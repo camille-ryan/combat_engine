@@ -944,8 +944,7 @@ def i806x1(c: Cast) -> None:
 @power("i806p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit with a weapon attack, before you deal damage",
-       on=Trigger(Hit, by_me, "you hit with a weapon attack"),
-       dropped=("durations.save(saver=)",))
+       on=Trigger(Hit, by_me, "you hit with a weapon attack"))
 def i806p1(c: Cast) -> None:
     """Re-aimed, and now it plays. "Reduce the resistance the target has
     **against your attack**" is an ignore read off the attacker, and
@@ -990,8 +989,20 @@ def i806p1(c: Cast) -> None:
     foe = _foe(c)
     if foe is None:
         return
-    c.ignore_resistance(5, on=c.me, until=When.EOT,
-                        when=lambda ctx: ctx.get("target") == foe)
+    held = c.ignore_resistance(5, on=c.me, until=When.SAVE_ENDS,
+                               when=lambda ctx: ctx.get("target") == foe)
+    if held is not None:
+        # **Both fields, because they are two questions.** `clock` is when
+        # the throw is taken -- `eff.clock == ev.actor` at a turn's end --
+        # and `saver` is whose throw it is. `apply` set both to the owner,
+        # which here is the attacker carrying the `Mod`. Set on the
+        # returned effect rather than through a kwarg on the verb: the
+        # mismatch is not about resistance, so a `saver=` on
+        # `c.ignore_resistance` would be the per-verb shape #874 argued
+        # against, and `Gear`-style post-hoc writes onto a returned hold
+        # are the existing idiom (`powers/paladin/marks.py`).
+        held.clock = foe
+        held.saver = foe
 
 
 @power("i825p1", level=6, cls=ITEM, usage=DAILY, action=FREE,

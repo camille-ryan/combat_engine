@@ -34414,6 +34414,96 @@ def mark_knows_its_row(out: Result) -> None:
              f"marked={bare.marked(on=foe)} via-filtered="
              f"{bare.marked(on=foe, via='p3323')}")
 
+
+def save_ends_for_somebody_else(out: Result) -> None:
+    """"Reduce the resistance the target has against your attack (save ends)."
+
+    `durations.save` read `eff.owner` for **three** separate questions --
+    who rolls, whose save bonus applies, and who the `SavingThrow` is
+    announced for -- so an effect that benefits one creature and is ended by
+    another's save could not be written. `i806p1` is that shape: the `Mod`
+    must sit on the **attacker**, because that is what narrows the five
+    points to *your* attack, while the printed clock is a throw made by the
+    **target**. A `SAVE_ENDS` duration there had the attacker rolling to end
+    its own benefit, which is why the row ran to the end of the turn
+    instead. #874.
+
+    `Effect.saver` carries it and `rolls_the_save` resolves it, defaulting
+    to `owner` -- so every other save-ends effect in the tree is untouched,
+    which the last assertion here is the control for.
+
+    **All three questions are asserted, not just the announcement**, and the
+    bonus one is the sharpest: a fix that moved only the `SavingThrow.actor`
+    would still read the attacker's save modifiers, and would pass an
+    announcement-only check. Dropping `saver` from `rolls_the_save` turns
+    three of these red.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit, SavingThrow
+
+    def laid() -> tuple[Any, int, int, Any]:
+        world, me, _start = A.board("i806p1", 1)
+        foe = next(e for e in world.entities if e != me)
+        c = Cast(world=world, me=me, ref="i806p1", target=foe,
+                 trigger=Hit(attacker=me, target=foe, power="i806p1",
+                             critical=False))
+        REGISTRY["i806p1"].body(c)
+        held = next(e for e in world.effects.live.values()
+                    if "i806p1" in (e.label or ""))
+        return world, me, foe, held
+
+    world, me, foe, held = laid()
+
+    out.that(held.owner == me,
+             "the ignore sits on the attacker, which is what narrows it",
+             f"owner={held.owner} me={me}")
+    out.that(held.when is When.SAVE_ENDS,
+             "and the printed clock is a saving throw, not the end of a turn",
+             f"when={held.when.value}")
+    out.that(held.rolls_the_save == foe,
+             "but the creature that rolls it is the target",
+             f"saver={held.saver} owner={held.owner} foe={foe}")
+    out.that(held.clock == foe,
+             "and the throw is taken at the target's turn end, not the"
+             " attacker's",
+             f"clock={held.clock}")
+
+    # Announced for the target.
+    cursor = len(world.bus.log)
+    world.effects.save(held)
+    throws = [e for e in world.bus.log[cursor:] if isinstance(e, SavingThrow)]
+    out.that(len(throws) == 1 and throws[0].actor == foe,
+             "the SavingThrow is announced for the target",
+             f"actor(s)={[t.actor for t in throws]} foe={foe}")
+
+    # **Whose bonus**, which is the question an announcement-only fix misses.
+    world, me, foe, held = laid()
+    Cast(world=world, me=me, ref="drivers:probe", target=foe).bonus(
+        "save", 7, on=foe, until=When.ENCOUNTER)
+    cursor = len(world.bus.log)
+    world.effects.save(held)
+    rolled = next(e for e in world.bus.log[cursor:]
+                  if isinstance(e, SavingThrow))
+    out.that(rolled.bonus >= 7,
+             "and the target's own save bonus is the one that applies",
+             f"bonus={rolled.bonus} (a +7 laid on the target)")
+
+    # The control: an ordinary save-ends hold is unmoved. `saver` is 0 for
+    # every other effect in the tree, so this is what says the field is
+    # inert until a row asks for it.
+    world, me, _ = A.board("i806p1", 1)
+    foe = next(e for e in world.entities if e != me)
+    plain = Cast(world=world, me=me, ref="drivers:probe", target=foe).dazed(
+        until=When.SAVE_ENDS, on=foe)
+    out.that(plain is not None and plain.saver == 0
+             and plain.rolls_the_save == plain.owner == foe,
+             "an ordinary save-ends hold still rolls for its own owner",
+             f"saver={getattr(plain, 'saver', None)}"
+             f" owner={getattr(plain, 'owner', None)} foe={foe}")
+
 DRIVERS = {
     "reload": (
         a_fired_crossbow_is_empty_until_it_is_reloaded,
@@ -35330,6 +35420,8 @@ DRIVERS = {
                        "a weapon block's clause lands on its own weapon"),
     "mark_knows_its_row": (mark_knows_its_row,
                            "a mark records which row laid it"),
+    "save_ends_for_somebody_else": (save_ends_for_somebody_else,
+                                    "one creature's hold, another's save"),
 }
 
 

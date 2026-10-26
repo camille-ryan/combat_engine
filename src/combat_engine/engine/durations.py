@@ -217,6 +217,39 @@ class Effect:
     #: Read by `dsl.branches_for`, which turns each one in force into an
     #: extra branch index, and by `dsl.reach_of`, which resolves that index.
     reshape_optional: bool = False
+    #: **Who rolls the saving throw that ends this**, when that is not the
+    #: creature the effect sits on. `0` means "the owner", which is every
+    #: effect in the tree but one.
+    #:
+    #: `durations.save` read `eff.owner` for *three* different questions --
+    #: who rolls, whose save bonus applies, and who the `SavingThrow` is
+    #: announced for -- so an effect that benefits one creature and is
+    #: ended by another's save could not be written at all. `i806p1`
+    #: prints "reduce the value of any resistance the target has against
+    #: **your** attack by 5 (save ends)": the `Mod` must sit on the
+    #: attacker, because that is what narrows the clause to your attack,
+    #: while the printed clock is a throw made by the target. A
+    #: `SAVE_ENDS` duration there had the attacker rolling to end its own
+    #: benefit.
+    #:
+    #: **Separate from `clock`, which is a different question.** `clock`
+    #: decides *when* the throw is taken (`eff.clock == ev.actor` at a
+    #: turn's end); this decides *whose throw it is*. Reassigning `clock`
+    #: alone moved the timing and left the roll with the wrong creature,
+    #: which is why #874 could not be solved with the field that already
+    #: existed. A row wanting the target's save at the target's turn end
+    #: sets both.
+    #:
+    #: `p2919` is the near miss and does not generalise: it carries a
+    #: save-ends hold for somebody else by laying a **relation** on the
+    #: target, which works because a relation is directional. A `Mod` is
+    #: read off the creature it sits on, so it cannot move. #874.
+    saver: int = 0
+
+    @property
+    def rolls_the_save(self) -> int:
+        """The creature whose saving throw ends this -- `saver` or `owner`."""
+        return self.saver or self.owner
 
     def __str__(self) -> str:
         bits = [self.label or "effect", self.when.value]
@@ -362,6 +395,7 @@ class Effects:
         reshape_optional: bool = False,
         by: str = "",
         weapon: str = "",
+        saver: int = 0,
     ) -> Effect:
         # Ongoing damage of one type does not stack -- the highest applies.
         # The rule lived in `Cast.ongoing` alone, and this is the door a
@@ -444,6 +478,7 @@ class Effects:
             reshape_when=reshape_when,
             retarget=retarget,
             reshape_optional=reshape_optional,
+            saver=saver,
         )
         # **The ref of the row that laid this, as a plain attribute.**
         #
@@ -1041,7 +1076,12 @@ class Effects:
         both of the turn's throws because nothing could say which this was.
         #671, #672.
         """
-        holder = self.world.get(eff.owner, Mods)
+        # **`rolls_the_save`, not `owner`, for all three questions here.**
+        # They are one creature for every effect but `i806p1`'s, where
+        # the `Mod` sits on the attacker and the printed throw is the
+        # target's. #874.
+        saver = eff.rolls_the_save
+        holder = self.world.get(saver, Mods)
         # With a context. It was called with none, so a `when=` gate on a
         # save bonus ran against `{}` and anything reading a key was
         # silently false -- "enemies within the aura take -2 to saving
@@ -1053,7 +1093,7 @@ class Effects:
         # meant matching whatever string the row that laid the effect
         # happened to choose, which is its ref more often than not.
         ctx = {
-            "actor": eff.owner,
+            "actor": saver,
             "effect": eff,
             "label": eff.label,
             "conditions": frozenset(eff.conditions),
@@ -1091,7 +1131,7 @@ class Effects:
         # a printed line and had nowhere to go -- and then acted on.
         rolled = self.world.bus.emit(
             SavingThrow(
-                actor=eff.owner,
+                actor=saver,
                 against=str(eff),
                 natural=roll.total,
                 bonus=bonus,
