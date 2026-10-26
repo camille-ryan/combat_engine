@@ -570,7 +570,13 @@ class Effects:
                 holder = self.world.add(eid, Mods())
             holder.items.append(mod)
         for kind, s, t in eff.relations:
-            self.world.relations.set(kind, s, t)
+            # `eff.by` is the ref of the row that laid this effect, stamped
+            # at `apply`. Passing it here is what gives every mark its
+            # provenance for free -- the alternative was widening the
+            # three-tuple above and moving ten content sites. #875.
+            self.world.relations.set(
+                kind, s, t, via=getattr(eff, "by", "") or "",
+            )
 
     def _install_conditions(self, eff: Effect, source: int, duration: str) -> None:
         """Lay the conditions and announce each one that was not already held.

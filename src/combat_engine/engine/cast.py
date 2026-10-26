@@ -1298,16 +1298,49 @@ class Cast:
         """
         return self.world.rng.roll(dice).total
 
-    def marked(self, on: int | None = None, *, by: int | None = None) -> bool:
+    def marked(self, on: int | None = None, *, by: int | None = None,
+               via: str = "") -> bool:
         """Is that creature marked -- **by you**, unless told otherwise?
 
         `c.is_(Condition.MARKED)` is true of a mark laid by anybody, which
         quietly pays a paladin's bonus off the fighter's mark.
+
+        **`via=` narrows to a mark laid by one named row**, which is the
+        third thing a card can mean and the one that could not be asked:
+        `i531p1` prints *"a creature you have marked with your p3323
+        power"*, and `by=self.me` is true of that swordmage's aegis **and**
+        of the combat challenge and divine challenge the same creature could
+        be holding. So the row paid on any mark of its own making. #875.
+
+        The three narrowings are different questions and all three are
+        printed somewhere: `by=` is *whose* mark, `via=` is *which card's*,
+        and the bare call is "mine, however laid". A `via=` naming a row
+        that laid no mark here answers False rather than raising -- the
+        relation may genuinely be somebody else's, which is the answer the
+        card wants.
+
+        **There is deliberately no `c.mark(via=)` to go with this.** The
+        reader needs none -- `durations._install_state` fills `via` from
+        `eff.by`, so every mark already records the row that laid it -- and
+        the one card wanting to lay a mark *as another row* (`i457p1`:
+        "treat each mark as if you applied it with your chosen aegis") is
+        blocked on `chargen.feature_choice()` regardless, because nothing
+        records which aegis the swordmage chose. Writing the override now
+        would also be wrong twice: hijacking `by` moves what
+        `durations.keywords_of` reads for that effect's keywords, so the
+        mark would answer the *other* row's keyword gates. Whoever
+        un-blocks `i457p1` wants a `via` of its own on `Effect`, not this
+        shortcut. #875.
         """
         who = self._who(on)
         if who is None:
             return False
-        return self.world.relations.holds(Relation.MARKED_BY, self.me if by is None else by, who)
+        marker = self.me if by is None else by
+        if not self.world.relations.holds(Relation.MARKED_BY, marker, who):
+            return False
+        if not via:
+            return True
+        return self.world.relations.via(Relation.MARKED_BY, marker, who) == via
 
     def save(
         self, *, on: int | None = None, bonus: int = 0, against: str = "",

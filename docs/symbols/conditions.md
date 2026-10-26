@@ -71,7 +71,7 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Everything this creature is holding in a grab.
 - `c.latched(self, label: 'str', *, on: 'int | None' = None, per_turn: 'bool' = False) -> 'bool'`
   - Has that creature already spent this payout in the current window?
-- `c.marked(self, on: 'int | None' = None, *, by: 'int | None' = None) -> 'bool'`
+- `c.marked(self, on: 'int | None' = None, *, by: 'int | None' = None, via: 'str' = '') -> 'bool'`
   - Is that creature marked -- **by you**, unless told otherwise?
 - `c.suffering(self, label: 'str' = '', *, by: 'int | None' = None, include_self: 'bool' = False) -> 'list[int]'`
   - Everyone carrying an effect I applied. "Each creature affected by

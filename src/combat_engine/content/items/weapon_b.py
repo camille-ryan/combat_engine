@@ -1803,12 +1803,23 @@ def i3558p1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
-    dropped=("c.aegis()",),
+    dropped=("chargen.feature_choice()",),
 )
 def i457p1(c: Cast) -> None:
-    """Treating the mark as a particular class feature's mark cannot be
-    said: a mark is a relation and carries no flavour of which row laid
-    it."""
+    """Re-pointed, because the gap it named was not the one holding it.
+
+    "A mark carries no flavour of which row laid it" was true and is fixed:
+    `Relations` records the laying ref and `c.marked(via=)` asks for it
+    (#875). That is not enough for this card, which says *"treat each mark
+    as if you applied it with your **chosen** aegis"* -- and the three
+    aegises are sub-options of `cf:swordmage-f1` (`s0`, `s1`, `s2`, naming
+    `p3322`, `p5736` and `p3323`), so laying the mark as the right one
+    needs to know which the swordmage picked. Nothing records a
+    class-feature sub-choice, which is the symbol this now waits on along
+    with four other rows.
+
+    `c.aegis()` was a verb name for neither half, which is why it went.
+    The mark itself lands, so this stays `dropped=` rather than `todo=`."""
     c.mark(until=When.SAVE_ENDS)
 
 

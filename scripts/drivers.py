@@ -34326,6 +34326,94 @@ def weapon_is_mine(out: Result) -> None:
              "i968x1's inline write re-points too, with its own 5/10 range",
              f"{landed}")
 
+
+def mark_knows_its_row(out: Result) -> None:
+    """"A creature you have marked with your p3323 power targets you."
+
+    A mark recorded **who** marked whom and never **which row** did it, so
+    `i531p1` -- which reduces damage from a creature marked by the
+    swordmage's aegis -- paid on any mark that swordmage happened to be
+    holding, a fighter's combat challenge included. #875.
+
+    `Relations` keeps the laying ref in the value slot of its `_live` dict,
+    which was `None` for the life of the store. The write cost nothing:
+    `durations._install_state` already had `eff.by` -- the ref every `Cast`
+    verb stamps -- so no content site moved and the `relations=[(kind,
+    source, target)]` tuple on `Effect` stayed three wide.
+
+    Asserted through `i531p1`'s body rather than through `c.marked`, which
+    is what makes the row's own re-point load-bearing: a rule calling
+    `c.marked(via=)` itself would stay green with the content change
+    reverted.
+
+    The negative control is the whole point and is the plant: a mark laid
+    by a *different* row must buy this row nothing. Dropping the `via=`
+    filter from either `c.marked` or the row turns it red.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.types import DamageType, Relation
+
+    def struck_after_a_mark_by(ref: str) -> tuple[int, str]:
+        """Run `i531p1` against a blow from a creature marked via `ref`.
+
+        Returns what the 20-point blow was reduced to, and the `via` the
+        store ended up holding.
+        """
+        world, me, _start = A.board("i531p1", 1)
+        foe = next(e for e in world.entities if e != me)
+        Cast(world=world, me=me, ref=ref, target=foe).mark()
+        via = world.relations.via(Relation.MARKED_BY, me, foe)
+        ev = DamageRolled(source=foe, target=me, amount=20,
+                          dtype=DamageType.UNTYPED, detail="")
+        c = Cast(world=world, me=me, ref="i531p1", target=me, trigger=ev)
+        REGISTRY["i531p1"].body(c)
+        return ev.amount, via
+
+    paid, via_aegis = struck_after_a_mark_by("p3323")
+    out.that(via_aegis == "p3323",
+             "a mark records the ref of the row that laid it",
+             f"via={via_aegis!r}")
+    out.that(paid < 20,
+             "i531p1 reduces a blow from a creature marked by its own power",
+             f"20 -> {paid}")
+
+    # The plant: the same swordmage, the same marked foe, a mark from
+    # another card. The reduction must not apply.
+    spared, via_other = struck_after_a_mark_by("p9999")
+    out.that(via_other == "p9999",
+             "and a mark laid by another row records that row instead",
+             f"via={via_other!r}")
+    out.that(spared == 20,
+             "so the blow is NOT reduced -- the row no longer pays on any mark",
+             f"20 -> {spared}")
+
+    # A mark with no provenance at all answers False rather than matching
+    # everything, which is the direction a bare `==` on an empty string
+    # would have got wrong.
+    #
+    # **`audit.board` has already marked this foe**, via `audit:setup`, to
+    # give defender follow-up rows something to aim at. The first draft of
+    # this control laid a bare mark on top of that and asserted an empty
+    # `via` -- which passed, on a mark attributed to `audit:setup`, so it
+    # was green for a reason it did not state. The plant is what exposed
+    # it. Cleared first, so "unattributed" is the fact and not the hope.
+    world, me, _ = A.board("i531p1", 1)
+    foe = next(e for e in world.entities if e != me)
+    world.relations.clear(Relation.MARKED_BY, me, foe, "cleared for the control")
+    world.relations.set(Relation.MARKED_BY, me, foe)
+    unattributed = world.relations.via(Relation.MARKED_BY, me, foe)
+    bare = Cast(world=world, me=me, ref="i531p1", target=me)
+    out.that(unattributed == "",
+             "a mark laid straight through the store names no row",
+             f"via={unattributed!r}")
+    out.that(bare.marked(on=foe) and not bare.marked(on=foe, via="p3323"),
+             "and it is still a mark, while matching no particular via",
+             f"marked={bare.marked(on=foe)} via-filtered="
+             f"{bare.marked(on=foe, via='p3323')}")
+
 DRIVERS = {
     "reload": (
         a_fired_crossbow_is_empty_until_it_is_reloaded,
@@ -35240,6 +35328,8 @@ DRIVERS = {
                           "a rider excluded on a damageless power"),
     "weapon_is_mine": (weapon_is_mine,
                        "a weapon block's clause lands on its own weapon"),
+    "mark_knows_its_row": (mark_knows_its_row,
+                           "a mark records which row laid it"),
 }
 
 

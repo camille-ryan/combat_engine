@@ -68,7 +68,12 @@ def burning_mark(
         held = c.mark(until=until, on=who)
         c.watch(AttackDeclared, bite, until=until, on=me, label=f"{c.ref} mark")
         return held
-    c.world.relations.set(Relation.MARKED_BY, me, who)
+    # `via=c.ref` because this branch bypasses `durations._install_state`,
+    # which is where every other mark gets its provenance from `eff.by`. A
+    # paladin's challenge left unlabelled here would read as "laid by no
+    # row", and `i531p1` asks exactly this question of exactly this mark.
+    # #875.
+    c.world.relations.set(Relation.MARKED_BY, me, who, via=c.ref)
     hold.relations.append((Relation.MARKED_BY, me, who))
     hold.subs.append(c.world.bus.on(AttackDeclared, bite, owner=me))
     return hold

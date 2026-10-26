@@ -29,11 +29,23 @@ IMPLIES: dict[Relation, Condition] = {
 
 
 class Relations:
-    """A set of `(kind, source, target)` triples, kept in insertion order."""
+    """A set of `(kind, source, target)` triples, kept in insertion order.
+
+    **The value slot holds `via`: the ref of the row that laid the
+    relation.** It was `None` for as long as this store existed, and a mark
+    therefore recorded *who* marked whom and never *which row* did it -- so
+    a card keyed on one particular mark paid on any of them. `i531p1` prints
+    *"a creature you have marked with your p3323 power"* and could not tell
+    the aegis from a fighter's combat challenge. #875.
+
+    Read with `via()` and filtered through `c.marked(via=)`. Empty means
+    nobody said, which is every relation laid outside an `Effect` that
+    carries a `by`.
+    """
 
     def __init__(self, world: World) -> None:
         self.world = world
-        self._live: dict[tuple[Relation, int, int], None] = {}
+        self._live: dict[tuple[Relation, int, int], str] = {}
 
     def holds(self, kind: Relation, source: int, target: int) -> bool:
         return (kind, source, target) in self._live
@@ -47,13 +59,38 @@ class Relations:
     def anyone(self, kind: Relation, target: int) -> bool:
         return any(k is kind and t == target for (k, s, t) in self._live)
 
-    def set(self, kind: Relation, source: int, target: int) -> None:
+    def via(self, kind: Relation, source: int, target: int) -> str:
+        """Which row laid this relation, or `""` if nothing said.
+
+        The reader `c.marked(via=)` is built on, and the answer a card
+        naming one particular mark needs. Absent rather than raising for a
+        relation that does not hold: "laid by no row" and "not there at
+        all" are both honestly empty here, and the caller asking `via`
+        has almost always asked `holds` first.
+        """
+        return self._live.get((kind, source, target), "")
+
+    def set(self, kind: Relation, source: int, target: int, *,
+            via: str = "") -> None:
         """Establish the relation.
 
         A creature can only be marked by one other at a time, so a new mark
         silently displaces the old one rather than stacking with it -- that is
         the printed rule, and it is the only place a relation behaves this
         way.
+
+        **`via` is the ref of the row laying it**, and it is filled for free
+        from the `Effect`: `durations._install_state` passes `eff.by`, which
+        every `Cast` verb already stamps. So no content site changes and the
+        `relations=[(kind, source, target)]` tuple on `Effect` stays three
+        wide -- widening it would have moved ten content sites and both
+        consumers for a fact the effect was already carrying. #875.
+
+        **A re-lay updates it.** The early return below is "this relation
+        already holds", which is right about the relation and wrong about
+        its provenance: the same marker marking the same target through a
+        *different* row has changed which card the mark answers to, and a
+        reader keyed on one power would otherwise go on seeing the first.
         """
         # "You cannot be marked until the end of your next turn" has to stop
         # the relation, not just the condition it mirrors: clearing the
@@ -68,8 +105,10 @@ class Relations:
                 if other != source:
                     self.clear(kind, other, target, "superseded")
         if self.holds(kind, source, target):
+            if via:
+                self._live[(kind, source, target)] = via
             return
-        self._live[(kind, source, target)] = None
+        self._live[(kind, source, target)] = via
         self._apply_condition(kind, target, +1, source)
         self.world.bus.emit(RelationSet(kind_=kind, source=source, target=target))
 

@@ -1113,7 +1113,7 @@ def i462x1(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="a creature you have marked targets you and an ally",
        on=Trigger(DamageRolled, targets_me, "a marked enemy hits you"),
-       dropped=("relations.set(via=)", "DamageRolled.among"))
+       dropped=("DamageRolled.among",))
 def i531p1(c: Cast) -> None:
     """The mark is asked in the body because the predicate gets no `Cast`.
 
@@ -1121,16 +1121,14 @@ def i531p1(c: Cast) -> None:
     neither about a verb nor about each other.** Both unsaid clauses are
     one level down:
 
-    * *"marked with your p3323 power"* -- a mark is a bare
-      `Relation.MARKED_BY` triple and records **who** marked whom, never
-      which row laid it. So this cannot tell the aegis from a fighter's
-      combat challenge, and pays on any mark. `relations.set(via=)`: the
-      `_live` dict's value slot is unused (`None` today), so the store is
-      free -- what is not free is the write path, because `c.mark` lays the
-      relation through an `Effect`'s `relations=[(kind, source, target)]`
-      list, so the tuple shape and its consumer move too. Four marked rows
-      want a mark's source (`f1156`, `f619`, `i457p1` and this), which is
-      at #468's threshold.
+    * *"marked with your p3323 power"* -- **written now.** A mark used to
+      be a bare `Relation.MARKED_BY` triple recording **who** marked whom
+      and never which row laid it, so this could not tell the aegis from a
+      fighter's combat challenge and paid on any mark. `Relations` keeps
+      the laying ref in its value slot and `c.marked(via=)` asks for it;
+      the write cost nothing in the end, because `durations._install_state`
+      had `eff.by` in its hand all along and no content site or tuple had
+      to move. #875.
     * *"targets you and at least one of your allies"* -- this fires on
       `DamageRolled`, which carries `source`, `target` and `amount` and
       nothing about the attack's other targets. `resolve` attaches
@@ -1138,11 +1136,12 @@ def i531p1(c: Cast) -> None:
       damage events, so the whole target list is unreachable from here.
       Three marked rows want it, the other two under `Hit.origin`.
 
-    So the row pays on **any** mark from the triggering attacker, which is
-    too generous in two directions at once, and that is the shape of the
-    error rather than an inert clause."""
+    So the row is still too generous, but in **one** direction rather than
+    two: the mark is now the right mark, and the "and at least one of your
+    allies" half is unasked. That is the shape of the error rather than an
+    inert clause."""
     foe = _foe(c)
-    if foe is None or not c.marked(on=foe):
+    if foe is None or not c.marked(on=foe, via="p3323"):
         return
     c.reduce(5 + c.enhancement, c.trigger)
 
