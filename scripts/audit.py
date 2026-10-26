@@ -1966,7 +1966,7 @@ def _source_of(body: object, ref: str = "") -> str:
 
 
 def board(ref: str, seed: int, pose: bool = False,
-          arm: str = "") -> tuple[World, int, set[str]]:
+          arm: str = "", element: bool = False) -> tuple[World, int, set[str]]:
     """A caster with the row, four creatures in reach, and the fight started.
 
     The third value is what got emitted while the encounter was starting,
@@ -2191,6 +2191,29 @@ def board(ref: str, seed: int, pose: bool = False,
                         break
         _hand_it_the_weapon(world, caster, declared)
         foe_team = Team.ENEMY
+
+    # **An element on the bearer's own build, when the row reads one.**
+    # `c.element()` reads `element:<type>` out of `Build.choices`, so arming
+    # it is one string -- and that is the whole reason it is done this way.
+    #
+    # Two earlier versions of this switched the character instead: the class
+    # to a sorcerer, or the build to an elemental leg. Both were net
+    # negative and a run said so each time. `chargen.build_for` picks "the
+    # build whose gear can actually hold this row", so replacing it silenced
+    # `f2045`; moving the class silenced `p16381`, whose board is arranged
+    # around its race. One row gained and two lost.
+    #
+    # Writing the choice leaves the class, the build, the gear, the race and
+    # the draw exactly as they were -- nothing but `c.element()` reads this
+    # key -- so the arming cannot cost another row anything. That is the
+    # property the two previous attempts did not have. #885.
+    if element:
+        from combat_engine.engine.components import Build as _Build
+
+        mine = world.get(caster, _Build)
+        if mine is not None and not any(
+                c.startswith("element:") for c in mine.choices):
+            mine.choices.add(f"element:{_ARMED_ELEMENT}")
 
     # **A price in another class's power, for the rows that charge one.**
     # Eight item rows print "expend an unused wizard daily attack power of
@@ -4487,6 +4510,73 @@ _BY_FIELD = ("ranged", "thrown")
 _PROJECTILE_GROUPS = frozenset({"bow", "crossbow", "sling"})
 
 
+#: `c.element()` -- the build's chosen damage type, which only five legs name.
+_ELEMENT_CALL = re.compile(r"\bc\.element\(")
+
+#: What an armed bearer's build is bound to. Fire because it is the element
+#: the most legs name and the one a row's own clause is likeliest to mention.
+_ARMED_ELEMENT = "fire"
+
+
+@cache
+def _wants_an_element(ref: str) -> bool:
+    """Does this row read `Build.element`, so it needs a bearer that has one?
+
+    **The sixth arming knob, and the first about the bearer rather than the
+    gear.** `_attempts` varies seed, die face, pose and weapon; it does not
+    vary the *build*, so whether a character with an elemental leg turns up
+    was left to whichever leg the seed's draw happened to pick. Only five
+    legs carry one -- the warlock's elemental and the sorcerer's four -- and
+    for an implement item the plausible classes have none, so `i2339x1`
+    (`breath = c.element(); if breath is not None:`) took the early return
+    on all eight seeds and read silent while being correct. #885.
+
+    **Not more seeds.** `_changed`'s docstring is explicit that the sweep's
+    cost has been measured and cannot be tuned away, and raising `TRIES`
+    makes every row pay for the odds on a few. The row wants **one
+    specific** board, which is what every knob in this family provides.
+
+    Docstrings stripped before the search, the trap `_wanted_by_field` fell
+    into and recorded: a note *explaining* that a row has no element would
+    otherwise arm one.
+    """
+    if REGISTRY.get(ref) is None:
+        return False
+    for who in (ref, *_siblings(ref)):
+        body = REGISTRY.get(who)
+        if body is None:
+            continue
+        try:
+            src = inspect.getsource(body.body)
+        except (OSError, TypeError):
+            continue
+        if _ELEMENT_CALL.search(_without_docstrings(src)):
+            return True
+    return False
+
+
+def _without_docstrings(text: str) -> str:
+    """`text` with every docstring removed. See `_wanted_by_field`'s `code`.
+
+    Both imports are function-local, the convention this file keeps for a
+    reason: a new module-level import in `audit.py` widens what the impact
+    map has to re-record.
+    """
+    import ast
+    import textwrap
+
+    try:
+        tree = ast.parse(textwrap.dedent(text))
+    except (SyntaxError, ValueError):
+        return text
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef | ast.ClassDef | ast.Module):
+            doc = ast.get_docstring(node, clean=False)
+            if doc:
+                text = text.replace(doc, "")
+    return text
+
+
 @cache
 def _wanted_by_field(ref: str) -> tuple[str, ...]:
     """Weapon refs for the printed `Weapon` **column** this row's gate reads.
@@ -5320,14 +5410,14 @@ def _attempts(out: Result):  # noqa: ANN202
     # global would not travel. The header is data and every worker reads it.
     claimed = get(out.ref)
     if claimed is not None and claimed.out_of_combat:
-        yield 1, None, False, ""
+        yield 1, None, False, "", False
         return
     for posed in (False, True):
         for face in LOADED:
             for seed in range(1, TRIES + 1):
                 if out.fired and (out.events & DID_SOMETHING):
                     return
-                yield seed, face, posed, ""
+                yield seed, face, posed, "", False
     # **A third axis, on the same principle as the posed one.** A row naming
     # a weapon its board does not hold can show nothing however it is posed,
     # because the reader walks `Gear.weapons` and finds no match. Paid only
@@ -5360,7 +5450,31 @@ def _attempts(out: Result):  # noqa: ANN202
                 for seed in range(1, TRIES + 1):
                     if out.fired and (out.events & DID_SOMETHING):
                         return
-                    yield seed, face, posed, held
+                    yield seed, face, posed, held, False
+    # **Sixth: an element on the bearer's own build.** `c.element()` reads
+    # `element:<type>` out of `Build.choices` and only five legs in the game
+    # set one, so for a carried implement the draw never produces a bearer
+    # that has one -- `i2339x1`'s whole body is `breath = c.element(); if
+    # breath is not None:` and it took the early return on all eight seeds.
+    #
+    # **Last, and that placement is the whole of its safety.** Two earlier
+    # versions of this armed from inside `board()` for any row that reads
+    # the key, and both were net negative because they changed the
+    # character: replacing the build `chargen.build_for` chose silenced
+    # `f2045`, and switching the class silenced `p16381`, whose board is
+    # arranged around its race. One row gained, two lost.
+    #
+    # Here it is paid only by a row that has already shown nothing through
+    # every arrangement above -- the rule `#663` states for the weapon axes
+    # and the reason they carry no collateral. A row that acts without an
+    # element is never offered one, so it cannot be changed by this. #885.
+    if _wants_an_element(out.ref):
+        for posed in (False, True):
+            for face in LOADED:
+                for seed in range(1, TRIES + 1):
+                    if out.fired and (out.events & DID_SOMETHING):
+                        return
+                    yield seed, face, posed, "", True
 
 
 @contextlib.contextmanager
@@ -5685,9 +5799,10 @@ def audit(ref: str) -> Result:
     # something on this face, the rest re-prove the same thing. Eight of them
     # meant twenty-four boards for every row, and the audit builds a hundred
     # thousand boards.
-    for seed, face, posed, held in _attempts(out):
+    for seed, face, posed, held, element in _attempts(out):
         try:
-            world, caster, _armed = board(ref, seed, pose=posed, arm=held)
+            world, caster, _armed = board(ref, seed, pose=posed, arm=held,
+                                          element=element)
             world.rng.loaded = face
             if not (trait or triggered):
                 # The rows this one is printed beside, **before** the
