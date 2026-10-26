@@ -4,7 +4,7 @@
   "scripts/cards.py": 2,
   "scripts/chargen.py": 0,
   "scripts/doctrine.py": 3,
-  "scripts/drivers.py": 43,
+  "scripts/drivers.py": 33,
   "scripts/expect.py": 2,
   "scripts/fight.py": 4,
   "scripts/guides.py": 4,

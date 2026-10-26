@@ -58,6 +58,29 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 
+def must[T](value: T | None, what: str) -> T:
+    """`value`, or a loud failure naming what was missing.
+
+    **`World.get` answers `C | None` and a rule that reads straight through
+    it is wrong twice.** The type checker says so -- 19 of this file's
+    diagnostics were `Attribute ... is not defined on None` -- and the
+    runtime consequence is worse than the complaint: a board that did not
+    deal the component silently takes the `None` branch, the comprehension
+    over it is empty, and the assertion passes on nothing. That is the
+    shape `scripts/CLAUDE.md` names as a check that cannot fail, and it is
+    indistinguishable from the rule working.
+
+    So this raises rather than returning a default. A driver rule that
+    cannot find the thing it is about has not proved anything, and saying so
+    is strictly better than a green line. #882.
+    """
+    if value is None:
+        raise AssertionError(
+            f"this board has no {what}, so the rule reading it proves nothing"
+        )
+    return value
+
+
 class Result:
     """What one driver saw. Pass/fail with the numbers attached."""
 
@@ -67,7 +90,16 @@ class Result:
         self.skipped: list[str] = []
         self.passed = 0
 
-    def that(self, ok: bool, what: str, detail: str = "") -> None:
+    def that(self, ok: object, what: str, detail: str = "") -> None:
+        """Record one assertion. `ok` is read for **truthiness**, not as a
+        `bool`.
+
+        Annotated `bool` for a long time and ten call sites did not pass
+        one: `out.that(seen and seen[0].critical, ...)` hands over the empty
+        list when `seen` is empty, which is the idiom and is correct. The
+        annotation was the thing that was wrong, not the callers -- `if ok:`
+        is all this does with it. #882.
+        """
         if ok:
             self.passed += 1
             print(f"    ok    {what}")
@@ -1088,7 +1120,8 @@ def two_types(out: Result) -> None:
         if getattr(pw, "summon", None) is not None
         and getattr(pw.summon, "damage", None) is not None
     ]
-    multi = [pw for pw in summons if pw.summon.damage.dtypes]
+    multi = [pw for pw in summons
+             if must(pw.summon, "a summon block").damage.dtypes]
     out.that(
         not multi,
         f"no summon block prints two types yet, so its forwarding is untested "
@@ -10521,13 +10554,13 @@ def keyword_ban(out: Result) -> None:
     if plain not in known.known:
         known.known.append(plain)
 
-    ok, why = usable(world, me, get(plain))
+    ok, why = usable(world, me, must(get(plain), "the row under test"))
     out.that(ok, f"before any ban the row is usable ({why})")
 
     # ---- `lacking=`: only keyworded powers allowed --------------------
     held = c.forbid(lacking=Keyword.BEAST_FORM, on=me, until=When.ENCOUNTER)
     out.that(held is not None, "the restriction is laid as an effect")
-    ok, why = usable(world, me, get(plain))
+    ok, why = usable(world, me, must(get(plain), "the row under test"))
     out.that(not ok, f"a row LACKING the keyword is refused ({why})")
     out.that("beast form" in (why or ""),
              "and the reason names the keyword, not a generic refusal")
@@ -10542,7 +10575,7 @@ def keyword_ban(out: Result) -> None:
                  " control, and without it a blanket refusal passes above")
 
     world.effects.end(held, "driver")
-    ok, _ = usable(world, me, get(plain))
+    ok, _ = usable(world, me, must(get(plain), "the row under test"))
     out.that(ok, "ending the restriction gives the plain row back")
 
     # ---- the sustain exception --------------------------------------
@@ -10554,7 +10587,7 @@ def keyword_ban(out: Result) -> None:
     # something of that row is already standing when the shape is taken
     world.effects.apply(me, me, When.ENCOUNTER, label=f"{plain} zone")
     c.forbid(lacking=Keyword.BEAST_FORM, on=me, until=When.ENCOUNTER)
-    ok, why = usable(world, me, get(plain))
+    ok, why = usable(world, me, must(get(plain), "the row under test"))
     out.that(ok,
              "a row already standing when the shape was taken may still be"
              " sustained -- the printed exception, and the half whose absence"
@@ -10580,7 +10613,7 @@ def keyword_ban(out: Result) -> None:
     c.forbid(keyword=Keyword.BEAST_FORM, on=me, until=When.SAVE_ENDS)
     ok, why = usable(world, me, banned)
     out.that(not ok, f"barred once the keyword is forbidden ({why})")
-    ok, _ = usable(world, me, get(plain))
+    ok, _ = usable(world, me, must(get(plain), "the row under test"))
     out.that(ok, "while a row carrying NO keywords is untouched -- the"
                  " negative control for this direction")
 
@@ -13447,8 +13480,8 @@ def both_printed_shapes_offered(out: Result) -> None:
                  f"{ref} -- \"{shape}\", conditional on a state -- is"
                  " written with ONE reach and no `alt`, which is what keeps"
                  " the two mechanisms distinguishable rather than blurred",
-                 f"alt={getattr(row.reach, 'alt', None)}"
-                 f" branches={getattr(row.reach, 'branches', None)}")
+                 f"alt={getattr(must(row, 'Power').reach, 'alt', None)}"
+                 f" branches={getattr(must(row, 'Power').reach, 'branches', None)}")
 
 
 def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
@@ -18886,7 +18919,7 @@ def an_effects_keywords_come_from_the_row_that_laid_it(out: Result) -> None:
     out.that(
         prose is not None and Keyword.PSYCHIC in keywords_of(prose),
         "and so does one labelling with prose, which the label never could",
-        f"label={prose.label!r} by={getattr(prose, 'by', None)!r}",
+        f"label={must(prose, 'Effect').label!r} by={getattr(prose, 'by', None)!r}",
     )
 
     # The half that reaches a rule: the save's own context.
@@ -24328,7 +24361,7 @@ def a_weapon_is_re_filed(out: Result) -> None:
     def total_with(prof: int) -> int | None:
         world, me, _ = audit_board("f1277", 1)
         gear = world.get(me, Gear)
-        arm = gear.main
+        arm = must(gear, 'Gear').main
         if arm is None:
             return None
         Cast(world=world, me=me, ref="drivers:prof").weapon_proficiency(
@@ -24354,7 +24387,7 @@ def a_weapon_is_re_filed(out: Result) -> None:
         n = Cast(world=world, me=me, ref="drivers:held").gains_property(
             "silvered", held=True, on=me)
         after = world.get(me, Gear)
-        got = {w.ref for w in after.weapons if "silvered" in w.properties}
+        got = {w.ref for w in must(after, 'Gear').weapons if "silvered" in w.properties}
         out.that(n == len(in_hand) and got == in_hand,
                  "`held=True` lays the property on exactly what is in hand"
                  " -- the selector `ref=` and `group=` could not spell,"
@@ -30955,7 +30988,7 @@ def a_fired_crossbow_is_empty_until_it_is_reloaded(out: Result) -> None:
 
     # -- the crossbow: load minor, so firing empties it -------------------
     world, me, gear, enc = armed("w3629")
-    out.that(rba.can_branch(world, me, 0),
+    out.that(must(rba, 'Power').can_branch(world, me, 0),
              "a loaded crossbow can be fired",
              f"unloaded={gear.unloaded or 'nothing'}")
     out.that(not actions._loading(world, enc, me),
@@ -30963,7 +30996,7 @@ def a_fired_crossbow_is_empty_until_it_is_reloaded(out: Result) -> None:
              f"{len(actions._loading(world, enc, me))} offered")
 
     spend_load(world, me, "rba", 0)
-    out.that(not rba.can_branch(world, me, 0),
+    out.that(not must(rba, 'Power').can_branch(world, me, 0),
              "**a fired crossbow is refused the next shot**",
              f"unloaded={sorted(gear.unloaded)}")
     offers = actions._loading(world, enc, me)
@@ -30972,7 +31005,7 @@ def a_fired_crossbow_is_empty_until_it_is_reloaded(out: Result) -> None:
              f"{[(a.ref, str(a.cost)) for a in offers]}")
 
     actions.perform(world, enc, me, offers[0])
-    out.that(rba.can_branch(world, me, 0) and not gear.unloaded,
+    out.that(must(rba, 'Power').can_branch(world, me, 0) and not gear.unloaded,
              "reloading makes it fireable again",
              f"unloaded={gear.unloaded or 'nothing'}")
 
@@ -30983,7 +31016,7 @@ def a_fired_crossbow_is_empty_until_it_is_reloaded(out: Result) -> None:
     # the ten load-property weapons -- and every bow -- from firing twice.
     world, me, gear, enc = armed("w3631")
     spend_load(world, me, "rba", 0)
-    out.that(rba.can_branch(world, me, 0) and not gear.unloaded,
+    out.that(must(rba, 'Power').can_branch(world, me, 0) and not gear.unloaded,
              "a longbow prints `load free`, so firing it empties nothing",
              f"unloaded={gear.unloaded or 'nothing'}")
 
@@ -31649,7 +31682,8 @@ def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
     world, me, _started = _posed("i1151p1", 1)
     foe = enemies(world, me)[0]
     gear = world.get(me, Gear)
-    held = [w for w in gear.weapons if w.ref not in gear.stowed]
+    worn = must(gear, "Gear")
+    held = [w for w in worn.weapons if w.ref not in worn.stowed]
 
     out.that(bool(held),
              "the thrower has a weapon in hand -- the premise, and with none"
@@ -31668,7 +31702,8 @@ def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
         now = world.get(me, Gear)
         during.append(any(
             "heavy thrown" in w.properties
-            for w in now.weapons if w.ref not in now.stowed))
+            for w in must(now, "Gear").weapons
+            if w.ref not in must(now, "Gear").stowed))
 
     world.bus.on(DamageApplied, peek)
     REGISTRY["i1151p1"].body(
@@ -31682,17 +31717,20 @@ def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
 
     after = world.get(me, Gear)
     out.that(not any("heavy thrown" in w.properties
-                     for w in after.weapons if w.ref not in after.stowed),
+                     for w in must(after, "Gear").weapons
+        if w.ref not in must(after, "Gear").stowed),
              "and it is **not** heavy thrown once the row is done -- the"
              " over-grant that kept this row marked, which `i1151x1` and"
              " `i1756p1` would have paid out on for the rest of the fight",
-             f"props {[sorted(w.properties) for w in after.weapons if w.ref not in after.stowed]}")
+             f"props {[sorted(w.properties) for w in must(after, 'Gear').weapons
+                  if w.ref not in must(after, 'Gear').stowed]}")
 
     # The removal must not strip a property the weapon printed for itself.
     world2, me2, _again = _posed("i1151p1", 1)
     gear2 = world2.get(me2, Gear)
     own = sorted(
-        p for w in gear2.weapons if w.ref not in gear2.stowed
+        p for w in must(gear2, "Gear").weapons
+        if w.ref not in must(gear2, "Gear").stowed
         for p in w.properties)
     Cast(world=world2, me=me2, ref="drivers:lend").loses_property(
         "heavy thrown", held=True, on=me2)
@@ -32459,8 +32497,15 @@ def crossing_a_hazard_can_cost_nothing(out: Result) -> None:
     pos = world.get(victim, Position)
     if pos is None:
         return
-    pos.square = spot
-    world.grid.place(victim, spot)
+    # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+    # The pair wrote the square onto `Position` and then handed the
+    # *square* to a method whose parameter is a `frozenset` of them --
+    # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+    # and `7` and left `occupant((5, 7))` as `None`. It also never
+    # lifted the old square, so the creature stayed indexed where it
+    # had been. `place` does all three. #882.
+    from combat_engine.engine.movement import place
+    place(world, victim, spot)
     world.zones.refresh()
 
     # **Each reading taken once into a variable.** `bitten()` emits a
@@ -32492,8 +32537,14 @@ def crossing_a_hazard_can_cost_nothing(out: Result) -> None:
     # -- the control: a different sort of going still burns ------------
     world.round += 1
     _, spot2 = hazard_of("ice")
-    pos.square = spot2
-    world.grid.place(victim, spot2)
+    # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+    # The pair wrote the square onto `Position` and then handed the
+    # *square* to a method whose parameter is a `frozenset` of them --
+    # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+    # and `7` and left `occupant((5, 7))` as `None`. It also never
+    # lifted the old square, so the creature stayed indexed where it
+    # had been. `place` does all three. #882.
+    place(world, victim, spot2)
     world.zones.refresh()
     elsewhere = bitten()
     out.that(elsewhere == 5,
@@ -32588,8 +32639,15 @@ def a_target_can_be_narrowed_to_whoever_carries_equipment(out: Result) -> None:
         pos = world.get(who, Position)
         if pos is None:
             return
-        pos.square = spot
-        world.grid.place(who, spot)
+        # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+        # The pair wrote the square onto `Position` and then handed the
+        # *square* to a method whose parameter is a `frozenset` of them --
+        # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+        # and `7` and left `occupant((5, 7))` as `None`. It also never
+        # lifted the old square, so the creature stayed indexed where it
+        # had been. `place` does all three. #882.
+        from combat_engine.engine.movement import place
+        place(world, who, spot)
 
     held, stowed, shield = list(kit.weapons), set(kit.stowed), kit.shield
     kit.weapons, kit.stowed, kit.shield = [], set(), 0
@@ -32767,8 +32825,15 @@ def an_aura_deals_more_to_the_creature_its_owner_is_grabbing(out: Result) -> Non
         pos = world.get(who, Position)
         if pos is None:
             return
-        pos.square = spot
-        world.grid.place(who, spot)
+        # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+        # The pair wrote the square onto `Position` and then handed the
+        # *square* to a method whose parameter is a `frozenset` of them --
+        # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+        # and `7` and left `occupant((5, 7))` as `None`. It also never
+        # lifted the old square, so the creature stayed indexed where it
+        # had been. `place` does all three. #882.
+        from combat_engine.engine.movement import place
+        place(world, who, spot)
 
     # The aura, then the grab.
     a: Any = Cast(world=world, me=mob, ref="m305a0")
@@ -33131,8 +33196,15 @@ def a_zone_can_hold_a_condition_and_takes_it_back(out: Result) -> None:
     pos = world.get(victim, Position)
     if pos is None:
         return
-    pos.square = spot
-    world.grid.place(victim, spot)
+    # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+    # The pair wrote the square onto `Position` and then handed the
+    # *square* to a method whose parameter is a `frozenset` of them --
+    # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+    # and `7` and left `occupant((5, 7))` as `None`. It also never
+    # lifted the old square, so the creature stayed indexed where it
+    # had been. `place` does all three. #882.
+    from combat_engine.engine.movement import place
+    place(world, victim, spot)
     world.zones.refresh()
     out.that(victim not in world.zones.occupants(eid),
              "the victim is walked clear of the zone, which is the setup"
@@ -33206,8 +33278,15 @@ def an_obscuring_zone_can_have_a_side(out: Result) -> None:
     pos = world.get(victim, Position)
     if pos is None:
         return
-    pos.square = spot
-    world.grid.place(victim, spot)
+    # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+    # The pair wrote the square onto `Position` and then handed the
+    # *square* to a method whose parameter is a `frozenset` of them --
+    # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+    # and `7` and left `occupant((5, 7))` as `None`. It also never
+    # lifted the old square, so the creature stayed indexed where it
+    # had been. `place` does all three. #882.
+    from combat_engine.engine.movement import place
+    place(world, victim, spot)
     world.zones.refresh()
 
     other_foe = next((f for f in foes if f != victim), None)
@@ -33254,8 +33333,14 @@ def an_obscuring_zone_can_have_a_side(out: Result) -> None:
         pos = world2.get(who, Position)
         if pos is None:
             return
-        pos.square = sq
-        world2.grid.place(who, sq)
+        # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+        # The pair wrote the square onto `Position` and then handed the
+        # *square* to a method whose parameter is a `frozenset` of them --
+        # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+        # and `7` and left `occupant((5, 7))` as `None`. It also never
+        # lifted the old square, so the creature stayed indexed where it
+        # had been. `place` does all three. #882.
+        place(world2, who, sq)
     world2.zones.refresh()
     out.that(light_concealment(world2, watcher, target) is Cover.NONE,
              "**two creatures both standing in it see each other plainly**,"
