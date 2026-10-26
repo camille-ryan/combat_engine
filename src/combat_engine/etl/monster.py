@@ -841,7 +841,92 @@ def _ability_spec(body: str, start: int, head: str, a: Ability) -> str:
         line = f"{pair[0]}: {pair[1]}" if pair else text(para)
         if line.strip():
             lines.append(line.strip())
-    return _unglue("\n".join(lines).strip())
+    return _unglue(_drop_stray_attack_line("\n".join(lines).strip()))
+
+
+#: A leading attack-line run closed by a **double period**, ahead of the
+#: effect text it does not belong to.
+#:
+#: The seam is in the compendium, not in our parsing. `m1092`'s page reads,
+#: verbatim:
+#:
+#:     Flailing Branch (standard, at-will)
+#:     Reach 2; +17 vs AC; 2d8+6 damage.
+#:     Whipping Branches (standard, at-will)
+#:     +15 vs ; 2d6+5 damage.. Make up to four flailing branch attacks ...
+#:
+#: so the second ability carries an attack line with **no defence** and a
+#: `..` before the effect that tells you to make four of the first one.
+#: `+15 / 2d6+5` matches neither ability. #765.
+_STRAY_LINE = re.compile(
+    r"""^(?P<keep>(?:\([^\n]*\n)?)         # the action parenthetical LINE, kept
+    [ \t]*
+    (?:[^;\n]{0,40};[ \t]*)?                # a "Reach 2; " prefix inside the run
+    \+\d+[ \t]*vs\.?[ \t]*[A-Za-z]*[ \t]*;  # the bonus and a maybe-blank defence
+    [^.\n]{0,60}?damage\.\.[ \t]*           # through "damage" and the seam
+    """,
+    re.X,
+)
+
+#: What must follow the seam for the run ahead of it to be stray: **prose**.
+#: Not a dice expression and not a bare number -- see `_drop_stray_attack_line`
+#: for the nine rows that distinction spares.
+_AFTER_SEAM = re.compile(r"^\s*(?!\d)[A-Za-z]")
+
+
+def _drop_stray_attack_line(spec: str) -> str:
+    """Drop a leading attack line that belongs to no ability. #765.
+
+    **Measured before writing it.** 75 of 13,459 specs open with the run;
+    **66 are stray and 9 are not**, and the 9 are what makes this a rule
+    rather than a `sub`:
+
+    * **five have nothing after the seam at all** -- `m3554a0` is
+      `"+9 vs Reflex; 1d8 + 2 necrotic damage.."` and that *is* the row's
+      whole attack line, with a stray trailing dot. Stripping it would leave
+      an empty spec and lose the only mechanics the card has.
+    * **three are followed by a bare damage expression** -- `m2085a1`'s
+      remainder is `"1d8 + 5 damage."` and `m1929a1`'s is
+      `"1d10 + 7 necrotic damage (no attack roll required)."`. Those cards
+      are genuinely garbled and stripping the run would leave damage with no
+      line to roll it on, which is worse than the seam.
+    * **one is followed by a second attack line** -- `m1124a3` continues
+      `"+9 vs. Armor Class, two attacks; 1d10 + 4 damage"`, so both runs are
+      real.
+
+    Hence `_AFTER_SEAM`: strip only when what follows begins a sentence.
+
+    **Of the 66, 64 delegate** -- "makes two warhammer attacks", "make a
+    melee basic attack", "can use <another ability>" -- so the row has no
+    line of its own to roll, and the two that look otherwise delegate in
+    their first clause and carry a *second* `vs` later in the effect.
+
+    The action parenthetical is kept, which the first draft of this dropped:
+    `(standard, at-will) Weapon` carries the usage and the keyword and is
+    the half of the head that is real.
+
+    **And it is matched unclosed**, which the first pattern was not.
+    `m876a1` and `m1499a1` open `"(standard, recharge"` with no closing
+    bracket -- the glyph that followed it is an image `text()` drops -- so a
+    a closed-bracket pattern could never match their head and both were
+    missed. Both
+    delegate ("makes a greatclub attack"), so both are stray. 66 -> 68.
+
+    `m2346a1` stays spared and is the reason the prefix allows only one
+    semicolon clause: its head is
+    `"Close burst 1; targets enemies; +14 vs ; 4d8+5 damage.."` and the
+    range and target line are **real**. What is wrong there is the blank
+    defence on the row's own line, which is `#360` and must not be
+    conflated with this -- the mistake that produced 22 markers.
+
+    **A trailing `..` is a different artefact and is left alone.** 41 specs
+    end a sentence with one -- `"(save ends).."`, `"its next turn.."` -- and
+    this pattern is anchored at the start precisely so it cannot reach them.
+    """
+    found = _STRAY_LINE.match(spec)
+    if found is None or not _AFTER_SEAM.match(spec[found.end():]):
+        return spec
+    return found.group("keep") + spec[found.end():]
 
 
 #: A word run into the list marker that follows it -- `sickness3.` -- which
