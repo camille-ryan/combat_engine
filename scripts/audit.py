@@ -52,6 +52,7 @@ import inspect
 import os
 import re
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
 from pathlib import Path
@@ -4309,22 +4310,167 @@ def _does_the_ordinary_things(
     # whose turn is ending and sets it to `None` on the way out, and every
     # pass after this one needs the caster's turn to be current -- leaving
     # it `None` would quietly refuse their actions rather than this one's.
+    #
+    # **And where the other creature is standing when the turn ends**, which
+    # is a second axis on the same moment and the whole of #887. With the
+    # pose above and no distance variation, 15 of the 23 fired and the 8 left
+    # were every one of them a *distance* condition on top of the turn
+    # ending -- "an enemy ends its turn adjacent to you", "within 5 but not
+    # adjacent", "more than 10 squares away". `board` places a foe for
+    # *swinging*, which is one of those distances, and they are mutually
+    # exclusive: no single placement can offer more than one.
+    #
+    # `_TURN_END_RANGES` is four, chosen to straddle the printed thresholds
+    # rather than to be a sweep: adjacent, inside 5 and not adjacent, inside
+    # 10 and outside 5, and beyond 10. The last leg **moves the roller
+    # during its own turn**, from inside 10 to outside it, because `p16020`
+    # is about the *difference* between two moments -- "started its turn
+    # within 10 squares, ends it farther away" -- and no static placement
+    # can satisfy that.
+    #
+    # Scoped to rows that declare `TurnEnd`, so the cost is 23 rows paying
+    # four placements each rather than a fifth axis on `_attempts`. That is
+    # the lesson of #885: an axis that applies to every row buys its
+    # coverage with collateral on rows it has nothing to do with.
     if "TurnEnd" in wants:
         enc = getattr(world, "encounter", None)
         if enc is not None:
-            for who in (caster, *foes[:1], *_allies_of(world, caster)[:1]):
-                if not alive(world, who):
-                    continue
-                was_turn = world.turn
-                world.turn = who
-                rearm()
-                try:
-                    enc.end_turn()
-                finally:
-                    world.turn = was_turn
-                if _fired(world, ref, cursor):
-                    return True
+            rollers = [who for who in
+                       (caster, *foes[:1], *_allies_of(world, caster)[:1])
+                       if alive(world, who)]
+            # **The undisplaced legs first, all of them, exactly as #827
+            # left them.** Distance is the *outer* loop and the roller the
+            # inner one, which is not a tidiness choice: ending a turn
+            # expires effects, so the legs added here cost the board
+            # something, and spending that on the caster before the foe has
+            # had its unmoved leg is enough to break a row that worked.
+            #
+            # It did. `p12871b` requires `p12871`'s zone to be standing and
+            # triggers on an enemy ending its turn inside it; with the
+            # rollers outermost, the caster's four extra turn-ends expired
+            # the zone before the foe's first leg, and the row went from
+            # firing to **UNUSED** -- not silent, unusable, which reads as
+            # "this row cannot work". Deterministic, twice each way.
+            #
+            # So: every roller gets the old arrangement before any roller
+            # gets a new one, and a row that already fired never reaches the
+            # added legs at all.
+            for far in _TURN_END_RANGES:
+                for who in rollers:
+                    if _ends_a_turn_at(world, caster, who, enc, ref, cursor,
+                                       far, rearm):
+                        return True
+            # **A moving leg was written and removed**, and #887 argued
+            # specifically for it: "`p16020` wants a **change** in distance
+            # across one turn -- started within 10, ended farther -- so one
+            # placement cannot satisfy it". Reasonable, and wrong. With the
+            # four static placements in, `p16020` fires off the one at 12
+            # and so does `p6994`; the moving leg fixed both only when the
+            # static ones were absent. It cost an `Encounter._begin` call
+            # from inside the `TurnEnd` pose -- a `TurnStart` emitted where
+            # no row expects one -- to buy nothing, so it is out.
+            # **A "began a turn and went nowhere" leg was written and
+            # removed, and the reason is worth more than the leg.** "An
+            # adjacent enemy does not move on its turn" needs a turn that
+            # actually began, which none of the legs above give -- they
+            # assign `world.turn` rather than beginning one -- so the leg
+            # looked obviously owed. It moved **nothing**, because both rows
+            # that print the clause (`m2256a4`, `m45a4`) are **level 12**:
+            # paragon, outside the band this board poses at all, so their
+            # UNUSED is correct and no pose can change it. A change that
+            # does not move the number comes back out.
     return False
+
+
+#: Where the roller stands when its turn ends, as a distance from the
+#: caster. `None` is "wherever the board already put it", which is the
+#: arrangement #827 posed and the one 15 rows already fire on -- kept first
+#: so the cheap case stays cheap and nothing that worked stops working.
+#:
+#: `12` is outside every printed threshold in the family (the largest is 10)
+#: and inside a 24x16 board from the caster's start square.
+_TURN_END_RANGES: tuple[int | None, ...] = (None, 1, 3, 7, 12)
+
+
+def _stand_off(world, caster: int, who: int, far: int) -> bool:  # noqa: ANN001
+    """Put `who` exactly `far` squares east of the caster, through the grid.
+
+    False when it will not fit -- off the board, or somebody else is already
+    standing there. **Through `Grid.lift`/`Grid.place`, never
+    `Position.square` alone**: the occupant index is a separate map, and
+    writing the component without re-indexing leaves one creature in two
+    places for every pass after this one. The falling pass above carries the
+    same correction for the same reason.
+    """
+    from combat_engine.engine.components import Position as _Position
+
+    spot = world.get(who, _Position)
+    anchor = world.get(caster, _Position)
+    if spot is None or anchor is None:
+        return False
+    want = (anchor.square[0] + far, anchor.square[1])
+    if not world.grid.inside(want):
+        return False
+    held = world.grid.occupant(want)
+    if held not in (None, who):
+        return False
+    world.grid.lift(who)
+    spot.square = want
+    world.grid.place(who, frozenset({want}))
+    return True
+
+
+def _back_to(world, who: int, home) -> None:  # noqa: ANN001
+    """Put a displaced creature back, through the grid."""
+    from combat_engine.engine.components import Position as _Position
+
+    spot = world.get(who, _Position)
+    if spot is None or spot.square == home:
+        return
+    world.grid.lift(who)
+    spot.square = home
+    world.grid.place(who, frozenset({home}))
+
+
+def _ends_a_turn_at(world, caster: int, who: int, enc, ref: str,  # noqa: ANN001
+                    cursor: int, far: int | None,
+                    rearm: Callable[[], None]) -> bool:
+    """End `who`'s turn, optionally from `far` squares off the caster.
+
+    `far=None` is the arrangement #827 posed -- wherever the board already
+    put everybody -- and it is what the caller runs for every roller before
+    any displaced leg. See the caller for why that order is load-bearing.
+
+    `world.turn` is saved and put back: `end_turn` reads it to decide whose
+    turn is ending and sets it to `None` on the way out, and every pass
+    after this one needs the caster's turn to be current -- leaving it
+    `None` would quietly refuse their actions rather than this one's.
+    """
+    from combat_engine.engine.components import Position as _Position
+
+    spot = world.get(who, _Position)
+    if spot is None:
+        return False
+    home = spot.square
+    if far is not None and (
+            who == caster or not _stand_off(world, caster, who, far)):
+        return False
+    was_turn = world.turn
+    world.turn = who
+    # **`rearm` before every leg**, which the pose this replaced did and the
+    # first draft of it dropped. One immediate action per round is the
+    # printed rule, so leg 1 spends it and every later leg is refused
+    # however well the row works -- and dropping the call made two rows
+    # fire for the wrong reason, which only the plant found: with the range
+    # list pinned to the undisplaced leg they still fired, so the "fix" was
+    # the missing `rearm` rather than the distance.
+    rearm()
+    try:
+        enc.end_turn()
+    finally:
+        world.turn = was_turn
+        _back_to(world, who, home)
+    return _fired(world, ref, cursor)
 
 
 def _rolls_saves(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
