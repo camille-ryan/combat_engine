@@ -128,7 +128,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Which weapon the attack behind this event was swung with.
 - `c.weapon_proficiency(self, bonus: 'int', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - "You treat slings as having a +3 proficiency bonus." Returns how
-- `c.weapon_range(self, *, ranged: 'tuple[int, int] | None' = None, thrown: 'tuple[int, int] | None' = None, group: 'str' = '', ref: 'str' = '', held: 'bool' = False, on: 'int | None' = None) -> 'int'`
+- `c.weapon_range(self, *, ranged: 'tuple[int, int] | None' = None, thrown: 'tuple[int, int] | None' = None, group: 'str' = '', ref: 'str' = '', held: 'bool' = False, mine: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Give that creature's weapons a printed range. Returns how many.
 - `c.wearing(self, prop: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Is this creature in armour of that kind? `c.wielding`'s sibling.

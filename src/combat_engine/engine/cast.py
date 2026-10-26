@@ -11304,11 +11304,23 @@ class Cast:
         1 for a +2 axe in silence, which is the fourth time this default
         has caught somebody on this project.
         """
-        mine = self.ref.split("x")[0].split("p")[0]
         for w in self.held(on=self.me, what="magic"):
-            if w.item == mine:
+            if w.item == self._my_item:
                 return w
         return None
+
+    @property
+    def _my_item(self) -> str:
+        """The item ref this row belongs to -- `i1150x1` and `i1150p1` both
+        give `i1150`.
+
+        Factored out of `c.my_weapon` when `mine=` on the weapon-writer
+        family wanted the same derivation. The two must agree: a block
+        asking `c.my_weapon` what it sits on and then writing through
+        `c.gains_property(mine=True)` would otherwise be asking two
+        questions that only look like one.
+        """
+        return self.ref.split("x")[0].split("p")[0]
 
     @property
     def enhancement(self) -> int:
@@ -15119,6 +15131,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         ref: str = "",
         every: bool = False,
         held: bool = False,
+        mine: bool = False,
         on: int | None = None,
     ) -> int:
         """Lay a printed weapon property on that creature's weapons. Returns how many.
@@ -15141,6 +15154,24 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         not -- it matches `Weapon.item == <this block's item>`, so for
         anything but a weapon or implement block it returns None, which is
         what left `i1151p1` marked. On all five writers. #841.
+
+        **`mine=True` is `c.my_weapon`'s question, and it is a different
+        one from `held=`.** On a *weapon* block the clause is about the
+        weapon the block is printed on -- "this weapon can be thrown" --
+        and a character carrying a magic axe and a magic bow has both in
+        the list and often both in hand, so `held=True` would lay the axe's
+        printed line on the bow. #843 proposed re-pointing six hand-rolled
+        content sites onto `held=`, and five of the six print *this
+        weapon*, so the re-point needed this selector first. `i968x1` had
+        already spelled it by hand -- `weapon.item == "i968"` inline,
+        mutating `properties` in place, bypassing `__post_init__` and
+        announcing nothing.
+
+        Keyed on `c._my_item`, the same derivation `c.my_weapon` uses, so
+        the reader and the writer cannot drift. Unlike `my_weapon` it does
+        **not** filter to magic weapons -- that method is answering "which
+        of this character's magic weapons is mine", and here the item ref
+        is already the whole question.
 
         Resolved against `Gear.stowed` rather than `Gear.held`: `held` is
         a derived list and `in` on a dataclass compares **fields**, so two
@@ -15178,6 +15209,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 or (group and weapon.group == group)
                 or (ref and weapon.ref == ref)
                 or (held and weapon.ref not in gear.stowed)
+                or (mine and weapon.item == self._my_item)
             ):
                 had = weapon.properties
                 weapon = replace(weapon, properties=had | {prop})
@@ -15289,6 +15321,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         group: str = "",
         ref: str = "",
         held: bool = False,
+        mine: bool = False,
         on: int | None = None,
     ) -> int:
         """Give that creature's weapons a printed range. Returns how many.
@@ -15318,6 +15351,14 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         an error, because a caller computing a range off a card may legally
         arrive with nothing to set.
 
+        **`mine=True` is this row's own item**, the selector
+        `gains_property` documents at length: on a weapon block the printed
+        range belongs to the weapon the block sits on, and `held=` would
+        give it to anything else in hand. The two travel together -- "heavy
+        thrown, range 5/10" is one property and one range on one weapon --
+        so a caller passing `mine=True` to one almost always passes it to
+        the other. #843.
+
         Announced on `WeaponChanged` like its two siblings, and only when it
         changed something, so arming a trait twice says the same thing once.
         """
@@ -15337,7 +15378,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         for weapon in gear.weapons:
             if not ((group and weapon.group == group)
                     or (ref and weapon.ref == ref)
-                    or (held and weapon.ref not in gear.stowed)):
+                    or (held and weapon.ref not in gear.stowed)
+                    or (mine and weapon.item == self._my_item)):
                 out.append(weapon)
                 continue
             changed += 1

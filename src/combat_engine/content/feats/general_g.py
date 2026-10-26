@@ -1472,15 +1472,19 @@ def f1125(c: Cast) -> None:
 def f621(c: Cast) -> None:
     """One named weapon rolls a d8, and becomes high crit.
 
-    **Both halves are the same write, and neither needs a door.**
-    `Gear.weapons` holds `replace(w)` copies made per character by
-    `chargen.spawn` -- the whole argument `c.weapon_dice` makes for
-    needing no reader -- and `Weapon.properties` has had a reader since
-    #240: `Cast._high_crit` pays a rolled extra `[W]` on a critical and
-    looks for the printed word in that field. So the property goes on this
-    character's own copy directly, the way `feats/paladin.py` reaches
-    `Health`. A set union, so arming the trait twice says the same thing
-    twice.
+    **The door exists now, and this said it did not.** `Weapon.properties`
+    has had a reader since #240 -- `Cast._high_crit` pays a rolled extra
+    `[W]` on a critical and looks for the printed word -- and the write
+    itself was hand-rolled here on the argument that it "needs no door".
+    `c.gains_property` is that door: `ref=` names one weapon, which is
+    exactly the `weapon.ref == "w3627"` loop this replaces. It writes
+    through `replace`, so `Weapon.__post_init__` runs and keeps `hands` in
+    step with `properties` (#842), and it announces `WeaponChanged`, which
+    the in-place union never did.
+
+    A seventh site of the same idiom, found while closing #843 -- that
+    issue listed six in `items/` and this one is in `feats/`. Arming the
+    trait twice still says the same thing twice.
 
     Re-aimed three times before this. `c.bonus('crit_range')` **exists**
     and is wrong twice over -- high crit is extra damage on a critical,
@@ -1489,10 +1493,7 @@ def f621(c: Cast) -> None:
     argument that nothing read the field, which stopped being true. Then
     `c.counts_as(property=)`, a new verb for a write a body can make."""
     c.weapon_dice("1d8", ref="w3627", on=c.me)
-    gear = c.world.get(c.me, Gear)
-    for weapon in gear.weapons if gear else ():
-        if weapon.ref == "w3627":
-            weapon.properties = weapon.properties | {"high crit"}
+    c.gains_property("high crit", ref="w3627", on=c.me)
 
 
 @power("f999", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

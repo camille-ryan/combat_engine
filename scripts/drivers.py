@@ -34205,6 +34205,127 @@ def deals_damage_gate(out: Result) -> None:
              f"paid {radiant_after('p5330')} time(s)")
 
 
+
+def weapon_is_mine(out: Result) -> None:
+    """"This weapon can be used as a heavy thrown weapon, range 6/12."
+
+    Four weapon blocks hand-rolled that write before `c.gains_property` and
+    `c.weapon_range` existed, and nothing re-pointed them once the verbs
+    landed. #843 called the re-point free. It was not: both verbs offered
+    `held=`, which is *every* weapon in hand, and these cards are about the
+    weapon the block is printed on. A character holding two magic weapons
+    would have had one item's printed line laid on the other's weapon.
+
+    So the re-point needed a selector first -- `mine=`, matching
+    `Weapon.item` the way `c.my_weapon` does -- and this rule is what says
+    the selector is **narrower** than the one #843 proposed, not merely
+    different. Reverting `mine=` to `held=` in either verb turns the second
+    assertion red; that is the plant, and it was run.
+
+    The third assertion is the thing the hand-roll could never do. It
+    mutated `properties` in place and announced nothing, so three of these
+    four rows sat on `audited.json`'s silent list and every reader of
+    `WeaponChanged` was blind to them. They now fire.
+    """
+    import dataclasses
+
+    import audit as A
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import WeaponChanged
+
+    REF, ITEM = "i1150x1", "i1150"
+
+    def gear_of(world: Any, who: int) -> Any:
+        """`Gear`, or a loud failure.
+
+        `World.get` answers `Gear | None` and every read below would have
+        silently skipped on the None -- a board dealt no gear reads exactly
+        like a selector that matched nothing, which is the one thing this
+        rule exists to tell apart.
+        """
+        gear = world.get(who, Gear)
+        if gear is None:
+            raise AssertionError("the audit board dealt this caster no Gear")
+        return gear
+
+    def two_in_hand() -> tuple[Any, int, Any]:
+        """The audit board, plus a second weapon carrying another item.
+
+        `audit.board` lays the item under test on the one weapon it deals
+        (#699), and arms the trait during `Encounter.start` -- so the clause
+        is already on by the time a rule looks. Both are stripped here, so
+        what the body writes is observable rather than assumed.
+        """
+        world, me, _start = A.board(REF, 1)
+        gear = gear_of(world, me)
+        mine = gear.weapons[0]
+        other = dataclasses.replace(
+            mine, ref="w9999", slug="other", item="i2882", group="hammer",
+            properties=frozenset({"two-handed"}), thrown=None)
+        gear.weapons = [
+            dataclasses.replace(
+                w, thrown=None,
+                properties=frozenset(p for p in w.properties
+                                     if p != "heavy thrown"))
+            for w in (*gear.weapons, other)
+        ]
+        return world, me, gear
+
+    def thrown_now(gear: Any) -> dict[str, tuple[bool, Any]]:
+        return {w.ref: ("heavy thrown" in w.properties, w.thrown)
+                for w in gear.weapons}
+
+    # The row's own body, not the verbs -- a rule that called
+    # `c.gains_property(mine=True)` itself would stay green with the content
+    # re-point reverted, which is half of what this is here to hold.
+    world, me, gear = two_in_hand()
+    cursor = len(world.bus.log)
+    REGISTRY[REF].body(Cast(world=world, me=me, ref=REF, target=me))
+    after = thrown_now(gear_of(world, me))
+
+    out.that(after["w3612"] == (True, (6, 12)),
+             "the block's own weapon gets the printed property and range",
+             f"w3612 (item={ITEM}) -> {after['w3612']}")
+    # The negative control, and the plant: `held=` would hit this one too.
+    out.that(after["w9999"] == (False, None),
+             "and the other item's weapon in the same hands gets neither",
+             f"w9999 (item=i2882) -> {after['w9999']}")
+
+    told = [e for e in world.bus.log[cursor:] if isinstance(e, WeaponChanged)]
+    out.that(len(told) == 2 and {e.field for e in told} == {"properties", "thrown"},
+             "both writes are announced, which the hand-rolled version never was",
+             f"{len(told)} WeaponChanged: {sorted(e.field for e in told)}")
+    out.that(all(e.weapon == "w3612" for e in told),
+             "and every announcement names the block's own weapon",
+             f"{sorted({e.weapon for e in told})}")
+
+    # Positive control on the width of `held=`, on the same board, so the
+    # assertion above cannot pass because nothing would have matched anyway
+    # -- a selector matching nothing looks exactly like a narrow one.
+    world, me, gear = two_in_hand()
+    c = Cast(world=world, me=me, ref=REF, target=me)
+    wide = c.gains_property("heavy thrown", held=True)
+    out.that(wide == 2,
+             "held= on the same board reaches both -- the selector is doing work",
+             f"held={wide} weapons, mine=1")
+
+    # `i968x1` is the fourth site and was inline rather than on the shared
+    # helper, so it is asserted separately: one row's re-point proves one
+    # row.
+    world, me, _ = A.board("i968x1", 1)
+    gear = gear_of(world, me)
+    gear.weapons = [dataclasses.replace(
+        w, thrown=None,
+        properties=frozenset(p for p in w.properties if p != "heavy thrown"))
+        for w in gear.weapons]
+    REGISTRY["i968x1"].body(Cast(world=world, me=me, ref="i968x1", target=me))
+    landed = thrown_now(gear_of(world, me))
+    out.that(any(v == (True, (5, 10)) for v in landed.values()),
+             "i968x1's inline write re-points too, with its own 5/10 range",
+             f"{landed}")
+
 DRIVERS = {
     "reload": (
         a_fired_crossbow_is_empty_until_it_is_reloaded,
@@ -35117,6 +35238,8 @@ DRIVERS = {
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
     "deals_damage_gate": (deals_damage_gate,
                           "a rider excluded on a damageless power"),
+    "weapon_is_mine": (weapon_is_mine,
+                       "a weapon block's clause lands on its own weapon"),
 }
 
 

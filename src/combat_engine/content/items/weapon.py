@@ -111,13 +111,19 @@ def _make_thrown(c: Cast, short: int, long: int) -> bool:
 
     Both writes are absolute, so arming the trait twice says the same thing
     twice.
+
+    **Re-pointed onto the engine verbs, which did not exist when this was
+    written.** `c.gains_property` and `c.weapon_range` do the same two
+    writes through `replace` and announce each on `WeaponChanged`, which the
+    hand-roll never did -- so the three rows that share this helper were
+    invisible to anything watching that event. What the re-point needed
+    first was a selector: both verbs offered `held=`, which is *every*
+    weapon in hand, and these cards are about the weapon the block is
+    printed on. `mine=` is that selector. #843.
     """
-    weapon = c.my_weapon()
-    if weapon is None:
-        return False
-    weapon.thrown = (short, long)
-    weapon.properties = weapon.properties | {"heavy thrown"}
-    return True
+    laid = c.gains_property("heavy thrown", mine=True)
+    c.weapon_range(thrown=(short, long), mine=True)
+    return bool(laid)
 
 
 def _longer_range(c: Cast, *, normal: int = 0, long: int = 0) -> bool:
@@ -131,6 +137,23 @@ def _longer_range(c: Cast, *, normal: int = 0, long: int = 0) -> bool:
     `thrown` as well as `ranged`, because the base-item restriction on these
     blocks is "any ranged **or any thrown**" and the field a thrown weapon
     answers with is the other one.
+
+    **This one stays hand-rolled, deliberately, and #843 is where the
+    decision is.** Its sibling `_make_thrown` above was re-pointed onto
+    `c.gains_property` and `c.weapon_range`; this one cannot be, because
+    `c.weapon_range` is **absolute** -- it takes the figures to set -- and
+    these two cards print a *relative* push, "+2 to both ranges". A
+    `push=` mode on the verb is the obvious shape and it is not obviously
+    right: a relative write has to answer what happens when two of them
+    land, and the engine's answer to that question everywhere else is
+    `c.bonus`, which takes a `max` rather than a sum and so would get this
+    wrong in the other direction. Two rows do not buy that decision.
+
+    So the latch below is the residue, and the thing to know about it is
+    that it is **per-row and per-weapon**, keyed `(id(weapon), c.ref)`: it
+    stops this row saying its own push twice, and does not stop the other
+    row saying its own. `feats.general.f139` and `f140` print the same
+    shape and are not on this helper.
     """
     weapon = c.my_weapon()
     if weapon is None:

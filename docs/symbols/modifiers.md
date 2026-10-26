@@ -136,7 +136,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Take a row away for a while. "Loses the ability to use ..."
 - `c.forgo_second_wind_heal(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You can choose to regain no hit points" from your second wind.
-- `c.gains_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, on: 'int | None' = None) -> 'int'`
+- `c.gains_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, mine: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Lay a printed weapon property on that creature's weapons. Returns how many.
 - `c.loses_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Take a weapon property back off. Returns how many weapons changed.

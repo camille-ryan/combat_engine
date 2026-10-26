@@ -73,7 +73,6 @@ from combat_engine.engine import (
     EffectApplied,
     Forced,
     ForcedMove,
-    Gear,
     Healed,
     Health,
     Hit,
@@ -2083,17 +2082,19 @@ def i968x1(c: Cast) -> None:
     thrown" to roll Strength rather than Dexterity. Same write as
     `c.weapon_dice` makes, on the same object.
 
+    **Written inline here, and that was the bug worth fixing.** The loop
+    this replaces mutated `properties` in place, which skips the `replace`
+    that re-runs `Weapon.__post_init__`, and announced nothing -- so the row
+    was invisible to every reader of `WeaponChanged`. `weapon.item ==
+    "i968"` is what `mine=` on both verbs now says, and this row is where it
+    was first spelled by hand. #843.
+
     `c.as_ranged` was the wrong half and is why this looked blocked: it is
     one attack's worth of reach, spent on the next swing, where this is a
     standing line on the weapon.
     """
-    gear = c.world.get(c.me, Gear)
-    if gear is None:
-        return
-    for weapon in gear.weapons:
-        if weapon.item == "i968":
-            weapon.properties = weapon.properties | {"heavy thrown"}
-            weapon.thrown = (5, 10)
+    c.gains_property("heavy thrown", mine=True)
+    c.weapon_range(thrown=(5, 10), mine=True)
 
 
 @power(

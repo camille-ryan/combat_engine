@@ -1194,9 +1194,6 @@ KNOWN_SILENT = {
     "f612": "nothing is on the floor to call back; a disarm is the only "
             "thing that drops a weapon and the board never does one. "
             "Driven: it fetches from nine squares at the printed twenty",
-    "i1252x1": "the same -- and its recall is gated on the class feature "
-               "besides. Driven: the thrown columns are written and the "
-               "recall fetches at any distance",
     # **Three rows #755 made reachable, and then showed doing nothing.**
     # Each was UNUSED before the total-defence and escape poses existed --
     # "this row cannot work" -- and each is now fired and judged. Two of the
