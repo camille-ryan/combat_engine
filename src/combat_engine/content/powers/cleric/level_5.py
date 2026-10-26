@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     AC,
-    ANY_CREATURE,
     DAILY,
     FORT,
     MINOR,
@@ -37,6 +36,7 @@ from combat_engine.engine import (
     Mod,
     Ranged,
     Relation,
+    Target,
     TurnStart,
     When,
     ZoneEntered,
@@ -60,7 +60,10 @@ def _weapon_row(ref: str) -> bool:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ANY_CREATURE,
+    # `label=` for the reason the docstring gives: the pool is the wielder
+    # because a weapon is not an entity, and the page should still print
+    # what the card prints. #855.
+    target=Target("any", 1, label="One held weapon"),
     keywords=[Keyword.DIVINE],
 )
 def p1406(c: Cast) -> None:

@@ -106,7 +106,11 @@ def p13789(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    # "One weapon", and a weapon is not an entity -- so the row is aimed at
+    # whoever holds it and `label=` is what the page prints. The convention
+    # the four artificer enchantments already use, and `scripts/targets.py`
+    # is the gate that found these three lacking it. #855.
+    target=Target("ally", 1, label="One weapon"),
     keywords=[Keyword.ARCANE, Keyword.COLD],
 )
 def p14458(c: Cast) -> None:
@@ -132,7 +136,11 @@ def p14458(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    # "One weapon", and a weapon is not an entity -- so the row is aimed at
+    # whoever holds it and `label=` is what the page prints. The convention
+    # the four artificer enchantments already use, and `scripts/targets.py`
+    # is the gate that found these three lacking it. #855.
+    target=Target("ally", 1, label="One weapon"),
     keywords=[Keyword.ARCANE, Keyword.THUNDER],
 )
 def p14459(c: Cast) -> None:
@@ -154,7 +162,11 @@ def p14459(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    # "One weapon", and a weapon is not an entity -- so the row is aimed at
+    # whoever holds it and `label=` is what the page prints. The convention
+    # the four artificer enchantments already use, and `scripts/targets.py`
+    # is the gate that found these three lacking it. #855.
+    target=Target("ally", 1, label="One weapon"),
     keywords=[Keyword.ARCANE],
 )
 def p14460(c: Cast) -> None:

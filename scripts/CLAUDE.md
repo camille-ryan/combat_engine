@@ -240,6 +240,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `localise.py` | does every heroic row carry the localisation fields it needs; `--freeze`, `--drift`, `--snapshot`, `--rules` |
 | `cards.py` | does a monster ability's header say the numbers its stat block prints — attack, defence, damage, range, usage |
 | `keywords.py` | does a row's header declare the keywords its card printed; a per-ref baseline that may shrink and never grow. `--record` |
+| `targets.py` | can a row's target **pool** hold the thing its printed Target line names — a card reading "One weapon" offering an ally to pick. Same baseline shape as `keywords.py`. `--record` |
 | `drivers.py` | one mechanic's printed rule on a board built for it; positive and negative controls |
 | `replay.py` | the regression net over `fixtures/`; `record`, `verify` |
 | `api_smoke.py` | play an encounter over HTTP |

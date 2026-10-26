@@ -171,6 +171,16 @@ CHECKS = (
     # import of `content/` and two queries. #486.
     Instrument("keywords", ("uv", "run", "scripts/keywords.py", "--quiet"),
                "every header declares the keywords its card printed"),
+    # **The fourth of the same question**, and the one the first three cannot
+    # reach: `bonuses` a bonus type, `cards` a stat block's numbers,
+    # `keywords` a keyword list -- and nothing asked whether a power's target
+    # *pool* can hold the thing its Target line names. It could not for
+    # eleven rows, which `audit.py` reports as working because the effect
+    # does land, on the wrong kind of thing. Six fixed on the first run and
+    # three of the eleven appear nowhere in the issue that found them.
+    # Seconds: one import of `content/` and two queries. #855.
+    Instrument("targets", ("uv", "run", "scripts/targets.py", "--quiet"),
+               "a target pool can hold the thing its printed line names"),
     # **Added because its new half caught a real fork on its first run**, and
     # because nothing else asks this question: a leg's fork decides which rows a
     # character is offered and which race scores best in a draw, and until
