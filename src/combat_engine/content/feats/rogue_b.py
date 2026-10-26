@@ -254,7 +254,7 @@ def _window(c: Cast) -> object:
 
 
 def _round_of(slot: object) -> int:
-    return slot[0] if isinstance(slot, tuple) else int(slot)  # type: ignore[index]
+    return slot[0] if isinstance(slot, tuple) else int(slot)
 
 
 def _watch_payout(c: Cast) -> Callable[[], object]:

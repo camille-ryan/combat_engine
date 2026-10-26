@@ -1152,7 +1152,7 @@ def _every_py() -> tuple[Path, ...]:
     return tuple(out)
 
 
-#: Per-file counts of `# type: ignore` -- the **mypy** syntax, which the
+
 #: checker this repo actually runs does not honour. A baseline that may
 #: shrink and must not grow, the contract `fixtures/audited.json` and
 #: `fixtures/types.json` already use.
@@ -1396,7 +1396,7 @@ def _duplicate_defs() -> list[tuple[str, str, str, int]]:
     """
     out: list[tuple[str, str, str, int]] = []
     narrowed = {p.resolve() for p in _ONLY} if _ONLY else None
-    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # type: ignore[assignment]
+    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # ty: ignore[invalid-assignment]
     for (path, scope), names in sorted(scopes.items()):
         if narrowed is not None and not any(
             path.resolve() == q or q in path.resolve().parents for q in narrowed
@@ -1426,8 +1426,8 @@ def _unreferenced_defs() -> list[tuple[str, str]]:
     Private names only. A public one may be part of a surface something outside
     this scan reads. #410.
     """
-    used: Counter[str] = _scan()["used"]  # type: ignore[assignment]
-    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # type: ignore[assignment]
+    used: Counter[str] = _scan()["used"]  # ty: ignore[invalid-assignment]
+    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # ty: ignore[invalid-assignment]
     out: list[tuple[str, str]] = []
     for path in _asked_for():
         names = scopes.get((path, ""), {})
@@ -2638,7 +2638,7 @@ def _event_attrs() -> list[tuple[str, str, str]]:
     def body_of(fn: ast.AST) -> list[ast.AST]:
         """This handler's own nodes, stopping at any nested callable."""
         out: list[ast.AST] = []
-        stack = list(fn.body)  # type: ignore[attr-defined]
+        stack = list(fn.body)  # ty: ignore[unresolved-attribute]
         while stack:
             node = stack.pop()
             if isinstance(

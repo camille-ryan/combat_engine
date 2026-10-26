@@ -547,7 +547,7 @@ class Effects:
                 # The row that laid the effect. `by` is defaulted from the
                 # label, so this is the ref for all 333 call sites without
                 # any of them saying anything.
-                power=eff.by,  # type: ignore[attr-defined]
+                power=eff.by,  # ty: ignore[unresolved-attribute]
             ),
             eff,
         ))
@@ -608,7 +608,7 @@ class Effects:
                     _with_weapon(
                         ConditionApplied(
                             source=source, target=eff.owner, condition=c,
-                            duration=duration, power=eff.by,  # type: ignore[attr-defined]
+                            duration=duration, power=eff.by,  # ty: ignore[unresolved-attribute]
                         ),
                         eff,
                     )

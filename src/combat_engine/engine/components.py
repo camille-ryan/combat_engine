@@ -755,7 +755,7 @@ class Counted:
         return any(n > 0 for n in self.counts.values())
 
     def __contains__(self, k: object) -> bool:
-        return self.counts.get(k, 0) > 0  # type: ignore[arg-type]
+        return self.counts.get(k, 0) > 0
 
     def __iter__(self) -> Iterator[Keyword]:
         return iter(self.live)

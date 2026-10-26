@@ -142,7 +142,7 @@ def _second_kin_hit_slows(c: Cast, ref: str) -> None:
     tally = getattr(c.world, "_kin_round_hits", None)
     if tally is None:
         tally = {}
-        c.world._kin_round_hits = tally  # type: ignore[attr-defined]
+        c.world._kin_round_hits = tally
 
     def reset(ev: RoundStart) -> None:
         tally.clear()

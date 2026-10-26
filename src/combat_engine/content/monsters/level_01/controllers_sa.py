@@ -125,7 +125,7 @@ def _not_grabbing(world: object, eid: int) -> bool:
     """
     from combat_engine.content.powers.fighter.holds import holds_somebody
 
-    return not holds_somebody(world, eid)  # type: ignore[arg-type]
+    return not holds_somebody(world, eid)
 
 
 @power(

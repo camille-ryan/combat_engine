@@ -1423,7 +1423,7 @@ def m6604a3(c: Cast) -> None:
     )
     held = c.effect(f"{c.ref} disguise", until=When.EONT, on=c.me)
     if held is not None:
-        held.victim = victim  # type: ignore[attr-defined]
+        held.victim = victim
 
 
 @power(

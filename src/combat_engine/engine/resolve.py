@@ -1182,7 +1182,7 @@ def deal_damage(
         extra = whole - reprice(roll.total)
 
         def _priced(total: int, _r: object = reprice, _x: int = extra) -> int:
-            got = _r(total) + _x  # type: ignore[operator]
+            got = _r(total) + _x  # ty: ignore[call-non-callable]
             return got // 2 if halved else got
 
         announce.roll = roll  # ty: ignore[unresolved-attribute]

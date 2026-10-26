@@ -1025,7 +1025,7 @@ def both(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int, 
     def check(world: World, me: int, ev: Event) -> bool:
         return all(c(world, me, ev) for c in checks)
 
-    check.parts = checks  # type: ignore[attr-defined]
+    check.parts = checks  # ty: ignore[unresolved-attribute]
     return check
 
 
@@ -1036,7 +1036,7 @@ def either(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int
     def check(world: World, me: int, ev: Event) -> bool:
         return any(c(world, me, ev) for c in checks)
 
-    check.parts = checks  # type: ignore[attr-defined]
+    check.parts = checks  # ty: ignore[unresolved-attribute]
     return check
 
 

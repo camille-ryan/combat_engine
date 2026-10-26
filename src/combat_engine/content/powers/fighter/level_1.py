@@ -427,7 +427,7 @@ def p1758(c: Cast) -> None:
 def _has_shield(world: object, eid: int) -> bool:
     from combat_engine.engine import Gear
 
-    gear = world.get(eid, Gear)  # type: ignore[attr-defined]
+    gear = world.get(eid, Gear)
     return bool(gear and gear.shield)
 
 

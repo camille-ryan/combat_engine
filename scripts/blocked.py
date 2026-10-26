@@ -864,7 +864,7 @@ def _params_ok(head: str, rest: str, have: dict[str, object]) -> bool:
     if not wanted:
         return True
     try:
-        params = inspect.signature(have[head]).parameters  # type: ignore[arg-type]
+        params = inspect.signature(have[head]).parameters  # ty: ignore[invalid-argument-type]
     except (TypeError, ValueError):
         return False         # no signature, so it cannot take one -- see `_params_ok_on`
     return all(p in params for p in wanted)
@@ -888,7 +888,7 @@ def _params_ok_on(thing: object, rest: str) -> bool:
     if thing is None:
         return False
     try:
-        params = inspect.signature(thing).parameters  # type: ignore[arg-type]
+        params = inspect.signature(thing).parameters  # ty: ignore[invalid-argument-type]
     except (TypeError, ValueError):
         # **A thing with no signature cannot take an argument, so the honest
         # answer is no.** This used to read `return True`, waived as "a

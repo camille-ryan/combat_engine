@@ -10969,7 +10969,7 @@ def compelled_walk(out: Result) -> None:
         asked.append(what)
         return max(options, key=lambda sq: distance(sq, (12, 2)))
 
-    world2.decide = contrary          # type: ignore[assignment]
+    world2.decide = contrary
     c2 = Cast(world=world2, me=me2, ref="drivers:compelled-rigged")
     c2.walk_toward(foe2, on=me2)
     rigged = distance(world2.get(me2, Position).square, (12, 2))
@@ -20240,7 +20240,7 @@ def mage_school_riders(out: Result) -> None:
             return script[n] if n < len(script) else 6
 
         c = Cast(world=world, me=caster, ref=EVOCATION_POWER)
-        world.rng.die = scripted  # type: ignore[method-assign]
+        world.rng.die = scripted
         got = c._roll_damage("2d6")
         out.that(got == 2,
                  "2d6 of [1, 1], one die rerolled once into another 1, comes"
@@ -20518,13 +20518,13 @@ def a_feats_clause_in_its_power(out: Result) -> None:
             seen.append(on)
             return real(self, who, on=on, **kw)
 
-        Cast.grant_attack = record  # type: ignore[method-assign]
+        Cast.grant_attack = record
         try:
             c = Cast(world=world, me=caster, ref="p9501",
                      trigger=Miss(attacker=caster, target=missed, power=RANGED))
             REGISTRY["p9501"].body(c)
         finally:
-            Cast.grant_attack = real  # type: ignore[method-assign]
+            Cast.grant_attack = real
         return sum(1 for t in seen if t == candidate)
 
     without, with_it = asked(False), asked(True)
@@ -24705,7 +24705,7 @@ def reroll_after_the_roll(out: Result) -> None:
     def price_of(got: object) -> int | None:
         if not prices:
             return None
-        return prices[0](got.total)  # type: ignore[operator,union-attr]
+        return prices[0](got.total)  # ty: ignore[call-non-callable, unresolved-attribute]
 
     world.bus.on(DamageRolled, note_announced)
 
@@ -27105,7 +27105,7 @@ def what_a_creature_is_wearing(out: Result) -> None:
         # `**kw: Any` and not `**kw: object`: the recorder passes the
         # caller's keywords straight through, so narrowing them here only
         # makes `ty` check them against a signature this wrapper does not
-        # have. The old `# type: ignore[arg-type]` was mypy's spelling and
+
         # suppressed nothing -- five errors behind one unread comment. #721.
         def recording(n: int = 1, **kw: Any) -> int:
             asked.append(n)
@@ -31147,7 +31147,7 @@ def a_missed_attack_is_repeated_against_the_one_you_swapped_with(
         world, me, _started = _posed("p16049", 1)
         world.decider = (
             lambda actor, kind, options, prompt="":
-            chosen.append(options[0]) or options[0]  # type: ignore[func-returns-value]
+            chosen.append(options[0]) or options[0]
             if kind == "choose" else options[0])
         return world, me, enemies(world, me)[0]
 

@@ -308,7 +308,7 @@ def m1030a1(c: Cast) -> None:
     ),
 )
 def m1030a2(c: Cast) -> None:
-    c.condition(Condition.BLINDED, on=c.trigger.attacker, until=When.SAVE_ENDS)  # type: ignore[union-attr]
+    c.condition(Condition.BLINDED, on=c.trigger.attacker, until=When.SAVE_ENDS)
 
 
 @power("m1030a3", level=6, usage=ENCOUNTER, action=MINOR, reach=PERSONAL, target=NO_TARGET)
@@ -680,7 +680,7 @@ def m1737a2(c: Cast) -> None:
     on=Trigger(AttackDeclared, targets_my_side, "it or an ally is attacked by a creature"),
 )
 def m1737a3(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     if c.strike(on=attacker):
         c.hit(on=attacker)
         c.penalty("attack", 6, on=attacker, once=True, until=When.ENCOUNTER)
@@ -1997,7 +1997,7 @@ def m4260a3(c: Cast) -> None:
     ),
 )
 def m4260a4(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     if c.strike(on=attacker):
         c.hit(on=attacker)
         c.grants_advantage(on=attacker, until=When.EONT)
@@ -2439,7 +2439,7 @@ def m5491a6(c: Cast) -> None:
     ),
 )
 def m5491a7(c: Cast) -> None:
-    victim = c.trigger.target  # type: ignore[union-attr]
+    victim = c.trigger.target
     if c.strike(on=victim):
         c.spend_surge(on=victim)
         # Untyped, and deliberately: the card is not granting a bonus at all --
@@ -2562,7 +2562,7 @@ def m5610a2(c: Cast) -> None:
 )
 def m5610a3(c: Cast) -> None:
     ev = c.trigger
-    hits = [t for t in ev.types() if t in _ELEMENTS]  # type: ignore[union-attr]
+    hits = [t for t in ev.types() if t in _ELEMENTS]
     if not hits:
         return
     for old in list(c.world.effects.of(c.me)):

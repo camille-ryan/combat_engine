@@ -451,9 +451,9 @@ def familiar_of(world: World, eid: int) -> int | None:
     """
     mine = [
         e for e in world.having(Companion)
-        if world.get(e, Companion).owner == eid  # type: ignore[union-attr]
+        if world.get(e, Companion).owner == eid  # ty: ignore[unresolved-attribute]
     ]
-    named = [e for e in mine if world.get(e, Companion).kind == "familiar"]  # type: ignore[union-attr]
+    named = [e for e in mine if world.get(e, Companion).kind == "familiar"]  # ty: ignore[unresolved-attribute]
     if named:
         return named[0]
     return mine[0] if mine else None

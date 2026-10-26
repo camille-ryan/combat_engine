@@ -11496,7 +11496,7 @@ class Cast:
         """
         who = self._who(on) if on is not None else self.me
         if who is None:
-            return None  # type: ignore[return-value]
+            return None  # ty: ignore[invalid-return-type]
 
         # **"Its regeneration does not function on its next turn after
         # damage from a <property> weapon."** Fifteen stat blocks print

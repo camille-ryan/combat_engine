@@ -1042,7 +1042,7 @@ def m5575a3(c: Cast) -> None:
     ),
 )
 def m5575a4(c: Cast) -> None:
-    victim = c.trigger.actor  # type: ignore[union-attr]
+    victim = c.trigger.actor
     if c.strike(on=victim):
         c.hit(on=victim)
 

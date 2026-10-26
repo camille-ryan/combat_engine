@@ -681,7 +681,7 @@ _M1818_MOVED = "an enemy within 10 squares of the m1818 moves or shifts"
     on=Trigger(MoveStart, enemy_within(10), _M1818_MOVED),
 )
 def m1818a3(c: Cast) -> None:
-    victim = c.trigger.actor  # type: ignore[union-attr]
+    victim = c.trigger.actor
     if c.strike(on=victim):
         c.push(3, on=victim)
         c.cancel()
@@ -893,7 +893,7 @@ _M1826_CLAW = "m1826 makes a successful claw attack"
     on=Trigger(Hit, lambda w, me, ev: ev.attacker == me and ev.power == "m1826a0", _M1826_CLAW),
 )
 def m1826a1(c: Cast) -> None:
-    victim = c.trigger.target  # type: ignore[union-attr]
+    victim = c.trigger.target
     if c.strike(on=victim):
         c.hit(on=victim)
         c.ongoing(10, DamageType.POISON, on=victim)
@@ -1349,7 +1349,7 @@ def m3183a2(c: Cast) -> None:
     on=Trigger(Hit, _rider_mount_hit, "m3183's mount is hit by a melee attack"),
 )
 def m3183a3(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     mount = c.mount()
     if c.strike(on=attacker):
         c.hit(on=attacker)
@@ -1713,7 +1713,7 @@ _M3471_MELEE = "m3471 is hit or missed by a melee attack"
     ),
 )
 def m3471a2(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     c.shift(1)
     c.basic(on=attacker)
 
@@ -2094,7 +2094,7 @@ _M4255_MISS = "a melee attack misses m4255"
     on=Trigger(Miss, both(targets_me, by_melee), _M4255_MISS),
 )
 def m4255a2(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     c.shift(1)
     c.use_power("m4255a0", on=attacker, spend=False)
     if c.landed:
@@ -2210,8 +2210,8 @@ def m4324a2(c: Cast) -> None:
     ev = c.trigger
     vs = getattr(ev, "vs", AC)
     c.bonus(vs, 2, on=c.me, once=True, until=When.EOT)
-    if c.strike(on=ev.attacker):  # type: ignore[union-attr]
-        c.hit(on=ev.attacker)  # type: ignore[union-attr]
+    if c.strike(on=ev.attacker):
+        c.hit(on=ev.attacker)
 
 
 _M4324_MISS = "a melee or close attack misses m4324"
@@ -2576,7 +2576,7 @@ _M5614_HELD = "m5614 is subjected to an effect that immobilizes, slows, or restr
     on=Trigger(ConditionApplied, _m5614_held, _M5614_HELD),
 )
 def m5614a3(c: Cast) -> None:
-    c.cure(c.trigger.condition, on=c.me)  # type: ignore[union-attr]
+    c.cure(c.trigger.condition, on=c.me)
     c.insubstantial(until=When.EONT, on=c.me)
     c.phasing(until=When.EONT)
 
@@ -2684,7 +2684,7 @@ _M5630_HIT = "an enemy within 5 squares of the m5630 hits it with an attack"
     on=Trigger(Hit, both(targets_me, enemy_within(5)), _M5630_HIT),
 )
 def m5630a5(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     c.flat(10, dtype=DamageType.COLD, on=attacker)
     c.push(2, on=attacker)
 
@@ -2843,7 +2843,7 @@ _M6003_HIT = "m6003 is hit by a melee or a ranged attack"
 )
 def m6003a3(c: Cast) -> None:
     if c.roll("1d20") >= 10:
-        c.trigger.result.natural = 1  # type: ignore[union-attr]
+        c.trigger.result.natural = 1
 
 
 # --------------------------------------------------------------------------
