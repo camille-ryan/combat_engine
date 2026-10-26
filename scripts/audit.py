@@ -4482,6 +4482,96 @@ def _weapon_vocabulary() -> dict[str, str]:
     return out
 
 
+#: Printed `Weapon` columns a gate reads off what is in hand, and the
+#: column that has to be set for the gate to pass.
+_BY_FIELD = ("ranged", "thrown")
+
+#: What `_shoots` asks of a ranged weapon beyond the column being set.
+_PROJECTILE_GROUPS = frozenset({"bow", "crossbow", "sling"})
+
+
+@cache
+def _wanted_by_field(ref: str) -> tuple[str, ...]:
+    """Weapon refs for the printed `Weapon` **column** this row's gate reads.
+
+    The fifth way to arm a weapon. `f139`'s whole body is
+    `if _shoots(c): c.bonus("range", 5, ...)`, and `_shoots` reads
+    `w.ranged and w.group in _PROJECTILE` off `Gear.held`; `f140` asks
+    `_throws`, which reads `w.thrown`. Neither names a ref, a word, or
+    anything in `requires_text` -- so all four existing knobs answered
+    nothing and both rows sat on `silent_refs`.
+
+    **The gate is in a helper, so the read is two hops**, the same as
+    `_priced_in_another_class`: the row calls `_shoots`, and `_shoots` is
+    where `w.ranged` appears. Reading the row alone finds nothing.
+
+    #629 measured that all 35 of the silent rows which *lay* something are
+    guarded on a board condition rather than broken, and named these two as
+    the cheap confirmation: *"build the two weapon knobs first and watch
+    whether `f139` and `f140` leave the list."*
+
+    One weapon per column, cheapest first, and `ranged` additionally wants
+    a projectile group because that is what `_shoots` asks -- a thrown
+    dagger has a printed range and is not fired, which is the distinction
+    `chargen` keeps two columns for and `_throws`' own docstring records
+    getting wrong once.
+    """
+    row = REGISTRY.get(ref)
+    src = _source_of(getattr(row, "body", None), ref)
+    if not src:
+        return ()
+    import ast as _ast
+    import textwrap as _tw
+
+    def code(text: str) -> str:
+        """`text` with its docstrings taken out.
+
+        **`_throws`' own docstring says `w.ranged`** -- explaining that it
+        used to read the wrong column -- so a text search over the helper
+        handed `f140` a crossbow as well as a thrown blade. That is the
+        trap `_label_gated` uses `ast` to avoid, and not applying it here
+        cost a wrong arrangement on the first run.
+        """
+        try:
+            tree = _ast.parse(_tw.dedent(text))
+        except (SyntaxError, ValueError):
+            return text
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.FunctionDef | _ast.ClassDef | _ast.Module):
+                doc = _ast.get_docstring(node, clean=False)
+                if doc:
+                    text = text.replace(doc, "")
+        return text
+
+    reached = [code(src)]
+    try:
+        for node in _ast.walk(_ast.parse(_tw.dedent(src))):
+            if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name):
+                helper = _helpers().get(node.func.id)
+                if helper:
+                    reached.append(code(helper))
+    except (SyntaxError, ValueError):
+        pass
+    text = "\n".join(reached)
+    out: list[str] = []
+    for column in _BY_FIELD:
+        # **`w.<field>`, not any `.<field>`.** The loose form matched
+        # `p992` and `f1841`, which have nothing to do with how a weapon
+        # reaches -- an over-broad knob costs every one of those rows a set
+        # of extra attempts and can credit a row on an arrangement its gate
+        # never asked for, which is the direction that matters.
+        if not re.search(rf"\b(?:w|weapon|held|wp)\.{column}\b", text):
+            continue
+        for other, weapon in sorted(chargen.PRINTED.items()):
+            if not getattr(weapon, column, None):
+                continue
+            if column == "ranged" and weapon.group not in _PROJECTILE_GROUPS:
+                continue
+            out.append(other)
+            break
+    return tuple(out)
+
+
 def _wanted_by_word(ref: str) -> tuple[str, ...]:
     """Weapon refs for the printed weapon **words** this row's body names.
 
@@ -5258,7 +5348,16 @@ def _attempts(out: Result):  # noqa: ANN202
     # names a printed weapon *word* fell through all three, which is 27 rows
     # on `silent_refs`. Last, so a row that shows itself on a cheaper
     # arrangement is never credited by this one. #864.
-    for held in (*_wanted_weapon(out.ref), *_wanted_by_word(out.ref)):
+    # **Fifth: the printed *field* a gate reads, not a word or a ref.**
+    # `f139` asks `_shoots(c)` and `f140` asks `_throws(c)`, and those
+    # helpers read `Weapon.ranged` and `Weapon.thrown` off what is in hand
+    # -- a column, where `_wanted_by_word` matches a printed *word* and
+    # `_wanted_weapon` a ref. Both rows fell through all four and sat on
+    # `silent_refs`, and #629 names arming these two as its own cheapest
+    # confirmation that the 35 guarded rows are guarded rather than broken.
+    # Last again, for the reason the line above is last. #629.
+    for held in (*_wanted_weapon(out.ref), *_wanted_by_word(out.ref),
+                 *_wanted_by_field(out.ref)):
         for posed in (False, True):
             for face in LOADED:
                 for seed in range(1, TRIES + 1):
@@ -5324,6 +5423,13 @@ VERDICT_ROWS = (
     "p14271",    # an ordinary melee attack
     "p14262",    # a close burst that lays resist and vulnerability
     "mba",       # the engine's own melee basic
+    # Moved out of `VERDICT_SILENT` by #629's weapon-column knob: its gate
+    # is `_shoots(c)`, which reads `Weapon.ranged` off what is in hand, and
+    # the board now arms a crossbow for it. Pinned on the firing side so
+    # that losing the knob reds in seconds rather than at the next sweep --
+    # the reason `f2470` is pinned, and the plant that found the hole in
+    # this fixture.
+    "f139",
     "rba",       # and the ranged one
     "p1333",     # an attack whose damage rides on the attack ability
     # **A row that can only be provoked by a swing with a class on it.**
@@ -5349,7 +5455,18 @@ VERDICT_ROWS = (
 #: reports credit again, the window has been widened back.
 VERDICT_SILENT = (
     "f172",
-    "f139",
+    # **`f139` was pinned here and has moved to `VERDICT_ROWS`.** The
+    # premise above still holds for `f172` and no longer holds for it:
+    # #629's weapon-column knob arms a projectile weapon for the rows whose
+    # gate reads `Weapon.ranged`, so `_shoots(c)` is true and the row lays
+    # its bonus. Moved rather than deleted, which is the stronger end: a
+    # row whose right answer is "fires" is checkable, where dropping it
+    # would have left one fewer pin either way.
+    #
+    # The control this pair exists for is intact. `f172` is still gated on
+    # the two-weapon build nobody deals, and `f775` and `p13813` below are
+    # the stronger half by this fixture's own note -- bodies that "would
+    # report credit on any board at all". Widening the window still reds.
     # **Two rows whose bodies do nothing observable anywhere**, which is a
     # stronger control than the pair above and was wanted for a reason. #204's
     # two install nothing *on this board* -- they are gated on a two-weapon
