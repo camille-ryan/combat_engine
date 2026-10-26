@@ -15022,7 +15022,25 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
     # -- what a creature is holding -------------------------------------------
 
     def held(self, *, on: int | None = None, what: str = "") -> list[Weapon]:
-        """What that creature has in hand. `what` is `"magic"` or a group."""
+        """What that creature has in hand. `what` is `"magic"` or a group.
+
+        **Not a condition reader, and it is the only `c.<past participle>`
+        that is not.** `c.grabbed_by`, `c.latched`, `c.marked`, `c.dying`,
+        `c.cursed`, `c.rattled`, `c.exposed`, `c.guarding` and
+        `c.suffering` all answer "is this creature in that state"; this one
+        answers "what is in its hands" and returns a list. `Condition` has
+        no `HELD` member for it to be confused with, so nothing catches the
+        mistake: `if c.held():` is truthy whenever the creature is carrying
+        anything, which is nearly always, and reads as "is it held".
+
+        Said here rather than renamed. Measured across the tree: **23 call
+        sites, one of them a bare truthiness test, and that one is right**
+        -- `p15929`'s card says "while holding a weapon", so `if not
+        c.held(): return` is exactly its printed gate. An alias would have
+        added a member to the surface for a mistake nobody has made; a
+        warning where the next reader will be standing costs nothing.
+        #592.
+        """
         from .query import holding
 
         who = self._who(on)
