@@ -3148,6 +3148,28 @@ def _links_resolve(source: sqlite3.Connection, out: sqlite3.Connection) -> tuple
     return found, total
 
 
+#: Every table carrying a `spec` column, which is every table whose text an
+#: author or the page is shown. **Both scrub passes read this one tuple**,
+#: because they used to carry a list each and both went stale: when `#492`
+#: built the reconciliation, `_cross_reference_rest` was 13 of 14 and
+#: `_swap_sub_options` was 8 of 14 -- missing `associate`, `build_option`,
+#: `disease`, `race`, `racial_trait` and `terrain` -- in a loop whose own
+#: comment says *"every table that carries a spec"* and records having been
+#: widened once already because a narrow scope "left the narrower scope to go
+#: stale against a later build". It did it again.
+#:
+#: Still hand-written, deliberately, and `leaks.tables()` is what keeps it
+#: honest. Deriving it from the schema would start scrubbing any column
+#: somebody happens to name `spec`, which is a gate changing scope with
+#: nobody deciding to -- how `item.slot`'s 15 reward titles were missed.
+#: The gate names a difference instead; it cannot invent one.
+SPEC_TABLES = (
+    "power", "monster_power", "class_feature", "companion", "item",
+    "item_block", "feat", "race", "racial_trait", "trap", "disease",
+    "associate", "terrain", "build_option",
+)
+
+
 def _cross_reference(
     out: sqlite3.Connection,
     names: dict[str, dict[str, str]],
@@ -3325,8 +3347,7 @@ def _swap_sub_options(
     # `scrub` anchors on `\b`, so "the dragon breathes" is untouched. Checked
     # after the fact -- zero corrupted substitutions across every table.
     swapped = 0
-    for table in ("power", "feat", "item", "item_block", "class_feature",
-                  "companion", "monster_power", "trap"):
+    for table in SPEC_TABLES:
         rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
         for ref, spec in rows:
             if not spec:
@@ -3703,9 +3724,7 @@ def _cross_reference_rest(
     # **`disease` is in this list deliberately.** A new table that misses it
     # keeps every printed name its pages mention, and the pages mention
     # creatures constantly -- "9 + two-thirds <creature>'s level". #389.
-    for table in ("power", "monster_power", "class_feature",
-                  "companion", "item", "item_block", "feat", "race",
-                  "trap", "racial_trait", "disease", "associate", "terrain"):
+    for table in SPEC_TABLES:
         rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
         for ref, spec in rows:
             if not spec:
