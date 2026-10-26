@@ -380,6 +380,34 @@ def _cleared(page, selector: str, timeout: int = 5000) -> int:  # noqa: ANN001
     return count
 
 
+def _became(page, true_yet, timeout: int = 5000) -> bool:  # noqa: ANN001
+    """Wait until a read of the page answers True; return whether it did.
+
+    `_settled` and `_cleared` wait on a **count**, which covers "N of these
+    appeared" and "these went away" and not "this attribute changed". The
+    leg hand-over in `_check_day` is the third shape: the marker moves from
+    one chip to another, so neither chip appears or disappears and there is
+    nothing to count -- which is why that assertion was resting on a fixed
+    600 ms and failing under load. #847.
+
+    Returns the answer rather than raising, for `_settled`'s reason: the
+    check is then the thing that fails, with its own message, instead of a
+    locator timeout that says nothing about what was wrong.
+
+    `true_yet` is re-read every poll, so it must be a callable that reaches
+    the page afresh -- not a value, and not a locator attribute read once.
+    """
+    deadline = time.monotonic() + timeout / 1000
+    while time.monotonic() < deadline:
+        with contextlib.suppress(Exception):
+            if true_yet():
+                return True
+        page.wait_for_timeout(100)
+    with contextlib.suppress(Exception):
+        return bool(true_yet())
+    return False
+
+
 def _check_chargen(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN001
     """The advisor page: ranked, explained, and choosing nothing by itself.
 
@@ -473,9 +501,13 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
         "the movement range is not drawn until it is asked for",
     )
     check.that(_press_move(page), "the action list offers Move")
-    highlights = page.locator("#movement .mv")
-    check.that(highlights.count() > 0,
-               f"pressing Move highlights where you can go ({highlights.count()} squares)")
+    # **`_settled`, not a bare `count()`** -- the same fix its twin in
+    # `_check_enumerated_move` already carried. Pressing Move paints the
+    # squares asynchronously, so this read the overlay before it existed.
+    # #823.
+    lit = _settled(page, "#movement .mv", 1)
+    check.that(lit > 0,
+               f"pressing Move highlights where you can go ({lit} squares)")
 
     # **A bare board click must not move anybody (#139).** Moving is now
     # selected before it is aimed, in both modes, so the reachable square that
@@ -735,6 +767,23 @@ def _play_on(page, rounds: int) -> None:  # noqa: ANN001
     The first version preferred "anything that is not a move", which meant it
     found `second wind` and pressed it every single turn. Four rounds of a
     party healing itself and nothing else looked exactly like a stalled loop.
+
+    **And it carried #402's index bug, which is the third site of it in this
+    file.** It read the labels of `#actions button:not([disabled])`, picked a
+    position in that list, and clicked `.nth(pick)` of a **freshly
+    evaluated** locator -- and the disabled set churns continuously while the
+    board plays out the events behind its snapshot, so the set this re-reads
+    is often not the set the labels came from. The click then lands on a
+    different button, nobody's turn ends, and the fight does not progress.
+
+    That is why `_check_day` had stopped reaching its hand-over: the first
+    leg -- built to a quarter budget, "a creature or two, over in a few
+    clicks" -- was not finishing after 60, so three checks including #847's
+    were being skipped rather than asked. Found by planting a failure into
+    one of them and watching the run stay green.
+
+    So the index goes away here too: Playwright's `filter` resolves at click
+    time, and `has_not_text` expresses the "not second wind" half directly.
     """
     for _ in range(rounds):
         page.wait_for_timeout(120)
@@ -757,17 +806,21 @@ def _play_on(page, rounds: int) -> None:  # noqa: ANN001
         buttons = page.locator("#actions button:not([disabled])")
         if not buttons.count():
             return
-        labels = [t.lower() for t in _texts(page, "#actions button:not([disabled])")]
-        pick = _first(labels, lambda t: "->" in t and "second wind" not in t)
-        if pick is None:
-            pick = _first(labels, lambda t: t.startswith("move to"))
         # Ending the turn by its name rather than by its place in the list.
         # It used to be the last button and is now the first, and a policy
         # that presses whatever is at the bottom was pressing a power it
         # cannot fire without a square -- so nobody's turn ever ended.
-        if pick is None:
-            pick = _first(labels, lambda t: t.startswith("end turn"))
-        buttons.nth(pick if pick is not None else len(labels) - 1).click()
+        for want in (
+            buttons.filter(has_text=re.compile(r"->")).filter(
+                has_not_text=re.compile(r"second wind", re.I)),
+            buttons.filter(has_text=re.compile(r"^\s*move to", re.I)),
+            buttons.filter(has_text=re.compile(r"^\s*end turn", re.I)),
+        ):
+            if want.count():
+                want.first.click()
+                break
+        else:
+            buttons.last.click()
 
 
 def _first(labels: list[str], want) -> int | None:  # noqa: ANN001
@@ -905,6 +958,17 @@ def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
     # stop taking your own. The pause after each is the point: every render
     # clears the transforms, so a watcher that looks only between clicks
     # sees a board at rest and concludes nothing moved.
+    # **The suppressed exception is the thing to count.** #695: this check
+    # failed 3 runs in 8, and *every* failure was a flat zero while every
+    # pass was three or more -- nothing in between. That shape says the
+    # monsters' round never advanced, so there was nothing to animate; it
+    # does not say the animation was missed. A loop that clicked nothing has
+    # to say so rather than letting the assertion below report `0 of them
+    # slid`, which reads as a broken animator.
+    landed = 0
+    # Where everybody stands before the round, so a board on which nothing
+    # needed to walk can be told from an animator that is off. See below.
+    was_at = _positions(page)
     for _ in range(8):
         # **Found by text, never by index.** This read the labels, found the
         # position of "end turn" in that list, and then clicked `.nth(i)` of a
@@ -921,15 +985,65 @@ def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
         end = page.locator(
             "#actions button:not([disabled])"
         ).filter(has_text=re.compile("end turn", re.I))
-        with contextlib.suppress(Exception):
+        try:
             end.first.click(timeout=5000)
+            landed += 1
+        except Exception:
+            pass          # absent, disabled, or re-rendering; counted above
         # Every render clears the transforms, so a watcher looking only between
         # clicks sees a board at rest and concludes nothing moved.
         page.wait_for_timeout(2200)
     slid = set(page.evaluate("Array.from(window.__slid)"))
     enemies = {a for a in slid if a.startswith("npc")}
-    check.that(bool(enemies), f"enemy tokens animate ({len(enemies)} of them slid)",
-               f"tokens that moved at all: {sorted(slid)}")
+    # **Did any enemy change square at all?** This is the question the check
+    # was missing, and it is what #695's "always a flat zero, never anything
+    # in between" was really measuring. The board here is a *fresh page*, not
+    # a pinned seed -- deliberately, because `_restart` was leaving it
+    # mid-settle -- so the fight it opens with is a fresh draw. On a draw
+    # where the monsters start in contact with the party they attack from
+    # where they stand and never take a step, and there is nothing to
+    # animate. Asserting "they slid" against that board is asking a question
+    # the board cannot answer.
+    #
+    # Measured: a failing run reported `8 of 8 end-turn clicks landed; tokens
+    # that moved at all: []` -- every click took, and **no** token held a
+    # transform, the party's included. So the loop clicking nothing is *not*
+    # the cause #695 nominated, and the animator was not off either: a
+    # sibling run two minutes earlier saw 10 slide. #695 also claims every
+    # pass is "three or more, nothing in between"; a run here reported **1**,
+    # so that is not a property to reason from.
+    #
+    # A position that moved with no transform recorded is still a hard
+    # failure -- that is a token teleporting, which is the whole point of the
+    # check.
+    walked = {a for a, at in _positions(page).items()
+              if a.startswith("npc") and was_at.get(a) != at}
+    if not landed:
+        # A skip, not a pass dressed as one: `Checks.skip` is counted
+        # separately and the summary's `(of N asked)` still reconciles, which
+        # is the rule this file's own arithmetic caught eight sites breaking.
+        check.skip(
+            "enemy tokens animate",
+            "the end-turn button took none of 8 clicks -- absent, disabled or"
+            " re-rendering every time -- so the round never reached the"
+            " monsters and there was nothing to animate",
+        )
+    elif not walked and not enemies:
+        check.skip(
+            "enemy tokens animate",
+            f"no enemy changed square across {landed} end-turn click(s) -- on"
+            f" this draw they begin in contact and attack from where they"
+            f" stand, so there is no movement to animate. A teleport would"
+            f" still be caught: a square that moved with no transform seen is"
+            f" the failure below",
+        )
+    else:
+        check.that(bool(enemies),
+                   f"enemy tokens animate ({len(enemies)} of them slid)",
+                   f"{landed} of 8 end-turn clicks landed; "
+                   f"{len(walked)} enemy token(s) changed square "
+                   f"({sorted(walked)}) and none held a transform -- they "
+                   f"teleported. Tokens that moved at all: {sorted(slid)}")
     _set_speed(page, was or "instant")
 
 
@@ -955,14 +1069,31 @@ def _press_move(page) -> bool:  # noqa: ANN001
     those sixty round trips had been acting as an accidental sleep, holding
     the instrument back until the page had settled. Removing the delay did
     not cause the bug -- it stopped hiding it. #355.
+
+    **And it still carried #402's bug, 400 lines above the comment
+    explaining it.** This read every label, found the index of the Move row
+    in that list, and then clicked `.nth(i)` of a **freshly evaluated**
+    locator. `_check_enemies_animate` records what that costs, having been
+    fixed for it: *"re-evaluating the selector does not re-evaluate the
+    index"*, so an action list that re-renders between the two reads makes
+    `i` point at a different button and the click lands on something else.
+    Move is then never pressed, the overlay is **correctly** empty, and the
+    check downstream reports `0 squares` -- which reads as a broken page and
+    is a missed click. That is #823, and it only shows under load because
+    only a busy machine re-renders inside the gap.
+
+    So the index goes away: Playwright filters by text, and `.first`
+    resolves at click time. `^\s*move(?!\s*to)` is the same discrimination
+    the loop made -- the Move row, never a per-square "move to" row -- with
+    nothing cached in between.
     """
-    labels = [t.lower() for t in _texts(page, "#actions button")]
-    for i, label in enumerate(labels):
-        if label.startswith("move") and "move to" not in label:
-            page.locator("#actions button").nth(i).click(force=True)
-            page.wait_for_timeout(200)
-            return True
-    return False
+    move = page.locator("#actions button").filter(
+        has_text=re.compile(r"^\s*move(?!\s*to)", re.I))
+    if not move.count():
+        return False
+    move.first.click(force=True)
+    page.wait_for_timeout(200)
+    return True
 
 
 def _move_square_box(page, nth: int):  # noqa: ANN001, ANN202
@@ -1309,6 +1440,16 @@ def _restart(page, seed: int, served: list[dict] | None = None) -> None:  # noqa
         while len(served) <= mark and time.monotonic() < deadline:
             page.wait_for_timeout(100)
     page.wait_for_timeout(600)
+    # **The action list is drawn separately from the board, and every caller
+    # reads it.** The waits above settle the tokens and the snapshot; nothing
+    # waited on the list of things to do, so a caller reading labels straight
+    # out of a restart could see an empty or half-drawn one -- which is how
+    # "and offers Run" failed on a page that offers Run. #823.
+    #
+    # Short, and `_settled` returns what it reached rather than raising, so a
+    # board where the list is legitimately empty costs two seconds and no
+    # verdict. A longer wait here would be paid by every restart in the file.
+    _settled(page, "#actions button", 1, timeout=2000)
 
 
 #: What the day's four boxes are set to for the browser run. Low on purpose:
@@ -1379,9 +1520,29 @@ def _check_day(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN00
                f"{page.locator('#day-curve .curve-row').count()}")
 
     # -- play the leg out --------------------------------------------------
-    for _ in range(6):
+    # **24 rounds, not 6, because 6 was not enough and the shortfall was
+    # silent.** The budget was written against "a leg built to a quarter of
+    # the budget fields a creature or two, so the fight is over in a few
+    # clicks". It fields **8 tokens**, and the first leg needs about **110**
+    # clicks to finish -- measured, with the round it finished on printed:
+    #
+    #     round 0..9   tokens=8  next=0
+    #     round 10     next=1     -- finished after 110 clicks
+    #
+    # So the 60-click budget ran out every time, `check.skip` fired, and the
+    # whole hand-over block below was **never asked**: 67 checks instead of
+    # 75. Eight of them, including #847's, had quietly stopped running. The
+    # skip was honest -- `(of N asked)` reconciles, which is how this was
+    # found at all -- but nothing was reading the N.
+    #
+    # Found by planting a failure into one of those assertions and watching
+    # the run stay green. A plant that will not go red is a finding either
+    # way, and this was the other way: the check was not there to fail.
+    rounds = 0
+    while rounds < 24:
         if page.locator("#day-foot .day-next").count():
             break
+        rounds += 1
         _play_on(page, 10)
         page.wait_for_timeout(400)
 
@@ -1389,9 +1550,10 @@ def _check_day(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN00
     if not walk_on.count():
         check.skip(
             "the day offers the next encounter",
-            "the first leg had not finished after 60 clicks -- the panel"
-            " and the chips are still checked above, but the hand-over"
-            " between legs is not",
+            f"the first leg had not finished after {rounds * 10} clicks"
+            f" -- the panel and the chips are still checked above, but the"
+            f" hand-over between legs is not. It normally needs about 110,"
+            f" so a skip here means stuck rather than slow",
         )
         return
 
@@ -1423,13 +1585,25 @@ def _check_day(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN00
 
     walk_on.click()
     _settled(page, "#board .token", TOKENS_DRAWN)
-    page.wait_for_timeout(600)
-    legs = page.locator("#day-legs .leg")
-    check.that("current" in (legs.nth(1).get_attribute("class") or ""),
-               "walking on moves the marker to the second leg",
-               legs.nth(1).get_attribute("class") or "")
-    check.that(not page.locator("#day-foot .day-next").count(),
-               "and the button is gone while that fight is being played")
+    # **Both of these raced the hand-over on a fixed 600 ms**, so they failed
+    # under load and passed on an idle machine -- measured three times at the
+    # same commit, red inside a full `check.py` and green twice standalone.
+    # #847.
+    #
+    # The waits now belong to the conditions being asserted, which is
+    # `_settled`'s stated rule. This is `_cleared`'s first shape, not the
+    # case #451 argued could not be waited for: the button **was** there --
+    # `walk_on` exists above, and was clicked -- so becoming empty is a real
+    # condition and a late removal was a false red rather than a false green.
+    gone = _cleared(page, "#day-foot .day-next")
+    marked = _became(
+        page, lambda: "current" in (
+            page.locator("#day-legs .leg").nth(1).get_attribute("class") or ""))
+    check.that(marked, "walking on moves the marker to the second leg",
+               page.locator("#day-legs .leg").nth(1).get_attribute("class") or "")
+    check.that(not gone,
+               "and the button is gone while that fight is being played",
+               f"{gone} still there")
     check.that(len(problems) == before, "no script errors across the day",
                "; ".join(problems[before:][:3]))
 
