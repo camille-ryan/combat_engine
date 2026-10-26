@@ -354,6 +354,29 @@ def main() -> int:
         # exists must not read its absence as a pass.
         print("  (the DIFFICULT_LABELS census needs the whole tree and was"
               " not asked on a narrow run)")
+        print("  (so does the pre_empt/instead_of pairing: a word is"
+              " registered in one file and read in another)")
+    else:
+        _WHY = {
+            0: "nothing anywhere reads that word back",
+            1: "that ref declares no row, so nothing can read the word",
+            2: "no function of that name reads the word",
+            3: "neither that row's body nor anything it calls reads the word",
+        }
+        pairs, asked, unreadable = _clause_words()
+        for ref, what, where, why in pairs:
+            print(
+                f"{where}: c.pre_empt({ref!r}, {what!r}) -- {_WHY[why]}."
+                f" The effect lands and the action menu offers the choice,"
+                f" and picking it runs nothing. Both halves spell the word"
+                f" by hand, so a typo is invisible to the audit: the feat"
+                f" has a body, it fires, and an effect is laid. #741."
+            )
+            faults += 1
+        print(f"  pre_empt/instead_of: {asked} registration(s) paired"
+              + (f", {unreadable} not statically readable (the ref or the"
+                 f" word is an expression, so this says nothing about them)"
+                 if unreadable else ""))
     # **The advice is per fault, not one line for both.** The census answers
     # two opposite questions and the fixes are opposite too: an unused entry
     # should be dropped, and a label a zone really lays must **not** be --
@@ -2374,6 +2397,122 @@ def _dead_terrain_labels() -> list[tuple[str, str]]:
         for label in sorted(written)
         if not _is_terrain_label(label)
     ]
+
+
+#: A `pre_empt` target that is not a `@power` row. The word is read by a
+#: **function of that name** instead -- `manoeuvre:bull_rush` is answered by
+#: `Cast.bull_rush`, which does `self.instead_of("push", ...)`. Checked
+#: rather than waived: the pairing still has to be found, just one hop
+#: further out.
+_MANOEUVRE = re.compile(r"^manoeuvre:(\w+)$")
+
+
+def _clause_words() -> tuple[list[tuple[str, str, str, int]], int, int]:
+    """Every `c.pre_empt(ref, what, ...)` whose `what` nobody reads back.
+
+    `c.pre_empt(ref, what, clause)` is the write half and
+    `c.instead_of(what, default)` inside `ref`'s own body is the read half,
+    and **the word is free text on both sides**. So registering `"extra_hp"`
+    against a row whose body asks for `"extra_hitpoints"` lands the effect,
+    puts the entry on the action menu so a player sees the choice, and then
+    runs nothing when it is picked.
+
+    That is the `drawable-and-inert` fault the tree has been bitten by
+    before, caused by a typo, and the audit cannot see it: the feat has a
+    body, it fires, and an effect is laid. `c.bonus(once=)` got a refusal
+    gate for the same risk after five keys were silently mis-spent. #741,
+    #544.
+
+    **A check rather than a registry of valid words**, deliberately: a
+    hand-kept list would be wrong by the second week, which is the lesson
+    `vocab.py` was built from. The vocabulary here is whatever the rows
+    actually read.
+
+    Three ways a registration is satisfied, in order:
+
+    * the row's **own** body reads the word;
+    * a function the row's body **calls** reads it, because a row may hand
+      the clause off to a helper;
+    * the ref is `manoeuvre:<name>` and a function named `<name>` reads it.
+      Not a waiver -- the pairing is still found, one hop out, and
+      `Cast.bull_rush` really does `instead_of("push", ...)`.
+
+    Returns the faults, the number of sites checked, and the number it could
+    **not** read statically -- a registration whose ref or word is an
+    expression rather than a literal. Those are reported rather than passed
+    over, which is `types.py`'s rule about the files it swept past: a reader
+    who knows this check exists must not read its absence as a pass.
+    """
+    import ast
+    from collections import defaultdict
+
+    def literal(node: ast.expr | None) -> str | None:
+        """The string a node is, or None. `ast.Constant.value` is a union of
+        every literal type, so narrowing it here keeps every caller honest
+        rather than asserting `str` at eight sites."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
+
+    reads: dict[str, set[str]] = defaultdict(set)   # word -> function names
+    declares: dict[str, str] = {}                   # ref -> function name
+    calls: dict[str, set[str]] = defaultdict(set)   # function -> names called
+    regs: list[tuple[str, str, str, int]] = []
+    unreadable = 0
+
+    for path in sorted((ROOT / "src" / "combat_engine").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                for dec in node.decorator_list:
+                    if not isinstance(dec, ast.Call) or not dec.args:
+                        continue
+                    named = literal(dec.args[0])
+                    if named is not None:
+                        declares[named] = node.name
+                for inner in ast.walk(node):
+                    if not isinstance(inner, ast.Call):
+                        continue
+                    if isinstance(inner.func, ast.Name):
+                        calls[node.name].add(inner.func.id)
+                    elif isinstance(inner.func, ast.Attribute):
+                        calls[node.name].add(inner.func.attr)
+                        if inner.func.attr not in ("instead_of", "instead_of_now"):
+                            continue
+                        word = literal(inner.args[0]) if inner.args else None
+                        if word is not None:
+                            reads[word].add(node.name)
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "pre_empt"):
+                ref = literal(node.args[0]) if node.args else None
+                what = literal(node.args[1]) if len(node.args) > 1 else None
+                if ref is not None and what is not None:
+                    regs.append((ref, what, str(path), node.lineno))
+                else:
+                    unreadable += 1
+
+    faults: list[tuple[str, str, str, int]] = []
+    for ref, what, where, line in regs:
+        at = f"{where}:{line}"
+        readers = reads.get(what, set())
+        if not readers:
+            faults.append((ref, what, at, 0))
+            continue
+        found = _MANOEUVRE.match(ref)
+        if found:
+            if found.group(1) not in readers:
+                faults.append((ref, what, at, 2))
+            continue
+        owner = declares.get(ref)
+        if owner is None:
+            faults.append((ref, what, at, 1))
+        elif owner not in readers and not readers & calls.get(owner, set()):
+            faults.append((ref, what, at, 3))
+    return faults, len(regs), unreadable
 
 
 def _lends_nobody_asks_for() -> list[tuple[str, str, str]]:
