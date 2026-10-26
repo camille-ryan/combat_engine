@@ -311,8 +311,34 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
     pass every structural check here and be the single-encounter engine with
     extra steps -- the carry is the whole point, so `hp` entering leg 2 is
     what this is really about.
+
+    **The seed is pinned to a day the party clears, and that is not the
+    check being loosened.** Seed 7 was pinned here and the party lost its
+    *second* leg, so the loop broke and eleven checks per remaining leg were
+    never asked -- silently, until `Checks.skip` landed (#889). The three
+    assertions past leg 1 are the sharpest ones this function has (the
+    carry, the rest, and #666's milestone) and **none of them can be asked
+    on a day with fewer than two completed legs**: there is no hand-over to
+    be lossless about. That is `audit.py`'s pose argument, not a weakening
+    -- the question has to exist before it can be answered.
+
+    Measured over 24 seeds at this level and these scales, playing each day
+    out over HTTP:
+
+        cleared all three legs   11 of 24
+        two of three              6
+        one or none               7
+
+    So the party clears a day a little under half the time, and seed 7 sat
+    in the bottom third. Seed 1 clears. The distribution is recorded here
+    rather than in a commit message because the number is the reason the
+    seed is allowed to be chosen, and a later balance change will move it.
+
+    **The skip stays armed.** If a future change makes even this seed lose a
+    leg, the run says so and names what went unexercised instead of quietly
+    testing less -- which is the whole of #889.
     """
-    state = server.post("/api/day", {"level": 3, "seed": 7, "scales": [0.75, 1, 1.25]})
+    state = server.post("/api/day", {"level": 3, "seed": 1, "scales": [0.75, 1, 1.25]})
     did = state["id"]
     check.that(len(state["legs"]) == 3, "the day laid out the legs it was asked for",
                f"{len(state['legs'])}")
