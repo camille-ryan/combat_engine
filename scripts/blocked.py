@@ -35,6 +35,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -50,6 +51,8 @@ def main() -> int:
                     help="wanted symbols, ranked by how many rows asked")
     ap.add_argument("--refs", metavar="SYMBOL",
                     help="the refs waiting on this one, space separated, for spec.py")
+    ap.add_argument("--prose", action="store_true",
+                    help="rows admitting a dropped clause while declaring no marker")
     args = ap.parse_args()
 
     rows = _declared()
@@ -59,6 +62,9 @@ def main() -> int:
         if p.unfinished
     ]
     entries = json.loads(BLOCKED.read_text()) if BLOCKED.exists() else {}
+
+    if args.prose:
+        return _drops_report()
 
     if args.group or args.refs:
         return _queue(marked, entries, set(rows), args)
@@ -292,6 +298,18 @@ def _report(
             print(f"      {phrase!r:28} {len(refs):>3}  "
                   f"{' '.join(sorted(refs)[:6])}"
                   f"{' …' if len(refs) > 6 else ''}")
+    # **The fourth bucket, and the one nothing surfaced at all.** A row may
+    # admit its missing clause in prose and declare no marker, which makes it
+    # invisible to `todo.py` and to every count above -- #729 measured 369 and
+    # found 14 of 14 sampled genuine. One line here rather than the whole list,
+    # because `--prose` is where the list belongs and this report is already
+    # long; the point of the line is that the number cannot be zero unnoticed.
+    drops = _undeclared_drops()
+    if drops:
+        print(f"\n  and {len(drops)} row(s) admit a dropped clause in prose "
+              f"while declaring NO marker -- `--prose` for the list, grouped "
+              f"by phrase and by family. #729")
+
     if capped:
         print(f"  of the {waiting} blocked, {capped} also want something the "
               f"page does not print, so they cannot fully clear")
@@ -351,6 +369,182 @@ CORRECTED = (
     "no longer true", "had stopped", "correction", "corrected",
     "and that is false", "turned out",
 )
+
+
+#: What a docstring says when it admits a clause is unwritten. Sixteen
+#: phrases, taken from #729's hand reading of the shape rather than guessed:
+#: the signal is **a prose claim that something is absent**, which is why
+#: none of these is a symbol name.
+#:
+#: `"there is no"` is deliberately absent, for the reason `PREMISE`'s note
+#: gives at length -- it matched 52 rows at roughly one-in-ten precision,
+#: because most were correct claims about the *card* or the *circumstance*.
+ADMITS = (
+    "has no method", "is dropped", "are dropped", "is left out",
+    "nothing forbids", "no primitive", "cannot be written",
+    "has nowhere", "nothing expresses", "is not written",
+    "are not written", "no way to say", "nothing to hang",
+    "cannot be said", "no facility", "is unwritten",
+)
+
+#: Added to `CORRECTED` for this walk only. **This tree's style is to keep
+#: the history beside the fix**, so a docstring that says "X was dropped;
+#: written now" is a finished row describing its own past -- and counting it
+#: is how a report like this becomes a list nobody reads. #729 measured
+#: 536 admissions down to 369 by subtracting exactly these.
+MENDED = (
+    "written now", "is written now", "landed", "re-pointed", "repointed",
+    "was wrong", "stale", "closed by", "now writable", "paid",
+    "re-aimed", "reaimed", "fixed",
+)
+
+#: The six markers a row may carry. A row with any of them is already
+#: visible to `todo.py` and to the queue above, so it is not what #729 is
+#: about.
+MARKERS = ("todo", "dropped", "narrative", "obsolete", "defect", "declined")
+
+
+def _drops_report() -> int:
+    """Print the bucket `_undeclared_drops` finds, grouped three ways.
+
+    **The deliverable of #729**, whose last comment said the report did not
+    exist: *"Nothing yet surfaces the 369 except the probe quoted in the
+    body."* Three groupings because the bucket is read for three different
+    questions -- by phrase to judge the precision of the walk, by family to
+    hand a wave to one agent, and the ref list because `spec.py` takes refs.
+
+    **Exit 0 always.** It is a queue and not a gate: this count falls as
+    rows are written and rises as rows are written *honestly*, so reddening
+    on it would punish the second. `todo.py` is where a marker becoming
+    false is a failure.
+    """
+    rows = _undeclared_drops()
+    if not rows:
+        print("no row admits a dropped clause while declaring no marker")
+        return 0
+
+    print(f"{len(rows)} row(s) admit a dropped clause in prose and declare "
+          f"no marker.")
+    print("  Neither `todo.py` nor the queue above can see these: a marker "
+          "is what both read.")
+
+    by_phrase: dict[str, list[str]] = defaultdict(list)
+    for ref, phrase in rows:
+        by_phrase[phrase].append(ref)
+    print("\n  by what the docstring says:")
+    for phrase, refs in sorted(by_phrase.items(),
+                               key=lambda kv: (-len(kv[1]), kv[0])):
+        print(f"      {phrase!r:22} {len(refs):>4}  "
+              f"{' '.join(sorted(refs)[:5])}"
+              f"{' …' if len(refs) > 5 else ''}")
+
+    # By family rather than by file: a wave is handed out per directory
+    # (`delegating-rows-to-agents` -- partition by file, one agent per), and
+    # 355 rows across ~200 files is not a partition anybody can act on.
+    where = _families(r for r, _p in rows)
+    print("\n  by family:")
+    for family, refs in sorted(where.items(),
+                               key=lambda kv: (-len(kv[1]), kv[0])):
+        print(f"      {family:28} {len(refs):>4}")
+
+    print("\n  every ref, for spec.py:")
+    for line in _in_columns(sorted(r for r, _p in rows)):
+        print(f"      {line}")
+    return 0
+
+
+def _families(refs: Iterable[str]) -> dict[str, list[str]]:
+    """Group refs by the content subdirectory each is declared in.
+
+    One `rglob` rather than a lookup per ref: the registry knows a row's
+    module, but this walk has already parsed every file and asking the
+    registry would import all 677 of them for a report.
+    """
+    import ast
+
+    want = set(refs)
+    out: dict[str, list[str]] = defaultdict(list)
+    root = ROOT / "src" / "combat_engine" / "content"
+    for path in sorted(root.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        here = path.relative_to(root).parent
+        family = str(here) if str(here) != "." else "(top level)"
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for deco in node.decorator_list:
+                if not isinstance(deco, ast.Call):
+                    continue
+                for word in deco.args:
+                    # `isinstance(word.value, str)` rather than leaning on
+                    # `in want`: a `Constant` can hold a number, and a set of
+                    # refs would simply not contain it -- so the test is
+                    # already sound and this is what makes it *provably* so.
+                    if (isinstance(word, ast.Constant)
+                            and isinstance(word.value, str)
+                            and word.value in want):
+                        out[family].append(word.value)
+    return out
+
+
+def _undeclared_drops() -> list[tuple[str, str]]:
+    """Rows admitting a dropped clause in prose while declaring no marker.
+
+    **The bucket both trackers are blind to.** A marker is what `todo.py`
+    reports ready and what `blocked.py --group` counts; a row that describes
+    its missing clause in the docstring and declares nothing is invisible to
+    each. #729 measured 369 of them and read a random 14 by hand: **14 of
+    14 were genuine, live, undeclared dropped clauses**, no false positives.
+
+    Returned as `(ref, the phrase that admits it)`, the same shape as
+    `_premise_rows`, and for the same reason an `ast` walk rather than a
+    grep over the registry: the thing being read is the *source* docstring
+    beside the *source* header.
+
+    **A reading queue, not a ready list**, which is the warning
+    `_premise_rows` earns the hard way and this inherits. An admission is
+    evidence that a clause is missing; whether it is *writable* depends on
+    the facility, and of the 14 read by hand only three were writable that
+    day.
+    """
+    import ast
+
+    out: list[tuple[str, str]] = []
+    root = ROOT / "src" / "combat_engine" / "content"
+    for path in sorted(root.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            ref = ""
+            marked = False
+            decorated = False
+            for deco in node.decorator_list:
+                if not isinstance(deco, ast.Call):
+                    continue
+                decorated = True
+                for word in deco.args:
+                    if isinstance(word, ast.Constant) and isinstance(
+                            word.value, str):
+                        ref = ref or word.value
+                for kw in deco.keywords:
+                    if kw.arg in MARKERS:
+                        marked = True
+            if not (decorated and ref) or marked:
+                continue
+            said = (ast.get_docstring(node) or "").lower()
+            if not said or any(w in said for w in (*CORRECTED, *MENDED)):
+                continue
+            hit = next((w for w in ADMITS if w in said), "")
+            if hit:
+                out.append((ref, hit))
+    return out
 
 
 def _premise_rows() -> list[tuple[str, str]]:
