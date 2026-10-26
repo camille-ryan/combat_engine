@@ -76,14 +76,76 @@ BASELINE = ROOT / "scripts" / "fixtures" / "types.json"
 DRIFT = 4
 
 
-def _baseline() -> dict[str, int]:
+def _baseline() -> dict[str, dict[str, int]]:
+    """The recorded diagnostics, `{file: {fingerprint: count}}`.
+
+    **An old per-file count is refused rather than adapted.** A `{file: int}`
+    entry carries no fingerprints, so the only honest reading of it is "we
+    do not know which errors these were" -- and quietly treating the number
+    as a tolerance would reintroduce exactly the blindness #891 is about,
+    while looking migrated. `--migrate` is the one command that may read the
+    old shape.
+    """
     if not BASELINE.exists():
         return {}
-    return json.loads(BASELINE.read_text())
+    raw = json.loads(BASELINE.read_text())
+    return {f: dict(v) for f, v in raw.items() if isinstance(v, dict)}
+
+
+def _unmigrated() -> dict[str, int]:
+    """Entries still in the old per-file-count shape, if any."""
+    if not BASELINE.exists():
+        return {}
+    raw = json.loads(BASELINE.read_text())
+    return {f: v for f, v in raw.items() if isinstance(v, int)}
+
+
+def _total(held: dict[str, dict[str, int]]) -> int:
+    return sum(sum(d.values()) for d in held.values())
 
 
 def _per_file(text: str) -> dict[str, int]:
-    """How many errors each file owns, from `ty`'s own output.
+    """How many errors each file owns. `_owned` collapsed to a count.
+
+    Kept because three callers want the number and nothing else -- the
+    scope-artifact re-measure, the `carried` line, and the `--all` clearing
+    pass. The *record* is per diagnostic now (see `_owned`); this is a view
+    over it.
+    """
+    return {f: sum(d.values()) for f, d in _owned(text).items()}
+
+
+def _owned(text: str) -> dict[str, dict[str, int]]:
+    """Which diagnostics each file owns: `{file: {fingerprint: count}}`.
+
+    **The record is per diagnostic, not per file, and that is #891.** A
+    baseline of `{"scripts/drivers.py": 33}` says a number and nothing about
+    *which* 33, so it cannot answer the three questions that matter:
+
+    * is this error one we recorded? -- attribute nothing
+    * is it new? -- red, and name it
+    * did a recorded one go away? -- lower the baseline for free
+
+    A count collapses all three. Ten errors fixed and ten introduced reads
+    as no change, and a commit is blamed for debt it inherited the moment an
+    unrelated edit pulls a file into a narrow run's scope.
+
+    **The fingerprint is `rule|message` and deliberately carries no line
+    number.** A line drifts whenever anything above it moves, which is the
+    same reasoning `impact.py` gives for fingerprinting at function
+    granularity rather than by line -- and a baseline that churns on every
+    insertion is one nobody can read a diff of.
+
+    **A count per fingerprint, not a set.** `ty` reports the identical
+    message more than once in a file -- `scripts/drivers.py` has
+    the message "Object of type AttackRolled has no attribute result" twice
+    -- and
+    a set would collapse them, so fixing one of the two would look like
+    fixing neither. The count is what keeps the ratchet honest at that
+    grain.
+
+    Ownership is unchanged and is the half that was already hard-won: the
+    first `-->` after each `error[`, and only that one.
 
     **The first `-->` after each `error[`, and only that one.** A diagnostic
     carries its primary location *and* any number of `info:` back-pointers
@@ -103,25 +165,21 @@ def _per_file(text: str) -> dict[str, int]:
     So the count was never "errors this file owns"; it was "times this file
     was mentioned". `ty` prints one `error[` line per diagnostic, so arming
     on that and taking the next location is exactly ownership.
-
-    Fixing this makes every affected count **fall**, which the baseline
-    permits -- it may shrink and must not grow -- so no bless is needed and
-    none should be done on this run: a bless here would record the new,
-    correct numbers as the ceiling and that is the right move only once
-    somebody has read them.
     """
-    out: dict[str, int] = {}
-    want = False
+    out: dict[str, dict[str, int]] = {}
+    want = ""
     for line in text.splitlines():
         if line.startswith("error["):
-            want = True
+            rule, _, message = line[len("error["):].partition("]:")
+            want = f"{rule}|{message.strip()}"
             continue
         if not want:
             continue
         m = re.match(r"\s*-->\s*([^:]+\.py):", line)
         if m:
-            out[m.group(1)] = out.get(m.group(1), 0) + 1
-            want = False
+            held = out.setdefault(m.group(1), {})
+            held[want] = held.get(want, 0) + 1
+            want = ""
     return out
 
 
@@ -169,11 +227,24 @@ def _run(paths: list[str]) -> tuple[int, str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--bless", action="store_true",
-                    help="record the current counts as the baseline")
+                    help="record the current diagnostics as the baseline")
     ap.add_argument("--all", action="store_true",
-                    help="the whole scope, backlog included; expected red")
+                    help="the whole scope, backlog included")
+    ap.add_argument("--migrate", action="store_true",
+                    help="convert a per-file-count baseline to fingerprints")
     ap.add_argument("paths", nargs="*", help="specific files")
     args = ap.parse_args()
+
+    stale = _unmigrated()
+    if stale and not args.migrate:
+        print(f"{len(stale)} baseline entry(ies) still hold a per-file count"
+              f" ({sum(stale.values())} error(s)) and carry no fingerprints,"
+              f" so nothing can be attributed: {' '.join(sorted(stale))}")
+        print("run `types.py --migrate` on a clean tree. #891")
+        return 1
+
+    if args.migrate:
+        return _migrate(stale)
 
     if args.paths:
         targets = args.paths
@@ -187,174 +258,261 @@ def main() -> int:
 
     _, text = _run(targets)
     if args.bless:
-        # **Merged, and only ever downward.** This wrote `_per_file(text)`
-        # straight over the file, so blessing after a narrow run kept the
-        # files it had just checked and **deleted every other entry** -- one
-        # invocation took the baseline from 317 files to 7 and 1,993 errors
-        # to 58. Nothing was loosened by that, which is why it would not
-        # have shown up as a red run: a missing entry reads as 0 and makes
-        # the file stricter. It just silently threw away the record.
-        #
-        # So: start from what is there, lower an entry that improved, and
-        # refuse to raise one. A count that got worse is a thing to fix or
-        # to argue for, never to bless -- `scripts/CLAUDE.md`'s first rule.
-        #
-        # **And `ty`'s per-file counts move with the file set it is given**,
-        # so only the files actually checked in this run are touched:
-        # `cast.py` reports 44 alone and 45 across the whole scope, and
-        # recording the narrower figure makes `--all` red for no reason.
-        #
-        # That sentence was here, correct, and **not implemented** -- see
-        # `_asked_about`, which is now what makes it true. Three files were
-        # blessed down by ~440 errors between them on the strength of it.
-        base = _baseline()
-        reported = _per_file(text)
-        asked = _asked_about(reported, targets)
-        now = {f: n for f, n in reported.items() if f in asked}
-        swept = {f: n for f, n in reported.items() if f not in asked}
-        lowered = {f: (base[f], n) for f, n in now.items()
-                   if f in base and n < base[f]}
-        risen = {f: (base[f], n) for f, n in now.items()
-                 if f in base and n > base[f]}
-        # **A file arriving with errors is refused too.** The first draft let
-        # one in as a "fresh" entry, and a plant proved it: a file with no
-        # baseline has an implied 0, so recording its count is a loosening
-        # wearing a different word. Only a clean newcomer is recorded, which
-        # is what keeps a file from entering the record already in debt.
-        fresh = {f: n for f, n in now.items() if f not in base and not n}
-        arriving = {f: n for f, n in now.items() if f not in base and n}
-        # **An entry could never reach zero**, which made the baseline a
-        # ratchet in one direction only. `--bless` lowers an entry it was
-        # *reported*, and a file with no diagnostics produces no report -- so
-        # a file that went from 48 errors to 0 kept its 48 for ever.
-        # Measured after a clean full bless: 290 entries above zero for files
-        # `ty` now reports nothing about, permitting 942 errors that do not
-        # exist.
-        #
-        # Only on a full run, and that restriction is the whole of its
-        # safety: under a narrow run almost every file in `SCOPE` is absent
-        # from `reported` because it was never checked, and zeroing those
-        # would record a figure nothing measured. `--all` is the one
-        # invocation where "in scope and silent" means "clean". #886.
-        cleared: dict[str, int] = {}
-        dropped: dict[str, int] = {}
-        if args.all:
-            in_scope = _asked_about(dict.fromkeys(base, 0), list(SCOPE))
-            cleared = {f: base[f] for f in in_scope
-                       if f not in reported and base[f]}
-            # **And the entries for files this instrument never checks.**
-            # `content/` is deliberately outside `SCOPE`, so 284 of 317
-            # entries -- 899 of the 1,220 errors the baseline claimed --
-            # could never go red, could never be lowered, and inflated every
-            # total the instrument printed. That is not a baseline; it is a
-            # number. #886 records it misleading a reader once, which was me.
-            #
-            # Dropped rather than kept against the day `content/` enters
-            # `SCOPE`: these counts were recorded against an older `ty` and
-            # would be re-measured then anyway, so keeping them preserves
-            # nothing except the inflated total.
-            dropped = {f: n for f, n in base.items() if f not in in_scope}
-        base.update({f: n for f, (_was, n) in lowered.items()})
-        base.update(fresh)
-        base.update(dict.fromkeys(cleared, 0))
-        for f in dropped:
-            del base[f]
-        BASELINE.parent.mkdir(parents=True, exist_ok=True)
-        BASELINE.write_text(json.dumps(base, indent=2, sort_keys=True) + "\n")
-        for f, (was, n) in sorted(lowered.items()):
-            print(f"  tightened {f}: {was} -> {n}")
-        for f, n in sorted(fresh.items()):
-            print(f"  recorded  {f}: {n} (was not in the baseline)")
-        for f, (was, n) in sorted(risen.items()):
-            print(f"  LEFT ALONE {f}: {was} -> {n} is worse; fix it or argue"
-                  f" for it, do not bless it")
-        for f, n in sorted(arriving.items()):
-            print(f"  LEFT ALONE {f}: arriving with {n} error(s) and no"
-                  f" baseline; an implied 0 is the stricter record")
-        # Named rather than silently dropped. A reader who watched `ty`
-        # print diagnostics for `dsl.py` and then saw nothing about it here
-        # would reasonably think the bless had missed something.
-        for f, n in sorted(swept.items()):
-            print(f"  not a target {f}: {n} error(s) at this scope, which is"
-                  f" not comparable to a full-scope baseline")
-        for f, was in sorted(cleared.items()):
-            print(f"  cleared   {f}: {was} -> 0, in scope and `ty` reports"
-                  f" nothing about it")
-        if dropped:
-            print(f"  dropped {len(dropped)} entry(ies) for files outside"
-                  f" SCOPE, {sum(dropped.values())} error(s) that could"
-                  f" never go red or be lowered")
-        print(f"blessed {len(lowered) + len(fresh) + len(cleared)} file(s);"
-              f" {len(risen) + len(arriving)} refused;"
-              f" {len(swept)} swept in but not asked about;"
-              f" {len(base)} entries total")
-        return 1 if (risen or arriving) else 0
+        return _bless(text, targets, args.all)
+    return _compare(text, targets, args.all)
 
-    # **Not gated by `_asked_about`, deliberately.** A swept-in file's
-    # narrow count is the *lower* one, so comparing it against a full-scope
-    # baseline can only ever let it pass -- gating here would discard a real
-    # finding to tidy up a symmetry. If a swept-in file ever does report
-    # higher than its baseline, that is a question worth being red about,
-    # not a scope artifact to waive. Narrowing a check to match a bless is
-    # how the loosening in `scripts/CLAUDE.md`'s first rule happens.
+
+def _migrate(stale: dict[str, int]) -> int:
+    """Turn `{file: count}` into `{file: {fingerprint: count}}`, once.
+
+    **Mechanism only: it must not move a verdict.** So it measures the whole
+    `SCOPE` and records exactly what is there, and it **refuses** any file
+    whose live total exceeds the count the old baseline allowed -- that is
+    pre-existing drift, and recording it would be a loosening dressed up as
+    a format change. #891.
+    """
+    if not stale:
+        print("nothing to migrate: every entry already holds fingerprints")
+        return 0
+    _, text = _run(list(SCOPE))
+    live = _owned(text)
+    counts = {f: sum(d.values()) for f, d in live.items()}
+    in_scope = _asked_about(dict.fromkeys(stale, 0), list(SCOPE))
+    over = {f: (counts[f], stale[f]) for f in in_scope
+            if counts.get(f, 0) > stale[f]}
+    if over:
+        for f, (now, was) in sorted(over.items()):
+            print(f"  REFUSING {f}: {now} error(s) against an allowance of"
+                  f" {was} -- that is drift to fix or argue for, not to"
+                  f" migrate")
+        return 1
+    fresh = {f: dict(live.get(f, {})) for f in in_scope}
+    # Entries for files outside `SCOPE` are dropped, which is what `--bless
+    # --all` already does to them and for the same reason: this instrument
+    # never checks them, so their counts could never go red or be lowered.
+    outside = {f: n for f, n in stale.items() if f not in in_scope}
+    BASELINE.write_text(json.dumps(fresh, indent=2, sort_keys=True) + "\n")
+    print(f"migrated {len(fresh)} entry(ies), {_total(fresh)} error(s) across"
+          f" {sum(len(d) for d in fresh.values())} distinct diagnostic(s)")
+    for f in sorted(fresh):
+        was, now = stale[f], sum(fresh[f].values())
+        if was != now:
+            print(f"  {f}: {was} -> {now} (lower; the live count is what is"
+                  f" recorded)")
+    if outside:
+        print(f"  dropped {len(outside)} entry(ies) outside SCOPE,"
+              f" {sum(outside.values())} error(s)")
+    return 0
+
+
+def _compare(text: str, targets: list[str], wide: bool) -> int:
+    """Is every diagnostic one the baseline already holds?
+
+    **Not gated by `_asked_about`, deliberately.** A swept-in file's narrow
+    count is the *lower* one, so comparing it against a full-scope baseline
+    can only ever let it pass -- gating here would discard a real finding to
+    tidy up a symmetry. If a swept-in file ever does report higher than its
+    baseline, that is a question worth being red about, not a scope artifact
+    to waive. Narrowing a check to match a bless is how the loosening in
+    `scripts/CLAUDE.md`'s first rule happens.
+    """
     base = _baseline()
-    now = _per_file(text)
-    worse = {f: (n, base.get(f, 0)) for f, n in now.items() if n > base.get(f, 0)}
-    # **A TARGET can be over its baseline on scope alone, and the paragraph
-    # above does not cover that case.** It argues a swept-in file's narrow
-    # count is the lower one, which is true; a *target* checked with fewer
-    # files than the baseline run can report **more**. Measured: `cast.py`
-    # is 46 alone and 45 across the whole `SCOPE`, and the baseline holds
-    # the full-scope 45 -- so editing one line in it turned the suite red
-    # for a file whose new code has no diagnostics at all.
-    #
-    # The fix is **not** a tolerance. A count is only comparable against a
-    # baseline taken at the same scope, so a file that looks worse is
-    # re-measured at the scope the baseline came from, and only then
-    # believed. One extra `ty` run, on the failing path only, and the
-    # verdict comes out right rather than looser -- the distinction
-    # `scripts/CLAUDE.md`'s first rule turns on. #618.
-    if worse:
-        _, wide = _run(list(SCOPE))
-        at_scope = _per_file(wide)
-        explained = {f: (n, was) for f, (n, was) in worse.items()
-                     if at_scope.get(f, 0) <= base.get(f, 0)}
-        worse = {f: v for f, v in worse.items() if f not in explained}
-        for f, (n, was) in sorted(explained.items()):
-            print(f"  {f}: {n} at this scope but {at_scope.get(f, 0)} across"
-                  f" the whole scope, at or under its baseline of {was}"
-                  f" -- a scope artifact, not a regression")
-        # **Report the number that was compared, not the narrow one.** A
-        # file confirmed worse is worse by its full-scope count, since that
-        # is what the baseline holds; printing the narrow figure beside a
-        # full-scope baseline overstates the regression, which is its own
-        # way of being wrong about a number.
-        worse = {f: (at_scope.get(f, n), was) for f, (n, was) in worse.items()}
-    if worse:
+    now = _owned(text)
+    # Per fingerprint, which is the whole of #891: ten fixed and ten
+    # introduced used to read as no change.
+    over: dict[str, dict[str, tuple[int, int]]] = {}
+    for f, held in now.items():
+        had = base.get(f, {})
+        bad = {fp: (n, had.get(fp, 0)) for fp, n in held.items()
+               if n > had.get(fp, 0)}
+        if bad:
+            over[f] = bad
+
+    # **A target can be over its baseline on scope alone**, and that is not a
+    # regression. A count is only comparable against a baseline taken at the
+    # same scope -- `cast.py` is 46 alone and 45 across the whole `SCOPE` --
+    # so a file that looks worse is re-measured at the scope the baseline
+    # came from, and only then believed. One extra `ty` run, on the failing
+    # path only. The fix is not a tolerance. #618.
+    explained: dict[str, dict[str, tuple[int, int]]] = {}
+    if over:
+        _, text_wide = _run(list(SCOPE))
+        at_scope = _owned(text_wide)
+        for f, bad in list(over.items()):
+            seen = at_scope.get(f, {})
+            ok = {fp: v for fp, v in bad.items()
+                  if seen.get(fp, 0) <= v[1]}
+            left = {fp: (seen.get(fp, n), was) for fp, (n, was) in bad.items()
+                    if fp not in ok}
+            if ok:
+                explained[f] = ok
+            if left:
+                over[f] = left
+            else:
+                del over[f]
+        for f, ok in sorted(explained.items()):
+            print(f"  {f}: {len(ok)} diagnostic(s) at this scope that the"
+                  f" whole scope does not report above baseline -- a scope"
+                  f" artifact, not a regression")
+
+    if over:
         print(text.rstrip())
         print()
-        for f, (n, was) in sorted(worse.items()):
-            print(f"  {f}: {n} error(s), baseline {was}")
-        print(f"\n{sum(n - w for n, w in worse.values())} error(s) above the"
-              f" baseline in {len(worse)} file(s)")
-        # **`--all` reports drift rather than failing on it, and that is a
-        # different answer from the `return 0` it used to give.** The old
-        # code returned 0 under `--all` on the premise in its own help text
-        # -- "the whole scope, backlog included; expected red" -- which
-        # predates the baseline. With a baseline the backlog is absorbed, so
-        # a file above it is real drift and silence about it is wrong.
-        #
-        # But it is **not a failure of the change in hand**: the drift
+        for f, bad in sorted(over.items()):
+            print(f"  {f}:")
+            for fp, (n, was) in sorted(bad.items()):
+                rule, _, message = fp.partition("|")
+                tag = "NEW" if not was else f"{was} -> {n}"
+                print(f"      {tag:9} [{rule}] {message[:92]}")
+        total = sum(n - was for bad in over.values()
+                    for n, was in bad.values())
+        print(f"\n{total} error(s) above the baseline in {len(over)} file(s),"
+              f" named above -- each one is a diagnostic the baseline does"
+              f" not hold")
+        # **`--all` reports drift rather than failing on it.** The drift
         # happened in whichever commit caused it, and a red that is not
         # about your work is how red gets ignored -- `_sweep_owed`'s
         # reasoning, and `scripts/CLAUDE.md`'s record of a check that could
         # not pass. So a third code, which `check.py` prints and lets
         # withhold "all clean" without calling the run unhappy. #870.
-        return DRIFT if args.all else 1
-    carried = sum(now.values())
+        return DRIFT if wide else 1
+
+    carried = _total({f: d for f, d in now.items()})
+    gone = _gone(base, now, targets) if wide else {}
+    if gone:
+        print(f"  {sum(len(d) for d in gone.values())} recorded diagnostic(s)"
+              f" in {len(gone)} file(s) no longer occur -- `--bless --all`"
+              f" lowers the baseline for free")
     note = f" ({carried} carried, at or below baseline)" if carried else ""
     print(f"ok: {len(targets)} file(s) checked{note}")
     return 0
+
+
+def _gone(base: dict[str, dict[str, int]], now: dict[str, dict[str, int]],
+          targets: list[str]) -> dict[str, dict[str, int]]:
+    """Recorded diagnostics that no longer occur, per file.
+
+    **`--all` only**, and that restriction is the whole of its safety: under
+    a narrow run almost every file in `SCOPE` is absent from the report
+    because it was never checked, and "absent" would then mean "never
+    looked at" rather than "fixed". `--all` is the one invocation where in
+    scope and silent means clean. Same reasoning the old per-file `cleared`
+    pass carried, at the finer grain. #886, #891.
+    """
+    in_scope = _asked_about(dict.fromkeys(base, 0), list(SCOPE))
+    out: dict[str, dict[str, int]] = {}
+    for f in in_scope:
+        held = now.get(f, {})
+        missing = {fp: n for fp, n in base[f].items() if n > held.get(fp, 0)}
+        if missing:
+            out[f] = missing
+    return out
+
+
+def _bless(text: str, targets: list[str], wide: bool) -> int:
+    """Record the current diagnostics. **Only ever downward.**
+
+    `fixtures/audited.json`'s contract, and here for the same reason: the
+    tree carries years of standing type debt, so a file with 6 pre-existing
+    errors must not fail the moment somebody edits an unrelated line in it.
+
+    Three refusals, each of which a plant has proved necessary:
+
+    * **a diagnostic the baseline does not hold** -- new, or a higher count
+      of a recorded one. That is the thing to fix or to argue for, never to
+      bless; `scripts/CLAUDE.md`'s first rule.
+    * **a file arriving with errors and no entry.** A missing entry is an
+      implied 0, so recording its diagnostics is a loosening wearing a
+      different word. Only a clean newcomer is recorded.
+    * **a file swept in but not asked about.** `ty` reports diagnostics for
+      files it merely imported, and their counts are *lower* than the same
+      files' full-scope counts, so blessing them records a figure nothing
+      measured. This cost a real baseline once: a three-file run recorded
+      `cast.py` 45 -> 1, `dsl.py` 332 -> 9 and `query.py` 81 -> 7, none of
+      them edited, every number an artifact of the scope. It passed the
+      only-ever-downward guard because downward is the direction the
+      artifact points, which is why that guard is not sufficient alone.
+    """
+    base = _baseline()
+    reported = _owned(text)
+    asked = _asked_about({f: 0 for f in reported}, targets)
+    now = {f: d for f, d in reported.items() if f in asked}
+    swept = {f: d for f, d in reported.items() if f not in asked}
+
+    risen: dict[str, dict[str, tuple[int, int]]] = {}
+    lowered: dict[str, dict[str, tuple[int, int]]] = {}
+    for f, held in now.items():
+        had = base.get(f)
+        if had is None:
+            continue
+        up = {fp: (had.get(fp, 0), n) for fp, n in held.items()
+              if n > had.get(fp, 0)}
+        down = {fp: (had[fp], held.get(fp, 0)) for fp in had
+                if held.get(fp, 0) < had[fp]}
+        if up:
+            risen[f] = up
+        if down:
+            lowered[f] = down
+    fresh = {f: {} for f, d in now.items() if f not in base and not d}
+    arriving = {f: d for f, d in now.items() if f not in base and d}
+
+    # **Clearing a recorded diagnostic that no longer occurs is `--all` only**
+    # -- see `_gone`. Lowering a count for a diagnostic still present is not,
+    # which is the behaviour this had before #891 and the same risk profile.
+    cleared = _gone(base, now, targets) if wide else {}
+    dropped: dict[str, dict[str, int]] = {}
+    if wide:
+        in_scope = _asked_about(dict.fromkeys(base, 0), list(SCOPE))
+        dropped = {f: d for f, d in base.items() if f not in in_scope}
+
+    for f, down in lowered.items():
+        for fp, (_was, n) in down.items():
+            if n:
+                base[f][fp] = n
+            else:
+                base[f].pop(fp, None)
+    for f, missing in cleared.items():
+        for fp in missing:
+            base[f].pop(fp, None)
+    base.update(fresh)
+    for f in dropped:
+        del base[f]
+    BASELINE.parent.mkdir(parents=True, exist_ok=True)
+    BASELINE.write_text(json.dumps(base, indent=2, sort_keys=True) + "\n")
+
+    for f, down in sorted(lowered.items()):
+        for fp, (was, n) in sorted(down.items()):
+            print(f"  tightened {f}: {fp.partition('|')[0]} {was} -> {n}")
+    for f in sorted(fresh):
+        print(f"  recorded  {f}: clean, and now in the baseline")
+    for f, up in sorted(risen.items()):
+        for fp, (was, n) in sorted(up.items()):
+            rule, _, message = fp.partition("|")
+            tag = "NEW" if not was else f"{was} -> {n}"
+            print(f"  LEFT ALONE {f}: {tag} [{rule}] {message[:76]}"
+                  f" -- fix it or argue for it, do not bless it")
+    for f, d in sorted(arriving.items()):
+        print(f"  LEFT ALONE {f}: arriving with {sum(d.values())} error(s)"
+              f" and no baseline; an implied 0 is the stricter record")
+    # Named rather than silently dropped. A reader who watched `ty` print
+    # diagnostics for `dsl.py` and then saw nothing about it here would
+    # reasonably think the bless had missed something.
+    for f, d in sorted(swept.items()):
+        print(f"  not a target {f}: {sum(d.values())} error(s) at this scope,"
+              f" which is not comparable to a full-scope baseline")
+    if cleared:
+        print(f"  cleared {sum(len(d) for d in cleared.values())}"
+              f" diagnostic(s) in {len(cleared)} file(s) that no longer"
+              f" occur")
+    if dropped:
+        print(f"  dropped {len(dropped)} entry(ies) for files outside SCOPE,"
+              f" {_total(dropped)} error(s) that could never go red or be"
+              f" lowered")
+    print(f"blessed {len(lowered) + len(fresh) + len(cleared)} file(s);"
+          f" {len(risen) + len(arriving)} refused;"
+          f" {len(swept)} swept in but not asked about;"
+          f" {len(base)} entries, {_total(base)} error(s)")
+    return 1 if (risen or arriving) else 0
 
 
 if __name__ == "__main__":

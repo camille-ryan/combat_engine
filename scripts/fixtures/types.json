@@ -1,35 +1,230 @@
 {
-  "scripts/audit.py": 63,
-  "scripts/blocked.py": 0,
-  "scripts/cards.py": 2,
-  "scripts/chargen.py": 0,
-  "scripts/doctrine.py": 3,
-  "scripts/drivers.py": 33,
-  "scripts/expect.py": 2,
-  "scripts/fight.py": 4,
-  "scripts/guides.py": 4,
-  "scripts/legs.py": 1,
-  "scripts/lint.py": 11,
-  "scripts/show.py": 2,
-  "scripts/vocab.py": 1,
-  "scripts/winrate.py": 1,
-  "src/combat_engine/api/render.py": 7,
-  "src/combat_engine/chargen/__init__.py": 4,
-  "src/combat_engine/engine/actions.py": 6,
-  "src/combat_engine/engine/cast.py": 44,
-  "src/combat_engine/engine/components.py": 0,
-  "src/combat_engine/engine/dsl.py": 6,
-  "src/combat_engine/engine/durations.py": 5,
-  "src/combat_engine/engine/ecs.py": 0,
-  "src/combat_engine/engine/events.py": 0,
-  "src/combat_engine/engine/expect.py": 5,
-  "src/combat_engine/engine/grid.py": 1,
-  "src/combat_engine/engine/monster_math.py": 5,
-  "src/combat_engine/engine/movement.py": 3,
-  "src/combat_engine/engine/query.py": 1,
-  "src/combat_engine/engine/relations.py": 0,
-  "src/combat_engine/engine/resolve.py": 46,
-  "src/combat_engine/engine/triggers.py": 0,
-  "src/combat_engine/etl/build.py": 7,
-  "src/combat_engine/etl/feat.py": 1
+  "scripts/audit.py": {
+    "invalid-argument-type|Argument to `set.__init__` is incorrect": 1,
+    "invalid-argument-type|Argument to function `_behind` is incorrect": 1,
+    "invalid-argument-type|Argument to function `_since` is incorrect": 1,
+    "invalid-argument-type|Argument to function `candidates` is incorrect": 1,
+    "invalid-argument-type|Argument to function `use` is incorrect": 30,
+    "not-subscriptable|Cannot subscript object of type `object` with no `__getitem__` method": 1,
+    "unresolved-attribute|Attribute `basic` is not defined on `None` in union `Powers | None`": 1,
+    "unresolved-attribute|Attribute `cls` is not defined on `None` in union `Power | None`": 9,
+    "unresolved-attribute|Attribute `level` is not defined on `None` in union `Power | None`": 1,
+    "unresolved-attribute|Attribute `reach` is not defined on `None` in union `Power | None`": 1,
+    "unresolved-attribute|Attribute `square` is not defined on `None` in union `Position | None`": 1,
+    "unresolved-attribute|Attribute `used` is not defined on `None` in union `Powers | None`": 2,
+    "unresolved-attribute|Object of type `World` has no attribute `armed_effects`": 1,
+    "unresolved-attribute|Object of type `World` has no attribute `fight_cursor`": 5,
+    "unresolved-attribute|Object of type `World` has no attribute `setup_effects`": 1,
+    "unresolved-attribute|Object of type `object` has no attribute `ref`": 1,
+    "unresolved-attribute|Unresolved attribute `armed_effects` on type `World`": 1,
+    "unresolved-attribute|Unresolved attribute `fight_cursor` on type `World`": 1,
+    "unresolved-attribute|Unresolved attribute `setup_effects` on type `World`": 1,
+    "unresolved-attribute|Unresolved attribute `trained` on type `object`": 1,
+    "unsupported-operator|Unsupported `|=` operation": 1
+  },
+  "scripts/blocked.py": {},
+  "scripts/cards.py": {
+    "unresolved-attribute|Attribute `group` is not defined on `None` in union `Match[str] | None`": 1,
+    "unresolved-attribute|Attribute `start` is not defined on `None` in union `Match[str] | None`": 1
+  },
+  "scripts/chargen.py": {},
+  "scripts/doctrine.py": {
+    "unresolved-attribute|Attribute `ref` is not defined on `None` in union `Ident | None`": 2,
+    "unresolved-attribute|Attribute `square` is not defined on `None` in union `Position | None`": 1
+  },
+  "scripts/drivers.py": {
+    "invalid-argument-type|Argument is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `Cast.reroll_ones` is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `Cast.transfer` is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `list.append` is incorrect": 1,
+    "invalid-argument-type|Argument to function `keywords_of` is incorrect": 1,
+    "invalid-argument-type|Argument to function `place` is incorrect": 1,
+    "invalid-argument-type|Argument to function `usable` is incorrect": 3,
+    "not-iterable|Object of type `None` is not iterable": 1,
+    "unknown-argument|Argument `actor` does not match any known parameter": 1,
+    "unresolved-attribute|Attribute `dtypes` is not defined on `None` in union `Damage | None`": 1,
+    "unresolved-attribute|Attribute `keywords` is not defined on `None` in union `Power | None`": 2,
+    "unresolved-attribute|Attribute `stowed` is not defined on `None` in union `Gear | None`": 1,
+    "unresolved-attribute|Attribute `trained` is not defined on `None` in union `Skills | None`": 2,
+    "unresolved-attribute|Attribute `weapons` is not defined on `None` in union `Gear | None`": 1,
+    "unresolved-attribute|Object of type `AttackRolled` has no attribute `result`": 2,
+    "unresolved-attribute|Object of type `Event` has no attribute `rolls`": 1,
+    "unresolved-attribute|Object of type `Hit` has no attribute `result`": 2,
+    "unresolved-attribute|Object of type `object` has no attribute `bus`": 3,
+    "unresolved-attribute|Object of type `object` has no attribute `result`": 2,
+    "unresolved-attribute|Object of type `~None` has no attribute `label`": 1,
+    "unresolved-attribute|Unresolved attribute `ctx` on type `Hit`": 1,
+    "unresolved-attribute|Unresolved attribute `result` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `result` on type `Hit`": 2
+  },
+  "scripts/expect.py": {
+    "not-iterable|Object of type `list[str] | None | list[Divergent] | list[str | Divergent]` may not be iterable": 1,
+    "unsupported-operator|Unsupported `*` operation": 1
+  },
+  "scripts/fight.py": {
+    "unresolved-attribute|Attribute `hp` is not defined on `None` in union `Health | None`": 1,
+    "unresolved-attribute|Attribute `max_hp` is not defined on `None` in union `Health | None`": 1,
+    "unresolved-attribute|Unresolved attribute `fights_left` on type `World`": 1,
+    "unresolved-attribute|Unresolved attribute `paradigm` on type `World`": 1
+  },
+  "scripts/guides.py": {
+    "not-subscriptable|Cannot subscript object of type `None` with no `__getitem__` method": 2,
+    "unresolved-attribute|Function `_power_owners` has no attribute `_c`": 1,
+    "unresolved-attribute|Unresolved attribute `_c` on type `def _power_owners() -> dict[str, str]`": 1
+  },
+  "scripts/legs.py": {
+    "invalid-argument-type|Argument to function `dump` is incorrect": 1
+  },
+  "scripts/lint.py": {
+    "invalid-assignment|Not enough values to unpack": 1,
+    "invalid-return-type|Return type does not match returned value": 3,
+    "unresolved-attribute|Object of type `AST` has no attribute `body`": 1,
+    "unresolved-attribute|Object of type `AST` has no attribute `decorator_list`": 3,
+    "unresolved-attribute|Object of type `AST` has no attribute `lineno`": 2,
+    "unresolved-attribute|Object of type `expr` has no attribute `value`": 1
+  },
+  "scripts/show.py": {
+    "unresolved-attribute|Attribute `event` is not defined on `Sequence[Trigger]` in union `Trigger | Sequence[Trigger]`": 1,
+    "unresolved-attribute|Attribute `text` is not defined on `Sequence[Trigger]` in union `Trigger | Sequence[Trigger]`": 1
+  },
+  "scripts/vocab.py": {
+    "invalid-argument-type|Argument to function `signature` is incorrect": 1
+  },
+  "scripts/winrate.py": {
+    "invalid-assignment|Object of type `bool` is not assignable to attribute `USE_RATINGS` of type `Literal[True]`": 1
+  },
+  "src/combat_engine/api/render.py": {
+    "invalid-argument-type|Argument to class `tuple` is incorrect": 3,
+    "invalid-argument-type|Argument to function `_option_label` is incorrect": 1,
+    "invalid-argument-type|Argument to function `adjacent` is incorrect": 1,
+    "invalid-argument-type|Argument to function `area_of` is incorrect": 1,
+    "unresolved-attribute|Attribute `team` is not defined on `None` in union `Side | None`": 1
+  },
+  "src/combat_engine/chargen/__init__.py": {
+    "invalid-argument-type|Argument to function `_fits` is incorrect": 1,
+    "unresolved-attribute|Attribute `items` is not defined on `None` in union `Mods | None`": 1,
+    "unresolved-attribute|Attribute `stowed` is not defined on `None` in union `Gear | None`": 1,
+    "unresolved-attribute|Attribute `weapons` is not defined on `None` in union `Gear | None`": 1
+  },
+  "src/combat_engine/engine/actions.py": {
+    "invalid-argument-type|Argument to bound method `World.despawn` is incorrect": 2,
+    "invalid-argument-type|Argument to function `shift` is incorrect": 1,
+    "unresolved-attribute|Attribute `owner` is not defined on `None` in union `Companion | None`": 1,
+    "unresolved-attribute|Attribute `ref` is not defined on `None` in union `Companion | None`": 2
+  },
+  "src/combat_engine/engine/cast.py": {
+    "invalid-argument-type|Argument is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `Bus.on` is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `Cast._caught` is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `Cast.damage` is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `Cast.half_damage` is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `Effects.apply` is incorrect": 4,
+    "invalid-argument-type|Argument to bound method `Grid.lift` is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `World.get` is incorrect": 4,
+    "invalid-argument-type|Argument to bound method `list.append` is incorrect": 1,
+    "invalid-argument-type|Argument to bound method `list.insert` is incorrect": 2,
+    "invalid-argument-type|Argument to function `has_sense` is incorrect": 1,
+    "invalid-argument-type|Argument to function `heal` is incorrect": 1,
+    "invalid-argument-type|Argument to function `living` is incorrect": 1,
+    "invalid-argument-type|Argument to function `reach_of` is incorrect": 1,
+    "invalid-argument-type|Argument to function `spend_surge` is incorrect": 1,
+    "invalid-argument-type|Argument to function `surge_value` is incorrect": 1,
+    "invalid-assignment|Object of type `<class 'Hit'> | <class 'Miss'>` is not assignable to `str`": 1,
+    "invalid-assignment|Object of type `Literal[False]` is not assignable to attribute `passive` on type `Companion | None`": 1,
+    "invalid-assignment|Object of type `Literal[True]` is not assignable to attribute `passive` on type `Companion | None`": 1,
+    "invalid-assignment|Object of type `None` is not assignable to attribute `stowed` on type `Companion | None`": 1,
+    "invalid-assignment|Object of type `Position | None` is not assignable to attribute `stowed` on type `Companion | None`": 1,
+    "too-many-positional-arguments|Too many positional arguments: expected 0, got 1": 3,
+    "unresolved-attribute|Attribute `kind` is not defined on `None` in union `Companion | None`": 1,
+    "unresolved-attribute|Attribute `only_attacks` is not defined on `None` in union `Powers | None`": 1,
+    "unresolved-attribute|Attribute `owner` is not defined on `None` in union `Companion | None`": 3,
+    "unresolved-attribute|Attribute `passive` is not defined on `None` in union `Companion | None`": 1,
+    "unresolved-attribute|Attribute `ref` is not defined on `None` in union `Conjuration | None`": 1,
+    "unresolved-attribute|Attribute `stowed` is not defined on `None` in union `Companion | None`": 1,
+    "unresolved-attribute|Object of type `Hit` has no attribute `result`": 2,
+    "unresolved-attribute|Unresolved attribute `replaced` on type `Rerolled`": 1,
+    "unresolved-attribute|Unresolved attribute `result` on type `Rerolled`": 2
+  },
+  "src/combat_engine/engine/components.py": {},
+  "src/combat_engine/engine/dsl.py": {
+    "unresolved-attribute|Attribute `owner` is not defined on `None` in union `Companion | None`": 3,
+    "unresolved-attribute|Attribute `value` is not defined on `Sequence[DamageType]` in union `DamageType & ~Literal[DamageType.UNTYPED] | Sequence[DamageType]`": 1,
+    "unsupported-operator|Unsupported `&` operation": 1,
+    "unsupported-operator|Unsupported `-` operation": 1
+  },
+  "src/combat_engine/engine/durations.py": {
+    "invalid-argument-type|Argument to bound method `Bus.emit` is incorrect": 2,
+    "not-subscriptable|Cannot subscript object of type `None` with no `__getitem__` method": 1,
+    "unresolved-attribute|Unresolved attribute `by` on type `Effect`": 1,
+    "unresolved-attribute|Unresolved attribute `weapon` on type `Effect`": 1
+  },
+  "src/combat_engine/engine/ecs.py": {},
+  "src/combat_engine/engine/events.py": {},
+  "src/combat_engine/engine/expect.py": {
+    "invalid-return-type|Return type does not match returned value": 3,
+    "unresolved-attribute|Attribute `critical` is not defined on `None` in union `AttackResult | None`": 1,
+    "unresolved-attribute|Attribute `hit` is not defined on `None` in union `AttackResult | None`": 1
+  },
+  "src/combat_engine/engine/grid.py": {
+    "invalid-parameter-default|Default value of type `frozenset[Unknown]` is not assignable to annotated parameter type `set[tuple[int, int]]`": 1
+  },
+  "src/combat_engine/engine/monster_math.py": {
+    "call-non-callable|Object of type `object` is not callable": 2,
+    "invalid-argument-type|Argument is incorrect": 3
+  },
+  "src/combat_engine/engine/movement.py": {
+    "invalid-argument-type|Argument to function `distance` is incorrect": 1,
+    "unresolved-attribute|Unresolved attribute `kind_` on type `Moved`": 2
+  },
+  "src/combat_engine/engine/query.py": {
+    "invalid-return-type|Return type does not match returned value": 1
+  },
+  "src/combat_engine/engine/relations.py": {},
+  "src/combat_engine/engine/resolve.py": {
+    "invalid-assignment|Object of type `AttackResult` is not assignable to attribute `result` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `Defense` is not assignable to attribute `vs` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `bool` is not assignable to attribute `action_point` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `bool` is not assignable to attribute `charge` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `bool` is not assignable to attribute `opportunity` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `dict[str, int | str | tuple[int, ...]]` is not assignable to attribute `ctx` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `int` is not assignable to attribute `branch` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `int` is not assignable to attribute `granted_by` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `str` is not assignable to attribute `ammo` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `str` is not assignable to attribute `as_` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `str` is not assignable to attribute `granted_via` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `str` is not assignable to attribute `hand` on type `Hit | Miss`": 2,
+    "invalid-assignment|Object of type `tuple[int, ...] & ~AlwaysFalsy` is not assignable to attribute `among` on type `Hit | Miss`": 2,
+    "unresolved-attribute|Unresolved attribute `action_point` on type `AttackDeclared`": 1,
+    "unresolved-attribute|Unresolved attribute `action_point` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `ammo` on type `AttackDeclared`": 1,
+    "unresolved-attribute|Unresolved attribute `ammo` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `among` on type `AttackDeclared`": 1,
+    "unresolved-attribute|Unresolved attribute `among` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `as_` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `branch` on type `AttackDeclared`": 1,
+    "unresolved-attribute|Unresolved attribute `branch` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `charge` on type `AttackDeclared`": 1,
+    "unresolved-attribute|Unresolved attribute `charge` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `ctx` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `ctx` on type `DamageRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `granted_by` on type `AttackDeclared`": 1,
+    "unresolved-attribute|Unresolved attribute `granted_by` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `granted_via` on type `AttackDeclared`": 1,
+    "unresolved-attribute|Unresolved attribute `granted_via` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `opportunity` on type `AttackDeclared`": 1,
+    "unresolved-attribute|Unresolved attribute `opportunity` on type `AttackRolled`": 1,
+    "unresolved-attribute|Unresolved attribute `result` on type `AttackRolled`": 1
+  },
+  "src/combat_engine/engine/triggers.py": {},
+  "src/combat_engine/etl/build.py": {
+    "invalid-assignment|Invalid subscript assignment with key of type `Literal[\"derived\"]` and value of type `list[str]` on object of type `dict[str, str]`": 1,
+    "invalid-assignment|Invalid subscript assignment with key of type `Literal[\"possessive\", \"plural\", \"aliases\"]` and value of type `(str & ~AlwaysFalsy) | (list[str] & ~AlwaysFalsy)` on object of type `dict[str, str]`": 1,
+    "invalid-assignment|Invalid subscript assignment with key of type `int` and value of type `dict[Any | LiteralString, None | Any]` on object of type `dict[int, dict[str, str]]`": 1,
+    "invalid-assignment|Object of type `str` is not assignable to `dict[str, list[str]]`": 1,
+    "unresolved-attribute|Attribute `group` is not defined on `None` in union `Match[str] | None`": 2,
+    "unsupported-operator|Unsupported `<` operation": 1
+  },
+  "src/combat_engine/etl/feat.py": {
+    "invalid-argument-type|Argument to function `_key` is incorrect": 1
+  }
 }
