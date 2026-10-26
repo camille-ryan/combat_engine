@@ -298,9 +298,13 @@ KNOWN_SILENT = {
     # `c.my_weapon()` answers it and the row's gate reads the right ref.
     # The row is strictly narrower than it was -- it used to heal on any
     # bloodying this wielder did, which was wider than the card.
-    "i1688p1": "needs the blow to come through its own weapon, and the"
-               " board's weapon carries another item (#699) -- the rider"
-               " half of this is fixed (#698)",
+    # **Both premises are now gone and the entry with them.** The rider half
+    # went in #698 when the swing started stamping `AttackResult.weapon`;
+    # the first half -- "the board's weapon carries another item" -- was
+    # #699, and the board lays the item under test on the weapon now even
+    # when chargen already dealt a magic one. The hand-driven proof recorded
+    # above (*"with `i1688` put on the weapon in hand, `c.my_weapon()`
+    # answers it"*) is what the board does by itself.
     # "When you use your shifter racial power, the power's benefits extend to
     # one ally wielding a weapon affected by your `cf:artificer-f0s0`." Three
     # board facts have to line up at once and the board gives none of them:
@@ -493,7 +497,6 @@ KNOWN_SILENT = {
     # enemy without the sense -- the card being odd, not the row wrong.
     "f3235": "needs a cursed enemy to fall with the pact leg's use already spent",
     "i1470p1": "hides from blindsight; the board fields no enemy that has it",
-    "i744p1": "needs an unused wizard attack power to expend; the printed cost refuses",
     # The same tome card at six other levels, all written to charge the
     # same printed price. `i744p1` has refused on this board since it was
     # written; the others refused only once they started charging, and a row
@@ -501,20 +504,32 @@ KNOWN_SILENT = {
     # a row doing nothing. The borrowable set is also empty for the
     # summoning and lightning ones -- see `i2717p1`'s docstring.
     #
-    # **The board is a fighter, which is why none of these can pay.** The
-    # price is "an unused wizard attack power" and `audit.board` deals a
-    # character, so the bearer holds a dealt class's powers and no wizard
-    # row at all. `drivers.tome_trade` is what proves the trade works: it
-    # plants the bearer's spell list and asserts the loan, the charge, the
-    # offer, and all three ways the old two-statement shape got it wrong.
-    # So this is an excuse about the board, which is the only kind allowed
-    # here -- and the second axis of `_attempts` cannot fix it, because
-    # posing the row differently does not deal it a different class.
-    "i2717p1": "needs an unused wizard attack power to expend; the printed cost refuses",
-    "i2895p1": "needs an unused wizard attack power to expend; the printed cost refuses",
-    "i2898p1": "needs an unused wizard attack power to expend; the printed cost refuses",
-    "i2899p1": "needs an unused wizard attack power to expend; the printed cost refuses",
-    "i2900p1": "needs an unused wizard attack power to expend; the printed cost refuses",
+    # **Six of these eight are gone, and the one sentence they shared was
+    # right.** It read: the board is a fighter, so the bearer holds no
+    # wizard row at all and the price cannot be paid -- *"and the second
+    # axis of `_attempts` cannot fix it, because posing the row differently
+    # does not deal it a different class"*. True, and the answer was not a
+    # pose: `board` lends the bearer a few of that class's dailies, for the
+    # rows that ask. `i744p1`, `i1098p1`, `i1461p1`, `i2895p1`, `i2899p1`
+    # and `i2900p1` all pay the price and act. #705.
+    #
+    # **The two below are re-stated, because the reason they shared is now
+    # false for them.** The price *is* payable and cards *do* exist to
+    # borrow -- measured per rung on each board:
+    #
+    #     i2717p1  rung 5: payable=2  borrowable=4
+    #     i2898p1  rung 2: payable=1  borrowable=1
+    #
+    # So the refusal is further in than the class, and it is not the board
+    # dealing the wrong one. Named as an unexplained observation rather
+    # than given a reason I have not established, which is the shape
+    # `m5466a2`'s entry had before #754 found its cause.
+    "i2717p1": "borrows by keyword and still does nothing with the price "
+               "payable and cards to borrow at the same rung -- measured, "
+               "rung 5: payable=2 borrowable=4. Unexplained; not the class",
+    "i2898p1": "borrows by keyword and still does nothing with the price "
+               "payable and cards to borrow at the same rung -- measured, "
+               "rung 2: payable=1 borrowable=1. Unexplained; not the class",
     # **`i3012p1` is deliberately NOT here, and that is the useful part.**
     # It was, and `audit.py` answered OUTGROWN on the next run: its price is
     # the widest of the seven -- a daily attack *or* utility -- so one of
@@ -542,8 +557,6 @@ KNOWN_SILENT = {
     # `c.element()`, which is `None` on all eight seeds, so it correctly does
     # nothing on every board the harness can build. It stays on
     # `silent_refs`. #885.
-    "i1098p1": "needs an unused wizard utility power to expend; the printed cost refuses",
-    "i1461p1": "needs an unused wizard daily attack power; the printed cost refuses",
     "m1526a2": "resets an adjacent sprung trap; the board fields none",
     "m6115a0": "lends its square to siblings of its own stock; the board fields it alone",
     # Sustains. Both narrow to holds whose printed cost is a minor, and the
@@ -1483,6 +1496,118 @@ def _associated() -> dict[str, list[str]]:
     return out
 
 
+#: `ev.power == "<ref>"` inside a declared trigger predicate. The row's
+#: moment *is* another named row being used, and the predicate says which.
+_TRIGGER_REF = re.compile(
+    r'ev\.power\s*==\s*["\']([pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)["\']')
+
+
+#: `cls="wizard"` in a row's source, or in a helper it calls.
+_WANTS_CLASS = re.compile(r'cls\s*=\s*["\'](\w+)["\']')
+
+
+@cache
+def _priced_in_another_class(ref: str) -> str:
+    """The class whose powers this row charges a price in, or `""`.
+
+    Eight item rows charge a printed price in another class's power --
+    *"expend an unused wizard daily attack power of equal or higher
+    level"* -- and `audit.board` deals whatever class the dealer drew. On
+    48 of 48 attempts that is not a wizard, so the rows fire, refuse
+    correctly, and report silent. #705, and it is #663's argument in
+    another vocabulary: *"a row naming a weapon its board does not hold can
+    show nothing however it is posed"*, with `Powers.all` for
+    `Gear.weapons`.
+
+    **Two hops, because only two of the eight name the class themselves.**
+    The other six call `implement_b._tome_trade`, and *that* is where
+    `cls="wizard"` is written -- so reading the row alone finds nothing and
+    would have left six of eight still silent with the fix apparently in.
+    Same shape as `lint._clause_words` following a row into its helper.
+
+    Only a word `chargen.CLASSES` knows, which is what keeps this from
+    matching the `cls=ITEM` in every one of these rows' own headers -- that
+    is the item's own slot, not a price.
+    """
+    row = REGISTRY.get(ref)
+    src = _source_of(getattr(row, "body", None), ref)
+    if not src:
+        return ""
+    import ast as _ast
+    import textwrap as _tw
+
+    reached = [src]
+    try:
+        for node in _ast.walk(_ast.parse(_tw.dedent(src))):
+            if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name):
+                helper = _helpers().get(node.func.id)
+                if helper:
+                    reached.append(helper)
+    except (SyntaxError, ValueError):
+        pass
+    for text in reached:
+        for word in _WANTS_CLASS.findall(text):
+            if word in chargen.CLASSES and word != getattr(row, "cls", ""):
+                return word
+    return ""
+
+
+@cache
+def _helpers() -> dict[str, str]:
+    """Every module-level function in `content/`, by name, as source.
+
+    One pass, cached, because `_priced_in_another_class` asks about a
+    helper per row and the alternative is re-reading the tree 23,060 times.
+    """
+    import ast as _ast
+
+    out: dict[str, str] = {}
+    for path in sorted((ROOT / "src" / "combat_engine" / "content").rglob("*.py")):
+        try:
+            text = path.read_text()
+            tree = _ast.parse(text)
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        lines = text.splitlines(keepends=True)
+        for node in tree.body:
+            if isinstance(node, _ast.FunctionDef) and node.name not in out:
+                end = getattr(node, "end_lineno", node.lineno)
+                out[node.name] = "".join(lines[node.lineno - 1:end])
+    return out
+
+
+def _triggered_by(ref: str) -> list[str]:
+    """Rows this one's declared trigger waits for, by ref.
+
+    The fifth shape of sibling. `p16034` is `action=NONE` with
+    `on=Trigger(PowerUsed, lambda w, me, ev: ... ev.power == "p16033", ...)`
+    -- `turns.arm_traits` deliberately skips a row with a declared trigger,
+    so it waits for its moment, and **its moment is another named row being
+    used**, which the board never did. The verdict was about the board.
+    #779.
+
+    **The predicate is a closure and there is nothing to call**, which is
+    what `_typed_lenders` says about reading a gate. But the predicate is
+    written *inline in the decorator*, and `inspect.getsource` on a
+    decorated function returns its decorators too -- so the ref is in the
+    source even though it is not in any readable value. That is the one
+    thing that makes this cheap rather than a facility.
+
+    Measured: 8 rows name a literal ref this way, and `_siblings` already
+    reached 2 of them through a feat's `requires={"ref": ...}`. The other
+    six are what this adds, three of them reporting UNUSED.
+
+    A text search rather than an `ast` walk, deliberately and unlike
+    `_label_gated`: the pattern is `ev.power == "<ref>"`, which is already
+    unambiguous, and the alternative is walking a `Lambda` inside a
+    `keyword` inside a decorator `Call` to find the same comparison. The
+    docstring risk `_label_gated` guards against does not arise either --
+    no docstring writes `ev.power ==`.
+    """
+    row = REGISTRY.get(ref)
+    return _TRIGGER_REF.findall(_source_of(getattr(row, "body", None), ref))
+
+
 def _label_gated(ref: str) -> list[str]:
     """Rows whose **effect label** this one's body tests for, by ref.
 
@@ -1564,6 +1689,7 @@ def _siblings(ref: str) -> list[str]:
     if found:
         out += _item_blocks().get(found.group(1), [])
     out += _label_gated(ref)
+    out += _triggered_by(ref)
     seen: list[str] = []
     for other in out:
         if other != ref and other in REGISTRY and other not in seen:
@@ -2038,8 +2164,81 @@ def board(ref: str, seed: int, pose: bool = False,
                 if bow is not None and gear is not None:
                     gear.weapons.append(bow)
                     gear.wield(bow)
+            # **And onto the weapon, when chargen already dealt a magic
+            # one.** `equipment.equip` puts a weapon-slot item on a weapon
+            # that has no magic of its own; this build's axe already carries
+            # chargen's, so the item under test reached no weapon at all and
+            # `c.my_weapon()` -- "the weapon *this row's item* sits on" --
+            # answered None. Every row phrased "using this weapon" was then
+            # unprovable by construction, however it was posed.
+            #
+            # Measured on two boards, which is what shows it is the clash
+            # and not the mechanism:
+            #
+            #     i1688p1  weapons=[('w3612', item='i2882')]  my_weapon=None
+            #     i2842x1  weapons=[('w3612', item='i2842')]  my_weapon=w3612
+            #
+            # The second works because nothing else had claimed the axe. So
+            # the item under test takes it: the board exists to exercise one
+            # row, and the weapon it belongs to is the one that should carry
+            # it. Chargen's own magic is what gives way, because it is
+            # incidental here and the row under test is not. #699.
+            if magic.slot == "weapon":
+                from combat_engine.engine import Gear as _Gear
+
+                gear = world.get(caster, _Gear)
+                for held in (gear.weapons if gear is not None else []):
+                    if held.item != magic.ref:
+                        held.item = magic.ref
+                        held.enhancement = max(held.enhancement, magic.plus)
+                        break
         _hand_it_the_weapon(world, caster, declared)
         foe_team = Team.ENEMY
+
+    # **A price in another class's power, for the rows that charge one.**
+    # Eight item rows print "expend an unused wizard daily attack power of
+    # an equal or higher level" and `audit.board` deals whatever class the
+    # dealer drew -- not a wizard on 48 of 48 attempts -- so each fired,
+    # refused correctly, and reported silent. #705.
+    #
+    # `i3012p1` is the control and was found by accident: its price is the
+    # widest of the family, *a daily attack **or** utility*, so one of the
+    # 48 dealt bearers happened to hold something it could pay with, and
+    # `audit.py` answered OUTGROWN the moment an excuse was written for it.
+    # The family was never un-poseable; it was one axis away.
+    #
+    # Lent rather than re-dealt: dealing a wizard would change the class
+    # under every other reader on the board, where appending to
+    # `Powers.known` touches only the question being asked -- the same
+    # bargain `_typed_rows`, `_range_lenders` and `second_wind` already
+    # strike here.
+    #
+    # Only for the rows that ask, which is what keeps it free of
+    # collateral: `_priced_in_another_class` reads the class off the row
+    # **and the helper it calls**, because six of the eight name it only
+    # inside `implement_b._tome_trade`.
+    priced = _priced_in_another_class(ref)
+    if priced:
+        from combat_engine.engine.actions import Usage as _Usage
+        from combat_engine.engine.components import Powers as _Powers
+
+        known = world.get(caster, _Powers)
+        if known is not None:
+            # Dailies at or below this row's level, both halves of the
+            # attack line, because the family splits on it: one row wants
+            # `attacks=True`, another `attacks=False`, and a third does not
+            # narrow at all.
+            swings = [
+                other for other, row in REGISTRY.items()
+                if row.cls == priced and not row.triggers
+                and row.usage is _Usage.DAILY
+                and row.level <= max(1, getattr(declared, "level", 1))
+            ]
+            with_line = [o for o in swings if REGISTRY[o].attack is not None]
+            without = [o for o in swings if REGISTRY[o].attack is None]
+            for other in [*sorted(with_line)[:3], *sorted(without)[:3]]:
+                if other not in known.all:
+                    known.known.append(other)
 
     from combat_engine.engine import Health
 

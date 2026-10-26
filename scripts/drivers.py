@@ -20651,12 +20651,29 @@ def a_tome_charges_before_it_lends(out: Result) -> None:
 
     world, caster, _ = _board(ref)
     c = Cast(world=world, me=caster, ref=ref)
+    known = world.need(caster, Powers)
+
+    # **The empty hand is arranged here rather than assumed of the board.**
+    # This used to rely on `audit.board` dealing a fighter, so the bearer
+    # held no wizard row and the refusal came for free -- and #705 made the
+    # board lend a few of that class's dailies to the rows that charge in
+    # them, which is the whole point of that change and turned this
+    # assertion red. The rule was right and its control was borrowed.
+    #
+    # Emptying the hand explicitly is strictly better: the negative control
+    # now holds whatever the board does, and a future axis that deals the
+    # bearer a wizard outright cannot quietly satisfy it either.
+    lent = [r for r in list(known.known)
+            if REGISTRY.get(r) is not None and REGISTRY[r].cls == "wizard"]
+    for other in lent:
+        known.known.remove(other)
     out.that(_spend_unused(c, cls="wizard", level=5, attacks=True) is False,
              f"{ref} refuses when the bearer holds no unused wizard attack"
-             f" power -- the printed cost is a Requirement",
+             f" power -- the printed cost is a Requirement"
+             + (f" (took {len(lent)} lent wizard row(s) out of its hand"
+                f" first)" if lent else ""),
              "it charged something it should not have")
 
-    known = world.need(caster, Powers)
     known.known.append(card)
     before = dict(known.used)
     paid = _spend_unused(c, cls="wizard", level=5, attacks=True)
@@ -26098,14 +26115,28 @@ def which_weapon_the_blow_came_through(out: Result) -> None:
                  f"{ref} carries no marker for it any more",
                  f"todo={row.todo} dropped={row.dropped}")
 
-    # -- and the one it cannot, with the reason named ----------------------
+    # -- and the third, which the board can pose now -----------------------
+    #
+    # **This assertion used to pin the bug.** It read `mine is None` and
+    # said so: *"i1688p1's board puts a DIFFERENT item on the weapon, so
+    # `c.my_weapon()` answers None and its gate cannot pass -- the reason it
+    # is excused rather than written wider (#699)."* True when written, and
+    # a control that documents a limitation goes red the day the limitation
+    # is lifted rather than quietly passing -- which is what it did, and why
+    # it is turned round here instead of deleted.
+    #
+    # #699: `board` lays the item under test on the weapon even when chargen
+    # already dealt a magic one, so `c.my_weapon()` answers it and the row's
+    # gate reads the right ref. Asserting the **positive** is strictly
+    # stronger: `None` was satisfied by any of a dozen failures, and this is
+    # satisfied by one thing.
     world, me, _ = audit_board("i1688p1", 1)
     gear = world.get(me, Gear)
     mine = Cast(world=world, me=me, ref="i1688p1").my_weapon()
-    out.that(mine is None,
-             "i1688p1's board puts a DIFFERENT item on the weapon, so"
-             " `c.my_weapon()` answers None and its gate cannot pass -- the"
-             " reason it is excused rather than written wider (#699)",
+    out.that(mine is not None and mine.item == "i1688",
+             "i1688p1's board lays the item under test on the weapon, so"
+             " `c.my_weapon()` answers it and the row's gate reads its own"
+             " ref (#699)",
              f"{[(w.ref, w.item) for w in gear.weapons] if gear else None}")
     health = world.get(me, Health)
     out.that(health is not None, "and the board is otherwise intact")
