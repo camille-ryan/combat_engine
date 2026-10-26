@@ -125,8 +125,18 @@ ASSOCIATED = ("feat.associated_powers",)
 #: #281. `ABILITY_SWAP` is gone: `c.rolls_with` exists and both rows that
 #: wanted it say the sentence now.
 _ASSOCIATED = {"f3427": ("p5919", "p1341"), "f3429": ("p1401", "p501")}
-#: Trading away the extra damage an augment would have dealt.
-FORGO = ("c.forgo_damage()",)
+# **`FORGO` is retired and this records why the constant is gone**, the way
+# `REACH` below does. It held `c.forgo_damage()` for a feat trading away the
+# extra damage an augment would have dealt. #606 read all six cards on that
+# symbol and found **two unrelated gaps and no missing verb**: three rows
+# want one die off a striker's rider, which `features/strikers.py`'s
+# `pay_extra` already parameterises, and three want a row to decline its own
+# damage, which `c.strike()` never charged for in the first place.
+#
+# Five of the six are written and carry no marker. The sixth, `f959`, is the
+# class-of-powers case and is `c.pre_empt(damage_of=)` under #780 -- a
+# different symbol for a different reason. So this one is at zero rows and
+# the constant had no readers.
 #: `f1028`'s own hold: a power's reach is header data and is never rewritten
 #: for one use, so no attack is ever "made using" it.
 #:
