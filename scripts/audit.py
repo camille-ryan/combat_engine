@@ -6633,8 +6633,26 @@ def main() -> int:
               + (" ..." if len(implemented) > 6 else ""))
     if broken or silent:
         if graded:
-            print(f"  {len(broken)} raise, {len(fresh)} newly silent, "
-                  f"{len(carried)} silent at the last full sweep too")
+            # **Named, not counted.** Every other line in this summary names
+            # its rows and this one did not -- and it is the one a reader has
+            # to act on, because a newly-silent row is the only verdict that
+            # means something you just did broke something.
+            #
+            # The count alone sends you to a diff against `silent_refs`, and
+            # that baseline is *routinely* stale: the watermark is withheld on
+            # a dirty tree (#723), and a content commit that moves a marker
+            # re-rolls the whole chargen draw through
+            # `choices.carries_a_marker`. Measured cost: in #885 the stale
+            # baseline said three rows were newly silent, the unchanged
+            # instrument said one of them was mine, and two design iterations
+            # went into fixing rows that were already silent before I
+            # started. #892.
+            fresh_refs = sorted(r.ref for r in fresh)
+            named = (" (" + ", ".join(fresh_refs[:8])
+                     + (" ..." if len(fresh_refs) > 8 else "") + ")"
+                     if fresh_refs else "")
+            print(f"  {len(broken)} raise, {len(fresh)} newly silent{named}"
+                  f", {len(carried)} silent at the last full sweep too")
         else:
             print(f"  {len(broken)} raise, {len(silent)} silent")
     if healed:
