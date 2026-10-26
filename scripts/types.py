@@ -223,8 +223,42 @@ def main() -> int:
         # is what keeps a file from entering the record already in debt.
         fresh = {f: n for f, n in now.items() if f not in base and not n}
         arriving = {f: n for f, n in now.items() if f not in base and n}
+        # **An entry could never reach zero**, which made the baseline a
+        # ratchet in one direction only. `--bless` lowers an entry it was
+        # *reported*, and a file with no diagnostics produces no report -- so
+        # a file that went from 48 errors to 0 kept its 48 for ever.
+        # Measured after a clean full bless: 290 entries above zero for files
+        # `ty` now reports nothing about, permitting 942 errors that do not
+        # exist.
+        #
+        # Only on a full run, and that restriction is the whole of its
+        # safety: under a narrow run almost every file in `SCOPE` is absent
+        # from `reported` because it was never checked, and zeroing those
+        # would record a figure nothing measured. `--all` is the one
+        # invocation where "in scope and silent" means "clean". #886.
+        cleared: dict[str, int] = {}
+        dropped: dict[str, int] = {}
+        if args.all:
+            in_scope = _asked_about(dict.fromkeys(base, 0), list(SCOPE))
+            cleared = {f: base[f] for f in in_scope
+                       if f not in reported and base[f]}
+            # **And the entries for files this instrument never checks.**
+            # `content/` is deliberately outside `SCOPE`, so 284 of 317
+            # entries -- 899 of the 1,220 errors the baseline claimed --
+            # could never go red, could never be lowered, and inflated every
+            # total the instrument printed. That is not a baseline; it is a
+            # number. #886 records it misleading a reader once, which was me.
+            #
+            # Dropped rather than kept against the day `content/` enters
+            # `SCOPE`: these counts were recorded against an older `ty` and
+            # would be re-measured then anyway, so keeping them preserves
+            # nothing except the inflated total.
+            dropped = {f: n for f, n in base.items() if f not in in_scope}
         base.update({f: n for f, (_was, n) in lowered.items()})
         base.update(fresh)
+        base.update(dict.fromkeys(cleared, 0))
+        for f in dropped:
+            del base[f]
         BASELINE.parent.mkdir(parents=True, exist_ok=True)
         BASELINE.write_text(json.dumps(base, indent=2, sort_keys=True) + "\n")
         for f, (was, n) in sorted(lowered.items()):
@@ -243,7 +277,14 @@ def main() -> int:
         for f, n in sorted(swept.items()):
             print(f"  not a target {f}: {n} error(s) at this scope, which is"
                   f" not comparable to a full-scope baseline")
-        print(f"blessed {len(lowered) + len(fresh)} file(s);"
+        for f, was in sorted(cleared.items()):
+            print(f"  cleared   {f}: {was} -> 0, in scope and `ty` reports"
+                  f" nothing about it")
+        if dropped:
+            print(f"  dropped {len(dropped)} entry(ies) for files outside"
+                  f" SCOPE, {sum(dropped.values())} error(s) that could"
+                  f" never go red or be lowered")
+        print(f"blessed {len(lowered) + len(fresh) + len(cleared)} file(s);"
               f" {len(risen) + len(arriving)} refused;"
               f" {len(swept)} swept in but not asked about;"
               f" {len(base)} entries total")
