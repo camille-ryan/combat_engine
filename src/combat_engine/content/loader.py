@@ -41,7 +41,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import REGISTRY, entry_defect
 from combat_engine.engine.movement import place
-from combat_engine.engine.types import ActionType, DamageType
+from combat_engine.engine.types import ActionType, DamageType, Keyword
 
 SIZES = {
     "tiny": Size.TINY, "small": Size.SMALL, "medium": Size.MEDIUM,
@@ -105,6 +105,27 @@ def spawn(world: World, ref: str, square: tuple[int, int], *, team: Team = Team.
                   if k in DamageType._value2member_map_}
     immune = {DamageType(k) for k in json.loads(row["immune"] or "[]")
               if k in DamageType._value2member_map_}
+    # **The other half of the same column, which was being dropped.** A
+    # printed "Immune fear" is an immunity to a whole class of effect rather
+    # than to damage, and the filter above keeps only `DamageType` members --
+    # so disease on 488 monsters, fear on 61, gaze on 36, sleep on 31 and
+    # charm on 27 were read out of `game.db` and thrown away, while two feats
+    # sat marked for want of the reader. #560.
+    #
+    # Split on `;` because the importer crams more than one fact into a
+    # token -- `["disease", "poison; resist 10 necrotic"]` is one row's
+    # worth -- so the keyword is not always the whole string. The
+    # resist/vulnerable text that arrives here is a separate extraction
+    # fault and is left alone rather than guessed at: matching against the
+    # `Keyword` vocabulary means a token this does not understand is
+    # ignored, never invented.
+    immune_keywords = {
+        Keyword(part)
+        for token in json.loads(row["immune"] or "[]")
+        for raw in token.split(";")
+        if (part := raw.strip().lower()) in Keyword._value2member_map_
+        and part not in DamageType._value2member_map_
+    }
 
     known = stock.declared
     printed = world.scaling.printed_monster(row["level"])
@@ -147,7 +168,8 @@ def spawn(world: World, ref: str, square: tuple[int, int], *, team: Team = Team.
             if (row["elite"] or row["solo"])
             else []
         ),
-        Defences(resist=resist, vulnerable=vulnerable, immune=immune),
+        Defences(resist=resist, vulnerable=vulnerable, immune=immune,
+                 immune_keywords=immune_keywords),
         Initiative(bonus=row["initiative"] - printed, scale="monster"),
         Conditions(),
         Mods(),

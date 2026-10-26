@@ -112,7 +112,7 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Health, PowerPoints
 from combat_engine.engine.dsl import Power
 from combat_engine.engine.grid import spread
-from combat_engine.engine.query import has_combat_advantage, team
+from combat_engine.engine.query import has_combat_advantage, immune_to, team
 from combat_engine.engine.query import squares as squares_of
 
 #: The barbarian card this feat pairs with. **`p4807` is the compendium's
@@ -1213,8 +1213,7 @@ def f3733(c: Cast) -> None:
 
 
 @power("f3736", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("Defences.immune_keywords",))
+       reach=PERSONAL, target=SELF)
 def f3736(c: Cast) -> None:
     """A tome is one implement among many and the engine's only implement
     group is "implement", so the accuracy half cannot be narrowed to it.
@@ -1223,10 +1222,13 @@ def f3736(c: Cast) -> None:
     rather than once: a conjuration put down on round three has to start
     granting then, and enemies walk in and out of the ring.
 
-    "Immune to fear is immune to this" is re-aimed: `query.immune_to`
-    exists and answers for a `Condition`, and fear is a `Keyword` with no
-    condition to stand for it, so the gap is keyword immunity on the
-    creature and not a reader.
+    **"Immune to fear is immune to this" is written now.** The note here
+    said the gap was "keyword immunity on the creature and not a reader",
+    which was the right diagnosis: `Defences.immune_keywords` is that
+    field, and the facts were already in `game.db` -- `monster.immune`
+    holds the printed token and `loader` was filtering the column to
+    damage types, dropping **Immune fear on 61 monsters**.
+    `query.immune_to` answers a `Keyword` beside a `Condition`. #560.
     """
 
     # The accuracy half, which was not written: "a tome" had nothing to name,
@@ -1240,6 +1242,11 @@ def f3736(c: Cast) -> None:
             return
         things = [*c.my_zones(), *c.servants()]
         for foe in c.enemies():
+            # "An enemy immune to fear is immune to this." The ring is a
+            # fear effect, so a creature that cannot be frightened does not
+            # start granting combat advantage for standing beside it. #560.
+            if immune_to(c.world, foe, Keyword.FEAR):
+                continue
             if any(c.adjacent_to(thing, foe) for thing in things):
                 c.grants_advantage(on=foe, to="team", until=When.EONT)
 

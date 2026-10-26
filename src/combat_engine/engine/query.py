@@ -38,6 +38,7 @@ from .types import (
     Cover,
     DamageType,
     Defense,
+    Keyword,
     Light,
     Relation,
     Team,
@@ -1676,7 +1677,7 @@ def granted_actions(world: World, eid: int) -> dict[tuple[str, str], int]:
 def immune_to(
     world: World,
     eid: int,
-    cond: Condition,
+    cond: Condition | Keyword,
     source: int | None = None,
     power: str = "",
 ) -> bool:
@@ -1686,7 +1687,37 @@ def immune_to(
     of your next turn" is a window in which the condition never arrives,
     and stripping it afterwards is a different sentence that leaves every
     rider hung on `ConditionApplied` already paid out.
+
+    **A `Keyword` asks the other printed immunity** -- "Immune fear",
+    "Immune charm", "Immune sleep" -- which is to a whole class of effect
+    rather than to a condition. One function for both because the printed
+    word is the same word and the modifier label already is: `Condition`
+    and `Keyword` are both `StrEnum`, so `f"immune to {cond.value}"` needed
+    no change at all, and a row laying either through `c.immune` is read
+    here without knowing which kind it was.
+
+    **The standing half came from a column that was being thrown away.**
+    `monster.immune` holds these tokens and `loader._stat_block` filtered it
+    to `DamageType` members, so **disease on 488 monsters, fear on 61, gaze
+    on 36, sleep on 31 and charm on 27** were read out of `game.db` and
+    dropped. `Defences.immune_keywords` keeps them now, which is why this
+    reader answers True for a creature nobody cast anything on. Two feats
+    (`f2107b`, `f3402`) were marked `dropped=` for want of it while the
+    facts were already in the database. #560.
+
+    Damage immunity is **not** asked here and deliberately so:
+    `Defences.immune` is a set of `DamageType` read in
+    `resolve.deal_damage`, which is a different question (how much of a blow
+    lands) from this one (whether an effect may arrive at all). A
+    `DamageType` reaching this function would answer off `immune_keywords`,
+    where it is never stored, and correctly report False -- but the caller
+    would be asking the wrong reader, so the loader excludes those tokens
+    rather than letting both sets hold them.
     """
+    if isinstance(cond, Keyword):
+        shields = world.get(eid, Defences)
+        if shields is not None and cond in shields.immune_keywords:
+            return True
     mods = world.get(eid, Mods)
     if mods is None or not mods.items:
         return False

@@ -130,6 +130,7 @@ from combat_engine.engine.query import (
     allies,
     distance_between,
     holding,
+    immune_to,
     squares,
     team,
 )
@@ -2377,8 +2378,7 @@ def f3397(c: Cast) -> None:
 
 
 @power("f3402", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("query.immune_to(keyword)",))
+       reach=PERSONAL, target=SELF)
 def f3402(c: Cast) -> None:
     """The feature is `cf:ardent-f0` and its radius is a column, not a
     guess: `get(...).reach.size` is the burst the row declares, so this
@@ -2391,9 +2391,15 @@ def f3402(c: Cast) -> None:
 
     A trait, and `AT_WILL` rather than `ENCOUNTER`: the card prints no
     limit, and a triggered `action=NONE` row declared `ENCOUNTER` spends
-    a use every firing (#210). The dropped clause is "not immune to
-    fear" -- `query.immune_to` answers for a condition and a keyword
-    immunity is not something a creature carries.
+    a use every firing (#210).
+
+    **"An enemy not immune to fear" is written now.** The old note said a
+    keyword immunity "is not something a creature carries", and that was
+    wrong twice over: `query.immune_to` answers a `Keyword` as well as a
+    `Condition`, and the creatures carrying one were already in `game.db`
+    -- `monster.immune` holds the token and `loader` was filtering the
+    column down to damage types, dropping **Immune fear on 61 monsters**.
+    #560.
     """
     me = c.me
     declared = get("cf:ardent-f0")
@@ -2406,6 +2412,11 @@ def f3402(c: Cast) -> None:
         if not ev.critical or foe == me:
             return
         if foe not in c.within(radius, side="enemy"):
+            return
+        # "An enemy **not immune to fear**" -- the gate is on the enemy
+        # scoring the critical, and it guards the whole benefit: the push
+        # below is the same sentence's second half. #560.
+        if immune_to(c.world, foe, Keyword.FEAR):
             return
         c.penalty("attack", 2, on=foe, until=When.EOTNT)
         if c.bloodied(on=me):

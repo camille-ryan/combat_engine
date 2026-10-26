@@ -116,6 +116,7 @@ from combat_engine.engine.query import (
     distance_between,
     enemies,
     flanked_by,
+    immune_to,
     race_skills,
     races_sized,
     spread,
@@ -868,21 +869,28 @@ _granted("f2107", "f2107b", swap=Swap(6, utility=True))
            Trigger(Miss, lambda w, me, ev: ev.target == me and ev.attacker != me,
                    "you are missed by an attack"),
        ),
-       dropped=("query.immune_to(keyword)",))
+       )
 def f2107b(c: Cast) -> None:
     """Both halves of "hit or missed" are declared; declaring one would
-    have looked finished. Creatures immune to fear are the dropped
-    clause -- immunity in this engine is to conditions, not keywords.
+    have looked finished.
 
-    **Re-pointed onto the reading side.** This asked for
-    `c.immune(keyword=)` while `f3402` asks for
-    `query.immune_to(keyword)` -- one absent facility filed from both
-    ends, so `blocked.py --group` counted the gap twice and building
-    either would have left the other reading as outstanding. #560's
-    finding (1). The reading side is the keeper because that is where the
-    work lands: `query.immune_to` takes a `Condition` today, and widening
-    it to a keyword is the whole of the gap."""
-    c.grants_advantage(on=c.trigger.attacker, until=When.EONT)
+    **The fear clause is written now.** "You do not gain this bonus
+    against attacks from creatures immune to fear" is a gate on the
+    attacker, and `query.immune_to` answers a `Keyword` as well as a
+    `Condition` -- the printed word is the same word, and both enums are
+    `StrEnum`, so the modifier label needed no change. The standing half
+    comes off `Defences.immune_keywords`, which `loader` now keeps from
+    `monster.immune` rather than filtering the column down to damage
+    types: **61 monsters print Immune fear** and every one of them was
+    being dropped on the floor. #560.
+
+    The marker was re-pointed here from `c.immune(keyword=)` -- one absent
+    facility filed from both ends, so `blocked.py --group` counted the gap
+    twice."""
+    foe = c.trigger.attacker
+    if immune_to(c.world, foe, Keyword.FEAR):
+        return
+    c.grants_advantage(on=foe, until=When.EONT)
 
 
 _granted("f2108", "f2108b", swap=Swap(9, Usage.DAILY))

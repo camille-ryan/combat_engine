@@ -438,6 +438,19 @@ class Defences:
         tuple[DamageType | None, int, Callable[[dict[str, Any]], bool]]
     ] = field(default_factory=list)
     immune: set[DamageType] = field(default_factory=set)
+    #: Keywords the creature cannot be affected by at all -- "Immune fear",
+    #: "Immune charm", "Immune sleep". **Not damage**, which is what
+    #: `immune` above is: this is the printed immunity to a whole class of
+    #: effect, and `query.immune_to` answers it beside the condition form.
+    #:
+    #: The data was there and was being thrown away. `monster.immune` holds
+    #: these tokens for the creatures that print them, and
+    #: `loader._stat_block` filtered the column to `DamageType` members
+    #: only -- so **disease on 488 monsters, fear on 61, gaze on 36, sleep
+    #: on 31 and charm on 27** were read out of the database and dropped on
+    #: the floor. Two feats were marked `dropped=` for want of the reader
+    #: while the facts were already in `game.db`. #560.
+    immune_keywords: set[Keyword] = field(default_factory=set)
     #: Types the creature's insubstantial trait does **not** halve -- "takes
     #: half damage from any damage source, except those that deal force
     #: damage". Counted rather than a set, for the same reason `Conditions`

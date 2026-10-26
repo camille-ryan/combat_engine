@@ -183,7 +183,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - What this creature has in hand, filtered by a printed word.
 - `query.holds_somebody(world: 'World', eid: 'int') -> 'bool'`
   - Is this creature holding anyone in a grab? "Requirement: you must
-- `query.immune_to(world: 'World', eid: 'int', cond: 'Condition', source: 'int | None' = None, power: 'str' = '') -> 'bool'`
+- `query.immune_to(world: 'World', eid: 'int', cond: 'Condition | Keyword', source: 'int | None' = None, power: 'str' = '') -> 'bool'`
   - Can this condition not be laid on this creature at all?
 - `query.needs_loading(weapon: 'Any') -> 'bool'`
   - Does firing this weapon leave it empty until somebody reloads it?

@@ -34504,6 +34504,90 @@ def save_ends_for_somebody_else(out: Result) -> None:
              f"saver={getattr(plain, 'saver', None)}"
              f" owner={getattr(plain, 'owner', None)} foe={foe}")
 
+
+def immune_to_a_keyword(out: Result) -> None:
+    """"An enemy not immune to fear", "creatures immune to fear".
+
+    Immunity in this engine was to **conditions**. Two feats printed a gate
+    on a keyword immunity and both were marked `dropped=`, each docstring
+    recording that a creature does not carry such a thing. It does, and the
+    facts were already in `game.db`: `monster.immune` holds the printed
+    token and `loader._stat_block` filtered the column to `DamageType`
+    members, so **disease on 488 monsters, fear on 61, gaze on 36, sleep on
+    31 and charm on 27** were read out of the database and dropped on the
+    floor. #560.
+
+    `query.immune_to` answers a `Keyword` beside a `Condition` -- one
+    function, because the printed word is the same word and both are
+    `StrEnum`, so the modifier label needed no change at all.
+
+    Asserted through `f2107b`'s body both ways on the same board, which is
+    the shape a gate needs: a rule that only tried the immune enemy would
+    pass just as well against a row that never pays anybody.
+    """
+    import audit as A
+    from combat_engine.content import loader
+    from combat_engine.db import game
+    from combat_engine.engine import Defences
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import immune_to
+    from combat_engine.engine.types import Condition, Keyword
+
+    db = game()
+    fearless = db.execute(
+        "SELECT ref FROM monster WHERE immune LIKE '%fear%' AND level <= 10"
+        " LIMIT 1").fetchone()
+    ordinary = db.execute(
+        "SELECT ref FROM monster WHERE (immune IS NULL OR immune = '[]')"
+        " AND level <= 10 LIMIT 1").fetchone()
+    out.that(fearless is not None and ordinary is not None,
+             "the corpus has a fear-immune monster and a plain one to compare",
+             f"{fearless and fearless[0]} vs {ordinary and ordinary[0]}")
+    if not (fearless and ordinary):
+        return
+
+    def advantage_against(ref: str) -> tuple[bool, bool, Any]:
+        """Run `f2107b` with `ref` as the attacker. Did it grant anything?"""
+        world, me, _start = A.board("f2107b", 1)
+        foe = loader.spawn(world, ref, (12, 12))
+        shields = world.get(foe, Defences)
+        c = Cast(world=world, me=me, ref="f2107b", target=me,
+                 trigger=Hit(attacker=foe, target=me, power="probe",
+                             critical=False))
+        before = len(world.effects.live)
+        REGISTRY["f2107b"].body(c)
+        granted = len(world.effects.live) > before
+        return granted, immune_to(world, foe, Keyword.FEAR), shields
+
+    gave, immune, shields = advantage_against(fearless[0])
+    out.that(immune,
+             "a monster printing Immune fear reads as immune to the keyword",
+             f"{fearless[0]} immune_keywords="
+             f"{sorted(k.value for k in shields.immune_keywords)}")
+    out.that(not gave,
+             "and f2107b withholds its combat advantage against it",
+             f"an effect was laid: {gave}")
+
+    gave, immune, shields = advantage_against(ordinary[0])
+    out.that(not immune,
+             "a monster printing no immunity does not read as immune",
+             f"{ordinary[0]} immune_keywords="
+             f"{sorted(k.value for k in shields.immune_keywords)}")
+    out.that(gave,
+             "and f2107b does grant its combat advantage against that one",
+             f"an effect was laid: {gave}")
+
+    # The condition reading is a separate question and must not have moved:
+    # `Defences.immune` is damage and is read in `resolve.deal_damage`, not
+    # here, so a fear-immune creature is not thereby immune to being dazed.
+    world, _me, _start = A.board("f2107b", 1)
+    foe = loader.spawn(world, ref=fearless[0], square=(12, 12))
+    out.that(not immune_to(world, foe, Condition.DAZED),
+             "and keyword immunity is not condition immunity -- still dazeable",
+             f"{fearless[0]}")
+
 DRIVERS = {
     "reload": (
         a_fired_crossbow_is_empty_until_it_is_reloaded,
@@ -35422,6 +35506,8 @@ DRIVERS = {
                            "a mark records which row laid it"),
     "save_ends_for_somebody_else": (save_ends_for_somebody_else,
                                     "one creature's hold, another's save"),
+    "immune_to_a_keyword": (immune_to_a_keyword,
+                            "immunity to a class of effect, not a condition"),
 }
 
 

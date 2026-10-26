@@ -292,12 +292,35 @@ def f970(c: Cast) -> None:
 @power("f970b", level=1, cls="", usage=DAILY, action=ActionType.STANDARD,
        reach=Melee(2), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
        attack=Attack(Ability.DEX, vs=REF),
-       dropped=("c.grab(pull_as_minor=)",))
+       dropped=("actions.GRANTABLE(pull_grabbed)", "c.forbid(weapon=)"))
 def f970b(c: Cast) -> None:
     """The grab and the prone land on a hit *and* on a miss -- only the
-    damage differs -- so both are written outside the branch. Dropped:
-    pulling the grabbed creature as a minor action, which wants an
-    action the grab itself hands over."""
+    damage differs -- so both are written outside the branch.
+
+    **Re-pointed, and the count was wrong: three clauses are unwritten,
+    not one.** The old marker said `c.grab(pull_as_minor=)` and named a
+    parameter on the wrong verb -- the engine already has the door.
+    "You can pull it 1 square as a minor action" is a line in the action
+    menu, which is `c.grant_action` plus a word in `actions.GRANTABLE`
+    and a reader beside it; a kwarg on `c.grab` would have to grow its own
+    menu entry anyway. That is the symbol now, and it is **not free**: a
+    new granted action widens what the AI can choose, so it owes a
+    `winrate` reading and probably a fixture re-record rather than riding
+    along with a content commit.
+
+    Reading the card for the re-point turned up two more clauses nothing
+    had recorded:
+
+    * *"While grabbing the target, you cannot make attacks with the
+      whip"* -- `c.forbid` takes `ref`, `keyword`, `lacking`, `usage`,
+      `only` and `attacks_only`, and none of them narrows to a **weapon**.
+      Marked.
+    * *"You can sustain the grab as long as the target is within 2 squares
+      of you"* -- deliberately **not** marked, because `sustain=` in the
+      header with `until=When.SUSTAIN` exists (`m2295a1` is the worked
+      example) and I have not established that the range condition cannot
+      be written with it. A symbol is a claim that something is missing,
+      and that one is unverified. #560."""
     hit = c.strike().hit
     if hit:
         c.damage(c.w(2), c.dex_mod)
