@@ -1787,19 +1787,36 @@ def _features(source: sqlite3.Connection, out: sqlite3.Connection,
         # tree moves. The level dialect has several sections and the primary
         # one has exactly one, so there it still counts 0, 1, 2 as before.
         ord_ = 0
+        #: Genuine features `_POWER_LIST` refused, filed after every section
+        #: so their ordinals land above the maximum this class already uses
+        #: and no `cf:` ref already in the tree moves. #812.
+        deferred: list = []
         for section in sections:
             got, ord_ = _section_rows(out, names, section, stem, bare, build,
-                                      ord_, per_level)
+                                      ord_, per_level, deferred)
             written += got
+        for body, marks, head, title in deferred:
+            ref = f"{stem}-f{ord_}"
+            written += _feature_row(out, names, ref, bare, ord_, build,
+                                    head, title)
+            written += _sub_features(out, names, ref, bare, ord_, build,
+                                     body, marks, cards=not per_level)
+            ord_ += 1
     return written
 
 
 def _section_rows(
     out: sqlite3.Connection, names: dict[str, dict[str, str]],
     section: str, stem: str, bare: str, build: str,
-    ord_: int, per_level: bool,
+    ord_: int, per_level: bool, deferred: list | None = None,
 ) -> tuple[int, int]:
-    """Every feature in one section, and the ordinal to carry on from."""
+    """Every feature in one section, and the ordinal to carry on from.
+
+    `deferred` collects the sections `_POWER_LIST` matches that are genuine
+    features after all -- see the guard below. They are filed by the caller
+    once every section has had its ordinals, so recovering them moves
+    nothing. #812.
+    """
     written = 0
     heads = list(_FEATURE_HEAD.finditer(section))
     for i, m in enumerate(heads):
@@ -1847,6 +1864,24 @@ def _section_rows(
         # and a feature with options always has them, so this makes the
         # guard's intent testable instead of incidental. #812.
         if per_level and _POWER_LIST.search(" ".join(_plain(head).split())):
+            # **Sub-marks mean a genuine feature, and it is deferred rather
+            # than filed here.** Filing it in place is the one-line fix this
+            # guard's note describes, and it re-points 18 live citations:
+            # `ord_` is a single running counter across every section, so a
+            # row recovered in the middle pushes each later feature's
+            # ordinal up by one and a content row citing one of them names a
+            # different feature or none. Measured by rebuilding twice --
+            # cited `cf:` refs absent from `class_feature` went 5 -> 23 --
+            # and reverted in `d672208`.
+            #
+            # So the caller emits these after every section, at ordinals
+            # above the maximum this class already uses. Route (2) of the
+            # three on #812, which is the only one that moves nothing: the
+            # ref order stops matching the printed order for these 94, and
+            # that is the price. Making the refs non-positional is #559 and
+            # is the better answer when somebody takes it on.
+            if marks and deferred is not None:
+                deferred.append((body, marks, head, _titled(m.group(1))))
             continue
         ref = f"{stem}-f{ord_}"
         written += _feature_row(out, names, ref, bare, ord_, build,
