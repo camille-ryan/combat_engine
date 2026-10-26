@@ -155,15 +155,23 @@ KNOWN_SILENT = {
     #              against='e42[probe: slowed, save ends]',
     #              granted_via='m5592a5')
     #
-    # So this is a board limit and not an excuse: `audit.board` spawns one
-    # sibling for the caster and it is always at full health and carries
-    # nothing a save can end. Posing an ally's *state* is the general gap --
-    # the same shape as `_provoke`'s poses -- and is filed rather than
-    # bodged here, because widening the board moves every row.
-    "m1585a6": ("heals only a bloodied ally; the board's sibling is always "
-                "at full health. Proven to heal 15 when one is bloodied"),
-    "m5592a5": ("grants a save to an ally carrying a save-ends effect; the "
-                "board's sibling carries none. Proven to roll one when it does"),
+    # **`m1585a6` is gone from this list and `m5592a5` was never blocked by
+    # what this note said.** #856 called the gap "the board's sibling is
+    # always at full health", and it was half right:
+    #
+    # * the board **does** wound its ally -- a cleric spawned at half hit
+    #   points -- but only for a caster with a class. A monster row's only
+    #   ally is a second of its own kind, spawned full, and gets none of the
+    #   states the board poses on a character's ally. That is what is now
+    #   posed, per row, in `board`.
+    # * `m5592a5` wants a save-ends effect on the ally, and `board` has laid
+    #   one on the cleric ally since before this entry was written -- so the
+    #   reason recorded here was never the live one. It is left on the list
+    #   with its own cause, which is the same one: a monster row does not get
+    #   that cleric.
+    "m5592a5": ("grants a save to an ally carrying a save-ends effect; its "
+                "only ally is a copy of itself, which carries none. Proven "
+                "to roll one when it does"),
     # Summons one of two creatures, chosen by which school benefit the
     # character holds (Camille's ruling, 2026-10-21, #826). It fires 48
     # times and returns on its first gate, because **this board's wizard is
@@ -790,9 +798,16 @@ KNOWN_SILENT = {
     # fired alone, has not happened.
     "m3290a4": "rerolls an attack roll; fired alone there is none behind it",
     "m3645a4": "rerolls an attack roll; fired alone there is none behind it",
-    # The board's one ally is a copy of the caster at **full** health, so a heal
-    # lands on nobody who needs it.
-    "m822a4": "heals undead allies in a burst; the board's one ally is unhurt",
+    # **Re-stated, because the recorded reason was wrong.** This said "the
+    # board's one ally is at full health, so a heal lands on nobody who
+    # needs it" -- and the body never asks about hit points at all. It opens
+    # `if not c.is_kind("undead", on=c.target): return`, so what stops it is
+    # the ally's **kind**, not its health, and wounding the copy (#856) does
+    # nothing for it. Checked by reading the body rather than trusting the
+    # note, after the health half of this board limit was closed and this row
+    # stayed silent.
+    "m822a4": ("heals undead allies in a burst; its only ally is a copy of "
+               "itself and reads as humanoid, so the kind gate returns"),
     # Terrain a bare grid has not got.
     "m960a5": "requires icy ground to teleport from; the board has none",
     # Round 11: the board carries `fire` and `object` scenery and nothing else, so
@@ -999,7 +1014,6 @@ KNOWN_SILENT = {
     # caster's own side is the second of its kind, spawned at full health --
     # the four wounded ones are all on the other team. Driven by hand: with
     # that ally at half hit points it is granted a melee attack and swings.
-    "m350a2": "grants a bloodied ally an attack; the board's only ally is unhurt",
     # A long jump plus "+2 to your fly speed (if any)". The jump is a skill
     # check nothing rolls, and the board's ranger has no fly speed, so the
     # printed row correctly does nothing here -- "if any" is the card's own
@@ -1854,7 +1868,38 @@ def board(ref: str, seed: int, pose: bool = False,
         # A second of its kind, so a row reading "an ally within 10" has
         # one. A lone monster on a board of enemies can never satisfy its
         # own trigger, and several rows are about their friends.
-        loader.spawn(world, ref.split("a")[0], (7, 9), team=Team.ENEMY)
+        mate = loader.spawn(world, ref.split("a")[0], (7, 9), team=Team.ENEMY)
+        # **And wounded, for the rows that ask.** The copy is spawned at
+        # full health, and a character caster's ally is not: `board` wounds
+        # the cleric it spawns to half, because "a great many powers heal
+        # one". A monster row gets neither that cleric nor that wound -- its
+        # only ally is this copy -- so every monster row healing or helping
+        # a *bloodied* ally landed on nobody who needed it.
+        #
+        # Three `KNOWN_SILENT` entries were paying for exactly this, each
+        # with a by-hand proof already recorded beside it:
+        #
+        #     m1585a6   heals a bloodied ally -- proven to heal 15 when one is
+        #     m350a2    grants a bloodied ally an attack -- proven to swing
+        #
+        # A third, `m822a4`, reads "heals undead allies in a burst; the
+        # board's one ally is unhurt" and that reason is **wrong**: its body
+        # gates on `c.is_kind("undead", on=c.target)` and never asks about
+        # hit points at all. The gate below answers False for it, correctly
+        # -- it belongs to the *kind* half of this board limit, which is a
+        # different pose.
+        #
+        # **Only for the rows that ask**, which is the whole argument of
+        # #856: the board poses the caster 48 ways and nobody else at all,
+        # and wounding this copy for all ~15,000 monster rows to serve a
+        # handful is a corpus-wide baseline move. `_wanted_weapon` is the
+        # precedent -- a state posed per row, carrying no collateral for
+        # anyone who did not name it.
+        if mate is not None and _asks_a_bloodied_ally(ref):
+            from combat_engine.engine import Health as _Health
+
+            mate_health = world.need(mate, _Health)
+            mate_health.hp = max(1, mate_health.max_hp // 2)
         foe_team = Team.PC
     else:
         # A classless row -- the engine's own basic attacks -- is fielded on
@@ -4289,6 +4334,40 @@ def _wanted_by_word(ref: str) -> tuple[str, ...]:
     ) if named else ()
     _WANTED_BY_WORD[ref] = tuple(dict.fromkeys(picked))
     return _WANTED_BY_WORD[ref]
+
+
+@cache
+def _asks_a_bloodied_ally(ref: str) -> bool:
+    """Does this row's body ask whether somebody other than itself is hurt?
+
+    The gate on wounding the monster board's one ally. Read off the body
+    rather than the card, because the card is prose and the body is what
+    actually takes the early return.
+
+    `c.bloodied()` **bare** counts, and that is the case to get right: with
+    no argument it asks about `c.target`, which for an ally-target row is
+    the ally. A standing note of mine says eight rows once had that
+    backwards, so the reading is deliberate rather than incidental here.
+
+    Excluded: a body that only ever asks `c.bloodied(on=c.me)`. That is a
+    row about its own state and wounding its friend serves it nothing --
+    and the board already bloodies the caster on purpose, so the state it
+    wants is there.
+
+    Deliberately *not* also matching a row that names an ally's condition
+    or kind. Those are the other halves of the same board limit -- an
+    undead ally, a natural beast ally, a corpse -- and each wants a
+    different pose; folding them in here would make one symbol serve three
+    needs, which `content/CLAUDE.md` is explicit about.
+    """
+    import re as _re
+
+    row = REGISTRY.get(ref)
+    src = _source_of(getattr(row, "body", None), ref)
+    if not src:
+        return False
+    asks = _re.findall(r"c\.(?:bloodied|hurt|wounded|missing_hp)\(([^)]*)\)", src)
+    return any("c.me" not in arg for arg in asks)
 
 
 def _wanted_weapon(ref: str) -> tuple[str, ...]:
