@@ -1287,7 +1287,7 @@ def f2847(c: Cast) -> None:
 
 @power("f2848", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.regeneration(add=)",))
+       )
 def f2848(c: Cast) -> None:
     """The payout half is written, and `Healed.regeneration` was the wrong
     name for its hold. `c.regeneration` ticks through `c.heal`, which puts
@@ -1305,6 +1305,18 @@ def f2848(c: Cast) -> None:
     me = c.me
     softened = c.feat(PLAGUE_FEAT, on=me)
     mine = set(allies(c.world, me))
+
+    # The raise, which was the dropped half. **The absolute total, not the
+    # printed delta**: `c.amount_for`'s rule is that the largest wins, so a
+    # +1 on a printed 2 is written as 3 -- the same way the aid grants say
+    # "a +3 bonus, rather than the normal +2". `p2483` reads the amount now
+    # rather than handing out a bare 2, which is what makes this consultable
+    # at all; a `change_amount` on a mechanic whose body hard-codes its
+    # number is `c.change_amount`'s own commonest bug.
+    #
+    # Heroic only. The card also says 2 at 11th level and 3 at 21st, which
+    # is paragon and epic and defers wholesale with the rest of the tier.
+    c.change_amount("p2483", 3, on=me, until=When.ENCOUNTER)
 
     def regained(ev: Any) -> None:
         if ev.target != me or ev.amount <= 0:

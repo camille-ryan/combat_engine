@@ -868,11 +868,20 @@ _granted("f2107", "f2107b", swap=Swap(6, utility=True))
            Trigger(Miss, lambda w, me, ev: ev.target == me and ev.attacker != me,
                    "you are missed by an attack"),
        ),
-       dropped=("c.immune(keyword=)",))
+       dropped=("query.immune_to(keyword)",))
 def f2107b(c: Cast) -> None:
     """Both halves of "hit or missed" are declared; declaring one would
     have looked finished. Creatures immune to fear are the dropped
-    clause -- immunity in this engine is to conditions, not keywords."""
+    clause -- immunity in this engine is to conditions, not keywords.
+
+    **Re-pointed onto the reading side.** This asked for
+    `c.immune(keyword=)` while `f3402` asks for
+    `query.immune_to(keyword)` -- one absent facility filed from both
+    ends, so `blocked.py --group` counted the gap twice and building
+    either would have left the other reading as outstanding. #560's
+    finding (1). The reading side is the keeper because that is where the
+    work lands: `query.immune_to` takes a `Condition` today, and widening
+    it to a keyword is the whole of the gap."""
     c.grants_advantage(on=c.trigger.attacker, until=When.EONT)
 
 
