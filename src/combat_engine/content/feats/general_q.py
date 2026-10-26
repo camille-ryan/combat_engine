@@ -590,13 +590,48 @@ _swap("f3186", "f3186b", Swap(9, Usage.DAILY))
 
 
 @power("f3186b", level=1, cls="", usage=DAILY, action=STANDARD,
-       reach=Ranged(10), target=ONE_CREATURE,
+       reach=Ranged(10, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.RELIABLE, Keyword.WEAPON],
-       attack=Attack(STR, vs=REF), requires=_wielding("w3711"),
+       attack=Attack(STR, vs=REF), thrown_by_hand=True,
+       requires=_wielding("w3711"),
        requires_text="wielding the weapon this chain names")
 def f3186b(c: Cast) -> None:
     """Both ends of the weapon land on one roll, so the off-hand dice are
-    a second `c.damage` on the same hit rather than a second strike."""
+    a second `c.damage` on the same hit rather than a second strike.
+
+    **`by_weapon=True`, because the card prints "Ranged weapon" and no
+    number.** It was a bare `Ranged(10)`, which `w3711` cannot satisfy --
+    that weapon reaches 2 and throws 3/6 -- so `usable` refused the row and
+    was right to: the engine was doing exactly what the two numbers said.
+    The 10 was never printed; it came from prose the ETL could not read
+    (`feat.unparsed` is 1 for `f3186`, and there is no `power` row for this
+    `b`-suffixed card at all), so it is a stand-in.
+
+    `_reach_of` says what the flag is for: *"a row printing `Ranged weapon`
+    does not print a number, so the number the ETL wrote down is a stand-in
+    and must lose to the thing in hand."* With the flag the range is the
+    weapon's long throw and the 10 is only what is left if the hand holds
+    nothing.
+
+    **And `thrown_by_hand=True`, which is the half that was actually
+    refusing it.** `Power.can_branch` asks a `ranged` row for
+    `Gear.ranged` -- something to *fire* -- and `w3711` is thrown, so
+    `gear.ranged` is None and the branch was closed. `thrown_by_hand` is
+    the declared field for exactly that: *"unless it is thrown by hand, in
+    which case a melee weapon is exactly what it wants"*.
+
+    **The range was not the whole fault and the refusal message said so
+    misleadingly.** With only the range fixed, `usable` reported
+    *"wielding the weapon this chain names"* -- this row's own
+    `requires_text` -- while `p.requires(world, me)` returned **True**.
+    That is by design: `usable` prints `requires_text` when no branch is
+    open, and its own comment says callers *"should ask
+    `unmet_requirement`, not read these words"*. Worth knowing before
+    trusting that string: it names a gate that had already passed.
+
+    Read off the page by the main session, which is the one that can. The
+    three siblings in the chain are `Melee(1)` and all fire. #709.
+    """
     if c.strike():
         c.damage(c.w(), c.str_mod)
         c.damage(c.w(1, hand="off"))
