@@ -93,6 +93,19 @@ ever be looked at:
   for it. Tier 1 is the one worth building an instrument for, and `#467` is
   that gap: nothing verifies what the page renders when the localisation is
   absent.
+
+  **`#467` is deferred, though, and this paragraph read as a call to
+  action.** Camille: *"defer 467. I don't really care until I try to
+  distribute it."* The right trigger is **before the first distribution**,
+  and until then the exposure is "unverified" rather than "known broken" —
+  `db.localisation()` returns `{}` when the file is gone rather than
+  raising, and all seven read sites in `api/wire.py` already go through
+  `.get(ref) or {}`. The issue holds the design, the `@cache` trap and the
+  two load-bearing proofs it needs, so none of that has to be re-derived.
+
+  Said here because the sentence above sent a session to read `#467` in
+  full before finding the deferral in its one comment — the same cost this
+  file's own first rule is about, with this file as the stale part.
 * **A content agent is shown each name beside its ref, and writes only the
   ref.** This replaced "shown no name, ever" on **2026-10-12**, on Camille's
   call:
