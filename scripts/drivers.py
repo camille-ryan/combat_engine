@@ -12234,6 +12234,81 @@ def a_trigger_reads_the_attackers_reach(out: Result) -> None:
              f" (ranged={rng}, melee={mel})")
 
 
+def a_choose_one_race_actually_chooses(out: Result) -> None:
+    """A race that prints "choose one of the following" was pinned to the
+    first printed power for every character of it.
+
+    `RaceLine.granted` answered `written[:1]`, so an `r33` always carried
+    the same manifestation of **thirteen** and an `r44` always the same
+    aspect of **three**. Nothing dealt it and nothing recorded it.
+
+    **The count does not change and that is what makes this safe.**
+    `written[:1]` and `[pick.choice(written)]` are both one power, so no
+    character gains or loses a row -- only *which* row it is moves. Whether
+    `one_of` is right about a given race is a separate and pre-existing
+    question this does not touch.
+
+    Seeded and uniform rather than scored: every other build decision goes
+    through `choices.sample` against a scored list, there is no scorer for a
+    racial power yet, and this is the same fallback `deal_race` takes when
+    `SCORED_CHOICES` is off. `pick=None` keeps the old answer exactly, which
+    is what lets `choices.race_options` rank a **race** without a particular
+    pick entering the ranking.
+
+    **Its own seeded stream in `spawn`**, like the loadout's and the feats',
+    so choosing a racial power cannot move the dice the fight is about to
+    roll. The character still changes -- that is the point, and it is what
+    the fixture re-record beside this pays for -- but through the hand
+    rather than the roll order.
+
+    Four things, and the third is the one that bounds the blast radius.
+    #743's second part. #680 is **not** closed by this: its subject is `r6`,
+    whose alternation is between a *trait* and a power rather than among
+    powers, and nothing records which trait alternates.
+    """
+    from random import Random
+
+    from combat_engine.chargen import RACES
+    from combat_engine.content import loader  # noqa: F401
+
+    r33 = RACES["r33"]
+    out.that(len(r33.powers) == 13 and r33.one_of,
+             f"r33 prints {len(r33.powers)} powers and says choose one")
+
+    pinned = r33.granted()
+    out.that(pinned == r33.granted(),
+             "with no pick it answers exactly what it used to -- which is"
+             " what keeps the race scorer's ranking where it was")
+
+    drawn = {
+        tuple(r33.granted(Random(f"s{s}:r33")))[-1] for s in range(40)
+    }
+    out.that(len(drawn) > 1,
+             f"and with one it varies ({len(drawn)} distinct manifestations"
+             f" over 40 seeds), where before it was always {pinned[-1]}")
+
+    # **The blast radius, stated as a measurement rather than a belief.**
+    # The new path is gated on `one_of`, and only a race with more than one
+    # *written* power can actually move -- so a diverging fixture must hold
+    # one of these five and no other race can be involved.
+    movable = [
+        ref for ref, line in sorted(RACES.items())
+        if {tuple(line.granted(Random(f"s{s}:{ref}"))) for s in range(40)}
+        != {tuple(line.granted())}
+    ]
+    out.that(movable == ["r1", "r16", "r33", "r44", "r68"],
+             f"exactly five races can have their hand moved by this"
+             f" ({movable}) -- the other 50 cannot, whatever the seed")
+
+    sizes = {
+        ref: (len(RACES[ref].granted()), len(RACES[ref].granted(Random("x"))))
+        for ref in movable
+    }
+    out.that(all(a == b for a, b in sizes.values()),
+             f"and none of the five changes how many rows it hands over"
+             f" ({sizes}) -- the pick swaps a power, it does not add one")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -36308,6 +36383,9 @@ DRIVERS = {
     "a_trigger_reads_the_attackers_reach": (
         a_trigger_reads_the_attackers_reach,
         "a reshaped attack is judged by the shape it was made with"),
+    "a_choose_one_race_actually_chooses": (
+        a_choose_one_race_actually_chooses,
+        "a choose-one race picks, and only five races can move"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,

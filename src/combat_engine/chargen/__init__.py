@@ -1526,7 +1526,7 @@ class RaceLine:
             key=_sub_option_order,
         )
 
-    def granted(self) -> list[str]:
+    def granted(self, pick: Random | None = None) -> list[str]:
         """The rows a character of this race carries into a fight.
 
         Its traits, and its racial powers -- or **one** of them where the
@@ -1547,7 +1547,28 @@ class RaceLine:
         written = [p for p in self.powers if p in REGISTRY]
         if not self.one_of:
             return [*self.traits, *written]
-        chosen = written[:1]
+        # **`pick` makes the choice a choice.** Without one this answered
+        # `written[:1]` for every character of the race, so a half-elf
+        # always borrowed the same power of two, an `r33` always the same
+        # manifestation of thirteen, and an `r44` always the same aspect of
+        # three. Nothing dealt it and nothing recorded it, which is what
+        # left nine feats keyed to the borrowed row unreachable: the row
+        # they key on was never the one dealt.
+        #
+        # Seeded and uniform rather than scored. Every other build decision
+        # goes through `choices.sample` against a scored option list, and
+        # there is no scorer for a racial power yet -- so this is the same
+        # fallback `deal_race` takes when `SCORED_CHOICES` is off, which is
+        # honest about being a draw rather than a judgement. A scorer is
+        # `race_options`-shaped work and can replace this without moving
+        # the signature.
+        #
+        # `pick=None` keeps the old answer exactly, which is what lets
+        # `choices.race_options` go on ranking a **race** without a
+        # particular pick entering the ranking. #680.
+        chosen = written[:1] if pick is None or not written else [
+            pick.choice(written)
+        ]
         return [*self.traits, *self._manifestation_for(chosen), *chosen]
 
     def _manifestation_for(self, chosen: list[str]) -> list[str]:
@@ -3136,7 +3157,15 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # A race's traits and its one racial power are known rows like any
     # other: a trait arms itself at the top of the fight and a racial
     # power goes on the action menu, with no machinery of their own.
-    racial = race.granted() if race is not None else []
+    # **Its own stream**, like the loadout's and the feats' above and for
+    # the same reason: choosing which racial power a character carries must
+    # not move the dice the fight is about to roll. The character still
+    # changes -- that is the point, and #680 accepts the fixture re-record
+    # it costs -- but it changes through the hand rather than through the
+    # roll order. #680.
+    racial = race.granted(
+        Random(f"{world.rng.seed}:{who.race}:racial")
+    ) if race is not None else []
     # Proficiency is the same kind of sentence, and it has to be settled
     # before the shield is, because what is in the other hand decides
     # whether there is room for one. A race trains a character in weapons
