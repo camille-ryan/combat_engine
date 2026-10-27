@@ -1141,17 +1141,30 @@ KNOWN_SILENT = {
     # the book, p10145 comes out of it, and the +1 power bonus applies to
     # p10145 and to nothing else.
     "p7377": "swaps a prepared power for one in the book; the board deals no second one",
-    # Its target line is "an enemy affected by your `p12577`", which
-    # `c.suffering` answers by label. The board never uses `p12577`, so the
-    # pool is empty, `c.choose` returns None and the daze lands on nobody.
+    # **`p16380` was here and #680 retired it.** The entry read "dazes an
+    # enemy affected by `p12577`; the board never uses that power", and that
+    # was true, measured, and driven by hand with both controls when it was
+    # written. What falsified it is the racial pick: the dealt character now
+    # draws a power set that reaches `p12577`, so the pool the row selects
+    # from is no longer empty.
     #
-    # **Driven by hand, both controls**: `c.suffering("p12577")` returns `[]`
-    # on the board as posed, and `[2]` once that creature carries the attack
-    # penalty and the granted advantage `p12577` lays -- at which point the
-    # body dazes it (`Conditions(counts={MARKED: 1, DAZED: 1})`). So the row
-    # works and the board cannot pose it, which is the distinction this
-    # excuse exists to draw. #629's family.
-    "p16380": "dazes an enemy affected by p12577; the board never uses that power",
+    # Measured both ways rather than inferred, because the obvious suspect
+    # was the row being credited for somebody else's condition -- which is
+    # the fault #900 had just found in a different family on the same day:
+    #
+    #     arrangements where c.suffering("p12577") is non-empty
+    #       with #680's pick       6 of 16
+    #       without it             0 of 16
+    #
+    # and the row calls `c.dazed(on=2)` **itself**, once, on the creature
+    # actually carrying the effect. So it is credited for its own printed
+    # daze and not for a neighbour's.
+    #
+    # **One seed said the opposite and was wrong.** A single probe at seed 1
+    # reported `c.suffering("p12577") == []`, which reads exactly like
+    # borrowed credit. `_attempts` sweeps 8 seeds and 2 poses; the three
+    # seeds that pose it are 2, 4 and 8. An excuse must be retired against
+    # the arrangements the harness actually tries, not against one of them.
     # **The only row in the tree whose whole mechanical clause is a header
     # field.** Its body is empty by design: the trade is `swap=Swap(2,
     # utility=True)`, spent by `chargen.power_swap` when the character is
