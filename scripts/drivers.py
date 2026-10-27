@@ -11621,6 +11621,88 @@ def unpreventable(out: Result) -> None:
              f" the pair ({walled} then {blown})")
 
 
+def a_darkness_a_light_cannot_lift(out: Result) -> None:
+    """One card prints a zone that is heavily obscured and "cannot be
+    illuminated", and both halves had been marked as engine gaps that were
+    not.
+
+    **The sight half wanted no new parameter.** The marker asked for
+    `c.zone(exempt_if=)` -- a predicate -- on the reasoning that the card
+    exempts whoever has a *sense* rather than a named creature, and a set
+    frozen when the zone is laid cannot say that. The reasoning was right
+    and the conclusion was wrong: `obscured=` is a **grade**, not a flag,
+    and `light_concealment` resolves it with the attacker in hand --
+    `if sees_in(world, attacker, Light.DARK, far): return Cover.NONE`. So
+    the exemption is already per-looker and already decided at the moment
+    somebody looks. `blocks_sight=True`, which the row had, is the binary
+    symmetric one and blinds the creature that laid it.
+
+    **The illumination half was a real gap, and for the opposite reason.**
+    Its marker said "light is not a thing the board holds", which has been
+    false since the light model landed -- #686 closed on 24 rows inert on
+    that same premise. Light *is* held, and that is what made the clause
+    live rather than empty: `light_level` gives a carried `c.light` radius
+    an absolute override, "anything within that radius is bright however
+    dark the square itself is", so a torch cancelled the darkness the card
+    says cannot be cancelled. `Zone.no_light` is the seal.
+
+    Four cells, and the third is the one that is new:
+
+    * a dark zone conceals totally from an ordinary looker;
+    * **and not from one that sees in darkness** -- the clause the predicate
+      was wanted for, working with no predicate;
+    * **a carried light does not lift a sealed zone**;
+    * **and does lift an unsealed one**, which is the control that makes the
+      cell above mean something. Without it, a sealed zone reading
+      `SUPERIOR` proves only that the zone is dark.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies, light_concealment
+    from combat_engine.engine.types import Cover, Light
+
+    def look(*, sealed: bool, torch: bool, sees_dark: bool) -> Cover:
+        world, me, _ = _board(seed=1)
+        foe = sorted(enemies(world, me))[0]
+        c = Cast(world=world, me=me, ref="drivers:sealed-dark")
+        # The zone is laid over the **target**, which is whose squares
+        # `light_concealment` reads.
+        from combat_engine.engine.query import squares
+        c.zone(
+            frozenset(squares(world, foe)), label="drivers:dark",
+            until=When.ENCOUNTER, obscured=Light.DARK, no_light=sealed,
+        )
+        if torch:
+            # Wide enough to cover the foe from where the caster stands --
+            # the board deals them adjacent, so 2 is already plenty, and a
+            # radius that failed to reach would read exactly like the seal
+            # working.
+            c.light(6, on=me, until=When.ENCOUNTER)
+        if sees_dark:
+            c.darkvision(on=me, until=When.ENCOUNTER)
+        return light_concealment(world, me, foe)
+
+    plain = look(sealed=False, torch=False, sees_dark=False)
+    out.that(plain == Cover.SUPERIOR,
+             f"a zone of darkness conceals totally ({plain!r})")
+
+    seen = look(sealed=False, torch=False, sees_dark=True)
+    out.that(seen == Cover.NONE,
+             "and not from a looker that sees in darkness -- the clause the"
+             f" `exempt_if=` marker was asking for ({seen!r})")
+
+    lifted = look(sealed=False, torch=True, sees_dark=False)
+    out.that(lifted == Cover.NONE,
+             "a carried light lifts an ordinary darkness, which is why"
+             f" 'cannot be illuminated' was a real gap ({lifted!r})")
+
+    held = look(sealed=True, torch=True, sees_dark=False)
+    out.that(held == Cover.SUPERIOR,
+             "and a sealed zone is not lifted by the same light"
+             f" ({held!r})")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -35674,6 +35756,9 @@ DRIVERS = {
                        "a raw ability check, which is not a skill check"),
     "unpreventable": (unpreventable,
                       "damage that resistance and immunity do not touch"),
+    "a_darkness_a_light_cannot_lift": (
+        a_darkness_a_light_cannot_lift,
+        "a zone that cannot be illuminated, and who still sees through it"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,

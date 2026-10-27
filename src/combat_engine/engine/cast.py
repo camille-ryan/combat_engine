@@ -12083,6 +12083,7 @@ class Cast:
         blocks_sight: bool = False,
         obscured: str = "",
         obscured_for: str = "",
+        no_light: bool = False,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
     ) -> int:
@@ -12127,7 +12128,7 @@ class Cast:
             self.me, label or self.ref, frozenset(area), until,
             difficult=difficult, blocks_sight=blocks_sight,
             obscured=obscured, obscured_for=obscured_for,
-            exempt=exempt, sustain=sustain,
+            no_light=no_light, exempt=exempt, sustain=sustain,
         )
 
     def aura(

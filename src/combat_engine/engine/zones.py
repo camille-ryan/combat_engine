@@ -94,6 +94,24 @@ class Zone:
     #: the attacker in hand. `light_level` does **not** filter on it -- see
     #: the note there.
     obscured_for: str = ""
+    #: **A darkness a light cannot lift.** One card prints a zone that is
+    #: heavily obscured and "cannot be illuminated", and the second half had
+    #: nothing to refuse: `query.light_level` gives a carried `c.light`
+    #: radius an absolute override -- "anything within that radius is bright
+    #: however dark the square itself is" -- so a torch cancelled the very
+    #: darkness the card says it cannot.
+    #:
+    #: **A flag on the zone and not a waiver on the carrier**, because the
+    #: printed sentence is about the darkness rather than about who walks
+    #: into it. Taking the radius away from whoever steps inside would also
+    #: put their light out *outside* the zone, which is a bigger rule than
+    #: the card -- the same objection `m5426a0` records against reading one
+    #: number for cover and concealment together.
+    #:
+    #: Only meaningful beside `obscured=`: a zone that darkens nothing has
+    #: nothing for a light to lift. Read in `light_level`, which skips the
+    #: carrier walk entirely for a sealed square. #535.
+    no_light: bool = False
     #: Creatures this zone's sight-blocking does not apply to.
     #:
     #: Eight monster cards print a cloud or a darkness that blinds everybody
@@ -181,6 +199,7 @@ class Zones:
         blocks_sight: bool = False,
         obscured: str = "",
         obscured_for: str = "",
+        no_light: bool = False,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
     ) -> int:
@@ -225,6 +244,7 @@ class Zones:
             blocks_sight=blocks_sight,
             obscured=obscured,
             obscured_for=obscured_for,
+            no_light=no_light,
             exempt=frozenset(exempt or ()),
         )
         return self._spawn(zone, when, sustain)

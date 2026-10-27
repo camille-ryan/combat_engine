@@ -157,6 +157,7 @@ from combat_engine.engine.triggers import (
     by_power,
     by_ranged,
 )
+from combat_engine.engine.types import Light
 from combat_engine.engine.zones import Zone
 
 #: The two damage types m6651a6 answers.
@@ -1175,7 +1176,6 @@ def m2515a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("1d6", 6, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.zone(exempt_if=)", "c.douse_lights()"),
 )
 def m2515a2(c: Cast) -> None:
     """The blast, and a patch of dark that bites at the start of a turn.
@@ -1185,28 +1185,41 @@ def m2515a2(c: Cast) -> None:
     rather than once when the zone is laid, which is what a dice expression
     in a zone means.
 
-    Two clauses are dropped. The zone blocks sight for everybody, where the
-    card exempts whatever can see in darkness -- `c.zone(exempt=)` is the
-    symbol twelve rows carry for that. And "cannot be illuminated" has
-    nothing to refuse, because light is not a thing the board holds.
-    
+    **Both dropped clauses are written, and both markers were asking for the
+    wrong thing.** They are kept here because each was wrong in a different
+    and instructive way.
 
-    **Re-pointed off `c.zone(exempt=)`, which landed as a set of ids.** That
-    serves the ten cards exempting *one named creature* -- their own maker.
-    This card exempts whoever has a particular sense or ability, which a set
-    cannot say: snapshotting who qualifies when the zone is laid would be
-    wrong the moment anything changed, and the zone is asked per look. A
-    predicate parameter -- `exempt_if=` -- is a different gap and this
-    names it. Not `exempt=<a predicate>`: `todo.py` matches a symbol
-    against the code and reads that as the parameter it already has,
-    so the row reported ready the moment the set form landed.
+    *"The zone blocks sight for everybody, where the card exempts whatever
+    can see in darkness"* -- and the fix was not a predicate parameter. It
+    was using the graded reader instead of the binary one.
+    `blocks_sight=True` is terrain: symmetric, and it blinds the creature
+    that laid it. `obscured=Light.DARK` is a **grade**, and
+    `query.light_concealment` resolves it per looker --
+    `if sees_in(world, attacker, Light.DARK, far): return Cover.NONE`. So
+    whatever can see in darkness is exempt by construction, decided at the
+    moment somebody looks rather than snapshotted when the zone is laid,
+    which is exactly the property the marker said only a predicate could
+    give. `m1652a3`, `m4665a3` and `m6581a3` each made this same correction
+    about their own clause: the answer is the right existing mechanism, not
+    a new parameter.
+
+    *"'Cannot be illuminated' has nothing to refuse, because light is not a
+    thing the board holds"* -- false since the light model landed, and
+    `#686` closed on 24 rows inert on that same premise. Light is held, and
+    that is precisely what made this clause a **real** gap rather than an
+    empty one: `light_level` gives a carried `c.light` radius an absolute
+    override, so a torch cancelled this darkness. `no_light=True` is the
+    seal, and it is the one thing here that needed building.
     """
     if c.strike():
         c.hit()
     if not c.first:
         return
     me = c.me
-    dark = c.zone(c.area(), label=c.ref, until=When.EONT, blocks_sight=True)
+    dark = c.zone(
+        c.area(), label=c.ref, until=When.EONT,
+        obscured=Light.DARK, no_light=True,
+    )
 
     def started(ev: TurnStart) -> None:
         if ev.ghost or ev.actor == me:

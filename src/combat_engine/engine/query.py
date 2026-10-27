@@ -1933,11 +1933,17 @@ def light_level(
     # target's squares does not re-walk every zone on the board for each one.
     if dark_zones is None:
         dark_zones = world.zones.dark()
+    # **Sealed, for a darkness a card says cannot be illuminated.** Collected
+    # in the same pass rather than a second walk, and only from a zone that
+    # actually covers this square -- a sealed zone two squares away seals
+    # nothing. #535.
+    sealed = False
     for zone in dark_zones:
         if square in zone.squares:
             level = Light(zone.obscured)
             if _DARKER[level] > _DARKER[worst]:
                 worst = level
+            sealed = sealed or zone.no_light
     if worst is Light.BRIGHT:
         # **Still has to ask about a carried dimmer**, which is the one
         # thing that can make a bright square darker. The early return was
@@ -1947,6 +1953,18 @@ def light_level(
         # every dimmer invisible on exactly the boards it is for. Caught by
         # `drivers.light_and_dim`'s first assertion. #687.
         return _dimmed(world, square)
+    # **A sealed square stops here**, before the carrier walk, which is the
+    # whole of what "cannot be illuminated" buys: the zone's own grade is the
+    # answer and no radius overrides it. Asked after the bright-board early
+    # return above, so a board nobody darkened pays nothing for this.
+    #
+    # A carried *dimmer* is not consulted either, and that is right rather
+    # than an oversight: `worst` is already at least this zone's grade, and
+    # the only thing a dimmer could do is darken it further -- which a
+    # sealed darkness has no card asking for. If one ever does, this is the
+    # line that has to learn about it. #535.
+    if sealed:
+        return worst
     # **A carried light moves, so it cannot be written into the terrain.**
     # `c.light(n)` lays a radius on the creature and this is what reads it:
     # anything within that radius is bright however dark the square itself
