@@ -868,10 +868,32 @@ _STRAY_LINE = re.compile(
     re.X,
 )
 
-#: What must follow the seam for the run ahead of it to be stray: **prose**.
-#: Not a dice expression and not a bare number -- see `_drop_stray_attack_line`
-#: for the nine rows that distinction spares.
+#: What must follow the seam for the run ahead of it to be stray: **prose
+#: carrying no damage of its own**.
+#:
+#: Two tests, and the second was found by a rebuild rather than by reading.
+#: Prose, so the five rows whose seam has nothing after it keep the line
+#: that *is* their attack. And no dice expression anywhere in the
+#: remainder, because a remainder with damage in it means the `..` is
+#: separating a **Hit line from an Effect line** rather than junk from
+#: text -- which is exactly `m1937a1`:
+#:
+#:     Targets a creature grabbed by <a creature>; +15 vs AC; 2d6+5
+#:     damage.. <the creature> shifts up to 3 squares before or after the
+#:     attack, pulling the target with it; 1d10 + 5 necrotic damage (no
+#:     attack roll required).
+#:
+#: Both halves are real there. `cards.py` caught it when a version without
+#: this test stripped the Hit line: *"m1937a1 damage 2d6 but the card
+#: prints 1d10"*.
+#:
+#: **It is the only one of the eleven whose remainder carries damage**, and
+#: the only one whose leading run is genuine, so the test separates them
+#: exactly.
 _AFTER_SEAM = re.compile(r"^\s*(?!\d)[A-Za-z]")
+
+#: A damage expression anywhere in the remainder. See `_AFTER_SEAM`.
+_OWN_DAMAGE = re.compile(r"\d+d\d+")
 
 
 def _drop_stray_attack_line(spec: str) -> str:
@@ -958,9 +980,12 @@ def _drop_stray_attack_line(spec: str) -> str:
     this pattern is anchored at the start precisely so it cannot reach them.
     """
     found = _STRAY_LINE.match(spec)
-    if found is None or not _AFTER_SEAM.match(spec[found.end():]):
+    if found is None:
         return spec
-    return found.group("keep") + spec[found.end():]
+    rest = spec[found.end():]
+    if not _AFTER_SEAM.match(rest) or _OWN_DAMAGE.search(rest):
+        return spec
+    return found.group("keep") + rest
 
 
 #: A word run into the list marker that follows it -- `sickness3.` -- which
