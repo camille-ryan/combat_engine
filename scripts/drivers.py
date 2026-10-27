@@ -11877,6 +11877,88 @@ def pull_what_you_hold(out: Result) -> None:
              " the option named")
 
 
+def a_variant_race_inherits_and_is_not_dealt(out: Result) -> None:
+    """Nine races carry no sheet numbers and were skipped outright.
+
+    They are not thin imports: **all 21 of their traits print a "replaces"
+    clause**, so they are variants by construction and the page expects them
+    to inherit a parent's size, speed, vision, skills and surges while
+    swapping named pieces.
+
+    **The parent is derived, not imported.** The clause names its target by
+    **ref** in the stored spec -- *"This benefit replaces rt:r1-t1."* -- and
+    every one of the nine resolves to exactly one parent, which is the only
+    reason this is a derivation rather than a guess:
+
+        r54 r55 -> r2      r56 r57 r64 -> r3
+        r58 r59 -> r4      r67 r68     -> r1
+
+    So no ETL change and no rebuild. `_variant_of` returns no parent at all
+    when the clauses name two, because adopting the lower-numbered one would
+    be a guess dressed as a rule.
+
+    **Selectable and not dealt, which is the half that keeps this cheap.** A
+    variant's own traits are undeclared (#813), so a *dealt* one would wear
+    its parent's traits under another name -- wrong in a way no instrument
+    reports, because the row that should have replaced them does not exist
+    to be missing. Keeping them out of the deal is also right on the merits:
+    a race whose every trait is unwritten is not one a dealer should hand
+    out.
+
+    And it is what makes this landable without a fixture re-record.
+    `DEAL_RACES`' own comment is the warning: changing what races are dealt
+    *"moves every number on every sheet and with them every roll in every
+    fight"*, and those fixtures were re-recorded in a commit with nothing
+    else in it. `replay` is green here, which is the measurement that says
+    no draw moved.
+
+    Four things, and the last is the control: filtering both the uniform
+    pool and the **scored** option list, because `winrate` runs both modes
+    in one process and leaving variants in one of them would move the
+    scored sheets while the uniform draw stayed put. #896.
+    """
+    from random import Random
+
+    from combat_engine.chargen import RACES, Character, deal_race
+    from combat_engine.chargen.choices import race_options
+
+    nine = ("r54", "r55", "r56", "r57", "r58", "r59", "r64", "r67", "r68")
+    kin = {"r54": "r2", "r55": "r2", "r56": "r3", "r57": "r3", "r64": "r3",
+           "r58": "r4", "r59": "r4", "r67": "r1", "r68": "r1"}
+
+    here = [r for r in nine if r in RACES]
+    out.that(len(here) == len(nine),
+             f"all nine variant races are in RACES now ({len(here)} of"
+             f" {len(nine)}), where every one used to be skipped for having"
+             " no sheet numbers")
+
+    wrong = {r: RACES[r].parent for r in here if RACES[r].parent != kin[r]}
+    out.that(not wrong,
+             "each one derives the parent its own traits name, by ref"
+             f" ({wrong or 'all nine agree'})")
+
+    thin = [r for r in here
+            if RACES[r].speed != RACES[kin[r]].speed
+            or RACES[r].size is not RACES[kin[r]].size]
+    out.that(not thin,
+             f"and inherits that parent's sheet ({thin or 'speed and size match'})")
+
+    held = Character(cls="fighter", level=1, race="r67")
+    out.that("race:r67" in held.choices,
+             "a character may still **name** one, and carries `race:r67` so"
+             f" a row can gate on it ({sorted(held.choices)[:3]})")
+
+    drawn = {deal_race(Random(s), "fighter") for s in range(200)}
+    out.that(not {r for r in drawn if RACES[r].parent},
+             f"but none is ever **dealt** -- {len(drawn)} distinct races over"
+             " 200 draws and no variant among them")
+
+    scored = {c.ref for c in race_options("fighter")}
+    out.that(not scored & set(nine),
+             "and none is on the **scored** option list either, which is the"
+             " list `winrate`'s other mode samples from")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -35939,6 +36021,9 @@ DRIVERS = {
     "pull_what_you_hold": (
         pull_what_you_hold,
         "dragging a grabbed creature is a granted action, offered live"),
+    "a_variant_race_inherits_and_is_not_dealt": (
+        a_variant_race_inherits_and_is_not_dealt,
+        "nine variant races inherit a parent and stay out of the deal"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,

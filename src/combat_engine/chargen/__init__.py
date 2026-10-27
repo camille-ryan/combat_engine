@@ -1454,6 +1454,34 @@ class RaceLine:
     #: those say "choose one of the following" -- and the difference
     #: matters: one race gets two powers and one gets one of thirteen.
     one_of: bool
+    #: The race this one is a **variant of**, or `""` for a race of its own.
+    #:
+    #: Nine of the 55 imported races carry no sheet numbers at all --
+    #: `size=''` and `scores='{}'` -- and were skipped outright, so none of
+    #: them could be named or dealt. They are not thin imports: **all 21 of
+    #: their traits print a "replaces" clause**, so they are variants by
+    #: construction and the page expects them to inherit.
+    #:
+    #: Derived rather than imported, because the clause names its target by
+    #: **ref** in the stored spec and every one of the nine resolves to
+    #: exactly one parent:
+    #:
+    #:     r54 r55 -> r2      r56 r57 r64 -> r3
+    #:     r58 r59 -> r4      r67 r68     -> r1
+    #:
+    #: so no ETL change and no rebuild was needed for it. #896.
+    parent: str = ""
+    #: What this variant's traits say they **replace**, by ref, in three
+    #: forms the pages actually use: a trait (`rt:r1-t0`), the ability-score
+    #: pair (a bare `r1` -- "replaces the normal racial ability score
+    #: bonuses for r1"), and a granted power (`p1448`).
+    #:
+    #: **Carried, not applied.** Nothing drops the named piece yet, which is
+    #: why a variant is kept out of the *deal* below: with its own 21 traits
+    #: undeclared, a dealt variant would wear its parent's traits under
+    #: another name. `#813` is the issue that writes them, and this field is
+    #: what it reads. #896.
+    replaces: tuple[str, ...] = ()
 
     @property
     def traits(self) -> list[str]:
@@ -1671,7 +1699,75 @@ def _races_from_the_book() -> dict[str, RaceLine]:
             ),
             one_of=any(word in spec.lower() for word in _ONE_OF),
         )
+
+    # **The nine variants, inheriting the parent their own traits name.**
+    # They carry no sheet numbers, so the loop above skipped them and none
+    # could be named or dealt. All 21 of their traits print a "replaces"
+    # clause naming a ref, which is what makes the parent derivable here
+    # instead of needing a column: every one resolves to exactly one.
+    #
+    # Second pass rather than inline, because a variant needs its parent
+    # already built and `ORDER BY id` is not a promise about that. #896.
+    for row in rows:
+        if row["size"] or row["ref"] in out:
+            continue
+        kin, swapped = _variant_of(row["ref"])
+        stock = out.get(kin)
+        if stock is None:
+            continue
+        out[row["ref"]] = replace(
+            stock, ref=row["ref"], parent=kin, replaces=swapped,
+            # **Its own racial powers, not the parent's.** The power table
+            # keys on the race, so a variant that prints one has it; one
+            # that prints none inherits nothing here on purpose -- the
+            # clause that would hand it the parent's is a `replaces` entry
+            # and belongs to the reader #813 writes.
+            powers=tuple(cards.get(row["ref"], ())) or stock.powers,
+        )
     return out
+
+
+#: Which ref a `replaces` clause points at: a trait, a race, or a power.
+_REPLACED = re.compile(
+    r"replaces?\s+(?:the\s+)?(?:normal\s+)?[^.]*?\b((?:rt:)?r\d+(?:-t\d+)?|p\d+)\b",
+    re.I,
+)
+
+
+def _variant_of(ref: str) -> tuple[str, tuple[str, ...]]:
+    """The race this one varies, and every ref its traits say it replaces.
+
+    Read off `racial_trait.spec`, because that is where the compendium puts
+    it: *"This benefit replaces rt:r1-t1."* The parent is whichever `rN` the
+    clauses name, and all nine variants name exactly one -- checked, which
+    is the only reason this is a derivation rather than a guess.
+
+    Returns `("", ())` for anything that names none, so a genuinely thin
+    import stays skipped rather than being adopted by the first race it
+    happens to mention.
+    """
+    from combat_engine.db import game
+
+    swapped: list[str] = []
+    try:
+        rows = game().execute(
+            "SELECT spec FROM racial_trait WHERE ref LIKE ? ORDER BY ref",
+            (f"rt:{ref}-%",),
+        )
+    except Exception:            # no database yet
+        return "", ()
+    for row in rows:
+        swapped += _REPLACED.findall(row["spec"] or "")
+    kin = {
+        m.group(1)
+        for named in swapped
+        if (m := re.match(r"(?:rt:)?(r\d+)$|(?:rt:)?(r\d+)-t\d+$", named))
+        and (m := re.match(r"(?:rt:)?(r\d+)", named))
+    }
+    # **One parent or none.** Two would mean the derivation is reading
+    # something it should not, and adopting the lower-numbered one would be
+    # a guess dressed as a rule.
+    return (next(iter(kin)) if len(kin) == 1 else ""), tuple(dict.fromkeys(swapped))
 
 
 #: The 46 races a character can be, by ref.
@@ -1758,7 +1854,20 @@ def deal_race(rng: Random, cls: str = "", build: Build | None = None) -> str:
     `cls` is optional so the old one-argument call still answers; without it
     there is no build to score against and the draw stays uniform.
     """
-    pool = sorted(RACES)
+    # **Variants are selectable and not dealt**, which is what keeps this
+    # change from moving every sheet in the game. A variant's own 21 traits
+    # are undeclared (`#813`), so a dealt one would wear its **parent's**
+    # traits under another name -- wrong in a way no instrument would
+    # report, because the row that should have replaced them does not
+    # exist to be missing.
+    #
+    # Right on the merits rather than convenient: a race whose every trait
+    # is unwritten is not a race a dealer should hand out. When `#813`
+    # writes them and something reads `RaceLine.replaces`, dropping this
+    # filter is a one-line change -- and it belongs in a commit with
+    # nothing else in it, for the reason `DEAL_RACES` records below: it
+    # moves every number on every sheet and all seven fixtures with them.
+    pool = sorted(r for r, line in RACES.items() if not line.parent)
     if not pool:
         return ""
     if not SCORED_CHOICES or not cls:

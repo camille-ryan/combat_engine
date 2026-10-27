@@ -402,6 +402,18 @@ def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[C
         return list(_RACES[key])
     out: list[Choice] = []
     for ref, race in sorted(RACES.items()):
+        # **A variant is selectable and not dealt**, so it is not an option
+        # the scorer ranks either -- `deal_race` filters the same way and
+        # for the same reason: its own 21 traits are undeclared (`#813`), so
+        # a dealt variant would wear its parent's traits under another name.
+        #
+        # Filtered here as well as there because this list is what the
+        # *scored* draw samples from, and `winrate` runs both modes in one
+        # process. Leaving it in here would move every scored sheet while
+        # the uniform draw stayed put -- a divergence in one mode only,
+        # which is the hardest kind to read. #896.
+        if race.parent:
+            continue
         raised = race.taken(leg)
         rows = [r for r in race.granted() if r in REGISTRY]
         score, terms = _priced(
