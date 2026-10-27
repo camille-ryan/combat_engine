@@ -2152,7 +2152,7 @@
   "DamageApplied(source=3, target=8, amount=10, dtype=<DamageType.UNTYPED: 'untyped'>, absorbed=0, hp=-5, detail='p653')",
   "Dropped(actor=8, dead=True, source=3, power='p653')",
   "EffectExpired(actor=2, what='e106[p3069, end of encounter]', why='the oath is discharged')",
-  "Note(text='2 regains the use of p3069')",
+  "UseRestored(who=2, power='p3069', by='p3069')",
   "Died(actor=8)",
   "EffectExpired(actor=8, what='e36[m221a0 sure-footed, end of encounter]', why='died')",
   "EffectExpired(actor=8, what='e37[m221a1 unflankable+1, end of encounter]', why='died')",
