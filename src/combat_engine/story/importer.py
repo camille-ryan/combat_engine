@@ -310,6 +310,42 @@ def extract_text(source: Path, into: Path) -> tuple[int, list[Heading]]:
     return 1, []
 
 
+def _unsummarise(scenes: list[dict]) -> tuple[list[dict], list[str]]:
+    """Drop the scenes an adventure's summary section invents.
+
+    An adventure opens by listing every session by name, and the heading
+    walk makes a scene out of each of those as well as out of the real
+    section later in the book. On the module in hand that was **10 of 65**
+    -- and the cost is not tidiness: a converter can fill in the summary
+    copy, whose `_pages` points at a one-page overview with none of the
+    detail, and the result **validates and plays**, just thinly. The
+    phantom also sits in the middle of the graph, so the party walks
+    through a scene that is a table of contents.
+
+    **For a duplicated title, the later copy is the real one.** Checked
+    against the module before being relied on: the first copies start on
+    pages 8, 9 and 34, and every scene starting on 8 or 9 is a duplicate,
+    as are 4 of the 6 on 34 -- those are the summary pages. Two signals I
+    tried first do not work. Width does not: `session-2` has both copies
+    one page wide. Nor does "the wider one is real": one pair runs (34,35)
+    then (36,36), with the *summary* copy wider.
+
+    A real adventure that revisits a location under the same heading would
+    lose the first visit here. That is why the names are returned rather
+    than discarded -- `BRIEF.md` prints them, and restoring one is an edit
+    to the draft. A silently shorter list reads as "the adventure has 55
+    scenes", which is a different claim from "we removed 10 we believe are
+    duplicates".
+    """
+    seen: dict[str, int] = {}
+    for i, scene in enumerate(scenes):
+        seen[scene["id"]] = i
+    kept = [s for i, s in enumerate(scenes) if seen[s["id"]] == i]
+    dropped = sorted({s["name"] for i, s in enumerate(scenes)
+                      if seen[s["id"]] != i})
+    return kept, dropped
+
+
 def draft(module_id: str, outline: list[Heading], total_pages: int) -> dict:
     """A scene graph from the outline, with every judgement left blank.
 
@@ -353,11 +389,14 @@ def draft(module_id: str, outline: list[Heading], total_pages: int) -> dict:
             scene |= {"extended": False}
         scenes.append(scene)
 
+    scenes, phantom = _unsummarise(scenes)
+
     for a, b in itertools.pairwise(scenes):
         a["exits"] = [b["id"]]
 
     return {
         "id": module_id,
+        "_dropped": phantom,
         "edition": "",
         "party_level": 1,
         "party_size": 5,
@@ -372,6 +411,7 @@ BRIEF = """# Converting `{module_id}`
 `{pages}` pages of text are in `pages/`, one file per page. The PDF's own
 outline is in `outline.json`. A skeleton with the ids, kinds and page ranges
 already filled in is in `module.draft.json` -- **{scenes} scenes** found.
+{dropped}
 
 Your job is to turn the draft into `module.json`. Read the pages a scene
 covers (its `_pages` hint) and fill in what a machine could not.
@@ -606,8 +646,30 @@ and never excludes a creature, so guess it if the page implies one.
 """
 
 
-def write_brief(into: Path, module_id: str, pages: int, scenes: int) -> Path:
-    """The instructions a session reads before filling the draft in."""
+def _dropped_note(dropped: list[str]) -> str:
+    if not dropped:
+        return ""
+    rows = "\n".join(f"* {name}" for name in dropped)
+    return (
+        f"\n**{len(dropped)} scene(s) were dropped as duplicates** of a "
+        "later section -- an adventure's summary lists every session by "
+        "name and the heading walk makes a scene out of each. The copy on "
+        "the later pages was kept. If one of these is a real scene the "
+        "party visits twice, add it back:\n\n" + rows + "\n"
+    )
+
+
+def write_brief(into: Path, module_id: str, pages: int, scenes: int,
+                dropped: list[str] | None = None) -> Path:
+    """The instructions a session reads before filling the draft in.
+
+    `dropped` names the scenes `_unsummarise` removed. **Printed, never
+    implied**: a shorter list on its own reads as "the adventure has this
+    many scenes", which is a different claim from "we removed these
+    because we believe they are duplicates", and the second is the one
+    that is true. If one of them is a real scene, restoring it is an edit
+    to the draft and the author has to be able to see it was taken.
+    """
     from combat_engine.engine.cast import TERRAIN_WORDS
     from combat_engine.engine.skills import SKILLS
 
@@ -616,6 +678,7 @@ def write_brief(into: Path, module_id: str, pages: int, scenes: int) -> Path:
         module_id=module_id,
         pages=pages,
         scenes=scenes,
+        dropped=_dropped_note(dropped or []),
         difficulty=", ".join(sorted(DIFFICULTY)),
         terrain=", ".join(sorted(TERRAIN_WORDS)),
         complexity_lo=min(COMPLEXITY),
@@ -661,7 +724,9 @@ def run_import(source: str | Path, module_id: str) -> Imported:
     skeleton = draft(Path(module_id).name, outline, pages)
     draft_path = into / "module.draft.json"
     draft_path.write_text(json.dumps(skeleton, indent=2) + "\n")
-    brief = write_brief(into, Path(module_id).name, pages, len(skeleton["scenes"]))
+    brief = write_brief(into, Path(module_id).name, pages,
+                        len(skeleton["scenes"]),
+                        skeleton.get("_dropped") or [])
     return Imported(
         into=into, pages=pages, headings=len(outline),
         scenes=len(skeleton["scenes"]), draft=draft_path, brief=brief,

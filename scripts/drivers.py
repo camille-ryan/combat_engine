@@ -29628,6 +29628,68 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
         )
 
 
+def the_importer_drops_the_summary_section_and_says_so(out: Result) -> None:
+    """#833. A summary section invents a scene for every session it lists.
+
+    On the module in hand that was **10 of 65**, and the cost is not
+    tidiness: a converter can fill in the summary copy, whose pages point
+    at a one-page overview with none of the detail, and the result
+    validates and plays -- thinly. The phantom also sits in the graph, so
+    the party walks through a table of contents.
+    """
+    from combat_engine.story import importer
+
+    # Shaped like the real thing: a run of one-page scenes early, each
+    # reappearing later in the body.
+    def scene(sid: str, lo: int, hi: int) -> dict:
+        return {"id": sid, "name": sid.replace("-", " ").title(),
+                "_pages": f"{lo}-{hi}", "kind": "roleplay", "exits": []}
+
+    draft = [
+        scene("session-one", 8, 8),
+        scene("session-two", 8, 8),
+        scene("the-gate", 9, 9),
+        scene("session-one", 10, 11),
+        scene("session-two", 12, 12),
+        scene("the-cellar", 14, 15),
+    ]
+    kept, dropped = importer._unsummarise(draft)
+
+    out.that(
+        len(kept) == 4 and len(dropped) == 2,
+        "a title that appears twice is kept once",
+        f"{len(kept)} kept, {len(dropped)} dropped",
+    )
+    # **The later copy, not the earlier.** Two signals were tried first and
+    # neither works on the real draft: width does not separate them (one
+    # pair is one page on both sides), and "the wider one is real" is
+    # backwards for a pair that runs (34,35) then (36,36).
+    out.that(
+        {s["_pages"] for s in kept if s["id"] == "session-one"} == {"10-11"},
+        "and it is the copy on the later pages that survives",
+        f"{[s['_pages'] for s in kept if s['id'] == 'session-one']}",
+    )
+    # The control: a title appearing once is never touched, however early.
+    out.that(
+        {s["id"] for s in kept} >= {"the-gate", "the-cellar"},
+        "while a scene that appears once is kept wherever it sits",
+        f"{sorted(s['id'] for s in kept)}",
+    )
+    # **Said out loud.** A shorter list on its own reads as the adventure
+    # being smaller, which is a different claim from this one.
+    note = importer._dropped_note(dropped)
+    out.that(
+        "2 scene(s) were dropped" in note and "Session One" in note,
+        "and the brief names what was taken, rather than quietly shrinking",
+        f"{note[:70]!r}",
+    )
+    out.that(
+        importer._dropped_note([]) == "",
+        "with nothing said when nothing was dropped",
+        f"{importer._dropped_note([])!r}",
+    )
+
+
 def the_dm_may_invent_but_not_contradict(out: Result) -> None:
     """#830, as Camille ruled it rather than as it was filed.
 
@@ -29985,6 +30047,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "summary_scenes": (
+        the_importer_drops_the_summary_section_and_says_so,
+        "the importer drops an adventure's summary duplicates (#833)",
     ),
     "invent_not_contradict": (
         the_dm_may_invent_but_not_contradict,
