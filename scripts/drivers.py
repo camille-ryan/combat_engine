@@ -12155,6 +12155,85 @@ def a_reentrant_repeat_passes_a_spent_grant(out: Result) -> None:
              f" fails if the waiver reads `forbidden` ({barred}, {why!r})")
 
 
+def a_trigger_reads_the_attackers_reach(out: Result) -> None:
+    """`by_melee`, `by_melee_only` and `by_ranged` judged an attack by the
+    shape it **used to have**.
+
+    `dsl.reach_of`'s rule is that every reader holding a world and an actor
+    comes through it, because a replacing reshape changes the `kind` itself
+    -- `i2467p1` prints "its area changed to 1 square", so a printed
+    `area_burst` is a `close_burst` in that creature's hands. #894 fixed
+    five such sites in `dsl.py`; these three were a sixth, seventh and
+    eighth in **another module**, so that sweep never reached them and the
+    rule it restored was still not held. 309 rows carry one of the three.
+
+    **The reason this was not a one-liner, and the reason the third cell
+    below exists.** `reach_of` wants the **attacker** -- whoever's reshape
+    applies -- and these helpers are handed `me`, the creature *watching*,
+    which for "a ranged attack damages you" is the **victim**. Passing `me`
+    would have read the wrong creature's reshape and been worse than
+    reading the header. So `_attacker_of(ev)` takes it off the event, which
+    spells it two ways: `attacker` on an attack event and `source` on a
+    damage or drop one -- the same split `_power_of` already documents for
+    the row.
+
+    Three cells, on a row printed `Area burst 1 within 10`:
+
+    * printed, it reads as ranged and not melee;
+    * **reshaped by the attacker**, that flips -- which is the fix;
+    * **reshaped by the watcher**, it does *not* flip, which is what says
+      the attacker is being read and not the subscriber. The one-liner this
+      replaced would pass the first two and fail this one.
+
+    Ongoing damage has no attacker (`source` is `None`) and falls back to
+    the print, which is the honest answer: with nobody to read a reshape
+    off, the card is all there is. #898.
+    """
+    import dataclasses
+
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import triggers
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import enemies
+
+    REF = "m4756a3"
+
+    def ask(on_attacker: bool, on_watcher: bool) -> tuple[bool, bool]:
+        world, me, _ = _board(seed=1)
+        foe = sorted(enemies(world, me))[0]
+
+        def swap(r):  # noqa: ANN001, ANN202
+            return dataclasses.replace(r, kind="close_burst", size=1)
+
+        if on_attacker:
+            Cast(world=world, me=me, ref="drivers:898").reshape_area(
+                swap, ref=REF, until=When.ENCOUNTER)
+        if on_watcher:
+            Cast(world=world, me=foe, ref="drivers:898").reshape_area(
+                swap, ref=REF, on=foe, until=When.ENCOUNTER)
+        ev = Hit(attacker=me, target=foe, power=REF, critical=False)
+        # `foe` is the **watcher** -- the victim, whose trigger this is.
+        return triggers.by_ranged(world, foe, ev), triggers.by_melee(world, foe, ev)
+
+    rng, mel = ask(False, False)
+    out.that(rng and not mel,
+             f"printed, an area burst reads as ranged and not melee"
+             f" (ranged={rng}, melee={mel})")
+
+    rng, mel = ask(True, False)
+    out.that(mel and not rng,
+             "reshaped by the **attacker** it reads as melee instead --"
+             f" the shape the attack was made with (ranged={rng}, melee={mel})")
+
+    rng, mel = ask(False, True)
+    out.that(rng and not mel,
+             "and a reshape on the **watcher** changes nothing, which is"
+             " what says the attacker is read and not the subscriber"
+             f" (ranged={rng}, melee={mel})")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -36226,6 +36305,9 @@ DRIVERS = {
     "a_reentrant_repeat_passes_a_spent_grant": (
         a_reentrant_repeat_passes_a_spent_grant,
         "a repeat passes an exhausted grant and not a prohibition"),
+    "a_trigger_reads_the_attackers_reach": (
+        a_trigger_reads_the_attackers_reach,
+        "a reshaped attack is judged by the shape it was made with"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,

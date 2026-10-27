@@ -705,6 +705,49 @@ def _power_of(ev: Event):  # noqa: ANN202
     return get(getattr(ev, "power", "") or getattr(ev, "detail", "") or "")
 
 
+def _attacker_of(ev: Event) -> int | None:
+    """Who made the attack, whichever field the event keeps it in.
+
+    The companion of `_power_of` and the same split: an attack event spells
+    it `attacker` (`AttackRolled`, `Hit`, `Miss`), a damage or drop event
+    spells it `source` (`DamageRolled`, `DamageApplied`, `Bloodied`,
+    `Dropped`). `source` is nullable and is `None` for ongoing damage, a
+    failed death save, and anything else with no attacker -- which the
+    three readers below treat as "fall back to the print", the same answer
+    they give when `_power_of` finds no row.
+
+    **Needed because the reach is per-creature and the creature is not the
+    subscriber.** `by_melee` and friends are handed `me`, which is whoever
+    is *watching* -- usually the victim. Reading the reshape off `me` would
+    be the wrong creature's and worse than reading the header. #898.
+    """
+    who = getattr(ev, "attacker", None)
+    return who if who is not None else getattr(ev, "source", None)
+
+
+def _reach_as_made(world: World, ev: Event, p: Any) -> Any:
+    """The shape the attack was **made** with, not the one it prints.
+
+    `dsl.reach_of`'s rule is that every reader holding a world and an actor
+    comes through it, because a replacing reshape can change the `kind`
+    itself -- `i2467p1` prints "its area changed to 1 square", so a card's
+    printed `area_burst` is a `close_burst` in that creature's hands. #894
+    fixed five sites in `dsl.py` on exactly this and these three were a
+    sixth, seventh and eighth, in another module and so outside its sweep.
+
+    Falls back to the print when the event names no attacker, which is the
+    honest answer rather than a guess: with nobody to read a reshape off,
+    the card is all there is.
+    """
+    from .dsl import reach_of
+
+    who = _attacker_of(ev)
+    branch = getattr(ev, "branch", 0)
+    if who is None:
+        return p.reach_of(branch)
+    return reach_of(world, who, p, branch)
+
+
 def by_melee(world: World, me: int, ev: Event) -> bool:
     """Was the attack that caused this a melee one?
 
@@ -716,7 +759,7 @@ def by_melee(world: World, me: int, ev: Event) -> bool:
     p = _power_of(ev)
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind in (
+    return _reach_as_made(world, ev, p).kind in (
         "melee", "close_burst", "close_blast",
     )
 
@@ -743,15 +786,24 @@ def by_melee_only(world: World, me: int, ev: Event) -> bool:
     p = _power_of(ev)
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind == "melee"
+    return _reach_as_made(world, ev, p).kind == "melee"
 
 
 def by_ranged(world: World, me: int, ev: Event) -> bool:
+    """Was it a **ranged or area** attack? "A ranged attack damages you."
 
+    The only member of this family that had no docstring at all, which is
+    some part of why it was the one nobody checked -- #898 found it and its
+    two siblings reading the printed reach with a world in hand.
+
+    `ranged` and `area_burst` together, because the printed clauses this
+    serves name both and no card in the tier separates them. 56 rows carry
+    it.
+    """
     p = _power_of(ev)
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind in ("ranged", "area_burst")
+    return _reach_as_made(world, ev, p).kind in ("ranged", "area_burst")
 
 
 def by_opportunity(world: World, me: int, ev: Event) -> bool:
