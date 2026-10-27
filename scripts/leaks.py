@@ -1034,11 +1034,36 @@ UNSWAPPED_KNOWN: dict[tuple[str, str, str], str] = {}
 #: by exactly one row of twenty-six thousand is believed on its uniqueness
 #: where `identifies` disbelieves it on its words. #628.
 #:
-#: **What is left is the other nine-tenths of the census**, and it is not
-#: the same bug. Eight feats name one class feature whose printed name is
-#: itself in `RULES_TERMS`, so the scrubber reads it as mechanics wherever
-#: it appears -- correct in general and wrong for these eight. Two traps
-#: name a power and a feat. Both want their own look.
+#: **What is left is 10 and none of it is owed. Looked at, 2026-10-26.**
+#: This used to read "correct in general and wrong for these eight", and
+#: that is backwards -- the scrubber is right about all eight and the
+#: baseline was mislabelling its own entries as debt.
+#:
+#: **The eight are a false attribution, not a missed swap.** They are feats
+#: printing the phrase that is *also* the title of one cleric build's
+#: feature, and every one of them means the **keyword category** rather
+#: than that row. `f1355` is the plain case: *"Your <phrase> powers that
+#: have a range of personal gain a range of close burst 5"* -- that is
+#: every power of that keyword, in any divine class, and substituting the
+#: warpriest's ref would name one build's feature where the card names a
+#: category. All three words of the title are in the rules vocabulary, so
+#: `identifies` refuses it, and refusing it is correct.
+#:
+#: The proof that nothing is missing is in the same specs: where the text
+#: *does* mean the class feature, **the swap already happened** --
+#: `cf:avenger-f2/cf:cleric-templar-f0/cf:invoker-f0/cf:paladin-f0`, the
+#: four-class alternation, appears wherever the sentence is about the
+#: feature. So both senses are handled, and the gate is flagging the one
+#: that must not be touched.
+#:
+#: **The two traps print a power's and a feat's name into `trap.spec`**, a
+#: table with no content rows: nothing in `content/` is authored from a
+#: trap, so no author reads them and nothing renders them. Tier 3 at
+#: worst (#447), and it would go the day traps are ingested as rows.
+#:
+#: So these 10 are **waived with a reason**, not work. The number can still
+#: only shrink and a new one is still red, which is the half worth having.
+#: #628.
 UNSWAPPED_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
     ("feat", "f1355", "cf:cleric-warpriest-f0"),
     ("feat", "f1432b", "cf:cleric-warpriest-f0"),
@@ -1209,7 +1234,8 @@ def _unswapped_names(index: dict[str, list[str]]) -> int:
             print(f"  {key[0]}.{key[1]} no longer prints {key[2]}'s name")
         return 1
     print(f"no NEW spec prints a uniquely-resolving name it does not cite "
-          f"({len(UNSWAPPED_BASELINE)} known, owed to the extraction)")
+          f"({len(UNSWAPPED_BASELINE)} known and waived with a reason --"
+          f" see UNSWAPPED_BASELINE, #628)")
     return 0
 
 
