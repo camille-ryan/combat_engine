@@ -134,9 +134,9 @@ CATEGORIES: dict[str, dict] = {
             # `c.hide`/`c.unhide` went to `modifiers` for a duller reason:
             # both docstrings are about being seen, not about moving.
             ("voluntary -- the creature spends its own movement", [
-                "charge", "charge_at", "flee", "hover", "jump", "move",
-                "moving_as", "overrun", "ride", "rise", "run_at", "shift",
-                "shift_as", "teleport", "walk_toward",
+                "charge", "charge_at", "dismount", "flee", "hover",
+                "jump", "move", "moving_as", "overrun", "ride", "rise",
+                "run_at", "shift", "shift_as", "teleport", "walk_toward",
             ]),
             ("forced -- somebody else moves it", [
                 "bull_rush", "pull", "push", "slide",
@@ -152,7 +152,7 @@ CATEGORIES: dict[str, dict] = {
                 "extend_every",
                 "extend_move", "forces", "ignores_difficult", "ignores_difficult_in",
                 "ignores_hazards", "immovable", "no_walk", "phasing",
-                "may_enter", "resist_forced", "shares_space",
+                "may_enter", "resist_forced", "rideable", "shares_space",
                 "speed_of", "squares_for", "squeeze_through",
             ]),
             # **Two attack modifiers, filed under movement on purpose.**
@@ -715,7 +715,8 @@ READERS: dict[str, list[str]] = {
     "what a creature may do": [
         "can_act", "can_move", "can_react", "can_shift", "can_run", "can_walk",
         "granted_actions", "held_by", "holding", "holds_somebody",
-        "immune_to", "needs_loading", "ready_to_fire",
+        "immune_to", "may_ride", "needs_loading", "ready_to_fire",
+        "rideable_by",
     ],
     "what has already happened": [
         "attacked_since", "bloodied", "damaged_since", "dropped_since",

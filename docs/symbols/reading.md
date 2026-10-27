@@ -185,10 +185,14 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Is this creature holding anyone in a grab? "Requirement: you must
 - `query.immune_to(world: 'World', eid: 'int', cond: 'Condition | Keyword', source: 'int | None' = None, power: 'str' = '') -> 'bool'`
   - Can this condition not be laid on this creature at all?
+- `query.may_ride(world: 'World', rider: 'int', mount: 'int') -> 'bool'`
+  - Is this pairing a legal mount, by size and by exception?
 - `query.needs_loading(weapon: 'Any') -> 'bool'`
   - Does firing this weapon leave it empty until somebody reloads it?
 - `query.ready_to_fire(world: 'World', eid: 'int', weapon: 'Any') -> 'bool'`
   - Is this weapon loaded, for a creature that has to load it?
+- `query.rideable_by(world: 'World', mount: 'int') -> 'frozenset[str]'`
+  - Which rider sizes this creature may carry **despite the size rule**.
 
 ## what has already happened
 

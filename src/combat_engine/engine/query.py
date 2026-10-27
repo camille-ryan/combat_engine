@@ -1674,6 +1674,60 @@ def granted_actions(world: World, eid: int) -> dict[tuple[str, str], int]:
     return out
 
 
+def rideable_by(world: World, mount: int) -> frozenset[str]:
+    """Which rider sizes this creature may carry **despite the size rule**.
+
+    The printed rule is that a mount must be *larger than* its rider, and
+    three rows relax it from two directions: a monster whose line is "a
+    Medium creature can ride this" and a feat whose line is "if your
+    companion is **your size or larger**". Both mounts involved are Medium,
+    so a Medium rider is barred outright by the general rule -- which makes
+    those lines real exceptions rather than restatements, and that was worth
+    measuring before building two facilities for one rule. #749.
+
+    Empty for almost every creature, which is what the ordinary rule means.
+    """
+    mods = world.get(mount, Mods)
+    if mods is None or not mods.items:
+        return frozenset()
+    out = set()
+    for m in mods.items:
+        what, sep, size = m.what.partition("rideable:")
+        if sep and not what and mods.total(m.what, {}) > 0:
+            out.add(size)
+    return frozenset(out)
+
+
+def may_ride(world: World, rider: int, mount: int) -> bool:
+    """Is this pairing a legal mount, by size and by exception?
+
+    The one legality test, read from whichever side the card wrote its
+    exception -- `rideable_by` is laid on the **mount** and a feat relaxing
+    the rule for its own companion lays it there too, with `on=`. #749's
+    comment is explicit that the two "gaps" are one rule relaxed from two
+    directions, and this is where that unification lives.
+
+    A creature cannot ride itself, and neither end may already be in a
+    mounted pairing -- the printed rule is one rider and one mount.
+    """
+    from .components import Position
+    from .types import Relation
+
+    if rider == mount or not alive(world, mount) or not alive(world, rider):
+        return False
+    if world.relations.targets(Relation.RIDDEN_BY, mount):
+        return False      # already carrying somebody
+    if world.relations.sources(Relation.RIDDEN_BY, rider):
+        return False      # already astride something
+    here = world.get(rider, Position)
+    there = world.get(mount, Position)
+    if here is None or there is None:
+        return False
+    if there.size.order > here.size.order:
+        return True
+    return str(here.size) in rideable_by(world, mount)
+
+
 def immune_to(
     world: World,
     eid: int,

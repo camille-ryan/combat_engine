@@ -35439,6 +35439,185 @@ def what_provoked_the_opening_reaches_the_attack(out: Result) -> None:
              f"{on_events[:4]}")
 
 
+def mounting_is_an_action_and_a_size_rule_with_an_exception(
+    out: Result,
+) -> None:
+    """Getting on and getting off are printed move actions, and three rows
+    had no moment at which they could become true.
+
+    `c.ride` set the relation and nothing offered the action, so two monster
+    rows whose whole line is *"a creature of that size may ride it"* were
+    **refused in play** rather than merely incomplete. #749.
+
+    **The two gaps that issue proposed are one facility, and the rules are
+    what showed it.** The general rule demands a mount *larger than* its
+    rider; both mounts here are Medium, so a Medium rider is barred
+    outright -- which makes those lines real **exceptions** rather than
+    restatements. `f2726` is the same exception from the rider's end ("your
+    size or larger"). So there is one permission, `c.rideable`, read by one
+    legality test, `query.may_ride`, and a card writes it from whichever
+    side it happens to phrase it.
+
+    Driven through `m3227a2`'s own body and the real `actions.legal` menu,
+    not by calling `c.ride` -- the row's whole content *is* the permission,
+    so a rule that set the relation itself would assert nothing about it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.grid import footprint
+    from combat_engine.engine.query import enemies, may_ride, rideable_by
+    from combat_engine.engine.types import ActionType, Relation, Size
+
+    for ref in ("m3227a2", "m3230a2", "f2726"):
+        row = REGISTRY[ref]
+        out.that(not row.unfinished, f"{ref} carries no marker now",
+                 f"{row.unfinished}")
+
+    # **Two things about the posed board, both load-bearing and neither
+    # guessed.** It starts the encounter, so `arm_traits` has already run
+    # this row's body -- a "without the permission" arrangement had the
+    # permission anyway, which is the same double-arming trap
+    # `drivers.provoked_by` hit an hour earlier. And it spawns somebody
+    # **already astride** the mount, so `may_ride` rightly refused a second
+    # rider and the first draft of this rule read that as a broken reader.
+    #
+    # So the control is a second Medium creature on the same board, and the
+    # pre-existing pairing is used rather than fought: dismounting it is
+    # what makes room, and exercises the new verb on the engine's own
+    # arrangement instead of on one this rule built.
+    world, mount, _started = _posed("m3227a2", 1)
+    foes = sorted(enemies(world, mount))
+    rider, other = foes[0], foes[1]
+    seat = must(world.get(mount, Position), "the mount has a Position")
+    here = sorted(seat.squares)[0]
+
+    def stand(who: int, square: tuple[int, int]) -> None:
+        """Put a creature down **through the grid**, at Medium."""
+        world.grid.lift(who)
+        legs = must(world.get(who, Position), f"{who} has a Position")
+        legs.square = square
+        legs.size = Size.MEDIUM
+        world.grid.place(who, footprint(square, legs.size))
+
+    seat.size = Size.MEDIUM
+    world.grid.lift(mount)
+    world.grid.place(mount, footprint(here, seat.size))
+    stand(rider, (here[0] + 1, here[1]))
+    stand(other, (here[0] + 1, here[1] + 1))
+    enc = world.encounter
+
+    out.that(rideable_by(world, mount) == frozenset({"medium"}),
+             "the row's body records which rider sizes this mount accepts,"
+             " on the **mount** -- `on=c.me`, which a `NO_TARGET` row has to"
+             " say or the permission lands on nobody, and `lint.py` named"
+             " exactly that here",
+             f"{sorted(rideable_by(world, mount))}")
+
+    # -- the board's own rider gets off, which is the new verb ------------
+    seated = world.relations.targets(Relation.RIDDEN_BY, mount)
+    out.that(bool(seated),
+             "the posed board really does spawn somebody astride this"
+             " creature, which is the premise the one-rider rule below"
+             " turns on",
+             f"{seated}")
+    first = seated[0]
+    world.turn = first
+    offs = [a for a in legal(world, enc, first) if a.kind == "dismount"]
+    out.that(bool(offs) and all(a.cost is ActionType.MOVE for a in offs),
+             "**dismounting is offered while mounted**, as a move action --"
+             " a peer of mounting rather than an afterthought, and it had no"
+             " verb at all before this",
+             f"{len(offs)} offer(s), {sorted({a.cost for a in offs})}")
+    was = sorted(must(world.get(first, Position), "the rider").squares)[0]
+    out.that(bool(offs) and perform(world, enc, first, offs[0]),
+             "taking it succeeds",
+             f"{offs[0] if offs else None}")
+    now = sorted(must(world.get(first, Position), "the rider").squares)[0]
+    out.that(not world.relations.sources(Relation.RIDDEN_BY, first),
+             "the relation is cleared",
+             f"{world.relations.sources(Relation.RIDDEN_BY, first)}")
+    out.that(now != was and world.grid.occupant(now) == first,
+             "**and the rider really moved, into a square the grid knows**"
+             " -- the printed line is \"moving to a square adjacent to it\","
+             " and a carried rider is deliberately absent from the occupancy"
+             " index, so clearing the relation without a step would leave it"
+             " nowhere the board can see",
+             f"{was} -> {now}, occupant={world.grid.occupant(now)}")
+
+    # -- now the seat is free, the permission is what makes it legal ------
+    out.that(may_ride(world, rider, mount),
+             "with the seat free, a Medium rider may ride a Medium mount --"
+             " which the general rule, demanding a mount *larger than* its"
+             " rider, forbids outright",
+             f"may_ride={may_ride(world, rider, mount)}")
+    out.that(not rideable_by(world, other)
+             and not may_ride(world, rider, other),
+             "**and the same rider may not ride the creature beside it** --"
+             " same size, same board, same adjacency, no permission. The"
+             " size rule standing on its own, which is the control that says"
+             " the exception is doing the work",
+             f"{sorted(rideable_by(world, other))},"
+             f" may_ride={may_ride(world, rider, other)}")
+
+    # -- it reaches the menu, which is the half that did not exist --------
+    world.turn = rider
+    offers = [a for a in legal(world, enc, rider) if a.kind == "mount"]
+    named = {who for a in offers for who in a.targets}
+    out.that(mount in named,
+             "**mounting is on the menu now**, naming the mount -- the"
+             " moment these rows had none of, and the reason two of them"
+             " were refused in play rather than incomplete",
+             f"{sorted(named)}")
+    # **Not the only entry, and the reason is the board rather than a
+    # leak.** The first draft asserted the mount was the *sole* option and
+    # read two as a failure; the second assumed the other one must be
+    # genuinely larger and read Medium as a failure. Both were wrong about
+    # the same thing: the posed board spawns a **copy of the caster**, which
+    # `arm_traits` arms too, so two creatures legitimately hold this row's
+    # permission.
+    #
+    # Asserted through `rideable_by` rather than `may_ride`, which would be
+    # circular -- `may_ride` *is* "larger or permitted", so asking it here
+    # would restate the implementation. The load-bearing control is the one
+    # below: `other`, the same size and adjacent, carries no permission and
+    # is not offered.
+    holders = sorted(who for who in named if rideable_by(world, who))
+    out.that(holders == sorted(named),
+             "and every creature offered holds the permission in its own"
+             " right -- the board spawns a copy of the caster, so two of"
+             " them carry this row rather than one",
+             f"offered {sorted(named)}, holders {holders}")
+    out.that(bool(offers) and all(a.cost is ActionType.MOVE for a in offers),
+             "as a move action, which is the general printed rule rather"
+             " than a gift any card confers -- so `c.grant_action(\"mount\")`"
+             " is only for a card that changes the cost, and that is why"
+             " `f2726`'s grant would have been a no-op",
+             f"{sorted({a.cost for a in offers})}")
+    out.that(all(other not in a.targets for a in offers),
+             "and the unpermitted neighbour is **not** among the options --"
+             " the reader asks the permission live, per candidate",
+             f"{[sorted(a.targets) for a in offers]}")
+
+    out.that(bool(offers) and perform(world, enc, rider, offers[0]),
+             "taking the action succeeds",
+             f"{offers[0] if offers else None}")
+    out.that(world.relations.sources(Relation.RIDDEN_BY, rider) == [mount],
+             "and the rider is astride the mount it chose, by the relation"
+             " `c.ride` sets -- not a second write that could disagree"
+             " with it",
+             f"{world.relations.sources(Relation.RIDDEN_BY, rider)}")
+    out.that(not may_ride(world, rider, mount)
+             and not may_ride(world, other, mount),
+             "a second mount is refused while astride, and so is a second"
+             " **rider** on a mount already carrying one -- the printed"
+             " one-rider rule, and the pair of negative controls a legality"
+             " test reading only size would fail",
+             f"{may_ride(world, rider, mount)},"
+             f" {may_ride(world, other, mount)}")
+
+
 def a_restored_or_expended_use_says_so(out: Result) -> None:
     """Handing a use back, and spending one without running the row, are each
     announced in their own right.
@@ -36211,6 +36390,10 @@ DRIVERS = {
     "blow_redirected": (
         a_redirected_blow_says_so_and_the_damage_follows,
         "moving a blow onto somebody else is announced at both ends (#900)",
+    ),
+    "mounting": (
+        mounting_is_an_action_and_a_size_rule_with_an_exception,
+        "mounting and dismounting are actions, and one size exception (#749)",
     ),
     "use_restored": (
         a_restored_or_expended_use_says_so,

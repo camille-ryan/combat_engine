@@ -1724,24 +1724,23 @@ def m3227a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("actions.mount()",),
 )
 def m3227a2(c: Cast) -> None:
-    """The whole of this line is "a creature of that size may ride it".
+    """The whole of this line is "a creature of that size may ride it", and
+    it is a real **exception** rather than a restatement: the general rule
+    demands a mount *larger than* its rider and this creature is Medium, so
+    a Medium rider is barred outright without this. Measured before writing
+    it -- the opposite was the expectation. #749.
 
-    `c.ride` can establish the relation but nothing offers mounting as an
-    action, so there is no moment at which this row can become true. Named
-    rather than approximated: setting the relation from here would put a
-    rider on it that nobody chose.
-
-    **`c.grant_action` is not the right verb, and this note said it was.**
-    That verb changes the *cost* of an action the menu already offers --
-    `actions.legal` has 21 kinds and none of them is riding -- so there is
-    nothing here for a word to cheapen. Being ridden has to become an
-    action before any of that applies, which is #749. Measured while
-    draining #763: all six words that issue proposed turned out to want an
-    action that does not exist, which is the opposite of the cheap cluster
-    it was filed as. Re-pointed to `actions.mount()`."""
+    `c.rideable` records the permission on the mount and `query.may_ride`
+    is the one legality test that reads it, so `actions._mounting` offers
+    the move action to whoever is standing beside this creature. The
+    relation is **not** set here: that would put a rider on it that nobody
+    chose, which is what the old note said and is still right."""
+    # `on=c.me`, which is load-bearing: this is a `NO_TARGET` row, so a
+    # bare call lays the permission on **nobody** -- `content/CLAUDE.md`'s
+    # commonest single mistake, and `lint.py` named it here.
+    c.rideable(sizes=(Size.MEDIUM,), on=c.me)
 
 
 # --------------------------------------------------------------------------

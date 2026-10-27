@@ -11,6 +11,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - is this use a charge?
 - `c.charge_at(self, victim: 'int', ref: 'str' = '', *, who: 'int | None' = None) -> 'bool'`
   - Run at somebody and swing, with the swing marked as a charge.
+- `c.dismount(self, *, to: 'Square | None' = None) -> 'bool'`
+  - Get off, into an adjacent square. `c.ride`'s missing inverse.
 - `c.flee(self, squares_: 'int', *, on: 'int | None' = None) -> 'int'`
   - The target runs, under its own power, as far from you as it can.
 - `c.hover(self, squares_: 'int' = 0, *, across: 'int' = 0, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None) -> 'Effect | None'`
@@ -84,6 +86,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Move through earth, rock and anything else in the way.
 - `c.resist_forced(self, squares_: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Shorten every push, pull and slide against this creature.
+- `c.rideable(self, *, sizes: 'tuple[Size, ...]' = (), on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'list[Effect]'`
+  - "A Medium creature can ride this." The size rule, relaxed.
 - `c.shares_space(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, difficult: 'bool' = True) -> 'Effect | None'`
   - Anyone may stand in this creature's square, and it costs them.
 - `c.speed_of(self, who: 'int | None' = None) -> 'int'`

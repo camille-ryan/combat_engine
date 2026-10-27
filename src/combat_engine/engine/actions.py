@@ -129,6 +129,7 @@ def legal(
     out.extend(_movement(world, encounter, actor))
     out.extend(_charges(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
+    out.extend(_mounting(world, encounter, actor))
     out.extend(_sustaining(world, encounter, actor))
     out.extend(_dropping(world, encounter, actor))
     out.extend(_wielding(world, encounter, actor))
@@ -809,8 +810,9 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
 #: `what` is a power's ref, not a word, so it builds the same carrier by
 #: hand and this set does not constrain it.
 GRANTABLE = frozenset({
-    "aid_attack", "aid_defence", "command", "escape", "instinctive",
-    "move_zone", "pull_grabbed", "second_wind", "shift", "stand",
+    "aid_attack", "aid_defence", "command", "dismount", "escape",
+    "instinctive", "mount", "move_zone", "pull_grabbed", "second_wind",
+    "shift", "stand",
 })
 
 
@@ -1128,6 +1130,56 @@ def _picking_up(world: World, encounter: Encounter, actor: int) -> list[Action]:
         if where is None or where.square not in here:
             continue
         out.append(Action(kind="pick_up", cost=cost, subject=eid, ref=item.ref))
+    return out
+
+
+def _mounting(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Getting on, and getting off. Both printed move actions.
+
+    **Offered by default rather than granted by a card**, which is the
+    question #749 left open and the mounted-combat rules answered: it is a
+    general move action for anybody beside a creature meeting the
+    requirements, so `c.grant_action("mount", cost)` is only for a card that
+    changes the **cost**. That is why `f2726`'s grant was close to a no-op
+    and why its real gift is the size exception, not the action.
+
+    Three rows had no moment at which they could become true. `c.ride` set
+    the relation and nothing offered the action, so `m3227a2` and `m3230a2`
+    -- whose whole line is "a creature of that size may ride it" -- were
+    refused in play rather than merely incomplete.
+
+    **Dismount is a peer, not an afterthought**, and is offered whenever
+    mounted. The printed line moves the rider to an adjacent square, which
+    `c.dismount` does; a rider carried by its mount is deliberately absent
+    from the occupancy index, so clearing the relation without a step would
+    leave it nowhere the grid can see.
+
+    One entry per legal mount. `query.may_ride` is the single legality test
+    and holds the size rule *and* its exception, so this never asks about
+    size itself.
+    """
+    from .query import adjacent, creatures, may_ride
+
+    out: list[Action] = []
+    costs = {ActionType.MOVE} | {
+        cost for (what, cost) in _granted(world, actor) if what == "mount"
+    }
+    for cost in sorted(costs, key=lambda a: a.value):
+        if not encounter.can_spend(actor, cost):
+            continue
+        for beast in sorted(creatures(world)):
+            if adjacent(world, actor, beast) and may_ride(world, actor, beast):
+                out.append(Action(kind="mount", cost=cost, targets=(beast,)))
+
+    off = {ActionType.MOVE} | {
+        cost for (what, cost) in _granted(world, actor) if what == "dismount"
+    }
+    from .types import Relation
+
+    if world.relations.sources(Relation.RIDDEN_BY, actor):
+        for cost in sorted(off, key=lambda a: a.value):
+            if encounter.can_spend(actor, cost):
+                out.append(Action(kind="dismount", cost=cost))
     return out
 
 
@@ -1684,6 +1736,28 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
 
         for victim in action.targets:
             forced(world, actor, victim, Forced.PULL, 1, to=action.dest)
+        return True
+
+    if action.kind == "mount":
+        # Through `Cast.ride`, not `relations.set`, so the one verb content
+        # uses is the one the menu uses. The legality was settled on the
+        # offer side by `query.may_ride`; re-asking here would duplicate the
+        # size rule and its exception in a second place.
+        from .cast import Cast
+
+        for beast in action.targets:
+            Cast(world=world, me=actor, ref="action:mount").ride(on=beast)
+        return True
+
+    if action.kind == "dismount":
+        # `c.dismount` moves the rider out, which is the printed line, and
+        # clears the relation before stepping -- `movement.step` carries a
+        # rider with its mount, so a step taken while still astride would
+        # move the pair rather than set one down.
+        from .cast import Cast
+
+        Cast(world=world, me=actor, ref="action:dismount").dismount(
+            to=action.dest)
         return True
 
     if action.kind == "escape":

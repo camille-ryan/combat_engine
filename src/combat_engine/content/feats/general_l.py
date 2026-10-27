@@ -2814,25 +2814,28 @@ def f2725(c: Cast) -> None:
 
 
 @power("f2726", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("actions.mount()",))
+       reach=PERSONAL, target=SELF)
 def f2726(c: Cast) -> None:
-    """`c.ride` is the printed sentence and the size test is `Size.order`
-    -- `Size` is a `StrEnum`, so a bare `>` sorts the words.
+    """The size test is `Size.order` -- `Size` is a `StrEnum`, so a bare
+    `>` sorts the words.
 
-    **Mounting as a move action is dropped, and the old note named the
-    wrong gap.** It said `c.grant_action` "eats anything that is not a
-    shift or a stand" -- true then, false now (it raises, #762), and
-    beside the point either way. `c.grant_action` changes the **cost** of
-    an action the menu already offers, and the menu has 21 kinds with no
-    `mount` among them. So there is no cost to cheapen: mounting has to
-    become an action first, which is #749. Re-pointed to
-    `actions.mount()`."""
+    **What this card actually buys is the size exception, and the old note
+    had it as the action.** Mounting is a move action by the general rule,
+    so there was never a cost here to cheapen; `c.grant_action("mount")`
+    would be close to a no-op. The printed gift is riding a companion of
+    **your own size** where the rule demands strictly larger -- so the row
+    lays `c.rideable` on the companion and `query.may_ride` reads it,
+    which is the same facility the two monster rows write from the other
+    end. #749.
+
+    The ride stays, because the card says you can ride it; the standing
+    permission is what makes the menu offer it again after a dismount."""
     beast = c.companion()
     if beast is None:
         return
     mine, theirs = c.size_of(c.me), c.size_of(beast)
     if theirs.order >= mine.order and theirs.order >= Size.MEDIUM.order:
+        c.rideable(sizes=(mine,), on=beast)
         c.ride(on=beast)
 
 

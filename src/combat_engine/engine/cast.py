@@ -10809,6 +10809,80 @@ class Cast:
         self.world.relations.set(Relation.RIDDEN_BY, who, self.me)
         return True
 
+    def dismount(self, *, to: Square | None = None) -> bool:
+        """Get off, into an adjacent square. `c.ride`'s missing inverse.
+
+        Dismounting is a **printed action in its own right**, a peer of
+        mounting rather than an afterthought, and had no verb at all -- so
+        `Relation.RIDDEN_BY` could be set and never cleared by anything a
+        row could say. #749.
+
+        The printed line is "moving to a square adjacent to it", so this
+        **moves** rather than only clearing the relation: a carried rider is
+        deliberately absent from the occupancy index, so a rider left where
+        the mount is standing would be nowhere the grid can see. `to=` names
+        the square; with none, the world decides between the free ones,
+        which is the same road `c.shift` takes.
+
+        Returns False when this creature is not riding anything, or when
+        there is nowhere beside the mount to step into.
+        """
+        from .grid import neighbours
+        from .movement import step
+        from .query import squares as occupies
+
+        beast = self.mount()
+        if beast is None:
+            return False
+        spots = sorted(
+            sq for here in occupies(self.world, beast)
+            for sq in neighbours(here)
+            if self.world.grid.inside(sq)
+            and self.world.grid.occupant(sq) is None
+        )
+        if not spots:
+            return False
+        spot = to if to is not None else self.choose(spots, f"{self.ref}: dismount to")
+        if spot is None or spot not in spots:
+            return False
+        # Cleared **before** the step, because `movement.step` carries a
+        # rider along with its mount -- stepping while still astride would
+        # move the mount's passenger rather than setting one down.
+        self.world.relations.clear(Relation.RIDDEN_BY, beast, self.me)
+        return step(self.world, self.me, spot, kind="walk")
+
+    def rideable(
+        self,
+        *,
+        sizes: tuple[Size, ...] = (),
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> list[Effect]:
+        """"A Medium creature can ride this." The size rule, relaxed.
+
+        The printed rule is that a mount must be **larger than** its rider,
+        and the cards that break it break it from two directions: a monster
+        saying which sizes may ride *it*, and a feat saying a companion of
+        **your own size** will do. Measured before building: both mounts
+        involved are Medium, so a Medium rider is barred outright by the
+        general rule and those lines are real exceptions. #749.
+
+        One facility either way, which is what the issue's own comment
+        settled -- the permission is recorded on the **mount** and `on=` is
+        how a row writes it from the rider's side, for its own companion.
+        `query.may_ride` is the single reader and `actions._mounting` is
+        what offers the action it makes legal.
+
+        Takes the sizes rather than a bare flag, because "a Medium creature"
+        is what the cards print and a blanket "anyone may ride me" is a
+        stronger card than any of them.
+        """
+        return [
+            eff for size in sizes
+            if (eff := self.bonus(f"rideable:{size}", 1, on=on, until=until,
+                                  kind="untyped")) is not None
+        ]
+
     def guard(self, *, on: int | None = None, by: int | None = None) -> bool:
         """Take that creature under this one's protection.
 
