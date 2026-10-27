@@ -1517,3 +1517,83 @@ def rt_r69_t2(c: Cast) -> None:
     """Proficiency with improvised weapons. There is no improvised weapon
     in the `weapon` table to be proficient with, so the header field has
     no ref to name."""
+
+
+# -- r67 and r68, the two variants whose traits are rows ----------------
+#
+# Seven more of their traits are **not** rows and are deliberately absent:
+# a fly speed (twice), an ability-score pair and a granted power belong on
+# the sheet or in `RaceLine.granted`, which is this file's charter -- "none
+# of it belongs in a row". #813 asked for six rows and two is the honest
+# count.
+#
+# Both races are **variants**: `#896` gives them a parent (`r1`) and the
+# sheet that comes with it, which is what makes a character able to hold
+# these at all. Both clauses below print "This benefit replaces rt:r1-t1",
+# and **nothing drops that trait yet** -- `RaceLine.replaces` carries the
+# ref and no reader applies it, so a character naming r67 has this *and*
+# the trait it replaces. Recorded here rather than marked: the row is
+# complete, the gap is one layer out in chargen.
+
+
+@power("rt:r67-t0", level=0, cls="", usage=AT_WILL,
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
+def rt_r67_t0(c: Cast) -> None:
+    """A racial damage bonus on this character's **arcane** attacks.
+
+    **Not `_keyword` above, and that helper would have been silently
+    false.** Its docstring says "save-context": it reads the keywords of
+    the row being *saved against*. Measured on a real damage context, the
+    keys are
+
+        advantage charge crit dtype dtypes from_attack granted_by
+        granted_via opportunity power ranged source target
+
+    -- no `keywords` at all, so `ctx.get("keywords", frozenset())` is
+    always empty here and the gate would never have fired. The power's ref
+    *is* carried, so the keyword is read off the row it names, which is
+    what `fighter.level_0` and `battlemind.level_10` already do.
+
+    +1, +2 from 11th and +3 from 21st, which is a flat read of the level
+    rather than a scaling table: the page prints the three numbers.
+    """
+    me = c.me
+    step = 1 + (c.level >= 11) + (c.level >= 21)
+
+    def arcane(ctx: dict[str, Any]) -> bool:
+        from combat_engine.engine.dsl import get
+
+        p = get(ctx.get("power") or "")
+        return p is not None and Keyword.ARCANE in p.keywords
+
+    c.bonus("damage", step, kind="racial", on=me, until=_HOLDS, when=arcane)
+
+
+@power("rt:r68-t1", level=0, cls="", usage=AT_WILL,
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
+def rt_r68_t1(c: Cast) -> None:
+    """Combat advantage against an enemy that is slowed, immobilized or
+    weakened.
+
+    `c.gains_advantage` is the writer -- "this creature has combat
+    advantage whenever that is true of a swing" -- and the three conditions
+    are read **live off the target** rather than out of the context, for
+    the reason the row above records: the context carries no `conditions`
+    key, and `_against` beside it reads the ones an *effect* carries when
+    it is saved against. The target's own state is what the card asks
+    about, and `c.is_` answers it.
+
+    Not `_HELD` next door, which is immobilized, restrained and slowed --
+    one condition different in each direction. A near-miss set would have
+    read as correct and been wrong on two of the three.
+    """
+    me = c.me
+    c.gains_advantage(
+        lambda ctx: any(
+            c.is_(cond, on=ctx.get("target"))
+            for cond in (Condition.SLOWED, Condition.IMMOBILIZED,
+                         Condition.WEAKENED)
+        )
+        if ctx.get("target") is not None else False,
+        on=me, until=_HOLDS,
+    )

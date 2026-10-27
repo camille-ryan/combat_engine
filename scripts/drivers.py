@@ -11959,6 +11959,106 @@ def a_variant_race_inherits_and_is_not_dealt(out: Result) -> None:
              " list `winrate`'s other mode samples from")
 
 
+def two_variant_racial_traits(out: Result) -> None:
+    """The two r67/r68 traits that are rows, and each one's gate.
+
+    #813 asked for six rows. **Two is the honest count** -- a fly speed
+    twice, an ability-score pair and a granted power belong on the sheet or
+    in `RaceLine.granted`, which is `features/racial.py`'s charter: "none of
+    it belongs in a row". Both are writable only because `#896` gave the
+    two races a parent and a sheet; before that a character could not hold
+    either.
+
+    **The interesting half is which reader each gate uses, because the
+    obvious one is silently false.** `racial.py` has `_keyword(word)` and
+    `_against(*conditions)` sitting right there, and both read a **save**
+    context -- the keywords and conditions of the effect being saved
+    against. Measured on a real damage context, the keys are
+
+        advantage charge crit dtype dtypes from_attack granted_by
+        granted_via opportunity power ranged source target
+
+    with **no `keywords` and no `conditions`**. So `_keyword(ARCANE)` would
+    have been an empty-set test on every swing: the row fires, lays a
+    bonus, audits green, and the bonus never applies. That is this
+    component's named failure mode and the reason both gates below read
+    something the context actually carries -- the power's ref for one, the
+    target's live state for the other.
+
+    Four assertions, two of them the negatives that make the others mean
+    anything.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.query import enemies, has_combat_advantage
+    from combat_engine.engine.types import Condition, Keyword
+
+    # -- rt:r67-t0: a damage bonus on arcane attacks only ---------------
+    # **Asked of the modifier directly, with a context naming each kind of
+    # power.** That is the gate under test and nothing else: inferring it
+    # from hit points would also be measuring the weapon, the roll and the
+    # target's resistances, and a zero there would not say which.
+    world, me, _ = _board("rt:r67-t0", seed=1)
+    use(world, me, "rt:r67-t0", spend=False)
+    mods = world.get(me, Mods)
+    out.that(mods is not None and bool(mods.items),
+             "the trait lays a damage modifier at all")
+
+    arcane = next(
+        (r for r, p in REGISTRY.items()
+         if p.is_attack and Keyword.ARCANE in p.keywords), "")
+    plain = next(
+        (r for r, p in REGISTRY.items()
+         if p.is_attack and Keyword.ARCANE not in p.keywords
+         and Keyword.WEAPON in p.keywords), "")
+    on_arcane = mods.total("damage", {"power": arcane}) if mods else 0
+    on_plain = mods.total("damage", {"power": plain}) if mods else 0
+    out.that(on_arcane >= 1,
+             f"and it applies to an arcane attack ({arcane}: +{on_arcane})")
+    out.that(on_plain == 0,
+             f"and not to one without the keyword ({plain}: +{on_plain}) --"
+             " the negative that `_keyword` would have failed in both"
+             " directions, by reading a context key that is never there")
+
+    # -- rt:r68-t1: advantage only against the three conditions ---------
+    # **A foe the board is not already giving away**, which is the trap
+    # `zone_exempt` records three of. `sorted(enemies())[0]` is the one the
+    # board arranges the fight around and it answers `True` **before this
+    # trait is used at all** -- flanked, or whatever else it is posed for.
+    # Measured: foe[0] True, foes 3 and 4 False. A negative control on the
+    # first foe therefore reads True whatever the gate does, which is how
+    # this rule failed its own control on the first run.
+    def a_clean_foe(world, me):  # noqa: ANN001, ANN202
+        return next(
+            (f for f in sorted(enemies(world, me))
+             if not has_combat_advantage(world, me, f)),
+            None,
+        )
+
+    def advantage(afflicted: bool) -> bool | None:
+        world, me, _ = _board("rt:r68-t1", seed=1)
+        foe = a_clean_foe(world, me)
+        if foe is None:
+            return None
+        c = Cast(world=world, me=me, ref="drivers:r68")
+        use(world, me, "rt:r68-t1", spend=False)
+        if afflicted:
+            c.condition(Condition.SLOWED, on=foe)
+        return has_combat_advantage(world, me, foe)
+
+    slowed, hale = advantage(True), advantage(False)
+    out.that(slowed is not None,
+             "the board has a foe it is not already granting advantage"
+             " against, to ask the question of")
+    out.that(slowed,
+             f"a slowed enemy grants this character combat advantage ({slowed})")
+    out.that(not hale,
+             "and an enemy under none of the three does not -- the negative"
+             f" that says the gate is read rather than ignored ({hale})")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -36024,6 +36124,9 @@ DRIVERS = {
     "a_variant_race_inherits_and_is_not_dealt": (
         a_variant_race_inherits_and_is_not_dealt,
         "nine variant races inherit a parent and stay out of the deal"),
+    "two_variant_racial_traits": (
+        two_variant_racial_traits,
+        "the two r67/r68 traits that are rows, and each one's gate"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,
