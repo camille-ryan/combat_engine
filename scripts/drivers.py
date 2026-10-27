@@ -28505,6 +28505,102 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         f"{spoke(bt.Director(scripted=True), 16)}",
     )
 
+    # **Only the people answering reach the DM's prompt.** With three
+    # cast, the DM gave all three a line in every beat -- three paragraphs
+    # an exchange, two of them the same servant adjusting the same plates.
+    # Fourth time this component has met "a name in a prompt is an
+    # invitation to write them a line". #850.
+    from combat_engine.story import llm as llm_mod
+
+    crowd = mod.parse({
+        "id": "probeE", "party_level": 1, "party_size": 2, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "Dinner.",
+            "exits": [], "max_beats": 1,
+            "npcs": [{"name": "Benwick", "wants": "an answer"},
+                     {"name": "Venn", "wants": "the evening to go well"},
+                     {"name": "Jarell", "wants": "to serve quietly"}]}]},
+        Path("<driver>")).scene("t")
+
+    heard: list[str] = []
+    was = llm_mod.chat
+
+    def listen(role: llm_mod.Role, messages: list[dict],
+               schema: dict | None = None) -> str:
+        del role, schema
+        heard.append(messages[-1]["content"])
+        return "Benwick sets down his cup."
+
+    class OnlyOne(bt.Director):
+        def answers(self, playing: bt.Playing,
+                    intents: list[bt.Intent]) -> list[str]:
+            del playing, intents
+            return ["Benwick"]
+
+    llm_mod.chat = listen  # ty: ignore[invalid-assignment]
+    try:
+        OnlyOne(roles=llm_mod.ROLES).react(bt.Playing(scene=crowd), [], [])
+        one = heard[-1]
+    finally:
+        llm_mod.chat = was
+    out.that(
+        "Benwick" in one and "Venn" not in one and "Jarell" not in one,
+        "only the person answering is named to the DM, not the whole cast",
+        f"{one[:110]!r}",
+    )
+
+    # The control: scripted answers with everybody, so an instrument sees
+    # the whole cast and the existing assertions about one still hold.
+    out.that(
+        bt.Director(scripted=True).answers(bt.Playing(scene=crowd), [])
+        == ["Benwick", "Venn", "Jarell"],
+        "while scripted keeps the whole cast, so check.py sees it all",
+        f"{bt.Director(scripted=True).answers(bt.Playing(scene=crowd), [])}",
+    )
+
+    # **A reply ends on a finished sentence.** The DM writes to its token
+    # budget rather than to its instructions -- measured: firming the "two
+    # or three sentences" ask moved 135 words to 128, and halving the
+    # budget gave 68-word replies cut off four and five times in five. So
+    # the length is not promptable and the fix is to stop the ragged
+    # endings instead.
+    for raw, want in (
+        ('He nods. "Aye." Venn turns to the door and says, "',
+         'He nods. "Aye."'),
+        ("He nods and says nothing more.", "He nods and says nothing more."),
+        ("A clause with no end at all running on",
+         "A clause with no end at all running on"),
+    ):
+        out.that(
+            bt._whole(raw) == want,
+            f"a reply is cut back to its last finished sentence: {want[:28]!r}",
+            f"got {bt._whole(raw)!r}",
+        )
+
+    # **And `react` applies it.** Asserting `_whole` alone tests the
+    # function and not its one caller -- deleting the call left every
+    # assertion above green, which is the third time this driver has
+    # caught that shape.
+    ragged = ('Benwick nods. "Of course." Venn turns to the door and says, "')
+    was_chat = llm_mod.chat
+
+    def ragged_reply(role: llm_mod.Role, messages: list[dict],
+                     schema: dict | None = None) -> str:
+        del role, messages, schema
+        return ragged
+
+    llm_mod.chat = ragged_reply  # ty: ignore[invalid-assignment]
+    try:
+        came_back = OnlyOne(roles=llm_mod.ROLES).react(
+            bt.Playing(scene=crowd), [], [])
+    finally:
+        llm_mod.chat = was_chat
+    out.that(
+        came_back == 'Benwick nods. "Of course."',
+        "and the DM's own reply is trimmed on the way out, not just in test",
+        f"{came_back!r}",
+    )
+
     # **A companion's declaration cannot depend on the human's line**, and
     # that invariant is what makes starting the companions before the
     # prompt safe rather than merely faster. Everybody declares at once and
@@ -29111,8 +29207,6 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         bt.Director(roles=llm.ROLES).react(quiet, [], [])
         before = asked[-1]
         quiet.found.add("look-around")
-        bt.Director(roles=llm.ROLES).react(quiet, [], [])
-        after = asked[-1]
     finally:
         llm.chat = real
 
@@ -29121,10 +29215,36 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         "an unnoticed npc is not in the DM's prompt at all",
         f"{before[:90]!r}",
     )
+    # **Being in the scene and answering this beat are different**, and
+    # this assertion used to test the first through the second. Once
+    # `Director.answers` started choosing one speaker (#850), a found
+    # watcher stopped reaching the prompt -- correctly, since nobody had
+    # addressed them -- and the assertion went red for the right
+    # behaviour. Cast membership is what the unseen rule governs.
     out.that(
-        "the watcher" in after,
-        "and is once the party has found them",
-        f"{after[:90]!r}",
+        "the watcher" in [n.name for n in quiet.cast()],
+        "and is in the cast once the party has found them",
+        f"{[n.name for n in quiet.cast()]}",
+    )
+
+    class Chorus(bt.Director):
+        """Everybody answers, so the prompt question is about the cast."""
+
+        def answers(self, playing: bt.Playing,
+                    intents: list[bt.Intent]) -> list[str]:
+            del intents
+            return [n.name for n in playing.cast()]
+
+    asked.clear()
+    llm.chat = tap2  # ty: ignore[invalid-assignment]
+    try:
+        Chorus(roles=llm.ROLES).react(quiet, [], [])
+    finally:
+        llm.chat = real
+    out.that(
+        "the watcher" in asked[-1],
+        "and reaches the DM's prompt when they are one of the answering",
+        f"{asked[-1][:100]!r}",
     )
 
     # **A recurring character's description reaches both prompts.** Scene

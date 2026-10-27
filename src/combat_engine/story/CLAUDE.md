@@ -229,6 +229,28 @@ Two things to know before pointing a role at a reasoning model:
   **3m26s**; warm it is 5-6s. Do not read a first-call timing as the
   model's speed, in either direction.
 
+## The DM writes to its budget, not to its instructions
+
+Measured, and it settles a question that looked like prompt tuning:
+
+```
+200 tokens, as now         135 words   1/5 cut off
+200 tokens, firmer ask     128 words   1/5 cut off
+ 90 tokens, as now          68 words   4/5 cut off
+ 90 tokens, firmer ask      67 words   5/5 cut off
+```
+
+The prompt already asks for "two or three sentences" and a "short
+paragraph"; firming that up is worth seven words, which is noise. Halving
+the budget halves the length and **breaks four replies in five**. So reply
+length is not promptable here and a smaller cap only produces more ragged
+endings -- 11% of the DM replies on record end mid-word, one of them on a
+servant saying `"Father,`.
+
+`_whole` cuts a reply back to its last finished sentence on the way out.
+No length threshold: a first version kept the text whole unless the trim
+left over 40 characters, which refused exactly the cases it was for.
+
 ## Invention is wanted; contradiction is not
 
 **The ruling is in a comment on #830 and reverses the issue's own body**,

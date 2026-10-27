@@ -47,6 +47,7 @@ differ, which is the part no instrument can judge anyway.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -339,6 +340,18 @@ KNOWING = ("well", "vaguely", "not at all")
 #: gate sergeant ignorant of who runs her own keep. Measured on twelve
 #: obvious cases, six each way: **11/12 then, 12/12 now**, and balanced
 #: 6/6 on both sides rather than solving one pole by giving up the other.
+_WHO_ANSWERS = """\
+Say who answers the party. One person, almost always.
+
+The person spoken to answers. If nobody was spoken to, the person whose
+business it is answers. The others are present and busy and do not need a
+line; a servant who poured wine last time does not have to pour it again.
+
+Answer "everyone" only when the party addressed the room, or when
+something has happened that all of them would react to at once.\
+"""
+
+
 _WOULD_KNOW = """\
 Say how well this person would know about the subject.
 
@@ -438,6 +451,40 @@ _SPEAK_SCHEMA = {
     "required": ["speech", "doing"],
     "additionalProperties": False,
 }
+
+
+def _whole(said: str) -> str:
+    """Cut back to the last finished sentence.
+
+    **The DM writes to its token budget, not to its instructions**, so a
+    reply ends where the budget does -- which is mid-word 11% of the time
+    in the transcripts on record, once leaving a servant saying
+    `"Father,` and stopping.
+
+    Measured before reaching for this: the prompt already asks for "two or
+    three sentences" and a "short paragraph", and firming that up moved a
+    reply from 135 words to 128, which is noise. Halving the budget gave
+    68-word replies cut off **four and five times in five**. The length is
+    not promptable and a smaller cap only breaks more sentences, so the
+    honest fix is to stop mid-sentence endings rather than to argue about
+    length.
+
+    A reply with no sentence end at all is returned whole: better a ragged
+    paragraph than an empty one.
+    """
+    said = said.strip()
+    # **A quote mark only ends a sentence when it follows a stop.** Taking
+    # any quote as a terminator cut `...Venn moves to the door and says, "`
+    # at the *opening* quote, which is the same dangling fragment one
+    # character shorter.
+    # **No length threshold.** A first version kept the text whole unless
+    # the trim left more than 40 characters, which refused the very cases
+    # it was for -- `He nods. "Aye." Venn moves to the door and says, "`
+    # has its last finished sentence at character 15. If a complete
+    # sentence exists, that is the reply; what follows it is the part the
+    # budget cut off.
+    ends = list(re.finditer(r'[.!?][")\u201d]?', said))
+    return said[:ends[-1].end()].strip() if ends else said
 
 
 @dataclass(frozen=True)
@@ -574,6 +621,45 @@ class Director:
         if who in by_name:
             return [by_name[who]]
         return []
+
+    def answers(self, playing: Playing, intents: list[Intent]) -> list[str]:
+        """Which of the people here actually respond. Usually one.
+
+        **A name in a prompt is an invitation to write them a line**, and
+        with three people cast the DM gave all three a line in every beat
+        of a scene -- three paragraphs an exchange, two of them the same
+        servant adjusting the same plates. That is the fourth time this
+        component has met the same rule, after `Npc.hides`, `brief` versus
+        `sets`, and an unnoticed watcher. The fix is the one that worked
+        each time: **withhold rather than instruct.** Only the people
+        chosen here reach the prompt at all.
+
+        Same shape as `joins` one layer over, and the same reason it is
+        safe to ask a small model: a closed set, with every option the
+        same kind of thing -- a name.
+        """
+        here = [n.name for n in playing.cast()]
+        if self.scripted or len(here) <= 1:
+            return here
+        schema = {"type": "object",
+                  "properties": {"who": {"enum": [*here, "everyone"]}},
+                  "required": ["who"]}
+        told = [f"THE SCENE: {playing.scene.seen}",
+                "WHO IS HERE:\n" + "\n".join(
+                    f"- {n.name}: wants {n.wants}" for n in playing.cast())]
+        if intents:
+            told.append("WHAT THE PARTY JUST DID:\n"
+                        + "\n".join(str(i) for i in intents))
+        got = llm.structured(
+            self.roles["match"],
+            [{"role": "system", "content": _WHO_ANSWERS},
+             {"role": "user", "content": "\n\n".join(told)}],
+            schema)
+        self.spend.note("answers", ok=bool(got))
+        picked = str(got.get("who", ""))
+        if picked == "everyone":
+            return here
+        return [picked] if picked in here else here[:1]
 
     def would_know(self, who: str, about: str, *, looks: str = "",
                    wants: str = "") -> str:
@@ -730,12 +816,18 @@ class Director:
             facts += [r.fact for r in (recalled or []) if r.knew and not r.mine]
             return " ".join(facts) if facts else "The moment passes."
         scene = playing.scene
+        # **Only the people answering reach the prompt.** The rest are
+        # in the scene and are not in the list, because a name in the
+        # list gets a line. #850.
+        speaking = set(self.answers(playing, intents))
+        cast = [n for n in playing.cast() if n.name in speaking] \
+            or list(playing.cast())[:1]
         who = [
             f"{n.name}: wants {n.wants}."
             + (f" Is {n.looks}." if n.looks else "")
             + (f" Speaks {n.voice}." if n.voice else "")
             + ("" if not n.knows else " May say: " + "; ".join(n.knows))
-            for n in playing.cast()
+            for n in cast
         ]
         # `hides` is not here and never is. See `module.Npc`.
         #
@@ -884,7 +976,7 @@ class Director:
             ],
         ).strip()
         self.spend.note("dm", ok=bool(text))
-        return text or "The moment passes."
+        return _whole(text) or "The moment passes."
 
 
 # -- the loop ---------------------------------------------------------------
