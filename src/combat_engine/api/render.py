@@ -661,11 +661,13 @@ def _traits(session: Session, eid: int) -> list[dto.PowerDTO]:
                 keywords=[k.value for k in keywords_of(session.world, eid, p)],
                 attack_text=None,
                 damage=printed.get("damage") or None,
-                requirement_text=printed.get("requirement") or p.requires_text or None,
+                requirement_text=session.wire.in_text(
+                    printed.get("requirement") or p.requires_text or ""
+                ) or None,
                 hit_text=printed.get("hit") or None,
                 miss_text=None,
                 effect_text=printed.get("effect") or None,
-                targets=str(p.target),
+                targets=session.wire.in_text(str(p.target)),
                 available=False,
                 reason=None,
                 squares=[],
@@ -729,11 +731,13 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
                 keywords=[k.value for k in keywords_of(world, actor, p)],
                 attack_text=printed.get("attack") or (str(p.attack) if p.attack else None),
                 damage=printed.get("damage") or None,
-                requirement_text=printed.get("requirement") or p.requires_text or None,
+                requirement_text=session.wire.in_text(
+                    printed.get("requirement") or p.requires_text or ""
+                ) or None,
                 hit_text=printed.get("hit") or None,
                 miss_text=printed.get("miss") or None,
                 effect_text=printed.get("effect") or None,
-                targets=str(p.target),
+                targets=session.wire.in_text(str(p.target)),
                 available=bool(indices),
                 reason=None if indices else (why or "cannot be used here"),
                 squares=aims_at,

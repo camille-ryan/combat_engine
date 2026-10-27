@@ -179,6 +179,76 @@ def disagreements(only: set[str] | None = None) -> list[tuple[str, str, str, str
     return sorted(out)
 
 
+#: A ref where a printed word belongs. `x_` is matched explicitly because
+#: `\b` cannot find it -- `_` is a word character, so there is no boundary
+#: between `x_` and `m6564`, which is the exact shape this checks for.
+_REFFY = re.compile(
+    r"\b(?:x_)?(?:[wpmifr]\d{2,}(?:a\d+)?|cf:[a-z0-9-]+|rt:[\w:-]+)\b"
+    r"|\bx_[wpmifr]\d{2,}(?:a\d+)?\b"
+)
+
+
+def unresolved_labels() -> list[tuple[str, str, str]]:
+    """Every `Target.label` still showing a ref **after** the page resolves it.
+
+    `Target(side, label=)` is the convention for a card naming a thing the
+    engine has no entity for: the pool is whoever holds it, the label is
+    what the page prints instead of the generic pool string. The label
+    reaches `render` as raw text, so the convention worked for a line of
+    ordinary rules words and broke for a line naming a **ref** -- which is
+    what every printed line naming a specific creature or item looks like
+    here. `wire.in_text` resolves them at display time. #895.
+
+    **This is the gate for the content half, and it is here rather than in
+    `api_smoke.py` for a measured reason.** The obvious place was the live
+    wire, and a check there is *vacuous*: the fight `api_smoke` plays
+    rosters no row carrying a ref label, so removing the resolver from
+    `render.py` entirely leaves it green. Verified by planting exactly that.
+    A check over the **corpus** exercises every such row that exists --
+    `p16660` today -- and goes red the day the resolver stops resolving.
+
+    What it cannot see, said plainly: whether `render.py` still *calls*
+    `in_text`. This asks the resolver the same question the page asks it,
+    not whether the page is still asking. Both `render` sites are one line
+    each and are read in the review; nothing automated covers that wiring,
+    and `#467` -- nothing verifies what the page renders without the
+    localisation -- is the issue that would.
+    """
+    from combat_engine.api.wire import Wire
+    from combat_engine.content import declared
+    from combat_engine.engine.dsl import NO_TARGET
+
+    page = Wire()
+    out: list[tuple[str, str, str]] = []
+    for ref, power in sorted(declared().items()):
+        label = getattr(getattr(power, "target", None), "label", "") or ""
+        # **`NO_TARGET`'s label is not a hand-written one.** It is the
+        # shared sentinel `Target("self", 0, label="None")`, because "None"
+        # is what the books print on the Target line of a power that has
+        # none -- 5,680 rows carry it and counting them as labels made this
+        # report read as though the corpus were six thousand hand-written
+        # lines instead of a few hundred.
+        if not label or label == NO_TARGET.label:
+            continue
+        shown = page.in_text(label)
+        if _REFFY.search(shown):
+            out.append((ref, label, shown))
+    return out
+
+
+def hand_written_labels() -> int:
+    """How many rows carry a `Target(label=)` of their own. See above."""
+    from combat_engine.content import declared
+    from combat_engine.engine.dsl import NO_TARGET
+
+    return sum(
+        1
+        for p in declared().values()
+        if (lbl := getattr(getattr(p, "target", None), "label", ""))
+        and lbl != NO_TARGET.label
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -231,7 +301,14 @@ def main() -> int:
     if healed:
         print(f"  {len(healed)} no longer disagree -- shrink the baseline"
               f" with --record: {' '.join(sorted(healed))}")
-    return 1 if (fresh or healed) else 0
+
+    raw = unresolved_labels()
+    print(f"{len(raw)} of {hand_written_labels()} hand-written "
+          f"`Target(label=)` row(s) still show a ref to the page after the"
+          f" localisation is applied")
+    for ref, label, shown in raw:
+        print(f"      {ref:10} {label!r} -> {shown!r}")
+    return 1 if (fresh or healed or raw) else 0
 
 
 if __name__ == "__main__":

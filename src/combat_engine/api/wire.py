@@ -38,6 +38,14 @@ def names_enabled() -> bool:
 #: and is where the printed name lives -- see `Wire.item`.
 _ITEM_BLOCK = re.compile(r"^(i\d+)[px]\d+$")
 
+#: A ref sitting inside a line of printed text. Anchored on word
+#: boundaries so a ref is not found inside an ordinary word, and it takes
+#: the `x_` prefix the ETL puts on a cross-reference it could not resolve --
+#: `x_m6564` is the case #895 was filed for.
+_REF_IN_TEXT = re.compile(
+    r"\b(?:x_)?[pmifrw]\d+[a-z]*\d*\b|\bcf:[\w-]+|\brt:[\w:-]+"
+)
+
 #: The words an item's printed name uses to mean "whatever this is laid on".
 #: `Wire.item` replaces one of these with the base weapon's own word and
 #: leaves every other head noun alone. Measured: 14 items lead with the first
@@ -177,6 +185,48 @@ class Wire:
         if name:
             return name
         return self.item(ref) if _ITEM_BLOCK.match(ref) else _plain(ref)
+
+    def in_text(self, text: str) -> str:
+        """Every ref inside a line of printed text, resolved to its name.
+
+        `Target(label=)`, `requires_text=` and `trigger=` are handed to the
+        page as **raw text**. So the `label=` convention -- the pool is
+        whoever holds the thing, the label is what the page prints instead
+        of the generic pool string -- worked for a line of ordinary rules
+        words and **broke for a line naming a ref**, which is what every
+        printed line naming a specific creature or item looks like in this
+        repository. `p16660`'s line is the case: "One x_m6564 or one
+        weapon".
+
+        **Resolved at display time and never written down, which is the
+        whole of why this is safe.** `show_names` is false when there is no
+        localisation, so the page then renders exactly the refs it rendered
+        before -- and a name has not entered a tracked file to get here.
+        The alternative anybody reaching for this would otherwise take is
+        spelling the name into the `label=`, which is `#447`'s **top row**:
+        text the page renders, shown to a player with no localisation. A
+        one-word ordinary name beside its own ref is also the case
+        `CLAUDE.md` records the tree-wide search as *not* catching, so there
+        would be no gate to catch it either.
+
+        **A ref with no name is left exactly as it was.** Not passed to
+        `_plain`, which prettifies and would turn an unresolvable ref into
+        something that reads like a name -- the status quo is the honest
+        answer for a ref nothing can resolve, and it keeps this change from
+        altering any line it cannot improve.
+
+        One mechanism over three fields rather than three fixes, because all
+        three reach `render` by the same raw route. #895.
+        """
+        if not text or not self.show_names:
+            return text
+        table = localisation()
+
+        def named(hit: re.Match[str]) -> str:
+            entry = table.get(hit.group(0)) or {}
+            return entry.get("name") or hit.group(0)
+
+        return _REF_IN_TEXT.sub(named, text)
 
     def item(self, ref: str, *, slug: str = "") -> str:
         """What to call a magic item's row: the **item's** name, not the block's.

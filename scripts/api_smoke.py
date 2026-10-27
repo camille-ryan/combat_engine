@@ -575,7 +575,17 @@ def check_no_engine_ids(check: Checks, state: dict, events: list[dict]) -> None:
 
 
 #: A ref where a word belongs. `w3611`, `p12609`, `m145a2`, `w:rod`, `cf:...`.
-_REFFY = re.compile(r"\b(?:[wpmifr]\d{2,}(?:a\d+)?|w:[a-z-]+|cf:[a-z0-9-]+)\b")
+#:
+#: **`x_` is matched explicitly, because `\b` cannot find it.** The ETL
+#: prefixes `x_` onto a cross-reference it could not resolve, and `_` is a
+#: word character -- so there is no word boundary between `x_` and `m6564`
+#: and the pattern below slid straight past `x_m6564`. That is precisely the
+#: shape #895 is about: a ref inside printed text the page renders. Found
+#: while adding the check beneath this one, not by the check itself. #895.
+_REFFY = re.compile(
+    r"\b(?:x_)?(?:[wpmifr]\d{2,}(?:a\d+)?|w:[a-z-]+|cf:[a-z0-9-]+)\b"
+    r"|\bx_[wpmifr]\d{2,}(?:a\d+)?\b"
+)
 
 
 def check_option_labels(check: Checks, seen: set[tuple[str, str]]) -> None:
@@ -655,6 +665,31 @@ def check_roster(check: Checks, state: dict) -> None:
         not vague,
         "where distance is the answer, the reason is the number",
         str(vague[:3]),
+    )
+
+    # **Printed text a row wrote by hand, which reaches the page raw.**
+    # `Target(label=)`, `requires_text=` and `trigger=` are handed to
+    # `render` as strings, so the convention for a card naming a thing the
+    # engine has no entity for -- the pool is the bearer, the label is what
+    # the page prints -- served a **ref** to the page for any line naming
+    # one. `wire.in_text` resolves them against the localisation at display
+    # time; this is the gate that says it is still doing it.
+    #
+    # A property over whatever this fight rostered rather than an assertion
+    # about one row, which is the correction `check_option_labels` records
+    # about itself: a check written against one snapshot covered nothing the
+    # snapshot happened to omit.
+    reffy = sorted(
+        f"{p['name']}: {field}={value}"
+        for p in roster
+        for field in ("targets", "requirement_text")
+        if (value := p.get(field)) and _REFFY.search(str(value))
+    )
+    check.that(
+        not reffy,
+        f"no printed line on the page is a bare ref, over {len(roster)} rows"
+        " x 2 hand-written fields",
+        str(reffy[:3]),
     )
 
 

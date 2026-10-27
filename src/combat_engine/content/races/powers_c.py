@@ -1640,7 +1640,7 @@ def p16657(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=Target("ally", 1, label="One x_m6564 or one weapon"),
 )
 def p16660(c: Cast) -> None:
     """Targets the wielder, there being no target for a piece of gear.
@@ -1652,17 +1652,22 @@ def p16660(c: Cast) -> None:
     on a board ever mints a `Scenery` for a worn thing, so neither was the
     gap either.)
 
-    **So this wants a `label=` and cannot have one**, which is why
-    `scripts/targets.py` lists it and no marker does. The convention for a
-    card naming a thing the engine has no entity for is
+    **It has its `label=` now, and the label carries a ref.** The convention
+    for a card naming a thing the engine has no entity for is
     `Target(side, label=)` -- the pool is the bearer, the label is what the
     page prints -- and four artificer enchantments render "One weapon or
-    implement" exactly that way. This card's line names a **ref**, and
-    `Target.label` is handed to `render` as raw text: nothing resolves a ref
-    inside it against the localisation, the way `wire.label` does for a
-    creature. So the honest label would print `x_m6564` to a player, which
-    is worse than the generic pool string it replaces. The row stays in
-    `fixtures/targets.json` with this note until a label can carry a ref.
+    implement" that way. This card's line names a **ref**, which used to
+    break the convention: `Target.label` reached `render` as raw text, so
+    the honest label printed `x_m6564` to a player, which is worse than the
+    generic pool string it replaced.
+
+    `wire.in_text` resolves it at display time, so the page shows the
+    creature's printed name to a reader who has `localization/` and the bare
+    ref to one who does not. **The ref and not the name is what is written
+    here**, which is the point: a name spelled into a `label=` is text the
+    page renders, shown to a player with no localisation -- the top row of
+    `#447` -- and a one-word ordinary name beside its own ref is the case
+    the tree-wide search is recorded as *not* catching. #895.
 
     The armour bonus ends when an attack against AC hits the wearer, read
     off the settled `Hit`: it carries the defence as a plain attribute, so
