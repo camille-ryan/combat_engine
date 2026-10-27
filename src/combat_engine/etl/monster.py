@@ -861,7 +861,7 @@ def _ability_spec(body: str, start: int, head: str, a: Ability) -> str:
 _STRAY_LINE = re.compile(
     r"""^(?P<keep>(?:\([^\n]*\n)?)         # the action parenthetical LINE, kept
     [ \t]*
-    (?:[^;\n]{0,40};[ \t]*)?                # a "Reach 2; " prefix inside the run
+    (?:[^.;\n]*;[ \t]*)?                    # a "Reach 2; " prefix inside the run
     \+\d+[ \t]*vs\.?[ \t]*[A-Za-z]+[ \t]*;  # the bonus and a NAMED defence
     [^.\n]{0,60}?damage\.\.[ \t]*           # through "damage" and the seam
     """,
@@ -934,6 +934,17 @@ def _drop_stray_attack_line(spec: str) -> str:
     a closed-bracket pattern could never match their head and both were
     missed. Both
     delegate ("makes a greatclub attack"), so both are stray. 66 -> 68.
+
+    **The prefix bound is structural, not a character count, and the first
+    one was a character count.** It allowed 40 characters before the `+N`,
+    which `m1937a1` overruns -- its clause is "Targets a creature grabbed
+    by <a named creature>; " -- so that row kept its stray line. Worse, the
+    bound was *name-length dependent*: this function runs during extraction,
+    **before** `_cross_reference` swaps names for refs, so how much text
+    sits in front of the `+N` depends on how long the printed name is. A
+    pattern whose behaviour varies with a name is not a pattern anybody can
+    reason about. `[^.;\n]*;` instead: any one clause with no sentence end
+    in it.
 
     `m2346a1` stays spared and is the reason the prefix allows only one
     semicolon clause: its head is
