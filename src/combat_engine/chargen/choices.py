@@ -115,6 +115,27 @@ WEIGHTS: dict[str, float] = {
     "has_a_rider": 1.5,
     # Not expended on a miss, which is most of a second use.
     "reliable": 1.5,
+    # **The leg is sworn to a damage type and the draw never read it.** Four
+    # sorcerer legs and one warlock leg name an element, `c.element()` reads
+    # it in play, and `power_options` priced nothing off it -- so all four
+    # sorcerer legs drew a **byte-identical** loadout on 30 of 30 seeds, and
+    # the share of elemental rows matching the leg was just the corpus
+    # frequency (fire 112, cold 67, lightning 54, acid 21 of the same 404).
+    #
+    # `leans_on_companion`'s weight, because it is the same shape: does this
+    # option's payoff go through the thing the leg is built around. #464.
+    "leans_on_element": 4.0,
+    # The mirror, and the half that does the work -- as it was for the
+    # companion. A cold power on an acid-sworn build is not a weaker choice,
+    # it is **another leg's** choice, so it takes
+    # `implement_only_build`/`companionless_build`'s weight: a chassis the
+    # row's whole payoff cannot reach.
+    #
+    # Priced and never filtered, and the reason is sharper here than for
+    # feats: a sorcerer's at-will pool is only a few rows deep, so a filter
+    # on element could leave a leg unable to fill its slots at all. The
+    # weight has to lose to availability.
+    "offelement_build": -9.0,
     # -- a feat -----------------------------------------------------------
     # `_leans_on` reads the row's own source for `c.<ability>_mod`, so this is
     # "does the feat pay out through the ability this build is good at". It
@@ -715,6 +736,13 @@ def power_options(
     from . import build_of
 
     leg = build or build_of(cls)
+    # The leg's sworn element, as the string the keywords are spelled in.
+    # `None` for every leg that names none, which is all but five.
+    sworn = (
+        str(leg.element)
+        if leg is not None and getattr(leg, "element", None) is not None
+        else None
+    )
     out: list[Choice] = []
     for ref in candidates:
         declared = REGISTRY.get(ref)
@@ -728,6 +756,14 @@ def power_options(
                 "hits_several": float(several),
                 "has_a_rider": float(_does_more_than_damage(declared)),
                 "reliable": float(Keyword.RELIABLE in (declared.keywords or ())),
+                "leans_on_element": float(
+                    sworn is not None and sworn in _elements_of(declared)
+                ),
+                "offelement_build": float(
+                    sworn is not None
+                    and bool(_elements_of(declared))
+                    and sworn not in _elements_of(declared)
+                ),
                 "carries_a_marker": float(bool(getattr(declared, "dropped", ()) or ())),
                 "refused_in_play": float(bool(getattr(declared, "todo", ()) or ())),
                 "out_of_combat": float(getattr(declared, "out_of_combat", False)),
@@ -736,6 +772,40 @@ def power_options(
         )
         out.append(Choice(ref=ref, score=score, terms=terms))
     return _ranked(out)
+
+
+#: The damage types a build leg can be sworn to, as the strings both enums
+#: use. `DamageType` and `Keyword` share these ten names **and their values**
+#: -- checked, all ten agree -- which is why a row's element can be read off
+#: its printed keywords with no mapping table and no source reading.
+#:
+#: That is the whole reason this detector is cheaper than
+#: `_leans_on_companion`, which had to read bodies because no header field
+#: said so. Here the header carries it as data. #464.
+@lru_cache(maxsize=1)
+def _elements() -> frozenset[str]:
+    """The ten shared names, computed once.
+
+    Function-local import and cached, which is this file's convention for
+    reaching `engine.types` -- `power_options` takes `Keyword` the same way.
+    A module-level import here would widen what `chargen` pulls in for a
+    constant that is wanted in one place.
+    """
+    from combat_engine.engine.types import DamageType
+
+    return frozenset(str(d) for d in DamageType)
+
+
+def _elements_of(declared) -> frozenset[str]:  # noqa: ANN001
+    """Which damage types this row is sworn to, off its printed keywords.
+
+    Empty for the great majority: a row with no elemental keyword is neither
+    on-element nor off it, and must score 0 on both terms rather than being
+    treated as a mismatch.
+    """
+    return frozenset(
+        str(k) for k in (declared.keywords or ()) if str(k) in _elements()
+    )
 
 
 def _does_more_than_damage(declared) -> bool:  # noqa: ANN001
