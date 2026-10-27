@@ -862,7 +862,7 @@ _STRAY_LINE = re.compile(
     r"""^(?P<keep>(?:\([^\n]*\n)?)         # the action parenthetical LINE, kept
     [ \t]*
     (?:[^;\n]{0,40};[ \t]*)?                # a "Reach 2; " prefix inside the run
-    \+\d+[ \t]*vs\.?[ \t]*[A-Za-z]*[ \t]*;  # the bonus and a maybe-blank defence
+    \+\d+[ \t]*vs\.?[ \t]*[A-Za-z]+[ \t]*;  # the bonus and a NAMED defence
     [^.\n]{0,60}?damage\.\.[ \t]*           # through "damage" and the seam
     """,
     re.X,
@@ -877,9 +877,29 @@ _AFTER_SEAM = re.compile(r"^\s*(?!\d)[A-Za-z]")
 def _drop_stray_attack_line(spec: str) -> str:
     """Drop a leading attack line that belongs to no ability. #765.
 
+    **A NAMED defence only, and that is Camille's ruling talking, not a
+    tuning choice.** #612: *"If an attack says '+X vs. BLANK' it's
+    malformed"*, and with #600 that makes the whole compendium entry
+    defective -- the row is refused and `pick` stops offering the creature.
+    86 declared rows carry `defect="the printed attack line names no
+    defence"` on that ruling.
+
+    The first draft of this function matched a blank defence too and so
+    changed **68** specs, **54 of them rows under that ruling**. That is the
+    ruling undone by a parser: strip the blank line and the row no longer
+    looks defective, while the card is exactly as unwritable as it was.
+    *Knowing why a line is junk does not make the row writable* --
+    `drivers.blank_defence_is_defective` carries the correction in those
+    words, and this is the fourth session to walk into #612.
+
+    So the blank form belongs to #612 and the **named** form belongs here,
+    and the split is clean rather than negotiated: 11 named, 57 blank, and
+    **0 of the 11 carry a `defect=`**.
+
     **Measured before writing it.** 75 of 13,459 specs open with the run;
-    **66 are stray and 9 are not**, and the 9 are what makes this a rule
-    rather than a `sub`:
+    11 have a named defence and are stray, 57 have a blank one and are the
+    ruling's, and 7 are neither -- the 7 being what makes this a rule rather
+    than a `sub`:
 
     * **five have nothing after the seam at all** -- `m3554a0` is
       `"+9 vs Reflex; 1d8 + 2 necrotic damage.."` and that *is* the row's
@@ -896,10 +916,13 @@ def _drop_stray_attack_line(spec: str) -> str:
 
     Hence `_AFTER_SEAM`: strip only when what follows begins a sentence.
 
-    **Of the 66, 64 delegate** -- "makes two warhammer attacks", "make a
-    melee basic attack", "can use <another ability>" -- so the row has no
-    line of its own to roll, and the two that look otherwise delegate in
-    their first clause and carry a *second* `vs` later in the effect.
+    **All 11 delegate**, every one to `vs AC` -- "makes two warhammer
+    attacks", "make a melee basic attack against two separate targets",
+    "makes a bite attack and a m1454a6 attack" -- so the row has no line of
+    its own to roll and the run ahead of it belongs to nobody. That is the
+    whole argument for dropping it, and it is an argument the blank form
+    cannot make: there, the line may be the card's own with its defence
+    lost, which is why it is a defect and not a deletion.
 
     The action parenthetical is kept, which the first draft of this dropped:
     `(standard, at-will) Weapon` carries the usage and the keyword and is
