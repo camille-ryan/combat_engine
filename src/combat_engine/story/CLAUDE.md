@@ -20,6 +20,8 @@ between all of them. The combat engine is a thing this drives.
 | `challenge.py` | successes against three failures. |
 | `dc.py` | what a check has to beat, by level and band. |
 | `beat.py` | a roleplay scene, one exchange at a time: who speaks, what they try, what they already know, what it changes. |
+| `graph.py` | what a campaign knows: entities, facts, and where each fact came from. `docs/STORY_GRAPH.md` is the design. |
+| `scripts/ingest.py` | an adventure's pages into a graph, locally, every fact quoted and checked against the page. |
 | `llm.py` | the model. A `Role` per job, two backends, a URL that can be a Tailscale host. |
 | `dm.py` | the Anthropic DM. Predates `llm.py` and is **unexercised live** (#794). |
 | `maker.py` | a character built by answering questions instead of being dealt. |
@@ -226,6 +228,42 @@ Two things to know before pointing a role at a reasoning model:
 * **A cold load is minutes, not seconds.** First call to the 9 GB model was
   **3m26s**; warm it is 5-6s. Do not read a first-call timing as the
   model's speed, in either direction.
+
+## The graph answers "no", and that is what it is for
+
+`docs/STORY_GRAPH.md` has the design; the short version of why it is not a
+vector store. Top-k retrieval **never returns nothing** -- it returns the
+nearest thing, which is "do not stretch an intent to fit an affordance"
+recurring one layer over. A lookup that resolves to `None` is what makes
+*"I never met him"* a true answer instead of an invented biography (#830).
+
+So `Graph.find` is exact after folding case, accents and a leading article,
+and a near miss **misses on purpose**. Breaking that -- making a miss fall
+back to any entity -- turns four assertions red.
+
+**Every fact carries where it came from**: `page` with a verbatim quote and
+a page number, `earned` for a module fact paid for with a die roll, or
+`invented` for something the table made up. Three things follow and all
+three are the point: an invention stays consistent on the next mention,
+stays distinguishable from canon, and stays reversible. A provenance the
+loader cannot read is **refused**, not defaulted -- guessing would launder
+an invention into canon or throw away a citation.
+
+**An empty `told_by` withholds.** The first draft read it the other way and
+a lookup handed back the chapter's twist, because nothing was marked
+unsayable. Knowing and telling are different; only telling reaches a
+prompt.
+
+Measured on the module in hand: **96% of what the extractor offers can be
+pointed at the page**, the 4% that cannot is paraphrase rather than
+invention, and the quote is stored as the page's span rather than the
+model's text. Two pages give 21 entities in 74 seconds on the desktop 14B.
+
+**The quote is the fact.** Asking for a one-sentence gloss as well got the
+entity's own name back in **38 of 38** cases, so the gloss was deleted
+rather than argued with: the page's own sentence is better than a
+paraphrase of it, is already validated, and removes the only place in the
+stage where the model could write something the adventure does not say.
 
 ## A band cannot keep a secret, and a printed number beats both
 

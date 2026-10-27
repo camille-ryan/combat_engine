@@ -29348,6 +29348,134 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
 
 
 
+def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
+    """The two things a vector store cannot do, and the default that bit.
+
+    `docs/STORY_GRAPH.md` is the design. The store exists because a player
+    asked about a man the adventure names once and the model invented a
+    knighthood and a death for somebody the party is hired to rescue alive
+    (#830). Two properties fix that and both are asserted here: a lookup
+    that **returns nothing** when it knows nothing, and a fact that carries
+    where it came from.
+
+    No model anywhere in this driver. Exact lookup is the point.
+    """
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from combat_engine.story import graph as gr
+
+    def built() -> gr.Graph:
+        g = gr.Graph()
+        g.add(gr.Entity(
+            id="patron", name="the patron", kind="person",
+            aliases=("the host", "the fat priest"),
+            links=(("lives in", "keep"),),
+            facts=[
+                gr.Fact("well liked in the outer bailey", "page",
+                        where="p11", skill="streetwise", dc=12),
+                gr.Fact("has a spy among the guards", "page", where="p12",
+                        told_by=("the patron",)),
+                gr.Fact("serves a snake god", "page", where="p5"),
+            ]))
+        g.add(gr.Entity(id="keep", name="the keep", kind="place"))
+        return g
+
+    g = built()
+    out.that(
+        g.find("The Fat Priest") is not None
+        and g.find("patron") is g.find("the patron"),
+        "a mention resolves by alias and without its article",
+        f"{g.find('The Fat Priest')}",
+    )
+
+    # **The absence is the answer.** Everything else here is bookkeeping;
+    # this is the line that makes "I never met him" a true reply instead of
+    # an invented biography.
+    out.that(
+        g.find("Gorblax the Unheard Of") is None,
+        "and a name the graph does not hold resolves to nothing at all",
+        f"{g.find('Gorblax the Unheard Of')}",
+    )
+
+    out.that(
+        {e.id for e in g.mentions("I ask the host about the keep.")}
+        == {"patron", "keep"},
+        "every entity named in a typed line is found",
+        f"{[e.id for e in g.mentions('I ask the host about the keep.')]}",
+    )
+    patron = g.find("the patron")
+    assert patron is not None
+    out.that(
+        [e.id for e in g.around(patron)] == ["keep"],
+        "and one hop along its links reaches what it is tied to",
+        f"{[e.id for e in g.around(patron)]}",
+    )
+
+    # **An empty `told_by` withholds.** The first draft read it the other
+    # way and handed back the chapter's twist -- that the patron serves a
+    # snake god -- because nothing was marked unsayable.
+    quiet = gr.ask(g, "the host")
+    out.that(
+        not quiet.say and quiet.held == 2 and len(quiet.recall) == 1,
+        "a fact nobody is recorded as telling is withheld, not volunteered",
+        f"say={[f.text for f in quiet.say]} held={quiet.held}",
+    )
+    spoken = gr.ask(g, "the host", speaker="the patron")
+    out.that(
+        [f.text for f in spoken.say] == ["has a spy among the guards"],
+        "and the one he will say is his alone",
+        f"{[f.text for f in spoken.say]}",
+    )
+
+    # Provenance: an invention is tagged, is not canon, and lands even
+    # though nobody had heard of the barkeep a moment ago.
+    g.remember("the barkeep", "she lost a brother in the valley",
+               where="tavern")
+    made = g.find("the barkeep")
+    out.that(
+        made is not None and made.facts[0].source == "invented"
+        and not made.facts[0].canon and made.facts[0].where == "tavern",
+        "something the table made up is stored, tagged, and not canon",
+        f"{made.facts[0] if made else None}",
+    )
+    out.that(
+        all(f.canon for f in patron.facts),
+        "while what came off the page still is",
+        f"{[f.source for f in patron.facts]}",
+    )
+
+    # A graph survives the round trip, and a provenance it cannot read is
+    # refused rather than defaulted -- guessing would launder an invention
+    # into canon, or throw away a citation.
+    with tempfile.TemporaryDirectory() as tmp:
+        where = Path(tmp) / "g.json"
+        gr.save(g, where)
+        back = gr.load(where)
+        kept = back.find("the barkeep")
+        out.that(
+            back.find("the fat priest") is not None
+            and kept is not None and len(kept.facts) == 1
+            and kept.facts[0].source == "invented",
+            "a graph round-trips through disk with its provenance intact",
+            f"{sorted(back.entities)}",
+        )
+        raw = json.loads(where.read_text())
+        raw["entities"][0]["facts"][0]["source"] = "probably"
+        where.write_text(json.dumps(raw))
+        try:
+            gr.load(where)
+            refused = ""
+        except gr.GraphError as exc:
+            refused = str(exc)
+        out.that(
+            "probably" in refused,
+            "and a fact whose source cannot be read is refused, not guessed",
+            f"{refused or 'it loaded anyway'}",
+        )
+
+
 def god_mode_hands_over_the_fight_without_playing_it(out: Result) -> None:
     """The party wins and the board is never built. With the control.
 
@@ -29556,6 +29684,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "story_graph": (
+        the_graph_answers_no_and_says_where_a_fact_came_from,
+        "the knowledge store: lookup, absence, and provenance (#830)",
     ),
     "god_mode": (
         god_mode_hands_over_the_fight_without_playing_it,

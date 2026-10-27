@@ -5,18 +5,33 @@ been wrong for a while.** It is a charter rather than documentation, and the
 documentation is `src/combat_engine/story/CLAUDE.md`, which exists because
 there is code to govern.
 
-What is built, as of 2026-10-20: a module is a graph of scenes
+What is built, as of 2026-10-27: a module is a graph of scenes
 (`module.py`, #789); an adventure you own is split out of a PDF into a draft
-worth filling in (`importer.py`); a scene's opposition resolves by name, then
-by theme, then by shape (`cast_list.py`, #790); a stat block can be worn as
-something else (`reflavour.py`, #790); a skill challenge runs on a board with
-nobody to fight on it (`table.py`, `challenge.py`, `dc.py`, #791); and a
-campaign is written down and picked up again (`save.py`, `run.py`, #792).
-`scripts/play.py` plays one and `check.py` runs it.
+worth filling in, **with its italic read-aloud pulled out by font**
+(`importer.py`); a scene's opposition resolves by name, then by theme, then
+by shape (`cast_list.py`, #790); a stat block can be worn as something else
+(`reflavour.py`, #790); a skill challenge runs on a board with nobody to
+fight on it (`table.py`, `challenge.py`, `dc.py`, #791); and a campaign is
+written down and picked up again (`save.py`, `run.py`, #792).
 
-Not built: the model that narrates (#794), human-driven character creation
-(#793), `/api/day` and any browser view of a campaign, milestones (#615), and
-a freeform campaign with no module behind it.
+**And a roleplay scene is now played rather than printed.** A local model
+speaks for the NPCs and for the party members nobody is driving, one beat at
+a time, inside rails the module lays: `beat.py` runs the loop, `llm.py`
+holds a model per job with a per-campaign override, and the judgement stays
+in the module -- affordances for what may be tried, `Lore` for what a
+character may already know. #800-#804, #807, #829.
+
+`scripts/play.py` plays one, `--god-mode` hands over the fights so the story
+half can be worked on alone, and `check.py` runs both.
+
+Not built: human-driven character creation (#793), `/api/day` and any
+browser view of a campaign, milestones (#615), a freeform campaign with no
+module behind it, and **the knowledge graph that would stop the DM inventing
+canon** (#830) -- designed in `docs/STORY_GRAPH.md`, not yet written.
+
+Chapters 2-5 of the one converted module do not exist either: 15 scenes of
+65, and ~10 of the remaining 50 are phantoms the importer makes out of the
+adventure's own summary section (#833).
 
 Written down so the next person does not have to rediscover where the job
 currently lives, or mistake the log renderer for a story engine.
@@ -67,6 +82,19 @@ Scattered, and this is the useful part of the charter:
 JSONL to `logs/`. Useful, unrelated. Do not extend them into story
 generation; a transcript is forensic, and nothing reconstructs a `World` from
 one.
+
+## Where the knowledge lives
+
+`docs/STORY_GRAPH.md` is the design for what a campaign knows: three layers
+(setting, module, campaign), facts tagged by where they came from, lookup by
+name rather than by embedding, and secrecy expressed as a DC. It is written
+out because the whole of it came out of one conversation and none of it was
+anywhere in the repository, which is how a finding gets lost.
+
+Read it before touching `beat.py`'s prompts. The rule it formalises --
+**the model may read what the players know and never what the DM knows** --
+has been re-learnt four times here under four different names, and each
+time it cost a bug.
 
 ## Constraints it inherits
 

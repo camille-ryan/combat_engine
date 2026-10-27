@@ -105,6 +105,12 @@ class Role:
     seed: int | None = None
     #: Cap on one reply. A beat wants three sentences, not an essay.
     max_tokens: int = 700
+    #: Seconds to wait. **Per role, because one number cannot serve both
+    #: callers**: a matcher answers an enum in five seconds, and a
+    #: reasoning model asked to list every entity on a 5,000-character
+    #: page takes minutes -- the first ingest run died on the module
+    #: constant with a bare `timed out`, having done the work.
+    timeout: int = TIMEOUT
 
     @property
     def local(self) -> bool:
@@ -216,7 +222,7 @@ def _ollama(role: Role, messages: list[dict], schema: dict | None) -> str:
         headers={"content-type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as fh:
+        with urllib.request.urlopen(request, timeout=role.timeout) as fh:
             got = json.loads(fh.read())
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")[:300]
