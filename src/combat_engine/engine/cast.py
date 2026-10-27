@@ -6093,7 +6093,10 @@ class Cast:
                     return
                 spent[0] += 1
                 if spent[0] >= uses:
-                    self.forbid(ref, on=who, until=until)
+                    # `ran_out=True`: this is the grant's allowance going,
+                    # not a prohibition, and `reentrant` is promised a way
+                    # past it. #820.
+                    self.forbid(ref, on=who, until=until, ran_out=True)
 
             self.watch(PowerUsed, count, until=until, on=who)
         return effect
@@ -9677,6 +9680,7 @@ class Cast:
         usage: Usage | Sequence[Usage] | None = None,
         only: str | Sequence[str] = (),
         attacks_only: bool = False,
+        ran_out: bool = False,
         on: int | None = None,
         until: When = When.SAVE_ENDS,
     ) -> Effect | None:
@@ -9766,6 +9770,15 @@ class Cast:
             undo.append(lambda: [known.only_attacks.discard(r) for r in kept])
         if ref:
             undo.append(lambda: known.forbidden.discard(ref))
+            # **`ran_out` says *why*, and only `grant_row`'s counter sets
+            # it.** A row whose grant is exhausted is spent rather than
+            # prohibited, and `usable` has to tell the two apart so that
+            # `grant_attack(reentrant=True)` can stand aside for the first
+            # and not the second. Same `undo`, so the reason cannot outlive
+            # the restriction. #820.
+            if ran_out:
+                known.spent_out.add(ref)
+                undo.append(lambda: known.spent_out.discard(ref))
         if keyword is not None:
             undo.append(lambda: known.forbidden_keywords.discard(keyword))
         if usages:

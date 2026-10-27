@@ -12059,6 +12059,102 @@ def two_variant_racial_traits(out: Result) -> None:
              f" that says the gate is read rather than ignored ({hale})")
 
 
+def a_reentrant_repeat_passes_a_spent_grant(out: Result) -> None:
+    """`grant_attack(reentrant=True)` stood aside for one of the two things
+    its docstring promised.
+
+    Its own words: *"the swing being granted is the very row and the very
+    use this one is answering, so the in-flight guard **and the usage
+    limit** both have to stand aside for it."* `use()` passes
+    `spent_ok=reentrant` into `usable`, which covers the row's **printed**
+    usage -- an encounter or daily already spent. It did not cover a limit
+    from `c.grant_row(uses=N)`, which counts the holder's own `PowerUsed`
+    and then calls `c.forbid(ref)` -- and `usable` refused anything in
+    `Powers.forbidden` **unconditionally, two gates earlier**.
+
+    So a repeat of a granted, use-limited row was refused while the
+    docstring said it was not. `i2002p1` fired on 4 of 8 audit attempts and
+    did nothing on every one; its `KNOWN_SILENT` excuse is removed in the
+    same change and the audit's own "an excuse outlived the thing it
+    excused" line is what demanded that.
+
+    **Why a second set and not a flag.** `forbidden` holds two different
+    facts: a grant whose allowance ran out, and a prohibition -- *"loses the
+    ability to use that power"*. An at-will has no printed allowance to
+    exhaust, so the exhaustion had nowhere to go but `forbidden`, and
+    nothing recorded which kind it was. `Powers.spent_out` is the subset
+    that ran out, written only by `grant_row`'s counter and cleared by the
+    same `undo` the forbid carries, so it cannot outlive the limit.
+
+    Four cells, and the second is the one that keeps this narrow:
+
+    * an exhausted grant is repeatable under `reentrant`;
+    * **a real prohibition is not**, which is the whole reason the waiver
+      reads `spent_out` rather than `forbidden`;
+    * without `reentrant` an exhausted grant is still refused, so the
+      ordinary path is unchanged;
+    * and the reason does not outlive the restriction. #820.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import get, usable
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+
+    REF = "p10069"          # a wizard arcane at-will
+
+    def board(prohibited: bool):  # noqa: ANN202
+        world, me, _ = _board(seed=1)
+        known = world.get(me, Powers) or world.add(me, Powers())
+        c = Cast(world=world, me=me, ref="drivers:reentrant")
+        if prohibited:
+            # Known outright here, because `grant_row` below refuses to
+            # grant a row the creature already has -- it is "let a creature
+            # use a row it does not know" and answers `None` otherwise.
+            # Handing it the row *and* asking for the grant is a
+            # self-contradicting setup, which is what the first version of
+            # this rule did: the grant never armed, so nothing was ever
+            # exhausted and three cells failed for the harness rather than
+            # for the code.
+            known.known = (*tuple(known.known), REF)
+            # A genuine prohibition, the sentence `c.forbid` is for.
+            c.forbid(REF, on=me, until=When.ENCOUNTER)
+        else:
+            # The grant's allowance, exhausted: one use, then spend it.
+            c.grant_row(REF, on=me, uses=1, until=When.ENCOUNTER)
+            foe = sorted(enemies(world, me))[0]
+            from combat_engine.engine.dsl import use
+            use(world, me, REF, targets=[foe], spend=False)
+        return world, me, known
+
+    world, me, known = board(prohibited=False)
+    out.that(REF in known.forbidden,
+             f"the grant's one use is spent and the row is forbidden"
+             f" ({REF in known.forbidden})")
+    out.that(REF in known.spent_out,
+             "and recorded as **ran out** rather than prohibited"
+             f" ({sorted(known.spent_out)})")
+    row = must(get(REF), "the wizard at-will under test")
+    ok, why = usable(world, me, row, spent_ok=True)
+    out.that(ok,
+             f"so a reentrant repeat is let past it ({ok}, {why!r})")
+    plain_ok, plain_why = usable(world, me, row, spent_ok=False)
+    out.that(not plain_ok,
+             "while the ordinary path still refuses -- nothing but a repeat"
+             f" gets this ({plain_ok}, {plain_why!r})")
+
+    # **The negative that makes the waiver narrow.**
+    world, me, known = board(prohibited=True)
+    out.that(REF in known.forbidden and REF not in known.spent_out,
+             "a real prohibition is forbidden and **not** in `spent_out`"
+             f" ({sorted(known.spent_out)})")
+    barred, why = usable(world, me, row, spent_ok=True)
+    out.that(not barred,
+             "so a reentrant repeat is still refused by it -- the cell that"
+             f" fails if the waiver reads `forbidden` ({barred}, {why!r})")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -36127,6 +36223,9 @@ DRIVERS = {
     "two_variant_racial_traits": (
         two_variant_racial_traits,
         "the two r67/r68 traits that are rows, and each one's gate"),
+    "a_reentrant_repeat_passes_a_spent_grant": (
+        a_reentrant_repeat_passes_a_spent_grant,
+        "a repeat passes an exhausted grant and not a prohibition"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,

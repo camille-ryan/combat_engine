@@ -196,27 +196,6 @@ KNOWN_SILENT = {
     "p13984": "its branch needs a cf:wizard-mage-f4s3/s4 school benefit and"
               " this board's wizard is an arcanist/sha-ir build -- proved in"
               " drivers.school_summon instead",
-    # "You hit a nonminion enemy with an at-will arcane attack power →
-    # repeat the attack against another enemy." Every gate in the body
-    # passes and the payout is refused by the engine:
-    #
-    #   trigger=Hit foe=2 power='p10069' usage=at-will foe_hp=38 others=[3,4,5,6]
-    #   choose([3, 4, 5, 6]) -> 3
-    #   grant_attack(me=1, on=3, ref='p10069', reentrant=True) -> False
-    #
-    # Traced into `usable`: 'cannot be used right now', because `p10069` is
-    # in `Powers.forbidden`. The board's caster holds `f277`, which borrows a
-    # wizard at-will with `uses=1`; the provocation spent that one use to
-    # produce the `Hit`, `grant_row`'s counter then forbade the row, and
-    # `reentrant` stands aside for the printed usage (`spent_ok`) but not for
-    # a forbid. #820, which has a ruling in it -- does a *repeat* consume a
-    # granted use -- so it is not a patch to make here.
-    #
-    # Two poses would each have avoided it and neither is reachable: #821
-    # (the search stops at the first pose that fires the row, so the lent
-    # arcane at-wills behind the borrowed one are never swung).
-    "i2002p1": "its repeat is refused because the board's arcane at-will was"
-               " borrowed with one use and the provocation spent it -- #820",
     # "You hit a cursed target with an arcane power using this rod." The row
     # is correct and `_pose_cursed` below now curses every enemy, verified at
     # the moment it is laid -- but the one creature the provocation swings at

@@ -1037,6 +1037,26 @@ class Powers:
     #: Rows taken away for a while. Not the same as spent: a forbidden row
     #: is one the creature still has and cannot currently reach.
     forbidden: set[str] = field(default_factory=set)
+    #: The subset of `forbidden` that is there because a **grant's uses ran
+    #: out**, rather than because anything prohibited the row.
+    #:
+    #: `c.grant_row(uses=N)` counts the holder's own `PowerUsed` and forbids
+    #: the row when they run out -- which is the only mechanism available,
+    #: since an at-will has no printed allowance to exhaust. But the two are
+    #: different facts, and one reader has to tell them apart:
+    #: `grant_attack(reentrant=True)` is "the target repeats *this* use", so
+    #: its docstring promises the usage limit stands aside. It did not,
+    #: because `usable` refuses anything in `forbidden` unconditionally and
+    #: two gates before it looks at `spent_ok`. #820.
+    #:
+    #: Narrow on purpose: a genuine prohibition -- "loses the ability to use
+    #: that power" -- is **not** in here and still refuses a reentrant
+    #: repeat, which is the whole reason this is a second set rather than a
+    #: flag on the first.
+    #:
+    #: Cleared by the same `undo` the forbid itself carries, so it cannot
+    #: outlive the limit that put it here.
+    spent_out: set[str] = field(default_factory=set)
     #: Keywords whose rows cannot be used. *"The target is dazed and cannot
     #: use powers that have the polymorph keyword"* -- two items print that,
     #: and `p12344`'s "cannot teleport" is the same thing said about a

@@ -3215,7 +3215,18 @@ def usable(
         if (powers.only_attacks and p.attack is not None
                 and p.ref not in powers.only_attacks):
             return False, "it can only attack with another power"
-        if p.ref in powers.forbidden:
+        # **A repeat of a use-limited grant is let past, and nothing else
+        # is.** `spent_out` is the subset of `forbidden` that is there
+        # because a `grant_row(uses=)` allowance ran out, which is a spend
+        # rather than a prohibition -- and `spent_ok` is exactly
+        # `grant_attack(reentrant=True)`, whose docstring already promised
+        # "the in-flight guard **and the usage limit** both have to stand
+        # aside". They did not: this gate refused unconditionally, two
+        # gates before the `spent_ok` one below, so a granted use-limited
+        # row could never be repeated. `i2002p1` fired on 4 of 8 attempts
+        # and did nothing on every one. #820.
+        if p.ref in powers.forbidden and not (
+                spent_ok and p.ref in powers.spent_out):
             return False, "cannot be used right now"
         # **Two keyword prohibitions, and they point opposite ways.** Read
         # through `keywords_of` rather than `p.keywords`, for #483's reason:
