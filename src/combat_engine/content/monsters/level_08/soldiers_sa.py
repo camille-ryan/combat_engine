@@ -875,21 +875,35 @@ def m1779a0(c: Cast) -> None:
 @power(
     "m1779a1", level=8, usage=Usage.RECHARGE, recharge=4, action=STANDARD,
     reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.WEAPON],
-    attack=Attack(vs=AC, printed=13), damage=Damage("3d10", 5, kind=LIMITED),
     defect="the printed attack line names no defence",
 )
 def m1779a1(c: Cast) -> None:
-    """The shift afterwards covers the whole burst, so it is counted and
+    """A **basic attack against each creature in the burst**, which is what
+    the card says, and no attack line of its own.
+
+    The shift afterwards covers the whole burst, so it is counted and
     spent once rather than once per target. Where it ends -- adjacent to
     somebody else -- is left to the decider, the same as any other bare
-    shift in this tree."""
+    shift in this tree.
+
+    **The `attack=` and `damage=` this used to declare were invented.** It
+    carried `Attack(vs=AC, printed=13)` and `Damage("3d10", 5)`, lifted
+    from the stray run ahead of the effect text -- `+13 vs ; 3d10+5
+    damage..` -- with the `AC` supplied because the run names no defence at
+    all. The card's attack is the basic one, `m1779a0` at `+15 vs AC` for
+    `2d6+3`, and `c.basic` rolls whichever row the creature's basic
+    attack is rather than a copy of it. #767.
+
+    **The marker stays**, and that is #612 rather than a statement about
+    this body: a printed line reading `+N vs <blank>` is malformed and the
+    whole entry drops. Removing an invented roll is not the same as
+    deciding the card is writable -- *knowing why a line is junk does not
+    make the row writable* -- so this row is still refused in play and
+    `pick` still passes the creature over.
+    """
     if not c.first:
         return
-    hits = 0
-    for victim in c.targets:
-        if _secondary(c, 13, AC, victim):
-            c.damage("3d10", 5, on=victim)
-            hits += 1
+    hits = sum(1 for victim in c.targets if c.basic(on=victim))
     if hits:
         c.shift(hits)
 

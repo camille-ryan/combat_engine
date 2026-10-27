@@ -130,7 +130,6 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
-    defence,
     distance_between,
     enemies,
     has_combat_advantage,
@@ -1539,17 +1538,32 @@ def m3642a0(c: Cast) -> None:
     defect="the printed attack line names no defence",
 )
 def m3642a1(c: Cast) -> None:
-    """It, not a named thing -- see the module docstring. Attacks whichever
-    of AC or Reflex is lower on the chosen foe, same weapon damage as its
-    basic strike."""
+    """Move half its speed and make **one basic attack** at any point during
+    the movement, which is what the card says.
+
+    **The whole attack this used to roll was invented, defence and dice
+    both.** It read `c.attack(9, weaker, on=foe)` for `1d6+5`, picking
+    whichever of AC and Reflex was lower -- and the printed run it came from
+    is `+9 vs  or  (whichever is lower); .` with **both defence names
+    absent and no damage at all after the semicolon**. So the `+9` was the
+    only real number in it; the two defences were guessed out of the
+    leftover conjunction and the dice were copied off the sibling. That
+    blanked *pair* is the form #612's ruling calls out by name.
+
+    `c.basic` rolls whichever row the creature's basic attack is --
+    `m3642a0`, `+11 vs AC` for `1d6+5` plus `1d6` fire, and +1 against a
+    bloodied target -- so the fire half and the bloodied bonus come along
+    rather than being dropped by a hand-rolled copy. #767.
+
+    **The marker stays**, and that is #612 rather than a verdict on this
+    body: a line naming no defence is malformed and the whole entry drops.
+    """
     half = max(1, c.speed_of() // 2)
     c.move(half)
     foe = next(iter(_adjacent_foes(c)), None)
     if foe is not None:
         c.no_provoke(from_=foe, on=c.me, until=When.EOT)
-        weaker = REF if defence(c.world, foe, REF) < defence(c.world, foe, AC) else AC
-        if c.attack(9, weaker, on=foe):
-            c.damage("1d6", 5, on=foe)
+        c.basic(on=foe)
     remaining = c.speed_of() - half
     if remaining > 0:
         c.move(remaining)

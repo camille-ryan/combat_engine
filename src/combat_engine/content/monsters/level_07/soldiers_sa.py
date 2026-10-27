@@ -2808,14 +2808,32 @@ def m884a0(c: Cast) -> None:
 
 @power(
     "m884a1", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
-    reach=Melee(2), target=ONE_CREATURE, damage=Damage("3d10", 5, kind=LIMITED),
+    reach=PERSONAL, target=NO_TARGET,
     defect="the printed attack line names no defence",
 )
 def m884a1(c: Cast) -> None:
+    """**The card makes no attack**, which is the whole of #767 for this row.
+
+    Printed: move 3 squares; every smaller creature whose space it enters is
+    pushed 1 and knocked prone; after moving it may use `m884a2`. No attack
+    roll, no damage, and no target -- so `target=ONE_CREATURE` and
+    `reach=Melee(2)` were describing a swing nobody prints.
+
+    **What this used to do was invent one.** It declared
+    `Damage("3d10", 5)` and rolled `c.attack(trim(12), AC, on=c.target)`,
+    both taken from the stray run ahead of the effect text -- `+12 vs ;
+    3d10+5 damage..` -- with the `AC` supplied because the run names no
+    defence. The swing was reachable without it anyway: `m884a2` is a free
+    action gated on `_just_rampaged`, which is the effect laid at the end
+    of this body, so the card's "after moving, it can use <the sweep>" was
+    already written.
+
+    **The marker stays**, and that is #612: a printed line naming no
+    defence is malformed and the whole entry drops. Taking the invented
+    roll out does not make the card writable -- and here there is nothing
+    left to write, because the trample is already correct.
+    """
     me = c.me
-    bonus = c.world.scaling.trim(12, c.level)
-    if c.attack(bonus, AC, on=c.target):
-        c.damage("3d10", 5)
     for caught in c.overrun():
         # **`.order`, not a bare `<`.** `Size` is a `StrEnum`, so the plain
         # comparison that stood here compared the *words*: "large" <

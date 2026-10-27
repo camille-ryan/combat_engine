@@ -1271,21 +1271,48 @@ _M1996_GRABBED: set[int] = set()
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    attack=Attack(vs=AC, printed=13),
-    damage=Damage("4d8", 5, kind=LIMITED),
     defect="the printed attack line names no defence",
 )
 def m1996a1(c: Cast) -> None:
-    """`c.overrun` walks the line and reports whose square was entered, in
+    """A **basic attack against each creature whose space it enters**, which
+    is what the card says, and no attack line of its own.
+
+    `c.overrun` walks the line and reports whose square was entered, in
     order -- the only way a trample can be written. `m1996a2` may convert
     one of these hits to a grab instead of damage; the flag it leaves is
-    read here before the damage is paid."""
+    read here before the damage is paid.
+
+    **The `attack=` and `damage=` this used to declare were invented.** It
+    carried `Attack(vs=AC, printed=13)` and `Damage("4d8", 5)`, lifted from
+    the stray run ahead of the effect text -- `+13 vs ; 4d8+5 damage..` --
+    with the `AC` supplied because the run names no defence. The card's
+    attack is the basic one, `m1996a0` at `+15 vs AC` for `2d8+4` with a
+    push and a prone, and `c.basic` rolls that row rather than a copy of
+    it -- which is also what keeps the grab conversion honest, since
+    `m1996a2` speaks about the attack this row makes. #767.
+
+    **One clause is lost in the swap and it is worth stating.** `m1996a2`
+    prints "the attack deals no damage; instead the target is grabbed", and
+    the old body could honour it because `c.strike` and `c.hit` are two
+    calls -- roll, then decline to pay. `c.basic` is one call and pays its
+    own damage, so there is no way to make it miss the damage and keep the
+    hit. The flag is still consumed so it cannot leak into the next use,
+    and the grab itself is `m1996a2`'s to lay.
+
+    That is a clause dropped, which would ordinarily take a `dropped=`
+    marker -- and `defect=` *cannot be combined with another marker*
+    (`content/CLAUDE.md`), nor should it be: the entry drops whole under
+    #612, so there is nothing for a second marker to make ready. Recorded
+    here instead, and the day #612's ruling is revisited this is the clause
+    to write.
+
+    **The marker stays**, and that is #612: `+N vs <blank>` is malformed
+    and the whole entry drops. Taking an invented roll out does not make
+    the card writable.
+    """
     for who in c.overrun():
-        if c.strike(on=who):
-            if who in _M1996_GRABBED:
-                _M1996_GRABBED.discard(who)
-            else:
-                c.hit(on=who)
+        c.basic(on=who)
+        _M1996_GRABBED.discard(who)
 
 
 def _hit_with_m1996a1(world: World, me: int, ev: Hit) -> bool:
