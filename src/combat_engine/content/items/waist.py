@@ -1200,6 +1200,22 @@ def i3475p1(c: Cast) -> None:
     in the setting. So the row plays the exception for the one creature it
     can name and the ordinary hold for everything else, which is the printed
     rule minus one clause rather than the whole clause dropped.
+
+    **And the symbol will never arrive, which was checked rather than
+    assumed (#611, 2026-10-26).** The compendium's `Monster` table has
+    thirteen columns and not one of them could hold a maker -- ID, Name,
+    Level, Modifier, Role, IsNew, IsChanged, Source, Teaser, Txt, XP,
+    Keywords, PlainTxt. **Zero** pages anywhere contain the word
+    "creations", and all 22 that say "created by" mean it *in a fight* --
+    "minions created by this power", "a nightmare prison created by the
+    dragon's mind" -- which is precisely the `c.made_by` sense and not this
+    one. `m6273`'s own page records an origin and a kind and nothing else.
+
+    So the marker is a **permanent, accurate description** rather than a
+    wait: `todo.py` reports a row ready the day its symbol lands and this
+    one cannot, which is harmless and is why `dropped=` stays. Not
+    `defect=`, because under #600 that drops the whole entry and would
+    delete a working item to record one missing clause.
     """
     victim = c.target
     if not c.strike():

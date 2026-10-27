@@ -3754,6 +3754,31 @@ def _cross_reference_rest(
             # saying which, and without offering an author something to
             # point a row at.
             monsters_ok = table in ("monster_power",)
+            # **An item whose text is about one named creature keeps the
+            # ref**, which is #610. The opaque token is right for the 103
+            # collisions below and wrong here: `i3475x1` prints "when a
+            # <creature> hits you with an attack, it becomes dazed", and an
+            # author handed `x_m6273` has been promised a token that cannot
+            # be resolved, so the clause stays dropped on a row that is one
+            # `Ident.ref` test from finished.
+            #
+            # **A bare creature ref only, never an ability**, and that is
+            # the discriminator rather than #610's "names exactly one
+            # monster" -- all eight `item_block` specs holding a token name
+            # exactly one, so the count decides nothing. Reading them
+            # splits 6/2 on this test and the split is exactly right:
+            #
+            # * the six creature refs are all genuine -- "conjure a
+            #   <creature>", "a <creature>'s <power> cannot stop this
+            #   weapon", "no larger than a Medium <creature>";
+            # * the two ability refs are the 103's own shape. `i1246x1`
+            #   reads "choose a specific kind of humanoid creature, such as
+            #   human, giant, or <X>" where X is somebody's *ability*, and
+            #   `i2728p1` uses an ability name as a state word. Both must
+            #   stay opaque.
+            #
+            # `monster_power` is untouched, so none of the 103 is re-opened.
+            creature_ok = table == "item_block"
             # **The creature this row belongs to**, for the guard below.
             # `m1107a0` belongs to `m1107`; a character's row has none.
             mine = re.match(r"^(m\d+)a\d+$", ref)
@@ -3808,7 +3833,11 @@ def _cross_reference_rest(
                         foreign and own_creature
                         and foreign.group(1) != own_creature
                     )
-                    if stranger or (other[:1] == "m" and not monsters_ok):
+                    a_creature = bool(re.fullmatch(r"m\d+", other))
+                    if stranger or (
+                        other[:1] == "m" and not monsters_ok
+                        and not (creature_ok and a_creature)
+                    ):
                         other = f"x_{other}"
                         names.setdefault(other, {"name": name})
                     others[name] = other
