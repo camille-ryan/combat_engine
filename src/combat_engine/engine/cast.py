@@ -417,10 +417,27 @@ class Cast:
         with the event, and `c.attack` reads its target back before the body
         that rolled deals its damage. Moving the event alone moved the
         announcement and left the damage on the creature that was spared.
+
+        **It announces `BlowRedirected` now**, which it did not for its whole
+        life, and that was the whole of why 26 rows read SILENT while
+        working. The 43 that looked credited are the more interesting half:
+        they were credited with the redirected attack's **own**
+        `DamageApplied`, landing inside the row's slice because the row had
+        just moved it there. So the verdict for this family was decided by
+        whose damage fell in the window rather than by whether the row
+        worked, and `m115864a5` fires 21 times and reports nothing the
+        moment the board provokes with a different power. #900.
+
+        The return value is deliberately unchanged -- still True whenever
+        there was an event to move, even if the move was a no-op -- because
+        rows read it. The **announcement** is gated on something actually
+        having moved, which is what `hit_becomes` does with its own write.
         """
         ev = self.trigger
         if ev is None or not hasattr(ev, "target"):
             return False
+        was_target = int(getattr(ev, "target", -1))
+        was_attacker = int(getattr(ev, "attacker", -1))
         if to is not None:
             ev.target = to
             result = getattr(ev, "result", None)
@@ -428,6 +445,21 @@ class Cast:
                 result.target = to
         if by is not None:
             ev.attacker = by
+        now_target = int(getattr(ev, "target", -1))
+        now_attacker = int(getattr(ev, "attacker", -1))
+        if now_target != was_target or now_attacker != was_attacker:
+            from .events import BlowRedirected
+
+            self.world.bus.emit(
+                BlowRedirected(
+                    attacker=now_attacker,
+                    target=now_target,
+                    power=str(getattr(ev, "power", "")),
+                    was_attacker=was_attacker,
+                    was_target=was_target,
+                    by=self.ref,
+                )
+            )
         return True
 
     def cancel(self) -> bool:
@@ -4314,6 +4346,13 @@ class Cast:
         Defaults to the **caster** -- every printed one is about its own
         owner -- and returns False if the row had not been used, which is
         the Requirement those rows print.
+
+        **It announced this as a `Note` and now announces `UseRestored`.**
+        A `Note` carries no `by`, so `audit.DID_SOMETHING` refuses it on
+        purpose, and a row whose entire Effect is this one line was
+        therefore silent by construction. `i3271p1` is the worked example
+        and it hid in the `UNUSED` bucket rather than the silent one for its
+        whole life. #899.
         """
         from .components import Powers as _Powers
 
@@ -4322,7 +4361,9 @@ class Cast:
         if powers is None or powers.times(ref) == 0:
             return False
         powers.restore(ref)
-        self.world.bus.emit(Note(text=f"{who} regains the use of {ref}"))
+        from .events import UseRestored
+
+        self.world.bus.emit(UseRestored(who=who, power=ref, by=self.ref))
         return True
 
     def expend_row(self, ref: str, *, on: int | None = None) -> bool:
@@ -4362,7 +4403,9 @@ class Cast:
         if powers.times(ref) >= (p.uses if p is not None else 1):
             return False
         powers.note_use(ref, self.world.round)
-        self.world.bus.emit(Note(text=f"{who} expends {ref}"))
+        from .events import UseSpent
+
+        self.world.bus.emit(UseSpent(who=who, power=ref, by=self.ref))
         return True
 
     def use_power(

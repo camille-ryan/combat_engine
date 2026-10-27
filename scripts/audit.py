@@ -244,16 +244,40 @@ KNOWN_SILENT = {
                " stopped dealing it between 81f5229a1 and 00429a9e4 -- #783",
     # **Became usable and is still quiet, which is two different facts.** At
     # `81f5229a1` the auditor reported this UNUSED -- it could not be used on
-    # the board at all -- so it was never on the silent list. It is reachable
-    # now and does nothing, because `c.trigger` is `None`: the body reads
-    # `c.trigger.power` to know which use to hand back, gets `""`, and
-    # `c.restore_use("")` returns False.
+    # the board at all -- so it was never on the silent list.
     #
-    # The board would have to pose a `PowerResolved` in which **every**
-    # target was missed, on a power whose use was spent. It poses neither.
-    "i1676p1": "reads c.trigger.power to know which use to restore and the"
-               " board poses no all-missed PowerResolved -- UNUSED at"
-               " 81f5229a1, reachable and quiet now",
+    # **The reason recorded here was wrong, and #899 measured the real one.**
+    # It said the board "poses no all-missed `PowerResolved`". It poses one:
+    # instrumenting `c.restore_use` shows this row reaching it **four**
+    # times, with a real ref off `c.trigger.power` rather than the `""` the
+    # old note describes.
+    #
+    # What stops it is one line further in. The board provokes every power
+    # use with `use(..., spend=False)` -- six sites in this file -- and
+    # `dsl.use` calls `powers.note_use` only inside its `if spend:` branch.
+    # So the use is never recorded as spent, `powers.times(ref)` is 0, and
+    # `c.restore_use` returns False on exactly the branch that **is** the
+    # printed Requirement. The row is correct; there is nothing to hand back.
+    #
+    # `spend=False` is deliberate -- it is what lets the board provoke the
+    # same power repeatedly without exhausting it -- so this wants a pose
+    # that spends and then lets the row restore, which is a separate board
+    # rather than a flag. Filed as #901.
+    "i1676p1": "restores a use, and the board provokes with spend=False so"
+               " powers.times() is 0 and there is nothing to hand back"
+               " -- UNUSED at 81f5229a1, reachable and quiet now; #901",
+    # The same row one item over, and found by the same route: #680's racial
+    # pick made its trigger reachable, so it left the `UNUSED` bucket and
+    # went straight onto the silent list. Measured identically -- two
+    # firings, a real ref (`p1767`), `times` 0 both times.
+    #
+    # **Worth keeping as a pair.** `UseRestored` (#899) took 28 rows off the
+    # silent list and these two are the residue, which is the evidence that
+    # the remaining cause is the board and not the missing event: the event
+    # lands, the restore never happens.
+    "i3271p1": "restores a use, and the board provokes with spend=False so"
+               " powers.times() is 0 and there is nothing to hand back"
+               " -- UNUSED until #680's racial pick reached it; #901",
     # "You bloody an enemy with an attack that uses **the augmented
     # weapon**", and the gate is written now that `Bloodied.weapon` exists
     # (#653). Two separate board facts keep it quiet, both measured:
@@ -1221,8 +1245,44 @@ DID_SOMETHING = {
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
-    "CritChanged", "BlowTurned",
+    "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
 }  # fmt: skip
+# `BlowRedirected`, `UseRestored` and `UseSpent` are the **ninth and tenth**
+# classes, and the first of them is the one that says something new about this
+# list rather than just lengthening it.
+#
+# **`BlowRedirected` is `BlowTurned`'s sibling and shows that a green verdict
+# here can be an accident.** Turning a blow aside got an event in #861; moving
+# one did not, and `c.redirect` rewrote `ev.target` and `result.target` in
+# place while announcing nothing. 69 rows call it. 26 read SILENT -- and the
+# other **43 were credited with the redirected attack's own
+# `DamageApplied`**, which lands inside the row's slice precisely *because*
+# the row moved it there.
+#
+# That is the first entry admitted here where the rows on the **green** side
+# were the worse finding. `m115864a5` was on neither list: an unrelated
+# chargen change (#680/#743's racial pick) altered which power the board
+# provokes with, the borrowed damage stopped landing in its window, and the
+# row went silent while firing **21 times instead of 8**. Instrumenting its
+# body shows every one of the 21 doing the whole job. So the verdict for this
+# family was decided by whose damage fell in the slice, not by whether the row
+# worked -- #690's shape, one window further out. #900.
+#
+# **`UseRestored` and `UseSpent` are the `Note` case**, which the note at the
+# bottom of this comment predicted and which nothing had yet paid for.
+# `c.restore_use` and `c.expend_row` each ended in a `Note`, deliberately
+# refused here because a `Note` carries no `by`, so a row whose entire Effect
+# is one of those two lines was **silent by construction**. Two events rather
+# than one, for `RelationCleared`'s reason: admitting a direction and not its
+# mirror is how a row whose whole effect is the inverse stayed invisible.
+#
+# `i3271p1` is why this took so long to see. Its whole body is one
+# `c.restore_use`, and it was never on `silent_refs` -- it sat on **`UNUSED`**,
+# "could not be used on the test board at all", for its entire life. The same
+# chargen change made its trigger reachable and it went straight to silent.
+# **A row can carry a defect in the `UNUSED` bucket indefinitely**, where the
+# silent list would have named it, and that is worth knowing independently of
+# these three events. #899.
 # `BlowTurned` is the **eighth** class and `CritChanged`'s sibling one field
 # over: five rows rewrite `AttackResult.hit` by hand, and `m6283a4` -- whose
 # whole printed effect is that the blow misses -- reported SILENT for as long

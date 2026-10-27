@@ -1214,6 +1214,99 @@ class BlowTurned(Event):
 
 
 @dataclass
+class BlowRedirected(Event):
+    """A blow was pointed at somebody else, or made to come from somebody
+    else.
+
+    `BlowTurned`'s sibling and the same omission: **turning a blow aside got
+    an event and moving one did not.** `c.redirect` rewrites the live
+    event -- `ev.target`, and `result.target` so the damage follows -- and
+    announced nothing, so a row whose whole printed effect is "the
+    triggering attack targets a creature adjacent to you instead" had no
+    observable of its own.
+
+    **The 43 rows of the 69 that looked credited were credited for the
+    redirected attack's own damage**, which is worse than the 26 that read
+    SILENT. `m115864a5` is the worked example: it fires, chooses a captive,
+    rolls, hits and moves the blow -- and what put it on the green side of
+    the list was the `DamageApplied` belonging to the power it had just
+    moved, landing inside its slice because the row put it there. An
+    unrelated chargen change altered which power the board provokes with,
+    the accident stopped, and the row went silent while firing *more* often
+    than before. #900.
+
+    `was_target` and `was_attacker` are the values **before** the move and
+    `target`/`attacker` the values after, for `BlowTurned.hit`'s reason: a
+    listener reads the new state rather than inferring a direction from the
+    event's name, and here it needs both ends -- "if an attack is redirected
+    away from you" and "if one is redirected onto you" are different
+    riders.
+
+    Only one end usually moves. `c.redirect(to=)` leaves `was_attacker ==
+    attacker` and `c.redirect(by=)` leaves `was_target == target`, so a
+    reader compares rather than assuming.
+
+    `by` is the ref that moved it, for `BlowTurned.by`'s reason.
+
+    **There is no `kind` field and there cannot be**: `Event.__init_subclass__`
+    refuses one. `Boosted` is why.
+    """
+
+    attacker: int
+    target: int
+    power: str
+    was_attacker: int
+    was_target: int
+    by: str
+
+
+@dataclass
+class UseRestored(Event):
+    """A spent use of a power was handed back.
+
+    `c.restore_use` did the work -- `Powers.restore` -- and announced it as
+    a `Note`, which `audit.DID_SOMETHING` deliberately refuses because a
+    `Note` carries no `by` and so cannot be attributed to the row that paid.
+    So the half-dozen rows whose entire Effect is that one line were
+    **silent by construction**, and `i3271p1` only showed it when an
+    unrelated chargen change made the row posable at all: it had sat on
+    `UNUSED` -- "could not be used on the test board at all" -- rather than
+    on the silent list, for its whole life. #899.
+
+    `UseSpent` is the mirror, and both exist for the reason
+    `RelationCleared` had to be added beside `RelationSet`: admitting one
+    direction and not the other leaves a row whose whole effect is the
+    inverse invisible.
+
+    `who` is the creature whose use came back, `power` the row restored, and
+    `by` the ref that restored it -- which need not be either of them.
+    """
+
+    who: int
+    power: str
+    by: str
+
+
+@dataclass
+class UseSpent(Event):
+    """A use of a power was spent **without the power running**.
+
+    `UseRestored`'s mirror, from `c.expend_row`: the price half of three
+    dozen printed lines, where a use is paid and the row never fires.
+    Nothing that goes through `dsl.use` says this, because using a power is
+    what those do -- so this is not emitted from the ordinary spend inside
+    `dsl.use`, which would announce every power use in the game and credit
+    every row for merely being used.
+
+    Same three fields as `UseRestored` and for the same reasons.
+    """
+
+    who: int
+    power: str
+    by: str
+
+
+@dataclass
 class RowStored(Event):
     """An object was given a row to hold.
 

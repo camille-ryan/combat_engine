@@ -35037,6 +35037,292 @@ def a_demoted_critical_says_so_out_loud(out: Result) -> None:
              f"{len(said)} announcement(s)")
 
 
+def a_redirected_blow_says_so_and_the_damage_follows(out: Result) -> None:
+    """Moving a blow to somebody else has to be announced, like turning one
+    aside.
+
+    `BlowTurned`'s sibling, and the omission was exact: #861 gave an event to
+    the row that stops a blow and none to the row that *moves* one.
+    `c.redirect` rewrote `ev.target` and `result.target` in place and said
+    nothing, so 26 of the 69 rows calling it read SILENT.
+
+    **The 43 that looked credited are what this rule is really for.** They
+    were credited with the redirected attack's own `DamageApplied` -- another
+    power's damage, landing inside the row's slice *because the row moved it
+    there*. `m115864a5` is the worked example and it sat on neither list:
+    #680's racial pick changed which power the audit board provokes with, the
+    borrowed damage stopped falling in the window, and the row went silent
+    while firing 21 times instead of 8. Every one of the 21 does the whole
+    job.
+
+    So the assertions below are about the **announcement** and about the
+    damage *following* the move. A rule reading only `ev.target` would pass
+    with the emit deleted, which is the state this fixes. #900.
+
+    Driven through `m115864a5`'s own body rather than by calling the verb,
+    for the standing reason: calling `c.redirect` proves the mechanism and
+    says nothing about whether a row reaches it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import BlowRedirected, Hit
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    REF = "m115864a5"
+    row = REGISTRY[REF]
+    out.that(not row.unfinished, f"{REF} carries no marker",
+             f"{row.unfinished}")
+
+    # `pose=True`, because the grab is part of the pose rather than part of
+    # the bare board: an unposed board grabs nobody and `c.grabbing()` comes
+    # back empty, which would make every assertion below vacuous. The check
+    # immediately underneath is what says so out loud rather than leaving it
+    # to be rediscovered.
+    world, me, _started = _posed(REF, 1, pose=True)
+    foe = enemies(world, me)[0]
+    captives = Cast(world=world, me=me, ref="drivers:redirect").grabbing()
+    out.that(bool(captives),
+             "the posed board really has this creature holding somebody --"
+             " the row's whole premise, and a board that grabbed nobody"
+             " would make every assertion below vacuous",
+             f"grabbing={sorted(captives)}")
+    shield = sorted(captives)[0] if captives else -1
+
+    said: list[BlowRedirected] = []
+    world.bus.on(BlowRedirected, said.append)
+
+    def blow(target: int) -> Any:
+        """A landed attack, shaped the way `resolve.attack` hands one over.
+
+        `Any` for `a_turned_blow_says_so_and_stays_turned`'s reason: `result`
+        is attached by `resolve` rather than declared on `Hit`, so typing the
+        local as the event's class makes the write and every read an error.
+        """
+        ev: Any = Hit(attacker=foe, target=target, power="mba",
+                      critical=False)
+        ev.result = AttackResult(hit=True, natural=14, total=25,
+                                 target_defence=10, target=target)
+        return ev
+
+    # -- the row moves the blow onto the captive --------------------------
+    # Swept rather than pinned to one seed. The row redirects only when its
+    # **own** attack against the captive's Fortitude lands, so a single seed
+    # is a coin flip on the die and not a fact about the row -- seed 1 misses
+    # and reported five FAILs that were nothing to do with the announcement.
+    # Same reasoning as the `AttackRolled` sweep in
+    # `a_turned_blow_says_so_and_stays_turned`.
+    hit = blow(me)
+    for seed in range(1, 25):
+        said.clear()
+        world, me, _started = _posed(REF, seed, pose=True)
+        world.bus.on(BlowRedirected, said.append)
+        foe = enemies(world, me)[0]
+        grabbed = sorted(Cast(world=world, me=me,
+                              ref="drivers:redirect").grabbing())
+        if not grabbed:
+            continue
+        shield = grabbed[0]
+        hit = blow(me)
+        c = Cast(world=world, me=me, ref=REF)
+        c.trigger = hit
+        row.body(c)
+        if said:
+            break
+
+    out.that(len(said) == 1,
+             "**moving a blow announces `BlowRedirected`** -- the event this"
+             " family had none of, and the whole of why 26 rows read SILENT"
+             " while working",
+             f"{len(said)} announcement(s)")
+    out.that(bool(said) and said[0].by == REF,
+             "and it names the row that moved it, so a rider on \"when an"
+             " attack is redirected away from you\" cannot pay out on"
+             " somebody else's interrupt",
+             f"by={said[0].by if said else None!r}")
+    out.that(bool(said) and said[0].was_target == me
+             and said[0].target == shield,
+             "and it names **both ends** -- away from whom and onto whom --"
+             " because \"redirected away from you\" and \"redirected onto"
+             " you\" are different riders and neither can be inferred from"
+             " the event's name",
+             f"{said[0].was_target if said else None} ->"
+             f" {said[0].target if said else None}, shield={shield}")
+    out.that(bool(said) and said[0].was_attacker == said[0].attacker == foe,
+             "the attacker did not move, because this row passed only `to=`"
+             " -- so a reader compares the two rather than assuming the end"
+             " it cares about changed",
+             f"{said[0].was_attacker if said else None} ->"
+             f" {said[0].attacker if said else None}")
+
+    out.that(hit.target == shield and hit.result.target == shield,
+             "the writes are still there as well as the announcement, on"
+             " **both** the event and the live result -- moving the event"
+             " alone moved the announcement and left the damage on the"
+             " creature that was spared",
+             f"ev.target={hit.target}, result.target={hit.result.target}")
+
+    # -- the control the emit is gated on: a move that moves nothing ------
+    said.clear()
+    standing: Any = blow(shield)
+    nothing = Cast(world=world, me=me, ref="drivers:noop")
+    nothing.trigger = standing
+    moved = nothing.redirect(to=shield)
+    out.that(moved is True and not said,
+             "pointing a blow at the creature it was **already** aimed at"
+             " returns True and announces nothing -- the return value is"
+             " unchanged because rows read it, and the announcement is gated"
+             " on something having actually moved",
+             f"moved={moved}, {len(said)} said")
+
+    # -- and the other end: `by=` moves the attacker, not the target ------
+    said.clear()
+    lent: Any = blow(me)
+    mover = Cast(world=world, me=me, ref="drivers:lent")
+    mover.trigger = lent
+    mover.redirect(by=shield)
+    out.that(len(said) == 1 and said[0].was_attacker == foe
+             and said[0].attacker == shield
+             and said[0].was_target == said[0].target == me,
+             "making a blow come from somebody else is the same kind of"
+             " rewrite and is announced the same way, with the target end"
+             " standing still",
+             f"{said[0] if said else None}")
+
+    # -- the negative control: nothing to move ----------------------------
+    said.clear()
+    empty = Cast(world=world, me=me, ref="drivers:empty")
+    empty.trigger = None
+    out.that(empty.redirect(to=shield) is False and not said,
+             "with no event to move, the verb refuses and announces nothing",
+             f"{len(said)} said")
+
+
+def a_restored_or_expended_use_says_so(out: Result) -> None:
+    """Handing a use back, and spending one without running the row, are each
+    announced in their own right.
+
+    Both ended in a `Note`, which `audit.DID_SOMETHING` refuses on purpose --
+    a `Note` carries no `by`, so it cannot be attributed to the row that
+    paid. A row whose entire Effect is one of these two lines was therefore
+    **silent by construction**, and `i3271p1`, whose whole body is one
+    `c.restore_use`, hid that for its entire life in the **`UNUSED`** bucket
+    rather than the silent one -- "could not be used on the test board at
+    all". #680's racial pick made its trigger reachable and it went straight
+    to silent. #899.
+
+    Two events rather than one, for the reason `RelationCleared` had to be
+    added beside `RelationSet`: admitting a direction and not its mirror is
+    how a row whose whole effect is the inverse stays invisible.
+
+    Driven through two rows' own bodies -- `i3271p1` for the restore and
+    `f2843` for the expenditure -- rather than by calling either verb.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import (
+        PowerResolved,
+        UseRestored,
+        UseSpent,
+    )
+
+    # -- the restore, through i3271p1's body ------------------------------
+    REF = "i3271p1"
+    row = REGISTRY[REF]
+    out.that(not row.unfinished, f"{REF} carries no marker",
+             f"{row.unfinished}")
+
+    world, me, _started = _posed(REF, 1)
+    powers = must(world.get(me, Powers), "the caster has a Powers component")
+    spendable = sorted(
+        r for r in powers.all
+        if (p := REGISTRY.get(r)) is not None and p.uses >= 1
+        and powers.times(r) == 0
+    )
+    out.that(bool(spendable),
+             "the posed character owns a row with a use to spend, so the"
+             " restore below has something real to hand back",
+             f"{len(spendable)} candidate(s)")
+    spent = spendable[0] if spendable else ""
+    if spent:
+        powers.note_use(spent, world.round)
+    out.that(bool(spent) and powers.times(spent) == 1,
+             "and it is spent before the row runs -- the Requirement these"
+             " cards print, and the branch `c.restore_use` returns False on",
+             f"{spent}: times={powers.times(spent) if spent else None}")
+
+    heard: list[UseRestored] = []
+    world.bus.on(UseRestored, heard.append)
+
+    c = Cast(world=world, me=me, ref=REF)
+    c.trigger = PowerResolved(actor=me, power=spent, targets=[me])
+    row.body(c)
+
+    out.that(len(heard) == 1,
+             "**handing a use back announces `UseRestored`** -- it was a"
+             " `Note`, which this harness refuses because a `Note` carries no"
+             " `by`, so this row was silent by construction",
+             f"{len(heard)} announcement(s)")
+    out.that(bool(heard) and heard[0].by == REF
+             and heard[0].who == me and heard[0].power == spent,
+             "and it names the row that paid, the creature, and which row"
+             " came back -- all three, because a rider on \"when you regain"
+             " the use of\" needs to know which",
+             f"{heard[0] if heard else None}")
+    out.that(bool(spent) and powers.times(spent) == 0,
+             "the use really is back, as well as announced",
+             f"times={powers.times(spent) if spent else None}")
+
+    # -- the negative control: nothing to hand back ----------------------
+    heard.clear()
+    again = Cast(world=world, me=me, ref="drivers:restore")
+    out.that(again.restore_use(spent, on=me) is False and not heard,
+             "restoring a row that was not used returns False and announces"
+             " nothing -- and that False **is** the printed Requirement",
+             f"{len(heard)} said")
+
+    # -- the expenditure, through f2843's body ---------------------------
+    EXP = "f2843"
+    priced = REGISTRY[EXP]
+    out.that(not priced.unfinished, f"{EXP} carries no marker",
+             f"{priced.unfinished}")
+
+    w2, mine, _begun = _posed(EXP, 1)
+    own = must(w2.get(mine, Powers), "the feat's holder has a Powers")
+    took: list[UseSpent] = []
+    w2.bus.on(UseSpent, took.append)
+
+    PRICE = "p6186"
+    if PRICE not in own.all:
+        own.all.append(PRICE)
+    before = own.times(PRICE)
+    paid = Cast(world=w2, me=mine, ref=EXP)
+    paid.expend_row(PRICE)
+
+    out.that(len(took) == 1 and took[0].power == PRICE
+             and took[0].who == mine and took[0].by == EXP,
+             "**spending a use without running the row announces"
+             " `UseSpent`**, naming the same three things -- the mirror,"
+             " admitted beside the restore rather than after somebody finds"
+             " the inverse row on the silent list",
+             f"{took[0] if took else None}")
+    out.that(own.times(PRICE) == before + 1,
+             "and the use really is gone",
+             f"{before} -> {own.times(PRICE)}")
+
+    # -- the negative control: a row this creature does not own -----------
+    took.clear()
+    stranger = Cast(world=w2, me=mine, ref="drivers:expend")
+    out.that(stranger.expend_row("p999999") is False and not took,
+             "a row the creature does not own is refused rather than lent,"
+             " and announces nothing -- lending one in order to spend it"
+             " would charge nobody",
+             f"{len(took)} said")
+
+
 def an_area_stops_being_aimable_when_a_wall_arrives(out: Result) -> None:
     """Where an area may be centred must follow the walls, not a stale answer.
 
@@ -35681,6 +35967,14 @@ DRIVERS = {
     "crit_announced": (
         a_demoted_critical_says_so_out_loud,
         "demoting or promoting a critical hit is announced, not silent (#861)",
+    ),
+    "blow_redirected": (
+        a_redirected_blow_says_so_and_the_damage_follows,
+        "moving a blow onto somebody else is announced at both ends (#900)",
+    ),
+    "use_restored": (
+        a_restored_or_expended_use_says_so,
+        "a use handed back, or spent without running the row, is said (#899)",
     ),
     "feint": (
         a_feint_is_an_action_and_one_feat_rides_it,
