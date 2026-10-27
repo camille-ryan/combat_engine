@@ -754,6 +754,37 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
             )
             for dest in sorted(step):
                 out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
+
+    # **Dragging what you already hold, which is a granted action and not a
+    # flag on the grab.** `f970b` prints "while you have the target grabbed
+    # you can pull it 1 square as a minor action", and the marker for it
+    # named `c.grab(pull_as_minor=)` -- a parameter on the hold. It cannot
+    # be one: the clause is **a line in the action menu**, so a kwarg would
+    # have had to grow its own entry here anyway and would only have hidden
+    # where the work is. #888, split out of #560.
+    #
+    # One option per (victim, destination), because which square the victim
+    # is dragged to is the puller's choice and the whole point of the line
+    # -- the same reasoning `forced_squares` records for a push.
+    from .movement import forced_squares
+    from .types import Forced
+
+    for (what, pull) in _granted(world, actor):
+        if what != "pull_grabbed":
+            continue
+        if not encounter.can_spend(actor, pull):
+            continue
+        for victim in sorted(
+                world.relations.targets(Relation.GRABBED_BY, actor)):
+            spot = world.get(actor, Position)
+            if spot is None:
+                continue
+            for dest in sorted(forced_squares(
+                    world, victim, spot.square, Forced.PULL)):
+                out.append(Action(
+                    kind="pull_grabbed", cost=pull,
+                    targets=(victim,), dest=dest, path=(dest,),
+                ))
     return out
 
 
@@ -779,7 +810,7 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
 #: hand and this set does not constrain it.
 GRANTABLE = frozenset({
     "aid_attack", "aid_defence", "command", "escape", "instinctive",
-    "move_zone", "second_wind", "shift", "stand",
+    "move_zone", "pull_grabbed", "second_wind", "shift", "stand",
 })
 
 
@@ -1641,6 +1672,18 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             if Condition.PRONE in eff.conditions:
                 world.effects.end(eff, "stood up")
         world.bus.emit(Note(text=f"{actor} stands"))
+        return True
+
+    if action.kind == "pull_grabbed":
+        # The grant says a square; `forced` is what moves anybody, so the
+        # pull goes through it rather than writing a `Position` by hand --
+        # a direct write leaves `Grid.occupants` stale and the board reads
+        # empty afterwards.
+        from .movement import forced
+        from .types import Forced
+
+        for victim in action.targets:
+            forced(world, actor, victim, Forced.PULL, 1, to=action.dest)
         return True
 
     if action.kind == "escape":

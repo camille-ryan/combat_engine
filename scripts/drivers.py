@@ -11780,6 +11780,103 @@ def a_reshaped_row_is_still_usable(out: Result) -> None:
              f" ({origin!r})")
 
 
+def pull_what_you_hold(out: Result) -> None:
+    """Dragging a grabbed creature is a **granted action**, not a flag on
+    the grab.
+
+    `f970b` prints "while you have the target grabbed you can pull it 1
+    square as a minor action", and the marker for it named
+    `c.grab(pull_as_minor=)` -- a parameter on the hold. It cannot be one:
+    the clause is a line in the action menu, so a kwarg would have had to
+    grow its own entry in `actions` anyway and would only have hidden where
+    the work is. #888, split out of #560.
+
+    **The word and its reader land together or not at all**, which is #583:
+    `c.grant_action` lays a bonus under `"<what> as <cost>"`, nothing used
+    to validate the word, and nine rows granted something no reader ever
+    looked for -- costing nothing, doing nothing, and auditing green.
+    `actions.GRANTABLE` is the gate and `drivers.granted_words` greps for
+    the comparison that proves each word is consulted.
+
+    Four things measured, and the third is the one the issue asked for:
+
+    * the grant puts `pull_grabbed` on the menu **while a grab is held**;
+    * it offers **one option per destination square**, because which square
+      the victim is dragged to is the puller's choice and the whole point of
+      the printed line;
+    * **nothing is offered to a creature grabbing nobody**, which is the
+      plant this issue names -- the reader asks `Relation.GRABBED_BY` live
+      rather than trusting the grant;
+    * and taking the option **moves the victim**, through `movement.forced`
+      rather than a `Position` write, so `Grid.occupants` does not go stale.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.actions import GRANTABLE, legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import ActionType
+
+    out.that("pull_grabbed" in GRANTABLE,
+             "`pull_grabbed` is a word `c.grant_action` may hand out")
+
+    def board(grabbing: bool):  # noqa: ANN202
+        world, me, _ = _board(seed=1)
+        enc = world.encounter
+        assert enc is not None
+        foe = sorted(enemies(world, me))[0]
+        c = Cast(world=world, me=me, ref="drivers:pull-held")
+        if grabbing:
+            c.grab(on=foe)
+            # **Two squares away, which is where this card's grab lives.**
+            # The printed line is "you can sustain the grab as long as the
+            # target is within 2 squares of you", and a pull must end
+            # *nearer* -- so against an adjacent victim `forced_squares`
+            # correctly returns nothing and the option has nowhere to go.
+            # That is not a fault in the grant: a grabbed creature ends up
+            # non-adjacent in play whenever anything moves either of them,
+            # and that is exactly when dragging it is worth a minor.
+            #
+            # Lifted and replaced rather than assigned, because writing
+            # `Position.square` alone leaves `Grid.occupants` stale and the
+            # board then reads as though the square were empty.
+            spot = world.need(me, Position).square
+            away = (spot[0] + 2, spot[1])
+            world.grid.lift(foe)
+            world.need(foe, Position).square = away
+            world.grid.place(foe, frozenset({away}))
+            world.zones.refresh()
+        # `on=me` deliberately: the default subject is `c.target`, and a
+        # bare call grants the pull to the creature being dragged.
+        c.grant_action("pull_grabbed", ActionType.MINOR, squares_=1,
+                       on=me, until=When.ENCOUNTER)
+        return world, enc, me, foe
+
+    world, enc, me, foe = board(grabbing=True)
+    pulls = [a for a in legal(world, enc, me) if a.kind == "pull_grabbed"]
+    out.that(bool(pulls),
+             f"holding a grab, the pull is on the menu ({len(pulls)} option(s))")
+    out.that(len({a.dest for a in pulls}) == len(pulls) and len(pulls) > 1,
+             "one option per destination square, so the square stays the"
+             f" puller's choice ({len({a.dest for a in pulls})} squares)")
+
+    # **The plant this issue names**, and it is a control rather than a
+    # break: the same grant on a creature holding nobody must offer nothing.
+    empty, enc2, me2, _ = board(grabbing=False)
+    idle = [a for a in legal(empty, enc2, me2) if a.kind == "pull_grabbed"]
+    out.that(not idle,
+             "and a creature grabbing nobody is offered none of it"
+             f" ({len(idle)} option(s)) -- the reader asks the relation live")
+
+    before = world.need(foe, Position).square
+    perform(world, enc, me, pulls[0])
+    after = world.need(foe, Position).square
+    out.that(after != before and after == pulls[0].dest,
+             f"taking it drags the victim {before} -> {after}, to the square"
+             " the option named")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -35839,6 +35936,9 @@ DRIVERS = {
     "a_reshaped_row_is_still_usable": (
         a_reshaped_row_is_still_usable,
         "a reshape changes the kind, and the readers must follow it"),
+    "pull_what_you_hold": (
+        pull_what_you_hold,
+        "dragging a grabbed creature is a granted action, offered live"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,

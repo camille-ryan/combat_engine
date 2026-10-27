@@ -292,7 +292,7 @@ def f970(c: Cast) -> None:
 @power("f970b", level=1, cls="", usage=DAILY, action=ActionType.STANDARD,
        reach=Melee(2), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
        attack=Attack(Ability.DEX, vs=REF),
-       dropped=("actions.GRANTABLE(pull_grabbed)", "c.forbid(weapon=)"))
+       dropped=("c.forbid(weapon=)",))
 def f970b(c: Cast) -> None:
     """The grab and the prone land on a hit *and* on a miss -- only the
     damage differs -- so both are written outside the branch.
@@ -327,3 +327,22 @@ def f970b(c: Cast) -> None:
     c.grab()
     c.prone()
     c.penalty("escape", 5)
+    # **"You can pull it 1 square as a minor action", which is a line in
+    # the action menu.** `actions.GRANTABLE` carries `pull_grabbed` now and
+    # `actions` offers it one option per legal destination square, so the
+    # choice of square stays the puller's -- which is what the clause is
+    # for. #888.
+    #
+    # `until=When.ENCOUNTER` rather than a stance: the printed condition is
+    # "while you have the target grabbed", and the grant is harmless once
+    # the grab ends because the reader asks `Relation.GRABBED_BY` live and
+    # offers nothing when the answer is empty. Tying the effect's own clock
+    # to the grab would need a second mechanism for the same gate.
+    #
+    # **`on=c.me`, and a bare call would have granted it to the victim.**
+    # This body runs once per target and `c.target` is the creature being
+    # grabbed, so the default would hand the pull to whoever is being
+    # dragged -- `content/CLAUDE.md`'s "commonest single mistake here", and
+    # silent: `grant_action` returns `None` for a missing subject rather
+    # than raising, so the clause would simply never have existed.
+    c.grant_action("pull_grabbed", ActionType.MINOR, squares_=1, on=c.me)
