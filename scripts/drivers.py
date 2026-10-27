@@ -28601,6 +28601,37 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         f"{came_back!r}",
     )
 
+    # **Somebody at 0 hp is not an actor.** The loop had a rogue at 0 hp
+    # with no surges left talking his way through two scenes, declaring
+    # intents and rolling skill checks. Nothing went red; it reads as
+    # correct, which is this component's failure mode. #808.
+    from combat_engine.story import run as runner
+
+    sick = runner.begin(mod.parse({
+        "id": "probeF", "party_level": 1, "party_size": 3, "start": "t",
+        "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                    "sets": "A room.", "exits": [],
+                    "npcs": [{"name": "the host", "wants": "to pour"}]}]},
+        Path("<driver>")), seed=4)
+    out.that(
+        len(runner.actors_for(sick)) == len(sick.party.sheets),
+        "a party with no numbers on its sheets is all present",
+        f"{len(runner.actors_for(sick))} of {len(sick.party.sheets)}",
+    )
+    sick.party.sheets[1].hp = 0
+    sick.party.sheets[2].hp = 7
+    out.that(
+        len(runner.actors_for(sick)) == len(sick.party.sheets) - 1
+        and all(a.slot != 1 for a in runner.actors_for(sick)),
+        "and the one at zero hit points is not asked to speak",
+        f"{[a.slot for a in runner.actors_for(sick)]}",
+    )
+    out.that(
+        len(runner.down(sick)) == 1,
+        "while the scene says who cannot speak, so silence is not a bug",
+        f"{runner.down(sick)}",
+    )
+
     # **A companion's declaration cannot depend on the human's line**, and
     # that invariant is what makes starting the companions before the
     # prompt safe rather than merely faster. Everybody declares at once and

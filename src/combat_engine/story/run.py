@@ -363,15 +363,39 @@ def actors_for(campaign: Campaign) -> list[beat_mod.Actor]:
     Position is the join, which is the same thing `harvest` and `_wear` match
     on and for the same reason -- a `Sheet` carries no id, because an id
     belongs to a world and a sheet outlives one.
+
+    **An unconscious character is not an actor.** `hp` at or below zero is
+    somebody face-down on the floor, and the loop happily had them
+    declaring intents, speaking, and rolling skill checks -- a rogue at
+    0 hp with no surges left talked his way through two scenes. Nothing
+    went red for it; it reads as correct, which is this component's
+    failure mode exactly (#808).
+
+    `hp is None` means full and untouched -- the sheets carry no number
+    until a fight harvests one -- so the test has to be explicit about
+    that or the whole party is silent before the first battle.
     """
     out = []
     for slot, sheet in enumerate(campaign.party.sheets):
+        if sheet.hp is not None and sheet.hp <= 0:
+            continue
         who = campaign.persona(slot)
         out.append(beat_mod.Actor(
             slot=slot, name=who.name or sheet.cls.title(), cls=sheet.cls,
             control=campaign.controls(slot), voice=who.voice, wants=who.wants,
         ))
     return out
+
+
+def down(campaign: Campaign) -> list[str]:
+    """Who is out of it, by name. Printed so the silence is explained.
+
+    A character who simply stops speaking reads as a bug. Saying they are
+    down reads as the game.
+    """
+    return [campaign.persona(slot).name or sheet.cls.title()
+            for slot, sheet in enumerate(campaign.party.sheets)
+            if sheet.hp is not None and sheet.hp <= 0]
 
 
 #: The adventure's own graph, read once per process. Built by
@@ -414,6 +438,10 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
     """
     if not (scene.affordances or scene.npcs):
         return
+    # Said once, at the top of the scene, so a character who never speaks
+    # reads as down rather than as broken.
+    if (out := down(campaign)):
+        step.say(f"  ({', '.join(out)} cannot speak.)")
     seed = seed_for(campaign, scene, "beats")
     table = table_mod.lay(campaign.party, seed=seed)
     def tell(made: beat_mod.Beat) -> None:
