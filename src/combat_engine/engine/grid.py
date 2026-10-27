@@ -241,6 +241,24 @@ class Grid:
     #: board today: the reader lands with the model and costs nothing until
     #: something fills it. Same bargain `light` above strikes.
     porous: dict[Square, str] = field(default_factory=dict)
+    #: Squares held shut by a lock, and the DC to pick it. Opening a lock is
+    #: a **standard action adjacent to the lock** by the printed rules, and
+    #: `actions._picking` is what offers it; half of `f3447` is a `+4` to
+    #: exactly that check and had nothing to be a bonus to.
+    #:
+    #: Same bargain as `porous` and `light` above, and stated for the same
+    #: reason: **a square absent from this map is unlocked, which is every
+    #: square on every board today.** The action lands with the model and
+    #: costs nothing until something fills it, so the honest reading of
+    #: `audit.py` reporting the action unreachable is "no board has a lock
+    #: yet", not "the rule does not work". #786 says that caveat out loud
+    #: and #779 is the same shape.
+    #:
+    #: What a square *does* once unlocked is terrain's business, not this
+    #: map's: picking the lock removes the entry here and leaves `blocking`
+    #: and `porous` alone. Giving a door a DC, and opening it, is the second
+    #: half #786 scopes out.
+    locked: dict[Square, int] = field(default_factory=dict)
     #: How well lit a square is, where it is not bright. Absent means
     #: `Light.BRIGHT`, which is the whole board until something darkens it --
     #: so the map is empty on every board that never mentions light, and the

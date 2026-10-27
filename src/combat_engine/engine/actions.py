@@ -130,6 +130,7 @@ def legal(
     out.extend(_charges(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
     out.extend(_mounting(world, encounter, actor))
+    out.extend(_picking(world, encounter, actor))
     out.extend(_sustaining(world, encounter, actor))
     out.extend(_dropping(world, encounter, actor))
     out.extend(_wielding(world, encounter, actor))
@@ -1133,6 +1134,41 @@ def _picking_up(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _picking(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Open Lock: a **standard action, adjacent to the lock**.
+
+    The printed rule, and the engine offered no such action -- so half of
+    `f3447` ("+4 to Thievery to open locks") had nothing to be a bonus to.
+    That row was re-aimed three times, twice at the wrong gap: it was filed
+    as a check not knowing what it was *for*, and the rules say these are
+    named actions rather than purposes. #786, on Camille's #735 call. The
+    sleight-of-hand half is deferred to the story engine, #787.
+
+    **No board carries a lock today**, so this is legal nowhere until
+    terrain grows one -- `Grid.locked`'s note says so, and the honest
+    reading of the action being unreachable is that, not that the rule is
+    broken. `drivers.open_lock` fills the map itself, which is how the rule
+    is driven at all.
+
+    Not in `GRANTABLE`: no card changes the cost of this one, and
+    `c.grant_action`'s docstring is explicit that a word with no reader is
+    carried, costs nothing and does nothing.
+    """
+    from .grid import spread
+    from .query import squares as occupies
+
+    if not world.grid.locked or not encounter.can_spend(
+        actor, ActionType.STANDARD
+    ):
+        return []
+    near = spread(occupies(world, actor), 1)
+    return [
+        Action(kind="open_lock", cost=ActionType.STANDARD, dest=sq)
+        for sq in sorted(world.grid.locked)
+        if sq in near
+    ]
+
+
 def _mounting(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Getting on, and getting off. Both printed move actions.
 
@@ -1758,6 +1794,25 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
 
         Cast(world=world, me=actor, ref="action:dismount").dismount(
             to=action.dest)
+        return True
+
+    if action.kind == "open_lock":
+        # The `+4` is read **per check** off a key of its own, not as a
+        # blanket Thievery bonus -- which is the one thing all three of
+        # `f3447`'s readings agreed on, because a standing bonus to the
+        # skill would raise every other use of it.
+        from .cast import Cast
+        from .components import Mods
+
+        dc = world.grid.locked.get(action.dest, 0)
+        mods = world.get(actor, Mods)
+        helped = mods.total("open_lock", {}) if mods is not None else 0
+        picker = Cast(world=world, me=actor, ref="action:open_lock")
+        if picker.check("thievery", dc, bonus=helped):
+            # Only the lock goes. What the square *does* once unlocked --
+            # whether it still blocks, or becomes a door -- is terrain's
+            # business and the second half #786 scopes out.
+            world.grid.locked.pop(action.dest, None)
         return True
 
     if action.kind == "escape":

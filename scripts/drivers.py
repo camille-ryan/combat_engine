@@ -35439,6 +35439,155 @@ def what_provoked_the_opening_reaches_the_attack(out: Result) -> None:
              f"{on_events[:4]}")
 
 
+def opening_a_lock_is_a_standard_action_beside_it(out: Result) -> None:
+    """Open Lock is a standard action adjacent to the lock, and half of
+    `f3447` is a `+4` to exactly that check.
+
+    The engine offered no such action, so the bonus had nothing to be a
+    bonus *to*. `f3447` was re-aimed three times and twice at the wrong
+    gap -- filed as a check that cannot be told what it is for, where the
+    printed rules say these are named **actions**, not purposes. #786, on
+    Camille's #735 call; the sleight-of-hand half is deferred (#787).
+
+    **This rule fills `Grid.locked` itself, because no board carries a lock
+    and that is the point.** The map lands with the action on the same
+    bargain `porous` and `light` already struck -- absent means unlocked,
+    which is every square on every board -- so the action is legal nowhere
+    until terrain grows one. That is a stated limit, not a working feature,
+    and it is the one thing #786 asks be said out loud rather than read off
+    a green check.
+
+    The `+4` is driven through `f3447`'s own body, and the control that
+    matters is the **adjacency**: a lock two squares away is offered
+    nothing, which is what makes this an action with a reach rather than a
+    button.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.types import ActionType
+
+    row = REGISTRY["f3447"]
+    out.that(row.dropped == ("story.skill_use()",),
+             "`f3447` keeps one marker, for the sleight-of-hand half that"
+             " went to the story engine -- the lock half is no longer"
+             " among them",
+             f"{row.unfinished}")
+
+    world, me, _started = _posed("f3447", 1)
+    enc = world.encounter
+    world.turn = me
+    spot = must(world.get(me, Position), "the caster has a Position")
+    here = sorted(spot.squares)[0]
+    beside = (here[0] + 1, here[1])
+    far = (here[0] + 4, here[1])
+
+    out.that(not world.grid.locked,
+             "no board carries a lock, which is why this rule lays one --"
+             " and why the action is legal nowhere in play until terrain"
+             " grows one. A stated limit, not a passing check",
+             f"{world.grid.locked}")
+
+    # -- nothing to pick, nothing offered ---------------------------------
+    out.that(not [a for a in legal(world, enc, me) if a.kind == "open_lock"],
+             "with no lock on the board the action is not offered at all",
+             "none")
+
+    # -- a lock out of reach is still not offered -------------------------
+    world.grid.locked[far] = 20
+    out.that(not [a for a in legal(world, enc, me) if a.kind == "open_lock"],
+             "**and a lock four squares away is not offered either** -- the"
+             " printed rule is adjacency, so this is an action with a reach"
+             " rather than a button. The control a rule asserting only the"
+             " happy case would miss",
+             f"{sorted(world.grid.locked)}")
+
+    # -- beside it, it is -------------------------------------------------
+    world.grid.locked[beside] = 20
+    offers = [a for a in legal(world, enc, me) if a.kind == "open_lock"]
+    out.that(len(offers) == 1 and offers[0].dest == beside,
+             "standing beside a lock, it is offered -- and names **that**"
+             " lock, not the one out of reach",
+             f"{[a.dest for a in offers]}")
+    out.that(all(a.cost is ActionType.STANDARD for a in offers),
+             "as a standard action, which is the printed cost",
+             f"{sorted({a.cost for a in offers})}")
+
+    # -- and the row's own +4 is read, per check --------------------------
+    REGISTRY["f3447"].body(Cast(world=world, me=me, ref="f3447"))
+    mods = must(world.get(me, Mods), "the caster has Mods")
+    out.that(mods.total("open_lock", {}) == 4,
+             "`f3447`'s body lays a `+4` on a key of its **own**, read only"
+             " by this check -- not a blanket Thievery bonus, which would"
+             " raise every other use of the skill and is the fault that"
+             " row's note has warned about since its first version",
+             f"{mods.total('open_lock', {})}")
+    out.that(mods.total("thievery", {}) == 0,
+             "and the skill itself is untouched, which is that distinction"
+             " asserted rather than described",
+             f"{mods.total('thievery', {})}")
+
+    # -- taking it rolls the check against the lock's DC ------------------
+    rolled: list[Any] = []
+    world.bus.on(SkillCheck, rolled.append)
+    out.that(perform(world, enc, me, offers[0]) if offers else False,
+             "taking the action succeeds",
+             f"{offers[0] if offers else None}")
+    out.that(len(rolled) == 1 and rolled[0].skill == "thievery",
+             "**and it rolls a Thievery check**, which is the observable --"
+             " a `SkillCheck` the harness can see, rather than a quiet grid"
+             " write",
+             f"{[(e.skill, getattr(e, 'dc', None)) for e in rolled]}")
+
+    # **The lock has to actually open, or the control below is vacuous.**
+    # A DC of 1 rather than 20, so this does not ride on the die: without
+    # this assertion a failed DC-20 roll would leave the lock shut and the
+    # "unbeatable DC" check below would pass for the wrong reason.
+    world.grid.locked[beside] = 1
+    # **The budget has to be refreshed between attempts, and not doing so is
+    # what made the first draft of the control vacuous.** `perform` spends
+    # the standard action, so the second and third attempts found
+    # `can_spend` False, were offered nothing, and did nothing -- the
+    # "unbeatable DC leaves it shut" assertion was green because *no roll
+    # happened*, not because the roll failed.
+    must(world.get(me, Budget), "the caster has a Budget").refresh()
+    easy = [a for a in legal(world, enc, me) if a.kind == "open_lock"]
+    out.that(len(easy) == 1,
+             "with the turn's standard action back, the lock beside it is"
+             " offered again",
+             f"{[a.dest for a in easy]}")
+    if easy:
+        perform(world, enc, me, easy[0])
+    out.that(beside not in world.grid.locked,
+             "**a lock it can beat really opens** -- the success half,"
+             " without which the failure half below would be green whatever"
+             " the verb did",
+             f"{sorted(world.grid.locked)}")
+
+    # -- a DC nothing can beat leaves the lock shut -----------------------
+    world.grid.locked[beside] = 99
+    must(world.get(me, Budget), "the caster has a Budget").refresh()
+    shut = [a for a in legal(world, enc, me) if a.kind == "open_lock"]
+    out.that(len(shut) == 1,
+             "and a re-locked square is offered once more, so the attempt"
+             " below really is made",
+             f"{[a.dest for a in shut]}")
+    if shut:
+        perform(world, enc, me, shut[0])
+    out.that(beside in world.grid.locked,
+             "a DC nothing can beat leaves the lock shut, so the action is"
+             " a check rather than a door-opener -- the negative control"
+             " that a rule only ever picking a DC 20 lock would miss",
+             f"{sorted(world.grid.locked)}")
+    out.that(far in world.grid.locked,
+             "and the far lock is untouched throughout, so picking one lock"
+             " does not clear the map",
+             f"{sorted(world.grid.locked)}")
+
+
 def mounting_is_an_action_and_a_size_rule_with_an_exception(
     out: Result,
 ) -> None:
@@ -36390,6 +36539,10 @@ DRIVERS = {
     "blow_redirected": (
         a_redirected_blow_says_so_and_the_damage_follows,
         "moving a blow onto somebody else is announced at both ends (#900)",
+    ),
+    "open_lock": (
+        opening_a_lock_is_a_standard_action_beside_it,
+        "opening a lock is a standard action adjacent to it (#786)",
     ),
     "mounting": (
         mounting_is_an_action_and_a_size_rule_with_an_exception,

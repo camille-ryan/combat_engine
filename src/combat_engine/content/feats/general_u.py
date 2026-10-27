@@ -155,8 +155,6 @@ _ASSOCIATED = {"f3427": ("p5919", "p1341"), "f3429": ("p1401", "p501")}
 #: of hand is Camille's deferral to the story engine (#787), because it
 #: palms an unattended object and is judged by onlookers, neither of which
 #: is on a board. The escape half of the same card already plays.
-CIRCUMSTANCE = ("actions.open_lock()", "story.skill_use()")
-
 #: Large and up, for the three feats that turn on a big enemy.
 BIG = (Size.LARGE, Size.HUGE, Size.GARGANTUAN)
 #: The heal half of the artificer's infusion feature, by ref.
@@ -737,7 +735,7 @@ def f3446(c: Cast) -> None:
 
 
 @power("f3447", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=CIRCUMSTANCE)
+       reach=PERSONAL, target=SELF, dropped=("story.skill_use()",))
 def f3447(c: Cast) -> None:
     """The escape half plays -- escaping a grab is a move action the engine
     offers and rolls, Acrobatics against the grabber's Reflex or Athletics
@@ -752,20 +750,25 @@ def f3447(c: Cast) -> None:
     object. They are named actions, not purposes, and the engine offers
     neither.
 
-    So the Thievery half splits, on Camille's call (#735):
+    The Thievery half split on Camille's call (#735), and the first of the
+    two is written now:
 
-    * **opening locks** is `actions.open_lock()`, and #786 says the honest
-      caveat out loud -- the action is buildable, but no square carries a
-      lock, so it would be legal nowhere until terrain grows one;
+    * **opening locks** is a standard action adjacent to the lock
+      (`actions._picking`, #786), so the `+4` has somewhere to be read.
+      The honest caveat stays: no square carries a lock yet, so the action
+      is legal nowhere until terrain grows one -- `Grid.locked` says so,
+      and that is why this clause is correct and currently unexercised in
+      play rather than working;
     * **sleight of hand** goes to the story engine (#787), because it palms
       an unattended object and is judged by onlookers, and neither of those
-      is on a board.
+      is on a board. That is the one symbol still marked.
 
-    The +4 has to be **per check** either way. A blanket Thievery bonus
-    would raise every use of the skill, which is the fault this note has
-    warned about since its first version and the one thing all three
-    readings agreed on."""
+    The +4 is **per check**, on a key of its own rather than on the skill.
+    A blanket Thievery bonus would raise every other use of it, which is
+    the fault this note has warned about since its first version and the
+    one thing all three readings agreed on."""
     c.bonus("escape", 4, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.bonus("open_lock", 4, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
 @power("f3448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
