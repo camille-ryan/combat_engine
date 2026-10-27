@@ -223,10 +223,19 @@ def _report(
 
     jready, jwaiting, stale, unchecked = [], [], [], []
     jsourced: list[tuple[str, str]] = []
+    covered: list[tuple[str, tuple[str, ...]]] = []
     for ref, entry in sorted(entries.items()):
         wants = entry.get("wants", "")
         if ref in declared:
             stale.append((ref, wants))
+            continue
+        arrived = _covered(entry)
+        if arrived:
+            # **Stale, and invisible to the test above.** A descriptive key
+            # is in `declared` for nothing, so the only staleness test this
+            # report had could never fire for the entries it most needed to
+            # fire for. #559.
+            covered.append((ref, arrived))
             continue
         if wants.startswith(SOURCE_GAP):
             # **The same separation the tree half makes, and this half did
@@ -250,7 +259,7 @@ def _report(
         else:
             jwaiting.append((ref, wants, entry.get("why", "")))
 
-    if jready or (not only_ready and (jwaiting or stale)):
+    if jready or (not only_ready and (jwaiting or stale or covered)):
         print(f"\n  in {BLOCKED.relative_to(ROOT)}, no row to decorate")
     for ref, wants, why in jready:
         print(f"  READY   {ref:<10} {wants} exists now — {why}")
@@ -259,6 +268,9 @@ def _report(
             print(f"  blocked {ref:<10} {wants or '(no method named)'} — {why}")
         for ref, wants in stale:
             print(f"  written {ref:<10} was waiting on {wants}; drop it from the list")
+        for ref, by in covered:
+            print(f"  covered {ref:<10} {' '.join(by)} declared and finished; "
+                  f"drop it from the list")
         for ref, wants in jsourced:
             print(f"  source  {ref:<10} {wants} — the page does not print "
                   f"it; nothing to build")
@@ -315,7 +327,19 @@ def _report(
               f"page does not print, so they cannot fully clear")
     print(f"  {BLOCKED.relative_to(ROOT)}: {len(jready)} ready, "
           f"{len(jwaiting)} still blocked, {len(jsourced)} waiting on the "
-          f"compendium, {len(stale)} to remove")
+          f"compendium, {len(stale) + len(covered)} to remove")
+    # **Absence of a `covered_by` is not a claim that nothing covers the
+    # entry**, and saying so is the whole point of printing this. The field
+    # only answers for an entry waiting on a **ref**; most are waiting on a
+    # symbol, where `wants` is already the right question and this would add
+    # nothing. Printed so a reader can tell "checked and not covered" from
+    # "never asked" -- the two were indistinguishable before #559, and
+    # three entries sat stale in the gap.
+    blind = [r for r in entries if not entries[r].get("covered_by")]
+    if blind:
+        print(f"  {len(blind)} of {len(entries)} entr(ies) name no "
+              f"`covered_by`, so staleness is unchecked for them -- a ref to "
+              f"name, not a symbol, is what the field is for")
     if unchecked:
         # Loud, and a non-zero exit. Printing a line and carrying on was
         # the whole failure: the summary read "0 ready" and nobody
@@ -839,6 +863,49 @@ def _declared() -> dict:
     from combat_engine.content import declared
 
     return declared()
+
+
+def _covered(entry: dict) -> tuple[str, ...]:
+    """The entry's `covered_by` refs, if **every** one has arrived.
+
+    `blocked.json` is for rows that are *genuinely absent*, so its keys
+    cannot be positional -- there is no ref to key on until the row exists.
+    That is the convention Camille settled on #559: the tree stays
+    positional and this file stays descriptive, with a gate rather than a
+    migration. The cost of it is that an entry goes stale **silently** the
+    day its rows land, because the only staleness test available was
+    `ref in declared` and a descriptive key is in `declared` for nothing.
+
+    So an entry may name the refs whose arrival would make it moot, and this
+    asks whether they are **declared and not themselves unfinished** -- the
+    same question `_one` asks of a ref in a `wants`, and for the same
+    reason: a declared row carrying markers of its own has not arrived.
+
+    **Every one, not any.** An entry about a feature with four sub-options
+    is not moot when the first lands, and `any` would have called it stale
+    there.
+
+    **Hand-written, never inferred from the prose.** An entry's prose names
+    the half that already exists at least as often as the half that is
+    missing -- `cf:assassin-training-guild` names the granted row it is
+    *not* waiting on -- so deriving coverage from it would rebuild the
+    false-READY fault this field exists to fix. That fault is what #559
+    measured: 1 of 3 READY verdicts real, and reading one of the stale
+    entries cost a duplicated 90-line row.
+    """
+    want = entry.get("covered_by") or ()
+    if isinstance(want, str):
+        want = [want]
+    if not want:
+        return ()
+    from combat_engine.content import declared
+
+    rows = declared()
+    arrived = tuple(
+        r for r in want
+        if (got := rows.get(r)) is not None and not got.unfinished
+    )
+    return arrived if len(arrived) == len(want) else ()
 
 
 def _symbols(wants: str) -> list[str]:
