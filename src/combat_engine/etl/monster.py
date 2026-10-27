@@ -742,6 +742,30 @@ def _abilities(m: Monster, body: str) -> None:
         for off, name in marks:
             if off < match.start() and name:
                 section = name
+        # **A bolded label ending in a colon is a clause of the ability
+        # above, not the start of a new one.** The earlier dialect splits
+        # abilities on bold headings, so "Secondary Attack:" inside a card
+        # read to the splitter as its own ability -- which left the parent
+        # incomplete *and* gave the creature a standard at-will it does not
+        # have. `m4756` is the case: its Blackleaf Arrow promises "on a hit,
+        # <it> makes a secondary attack against the same target" and the
+        # line that attack rolls on was filed as `m4756a3`.
+        #
+        # **Folded, not dropped.** Returning early without the text would
+        # lose the payoff and leave the parent incomplete, which is the
+        # worse half of #485 rather than a fix for it.
+        #
+        # The colon is an exact discriminator, which #485's "1 of 13,432"
+        # already implied: no real ability name ends in one. Measured before
+        # landing -- names ending in a colon go 2 -> 0 and `monster_power`
+        # drops by exactly the one row.
+        if _is_clause_heading(head) and m.abilities:
+            tail = _ability_spec(body, match.end(), head, m.abilities[-1])
+            if tail:
+                parent = m.abilities[-1]
+                parent.spec = f"{parent.spec.rstrip()} {tail.lstrip()}".strip()
+            continue
+
         ability = _one_ability(head, index, section)
         if ability is None:
             continue
@@ -749,6 +773,18 @@ def _abilities(m: Monster, body: str) -> None:
         if ability.spec or ability.name:
             m.abilities.append(ability)
             index += 1
+
+
+def _is_clause_heading(head: str) -> bool:
+    """A bolded label ending in a colon: a clause, not an ability. #485.
+
+    `_one_ability` reads `<b>…</b>` as the name, so the earlier dialect's
+    bold-heading split cannot tell an ability from a labelled clause inside
+    one. The colon is what the pages use for the second and nothing for the
+    first.
+    """
+    name = re.search(r"<b>(.*?)</b>", head, re.S)
+    return bool(name) and text(name.group(1)).strip().endswith(":")
 
 
 def _is_footer(head: str) -> bool:

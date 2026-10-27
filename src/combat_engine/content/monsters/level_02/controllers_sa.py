@@ -560,38 +560,51 @@ def m4756a1(c: Cast) -> None:
     reach=Ranged(15),
     target=ONE_CREATURE,
     keywords=[Keyword.POISON, Keyword.WEAPON],
-    dropped=("etl.monster.secondary_line()",),
 )
 def m4756a2(c: Cast) -> None:
     """The shortbow attack is the creature's own ranged row, run at this row's
-    action cost so every rider that reads it still does. The secondary attack
-    the card promises has no line at all in the extraction -- no bonus, no
-    defence, no effect -- so it is named rather than invented."""
-    c.use_power("m4756a1", on=c.target)
+    action cost so every rider that reads it still does.
 
+    **The secondary attack is written now, and the line it rolls on was
+    never missing -- it was filed as a separate ability.** The old note here
+    said it "has no line at all in the extraction -- no bonus, no defence,
+    no effect", and that was true of what the importer produced. On the card
+    the secondary is a **labelled clause of this ability**: a bolded label
+    ending in a colon, then its own action and usage, then `+6 vs Fortitude`
+    and dazed plus ongoing 3, save ends both.
 
-@power(
-    "m4756a3",
-    level=2,
-    usage=AT_WILL,
-    action=STANDARD,
-    reach=Melee(1),
-    target=ONE_CREATURE,
-    attack=Attack(vs=FORT, printed=6),
-)
-def m4756a3(c: Cast) -> None:
-    """"Save ends both" is one effect carrying both halves, so `ongoing=` on
-    the condition rather than a second hold with a second saving throw."""
-    if c.strike():
+    The bold-heading split read that colon-ended label as the start of a new
+    ability, so the line was extracted as a sixth row of this stat block --
+    a standard at-will this creature does not have -- and *this* row was left
+    naming an engine gap for a clause that had simply been filed elsewhere.
+    `etl.monster._is_clause_heading` now folds a colon-ended heading back
+    into the ability above it. #485.
+
+    On a hit the creature makes the secondary against the same target, so
+    `c.landed` after the nested use is the printed gate, and it is the
+    convention two other monster rows in this tree already use for a rider
+    on a borrowed attack.
+
+    The bonus goes through `scaling.trim` rather than in bare, because the
+    6 is a printed total and the header this clause used to live in would
+    have had the level taken back out of it.
+    """
+    victim = c.target
+    if victim is None:
+        return
+    if not (c.use_power("m4756a1", on=victim) and c.landed):
+        return
+    if c.attack(c.world.scaling.trim(6, c.level), FORT, on=victim):
         c.condition(
             Condition.DAZED,
             until=When.SAVE_ENDS,
             ongoing=(3, DamageType.UNTYPED),
+            on=victim,
         )
 
 
 @power(
-    "m4756a4",
+    "m4756a3",
     level=2,
     usage=Usage.RECHARGE,
     recharge=5,
@@ -602,14 +615,14 @@ def m4756a3(c: Cast) -> None:
     attack=Attack(vs=REF, printed=6),
     damage=Damage("2d8", 2, kind=LIMITED),
 )
-def m4756a4(c: Cast) -> None:
+def m4756a3(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.immobilized(until=When.SAVE_ENDS)
 
 
 @power(
-    "m4756a5",
+    "m4756a4",
     level=2,
     usage=ENCOUNTER,
     action=FREE,
@@ -618,7 +631,7 @@ def m4756a4(c: Cast) -> None:
     trigger="it makes an attack roll",
     on=Trigger(AttackRolled, by_me, "it makes an attack roll"),
 )
-def m4756a5(c: Cast) -> None:
+def m4756a4(c: Cast) -> None:
     """The card prints no Trigger line, and `c.reroll_attack` reads the roll off
     one -- there is nothing else on the board that holds a spent d20. So the
     sentence is declared against its own rolls, which is the only moment the
@@ -629,14 +642,14 @@ def m4756a5(c: Cast) -> None:
 
 
 @power(
-    "m4756a6",
+    "m4756a5",
     level=2,
     usage=AT_WILL,
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
 )
-def m4756a6(c: Cast) -> None:
+def m4756a5(c: Cast) -> None:
     """Rough ground costs it nothing while it shifts, and nothing else.
 
     `when="shift"` is the narrowing every one of these cards prints and this
