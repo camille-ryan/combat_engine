@@ -29498,6 +29498,66 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         f"{theirs_prompt[-110:]!r}",
     )
 
+    # **And is printed as well, because the DM is not a reliable courier.**
+    # It drops roughly a quarter of what it is handed (#809), and a fact
+    # the dice earned reaching nobody is the one loss a player is never
+    # owed. A restatement is the cheaper failure.
+    shared = mod.parse({
+        "id": "probeG", "party_level": 1, "party_size": 3, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 1,
+            "npcs": [{"name": "the host", "wants": "to pour"}],
+            # DC 14 and seed 3, chosen because they produce the case
+            # this is about: a companion knows it and the player does
+            # not. At DC 1 everybody passes and there is no companion-only
+            # fact to attribute, so the assertion had nothing to bite on.
+            "lore": [{"fact": "the jewel was stolen from a temple",
+                      "skill": "history", "dc": 14}]}]},
+        Path("<driver>"))
+    class Mute(bt.Director):
+        """Says nothing about the facts, so printing is the only route.
+
+        **The scripted DM's reaction *is* the joined facts**, so with it a
+        recalled fact reaches the page whether or not it is printed, and
+        both breaks stayed green. This driver has now been caught by that
+        exact shape four times.
+        """
+
+        def react(self, playing: bt.Playing, intents: list[bt.Intent],
+                  rulings: list[bt.Ruling],
+                  recalled: list[bt.Recalled] | None = None,
+                  standing: list[bt.Standing] | None = None) -> str:
+            del playing, intents, rulings, recalled, standing
+            return "The host pours."
+
+    # Seed 3 and not 2: a scene's dice derive from
+    # `f"{seed}:{module}:{scene}"`, so the module id is part of the
+    # stream and a seed found under a different id rolls differently.
+    camp4 = run_mod.begin(shared, seed=3)
+    camp4.control = ["human"] + ["ai"] * (len(camp4.party.sheets) - 1)
+    made4 = run_mod.step(camp4, shared, record=False,
+                         director=Mute(scripted=True),
+                         ask_human=lambda a, _s: ("", "listens"))
+    got4 = [r for b in (made4.played.beats if made4.played else [])
+            for r in b.recalled if r.knew]
+    theirs4 = [r for r in got4 if not r.mine]
+    lines4 = [ln.strip() for ln in made4.lines]
+    out.that(
+        bool(got4)
+        and all(any(r.fact in ln for ln in lines4) for r in got4),
+        "every recalled fact reaches the page, whoever remembered it",
+        f"{len(got4)} recalled, "
+        f"{sum(any(r.fact in ln for ln in lines4) for r in got4)} printed",
+    )
+    out.that(
+        bool(theirs4)
+        and all(any(f"{r.knew[0][1]} knows:" in ln for ln in lines4)
+                for r in theirs4),
+        "and a companion's is attributed to them by name",
+        f"{[ln[:50] for ln in lines4 if 'knows:' in ln]}",
+    )
+
 
 
 def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:

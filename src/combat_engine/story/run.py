@@ -454,6 +454,14 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         for knew in made.recalled:
             if knew.mine:
                 step.say(f"  You know: {knew.fact}")
+            elif knew.knew:
+                # **A companion's recall is printed too, attributed.** It
+                # still goes to the DM, which says it in their voice -- but
+                # the DM was the only path and it drops roughly a quarter
+                # of what it is handed (#809). A fact the dice earned
+                # reaching nobody is the one loss a player is never owed,
+                # and a restatement is the cheap failure to prefer.
+                step.say(f"  {knew.knew[0][1]} knows: {knew.fact}")
         # **A companion's intent is not printed.** It goes to the DM, which
         # writes it into the paragraph below -- so what a reader sees is one
         # piece of prose in which those things happened, not four captioned
