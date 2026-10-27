@@ -2348,6 +2348,34 @@ def reach_of(
       is not a thing any of the fifteen cards says, and widening it would
       make a dagger feat refuse the dagger.
 
+    **The five sites that used to read the header are routed through here,
+    and the rule above is now true of `dsl.py`.** `#894` found them: three
+    wrapped the print in `switched(...)`, which is *half* the resolution --
+    it applies the state-switch and not the reshape -- and two read the
+    `kind` straight off the print. Measured rather than argued, with a
+    replacing reshape in force:
+
+        p.reach_of(0)                 Area burst 1 within 10
+        switched(p.reach_of(0))       Area burst 1 within 10
+        reach_of(world, actor, ...)   Close burst 1
+
+    So the `kind` itself moved, and the two sites branching on it --
+    `_can_land`'s first and `_auto_targets` -- demanded an origin for a row
+    that had become a close burst and needed none. `candidates` computed
+    `aimed` the same wrong way. That is a live disagreement under any
+    reshape, not a latent one, which is why this stopped being an
+    enhancement.
+
+    The sites are `candidates`, `_can_land` (both), `_within_reach` and
+    `_auto_targets`. `_within_reach` is the one the **action menu** reads,
+    so it is the site where a wrong answer is offered rather than merely
+    computed -- and the reason this change owes a `winrate` reading and not
+    only a plant.
+
+    `_aimed_shape` is now the only reader of `Power.reach_of` in this module
+    that holds a world, which is what makes the claim checkable: a sixth
+    site would show up as a second one.
+
     `area_of` resolves its branch through `_aimed_shape` below, which is this
     function's first half factored out, and still applies the swap itself: it
     needs the unswapped `kind` first to decide whether a `blast_size` stretch
@@ -2995,7 +3023,12 @@ def candidates(
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
-    reach = p.reach_of(branch, augment)
+    # **Through the one door, not off the header.** A replacing reshape
+    # changes the `kind` -- `i2467p1` turns an area into a single square --
+    # so the print says "area burst" while this creature is holding a
+    # close burst, and `aimed` came out True for a row that needs no
+    # origin at all. #894.
+    reach = reach_of(world, actor, p, branch, augment)
     aimed = origin is not None and reach.kind in ("area_burst", "close_blast")
     if aimed and origin not in aim_points(world, actor, p, augment):
         return []
@@ -3278,7 +3311,11 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
     adjacent square, and a blast that happens to point away from everybody
     reported itself unusable while three creatures stood in range.
     """
-    if p.reach_of(branch, augment).kind in ("area_burst", "close_blast"):
+    # The reshaped kind, for the reason `candidates` records above: this
+    # asks whether the row needs an origin, and a reshape is exactly what
+    # can stop it needing one. #894.
+    if reach_of(world, actor, p, branch, augment).kind in (
+            "area_burst", "close_blast"):
         return any(
             candidates(world, actor, p, aim, branch, augment)
             for aim in aim_points(world, actor, p, augment)
@@ -3290,7 +3327,10 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
         # sword -- which is every time a charge is the right thing to do.
         from .query import distance_between, enemies, speed
 
-        far = (switched(world, actor, p.reach_of(branch, augment)).size
+        # `switched` alone is half the resolution: it applies the
+        # state-switch and not the reshape, so a reshaped size read as the
+        # printed one. #894.
+        far = (reach_of(world, actor, p, branch, augment).size
                + speed(world, actor, {"charge": True}))
         return any(
             distance_between(world, actor, foe) <= far for foe in enemies(world, actor)
@@ -3548,7 +3588,10 @@ def _within_reach(
       whose squares were entered, and a caller passes this only for one of them.
       A bare opt-out is what the next author copies by habit.
     """
-    r = switched(world, actor, p.reach_of(branch, augment))
+    # The whole resolution rather than the state-switch alone -- see #894.
+    # This one is read by the action menu, so it is also the site where a
+    # wrong answer is *offered* rather than merely computed.
+    r = reach_of(world, actor, p, branch, augment)
     if r.kind not in ("melee", "ranged") or charge or reached:
         return True
     if trigger is not None and type(trigger).__name__ in _DEPARTING:
@@ -3961,7 +4004,10 @@ def _auto_targets(
     entirely. Two answers to "where is this power" is one too many.
     """
     want = target_of(world, actor, p, augment)
-    if origin is None and p.reach_of(branch, augment).kind in ("area_burst", "close_blast"):
+    # The reshaped kind: whether an origin must be chosen before targets is
+    # the same question `_can_land` asks, and takes the same answer. #894.
+    if origin is None and reach_of(world, actor, p, branch, augment).kind in (
+            "area_burst", "close_blast"):
         best: list[int] = []
         chosen: Square | None = None
         for aim in aim_points(world, actor, p, augment):

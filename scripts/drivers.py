@@ -11703,6 +11703,83 @@ def a_darkness_a_light_cannot_lift(out: Result) -> None:
              f" ({held!r})")
 
 
+def a_reshaped_row_is_still_usable(out: Result) -> None:
+    """A reshape changes the `kind`, and five readers were reading the print.
+
+    `dsl.reach_of`'s docstring states the rule this module is organised
+    around -- *every reader that has a world and an actor must come through
+    here* -- and names the ones that cannot. **Five sites in `dsl.py` did
+    not come through it and were named nowhere.** Three wrapped the print in
+    `switched(...)`, which is only *half* the resolution: it applies the
+    state-switch and not the reshape. Two read the `kind` straight off the
+    header.
+
+    That matters because a replacing reshape can change the `kind` itself --
+    `i2467p1` prints "its area changed to 1 square" -- so the print says
+    `area_burst` while the creature is holding a `close_burst`:
+
+        p.reach_of(0)                 Area burst 1 within 10
+        switched(p.reach_of(0))       Area burst 1 within 10
+        reach_of(world, actor, ...)   Close burst 1
+
+    **And the consequence was a row that could not be used at all.**
+    `_can_land` asked the header whether the row needs an origin, got
+    `area_burst`, and looked for an origin that a close burst does not have
+    -- so it answered **False** and the row left the menu. Which is the
+    exact fault `_can_land`'s own docstring was written against: *"a blast
+    that happens to point away from everybody reported itself unusable while
+    three creatures stood in range."*
+
+    Measured rather than reasoned, on a row printed `Area burst 1 within 10`
+    reshaped to `close_burst`:
+
+        before   _can_land False   <- the row is gone
+        after    _can_land True
+
+    The printed case is the control and is unchanged, which is what says the
+    fix did not simply make `_can_land` answer True for everything. #894.
+    """
+    import dataclasses
+
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+
+    REF = "m4756a3"
+
+    def ask(reshaped: bool) -> tuple[str, bool, object]:
+        world, me, _ = _board(seed=1)
+        # Narrowed: `dsl.get` answers `Power | None`, and `ty` reports an
+        # unnarrowed one as three argument-type diagnostics rather than one.
+        p = must(dsl.get(REF), "the row under test")
+        c = Cast(world=world, me=me, ref="drivers:reshaped-usable")
+        if reshaped:
+            c.reshape_area(
+                lambda r: dataclasses.replace(r, kind="close_burst", size=1),
+                ref=REF, until=When.ENCOUNTER,
+            )
+        shape = dsl.reach_of(world, me, p, 0, 0)
+        _, origin = dsl._auto_targets(world, me, p, None, 0, 0)
+        return shape.kind, dsl._can_land(world, me, p, 0, 0), origin
+
+    kind, lands, origin = ask(reshaped=False)
+    out.that(kind == "area_burst" and lands and origin is not None,
+             "printed, the row is an area burst, lands, and picks an origin"
+             f" ({kind}, can_land={lands}, origin={origin})")
+
+    kind, lands, origin = ask(reshaped=True)
+    out.that(kind == "close_burst",
+             f"a replacing reshape changes the kind itself ({kind})")
+    out.that(lands,
+             "and the reshaped row is still usable -- reading the header here"
+             f" reported it unusable while its targets stood in range"
+             f" (can_land={lands})")
+    out.that(origin is None,
+             "with no origin, because a close burst has none to choose"
+             f" ({origin!r})")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -35759,6 +35836,9 @@ DRIVERS = {
     "a_darkness_a_light_cannot_lift": (
         a_darkness_a_light_cannot_lift,
         "a zone that cannot be illuminated, and who still sees through it"),
+    "a_reshaped_row_is_still_usable": (
+        a_reshaped_row_is_still_usable,
+        "a reshape changes the kind, and the readers must follow it"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,
