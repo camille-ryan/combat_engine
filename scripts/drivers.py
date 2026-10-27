@@ -29296,8 +29296,9 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
 
         def react(self, playing: bt.Playing, intents: list[bt.Intent],
                   rulings: list[bt.Ruling],
-                  recalled: list[bt.Recalled] | None = None) -> str:
-            del playing, intents, rulings, recalled
+                  recalled: list[bt.Recalled] | None = None,
+                  standing: list[bt.Standing] | None = None) -> str:
+            del playing, intents, rulings, recalled, standing
             return "The host refills a cup."
 
     camp3 = run_mod.begin(earned, seed=7)
@@ -29474,6 +29475,155 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
             "and a fact whose source cannot be read is refused, not guessed",
             f"{refused or 'it loaded anyway'}",
         )
+
+
+def the_dm_may_invent_but_not_contradict(out: Result) -> None:
+    """#830, as Camille ruled it rather than as it was filed.
+
+    The issue's body asks for the DM to stop inventing. Its **one comment
+    reverses that**: *"it's actually intended behavior for the DM to make
+    things up and them to become canon. However, the made up facts MUST be
+    consistent with the rest of the story."*
+
+    So three things are asserted, and the first two are the ruling:
+    a subject with facts on record arrives as "do not contradict", a
+    subject with none arrives as a licence to invent, and what gets
+    invented is written down so the next beat is bound by it too.
+
+    No model: `Director(scripted=True)` answers the guard with `vaguely`,
+    so this tests the plumbing and the prompt-building, which is the half
+    that is code.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import beat as bt
+    from combat_engine.story import graph as gr
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import table as tbl
+
+    party = run_mod.Party.of(["fighter", "cleric"], level=1, seed=3)
+    canon = gr.Graph()
+    canon.add(gr.Entity(id="gordi", name="Gordi", kind="person", facts=[
+        gr.Fact("he is missing, and worked for the banker", "page",
+                where="p10", quote="a man named Gordi who worked for")]))
+    scene = mod.parse({
+        "id": "probeD", "party_level": 1, "party_size": 2, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T",
+            "sets": "Dinner.", "exits": [], "max_beats": 1,
+            "npcs": [{"name": "Benwick", "wants": "an answer",
+                      "looks": "a well-fed holy man"}]}]},
+        Path("<driver>")).scene("t")
+
+    def asked(line: str, *, with_canon: bool = True) -> bt.Beat:
+        board = tbl.lay(party, seed=23)
+        try:
+            live = bt.Playing(scene=scene, canon=canon if with_canon else None,
+                              told=gr.Graph())
+            return bt.one_beat(
+                live, board,
+                [bt.Actor(0, "Fighter", "fighter", "human")],
+                bt.Director(scripted=True),
+                ask_human=lambda a, _s: (line, ""), party_level=1)
+        finally:
+            board.strike()
+
+    bound = asked("Who was Gordi to you?")
+    out.that(
+        len(bound.standing) == 1
+        and "do not contradict" in str(bound.standing[0]),
+        "a subject the pages cover arrives as something not to contradict",
+        f"{[str(x)[:60] for x in bound.standing]}",
+    )
+    out.that(
+        "he is missing" in str(bound.standing[0]),
+        "and carries the page's own sentence, so the DM has the facts",
+        f"{str(bound.standing[0])[:90]}",
+    )
+
+    # **Invention is wanted.** A subject with nothing on record is a
+    # licence, not a refusal -- that is the ruling the issue body misses.
+    free = asked("Tell me about your brass compass.")
+    out.that(
+        len(free.standing) == 0,
+        "something the graph has never heard of raises no standing at all",
+        f"{[str(x)[:50] for x in free.standing]}",
+    )
+
+    # The guard, at the three registers it can answer.
+    out.that(
+        "never heard of it" in str(bt.Standing("a jewel", (), "not at all"))
+        and "becomes true" in str(bt.Standing("a jewel", (), "vaguely")),
+        "a speaker who would not know is told to say so, not to invent",
+        f"{str(bt.Standing('a jewel', (), 'not at all'))[:70]}",
+    )
+
+    # The control: a module nobody has ingested plays exactly as before.
+    plain = asked("Who was Gordi to you?", with_canon=False)
+    out.that(
+        not plain.standing,
+        "and a module with no graph behind it raises nothing and plays on",
+        f"{len(plain.standing)} standing",
+    )
+
+    # **It reaches the prompt, not just the beat.** Gathering the record
+    # and then not handing it over leaves every assertion above green and
+    # the DM exactly as uninformed as before.
+    from combat_engine.story import llm
+
+    seen: list[str] = []
+    real_chat = llm.chat
+
+    def tap(role: llm.Role, messages: list[dict],
+            schema: dict | None = None) -> str:
+        del role, schema
+        seen.append(messages[-1]["content"])
+        return "Benwick sets down his cup."
+
+    llm.chat = tap  # ty: ignore[invalid-assignment]
+    try:
+        live = bt.Playing(scene=scene, canon=canon, told=gr.Graph())
+        bt.Director(roles=llm.ROLES).react(
+            live, [], [], None,
+            [bt.Standing("Gordi", ("he is missing, and worked for the banker",))])
+    finally:
+        llm.chat = real_chat
+    out.that(
+        bool(seen) and "he is missing" in seen[-1]
+        and "do not contradict" in seen[-1],
+        "the record reaches the DM's prompt, with the page's own sentence",
+        f"{seen[-1][-120:] if seen else 'nothing was asked'!r}",
+    )
+
+    # **A companion's line is not mined.** It came out of the same model
+    # that is about to answer it, so resolving it would feed the model its
+    # own output back as a thing to be consistent with, which is a loop
+    # rather than consistency.
+    board = tbl.lay(party, seed=24)
+    try:
+        pair = bt.Playing(scene=scene, canon=canon, told=gr.Graph())
+
+        class Talks(bt.Director):
+            def declare(self, actor: bt.Actor, playing: bt.Playing,
+                        situation: str) -> bt.Intent:
+                del playing, situation
+                return bt.Intent(actor.slot, actor.name, played=True,
+                                 speech="What of Gordi?")
+
+        only_theirs = bt.one_beat(
+            pair, board,
+            [bt.Actor(0, "Fighter", "fighter", "human"),
+             bt.Actor(1, "Sela", "cleric", "ai")],
+            Talks(scripted=True),
+            ask_human=lambda a, _s: ("", "eats"), party_level=1)
+    finally:
+        board.strike()
+    out.that(
+        not only_theirs.standing,
+        "while a companion naming the same man raises nothing",
+        f"{[str(x)[:40] for x in only_theirs.standing]}",
+    )
 
 
 def god_mode_hands_over_the_fight_without_playing_it(out: Result) -> None:
@@ -29684,6 +29834,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "invent_not_contradict": (
+        the_dm_may_invent_but_not_contradict,
+        "the DM may make things up and may not contradict the page (#830)",
     ),
     "story_graph": (
         the_graph_answers_no_and_says_where_a_fact_came_from,

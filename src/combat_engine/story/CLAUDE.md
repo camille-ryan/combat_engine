@@ -229,6 +229,46 @@ Two things to know before pointing a role at a reasoning model:
   **3m26s**; warm it is 5-6s. Do not read a first-call timing as the
   model's speed, in either direction.
 
+## Invention is wanted; contradiction is not
+
+**The ruling is in a comment on #830 and reverses the issue's own body**,
+which is the failure the root `CLAUDE.md` opens by warning about:
+
+> *"it's actually intended behavior for the DM to make things up and them
+> to become canon. However, the made up facts MUST be consistent with the
+> rest of the story."*
+
+So the job was never to make the DM say "I never met him". The knighthood
+it invented was not wrong for being invented -- it was wrong for killing a
+man the party is hired to rescue alive. Three mechanisms, and the pattern
+is the one that works everywhere else here: **supply the constraint, do
+not request it.**
+
+* **What the pages say is handed over.** `Standing` puts the adventure's
+  own sentences in the prompt under "already true, do not contradict". A
+  DM holding *"a man named Gordi who worked for the banker"* writes him
+  missing, not dead -- verified end to end, and the same across beats.
+* **A guard runs before invention.** `Director.would_know` asks how well
+  *this* speaker would know *that* subject, as a three-way enum.
+  `not at all` tells the DM to say so plainly rather than improvise; the
+  other two licence it and set the register. Measured on twelve obvious
+  cases, six each way: **12 of 12, balanced 6/6**.
+* **What gets invented is written down**, tagged `invented`, so the next
+  beat is bound by it too. Only for subjects that had nothing on record --
+  a subject with page facts is not re-recorded, because the DM was told
+  not to contradict those and storing its paraphrase beside them blurs the
+  two.
+
+**Only the player's line is mined.** A companion's intent came out of the
+same model that is about to answer it, so resolving it feeds the model its
+own output back as a thing to be consistent with. That is a loop, not
+consistency.
+
+Naming both failure modes in the guard's prompt was load-bearing. The first
+version said only *"not at all is a common and correct answer"* -- written
+to stop a tavern cook explaining a distant city's politics -- and it made a
+gate sergeant ignorant of who runs her own keep.
+
 ## The graph answers "no", and that is what it is for
 
 `docs/STORY_GRAPH.md` has the design; the short version of why it is not a

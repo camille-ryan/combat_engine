@@ -60,10 +60,12 @@ what the DM knows.** The module layer is by definition the DM's, so it
 reaches the model only through affordances, lore rows and scene text — all
 of which are code-mediated.
 
-That also answers #830 cleanly. Asked who the informant is, the setting layer has
-nothing, the campaign layer has only what the party has learnt, and the
-module layer — which knows he is alive in a cave — is not consulted. The
-answer is *"I never met the man"*, which is true.
+Asked who the informant is, the DM gets the setting layer's facts about him
+and whatever this campaign has already established, and may invent past
+them. What it must not do is contradict them -- and the page facts are the
+reason it will not kill off a man the adventure says is missing and held
+somewhere. The module layer, which knows he is alive in a cave and why, is
+still not consulted.
 
 ### An adventure contains both kinds, and ingest must split them
 
@@ -110,7 +112,42 @@ An invention is written to the **campaign** layer and never to setting. A
 setting graph is shared across campaigns; one table's improvisation must not
 leak into another's world.
 
-## Lookup is exact, and the valuable answer is the absence
+## Camille's ruling: invention is wanted, contradiction is not
+
+**This reverses what the first draft of this document argued**, and the
+reversal is on the issue itself, in a comment the body does not reflect --
+which is the failure mode the root `CLAUDE.md` opens by warning about.
+
+> *"it's actually intended behavior for the DM to make things up and them
+> to become canon. However, the made up facts MUST be consistent with the
+> rest of the story."*
+
+So the job is **not** to make the DM say "I never met him". Improvisation
+is the point of having a model at the table at all; the knighthood was not
+wrong for being invented. It was wrong for killing a man the party is hired
+to rescue alive.
+
+That changes what the graph is for, and makes it *more* necessary rather
+than less:
+
+1. **Record what is invented**, tagged, so it is the story from then on
+   rather than lasting one paragraph.
+2. **Feed it back**, so the next answer about the same person agrees with
+   the last one.
+3. **Feed back the canon too**, so an invention cannot contradict what the
+   page already said.
+
+The third is what would have caught the knighthood. The adventure says the
+man is missing and was taken to a grotto; a DM holding those two facts does
+not kill him off. **Consistency is supplied, not requested** -- the same
+shape as every guard in this component that works.
+
+Absence remains an option the module can choose -- an NPC with nothing
+recorded and nothing to invent from may still say they never met the man --
+but it is the exception, not the default, and the rest of this document
+should be read that way.
+
+## Lookup is exact, and so is the absence when it is wanted
 
 The graph half is kept and the RAG half is treated with suspicion, for a
 reason specific to this project.
@@ -123,10 +160,16 @@ about a jewel, get a node about a city, and the DM now has a
 plausible-adjacent fact — which it will use, because a fact in a prompt is
 an invitation to use it.
 
-**The absence is the answer that fixes #830.** No node for the man → *"I
-never met him"* — true, in character, not an invention. Similarity search
-cannot produce that answer; it is the one query a graph answers and a vector
-store structurally cannot.
+**An exact lookup can answer "nothing known", and an approximate one
+cannot.** That matters even though absence is no longer the default reply:
+the DM has to be told *which* facts bind it, and a retriever that hands
+back the nearest thing binds it to the wrong ones. Ask about a jewel, get a
+node about a city, and the invention is now anchored to a fact that has
+nothing to do with the question -- which is worse than no anchor at all.
+
+So the property to keep is that a miss **misses**: `None` means "nothing on
+record, invent freely", and a hit means "these are true, do not contradict
+them". Top-k cannot express the first.
 
 So: resolve a mention to an entity by **name and alias, exactly**, and
 traverse typed edges one hop for context. The Planescape project's

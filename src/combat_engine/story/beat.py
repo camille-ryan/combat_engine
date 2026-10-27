@@ -49,6 +49,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from combat_engine.engine.skills import CheckResult
 
@@ -175,6 +176,10 @@ class Beat:
     intents: list[Intent] = field(default_factory=list)
     rulings: list[Ruling] = field(default_factory=list)
     reaction: str = ""
+    #: What was already on record about the things the party named, and
+    #: how well the speaker would know each. Handed to the DM so an
+    #: invention agrees with what came before.
+    standing: list[Standing] = field(default_factory=list)
     #: What the party already knew, rolled when the scene opened. Only the
     #: first beat of a scene has any.
     recalled: list[Recalled] = field(default_factory=list)
@@ -198,6 +203,12 @@ class Playing:
     spent: set[str] = field(default_factory=set)
     #: Facts the party has learnt, which later beats may refer back to.
     learnt: list[str] = field(default_factory=list)
+    #: What the adventure's pages say, built by `scripts/ingest.py`. Read
+    #: only: the DM may invent past it and must not contradict it.
+    canon: Any = None
+    #: What this table has established, including what the DM made up.
+    #: Written to during play and saved with the campaign.
+    told: Any = None
     #: Lore facts already rolled for, so a `once` row is not re-rolled on
     #: a second visit. Carried in from the campaign, not reset per scene.
     asked: set[str] = field(default_factory=set)
@@ -317,6 +328,29 @@ something it is not.\
 #: differ precisely in how much they re-word, so overlap is biased against
 #: the one under test. A judge answers it; a judge with controls answers it
 #: honestly.
+#: How well somebody might know a subject. Three options of the same kind,
+#: ordered, so the DM can be handed a register rather than a boolean.
+KNOWING = ("well", "vaguely", "not at all")
+
+#: **Both failure modes named, because naming one caused the other.** The
+#: first version ended *""not at all" is a common and correct answer. Do
+#: not stretch to make somebody knowledgeable."* -- written to stop a
+#: tavern cook explaining a distant city's politics, and it duly made a
+#: gate sergeant ignorant of who runs her own keep. Measured on twelve
+#: obvious cases, six each way: **11/12 then, 12/12 now**, and balanced
+#: 6/6 on both sides rather than solving one pole by giving up the other.
+_WOULD_KNOW = """\
+Say how well this person would know about the subject.
+
+Judge it from who they are and what they do. Somebody knows their own
+trade, their own town and their own faith well. They know a distant city's
+business, another profession's craft, or a scholar's speciality not at all.
+
+Both mistakes are real. Do not make somebody an expert in everything, and
+do not make them ignorant of their own life.\
+"""
+
+
 _TURN_TO = """\
 You decide who the next moment belongs to.
 
@@ -406,6 +440,72 @@ _SPEAK_SCHEMA = {
 }
 
 
+@dataclass(frozen=True)
+class Standing:
+    """What is already true about something the player just named.
+
+    Handed to the DM so an invention agrees with what came before.
+    **Consistency is supplied, not requested** -- the knighthood that
+    killed off a man the adventure has alive was not wrong for being
+    invented, it was wrong for contradicting two sentences the page
+    prints, and a DM holding those two sentences does not write it.
+    """
+
+    about: str
+    #: Sentences from the adventure and from this table's own play. The
+    #: DM may not contradict these.
+    facts: tuple[str, ...] = ()
+    #: `well`, `vaguely` or `not at all` -- how well the speaker would
+    #: know, which sets the register rather than permitting or forbidding.
+    knows: str = "vaguely"
+
+    def __str__(self) -> str:
+        """The line the DM is handed. The three cases read differently.
+
+        **A speaker who knows nothing must not be invited to invent.** The
+        first version ended every factless case with "anything you say
+        about it becomes true", including the ones where the guard had
+        just said this person has never heard of it -- which is the
+        licence the guard exists to withhold.
+        """
+        if self.facts:
+            return (f"{self.about} -- already true, do not contradict:\n"
+                    + "\n".join(f"    - {f}" for f in self.facts))
+        if self.knows == "not at all":
+            return (f"{self.about} -- this speaker has never heard of it. "
+                    "Have them say so plainly. Do not invent an answer.")
+        hedge = "" if self.knows == "well" else ", and should hedge"
+        return (f"{self.about} -- nothing is on record. This speaker would "
+                f"know it {self.knows}{hedge}. What they say about it "
+                "becomes true, so keep it small and keep it consistent.")
+
+
+def standing(playing: Playing, mention: str, *, speaker: str,
+             director: Director, looks: str = "",
+             wants: str = "") -> Standing:
+    """Everything on record about one thing, from both layers.
+
+    Canon first, then what this table has established, because that is the
+    order they bind in. The guard is only asked when the speaker is going
+    to have to improvise -- if the record already answers, how well they
+    would know is beside the point.
+    """
+
+    facts: list[str] = []
+    for layer in (playing.canon, playing.told):
+        if layer is None:
+            continue
+        found = layer.find(mention)
+        if found is not None:
+            facts += [f.text for f in found.facts]
+    if facts:
+        return Standing(about=mention, facts=tuple(dict.fromkeys(facts)),
+                        knows="well")
+    return Standing(about=mention,
+                    knows=director.would_know(speaker, mention, looks=looks,
+                                              wants=wants))
+
+
 @dataclass
 class Director:
     """Everything that needs a model, and the version that needs none."""
@@ -474,6 +574,51 @@ class Director:
         if who in by_name:
             return [by_name[who]]
         return []
+
+    def would_know(self, who: str, about: str, *, looks: str = "",
+                   wants: str = "") -> str:
+        """Would this character know about that? One of `KNOWING`.
+
+        **A guard in front of invention, on Camille's call.** Making things
+        up is wanted -- *"it's actually intended behavior for the DM to
+        make things up and them to become canon"* -- but an unguarded DM
+        gives a tavern halfling the provenance of a jewel in another city,
+        and the player has no way to tell that from the adventure's own
+        text.
+
+        So the question is asked before the inventing: would *this* person
+        plausibly know about *that*? The answer sets the register the DM
+        writes in, which is what makes the prose carry it naturally --
+        `"well"` licenses a confident answer, `"vaguely"` a half-remembered
+        one, `"not at all"` an honest shrug.
+
+        It is a **classification over a closed set**, which is the side of
+        the line a 7B is measurably on: 3 of 3 matching against a list
+        where it was 1 of 3 judging freely (#801). And the three options
+        are the same *kind* of phrase, because an enum whose options differ
+        in kind biases the answer -- "the Fighter" against "somebody else"
+        scored 3/4 on a 7B and 3/5 on a 14B, failing identically, and
+        naming both sides took it to 6/6.
+        """
+        if self.scripted or not about.strip():
+            return "vaguely"
+        schema = {"type": "object",
+                  "properties": {"how_well": {"enum": list(KNOWING)}},
+                  "required": ["how_well"]}
+        told = [f"THE PERSON: {who}"]
+        if looks:
+            told.append(f"WHO THEY ARE: {looks}")
+        if wants:
+            told.append(f"WHAT THEY WANT: {wants}")
+        told.append(f"THE SUBJECT: {about}")
+        got = llm.structured(
+            self.roles["match"],
+            [{"role": "system", "content": _WOULD_KNOW},
+             {"role": "user", "content": "\n\n".join(told)}],
+            schema)
+        self.spend.note("know", ok=bool(got))
+        answer = str(got.get("how_well", ""))
+        return answer if answer in KNOWING else "not at all"
 
     def declare(self, actor: Actor, playing: Playing, situation: str) -> Intent:
         if self.scripted:
@@ -578,7 +723,8 @@ class Director:
 
     def react(self, playing: Playing, intents: list[Intent],
               rulings: list[Ruling],
-              recalled: list[Recalled] | None = None) -> str:
+              recalled: list[Recalled] | None = None,
+              standing: list[Standing] | None = None) -> str:
         if self.scripted:
             facts = [r.fact for r in rulings if r.fact and not r.exit]
             facts += [r.fact for r in (recalled or []) if r.knew and not r.mine]
@@ -672,6 +818,16 @@ class Director:
                 "refuse -- there is nothing to answer. Write what the "
                 "people here do in the silence: wait, fill it, press, lose "
                 "patience, turn to something else.")
+        # **What is already true about what they asked about.** Camille's
+        # ruling is that inventing is wanted and contradicting is not, so
+        # the record is supplied rather than the restraint requested: a DM
+        # holding the two sentences the page prints about a missing man
+        # does not write him dead.
+        if standing:
+            told.append(
+                "WHAT THEY ASKED ABOUT. Anything listed as already true is "
+                "fixed and you may not contradict it; you may add to it:\n"
+                + "\n".join(f"  {st}" for st in standing))
         if nothing:
             # **"Show them trying" is an invitation to write the player**,
             # and it was taken: typing "(I wait and eat.)" came back as the
@@ -860,6 +1016,32 @@ def one_beat(
             # already made for the same reason. #807.
             beat.exit_line = beat.rulings[-1].fact
 
+    # -- what did they ask about, and what is already true of it?
+    #
+    # Only the player's own line is mined. A companion's intent came out
+    # of the same model that is about to answer it, so resolving it would
+    # feed the model its own output back as a thing to be consistent with
+    # -- which is not consistency, it is a loop.
+    if playing.canon is not None or playing.told is not None:
+        speaker = scene.npcs[0] if scene.npcs else None
+        seen: set[str] = set()
+        for intent in beat.intents:
+            if intent.played:
+                continue
+            said = f"{intent.speech} {intent.doing}".strip()
+            for layer in (playing.canon, playing.told):
+                if layer is None:
+                    continue
+                for found in layer.mentions(said):
+                    if found.name in seen:
+                        continue
+                    seen.add(found.name)
+                    beat.standing.append(standing(
+                        playing, found.name, speaker=speaker.name if speaker
+                        else "somebody here", director=director,
+                        looks=speaker.looks if speaker else "",
+                        wants=speaker.wants if speaker else ""))
+
     playing.learnt += [r.fact for r in beat.rulings if r.won and r.fact]
     # Won, not merely attempted: a failed Perception reveals nobody.
     playing.found |= {r.affordance for r in beat.rulings if r.won}
@@ -875,7 +1057,7 @@ def one_beat(
 
     # -- react
     beat.reaction = director.react(playing, beat.intents, beat.rulings,
-                                   beat.recalled)
+                                   beat.recalled, beat.standing)
     playing.beats.append(beat)
     if beat.leads_to:
         playing.leads_to = beat.leads_to
@@ -930,6 +1112,8 @@ def play_scene(
     *, ask_human: AskHuman, party_level: int,
     after: Callable[[Beat], None] | None = None,
     asked: set[str] | None = None,
+    canon: Any = None,
+    told: Any = None,
 ) -> Playing:
     """Run a roleplay scene to its end.
 
@@ -940,7 +1124,8 @@ def play_scene(
     lines, not their own roll, not the reply. Four prompts into a
     conversation that has not visibly started.
     """
-    playing = Playing(scene=scene, asked=set(asked or ()))
+    playing = Playing(scene=scene, asked=set(asked or ()),
+                      canon=canon, told=told)
     while not playing.over:
         made = one_beat(playing, table, actors, director,
                         ask_human=ask_human, party_level=party_level)

@@ -374,6 +374,34 @@ def actors_for(campaign: Campaign) -> list[beat_mod.Actor]:
     return out
 
 
+#: The adventure's own graph, read once per process. Built by
+#: `scripts/ingest.py` and absent until somebody runs it, which is the
+#: normal case -- a module with no graph plays exactly as it did.
+_CANON: dict[str, object] = {}
+
+
+def _canon(module: Module) -> object | None:
+    """What the pages say, or `None` if this module has not been ingested."""
+    if module.id not in _CANON:
+        from combat_engine.db import ROOT
+        from combat_engine.story import graph as graph_mod
+        where = ROOT / "modules" / module.id / "graph.json"
+        _CANON[module.id] = graph_mod.load(where) if where.exists() else None
+    return _CANON[module.id]
+
+
+def _told(campaign: Campaign) -> object:
+    """What this table has established, loaded from beside its save.
+
+    A separate file from the canon and a separate layer in play: an
+    invention belongs to one campaign and must not leak into another's
+    world, nor into the adventure as shipped.
+    """
+    from combat_engine.story import graph as graph_mod
+    from combat_engine.story.save import SAVES
+    return graph_mod.load(SAVES / f"{campaign.module}.told.json")
+
+
 def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
               director: beat_mod.Director | None,
               ask_human: beat_mod.AskHuman) -> None:
@@ -446,14 +474,57 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         director or beat_mod.Director(scripted=True),
         ask_human=ask_human, party_level=module.party_level,
         after=tell, asked=set(campaign.recalled),
+        canon=_canon(module), told=_told(campaign),
     )
     # Back onto the campaign, so a `once` row stays rolled across a revisit
     # and across a save. `Playing` does not survive the scene.
     campaign.recalled = sorted(playing.asked)
+    _keep(campaign, scene, playing)
     table.strike()
     step.played = playing
     if playing.leads_to:
         step.next_id = playing.leads_to
+
+
+def _keep(campaign: Campaign, scene: Scene, playing: object) -> None:
+    """Write down what the table established, so it binds from now on.
+
+    **Camille's ruling is that invention is wanted and contradiction is
+    not**, and nothing here could hold the DM to its own word because
+    nothing was written down: a man given a knighthood in one paragraph
+    had no history at all by the next scene.
+
+    What is kept is the DM's reply, against each thing the player asked
+    about that had **nothing on record**. A subject that already had facts
+    is not re-recorded -- the DM was told not to contradict those and
+    storing its paraphrase beside them would blur the two.
+
+    The reply is stored whole rather than summarised. A summary is a
+    second model call and a second chance to drift; the paragraph is what
+    was actually said at the table, which is the thing a later beat has to
+    agree with.
+    """
+    from combat_engine.story import graph as graph_mod
+    from combat_engine.story.save import SAVES
+
+    told = playing.told  # type: ignore[attr-defined]
+    if told is None:
+        return
+    added = 0
+    for beat in playing.beats:  # type: ignore[attr-defined]
+        if not beat.reaction:
+            continue
+        for st in beat.standing:
+            if st.facts or st.knows == "not at all":
+                continue
+            told.remember(st.about, beat.reaction.strip(),
+                          where=scene.id)
+            added += 1
+    if added:
+        graph_mod.save(told, SAVES / f"{campaign.module}.told.json")
+        step_note = (f"{scene.id}: {added} thing(s) the DM made up are now "
+                     "on record and cannot be contradicted")
+        campaign.log.append(step_note)
 
 
 def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
