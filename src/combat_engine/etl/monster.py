@@ -37,7 +37,11 @@ class Ability:
     section: str = "standard"
     usage: str = "at-will"
     action: str = "standard"
-    recharge: int = 0
+    #: The printed die threshold. **`None` is "the card prints a recharge
+    #: clause and no die"**, which is 440 conditional cards, and `0` is "no
+    #: recharge clause at all". The two were the same value until #488 and
+    #: the shared value was a guess. See `_one_ability`.
+    recharge: int | None = 0
     keywords: tuple[str, ...] = ()
     spec: str = ""
     #: Carried only so the localisation table can be built. Never stored in
@@ -800,14 +804,32 @@ def _one_ability(head: str, index: int, section: str) -> Ability | None:
     elif printed:
         a.recharge = int(printed.group(1))
     elif "recharge" in low:
-        # **A conditional recharge, and 6 is still invented here.** "Recharge
-        # when first bloodied" prints no die at all, and `etl/CLAUDE.md`'s
-        # rule says store nothing rather than guess -- but a conditional
-        # recharge that parses to no die never comes back, which moves what
-        # ~1,000 monsters can do. That is a balance change and wants its own
-        # measurement, so it is deliberately left alone here and the glyph
-        # half lands on its own.
-        a.recharge = 6
+        # **A conditional recharge stores NULL, not 6.** "Recharge when
+        # first bloodied" prints no die at all, and `etl/CLAUDE.md` is
+        # explicit: *"Parse, or store nothing. A number you cannot read is
+        # `NULL`, not a guess."* Storing 6 said "and it also comes back on a
+        # natural 6", which no card says -- for **440** of them.
+        #
+        # **The balance worry this branch used to carry is void, and that is
+        # why it can land now.** It read "a conditional recharge that parses
+        # to no die never comes back, which moves what ~1,000 monsters can
+        # do". Nothing in `src/combat_engine/` reads this column: a content
+        # row declares its own `recharge=` and `actions.recharge` reads the
+        # header. The **only** reader is `scripts/cards.py`, and `#449`
+        # already set all 440 content rows to the 0 their cards print. So
+        # NULL here cannot change what any monster does -- it changes what
+        # one instrument compares against.
+        #
+        # `cards._recharge_fault` handles it by construction: it returns no
+        # fault when the printed value is falsy, which is honest, because a
+        # card with no die has no threshold to disagree with.
+        #
+        # **One card prints both** and must keep its die: `m4356a2` reads
+        # "recharge 6, or recharges when <it> takes cold or fire damage".
+        # It never reaches here -- `_RECHARGE_DIGIT` matches the 6 in the
+        # branch above -- which is what makes "has a condition" not mean
+        # "has no die". #488.
+        a.recharge = None
 
     words: list[str] = []
     for group in re.findall(r"\(([^)]*)\)", after):
