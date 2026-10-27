@@ -653,7 +653,7 @@ def f3443(c: Cast) -> None:
 
 @power("f3444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("warlock.boon_instead_of()",))
+       dropped=("c.active_vestige()",))
 def f3444(c: Cast) -> None:
     """Hands back the racial power **in place of** the pact boon.
 
@@ -687,14 +687,19 @@ def f3444(c: Cast) -> None:
     `Powers.pre_empts` when they end, so the trade stops being offered
     after it is taken.
 
-    `dropped=` and not finished: the clause reaches **two of the seven
-    pacts**. `cf:warlock-f1s4` and `cf:warlock-f1c10` offer it; the three
-    legs `cf:warlock-f1` pays inline and `p16254`'s do not yet, and both of
-    those files are elsewhere, while `cf:warlock-f1c12` pays nothing at all
-    until `c.active_vestige()` lands. A warlock on one of the other five is
-    offered nothing and keeps the printed boon -- a narrowing, where the
-    old shape was a widening. `ENCOUNTER` on a trait armed once at the
-    start of the fight is this file's convention."""
+    **Six of the seven pacts now, and the marker is re-pointed rather than
+    dropped.** It used to read "two of the seven", naming `cf:warlock-f1`'s
+    three inline legs and `p16254` as payouts that did not offer the
+    clause; both offer it now, so that premise is spent. What is left is
+    `cf:warlock-f1c12`, which pays **nothing at all** until
+    `c.active_vestige()` lands -- so the gap is no longer "the payout does
+    not offer itself" but "there is no payout to trade", and the marker
+    names that symbol instead. One marker, one gap.
+
+    A warlock on that one pact keeps the printed boon and is offered
+    nothing, which is still a narrowing rather than a widening.
+    `ENCOUNTER` on a trait armed once at the start of the fight is this
+    file's convention."""
     armed: list[Any] = []
 
     def regain(using: Cast) -> None:

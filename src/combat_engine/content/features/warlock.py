@@ -100,12 +100,21 @@ BOON = "boon"
 #: which leg the character took -- `c.pre_empt`'s own instruction, and a
 #: registration against a row the character does not have never fires.
 #:
-#: **Two of these do not offer `BOON` yet and are not in this file**:
-#: `cf:warlock-f1`, whose three legs pay inline in `features/strikers.py`,
-#: and `p16254` in `powers/warlock/pacts.py`. `cf:warlock-f1c12` is here
-#: and pays nothing yet -- it waits on `c.active_vestige()`. All three are
-#: listed anyway, so the registering rows need no second pass when each
-#: door opens. #641.
+#: **Four of the five offer `BOON` now.** The two that did not are the two
+#: outside this file, and both were opened together: `cf:warlock-f1`, whose
+#: three legs pay inline in `features/strikers.py`, and `p16254` in
+#: `powers/warlock/pacts.py`. They took opposite readers and the reason is
+#: the one `instead_of_now`'s docstring draws -- `cf:warlock-f1` pays inside
+#: a watcher it installed itself, so `Cast.variant` is 0 for ever and only
+#: `instead_of_now` can ask; `p16254` carries a declared trigger, so
+#: `Triggers._ask` has already offered the substitution and plain
+#: `instead_of` reads it.
+#:
+#: `cf:warlock-f1c12` is the one left, and it pays **nothing at all** until
+#: `c.active_vestige()` lands -- so there is no payout to trade, which is a
+#: different gap from "the payout does not offer itself". Listing it here
+#: still costs nothing: a registration against a leg the character does not
+#: stand on never fires. #641.
 BOONS = (
     "cf:warlock-f1",
     "cf:warlock-f1s4",

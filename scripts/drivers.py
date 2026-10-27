@@ -11852,6 +11852,110 @@ def boon_traded(out: Result) -> None:
              f" points {points_without})")
 
 
+def boon_offered_where_it_is_paid(out: Result) -> None:
+    """A card trading the pact boon away reaches the legs that pay inline.
+
+    Four cards print some form of "instead of your pact boon" and name no
+    pact, so each payout has to offer itself under the shared clause
+    `warlock.BOON` and the card registers against every ref in
+    `warlock.BOONS`. Two of the five payouts did not offer it, and both
+    were outside `features/warlock.py` -- which is exactly why nothing
+    noticed: the registering rows were written, their markers said so in
+    prose, and every row involved audited green.
+
+    **`cf:warlock-f1` is the one worth driving**, because it is three of
+    the seven pacts on its own and because its payout lives inside a
+    watcher it installed itself. That makes `Cast.variant` 0 for ever, so
+    `c.instead_of`'s fast path would return the printed payout **without
+    ever asking** -- a trade that silently never happens. `instead_of_now`
+    is the reader for that shape and the assertion below is what tells the
+    two apart.
+
+    Three things measured, and the second is the one that fails on a
+    plausible wrong implementation:
+
+    * a registered clause is **taken**, and the printed payout does not
+      also happen -- an implementation that pays both is the "free where
+      the card charges" fault these rows were reshaped to fix;
+    * **declining leaves the printed payout alone**, because every one of
+      these cards says "you can" and a compulsory trade is a different
+      card;
+    * with **nothing registered** the payout is untouched, which is the
+      control that a green result is not just the boon failing to pay.
+
+    **`p16254` is not driven here, and that is a real gap in this rule.**
+    It is the other payout opened at the same time, and it takes the
+    *opposite* reader -- plain `c.instead_of`, because it carries a
+    declared trigger and `Triggers._ask` has already offered the
+    substitution. Reaching that path needs the trigger dispatcher rather
+    than a body call, so what covers it is construction: the same two lines
+    as `cf:warlock-f1c10`, which has shipped. Said out loud rather than
+    counted as covered. #641.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.features.warlock import BOON, BOONS
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Health, Powers
+    from combat_engine.engine.events import Dropped
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import arm_traits
+    from combat_engine.engine.types import Relation
+
+    REF = "cf:warlock-f1"
+
+    def play(register: bool, take: bool) -> tuple[int, int]:
+        """(temp hp the printed payout gave, times the substitute ran)."""
+        world, me, _ = _board(seed=1)
+        known = world.get(me, Powers) or world.add(me, Powers())
+        known.known = (*tuple(known.known), REF)
+        held = world.get(me, Build) or world.add(me, Build())
+        # The infernal leg, whose payout is temporary hit points -- the one
+        # of the three with a number to read rather than a position change.
+        held.choices = (*tuple(held.choices), "infernal")
+        arm_traits(world, me)
+
+        ran: list[int] = []
+        c = Cast(world=world, me=me, ref="drivers:boon-inline")
+        if register:
+            c.pre_empt(REF, BOON, lambda using: ran.append(1))
+        # The offer puts the clause first and the decline last, so the end
+        # of the list is the "no, as printed" answer.
+        world.decider = (lambda actor, kind, options, prompt="":
+                         options[0] if take else options[-1])
+
+        foe = sorted(enemies(world, me))[0]
+        world.relations.set(Relation.CURSED_BY, me, foe)
+        # **Measured across the drop, not read afterwards.** The board
+        # hands out temporary hit points of its own before any body runs,
+        # so an absolute reading here would be a number the payout never
+        # produced.
+        before = world.need(me, Health).temp
+        world.bus.emit(Dropped(actor=foe))
+        return world.need(me, Health).temp - before, len(ran)
+
+    out.that(REF in BOONS and "p16254" in BOONS,
+             "`warlock.BOONS` lists both payouts that were opened -- the"
+             " constant and the rows agree about where a boon is paid")
+
+    printed_only, ran_only = play(register=False, take=False)
+    out.that(printed_only > 0 and ran_only == 0,
+             "with nothing registered the printed payout pays in full"
+             f" (+{printed_only} temporary hit points), so a green trade"
+             " below is not the boon quietly failing")
+
+    traded, ran_traded = play(register=True, take=True)
+    out.that(ran_traded == 1 and traded == 0,
+             "a registered clause is taken at the payout and the printed"
+             f" benefit does not also arrive (clause ran {ran_traded}x,"
+             f" temporary hit points +{traded})")
+
+    declined, ran_declined = play(register=True, take=False)
+    out.that(ran_declined == 0 and declined == printed_only,
+             "and declining leaves the card as printed -- every one of"
+             f" these says 'you can' (clause ran {ran_declined}x, temporary"
+             f" hit points +{declined} against +{printed_only})")
+
+
 def lent_augments(out: Result) -> None:
     """A feat lends a power an Augment line the card does not print.
 
@@ -35576,6 +35680,9 @@ DRIVERS = {
                         "a power point put back, and the cap that refuses one"),
     "boon_traded": (boon_traded,
                     "a feat takes a power point instead of the boon's regain"),
+    "boon_offered_where_it_is_paid": (
+        boon_offered_where_it_is_paid,
+        "every pact boon payout offers itself to a card that trades it"),
     "lent_augments": (lent_augments,
                       "a feat lends a power an augment its card omits"),
     "counts_as_basic": (counts_as_basic,

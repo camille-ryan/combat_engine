@@ -3284,7 +3284,7 @@ def i2291p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("warlock.boon_instead_of()",),
+    dropped=("c.active_vestige()",),
 )
 def i2296x1(c: Cast) -> None:
     """"Instead of taking its normal benefit" is written now, and the row
@@ -3332,13 +3332,21 @@ def i2296x1(c: Cast) -> None:
     first, so a player can see the board; the AI policy cannot, which is
     `instead_of_now`'s own recorded cost.
 
-    Still `dropped=`, on the residual `f3444` already names: the clause
-    reaches **two of the five** boon refs. `cf:warlock-f1`'s three legs pay
-    inline in `features/strikers.py` and `p16254` pays in
-    `powers/warlock/pacts.py`, neither offering the clause; `cf:warlock-f1c12`
-    pays nothing at all until `c.active_vestige()` lands. A warlock on one
-    of those keeps the printed boon and is offered nothing -- a narrowing,
-    where the old shape was a widening."""
+    **Four of the five boon refs now, and the marker is re-pointed.** It
+    read "two of the five", naming `cf:warlock-f1`'s three inline legs and
+    `p16254` as payouts that did not offer the clause; both do now, by
+    opposite readers for the reason `instead_of_now`'s docstring gives. So
+    the residual is `cf:warlock-f1c12` alone, which pays **nothing** until
+    `c.active_vestige()` lands -- a different gap from a payout that does
+    not offer itself, and the symbol the marker names now.
+
+    A warlock on that pact keeps the printed boon and is offered nothing,
+    still a narrowing rather than a widening.
+
+    Note the clause above about reading the dropped creature off the bus
+    log is now true of **three** routes rather than two: `cf:warlock-f1`
+    joins `cf:warlock-f1s4` in reaching this from inside a watcher, with no
+    `c.trigger` to read. The log walk already covers it."""
 
     def transfer(using: Cast) -> None:
         fell = next(
