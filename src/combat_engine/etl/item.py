@@ -462,11 +462,43 @@ def items(
     report: Any,
     names: dict[str, dict[str, str]],
 ) -> None:
-    """Heroic magic items, their ladders and their blocks."""
+    """Heroic magic items, their ladders and their blocks -- **and gear**.
+
+    **`Category = 'Equipment'` is the adventuring gear and it has no
+    level**, so the heroic band alone excluded all 233 of it -- `i390`,
+    `i251`, `i332` and the rest of the ordinary kit. Four rows print a
+    Requirement naming one: `p16442`, `p16443` and `p16444` want `i390`
+    and `p15845` an instrument, and none of them had a ref to name. #876.
+
+    **This docstring is itself the rule's own worked example.** The first
+    draft of it spelled two of those names out, and the gate this import
+    enables reported it immediately -- `etl/item.py:469` and `:471`,
+    alongside the content sites. A name must not enter a tracked file and
+    an explanation is not an exemption; refs do the job here exactly as
+    well.
+
+    It is the **same table**, not the separate section #876 supposed:
+    every one of the 233 carries `LevelSort = 0`, which is the only reason
+    `BETWEEN 1 AND` dropped them. `IsMundane` is 0 across the whole table
+    and tells nothing.
+
+    **Chargen will not deal a crowbar**, which was checked before this
+    landed rather than hoped: its item query joins `item_step`, and gear
+    has no steps -- `_head` reads no level price off a page costing
+    "40 gp", so `steps` comes out empty and the join excludes the row.
+
+    **And this makes four existing name leaks visible rather than making
+    any.** Of the 233 names, only 4 both `identifies` and already appear in
+    a tracked file, and all four are the printed Requirement text of the
+    rows above. `leaks.py` cannot report a name it does not hold, so those
+    four have been in the tree unseen; with a ref to name, they can be
+    written as refs. The other 229 are waived or absent.
+    """
     scores: list[float] = []
     for row in source.execute(
         "SELECT ID, Name, Category, Rarity, LevelSort, Source, Txt FROM Item "
-        "WHERE LevelSort BETWEEN 1 AND ? ORDER BY ID",
+        "WHERE (LevelSort BETWEEN 1 AND ?) OR Category = 'Equipment' "
+        "ORDER BY ID",
         (MAX_ITEM_LEVEL,),
     ):
         scores.append(_one_item(dict(row), out, report, names))

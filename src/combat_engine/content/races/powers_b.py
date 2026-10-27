@@ -1410,11 +1410,19 @@ def p15842(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CHARM],
-    dropped=("etl.item.adventuring_gear",),
+    dropped=("Gear.carried",),
 )
 def p15845(c: Cast) -> None:
     """Both premises of the old note are false, and the card is roll-twice,
     not the numeric penalty that note described.
+
+    **The marker moves off the import, which landed under #876.** It read
+    `etl.item.adventuring_gear`, and `Category = 'Equipment'` is now
+    imported -- 233 rows, `item` 1,877 -> 2,110 -- so the instrument this
+    card requires has a ref. What is still missing is the list a row would
+    read it from, and an empty `Gear.carried` would refuse the Requirement
+    for every character and stop this row being offered at all, which is
+    worse than playing with the clause dropped. The dealing half is #877.
 
     *Which save is a charm save* **is** askable. `durations.keywords_of`
     puts the effect's keywords in the save context and on the

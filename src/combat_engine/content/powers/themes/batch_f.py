@@ -1725,29 +1725,36 @@ def p16394(c: Cast) -> None:
 
 # -- x7_988 -----------------------------------------------------------------
 
-#: "You must have a trap-making kit on your person." Mundane gear is not
+#: "You must have `i390` on your person." Mundane gear is not
 #: modelled, so the Requirement never refuses the row.
-#: "You must have a trap-making kit on your person."
+#: "You must have `i390` on your person."
 #: **Re-aimed off `c.carrying(ref)`.** That one arrived and is not this: it
 #: reads the `Item` component, which is a thing a *power* made and handed
 #: over, and a kit is ordinary equipment. `Gear` records weapons, a shield,
 #: armour, worn magic and ammunition and has no slot for the rest, so there
 #: is no ref to ask for -- and a printed Requirement is a `requires=` gate,
 #: handed `(world, eid)`, which cannot call a `Cast` method at all.
-#: **The Requirement these three print is blocked in the ETL, not here.**
-#: *"You must have a trap-making kit on your person"* -- and `game.db`'s
-#: `item` table holds 1,877 rows, every one a **magic** item: the categories
-#: are Implement, Weapon, Armor, Wondrous, Consumable, Alchemical Item and
-#: the slot names, and a query for any category matching gear, mundane,
-#: adventuring or tool returns **0**. Adventuring gear was never imported,
-#: so there is no ref for a trap-making kit and nothing a carried-items list
-#: could hold.
+#: *"You must have `i390` on your person."*
 #:
-#: Re-pointed off `Gear.carried`, which named a component field. Adding the
-#: field first would make this Requirement **permanently unmeetable** --
-#: strictly worse than dropping it, because these three play today and would
-#: stop. #876.
-KIT = ("etl.item.adventuring_gear",)
+#: **The import landed and the marker moves back to the field.** #876 is
+#: closed: `Category = 'Equipment'` is 233 rows in the same `Item` table,
+#: every one at `LevelSort = 0`, which is the only reason the heroic band
+#: dropped them. `game.db`'s `item` table is 1,877 -> 2,110 and `i390`
+#: exists, so there is now something a carried-items list could hold.
+#:
+#: **What is still missing is the list, and it cannot land alone.** This
+#: used to read "re-pointed off `Gear.carried`… adding the field first
+#: would make this Requirement permanently unmeetable", and that is still
+#: exactly right: an empty list refuses the Requirement for every
+#: character, and these three play today with the clause dropped. A row
+#: that plays without one restriction beats a row that never plays.
+#:
+#: So the field needs a *dealer* alongside it -- something that puts `i390`
+#: in the hands of a character whose rows ask for it -- which is #877's
+#: question about whether a dealt character carries ordinary kit. The
+#: marker names the field because that is the thing a row reads; the
+#: dealing is the half that makes it answer True.
+KIT = ("Gear.carried",)
 
 
 def _enemy_closed(world: Any, me: int, ev: Any) -> bool:

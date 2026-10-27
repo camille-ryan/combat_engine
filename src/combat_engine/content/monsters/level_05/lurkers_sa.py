@@ -2199,8 +2199,8 @@ def m6530a5(c: Cast) -> None:
     and the row was offered against anybody. But the printed effect is that
     *the target's equipment animates* -- a sword, a shield, a suit of
     armour -- and `Gear` records exactly those. Ordinary kit is a different
-    card's problem (`p16442` and its siblings need a trap-making kit, which
-    the ETL has never imported) and this one does not need it.
+    card's problem (`p16442` and its siblings need `i390`, imported under
+    #876) and this one does not need it.
 
     Not `holding=`, which asks what is **in hand**: a creature with a
     shield and nothing drawn carries equipment, and `holding=""` is the

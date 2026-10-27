@@ -968,8 +968,8 @@ def i2285p1(c: Cast) -> None:
 
     **A torch is bright light to a radius of 5**, which is the one number
     here that is not on the card: looked up rather than guessed, and it is
-    the published equipment figure (an everburning torch prints the same 5,
-    a sunrod 20). So "like a torch" is `c.light(5)`.
+    the published equipment figure (`i189` prints the same 5 and `i386`
+    20). So "like a torch" is `c.light(5)`.
 
     The free action to end it is `c.endable`."""
     held = c.light(5, on=c.me, until=When.ENCOUNTER)
