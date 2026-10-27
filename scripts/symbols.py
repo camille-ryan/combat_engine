@@ -52,6 +52,7 @@ Nothing else is nested, because nothing else has a split the code insists on.
 from __future__ import annotations
 
 import argparse
+import ast
 import inspect
 import sys
 from collections.abc import Callable
@@ -1144,29 +1145,107 @@ def _without_prose(text: str) -> str:
     return _re.sub(r"(?m)#[^\n]*", blank, text)
 
 
-def _gate_reads() -> list[tuple[str, str, str]]:
-    """Every `ctx.get("…")` in `content/`, as (ref, key, file).
+def _is_ctx(node: ast.expr) -> bool:
+    """Is this the attack context, under any of the three spellings in use?
 
-    The ref is the nearest `@power("…")` above the gate, which is what makes
-    a failure actionable: the author needs the row, not the line.
+    `ctx` is the common one; a lambda parameter is sometimes `_ctx`, and a
+    damage event carries its own as `ev.ctx` (`resolve.py` attaches it). The
+    regex this replaced matched all three by accident -- its pattern is a
+    substring of `_ctx.get(` and of `ev.ctx.get(` -- and a first AST draft
+    that insisted on a bare `ctx` Name silently dropped two real reads.
     """
-    import re
+    if isinstance(node, ast.Name):
+        return node.id == "ctx" or node.id.endswith("_ctx")
+    if isinstance(node, ast.Attribute):
+        return node.attr == "ctx"
+    return False
 
+
+def _gate_owner(
+    node: ast.AST, parent: dict[ast.AST, ast.AST]
+) -> str:
+    """Which row a gate belongs to, by its **enclosing function**.
+
+    **This was the nearest `@power("…")` above the gate, by offset, and that
+    is wrong for every row declared with a helper decorator.** A gate inside
+    `@_trait("f1302")` was attributed to whatever `@power` came last -- for
+    `f1302` that was `f1295b`, declared 638 lines earlier and with nothing
+    wrong with it. The message this check prints is *"the gate is never true
+    and the row does nothing"*, so handing over an innocent ref sends the
+    reader to the wrong body. #904.
+
+    Walks out through the enclosing functions and takes the first decorator
+    carrying a string-constant first argument, innermost first -- which
+    resolves `@power("p653")`, `@_trait("f1302")` and any future helper of
+    that shape without naming them.
+
+    A row minted by a helper whose `ref` is a **parameter** (`_leash(ref,
+    …)`) cannot be resolved statically at all, so this names the helper
+    function with `()` rather than guessing a ref. 363 gates are in that
+    position and the honest answer for them is "which helper", which is what
+    an author needs.
+    """
+    chain: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+    cur = node
+    while cur in parent:
+        cur = parent[cur]
+        if isinstance(cur, ast.FunctionDef | ast.AsyncFunctionDef):
+            chain.append(cur)
+    if not chain:
+        return ""
+    for fn in chain:
+        for dec in fn.decorator_list:
+            if (
+                isinstance(dec, ast.Call)
+                and dec.args
+                and isinstance(dec.args[0], ast.Constant)
+                and isinstance(dec.args[0].value, str)
+            ):
+                return dec.args[0].value
+    return f"{chain[-1].name}()"
+
+
+def _gate_reads() -> list[tuple[str, str, str]]:
+    """Every `ctx.get("…")` in `content/`, as (owner, key, file).
+
+    The owner is the **enclosing row**, resolved by AST rather than by
+    finding the nearest `@power` above the gate -- see `_gate_owner` for what
+    that got wrong and for the helper case it cannot resolve.
+
+    Measured across the swap: the same **1964** gates either way, with
+    **309** that had no owner at all now attributed and **530** file-and-key
+    pairs whose owner changed. Two reads the first AST draft dropped are
+    back; see `_is_ctx`.
+
+    An AST walk also makes `_without_prose` unnecessary here, since a
+    docstring is not a `Call` -- but that helper has other callers and stays.
+    """
     out: list[tuple[str, str, str]] = []
-    decorator = re.compile(r'@power\(\s*\n?\s*"([A-Za-z0-9_:+-]+)"')
-    getter = re.compile(r'ctx\.get\(\s*"([a-z_]+)"')
     for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
-        text = _without_prose(path.read_text(errors="replace"))
-        marks = [(m.start(), m.group(1)) for m in decorator.finditer(text)]
-        for hit in getter.finditer(text):
-            owner = ""
-            for at, ref in marks:
-                if at < hit.start():
-                    owner = ref
-                else:
-                    break
-            rel = path.relative_to(ROOT).as_posix()
-            out.append((owner, hit.group(1), rel))
+        try:
+            tree = ast.parse(path.read_text(errors="replace"))
+        except SyntaxError:
+            continue
+        parent: dict[ast.AST, ast.AST] = {}
+        for node in ast.walk(tree):
+            for child in ast.iter_child_nodes(node):
+                parent[child] = node
+        rel = path.relative_to(ROOT).as_posix()
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and _is_ctx(node.func.value)
+            ):
+                continue
+            if not (
+                node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                continue
+            out.append((_gate_owner(node, parent), node.args[0].value, rel))
     return out
 
 
