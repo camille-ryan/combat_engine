@@ -744,12 +744,13 @@ def _abilities(m: Monster, body: str) -> None:
                 section = name
         # **A bolded label ending in a colon is a clause of the ability
         # above, not the start of a new one.** The earlier dialect splits
-        # abilities on bold headings, so "Secondary Attack:" inside a card
-        # read to the splitter as its own ability -- which left the parent
-        # incomplete *and* gave the creature a standard at-will it does not
-        # have. `m4756` is the case: its Blackleaf Arrow promises "on a hit,
-        # <it> makes a secondary attack against the same target" and the
-        # line that attack rolls on was filed as `m4756a3`.
+        # abilities on bold headings, so a card's own colon-ended label --
+        # the one introducing its secondary attack -- read to the splitter
+        # as its own ability, which left the parent incomplete *and* gave
+        # the creature a standard at-will it does not have. `m4756a2` is
+        # the case: it promises "on a hit, <it> makes a secondary attack
+        # against the same target" and the line that attack rolls on was
+        # filed as `m4756a3`.
         #
         # **Folded, not dropped.** Returning early without the text would
         # lose the payoff and leave the parent incomplete, which is the
