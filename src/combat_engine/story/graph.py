@@ -187,6 +187,64 @@ class Graph:
         return found
 
 
+def reconcile(graph: Graph) -> list[tuple[str, str]]:
+    """Fold a short name into the long one it is the tail of. #903.
+
+    One ingest run produced a banker under both his surname and his full
+    name, and a keep under both its short and full name -- each with a
+    different subset of the facts, so a lookup for one missed what the
+    other held.
+
+    **The rule is tighter than "one name contains the other", on purpose.**
+    The short name must be the *last* word of the long one and the kinds
+    must agree. That is the surname and head-noun pattern -- a banker to
+    his full name, a keep to its full name -- and it excludes the case
+    that worries: a first name shared by two people, where the short form
+    is the *leading* word and merging a father into his son would be
+    wrong.
+
+    **Merged as an alias, not by deleting.** The long name stays canonical
+    and the short one resolves to it, so every fact from both is reachable
+    under either. Nothing is discarded, which matters because the rule is
+    a heuristic: if it is ever wrong the cost is a lookup that is too
+    broad, not one that silently lost half its facts.
+
+    No model. The Planescape pipeline this borrows from needed a verifier
+    for its fuzzy pairs because it worked across twenty-seven books, where
+    two deities one letter apart are different people. Inside one
+    adventure the tail rule is exact, and a verifier is the thing to add
+    when a second source arrives (`#903`).
+    """
+    merged: list[tuple[str, str]] = []
+    for short in sorted(graph.entities.values(), key=lambda e: len(e.name)):
+        head = _fold(short.name)
+        if not head or " " in head:
+            continue
+        for long in graph.entities.values():
+            if long.id == short.id or long.kind != short.kind:
+                continue
+            words = _fold(long.name).split()
+            if len(words) > 1 and words[-1] == head:
+                long.facts += short.facts
+                long.aliases = tuple(dict.fromkeys(
+                    (*long.aliases, short.name, *short.aliases)))
+                del graph.entities[short.id]
+                # Re-point every key that named the short entity. **And
+                # nothing more** -- a loop re-indexing the long entity's
+                # own names used to follow this, and breaking it changed
+                # no assertion, which is what a dead line looks like
+                # rather than an untested one. The long entity's names
+                # were already in the index, and its new aliases are the
+                # short one's keys, which this rewrites.
+                graph.index = {
+                    k: (long.id if v == short.id else v)
+                    for k, v in graph.index.items()
+                }
+                merged.append((short.name, long.name))
+                break
+    return merged
+
+
 def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", _fold(name)).strip("-") or "unnamed"
 

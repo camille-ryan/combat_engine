@@ -29658,6 +29658,47 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
         f"{[f.source for f in patron.facts]}",
     )
 
+    # **A short name folds into the long one it is the tail of.** #903.
+    two = gr.Graph()
+    two.add(gr.Entity(id="ronnik", name="Ronnik", kind="person",
+                      facts=[gr.Fact("lends at bad rates", "page", where="p11")]))
+    two.add(gr.Entity(id="ferdinand-ronnik", name="Ferdinand Ronnik",
+                      kind="person",
+                      facts=[gr.Fact("keeps a jewel", "page", where="p10")]))
+    # Must NOT fold: a shared *leading* word is two people, not one.
+    two.add(gr.Entity(id="john", name="John", kind="person"))
+    two.add(gr.Entity(id="john-smith", name="John Smith", kind="person"))
+    # Must NOT fold: the tail matches but the kinds do not.
+    two.add(gr.Entity(id="scar", name="Scar", kind="person"))
+    two.add(gr.Entity(id="chaos-scar", name="Chaos Scar", kind="place"))
+    folded = gr.reconcile(two)
+
+    out.that(
+        ("Ronnik", "Ferdinand Ronnik") in folded,
+        "a surname folds into the full name it ends",
+        f"{folded}",
+    )
+    joined = two.find("Ronnik")
+    out.that(
+        joined is not None and joined.name == "Ferdinand Ronnik"
+        and len(joined.facts) == 2,
+        "and both names reach one entity holding both sets of facts",
+        f"{joined.name if joined else None}, "
+        f"{len(joined.facts) if joined else 0} facts",
+    )
+    john = two.find("John")
+    out.that(
+        john is not None and john.name == "John",
+        "while a shared first name is left alone -- two people, not one",
+        f"{john.name if john else None}",
+    )
+    scar = two.find("Scar")
+    out.that(
+        scar is not None and scar.kind == "person",
+        "and a matching tail across two kinds is left alone as well",
+        f"{[(e.name, e.kind) for e in two.entities.values() if 'car' in e.name]}",
+    )
+
     # A graph survives the round trip, and a provenance it cannot read is
     # refused rather than defaulted -- guessing would launder an invention
     # into canon, or throw away a citation.

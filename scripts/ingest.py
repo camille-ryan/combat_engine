@@ -239,17 +239,16 @@ def harvest(folder: Path, pages: list[int], role: llm.Role,
     return graph, tally
 
 
-# **Not done: reconciling names.** One run produced `Ronnik` and `Ferdinand
-# Ronnik` as two entities, and `Keep` beside `Restwell Keep`. The project
-# this borrows from solved it with a merge pass -- exact matches merge
-# silently, fuzzy pairs go to a model that sees both descriptions and rules
-# same-or-different, which caught cases pure edit distance cannot (two
-# deities one letter apart are not one deity).
+# **Names are reconciled, with a tail rule rather than a model.** One run
+# produced a banker under his surname and his full name, and a keep under
+# its short and full name. `graph.reconcile` folds a one-word name into
+# the long name it is the *last* word of, when the kinds agree -- the
+# surname and head-noun pattern -- and keeps the short form as an alias,
+# so nothing is lost if the rule is ever wrong.
 #
-# Until that exists, a lookup for the short form and the long form return
-# different entities and neither has all the facts. It does not make
-# anything *wrong* -- both are grounded, both cite pages -- it makes recall
-# incomplete, which is the safe direction. #903.
+# A model verifier is the thing to add when a second source arrives, not
+# now: across twenty-seven books two deities one letter apart are
+# different people, and inside one adventure the tail rule is exact. #903.
 
 
 def main() -> int:
@@ -296,6 +295,9 @@ def main() -> int:
     print(f"  {tally['kept']:5} kept, with a quote found on the page")
     print(f"  {tally['mended']:5} of those needed a fuzzy match to find")
     print(f"  {tally['unquotable']:5} dropped: no such words on the page")
+    folded = gr.reconcile(graph)
+    for short, long in folded:
+        print(f"      folded {short!r} into {long!r}")
     print(f"  {len(graph.entities):5} distinct entities after merging")
     if tally["offered"]:
         print(f"  {tally['kept'] / tally['offered']:.0%} of what the model "
