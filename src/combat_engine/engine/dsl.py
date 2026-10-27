@@ -3991,9 +3991,24 @@ def _survive_provoking(world: World, actor: int, ref: str) -> bool:
     for foe in sorted(enemies(world, actor)):
         pos = world.get(foe, Position)
         if pos is not None and pos.squares & reach:
-            world.bus.emit(
-                OpportunityWindow(actor=foe, provoker=actor, why=f"{ref} is a ranged power")
+            # `by` is the ranged power being used, and the window is parked
+            # on the world for the duration of the emit so `resolve.attack`
+            # can carry it into the attack context. Four of #880's five rows
+            # narrow on exactly this -- "an opportunity attack you provoke
+            # when using a ranged or an area power" -- which `opportunity`
+            # alone cannot tell from a move.
+            window = OpportunityWindow(
+                actor=foe, provoker=actor, why=f"{ref} is a ranged power"
             )
+            window.by = ref  # ty: ignore[unresolved-attribute]
+            # Saved and restored rather than cleared, because windows nest
+            # -- see `movement.step`, where the same plant found it.
+            prior = world.provocation
+            world.provocation = window
+            try:
+                world.bus.emit(window)
+            finally:
+                world.provocation = prior
     return can_act(world, actor)
 
 

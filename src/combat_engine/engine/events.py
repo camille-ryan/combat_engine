@@ -374,6 +374,23 @@ class OpportunityWindow(Decision):
     controller (a player, or whatever plays the monsters) subscribes and
     answers. Opened while the provoker is still in the square it is leaving,
     because an opportunity attack interrupts the move.
+
+    **`by` is attached, not declared**, and that is deliberate. A row that
+    narrows on *what* provoked the opening needs the ref, and the two
+    non-movement emitters have it -- `c.provoke` from its caller,
+    `_survive_provoking` as the ranged power being used. But this class
+    appears **31 times in the committed fixtures** and `Event.wire()` ships
+    declared fields, so a real field moves every one of them for a value
+    five rows read. `Effect.by` and `Bloodied.weapon` are the precedent:
+    `setattr` it, read it with `getattr(ev, "by", "")`, and `replay` never
+    sees it.
+
+    Movement leaves it empty, because a move is not a row. **The absence is
+    the signal**, which is what lets `f1302` ask "provoked by *this
+    movement*" and `f2565` ask "provoked by using a ranged or area power" --
+    the two narrowings that `opportunity` alone cannot tell apart, and that
+    both of those rows' docstrings named as the reason their clause was
+    dropped. #880.
     """
 
     actor: int

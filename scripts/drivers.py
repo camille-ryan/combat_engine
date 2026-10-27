@@ -35199,6 +35199,246 @@ def a_redirected_blow_says_so_and_the_damage_follows(out: Result) -> None:
              f"{len(said)} said")
 
 
+def what_provoked_the_opening_reaches_the_attack(out: Result) -> None:
+    """"An opportunity attack **you provoked with a ranged power**" is not
+    the same gate as "one provoked by **this movement**", and until #880 the
+    attack context could not tell them apart.
+
+    It carried `opportunity` -- the attack *is* one -- and nothing about why
+    the window opened, so five rows narrowing on the provocation each paid
+    out for the other case. Both docstrings said so: `f2565`'s clause was
+    dropped because it "cannot be told from any other", and `f1302`'s
+    because gating on `opportunity` alone "would also pay for the openings a
+    ranged attack gives, which is more often than printed".
+
+    **Driven through the engine's own emitters**, not a synthetic event:
+    `dsl._survive_provoking` is what opens a window for a ranged power and
+    `movement.step` is what opens one for a move, and the whole mechanism is
+    that each parks the window on `world.provocation` for the duration of
+    its emit so `resolve.attack` can read it. A rule that built its own
+    `OpportunityWindow` would test none of that.
+
+    **The observable is the defence actually rolled against**
+    (`AttackResult.target_defence`), so this asserts through `f2565`'s own
+    body rather than by reading a ctx key back. A rule that inspected the
+    key would pass with the row still gated on bare `opportunity`, which is
+    exactly the state this fixes.
+
+    **On the stale-provocation risk #880 deferred itself over, two guards
+    and the plants say which does what.** The first draft of this rule
+    asserted that an ordinary attack taken *after* a window carries no
+    provocation, and credited the `opportunity` gate in `resolve.attack` for
+    it. **The plant refuted that**: removing the gate entirely left all 15
+    assertions green, because by then `world.provocation` is already None --
+    so the *clearing* was what that assertion tested and the gate was
+    covered by nothing.
+
+    They protect different moments, and both are now driven:
+
+    * **the clearing** stops a swing *after* the window inheriting one, and
+      a plant that stops parking the window reddens 2 assertions;
+    * **the `opportunity` gate** stops a swing *inside* the window -- a
+      listener on the open window that attacks for some other reason -- and
+      is only testable there, which is where the ordinary swing below is
+      taken from.
+
+    The `finally` specifically is the narrower of the two: it matters for a
+    listener that raises mid-emit, which neither plant reproduces.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import movement, resolve
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, _survive_provoking
+    from combat_engine.engine.events import Hit, Miss, OpportunityWindow
+    from combat_engine.engine.grid import footprint
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    for ref in ("f2565", "f3540", "f1302"):
+        row = REGISTRY[ref]
+        out.that(not row.unfinished, f"{ref} carries no marker now",
+                 f"{row.unfinished}")
+    for ref in ("i2060x1", "i3085p1"):
+        row = REGISTRY[ref]
+        out.that(row.dropped == ("resolve.ctx.provoked_weapon",),
+                 f"{ref} keeps a marker, re-pointed at the half that is"
+                 " genuinely unreachable -- the weapon of record does not"
+                 " exist until the attack rolls",
+                 f"{row.unfinished}")
+
+    # -- what the context carries, per emitter -------------------------
+    seen: list[dict[str, Any]] = []
+
+    def swing(world: Any, foe: int, victim: int, *, chance: bool) -> Any:
+        """One attack, through `resolve` rather than through a verb."""
+        return resolve.attack(world, foe, victim, 0, Defense.AC,
+                              power="mba", opportunity=chance)
+
+    world, me, _started = _posed("f2565", 1)
+    foe = sorted(enemies(world, me))[0]
+    # Stand the foe next to the caster, so a ranged use provokes and a step
+    # away provokes. Moving a creature needs the grid, not just `Position`.
+    spot = must(world.get(me, Position), "the caster has a Position")
+    mine = sorted(spot.squares)[0]
+    beside = (mine[0] + 1, mine[1])
+    world.grid.lift(foe)
+    fpos = must(world.get(foe, Position), "the foe has a Position")
+    fpos.square = beside
+    # **`footprint`, not the bare square.** `Grid.place` indexes a set of
+    # squares, and `movement.place` passes `footprint(square, size)` for
+    # exactly this reason -- a bare tuple leaves the occupancy index
+    # disagreeing with `Position`, which is the trap behind "moving a
+    # creature needs the grid". `ty` named it; the rule was green either way.
+    world.grid.place(foe, footprint(beside, fpos.size))
+
+    # What the **attack events** were told, which is step 5 of the design
+    # and what `i3085p1`'s trigger reads.
+    told: list[tuple[bool, str]] = []
+
+    def note(ev: Any) -> None:
+        told.append((bool(getattr(ev, "opportunity", False)),
+                     str(getattr(ev, "provoked_by", "") or "")))
+
+    world.bus.on(Hit, note)
+    world.bus.on(Miss, note)
+
+    def take_the_swing(ev: Any) -> None:
+        got: dict[str, Any] = {
+            "by": str(getattr(world.provocation, "by", "") or ""),
+            "kind": str(getattr(world.provocation, "kind_", "") or ""),
+        }
+        del told[:]
+        got["defence"] = swing(world, ev.actor, ev.provoker,
+                               chance=True).target_defence
+        got["chance"] = list(told)
+        # **An ordinary swing taken while the window is still open.** This is
+        # the only moment the `opportunity` gate is testable at all: after
+        # the emit returns the window is cleared, so an assertion out there
+        # tests the clearing instead and passes with the gate deleted. The
+        # plant proved that about this rule's own first draft.
+        del told[:]
+        swing(world, ev.actor, ev.provoker, chance=False)
+        got["ordinary"] = list(told)
+        seen.append(got)
+
+    world.bus.on(OpportunityWindow, take_the_swing)
+
+    # **`f2565`'s body is deliberately not called here, and calling it was a
+    # bug.** `audit.board` starts the encounter and `turns.arm_traits` runs a
+    # standing trait's body as part of that, so the rider is already laid.
+    # Calling it again laid a second +4 and the assertion below read +8 --
+    # which looks like the engine double-counting and was the rule
+    # double-arming. So this still drives the row's own body; the engine runs
+    # it, which is stronger evidence than calling it by hand.
+    #
+    # The evidence that it really was armed is the **exactly +4** below: a
+    # row that never armed gives +0 and a double-armed one gives +8, so that
+    # one number distinguishes all three cases and no separate assertion
+    # about `Effects` is needed.
+    base = swing(world, foe, me, chance=False).target_defence
+    out.that(base > 0,
+             "the caster has an AC to be rolled against at all, which every"
+             " comparison below is a difference from",
+             f"AC {base}")
+
+    # -- a ranged power's use: the row-provoked opening -----------------
+    seen.clear()
+    ranged = "i1043p1"   # the ref `winrate` already reports provoking with
+    _survive_provoking(world, me, ranged)
+    # One window per adjacent enemy, and the board stands four of them in
+    # reach -- so this asserts over **every** window rather than over the
+    # first. "Exactly one" was a claim about the board, not the engine, and
+    # it was wrong; reading only `seen[0]` would have passed either way.
+    out.that(len(seen) >= 1,
+             "using a ranged power beside an enemy opens a window through"
+             " `dsl._survive_provoking`, the engine's own emitter",
+             f"{len(seen)} window(s)")
+    if seen:
+        out.that(all(g["by"] == ranged and g["kind"] == "" for g in seen),
+                 "**and every window names the provoking row** -- `by` is"
+                 " the ranged power and `kind_` is empty, because a row"
+                 " opened this and not a move",
+                 f"{[(g['by'], g['kind']) for g in seen]}")
+        out.that(all(g["defence"] == base + 4 for g in seen),
+                 "so `f2565` pays on each: the opportunity attack is rolled"
+                 " against an AC 4 higher, which is the clause its"
+                 " docstring said could not be written",
+                 f"{base} -> {[g['defence'] for g in seen]}")
+    # Snapshot before the move case reuses `seen`. The first draft asserted
+    # the event half *after* that reuse and read the move windows' empty
+    # refs -- a real FAIL, of the rule rather than of the engine.
+    by_a_row = list(seen)
+
+    # -- the negative control: a move-provoked opening -----------------
+    # The exact over-payment `f2565`'s old gate made, and the one `f1302`
+    # wants instead. If this came out +4 the narrowing would be measuring
+    # nothing.
+    seen.clear()
+    away = (mine[0] - 3, mine[1])
+    movement.step(world, me, away, kind="walk", mode="walk")
+    out.that(len(seen) >= 1,
+             "walking out of the enemy's reach opens a window through"
+             " `movement.step`",
+             f"{len(seen)} window(s)")
+    if seen:
+        out.that(all(g["by"] == "" and g["kind"] == "walk" for g in seen),
+                 "**named the other way round** -- no provoking row, and the"
+                 " move kind `movement.step` was given. The absence of `by`"
+                 " is the signal `f1302` reads",
+                 f"{[(g['by'], g['kind']) for g in seen]}")
+        out.that(all(g["defence"] == base for g in seen),
+                 "and `f2565` does **not** pay for it, which is the"
+                 " over-payment its old `opportunity`-only gate made and the"
+                 " control that a rule asserting only the ranged case would"
+                 " miss",
+                 f"{base} vs {[g['defence'] for g in seen]}")
+
+    # -- an ordinary attack inherits nothing, in both moments ----------
+    # The risk #880 deferred itself over. Two guards, and the plants say
+    # which covers which -- see the docstring.
+    out.that(world.provocation is None,
+             "the window is closed once its emit returns, so nothing is"
+             " parked on the world between swings -- this is what stops a"
+             " swing *after* the window inheriting a provocation",
+             f"{world.provocation}")
+    del told[:]
+    after = swing(world, foe, me, chance=False).target_defence
+    out.that(after == base and all(not p[1] for p in told),
+             "and an ordinary attack taken straight after a window carries"
+             " no provocation on its events either",
+             f"{base} vs {after}, {told}")
+
+    # And the half the first draft of this rule could not see: inside the
+    # window, where `world.provocation` really is set, the `opportunity`
+    # gate is the only thing keeping an ordinary swing clean.
+    # **From the ranged snapshot, not from `seen`.** A move window carries
+    # no `by` at all, so an ordinary swing inside one reads empty whether
+    # the gate exists or not -- the second draft of this rule asserted
+    # exactly that and the plant stayed green again. The provocation has to
+    # be a *non-empty ref* for its absence to mean anything.
+    ordinary = [p for g in by_a_row for p in g.get("ordinary", [])]
+    out.that(bool(ordinary),
+             "an ordinary attack really was taken **inside** an open"
+             " row-provoked window, so the assertion below is about the gate"
+             " rather than about the clearing -- and about a window whose"
+             " provocation is a real ref, so an empty answer is evidence",
+             f"{len(ordinary)} ordinary swing(s) inside a window")
+    out.that(all(not opp and not by for opp, by in ordinary),
+             "**and it carries no provocation**, though one is parked on the"
+             " world at that moment: `resolve.attack` reads the window only"
+             " when the swing is an opportunity attack",
+             f"{ordinary[:4]}")
+
+    # -- and the events carry it, which is what i3085p1's trigger reads --
+    on_events = [p for g in by_a_row for p in g.get("chance", [])]
+    out.that(bool(on_events)
+             and all(opp and by == ranged for opp, by in on_events),
+             "the provoking ref reaches the attack **events** and not only"
+             " the context, which is what a trigger answering a `Hit` can"
+             " read -- `i3085p1` narrows there",
+             f"{on_events[:4]}")
+
+
 def a_restored_or_expended_use_says_so(out: Result) -> None:
     """Handing a use back, and spending one without running the row, are each
     announced in their own right.
@@ -35975,6 +36215,10 @@ DRIVERS = {
     "use_restored": (
         a_restored_or_expended_use_says_so,
         "a use handed back, or spent without running the row, is said (#899)",
+    ),
+    "provoked_by": (
+        what_provoked_the_opening_reaches_the_attack,
+        "what provoked an opportunity attack reaches its context (#880)",
     ),
     "feint": (
         a_feint_is_an_action_and_one_feat_rides_it,

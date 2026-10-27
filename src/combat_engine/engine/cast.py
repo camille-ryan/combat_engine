@@ -3322,15 +3322,28 @@ class Cast:
         A handful of rows say "it provokes an opportunity attack from an ally
         of your choice". The engine already has the window and a controller
         to answer it; this is the door in.
+
+        Carries `by` -- the row that opened it -- and parks the window on
+        `world.provocation` for the duration of the emit, so
+        `resolve.attack` can tell a row-provoked opening from a move. See
+        `OpportunityWindow`. #880.
         """
         from .events import OpportunityWindow
 
         victim = self._who(on)
         if victim is None:
             return
-        self.world.bus.emit(
-            OpportunityWindow(actor=attacker, provoker=victim, why=why or self.ref)
+        window = OpportunityWindow(
+            actor=attacker, provoker=victim, why=why or self.ref
         )
+        window.by = self.ref  # ty: ignore[unresolved-attribute]
+        # Saved and restored rather than cleared -- windows nest.
+        prior = self.world.provocation
+        self.world.provocation = window
+        try:
+            self.world.bus.emit(window)
+        finally:
+            self.world.provocation = prior
 
     def swap(self, other: int, *, who: int | None = None) -> bool:
         """Two creatures change places. Either both move or neither does.

@@ -62,6 +62,28 @@ class World:
         #: rather than a lookup, because a power body that summons something
         #: has to put it in the initiative order and had no way to reach it.
         self.encounter: Any = None
+        #: The `OpportunityWindow` currently open, or None. Live state about
+        #: the fight in progress, like `turn` and `encounter` above.
+        #:
+        #: It exists so `resolve.attack` can say **what provoked** an
+        #: opportunity attack. The chain is: a window opens knowing the ref,
+        #: the move kind and the mode -> a controller answers -> somebody
+        #: swings -> `resolve.attack` builds a context that used to carry
+        #: `opportunity=True` and nothing else about the provocation.
+        #: Threading it through every taker would touch each call site; one
+        #: field here keeps the knowledge in one place.
+        #:
+        #: **It cannot go stale, and that is structural rather than
+        #: careful.** All three emitters are a plain synchronous
+        #: `bus.emit(...)` and the window is a `Decision` -- the controller
+        #: takes the swing *inside* that call -- so the field is set and
+        #: cleared around one function call in a `finally`. `#880` deferred
+        #: itself over the risk of a stale provocation reading as a working
+        #: narrowing, and the synchronous emit is what removes it: nothing
+        #: can observe this outside the emit, even if a listener raises.
+        #:
+        #: Read through the attack context, never directly from a row.
+        self.provocation: Any = None
         self._stores: dict[type, dict[int, Any]] = {}
         self._alive: list[int] = []
         self._next = 0

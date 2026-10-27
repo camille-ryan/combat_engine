@@ -37,6 +37,7 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     ENCOUNTER,
     FORT,
@@ -1533,15 +1534,25 @@ def f2564(c: Cast) -> None:
 
 
 @power("f2565", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("resolve.ctx.provoked_by",))
+       reach=PERSONAL, target=SELF)
 def f2565(c: Cast) -> None:
-    """The narrowing is dropped. The defence context carries
-    `opportunity` and nothing about *why* the window opened, so "an
-    opportunity attack you provoked by using a ranged power" cannot be
-    told from any other."""
+    """The narrowing is written now. `ctx["provoked_reach"]` is the
+    **provoking** row's shape in `ctx["reach"]`'s own vocabulary, so "a
+    ranged or an area power" is `"ranged"` or one of `AREA_OR_CLOSE`.
+
+    `opportunity` alone was the old gate and it was wider than printed: it
+    also paid for the opening your *walking away* gives, which is a move
+    and carries no provoking row at all. #880.
+    """
+    def provoked_by_a_ranged_power(ctx: dict[str, Any]) -> bool:
+        if not ctx.get("opportunity"):
+            return False
+        shape = ctx.get("provoked_reach", "")
+        return shape == "ranged" or shape in AREA_OR_CLOSE
+
     c.bonus(
         AC, 4, on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("opportunity", False),
+        when=provoked_by_a_ranged_power,
     )
 
 

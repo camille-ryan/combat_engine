@@ -348,12 +348,43 @@ def attack(
         # opportunity attacks" cannot be written without it, and gating on
         # the power's ref instead catches a standard-action basic and misses
         # a creature whose opportunity attack is something else.
+        #
+        # **And `opportunity` alone was not enough**, which five rows said in
+        # their own words before anything carried the answer: it says an
+        # attack *is* an opportunity attack and never what provoked it, so
+        # "against opportunity attacks you provoke with a ranged power" and
+        # "provoked by this movement" could not be told apart and both paid
+        # out for the other. Read off the window that is open right now --
+        # see `World.provocation` -- rather than threaded through every
+        # taker. Only when `opportunity` is true, so an ordinary attack
+        # cannot inherit a provocation. #880.
+        window = world.provocation if opportunity else None
         ctx = {
             "attacker": attacker,
             "target": target,
             "power": power,
             "advantage": ca,
             "opportunity": opportunity,
+            # What opened the window this swing is coming through. Three
+            # keys because the rows split three ways: whether it was a row
+            # at all (`provoked_by` empty means a move), which row, and how
+            # the provoker was travelling.
+            "provoked_by": str(getattr(window, "by", "") or ""),
+            "provoked_kind": str(getattr(window, "kind_", "") or ""),
+            "provoked_mode": str(getattr(window, "mode", "") or ""),
+            # The provoking row's **shape**, in `reach`'s own vocabulary, so
+            # "an opportunity attack you provoke when using a ranged or an
+            # area power" is a gate in the words #644 already established
+            # rather than a second registry lookup in every row.
+            #
+            # Needed because `provoked_by` being non-empty means only "a row
+            # opened this", and `c.provoke` opens one for arbitrary rows --
+            # so the ranged-or-area question is narrower than "not a move"
+            # and `f2565` prints the narrower one.
+            "provoked_reach": _reach_kind(
+                str(getattr(window, "by", "") or ""), 0, world,
+                getattr(window, "provoker", None),
+            ) if window is not None else "",
             "charge": charge,
             # Who handed this swing over, and through which row. A bonus
             # to "the melee basic attack granted by your Combat
@@ -497,6 +528,16 @@ def attack(
         # event said so -- the flag lived only in the roll's own context, so
         # a creature could not react to being hit by one.
         rolled.opportunity = opportunity
+        # And **what** provoked it, for the rows that narrow on the
+        # provocation rather than on the swing that came back. Attached
+        # like `opportunity` above and for the same reason: `i3085p1`
+        # answers a `Hit`, and the `Hit` named only the return blow.
+        # Empty when a move opened the window. #880.
+        # A local rather than the dict read, because a ctx value is typed
+        # as the union of everything a ctx holds; narrowing it once here is
+        # a real fix where blessing it would only hide the union.
+        provoked = str(ctx["provoked_by"])
+        rolled.provoked_by = provoked  # ty: ignore[unresolved-attribute]
         rolled.charge = charge
         # **Which swing this is, when one row makes two.** Hung on the event
         # the way `opportunity` and `charge` are. A row that grants a counter
@@ -552,6 +593,7 @@ def attack(
         landed.among = among or (target,)
         landed.branch = branch
         landed.opportunity = opportunity
+        landed.provoked_by = provoked  # ty: ignore[invalid-assignment]
         landed.charge = charge
         landed.as_ = as_
         landed.granted_by = granted_by
@@ -603,6 +645,7 @@ def attack(
             ev.branch = branch
             ev.as_ = as_
             ev.opportunity = opportunity
+            ev.provoked_by = provoked  # ty: ignore[invalid-assignment]
             ev.charge = charge
             ev.granted_by = granted_by
             ev.granted_via = granted_via

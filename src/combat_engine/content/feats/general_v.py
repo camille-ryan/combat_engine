@@ -1623,15 +1623,22 @@ def f3539b(c: Cast) -> None:
 
 
 @power("f3540", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("resolve.ctx.provoked_by",))
+       reach=PERSONAL, target=SELF)
 def f3540(c: Cast) -> None:
-    """The attack context carries `opportunity`, so "against opportunity
-    attacks" is a gate. What it does not carry is what the mount was doing
-    when it provoked, which is the narrowing to a `m112a1` power."""
+    """What the mount was doing when it provoked is
+    `ctx["provoked_by"]` now, so the narrowing to `m112a1` is the ref
+    itself rather than a shape test. #880.
+
+    The bonus is on the mount and the gate is about the mount's own
+    provocation, which is the same creature here -- `c.bonus(on=mount)`
+    means the defence being rolled against is the mount's, and only the
+    mount provokes by using its own `m112a1`.
+    """
     mount = c.mount()
     if mount is not None:
         c.bonus(AC, 4, on=mount, until=When.ENCOUNTER,
-                when=lambda ctx: bool(ctx.get("opportunity")))
+                when=lambda ctx: bool(ctx.get("opportunity"))
+                and ctx.get("provoked_by") == "m112a1")
 
 
 @power("f3541", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

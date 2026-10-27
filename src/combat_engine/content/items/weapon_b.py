@@ -37,6 +37,7 @@ from typing import Any
 from combat_engine.content.items.feet import _grabbing
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     CHA,
     DAILY,
     DEX,
@@ -209,6 +210,35 @@ def _swung_by(who: int):  # noqa: ANN202
 
 
 # -- predicates -------------------------------------------------------------
+
+
+def _provoked_by_a_ranged_power(ev: Any, cls: str = "") -> bool:
+    """Did a ranged or area row open the window this blow came through?
+
+    `ev.provoked_by` is the ref that provoked, attached by `resolve.attack`
+    and **empty when a move opened the window** -- which is the distinction
+    `opportunity` alone could not draw, and the reason two rows here had
+    their clause dropped. #880.
+
+    The shape is asked of the row rather than taken from the event, because
+    only the ctx carries `provoked_reach`; a trigger gets the ref and looks
+    it up, the way `powers/battlemind/level_2.py` already does.
+
+    `cls` narrows further for the row whose card names a class.
+    """
+    ref = str(getattr(ev, "provoked_by", "") or "")
+    if not ref:
+        return False
+    p = get(ref)
+    if p is None or (cls and p.cls != cls):
+        return False
+    kind = p.reach_of(getattr(ev, "branch", 0)).kind
+    return kind == "ranged" or kind in AREA_OR_CLOSE
+
+
+def _ranged_sorcery_provoked(world: World, me: int, ev: Any) -> bool:
+    """The trigger half of the above, for `i3085p1`'s printed class."""
+    return _provoked_by_a_ranged_power(ev, "sorcerer")
 
 
 def _crit_by_me(world: World, me: int, ev: Any) -> bool:
@@ -1092,19 +1122,36 @@ def i2011p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("resolve.ctx.provoked_by",),
+    dropped=("resolve.ctx.provoked_weapon",),
 )
 def i2060x1(c: Cast) -> None:
-    """The attack context carries `opportunity`, so the defence gate is
-    exact; what it cannot say is *what* provoked the opening, so the bonus
-    also applies to an opportunity attack your walking away provoked."""
+    """The openings a *move* gives no longer pay. `ctx["provoked_reach"]`
+    is the provoking row's shape, so "provoked by making a ranged attack"
+    is exact and walking away -- which carries no provoking row at all --
+    is excluded by construction. #880.
+
+    **Still dropped, and the remaining half is narrower than it was**:
+    "with **this weapon**". The window knows the provoking *ref* and
+    nothing knows the weapon yet, because the weapon of record is a
+    parameter to `resolve.attack` and is decided when the attack rolls --
+    strictly later than the moment a ranged power's use opens the window.
+    So the residue is an opportunity attack provoked by a ranged attack
+    made with a *different* weapon, where it used to be any opportunity
+    attack at all.
+    """
+    def provoked_by_a_ranged_attack(ctx: dict[str, Any]) -> bool:
+        if not ctx.get("opportunity"):
+            return False
+        shape = ctx.get("provoked_reach", "")
+        return shape == "ranged" or shape in AREA_OR_CLOSE
+
     c.bonus(
         AC,
         2,
         kind="item",
         on=c.me,
         until=When.ENCOUNTER,
-        when=lambda ctx: bool(ctx.get("opportunity")),
+        when=provoked_by_a_ranged_attack,
     )
 
 
@@ -4404,15 +4451,24 @@ def i3056p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="an enemy hits you with an opportunity attack",
     on=Trigger(
-        Hit, both(targets_me, by_opportunity), "an opportunity attack hits you"
+        Hit,
+        both(targets_me, by_opportunity, _ranged_sorcery_provoked),
+        "an opportunity attack provoked by a ranged or area power hits you",
     ),
-    dropped=("resolve.ctx.provoked_by",),
+    dropped=("resolve.ctx.provoked_weapon",),
 )
 def i3085p1(c: Cast) -> None:
-    """Which class the provoking row belonged to is `get(ref).cls` and would
-    be askable; *what provoked the opening* is not, and the `Hit` the row
-    answers names only the swing that came back. So any opportunity attack
-    that lands on the wielder arms it."""
+    """The `Hit` named only the swing that came back; it carries
+    `provoked_by` now, so the printed Trigger's two askable halves are
+    asked: the opening was given by a ranged or area row, and that row
+    belongs to the class the card names. #880.
+
+    **Still dropped**: "through **this** item". The weapon of record is a
+    parameter to `resolve.attack`, decided when the attack rolls, which is
+    later than the use that opened the window -- so nothing knows which
+    implement the provoking power went through. The residue is the same
+    ranged power used through a different one.
+    """
     c.flat(5)
 
 

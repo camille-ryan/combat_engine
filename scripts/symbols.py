@@ -587,6 +587,32 @@ CTX_KEYS: dict[str, str] = {
     "reach": "the shape of the attack -- `Range.kind` verbatim.",
     "reroll_by": "the ref of whatever asked for the reroll.",
     "skill": "the skill being checked, lowercased.",
+    "provoked_by": (
+        "the **ref that opened the opportunity window** this swing is "
+        "coming through, and `\"\"` when a *move* opened it, because a move "
+        "is not a row. Written by `resolve.attack` off `World.provocation`, "
+        "which `c.provoke`, `dsl._survive_provoking` and `movement.step` "
+        "each park their window on for the duration of its emit. Read only "
+        "when `opportunity` is true, so an ordinary attack cannot inherit "
+        "one. #880."
+    ),
+    "provoked_kind": (
+        "how the provoker was moving when it opened the window -- "
+        "`movement.step`'s own `walk` / `shift` / `charge` -- and `\"\"` "
+        "when a row rather than a move opened it. **The absence is the "
+        "signal**: it is what lets \"provoked by this movement\" be told "
+        "from \"provoked by using a ranged power\", which `opportunity` "
+        "alone could not. #301 put it on the event, #880 carried it here."
+    ),
+    "provoked_mode": "how the provoker was travelling -- walk, fly, swim, "
+                     "burrow. #880.",
+    "provoked_reach": (
+        "the **provoking** row's `Range.kind`, in `reach`'s own vocabulary, "
+        "so \"an opportunity attack you provoke when using a ranged or an "
+        "area power\" is one gate. Narrower than `provoked_by` being "
+        "non-empty, which means only that *some* row opened the window -- "
+        "`c.provoke` opens one for arbitrary rows. #880."
+    ),
     "source": "who laid the effect.",
     "target": "who it lands on. The commonest key in the tree.",
     "when_": (

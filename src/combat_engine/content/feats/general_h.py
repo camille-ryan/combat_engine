@@ -1742,7 +1742,7 @@ def f1301(c: Cast) -> None:
     c.watch(PowerResolved, shift_after, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1302", dropped=("resolve.ctx.provoked_by",))
+@_trait("f1302")
 def f1302(c: Cast) -> None:
     """Two of the four clauses are the same sentence on two rows: a
     defence bonus against *the target of* the exploit, which does not
@@ -1754,22 +1754,44 @@ def f1302(c: Cast) -> None:
     "Against that enemy" is a `when=` on the attacker, which the defence
     query is handed. No type word is printed, so the bonus is untyped.
 
-    Dropped: p971's clause lengthens the move its row prints, and
-    p1505's covers only the opportunity attacks *that* movement provokes
-    -- gating on `opportunity` alone would also pay for the openings a
-    ranged attack gives, which is more often than printed.
+    **The other two clauses are written now.** `p971` prints "+Cha to
+    defences against opportunity attacks provoked by **this movement**" and
+    `p1505` prints the same for "opportunity attacks made against you
+    **during that movement**", and the note this replaces said both were
+    dropped because gating on `opportunity` alone "would also pay for the
+    openings a ranged attack gives, which is more often than printed".
+
+    `ctx["provoked_kind"]` answers it: it is `movement.step`'s own kind --
+    `walk`, `shift`, `charge` -- and **empty when a row rather than a move
+    opened the window**. So the move case is the non-empty one, and the
+    ranged openings the old note worried about are excluded by
+    construction. #880.
+
+    Both clauses are the same gate, which is why they are one rider: the
+    printed difference between them is *which* movement, and neither card
+    narrows further than "the move this row is about". Hung on the same
+    `PowerUsed` watch so the span matches the clause above it.
     """
     me = c.me
     guarded = {"p4541", "p2620"}
+    moves = {"p971", "p1505"}
 
     def on_use(ev: Any) -> None:
-        if ev.actor != me or ev.power not in guarded or c.cha_mod <= 0:
+        if ev.actor != me or c.cha_mod <= 0:
             return
-        for foe in ev.targets:
+        if ev.power in guarded:
+            for foe in ev.targets:
+                for defence in (AC, FORT, REF, WILL):
+                    c.bonus(
+                        defence, c.cha_mod, on=me, until=When.SONT,
+                        when=lambda ctx, foe=foe: ctx.get("attacker") == foe,
+                    )
+        elif ev.power in moves:
             for defence in (AC, FORT, REF, WILL):
                 c.bonus(
                     defence, c.cha_mod, on=me, until=When.SONT,
-                    when=lambda ctx, foe=foe: ctx.get("attacker") == foe,
+                    when=lambda ctx: bool(ctx.get("opportunity"))
+                    and bool(ctx.get("provoked_kind")),
                 )
 
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)

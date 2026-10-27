@@ -44,6 +44,10 @@ applied (#591). `symbols.py` refuses a key that is not listed here.
 - `ctx['ongoing']` -- is this ongoing damage rather than a blow.
 - `ctx['opportunity']` -- is this an opportunity attack.
 - `ctx['power']` -- the ref of the row doing this. The commonest gate.
+- `ctx['provoked_by']` -- the **ref that opened the opportunity window** this swing is coming through, and `""` when a *move* opened it, because a move is not a row. Written by `resolve.attack` off `World.provocation`, which `c.provoke`, `dsl._survive_provoking` and `movement.step` each park their window on for the duration of its emit. Read only when `opportunity` is true, so an ordinary attack cannot inherit one. #880.
+- `ctx['provoked_kind']` -- how the provoker was moving when it opened the window -- `movement.step`'s own `walk` / `shift` / `charge` -- and `""` when a row rather than a move opened it. **The absence is the signal**: it is what lets "provoked by this movement" be told from "provoked by using a ranged power", which `opportunity` alone could not. #301 put it on the event, #880 carried it here.
+- `ctx['provoked_mode']` -- how the provoker was travelling -- walk, fly, swim, burrow. #880.
+- `ctx['provoked_reach']` -- the **provoking** row's `Range.kind`, in `reach`'s own vocabulary, so "an opportunity attack you provoke when using a ranged or an area power" is one gate. Narrower than `provoked_by` being non-empty, which means only that *some* row opened the window -- `c.provoke` opens one for arbitrary rows. #880.
 - `ctx['range_kind']` -- the shape of the attack -- `Range.kind` verbatim: `melee` `ranged` `close_burst` `close_blast` `area_burst` `wall`. Written by `dsl`'s stretch and reshape gates and by `resolve`'s ranged pass. Not the same key as `reach`, which `resolve` writes from `_reach_kind` on an attack's own context -- two spellings of a near-identical fact, left apart because they are written by different passes and read by different gates.
 - `ctx['ranged']` -- was it a ranged attack.
 - `ctx['reach']` -- the shape of the attack -- `Range.kind` verbatim.
