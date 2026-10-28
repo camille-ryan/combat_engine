@@ -6325,6 +6325,69 @@ def _why_never(never: list[Result]) -> None:
         pass
 
 
+
+#: An event class as a reason would spell one: a capitalised word ending in
+#: one of the suffixes this engine's events use. Narrow on purpose -- a bare
+#: capitalised word in prose is not a claim about an event.
+_EVENTISH = re.compile(
+    r"\b([A-Z][A-Za-z]*(?:Applied|Rolled|Used|Resolved|Expired|Spent"
+    r"|Changed|Resized))\b"
+)
+
+
+def _dead_premises() -> list[str]:
+    """An excuse whose reason names a symbol the tree no longer has.
+
+    **The conclusion is checked and the premise is not, which is #545's
+    sharper finding.** `audit.py` already refuses an excuse naming an
+    undeclared row, and already reports an excuse whose row has started
+    firing -- both tests of the *verdict*. Neither reads the sentence. So an
+    entry can stop being true while staying green: `i2318p1`'s reason said
+    the verb *"announces only a Note"*, the verb was given two events, and
+    the row stayed silent for an entirely different cause. Three stale
+    reasons were found by hand in one day and none by a gate.
+
+    This is the half of that which is mechanical: a reason naming `c.foo`,
+    `query.foo` or an event class that does not exist cannot be true,
+    whatever the row is doing.
+
+    **Deliberately narrow, and the measurement says why.** Across 193
+    entries the reasons name a symbol **4 times, in 3 of them** -- they are
+    prose, not references -- so this gate is nearly vacuous today and will
+    not catch the `i2318p1` shape, where every symbol named still existed. It
+    earns its microseconds as a rename guard: one rename wave already
+    produced a stale excuse (`cf:wizard-implement`), and the same wave
+    hitting a verb named in a reason goes red here instead of silently
+    describing something gone.
+
+    The richer check #545 asks for -- *"a `KNOWN_SILENT` entry naming a verb
+    or an event that no longer behaves as the text says"* -- is **not
+    buildable against prose**, and that is the finding rather than a
+    shortfall: making it checkable means the entries carrying a structured
+    premise, which is an authoring convention for 193 of them and a call
+    rather than a patch. Recorded on the issue.
+    """
+    from combat_engine.engine import query as _query
+    from combat_engine.engine.cast import Cast as _Cast
+
+    verbs = {n for n in dir(_Cast) if not n.startswith("__")}
+    readers = {n for n in dir(_query) if not n.startswith("_")}
+    events = _event_names()
+    out: list[str] = []
+    for ref, reason in sorted(KNOWN_SILENT.items()):
+        text = reason if isinstance(reason, str) else str(reason)
+        for name in re.findall(r"\bc\.([a-z_][a-z_0-9]*)", text):
+            if name not in verbs:
+                out.append(f"{ref}'s reason names c.{name}, which Cast has not")
+        for name in re.findall(r"\bquery\.([a-z_][a-z_0-9]*)", text):
+            if name not in readers:
+                out.append(f"{ref}'s reason names query.{name}, which does not exist")
+        for name in _EVENTISH.findall(text):
+            if name not in events:
+                out.append(f"{ref}'s reason names {name}, which is not an event class")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -6670,6 +6733,7 @@ def main() -> int:
         f"DID_SOMETHING names {k}, which is not an event class"
         for k in sorted(DID_SOMETHING - _event_names())
     ]
+    refused += _dead_premises()
     for line in refused:
         print(f"  IGNORED {line}")
 
