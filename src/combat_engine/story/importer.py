@@ -122,9 +122,16 @@ def kind_of(title: str) -> str:
 #:
 #: An adventure sets three different things in italics and only one of them
 #: is boxed text: the running head on every page, a power's one-line flavour
-#: in a stat block ("Frigid water washes out, chilling all it touches."), and
-#: the thing we want. Length separates them cleanly -- the real boxed text on
-#: the module in hand runs 400-2,800 characters and the impostors run 20-65.
+#: in a stat block -- a single sentence of scene-setting, printed above the
+#: mechanics -- and the thing we want. Length separates them cleanly: the
+#: real boxed text on the module in hand runs 400-2,800 characters and the
+#: impostors run 20-65.
+#:
+#: **This note used to quote one of those flavour lines verbatim** to show
+#: what gets rejected, which put a printed line in a tracked file --
+#: `24989a8`, and `leaks.py --modules` is what finally saw it, since the
+#: compendium-name passes had nothing to match it against. Described rather
+#: than quoted; the length argument is the part that mattered. #917.
 READ_ALOUD = 150
 
 
@@ -642,7 +649,7 @@ model that doing it is a thing this scene supports.
 opens. Nobody declares it; everyone rolls their own check and whoever passes
 learns it -- the player hears it directly, a companion tells them.
 
-    {{"fact": "the jewel was stolen from the temple long ago",
+    {{"fact": "the bridge here collapsed two winters ago",
       "skill": "history", "dc": 15}}
 
 **This is the single easiest thing to harvest and the page has it in bulk.**

@@ -52,6 +52,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 from combat_engine.db import ROOT, SOURCE, game, localisation
@@ -551,8 +552,33 @@ MODULE_RUN = 8
 MODULE_NAME_MIN = 4
 
 
+#: The typeset punctuation a page uses where the database uses ASCII.
+#:
+#: The same table and the same reason as `ingest._fold`: a book is typeset
+#: and a database column is typed, so a run that is word-for-word identical
+#: fails to match on punctuation alone.
+#: Written as escapes rather than literals because `ruff`'s RUF001 refuses
+#: an ambiguous quotation mark in source, which is the right call for every
+#: other file and merely inconvenient here. Ligatures are left to NFKC
+#: below, which already maps them.
+_MODULE_CURLY = str.maketrans({
+    "\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
+    "\u2014": "-", "\u2013": "-", "\u00ad": "",
+})
+
+
 def _module_words(text: str) -> list[str]:
-    return re.findall(r"[a-z']+", text.lower())
+    """The words of a run, with the two corpora spelled the same way.
+
+    **The fold is not cosmetic and leaving it out cost the rules filter most
+    of its reach.** `[a-z']+` takes a straight apostrophe and not a curly
+    one, and the pages are full of curly ones -- so a possessive tokenised
+    as *two* words off a page and as *one* off the database, every shingle
+    containing it came out different, and `_rules_runs` could not waive a
+    rules formula it held verbatim. #917.
+    """
+    folded = unicodedata.normalize("NFKC", text).translate(_MODULE_CURLY)
+    return re.findall(r"[a-z']+", folded.lower())
 
 
 def _module_runs(text: str) -> set[str]:
@@ -598,15 +624,50 @@ def _module_runs(text: str) -> set[str]:
 #:   phrase slipped straight through: the title was caught one word along
 #:   as a window containing neither title in full. Shingles overlap, so an
 #:   exact key only ever silences one of them.
+#: **#917 put two entries here and then took them out again, and why is
+#: the useful part.** Adding `pages/*.txt` took the corpus from 6,493 runs
+#: to 43,210 -- and the raw pages are not length-filtered the way
+#: `read_aloud` is, so the material `#909` removed at the extractor came
+#: back by the new route: the book reprints **pre-generated characters** at
+#: the back, and their class-feature text is rules prose that five content
+#: files state as a mechanic.
+#:
+#: Waiving it here would have meant **writing a printed class-feature name
+#: into this file** -- the run is the feature's name followed by its
+#: once-per-encounter limit, and there is no distinctive fragment that
+#: omits the name. A baseline entry spelling it would have been the exact
+#: leak this gate exists to catch, in the gate.
+#:
+#: So the filter was widened instead: `_rules_runs` now reads the
+#: localisation's `rules_text` as well as `game.db`'s `spec`, which waives
+#: all four runs by holding them verbatim and names nothing. That is the
+#: same preference the note above states -- fix the corpus, not the
+#: verdict -- reached from the other direction.
 MODULE_BENIGN: dict[str, str] = {}
 
 
 def _rules_runs() -> set[str]:
     """Every eight-word run the rules themselves use.
 
-    From `spec`, which is the text column on every table that has prose.
-    Built once; about 269,000 runs, which is a set lookup and costs
-    nothing next to reading the tree.
+    Two sources, and the second was added by #917 because the first is not
+    enough. `spec` is the sanitised text column on the tables that carry
+    prose -- about 268,000 runs. The localisation's `rules_text` is the
+    *printed* wording of the same rules, which is a different corpus: 25,413
+    fields and about 627,000 runs.
+
+    **The gap between them was load-bearing.** An adventure reprints
+    pre-generated characters, so a class feature's printed limit is in the
+    module corpus -- and five content files state that same limit as a
+    mechanic. `spec` does not hold it: measured, the phrase appears in **no
+    column of any of the 25 tables** in `game.db`, because that feature's
+    prose is not ingested. `rules_text` holds all four runs verbatim, so
+    widening here waives them without a prose baseline -- which matters more
+    than usual, since the only baseline key that could have matched would
+    have had to spell the feature's printed name. See `MODULE_BENIGN`.
+
+    `localisation()` answers `{}` when the file is absent, which costs
+    nothing: `modules/` is git-ignored too, so a checkout without one has no
+    module corpus to compare against and the caller says so.
     """
     out: set[str] = set()
     with contextlib.suppress(sqlite3.Error):
@@ -617,6 +678,13 @@ def _rules_runs() -> set[str]:
                 continue
             for (spec,) in db.execute(f"select spec from {table}"):
                 out |= _module_runs(spec or "")
+    # The printed wording, which is what an adventure reprints and what the
+    # sanitised `spec` above has had the flavour taken out of.
+    for fields in localisation().values():
+        for key in ("rules_text", "description"):
+            text = (fields or {}).get(key)
+            if isinstance(text, str) and len(text) > 40:
+                out |= _module_runs(text)
     return out
 
 
@@ -650,6 +718,19 @@ def _module_material() -> tuple[set[str], dict[str, str], int]:
             for blocks in json.loads(aloud.read_text()).values():
                 for block in blocks:
                     runs |= _module_runs(str(block))
+        # **The book's own pages, which are most of it.** The two sources
+        # above are what the *importer* chose to keep -- scene briefs and
+        # italic read-aloud -- and `pages/` is the whole text it read them
+        # out of. Leaving them out meant this gate held about 15% of the
+        # material it exists to protect, so a session quoting a page into a
+        # docstring was found by hand rather than by this. #917.
+        #
+        # Every page is filtered against `_rules_runs` exactly as the rest
+        # is, which is what keeps the stat blocks printed in an adventure
+        # from flagging the whole content tree that legitimately quotes
+        # them.
+        for page in sorted((module.parent / "pages").glob("*.txt")):
+            runs |= _module_runs(page.read_text(errors="replace"))
     # Mechanical vocabulary is not this adventure's prose. See
     # `MODULE_BENIGN` for why this is a filter and a short list rather
     # than a looser rule.
