@@ -54,7 +54,44 @@ Three orthogonal axes. Pick one from each that applies.
 * **Content type**, when it is content work — `monsters`, `powers`,
   `items`, `feats`, `features`.
 
-`claude` marks an issue opened on Camille's behalf.
+`claude` marks an issue opened on Camille's behalf — and it is **carried by
+400 of 400 issues**, so it distinguishes nothing and should be read as noise
+rather than as information. Either drop it or invert it to mark the ones
+Camille opens.
+
+## Attribution: the record cannot tell Camille's words from Claude's
+
+Camille asked, 2026-10-28, whether anything shows the difference. Measured:
+
+| where | distinguishes? |
+|---|---|
+| git commits | **yes** — author is `Claude (Camille)` |
+| issue comments | **no** — every one is authored `camille-ryan`; Claude posts via `gh` |
+| the `claude` label | **no** — 400 of 400 |
+| in-code notes | **no** — 126 attributions, **3** carry a verbatim quote, **79** are a bare "Camille's call/rule" |
+
+So **git history is the only audit trail**, and every *"Camille's call"* in
+this tree is Claude's paraphrase of a chat turn with nothing to check it
+against. That is not a hypothetical cost. `#877` carried *"Decided: a dealt
+character carries nothing expendable. Camille, asked directly"* — written by
+Claude, quoted onward on `#520` as a governing ruling, and **Camille did not
+recall making it**. The real ruling, given the next day, was the opposite:
+50 pieces of mundane ammunition and 5 throwing weapons. A paraphrase had
+been steering the design.
+
+So:
+
+* **An attribution carries a verbatim quote, in a blockquote, or it says it
+  is a paraphrase.** A quote is checkable against a transcript; "Camille's
+  call: X" is not. The 79 bare ones get corrected as they are touched, not
+  in a sweep.
+* **Sign every issue comment.** A trailer — *"Claude, posting on Camille's
+  behalf"* — so the author field being `camille-ryan` stops misleading.
+* **A ruling is recorded as a quote, not a summary**, on the issue it
+  governs.
+* And when a note says Camille ruled something, **the quote is the
+  evidence**. Without one, treat it as Claude's reading and say so — the
+  same standard this file already applies to a census or a marker.
 
 ## The one rule
 
