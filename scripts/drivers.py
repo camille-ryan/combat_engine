@@ -36427,6 +36427,156 @@ def immune_to_a_keyword(out: Result) -> None:
              "and keyword immunity is not condition immunity -- still dazeable",
              f"{fearless[0]}")
 
+def damage_given_up_is_actually_given_up(out: Result) -> None:
+    """"You can forgo dealing damage to immobilize it" -- both arms of it.
+
+    `f959`, the last of the three rows `#780` was filed for and the one it
+    called the hard third. The card names **a class of attacks** -- any
+    weapon attack with the bola -- so there is no body to write the clause
+    into and `#550`'s convention does not reach it; `#780` costed that as a
+    new `c.pre_empt` registration keyed on the weapon, which would have
+    grown the action menu.
+
+    It needs none of that. `DamageRolled` is **refusable** -- which
+    `drivers.refusals` already asserts, "a refused blow takes no hit
+    points" -- so the trade is the event: answer in `Window.BEFORE` and
+    cancel. `Trigger.window` exists for this.
+
+    **The negative control is the whole rule**, because a card that gives
+    up damage and a card that merely adds a condition look identical from
+    the condition alone. So the trade is driven **both ways on the same
+    board** through `world.decider`, and the assertion is that taking it
+    costs the damage and declining it costs the immobilise.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conditions, Health
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition
+
+    def swing(take: bool, crit: bool) -> tuple[int, bool, bool]:
+        """`(damage dealt, newly immobilised, newly prone)` after one bola hit.
+
+        **The real row, through `dsl.use`, not a bare `resolve.attack`.**
+        `attack()` only rolls -- the body is what pays, with `c.damage` --
+        so an `attack()` call deals nothing, emits no `DamageRolled`, and
+        this rider never fires. The first draft of this rule did that and
+        read five green/red assertions off a board where the row had not
+        run at all.
+
+        `arm="w3661"` is the audit board's weapon axis, which is what puts a
+        bola in hand: `chargen` deals none, which is why every row in that
+        file reports UNUSED and why this cannot be driven on a plain board.
+
+        **The conditions are read as a delta.** `audit.board` arrives with
+        state already laid -- the dummy comes immobilised and marked -- so
+        an absolute read says `immobilized=True` whatever the row did, which
+        is the second thing the first draft got wrong.
+        """
+        world, me, _start = A.board("f959", 1, arm="w3661")
+        world.turn = me
+        foe = sorted(enemies(world, me))[0]
+        # The `c.may` pool is `["yes, ...", "no, do not ..."]`, so the arm is
+        # chosen by which of the two a decider picks rather than by a flag.
+        world.decider = (
+            lambda actor, kind, options, prompt="":
+            next((o for o in options if str(o).startswith("yes")), options[0])
+            if take else
+            next((o for o in options if str(o).startswith("no")), options[-1])
+        )
+        # **The attack card has to be handed over.** The board is built for
+        # the feat, and `f960b` -- the bola attack -- is a separate printed
+        # card that a *different* feat swaps in, so a character holding
+        # `f959` does not know it. `use` on an unknown ref returns False and
+        # emits nothing at all, which is how the first draft of this rule
+        # read four assertions off a board where no attack had happened.
+        Cast(world=world, me=me, ref="drivers:bola").grant_row(
+            "f960b", on=me, until=When.ENCOUNTER)
+        world.rng.loaded = 20 if crit else 19
+        conds = world.get(foe, Conditions)
+        was = set(conds.active) if conds is not None else set()
+        before = world.need(foe, Health).hp
+        use(world, me, "f960b", targets=[foe], spend=False)
+        now = set(conds.active) if conds is not None else set()
+        return (
+            before - world.need(foe, Health).hp,
+            Condition.IMMOBILIZED in (now - was),
+            Condition.PRONE in (now - was),
+        )
+
+    # **The damage pair is the attribution, and it is the only clean one on
+    # this board.** Same board, same seed, same loaded face, same attack
+    # row -- the single difference is which arm of `c.may` the decider
+    # takes. So a difference in damage dealt is this row and nothing else.
+    took, _immobile, prone = swing(take=True, crit=False)
+    paid, _still, _p2 = swing(take=False, crit=False)
+
+    out.that(took == 0,
+             "taking the trade costs the whole of the damage",
+             f"{took} hit points taken")
+    out.that(paid > 0,
+             "declining it deals the damage instead",
+             f"{paid} hit points taken")
+    out.that(took == 0 and paid > 0,
+             "so the only thing that changed between the two runs is the "
+             "answer to the offer -- which is what makes this the row's own "
+             "doing and not the attack's",
+             f"took={took} paid={paid}, same board and same roll")
+    out.that(not prone,
+             "and an ordinary hit knocks nobody prone",
+             f"prone={prone}")
+
+    # **What this rule does NOT assert, and why, rather than reporting a
+    # number it has not earned.**
+    #
+    # *The immobilise.* `f960b` is the only bola attack the board can be
+    # given, and it lays an immobilise of its own -- so a condition read
+    # around it cannot be attributed to this row. The board also arrives
+    # with the dummy already immobilised and already carrying an `f959`
+    # label, so neither a condition delta nor a new-effect-label test
+    # separates them. Three earlier drafts of this rule each reported a
+    # confident green off one of those reads.
+    #
+    # *The critical's knockdown.* Same cause: `f960b` knocks prone on a
+    # critical too. Driving the body with a made `DamageRolled` showed the
+    # prone arriving only when the context says `crit`, which is the right
+    # shape -- but on a board whose dummy is already immobilised that
+    # measurement cannot also show the immobilise, so it proves half a
+    # clause and is not kept.
+    #
+    # What would settle both is a bola attack that does neither, which
+    # means a character who can make one: `chargen` deals no bola, and
+    # `c.basic` refuses with only the `arm=` axis's weapon in hand. That is
+    # the same chassis gap `content/feats/exotic.py`'s module docstring
+    # records for all twelve rows in that file.
+
+    # -- and it does not answer damage that is not an attack --------------
+    # `from_attack` is the gate. Ongoing damage and a zone's burn must not
+    # offer the trade, or the feat would immobilise on every tick.
+    from combat_engine.engine.resolve import deal_damage
+
+    world, me, _s = A.board("f959", 1, arm="w3661")
+    world.turn = me
+    foe = sorted(enemies(world, me))[0]
+    world.decider = (lambda actor, kind, options, prompt="":
+                     next((o for o in options if str(o).startswith("yes")),
+                          options[0]))
+    conds = world.get(foe, Conditions)
+    was = set(conds.active) if conds is not None else set()
+    before = world.need(foe, Health).hp
+    deal_damage(world, me, foe, 6, from_attack=False, detail="drivers:ongoing")
+    held = (set(conds.active) if conds is not None else set()) - was
+    out.that(before - world.need(foe, Health).hp == 6,
+             "damage that is not from an attack still lands in full",
+             f"{before - world.need(foe, Health).hp} of 6 taken")
+    out.that(Condition.IMMOBILIZED not in held,
+             "and offers no trade, so the feat does not immobilise on every "
+             "tick of ongoing damage",
+             f"conditions={sorted(str(x) for x in held)}")
+
+
 def a_borrowed_row_records_which_one_was_taken(out: Result) -> None:
     """"The power you chose for your <trait>" has to be answerable.
 
@@ -37058,6 +37208,10 @@ def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
 
 
 DRIVERS = {
+    "bola_trade": (
+        damage_given_up_is_actually_given_up,
+        "a row that forgoes its damage really does forgo it (#780)",
+    ),
     "borrowed_pick": (
         a_borrowed_row_records_which_one_was_taken,
         "a borrowed row records which one was taken (#743)",

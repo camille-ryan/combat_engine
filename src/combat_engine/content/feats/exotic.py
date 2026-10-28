@@ -29,6 +29,7 @@ from combat_engine.engine import (
     EACH_OTHER,
     ENCOUNTER,
     FORT,
+    FREE,
     MINOR,
     NO_TARGET,
     ONE_CREATURE,
@@ -42,12 +43,14 @@ from combat_engine.engine import (
     Cast,
     CloseBurst,
     Condition,
+    DamageRolled,
     Hit,
     Keyword,
     Melee,
     Ranged,
     Trigger,
     When,
+    Window,
     power,
 )
 from combat_engine.engine.query import holding
@@ -66,6 +69,40 @@ def _hit_with(what: str):  # noqa: ANN202
 
 _hit_with_a_net = _hit_with("net")
 _hit_with_a_whip = _hit_with("whip")
+
+
+def _damaged_with(what: str):  # noqa: ANN202
+    """My own attack damage, about to land, while one named weapon is held.
+
+    The sibling of `_hit_with` for a card that trades the damage away
+    rather than adding to it: the moment to answer is `DamageRolled` and
+    not `Hit`, because that is the one a responder can refuse.
+
+    `source` rather than `attacker` -- `DamageRolled` names the dealer that
+    way -- and `from_attack` off the context, so the rider does not fire on
+    ongoing damage or on a zone's burn.
+
+    **"With your bola" is approximated by "holding one"**, exactly as
+    `_hit_with` does for the whip and the net: the event carries the power
+    that dealt it and not the weapon that swung, so holding is the nearest
+    question the board can answer. A character wielding a bola and hitting
+    with something else would get the offer wrongly; no dealt character
+    holds two exotic weapons.
+    """
+
+    def when(world, me: int, ev) -> bool:  # noqa: ANN001
+        ctx = getattr(ev, "ctx", None) or {}
+        return (
+            getattr(ev, "source", None) == me
+            and getattr(ev, "amount", 0) > 0
+            and bool(ctx.get("from_attack"))
+            and bool(holding(world, me, what))
+        )
+
+    return when
+
+
+_damaged_with_a_bola = _damaged_with("bola")
 
 
 def _wielding(what: str):  # noqa: ANN202
@@ -98,14 +135,61 @@ def _swap(ref: str, card: str):  # noqa: ANN202
 # -- the bola ---------------------------------------------------------------
 
 
-@power("f959", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.pre_empt(damage_of=)",),
+@power("f959", level=1, cls="", usage=AT_WILL, action=FREE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you hit with a weapon attack using your bola",
+       on=Trigger(DamageRolled, _damaged_with_a_bola,
+                  "you hit with a weapon attack using your bola",
+                  window=Window.BEFORE),
        proficiency=("w3661",))
 def f959(c: Cast) -> None:
-    """The weapon exists now and `chargen` deals it. What is left is the
-    shape of the rider: the immobilise is bought by giving the damage up,
-    and the critical's knockdown rides inside that same choice, so
-    neither half can be laid without the trade."""
+    """Give the damage up to immobilise instead; a critical knocks prone too.
+
+    **No verb was needed, and the marker said otherwise for a long time.**
+    This carried `todo=("c.pre_empt(damage_of=)",)` on the premise that a
+    row cannot decline its own damage. Two of the three rows that wore that
+    symbol turned out to need nothing (#780): `c.strike()` rolls and does
+    not pay, the body pays with `c.damage`, so declining is simply not
+    calling it.
+
+    This one is the exception `#780` then called the hard third, because the
+    card names **a class of attacks** -- any weapon attack with the bola --
+    rather than one power, so there is no body to write the clause into and
+    `#550`'s convention does not reach it. The answer is not a registration
+    keyed on the weapon: it is that `DamageRolled` is **refusable**, which
+    `drivers.refusals` already asserts ("a refused blow takes no hit
+    points"), and a free action may refuse one.
+
+    So the trade is the event: answer the damage in `Window.BEFORE` and
+    cancel it. `Trigger.window` exists for exactly this -- its own note says
+    a handful of printed lines "cannot be said any other way".
+
+    **The critical rides inside the same choice**, as the card prints, and
+    is readable: `resolve` attaches the damage context to the event and
+    `crit` is one of its keys, so the knockdown needs no second trigger and
+    cannot fire without the trade.
+
+    **`usage` was wrong and un-marking is what found it.** This was
+    `ENCOUNTER`, and the card prints no limit at all -- which
+    `content/CLAUDE.md` names as a real and silent narrowing for a row with
+    a declared trigger, where `ENCOUNTER` means once a fight. `AT_WILL` is
+    what the page says.
+
+    `c.may` rather than `c.choose`, and `default=True` is deliberate: its
+    docstring records that the order "is the answer for every fight run
+    headless", so a `False` default would make this clause unreachable to
+    every instrument. The consequence is that headless play always takes the
+    trade, which is a scoring question for `policy/` rather than a rules
+    one.
+    """
+    ev = c.trigger
+    foe = getattr(ev, "target", None)
+    if foe is None or not c.may("give up the damage to immobilise", who=c.me):
+        return
+    c.cancel()
+    c.condition(Condition.IMMOBILIZED, until=When.EONT, on=foe)
+    if (getattr(ev, "ctx", None) or {}).get("crit"):
+        c.prone(on=foe)
 
 
 _swap("f960", "f960b")
