@@ -448,12 +448,21 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
               ask_human: beat_mod.AskHuman) -> None:
     """Play a roleplay scene out, if the module gave it anything to play.
 
-    **A scene with no affordances and no NPCs stays what it was**: its brief,
-    printed, and on. That is every scene in every module converted so far, so
-    the old behaviour is the default rather than a fallback -- and a module
-    only pays for beats where its author wrote something to do.
+    **A scene with nothing written to do stays what it was**: its brief,
+    printed, and on. That was every scene in every module converted so far,
+    so the old behaviour is the default rather than a fallback -- and a
+    module only pays for beats where its author wrote something.
+
+    **There are three such things, and this guard knew two.** `lore` is also
+    something to play, and a scene carrying only lore returned here before
+    `_recall` was ever reached, so its facts never rolled and the player was
+    never told them -- silently, because a scene that prints its `sets` and
+    moves on is exactly what a scene with nothing to do looks like.
+    Isolated by adding one NPC to an otherwise identical scene: 0 recall
+    lines against 3. It did not bite only because the one converted module
+    puts all 8 of its lore rows on a scene that has NPCs. #918.
     """
-    if not (scene.affordances or scene.npcs):
+    if not (scene.affordances or scene.npcs or scene.lore):
         return
     # Said once, at the top of the scene, so a character who never speaks
     # reads as down rather than as broken.
@@ -468,17 +477,61 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         # DM -- a fact routed through the model comes back in somebody
         # else's mouth, paraphrased, which is the whole reason the
         # companion half is separate.
-        for knew in made.recalled:
-            if knew.mine:
-                step.say(f"  You know: {knew.fact}")
-            elif knew.knew:
-                # **A companion's recall is printed too, attributed.** It
-                # still goes to the DM, which says it in their voice -- but
-                # the DM was the only path and it drops roughly a quarter
-                # of what it is handed (#809). A fact the dice earned
-                # reaching nobody is the one loss a player is never owed,
-                # and a restatement is the cheap failure to prefer.
-                step.say(f"  {knew.knew[0][1]} knows: {knew.fact}")
+        # **Ordered by how many of the party knew it, and headed with a
+        # count.** `Lore.after` stopped the tavern ladder firing before the
+        # player had spoken; it did not stop it arriving all at once, and
+        # measured over 25 seeds the unlocking beat delivers **7.7 of the
+        # 8 rows** -- all eight in 17 of 25. Eight unheaded lines is a wall
+        # a reader cannot rank. #912.
+        #
+        # **Nothing is capped.** Each row is rolled against its own DC, so
+        # the number arriving is the dice and the party's skills rather
+        # than a number to pick, and `scripts/CLAUDE.md` is explicit that a
+        # silent cap reads as having covered everything.
+        #
+        # **Ordered by the page's DC, not by how many of us rolled well.**
+        # Both were tried. The party's knower-count is tempting -- over 25
+        # seeds 28 facts were known by one character of five and 14 by all
+        # five, so it separates -- but it is **this run's dice**, so the
+        # same scene reads in a different order every campaign and a
+        # fixture cannot pin it. The DC is the **author's** statement of
+        # how obscure a thing is, it is stable, and on this adventure it is
+        # literally a printed ladder: 8, 12, 12, 12, 12, 15, 15, 19. Walking
+        # it upwards is the escalating detail the page intends, and it ends
+        # on the one somebody had to be good to dig up.
+        #
+        # **Sorted on the DC alone, and the tier order is the page's.**
+        # Knower-count was the obvious tiebreak and is the same mistake one
+        # level down: four of these rows are DC 12, so a dice-dependent
+        # tiebreak reorders the tier every campaign -- measured, two seeds
+        # sharing seven facts printed them in different orders. `sorted` is
+        # stable and `_recall` walks `scene.lore` in order, so a one-key
+        # sort leaves each tier in the order the adventure prints it.
+        #
+        # Knower-count still says what the DC cannot, in the "only" below.
+        delivered = [knew for knew in made.recalled if knew.knew]
+        if len(delivered) > 1:
+            step.say(f"  Between you, {len(delivered)} things are already "
+                     f"known -- common talk first:")
+        for knew in sorted(delivered, key=lambda r: r.dc):
+            # **Only one knower is said out loud**, because that is the
+            # fact a reader should weigh: it took the one character who is
+            # good at this, and on a reread it is why they are in the party.
+            alone = len(knew.knew) == 1
+            if knew.mine and alone:
+                step.say(f"    Only you know: {knew.fact}")
+            elif knew.mine:
+                step.say(f"    You know: {knew.fact}")
+            # **A companion's recall is printed too, attributed.** It
+            # still goes to the DM, which says it in their voice -- but
+            # the DM was the only path and it drops roughly a quarter
+            # of what it is handed (#809). A fact the dice earned
+            # reaching nobody is the one loss a player is never owed,
+            # and a restatement is the cheap failure to prefer.
+            elif alone:
+                step.say(f"    Only {knew.knew[0][1]} knows: {knew.fact}")
+            else:
+                step.say(f"    {knew.knew[0][1]} knows: {knew.fact}")
         # **A companion's intent is not printed.** It goes to the DM, which
         # writes it into the paragraph below -- so what a reader sees is one
         # piece of prose in which those things happened, not four captioned

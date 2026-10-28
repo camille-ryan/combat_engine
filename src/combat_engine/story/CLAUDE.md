@@ -357,6 +357,43 @@ rather than argued with: the page's own sentence is better than a
 paraphrase of it, is already validated, and removes the only place in the
 stage where the model could write something the adventure does not say.
 
+## What the party already knows is ranked by the page, not by the dice
+
+`Lore.after` stopped the tavern ladder firing before the player had
+spoken. It did not stop it arriving **all at once**: over 25 seeds the
+unlocking beat delivers **7.7 of the 8 rows**, all eight in 17 of 25.
+Eight unheaded "You know:" lines is a wall a reader cannot rank.
+
+**Nothing is capped**, and that is not timidity: each row rolls against
+its own DC, so the number arriving is the dice and the party's skills
+rather than a number to choose. What changed is the order and a heading
+with the count in it.
+
+**Two rankings were tried and the obvious one is wrong.** How many of the
+party knew a fact separates beautifully -- 28 facts known by one character
+of five against 14 by all five -- but it is *this run's dice*, so the same
+scene reads in a different order every campaign and no fixture can pin it.
+Measured: two seeds printed the seven facts they shared in different
+orders. The **DC** is the author's own statement of obscurity, it is
+stable, and on this adventure it is literally a printed ladder -- 8, 12,
+12, 12, 12, 15, 15, 19 -- so walking it upwards is the escalating detail
+the page intends and it ends on the one somebody had to be good to find.
+
+The same mistake lives one level down: four rows share DC 12, so a
+dice-dependent *tiebreak* reorders that tier every campaign. `sorted` is
+stable and `_recall` walks `scene.lore` in order, so a **one-key sort**
+leaves each tier in the order the adventure prints it. Knower-count
+survives only where it says what the DC cannot -- "Only <name> knows", for
+a fact exactly one character got.
+
+**A scene carrying only `lore` used to be skipped entirely.** `_roleplay`
+returned early unless the scene had affordances or NPCs, and `lore` is a
+third thing an author can write -- so its facts never rolled and the
+player was never told them, silently. Isolated by adding one NPC to an
+otherwise identical scene: 0 recall lines against 3. It never bit because
+the one converted module puts all 8 of its rows on a scene that has NPCs.
+#918.
+
 ## A band cannot keep a secret, and a printed number beats both
 
 Two measurements that settled the design of `Lore` and are worth not
@@ -523,18 +560,20 @@ uv run scripts/play.py --play <module> --god-mode  the story half, no fights
 uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     challenge_refusal training_bonus challenge_costs_nothing \
     beat_loop scene_audience module_refusals affordance_match \
-    summary_scenes boxed_text graph_furniture graph_administration
+    summary_scenes boxed_text graph_furniture graph_administration \
+    recall_order
 uv run scripts/check.py --only play,drivers
 ```
 
-**21 drivers and 184 assertions** cover this component, and **each was
+**22 drivers and 192 assertions** cover this component, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
 scene ending, whose text becomes a fact, both halves of the brief/sets
 split, each of the three furniture shapes, the contents pattern, the
 classifier's call site, its `sort` flag and its keep-on-an-empty-answer
-default. All went red.
+default, the DC sort, the lore guard and the cap that is not there. All
+went red.
 
 Measured, because this sentence said "ten" for three commits after it
 stopped being ten. `uv run scripts/drivers.py <the list above>` prints the

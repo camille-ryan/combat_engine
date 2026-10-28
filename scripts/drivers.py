@@ -30255,6 +30255,160 @@ def a_graph_fact_is_a_claim_and_not_page_furniture(out: Result) -> None:
     )
 
 
+def what_the_party_already_knows_arrives_ranked_and_whole(
+    out: Result,
+) -> None:
+    """#912 and #918. Eight facts in one beat, and a scene that drops them.
+
+    `Lore.after` stopped the tavern ladder firing before the player had
+    spoken. It did not stop it arriving **all at once**: measured over 25
+    seeds the unlocking beat delivers **7.7 of the 8 rows**, all eight in
+    17 of 25. Eight unheaded "You know:" lines is a wall a reader cannot
+    rank.
+
+    Nothing is capped -- each row rolls against its own DC, so the number
+    arriving is the dice rather than a number to choose. What changed is
+    the **order and the heading**.
+
+    And #918, found building this fixture: `_roleplay` returned early
+    unless the scene had affordances or NPCs, so a scene carrying only
+    `lore` never rolled it.
+
+    All of it through `run.step`, because both bugs are in the caller.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    # A DC ladder with a repeated tier, so tier ordering is testable, plus
+    # one nobody can reach. Invented, every word.
+    #
+    # **Deliberately not in DC order.** A first version listed them 5, 12,
+    # 12, 12, 15 -- which is how the adventure prints them -- so module
+    # order and DC order were the same and deleting the sort changed
+    # nothing. The break stayed green on the one assertion written for it.
+    LADDER = [
+        {"fact": "the ford is watched after dark", "skill": "streetwise",
+         "dc": 15},
+        {"fact": "the reeve took a bribe", "skill": "streetwise", "dc": 12},
+        {"fact": "the ferry runs at dawn", "skill": "streetwise", "dc": 5},
+        {"fact": "the chapel keeps a second key", "skill": "religion",
+         "dc": 12},
+        {"fact": "the mill burned last spring", "skill": "history", "dc": 12},
+        # **Unreachable, as the negative control.** With five characters
+        # rolling, an easy check is passed by somebody 100% of the time, so
+        # without this every assertion below would pass on a board where
+        # the gate does nothing.
+        {"fact": "nobody alive knows this", "skill": "arcana", "dc": 40},
+    ]
+
+    def build(**extra: object) -> mod.Module:
+        raw = {"id": "probe", "party_level": 2, "party_size": 5,
+               "start": "talk",
+               "scenes": [{"id": "talk", "kind": "roleplay", "name": "Talk",
+                           "sets": "The taproom is loud.", "exits": [],
+                           "max_beats": 1, **extra}]}
+        return mod.parse(raw, Path("<driver>"))
+
+    def play(module: mod.Module, seed: int = 1) -> run_mod.Step:
+        campaign = run_mod.begin(module, seed=seed)
+        # **Solo, explicitly.** `begin` defaults every character to human,
+        # and `Recalled.mine` is true when a human passed -- so without
+        # this every fact reads as the player's own and the companion half
+        # of the block is never exercised. The same trap `--solo` is
+        # load-bearing for in `check.py`.
+        campaign.control = (
+            ["human"] + ["ai"] * (len(campaign.party.sheets) - 1))
+        return run_mod.step(campaign, module, record=False)
+
+    def rolled(made: run_mod.Step) -> list[str]:
+        """What `_recall` actually delivered, read off the beat.
+
+        **Not off the printed lines.** The "nothing is capped" assertion
+        below first compared the printed count against the facts it could
+        find *in the printed text*, which is circular: capping the list to
+        three shrank both sides and the break stayed green. `Step.played`
+        carries the beats, so the roll is an independent witness to the
+        print.
+        """
+        if made.played is None:
+            return []
+        return [r.fact for b in made.played.beats for r in b.recalled
+                if r.knew]
+
+    # ---- #918: a scene whose only content is lore still plays it ----
+    step_one = play(build(lore=LADDER))
+    lore_only = step_one.lines
+    said = [ln.strip() for ln in lore_only if "know" in ln]
+    out.that(
+        bool(said),
+        "a scene carrying only lore still rolls it (#918)",
+        f"{len(said)} line(s) from a scene with no npcs and no affordances",
+    )
+
+    # ---- #912: ranked, headed, and nothing dropped ----
+    lines = [ln.strip() for ln in lore_only if "know" in ln]
+    header = [ln for ln in lines if "things are already known" in ln]
+    facts = [ln for ln in lines if ln not in header]
+    out.that(
+        len(header) == 1 and f"{len(facts)} things" in header[0],
+        "a block of them is headed with its own count",
+        f"header {header!r} over {len(facts)} fact(s)",
+    )
+    # **Nothing capped**, against the roll rather than against the print.
+    earned = rolled(step_one)
+    out.that(
+        bool(earned) and len(facts) == len(earned),
+        "and every fact the dice earned is printed, none capped away",
+        f"{len(earned)} rolled, {len(facts)} printed",
+    )
+    # The negative control: the unreachable row is absent, so the gate is
+    # doing something and the block is not just "print all the lore".
+    out.that(
+        not any("nobody alive knows this" in ln for ln in facts),
+        "while a DC nobody can make delivers nothing",
+        f"{[ln for ln in facts if 'nobody alive' in ln]}",
+    )
+
+    # Ordered by the page's DC, ascending.
+    dc_of = {str(r["fact"]): int(str(r["dc"])) for r in LADDER}
+    order = [dc for ln in facts for f, dc in dc_of.items() if f in ln]
+    out.that(
+        order == sorted(order),
+        "the facts climb the module's own DC ladder rather than its row order",
+        f"{order}",
+    )
+
+    # ---- and the order does not move between campaigns ----
+    # **This is the half knower-count failed.** Ranking by how many of the
+    # party rolled well separates nicely -- 28 facts known by one character
+    # of five against 14 by all five -- but it is this run's dice, so two
+    # seeds printed the facts they shared in different orders.
+    def shared_order(seed: int) -> list[str]:
+        got = [ln.strip() for ln in play(build(lore=LADDER), seed).lines
+               if "know" in ln and "things are already" not in ln]
+        return [f for ln in got for f in dc_of if f in ln]
+
+    a, b = shared_order(3), shared_order(11)
+    both = [f for f in a if f in b]
+    out.that(
+        bool(both) and [f for f in a if f in both] == [
+            f for f in b if f in both],
+        "and two campaigns print the facts they share in the same order",
+        f"{len(both)} shared: {[f[:18] for f in both]}",
+    )
+
+    # ---- a single fact gets no heading, so the heading is not noise ----
+    one = [ln.strip() for ln in play(build(lore=[LADDER[2]])).lines
+           if "know" in ln]
+    out.that(
+        len(one) == 1 and "things are already known" not in one[0],
+        "one fact arrives bare, with no count in front of it",
+        f"{one!r}",
+    )
+
+
 def a_rule_for_running_the_session_is_not_a_fact_about_the_world(
     out: Result,
 ) -> None:
@@ -30993,6 +31147,10 @@ DRIVERS = {
     "graph_administration": (
         a_rule_for_running_the_session_is_not_a_fact_about_the_world,
         "how to run a session is not canon about the world (#915)",
+    ),
+    "recall_order": (
+        what_the_party_already_knows_arrives_ranked_and_whole,
+        "recall is ranked by the page's DC and nothing is capped (#912, #918)",
     ),
     "invent_not_contradict": (
         the_dm_may_invent_but_not_contradict,
