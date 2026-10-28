@@ -663,10 +663,27 @@ def _queue(
     # counting it twice made one entry look like two rows of demand --
     # which is the one number this view exists to get right.
     wanted: dict[str, dict[str, None]] = defaultdict(dict)
+    # **What each symbol has to *do*, from `Power.wants`.** The symbol says
+    # what to call the missing thing and says nothing about its job, which
+    # is why clustering 949 of them by name captured 471 of 1,185 wants and
+    # no more -- `c.race_option()` looked like one gap and was six. #549.
+    #
+    # Keyed symbol -> sentence -> the rows that wrote it, so two rows
+    # describing the same symbol differently both show. That disagreement is
+    # the signal worth surfacing rather than smoothing: a symbol whose rows
+    # cannot agree what it does is usually a symbol serving two needs, which
+    # this project has already paid for once -- one serving three made
+    # twelve rows report ready when a third of it landed.
+    described: dict[str, dict[str, list[str]]] = defaultdict(
+        lambda: defaultdict(list))
+    rows = _declared()
     mute = 0
     for ref, todo in marked:
+        said = getattr(rows.get(ref), "wants", "") or ""
         for want in todo:
             wanted[want.strip()][ref] = None
+            if said:
+                described[want.strip()][said].append(ref)
     for ref, entry in sorted(entries.items()):
         if ref in declared:
             continue
@@ -693,7 +710,14 @@ def _queue(
         shown = ", ".join(refs[:12]) + (f", … and {len(refs) - 12} more"
                                         if len(refs) > 12 else "")
         print(f"  {want:<{width}} ({len(refs):>3} rows): {shown}")
+        for said, who in sorted(described.get(want, {}).items(),
+                                key=lambda kv: (-len(kv[1]), kv[0])):
+            print(f"  {'':<{width}}   wants: {said}  [{len(who)} row(s)]")
+    described_syms = sum(1 for w in wanted if described.get(w))
     print(f"\n  {len(wanted)} symbols wanted by {sum(len(v) for v in wanted.values())} rows")
+    print(f"  {described_syms} of them say what the thing has to do "
+          f"(`wants=` on the row) -- #549 fills this going forward, "
+          f"never by backfill")
     if mute:
         print(f"  {mute} blocked.json entr(ies) name no symbol at all "
               f"-- run without --group to see them")
