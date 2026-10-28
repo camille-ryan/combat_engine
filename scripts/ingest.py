@@ -56,6 +56,7 @@ import re
 import sys
 import time
 import unicodedata
+from collections.abc import Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -183,6 +184,67 @@ def _furniture(name: str) -> bool:
     return bool(FURNITURE.search(name.strip()))
 
 
+#: Three shapes a page prints that are not claims about anything.
+#:
+#: `harvest` stores whatever span `ground` can point at the page, and a page
+#: holds more than prose. **18 of chapter 1's 188 facts were furniture**,
+#: and they come in exactly three shapes:
+#:
+#: * **shouted** -- a section heading or, worse, an **artist's credit**: a
+#:   real living person was held in the graph as a `person` whose only fact
+#:   was their own name in capitals.
+#: * **a map key** -- the bracketed letter is the token on the tactical
+#:   map. `Kobold dragonshield (D)` is a real creature and that is still not
+#:   a fact about it.
+#: * **a treasure-table row** -- the trailing `Encounter 1-1` is the column
+#:   the cell sat in.
+#:
+#: **This tests the span; `FURNITURE` tests the name.** Both are needed and
+#: they miss different things: a heading offered under an ordinary-looking
+#: name passes `FURNITURE` and then becomes the only fact of the entity it
+#: named.
+#:
+#: **An exact shape beat a verb test on both counts, which is why there is
+#: no verb test here.** "A fact is a claim and a claim has a verb" sounds
+#: righter and measured worse. It was **less complete** -- a map key and a
+#: table row usually end in a plural noun, so `[a-z]+s` saved 7 of them --
+#: and it had a **false positive on real adventure prose**, dropping a
+#: five-word sentence whose only verb was a bare infinitive. 14 with one
+#: wrong against 18 with none.
+#:
+#: What this deliberately keeps: three spans that identify without claiming
+#: -- a bare noun phrase naming a place or a person. They are vacuous in a
+#: prompt and they are also **correct**, so they are not worth a loose rule
+#: that can drop a sentence.
+#:
+#: ## It drops seven creatures, and that is not `MECHANICAL`'s case
+#:
+#: On the graph in hand this takes **126 entities to 115**: eleven had no
+#: other fact, and seven of those are real opponents whose only fact was
+#: their map key. `MECHANICAL` argues the opposite way for a creature --
+#: "dropping it would lose a real opponent" -- so the distinction matters.
+#:
+#: There, the creature has a real sentence and only its *name* looks
+#: mechanical. Here it has no sentence at all, and what is being discarded
+#: is **encounter composition**: which tokens start on which map. That is
+#: real information and it is not a fact about the world; it belongs to the
+#: module's own fight definition, which is where a converter puts it. The
+#: graph is for what the pages *say*.
+#:
+#: And behaviourally a factless entity buys nothing: `beat.standing` reads
+#: `found.facts`, so an entity with none falls through to `would_know`
+#: exactly as a miss does. #916.
+SHOUTED = re.compile(r"^[^a-z]*[A-Z]{2,}[^a-z]*$")
+MAP_KEY = re.compile(r"\([A-Z]\)\s*$")
+TABLE_ROW = re.compile(r"\bEncounter\s+\d+-\d+\s*$", re.I)
+
+
+def _a_claim(span: str) -> bool:
+    span = span.strip()
+    return not (SHOUTED.match(span) or MAP_KEY.search(span)
+                or TABLE_ROW.search(span))
+
+
 #: Kinds that can be rules vocabulary rather than something in the world.
 #:
 #: A `thing` or an `idea` named by the rules -- "cold damage", "close blast
@@ -234,19 +296,29 @@ def read_page(folder: Path, n: int) -> str:
 
 
 def harvest(folder: Path, pages: list[int], role: llm.Role,
-            *, say: bool = True) -> tuple[gr.Graph, dict]:
-    """Every page through the extractor, every quote checked, into a graph."""
+            *, say: bool = True,
+            ask: Callable[..., dict] = llm.structured
+            ) -> tuple[gr.Graph, dict]:
+    """Every page through the extractor, every quote checked, into a graph.
+
+    `ask` is the one model call this stage makes, injectable so the loop can
+    be driven **without a server**. Everything interesting here is the
+    filtering that happens to what comes back -- three drops and a fuzzy
+    grounding -- and none of it could be exercised offline while the call
+    was reached through the module. `story/CLAUDE.md`: any feature added to
+    the model path needs an answer for the path without one.
+    """
     graph = gr.Graph()
     vocabulary = _rules_vocabulary()
     tally = {"pages": 0, "offered": 0, "kept": 0, "unquotable": 0,
-             "mended": 0, "mechanical": 0, "seconds": 0.0}
+             "mended": 0, "mechanical": 0, "furniture": 0, "seconds": 0.0}
     for n in pages:
         text = read_page(folder, n)
         if len(text.strip()) < 200:
             continue
         tally["pages"] += 1
         started = time.monotonic()
-        got = llm.structured(role, [
+        got = ask(role, [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": f"THE PAGE:\n\n{text}"},
         ], SCHEMA)
@@ -270,6 +342,12 @@ def harvest(folder: Path, pages: list[int], role: llm.Role,
                 tally["unquotable"] += 1
                 continue
             span, edits = found
+            # **Tested on the grounded span, not the model's quote.** The
+            # span is what gets stored and what a prompt will carry, and
+            # `ground` may have widened the quote to the page's own wording.
+            if not _a_claim(span):
+                tally["furniture"] += 1
+                continue
             tally["mended"] += bool(edits)
             tally["kept"] += 1
             graph.add(gr.Entity(
@@ -342,6 +420,8 @@ def main() -> int:
     print(f"  {tally['unquotable']:5} dropped: no such words on the page")
     print(f"  {tally['mechanical']:5} dropped: rules vocabulary, not this "
           f"adventure's")
+    print(f"  {tally['furniture']:5} dropped: a heading, a map key or a "
+          f"table row, which claim nothing")
     folded = gr.reconcile(graph)
     for short, long in folded:
         print(f"      folded {short!r} into {long!r}")

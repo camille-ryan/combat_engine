@@ -30121,6 +30121,139 @@ def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
     )
 
 
+def a_graph_fact_is_a_claim_and_not_page_furniture(out: Result) -> None:
+    """#916. 18 of chapter 1's 188 facts claimed nothing.
+
+    `harvest` stores whatever span `ground` can point at the page, and a
+    page prints headings, map keys and treasure tables as well as prose.
+    The worst single record was an **artist's credit** -- a real living
+    person held as a `person` whose only fact was their name in capitals.
+
+    The three positive controls are the three shapes; the negative controls
+    are the part that matters, because the rule this replaced had a false
+    positive on real adventure prose.
+    """
+    import importlib
+
+    ingest = importlib.import_module("ingest")
+
+    # Invented, every word -- a real page's span here would put an
+    # adventure's prose in a tracked file. Shapes copied, text not.
+    furniture = [
+        ("a shouted heading", "ENCOUNTER 2-3: THE SUNKEN STAIR"),
+        ("a credit line", "ALDA FENWICKE"),
+        ("a map key", "3 marsh lurkers (M)"),
+        ("a one-letter key", "Gate sergeant (G)"),
+        ("a treasure-table row", "Jade ring (40 gp each) Encounter 2-3"),
+    ]
+    for what, span in furniture:
+        out.that(
+            not ingest._a_claim(span),
+            f"{what} is not a fact",
+            f"{span!r} -> kept",
+        )
+
+    # **The negative controls.** A verb test scored 14 with one of these
+    # wrong; these are what make 18-with-none a different claim.
+    prose = [
+        # The false positive that retired the verb test: its only verb is a
+        # bare infinitive, so no word ends in -s, -ed or -ing.
+        "you arrive at the gate.",
+        # Ends in a capital in brackets, but not a single letter.
+        "The seal is stamped with a crown (ROYAL).",
+        # Names an encounter, but goes on afterwards.
+        "Encounter 2-3 begins once the party crosses the bridge.",
+        # Ordinary prose with capitals in it.
+        "The sergeant shouts STAND DOWN and lowers her spear.",
+    ]
+    for span in prose:
+        out.that(
+            ingest._a_claim(span),
+            f"while prose survives: {span[:34]!r}",
+            f"{span!r} -> dropped",
+        )
+
+    # And the seam with the older filter, which tests the **name**: both are
+    # needed and they miss different things.
+    out.that(
+        not ingest._furniture("The Sunken Stair")
+        and not ingest._a_claim("THE SUNKEN STAIR"),
+        "a heading under an ordinary name passes the name filter and is "
+        "caught by the span filter",
+        f"name={ingest._furniture('The Sunken Stair')} "
+        f"claim={ingest._a_claim('THE SUNKEN STAIR')}",
+    )
+
+    # **Through `harvest`, not the helper.** Deleting the call from the
+    # harvest loop leaves every assertion above green -- the gate would be
+    # gone and the driver would be happy, which is the failure this
+    # component has produced repeatedly. So the rest drives the real loop
+    # with the model stubbed out, and asserts what reaches the graph.
+    import tempfile
+    from pathlib import Path as _Path
+
+    page = (
+        "ENCOUNTER 2-3: THE SUNKEN STAIR\n"
+        "The stair drops two flights into standing water. "
+        "A gate sergeant waits at the bottom holding a shuttered lantern. "
+        "Gate sergeant (G)\n"
+        "Jade ring (40 gp each) Encounter 2-3\n"
+        + "The water is cold and about knee deep along the whole passage. " * 3
+    )
+    canned: dict = {"entities": [
+        {"name": "The Sunken Stair", "kind": "place",
+         "quote": "ENCOUNTER 2-3: THE SUNKEN STAIR"},
+        {"name": "Gate sergeant", "kind": "person",
+         "quote": "Gate sergeant (G)"},
+        {"name": "Jade ring", "kind": "thing",
+         "quote": "Jade ring (40 gp each) Encounter 2-3"},
+        {"name": "stair", "kind": "place",
+         "quote": "The stair drops two flights into standing water."},
+    ]}
+
+    # **Passed in, not monkeypatched.** `harvest` takes its one model call
+    # as `ask=` so the loop runs with no server -- the filtering is the
+    # whole of what this stage does and none of it was reachable offline
+    # while the call was looked up through the module.
+    def _canned(*_a: object, **_k: object) -> dict:
+        return canned
+
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = _Path(tmp)
+        (folder / "pages").mkdir()
+        (folder / "pages" / "0000.txt").write_text(page)
+        graph, tally = ingest.harvest(
+            folder, [0], ingest.llm.Role(), say=False, ask=_canned)
+
+    out.that(
+        tally["furniture"] == 3 and tally["kept"] == 1,
+        "harvest drops all three shapes and keeps the one real sentence",
+        f"furniture={tally['furniture']} kept={tally['kept']} "
+        f"offered={tally['offered']} unquotable={tally['unquotable']}",
+    )
+    out.that(
+        graph.find("The Sunken Stair") is None
+        and graph.find("Gate sergeant") is None,
+        "and neither the heading nor the map key reaches the graph",
+        f"heading={graph.find('The Sunken Stair')} "
+        f"key={graph.find('Gate sergeant')}",
+    )
+    # The positive half of that, so an empty graph cannot pass it.
+    kept = graph.find("stair")
+    out.that(
+        kept is not None and "two flights" in kept.facts[0].text,
+        "while the sentence about the stair is stored, with the page's words",
+        f"{kept.facts[0].text[:44]!r}" if kept else "nothing stored",
+    )
+    # **Printed, never silent.** `story/CLAUDE.md`: a quietly smaller graph
+    # reads as the adventure being thinner rather than furniture excluded.
+    out.that(
+        "furniture" in tally,
+        "and the count is in the tally the CLI prints",
+        f"{sorted(tally)}",
+    )
+
+
 class _Italics:
     """A PDF page that draws the runs it is given, all of them italic.
 
@@ -30673,6 +30806,10 @@ DRIVERS = {
     "boxed_text": (
         the_importer_keeps_boxed_text_and_drops_the_books_own_voice,
         "read-aloud is the adventure's, not the credits' or a sheet's (#909)",
+    ),
+    "graph_furniture": (
+        a_graph_fact_is_a_claim_and_not_page_furniture,
+        "a heading, a map key and a table row are not facts (#916)",
     ),
     "invent_not_contradict": (
         the_dm_may_invent_but_not_contradict,
