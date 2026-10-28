@@ -113,13 +113,22 @@ def p997(c: Cast) -> None:
     row and are not written yet**, and the Lesser Style chain does not
     exist.
 
-    **`f3230` is now writable and this note used to say it was not.** It
-    said its clause "is once per encounter, which a body has no latch for,
-    so it cannot come here at all" -- true when written and falsified by
-    `c38c0cd2`, which added `c.once_per_board`: *"True the first time this
-    row asks on this board, False ever after"*, which is that sentence
-    exactly. So `f3230` belongs in the chain and is the next step here, not
-    an exclusion. #907 paid for this without knowing it.
+    **`f3230` still cannot come here, and the reason this note gave was
+    the wrong one.** It said the clause "is once per encounter, which a
+    body has no latch for" -- that half was falsified by `c38c0cd2`, which
+    added `c.once_per_board` ("True the first time this row asks on this
+    board, False ever after"), the sentence exactly.
+
+    The real blocker is **whose** latch. `f3230`'s limit is once per
+    encounter across the **four** powers its Associated Powers line names,
+    and `once_per_board` keys on `(self.ref, *key)` -- the calling row's
+    own ref. So a body here would hold `("p997", "f3230")` while the watch
+    covering the other three holds its own, and a character would get the
+    advantage **twice** in an encounter where the card gives it once.
+
+    So this clause wants a once-per-board latch keyed to the *feat* rather
+    than the row, or all four powers migrated together. Until then the
+    rider is the only place the limit can be counted once.
 
     `f979` is the one that genuinely cannot come: it is `todo=` on
     `c.in_vehicle()` and nothing here works, so there is no clause to move.
