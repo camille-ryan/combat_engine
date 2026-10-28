@@ -105,6 +105,7 @@ from combat_engine.engine.events import (
     Bloodied,
     ConditionApplied,
     DamageApplied,
+    DamageRolled,
     Dropped,
     Healed,
     Hit,
@@ -556,24 +557,30 @@ def m1659a1(c: Cast) -> None:
     attack=Attack(vs=REF, printed=4),
     damage=Damage("2d8", 1, dtype=DamageType.COLD),
     no_provoke=True,
-    dropped=("c.conjure(defences_of=)",),
 )
 def m1659a2(c: Cast) -> None:
-    """The range is measured from an object with defences of its own, which is
-    the same object the block's last row is bound to and which nothing puts on
-    the board -- so the distance is measured from the creature instead.
+    """The printed range is measured from the object, and the body says
+    nothing because the header and `m1659a5` between them already do.
 
-    **Re-pointed off `c.conjure(defences=)`, which exists now (#714).** An
-    attackable conjuration is writable; what is absent is an object whose
-    four defences are **the creature's own**, which is what this card
-    measures a range from and what `m1659a5` would put there. `defences=`
-    takes one flat number for all four, so both rows wait on the same
-    narrowing and carry the same symbol.
+    **The marker came off without this row gaining a line, which is the
+    part worth recording.** It waited on `c.conjure(defences_of=)` and the
+    reasoning was that the object this range is taken from did not exist.
+    It does now -- `m1659a5` puts it there -- and the *origin* half needed
+    no new facility at all: `c.cast_from` has lent a square to a ranged
+    line since #614, and `dsl.measured_from` reads it before `legal()`
+    decides what may be aimed at. So the relation is established by the row
+    that creates the object, and this row is an ordinary ranged attack.
 
-    Marking this with the sibling's ref was tried first and is wrong:
-    `todo.py` reads a declared ref as a symbol that has **arrived**, and
-    `m1659a5` is declared -- as a `todo=` row. The convention only works
-    for a ref nobody has declared yet."""
+    Two things that follow from `measured_from` rather than from here, so
+    nobody looks for them in this body: the distance falls back to the
+    creature's own square whenever the object has left the board, which is
+    the honest reading of a range whose origin is gone; and only a ranged,
+    burst or wall line borrows, so the block's close burst is untouched.
+
+    The earlier note here said marking this with the sibling's ref was
+    tried and is wrong -- `todo.py` reads a declared ref as a symbol that
+    has **arrived**, and `m1659a5` was declared as a marked row. That is
+    still true and is still the reason this carried a verb's name instead."""
     if c.strike():
         c.hit()
 
@@ -623,7 +630,6 @@ def m1659a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.conjure(defences_of=)",),
 )
 def m1659a5(c: Cast) -> None:
     """The creature shares its hit points with an object: attacking either hurts
@@ -657,9 +663,73 @@ def m1659a5(c: Cast) -> None:
     can already write, which is the shape #780's
     `c.pre_empt(damage_of=)` turned out to have as well. #846.
 
-    Still `todo=` rather than `dropped=`, because the object the clause is
-    about cannot be put on the board with the right defences yet, and
-    without the object there is nothing to share with."""
+    **Written. `c.conjure(defences_of=)` is the half that landed** (#846):
+    it copies a creature's four defences where `defences=` takes one flat
+    number for all of them.
+
+    **It redirects rather than mirrors, which corrects the paragraph
+    above.** That argued the clause "mirrors -- the blow lands in full on
+    whichever was aimed at and in full in the other pool". The card names
+    **one** pool: *"attacking either damages the m1659"*, and the object is
+    given no hit points of its own -- it is "also destroyed" when the
+    creature falls rather than when it runs out. So damage aimed at the
+    object moves onto the creature and is zeroed where it landed, which is
+    `m3039a4`'s watcher with the share set to the whole amount.
+
+    `c.conjure`'s one hit point is therefore never spent: the watch empties
+    `ev.amount` before anything can take it off the object, which is why
+    the object does not simply die to the first blow.
+
+    The destruction half is its own watch on the creature's `Dropped`, and
+    `c.dispel` serves it: *"destroy a zone or a conjuration, and unwind
+    what it was holding."*
+
+    **A note on proving this, because two probes of mine said it was
+    broken.** The creature carries **cold resist 15**, so a 12-point cold
+    test blow is absorbed whole and nothing reaches it -- the redirect
+    looks dead and is not. `c.flat` is also *"damage that is not rolled"*
+    and emits no `DamageRolled`, so using it as the incoming blow misses
+    the watch entirely. Measure with `resolve.deal_damage` and an
+    **untyped** blow."""
+    me = c.me
+    anchor = c.conjure(defences_of=me, label=c.ref,
+                    until=When.ENCOUNTER, sustain=None)
+    # "resist 5 all" -- `dtype=None` is every type, which is the default
+    # and what the card says.
+    c.resist(5, on=anchor, until=When.ENCOUNTER)
+
+    def onto_the_creature(ev: Any) -> None:
+        if getattr(ev, "target", None) != anchor or ev.amount <= 0:
+            return
+        # **The object's own resistance has to be applied here.**
+        # `DamageRolled` is announced *before* resistance is taken off, so
+        # moving the raw amount hands the creature the unreduced blow --
+        # measured at 12 where the card gives 7. Read off the object
+        # rather than written as a 5 twice: `c.resist` above is the one
+        # place the number lives, and an all-types resist is expanded to
+        # every member, so a plain lookup finds it.
+        soak = c.resistances(on=anchor).get(ev.dtype, 0)
+        moved, ev.amount = max(0, ev.amount - soak), 0
+        if moved:
+            c.flat(moved, dtype=ev.dtype, on=me)
+
+    c.watch(DamageRolled, onto_the_creature, until=When.ENCOUNTER, on=anchor,
+            label=c.ref)
+
+    def falls(ev: Any) -> None:
+        c.dispel(anchor)
+
+    c.watch(Dropped, falls, until=When.ENCOUNTER, on=me, once=True,
+            label=c.ref)
+
+    # **`m1659a2` is measured from this thing, so the square is lent here.**
+    # Its printed range names this object as the origin, and
+    # `dsl.measured_from` already reads a lent square for a ranged line --
+    # so the sibling needs no body of its own, and the relation belongs to
+    # the row that puts the object on the board rather than to the row that
+    # aims from it. Falls back to this creature's own square whenever the
+    # object is gone, which is the proviso `cast_from` carries.
+    c.cast_from(anchor, until=When.ENCOUNTER)
 
 
 # --------------------------------------------------------------------------

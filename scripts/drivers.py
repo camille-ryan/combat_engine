@@ -40162,6 +40162,120 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def an_object_bound_to_its_creature_takes_the_blow_for_it(out: Result) -> None:
+    """A creature bound to an object: hit either, the creature bleeds. #846.
+
+    `m1659a5` puts an attackable object on the board whose **four**
+    defences are the creature's, and routes damage aimed at it onto the
+    creature. Two halves, and each one had a plausible wrong version.
+
+    **`c.conjure(defences_of=)` rather than `defences=`.** The flat form
+    takes one number for all four, and this card copies a creature whose
+    four differ. Asserted field by field, not as a count.
+
+    **The *effective* totals are copied, and that is the opposite of the
+    obvious worry.** `query.defence` is the one place a defence gains its
+    level, so copying stored values would hand over numbers with no level
+    in them -- but a conjuration carries `scale="none"`, so nothing is
+    added afterwards and the effective total is the right thing to store.
+
+    **The object's own resistance is applied by the row, because
+    `DamageRolled` precedes resistance.** Moving the raw amount handed the
+    creature 12 where the card gives 7. Asserted on the number, since that
+    is the only thing that distinguishes the two readings.
+
+    **Four of my probes called this broken before it was.** Recorded so
+    the next reader does not repeat them: `c.flat` as the incoming blow
+    emits no `DamageRolled` at all; a hand-built event through `bus.emit`
+    zeroes the amount without delivering anything, which looks like
+    success; the creature carries **cold resist 15**, so a 12-point cold
+    test is absorbed whole; and the board spawns a **second** copy of the
+    creature, so there are two objects and attacking the wrong one moves
+    damage onto the wrong creature. Only `resolve.deal_damage`, untyped,
+    against the object whose `Conjuration.by` is this caster, measures it.
+    """
+    from combat_engine.engine.components import Conjuration, Health
+    from combat_engine.engine.query import defence as defence_of
+    from combat_engine.engine.resolve import deal_damage
+    from combat_engine.engine.types import DEFENCES, DamageType
+
+    world, me, _armed = _board("m1659a5", 1)
+    owned = [e for e in world.entities
+             if (cj := world.get(e, Conjuration)) is not None and cj.by == me]
+    out.that(len(owned) == 1,
+             "the row puts exactly one object on the board for its own "
+             "creature -- the board spawns a second copy of the creature, "
+             "so the one to measure is the object that names this caster",
+             f"objects owned by the caster: {owned}")
+    if not owned:
+        return
+    gem = owned[0]
+
+    mine = {d.name: defence_of(world, me, d) for d in DEFENCES}
+    theirs = {d.name: defence_of(world, gem, d) for d in DEFENCES}
+    out.that(mine == theirs,
+             "the object's four defences are the creature's four, field by "
+             "field -- which `defences=` cannot express, because it takes "
+             "one number for all of them",
+             f"creature {mine} vs object {theirs}")
+    out.that(len(set(mine.values())) > 1,
+             "and they are not all the same number, so the flat form would "
+             "have been wrong rather than merely clumsy",
+             f"{mine}")
+
+    health = world.get(gem, Health)
+    out.that(health is not None,
+             "the object is attackable: `defences_of` gives it Health the "
+             "way `defences` does",
+             f"health={health and (health.hp, health.max_hp)}")
+
+    attacker = next(e for e in world.entities
+                    if world.get(e, Health) is not None
+                    and world.get(e, Conjuration) is None and e != me)
+    hp, gh = world.get(me, Health), world.get(gem, Health)
+    before, gem_before = hp.hp, gh.hp
+    deal_damage(world, attacker, gem, 12, DamageType.UNTYPED, "drivers:m1659a5")
+    out.that(gh.hp == gem_before,
+             "a blow aimed at the object takes nothing off the object -- the "
+             "watch empties the amount before its one hit point can be "
+             "spent, which is why it does not simply die to the first hit",
+             f"object {gem_before} -> {gh.hp}")
+    out.that(before - hp.hp == 7,
+             "and the creature takes it, less the object's own resist 5: 12 "
+             "becomes 7. The raw amount would be 12, which is the bug this "
+             "number is here to catch",
+             f"creature lost {before - hp.hp} of 12")
+
+    # **The sibling's printed range is measured from the object**, and the
+    # relation that does it is established by the row above rather than by
+    # the sibling, which has no body at all. So the sibling is only tested
+    # through this board. #846.
+    from combat_engine.engine.dsl import REGISTRY, measured_from
+    from combat_engine.engine.types import Relation
+
+    sibling = REGISTRY["m1659a2"]
+    out.that(measured_from(world, me, sibling.reach) == gem,
+             "`m1659a2`'s ranged line is measured from the object, not from "
+             "the creature -- which is what its card prints and the whole "
+             "reason its marker came off",
+             f"origin={measured_from(world, me, sibling.reach)}, "
+             f"object={gem}, creature={me}")
+    out.that(gem != me and _at(world, gem) != _at(world, me),
+             "and the two stand in different squares, so measuring from the "
+             "wrong one would give a different answer -- without this the "
+             "assertion above could pass on a coincidence",
+             f"object at {_at(world, gem)}, creature at {_at(world, me)}")
+
+    # The negative control the printed line carries: an origin that has left
+    # the board falls back to the creature rather than aiming from nowhere.
+    world.relations.clear(Relation.CASTS_FROM, me, gem)
+    out.that(measured_from(world, me, sibling.reach) == me,
+             "with the lent square withdrawn it falls back to the creature, "
+             "so a destroyed object leaves the row out of reach rather than "
+             "unaimable",
+             f"origin={measured_from(world, me, sibling.reach)}, creature={me}")
+
+
 def a_borrowed_row_records_which_one_was_taken(out: Result) -> None:
     """"The power you chose for your <trait>" has to be answerable.
 
@@ -40900,6 +41014,10 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "bound_object": (
+        an_object_bound_to_its_creature_takes_the_blow_for_it,
+        "an object bound to its creature takes the blow for it (#846)",
     ),
     "borrowed_pick": (
         a_borrowed_row_records_which_one_was_taken,

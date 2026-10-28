@@ -6292,6 +6292,7 @@ class Cast:
         burn: tuple[int, DamageType] | None = None,
         solid: bool = False,
         defences: int = 0,
+        defences_of: int | None = None,
     ) -> int:
         """Put a conjuration on the board and return its entity id.
 
@@ -6355,6 +6356,7 @@ class Cast:
             return 0
         name = label or self.ref
         from .components import Defenses, Health, Side
+        from .query import defence as _defence_of
         from .query import team as _side_of
         from .types import DEFENCES, Team
 
@@ -6364,10 +6366,26 @@ class Cast:
             Movement(speed=speed),
             Conjuration(ref=name, by=self.me),
         ]
-        if defences:
+        # **`defences_of` copies a creature's four, where `defences` is one
+        # number for all of them.** A card reading "its defences are the
+        # same as yours" cannot use the flat form: the four differ, and
+        # `m1659a5` is the row that wanted this.
+        #
+        # **The *effective* totals are copied, not the stored ones**, and
+        # that is the opposite of the obvious worry. `query.defence` is
+        # "the one place a defence gains" its level -- so copying stored
+        # values would hand over numbers with no level in them. The
+        # conjuration carries `scale="none"` precisely so nothing is added
+        # afterwards, which makes the effective total the right thing to
+        # store and the two equal. #846.
+        if defences_of is not None:
+            borrowed = {d: _defence_of(self.world, defences_of, d)
+                        for d in DEFENCES}
+        else:
+            borrowed = dict.fromkeys(DEFENCES, defences)
+        if defences or defences_of is not None:
             parts += [
-                Defenses(values=dict.fromkeys(DEFENCES, defences),
-                         scale="none"),
+                Defenses(values=borrowed, scale="none"),
                 # **`Team.NEUTRAL` and not `Team.ALLY`, which does not
                 # exist.** Four sites spelled `or Team.ALLY` -- three of
                 # them for years -- and `query.team` is `Team | None`, so
