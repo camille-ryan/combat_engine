@@ -183,6 +183,44 @@ def _furniture(name: str) -> bool:
     return bool(FURNITURE.search(name.strip()))
 
 
+#: Kinds that can be rules vocabulary rather than something in the world.
+#:
+#: A `thing` or an `idea` named by the rules -- "cold damage", "close blast
+#: 3", "action points" -- is mechanical vocabulary the extractor picked off
+#: a stat block, and an entity for it only adds noise to a prompt. A
+#: `creature`, `person`, `place` or `group` is **not** filtered even when
+#: the rules name it: a monster that has a stat block is still a monster in
+#: this adventure, and dropping it would lose a real opponent.
+#:
+#: Measured on chapter 1: nine of 134 names are rules phrases, and the
+#: split is exactly along this line -- eight `thing`s that are vocabulary,
+#: and one `creature` that is an actual opponent.
+MECHANICAL = ("thing", "idea")
+
+
+def _rules_vocabulary() -> set[str]:
+    """Two- and three-word phrases the rules themselves use."""
+    from combat_engine.db import game
+
+    out: set[str] = set()
+    try:
+        db = game()
+    except Exception:
+        return out
+    for table in ("power", "monster_power", "class_feature", "item"):
+        cols = [r[1] for r in db.execute(f"pragma table_info({table})")]
+        if "spec" not in cols:
+            continue
+        for (spec,) in db.execute(f"select spec from {table}"):
+            words = re.findall(r"[a-z]+", (spec or "").lower())
+            out |= {
+                " ".join(words[i:i + n])
+                for n in (2, 3)
+                for i in range(len(words) - n + 1)
+            }
+    return out
+
+
 def _pages(spec: str, total: int) -> list[int]:
     if not spec:
         return list(range(total))
@@ -199,8 +237,9 @@ def harvest(folder: Path, pages: list[int], role: llm.Role,
             *, say: bool = True) -> tuple[gr.Graph, dict]:
     """Every page through the extractor, every quote checked, into a graph."""
     graph = gr.Graph()
+    vocabulary = _rules_vocabulary()
     tally = {"pages": 0, "offered": 0, "kept": 0, "unquotable": 0,
-             "mended": 0, "seconds": 0.0}
+             "mended": 0, "mechanical": 0, "seconds": 0.0}
     for n in pages:
         text = read_page(folder, n)
         if len(text.strip()) < 200:
@@ -217,6 +256,11 @@ def harvest(folder: Path, pages: list[int], role: llm.Role,
             name = str(item.get("name", "")).strip()
             if not name or _furniture(name):
                 continue
+            kind = str(item.get("kind", "person"))
+            if kind in MECHANICAL and " ".join(
+                    re.findall(r"[a-z]+", name.lower())) in vocabulary:
+                tally["mechanical"] += 1
+                continue
             found = ground(str(item.get("quote", "")), text)
             if found is None:
                 # **Dropped, not stored unverified.** A fact that cannot be
@@ -230,7 +274,7 @@ def harvest(folder: Path, pages: list[int], role: llm.Role,
             tally["kept"] += 1
             graph.add(gr.Entity(
                 id=gr._slug(name), name=name,
-                kind=str(item.get("kind", "person")),
+                kind=kind,
                 facts=[gr.Fact(text=span, source="page", where=f"p{n}",
                                quote=span)]))
         if say:
@@ -296,6 +340,8 @@ def main() -> int:
     print(f"  {tally['kept']:5} kept, with a quote found on the page")
     print(f"  {tally['mended']:5} of those needed a fuzzy match to find")
     print(f"  {tally['unquotable']:5} dropped: no such words on the page")
+    print(f"  {tally['mechanical']:5} dropped: rules vocabulary, not this "
+          f"adventure's")
     folded = gr.reconcile(graph)
     for short, long in folded:
         print(f"      folded {short!r} into {long!r}")

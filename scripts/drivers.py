@@ -29699,6 +29699,47 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
         f"{[(e.name, e.kind) for e in two.entities.values() if 'car' in e.name]}",
     )
 
+    # **A rules phrase is not an entity, unless it is a creature.** The
+    # extractor reads whole pages, so a stat block gives it "cold damage"
+    # and "close blast 3" as things the page names -- true, and useless
+    # in a prompt. Measured on chapter 1: nine of 134 names are rules
+    # phrases, split exactly along kind -- eight `thing`s that are
+    # vocabulary, and one `creature` that is a real opponent.
+    import importlib.util
+    import re
+
+    spec = importlib.util.spec_from_file_location(
+        "ingest", Path(__file__).resolve().parent / "ingest.py")
+    assert spec is not None and spec.loader is not None
+    ingest = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ingest)
+    vocabulary = ingest._rules_vocabulary()
+
+    def dropped(name: str, kind: str) -> bool:
+        key = " ".join(re.findall(r"[a-z]+", name.lower()))
+        return kind in ingest.MECHANICAL and key in vocabulary
+
+    out.that(
+        len(vocabulary) > 50_000,
+        "the rules corpus is read and is the size it should be",
+        f"{len(vocabulary):,} phrases",
+    )
+    out.that(
+        dropped("cold damage", "thing") and dropped("close blast 3", "thing"),
+        "a mechanical phrase offered as a thing is dropped",
+        f"{dropped('cold damage', 'thing')}",
+    )
+    out.that(
+        not dropped("Guard drake", "creature"),
+        "while a creature the rules also name is kept -- it is a real foe",
+        f"{dropped('Guard drake', 'creature')}",
+    )
+    out.that(
+        not dropped("the brazier", "thing"),
+        "and a thing the rules never mention is kept",
+        f"{dropped('the brazier', 'thing')}",
+    )
+
     # A graph survives the round trip, and a provenance it cannot read is
     # refused rather than defaulted -- guessing would launder an invention
     # into canon, or throw away a citation.
