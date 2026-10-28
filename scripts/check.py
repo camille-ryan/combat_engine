@@ -182,6 +182,17 @@ CHECKS = (
                         "scripts/fixtures/modules/sunken-mill.json",
                         "--seed", "7", "--quiet", "--solo", "--no-llm"),
                "a whole adventure runs, carrying the party between scenes"),
+    Instrument("leaks-modules",
+               ("uv", "run", "scripts/leaks.py", "--modules"),
+               "no tracked file quotes an adventure or names its cast"),
+    # **In the default run, where `--history` deliberately is not.**
+    # `--history`'s commit half can never go green, because a pushed
+    # message is append-only -- so it would print a number every run and
+    # become noise. This one can: it was red on 8 findings when written and
+    # is green now, and a new leak is a thing the author can still fix.
+    #
+    # It **skips and says so** on a machine with no `modules/`, which is
+    # every fresh clone and every CI box, rather than passing silently.
     Instrument("play-god", ("uv", "run", "scripts/play.py", "--play",
                            "scripts/fixtures/modules/sunken-mill.json",
                            "--seed", "7", "--quiet", "--solo", "--no-llm",

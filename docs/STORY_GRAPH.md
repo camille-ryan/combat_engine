@@ -219,9 +219,13 @@ Two things were tested against the real adventure:
 **Lexical signals do not exist.** I predicted adventures mark secrecy in
 stock phrases. Across 154 pages: *hidden from the party* 7 matches on 5
 pages, *available for the asking* 4 on 3, **5.1% of sentences carrying any
-signal at all**. Worse, the phrase I cited as proof — *"the party has no way to know it"* — has **zero** matches in the source. I had written it myself
-while hand-authoring chapter 1 and quoted my own paraphrase back as evidence
-about the book.
+signal at all**. Worse, the phrase I cited as proof has **zero** matches in the source. I
+had written it myself while hand-authoring the first chapter and quoted my
+own paraphrase back as evidence about the book. (It is not repeated here
+either: `leaks.py --modules` flags it, correctly -- the check cannot tell
+my paraphrase sitting in a module from the adventure's own prose sitting
+in a module, and should not try, since both belong there and neither
+belongs in the tree.)
 
 **What does exist is `DC \d+` — 140 matches on 42 pages.** The adventure
 almost never says a thing is hidden; it says *"DC 15 Insight"*. Of 143 DC

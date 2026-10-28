@@ -108,6 +108,33 @@ it improves, red when it regresses, never a bare allowance. #372.
   around the name while writing it, and one in a `trigger=` string the page
   renders.
 
+  **`--modules` is the third narrow question, and it sees what neither of
+  the others can.** Both passes above compare a file against
+  `localization/`, which holds the *compendium's* names. An adventure
+  module's characters and places were never in the compendium, so a
+  tracked file could carry a published adventure's cast and two paragraphs
+  of its prose and every pass reported clean. That is not a matcher
+  wanting improvement -- there was nothing to match against.
+
+  Found the usual way: a design document in this repo quoted a dozen
+  character and place names and two paragraphs of read-aloud, and
+  `leaks.py` passed it. First real run: **8 findings, every one written by
+  me**, across four source files and the document.
+
+  Its strong test needs no vocabulary at all -- **an eight-word run** of a
+  module's own prose in a tracked file is copied or coincidence, and
+  coincidence does not survive eight words. Except that it does for a
+  rules formula: the first run flagged "hit points equal to your healing
+  surge value", in the adventure only because `read_aloud` takes all
+  italic text and a stat block's flavour line is italic too. The same
+  correction `--cited` needed, and the same fix -- filter against the rules
+  corpus in `game.db`, then a short named baseline for what is left.
+
+  Two notes on that baseline, both learnt by it failing: it matches as a
+  **substring**, because shingles overlap and an exact key silences only
+  one window of a phrase; and a key has to be the **distinctive fragment**,
+  because an eight-word window can start mid-title.
+
   The plant test is the clearest evidence in this file of why narrow beats
   tuned: a printed name planted in a content file beside its own ref turns
   `--cited` red naming the file, and in the **same run** the wide walk prints
@@ -200,7 +227,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `check.py` | runs every instrument; `--fast`, `--all`, `--history` |
 | `audit.py` | fire every declared row; catches raises and silent rows |
 | `lint.py` | ruff, plus two structural walks. Python only — never `web/` |
-| `leaks.py` | has a printed name got into the repo, a spec, a **quoted run in a comment**, a commit message or an issue; `--specs`, `--cited`, `--history`, `--issues`, `--staged` |
+| `leaks.py` | has a printed name got into the repo, a spec, a **quoted run in a comment**, a commit message or an issue, or has a tracked file **quoted an adventure the user owns**; `--specs`, `--cited`, `--modules`, `--history`, `--issues`, `--staged` |
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
 | `coverage.py` | written / not written / half-written on purpose |

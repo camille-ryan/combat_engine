@@ -28517,9 +28517,9 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         "scenes": [{
             "id": "t", "kind": "roleplay", "name": "T", "sets": "Dinner.",
             "exits": [], "max_beats": 1,
-            "npcs": [{"name": "Benwick", "wants": "an answer"},
-                     {"name": "Venn", "wants": "the evening to go well"},
-                     {"name": "Jarell", "wants": "to serve quietly"}]}]},
+            "npcs": [{"name": "Halvard", "wants": "an answer"},
+                     {"name": "Orsa", "wants": "the evening to go well"},
+                     {"name": "Tobin", "wants": "to serve quietly"}]}]},
         Path("<driver>")).scene("t")
 
     heard: list[str] = []
@@ -28529,13 +28529,13 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
                schema: dict | None = None) -> str:
         del role, schema
         heard.append(messages[-1]["content"])
-        return "Benwick sets down his cup."
+        return "Halvard sets down his cup."
 
     class OnlyOne(bt.Director):
         def answers(self, playing: bt.Playing,
                     intents: list[bt.Intent]) -> list[str]:
             del playing, intents
-            return ["Benwick"]
+            return ["Halvard"]
 
     llm_mod.chat = listen  # ty: ignore[invalid-assignment]
     try:
@@ -28544,7 +28544,7 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
     finally:
         llm_mod.chat = was
     out.that(
-        "Benwick" in one and "Venn" not in one and "Jarell" not in one,
+        "Halvard" in one and "Orsa" not in one and "Tobin" not in one,
         "only the person answering is named to the DM, not the whole cast",
         f"{one[:110]!r}",
     )
@@ -28553,7 +28553,7 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
     # the whole cast and the existing assertions about one still hold.
     out.that(
         bt.Director(scripted=True).answers(bt.Playing(scene=crowd), [])
-        == ["Benwick", "Venn", "Jarell"],
+        == ["Halvard", "Orsa", "Tobin"],
         "while scripted keeps the whole cast, so check.py sees it all",
         f"{bt.Director(scripted=True).answers(bt.Playing(scene=crowd), [])}",
     )
@@ -28565,7 +28565,7 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
     # the length is not promptable and the fix is to stop the ragged
     # endings instead.
     for raw, want in (
-        ('He nods. "Aye." Venn turns to the door and says, "',
+        ('He nods. "Aye." Orsa turns to the door and says, "',
          'He nods. "Aye."'),
         ("He nods and says nothing more.", "He nods and says nothing more."),
         ("A clause with no end at all running on",
@@ -28581,7 +28581,7 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
     # function and not its one caller -- deleting the call left every
     # assertion above green, which is the third time this driver has
     # caught that shape.
-    ragged = ('Benwick nods. "Of course." Venn turns to the door and says, "')
+    ragged = ('Halvard nods. "Of course." Orsa turns to the door and says, "')
     was_chat = llm_mod.chat
 
     def ragged_reply(role: llm_mod.Role, messages: list[dict],
@@ -28596,7 +28596,7 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
     finally:
         llm_mod.chat = was_chat
     out.that(
-        came_back == 'Benwick nods. "Of course."',
+        came_back == 'Halvard nods. "Of course."',
         "and the DM's own reply is trimmed on the way out, not just in test",
         f"{came_back!r}",
     )
@@ -29281,14 +29281,14 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
     # **A recurring character's description reaches both prompts.** Scene
     # text does not travel: the adventure describes one NPC in the opening
     # read-aloud, and three scenes later the DM sees only that scene's
-    # prose, so it had nothing and invented -- "Venn nodded slightly, her
+    # prose, so it had nothing and invented -- "Orsa nodded slightly, her
     # eyes downcast", twice, for a man the player had read about.
     described = mod.parse({
         "id": "probeC", "party_level": 1, "party_size": 2, "start": "t",
         "scenes": [{
             "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
             "exits": [], "max_beats": 1,
-            "npcs": [{"name": "Venn", "wants": "to serve",
+            "npcs": [{"name": "Orsa", "wants": "to serve",
                       "looks": "a thin, bald human friar, a man"}]}]},
         Path("<driver>")).scene("t")
     asked.clear()
@@ -29660,9 +29660,9 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
 
     # **A short name folds into the long one it is the tail of.** #903.
     two = gr.Graph()
-    two.add(gr.Entity(id="ronnik", name="Ronnik", kind="person",
+    two.add(gr.Entity(id="short", name="Corwin", kind="person",
                       facts=[gr.Fact("lends at bad rates", "page", where="p11")]))
-    two.add(gr.Entity(id="ferdinand-ronnik", name="Ferdinand Ronnik",
+    two.add(gr.Entity(id="long", name="Aldous Corwin",
                       kind="person",
                       facts=[gr.Fact("keeps a jewel", "page", where="p10")]))
     # Must NOT fold: a shared *leading* word is two people, not one.
@@ -29674,13 +29674,13 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
     folded = gr.reconcile(two)
 
     out.that(
-        ("Ronnik", "Ferdinand Ronnik") in folded,
+        ("Corwin", "Aldous Corwin") in folded,
         "a surname folds into the full name it ends",
         f"{folded}",
     )
-    joined = two.find("Ronnik")
+    joined = two.find("Corwin")
     out.that(
-        joined is not None and joined.name == "Ferdinand Ronnik"
+        joined is not None and joined.name == "Aldous Corwin"
         and len(joined.facts) == 2,
         "and both names reach one entity holding both sets of facts",
         f"{joined.name if joined else None}, "
@@ -29818,15 +29818,15 @@ def the_dm_may_invent_but_not_contradict(out: Result) -> None:
 
     party = run_mod.Party.of(["fighter", "cleric"], level=1, seed=3)
     canon = gr.Graph()
-    canon.add(gr.Entity(id="gordi", name="Gordi", kind="person", facts=[
+    canon.add(gr.Entity(id="informant", name="Odrick", kind="person", facts=[
         gr.Fact("he is missing, and worked for the banker", "page",
-                where="p10", quote="a man named Gordi who worked for")]))
+                where="p10", quote="a man who worked for the banker")]))
     scene = mod.parse({
         "id": "probeD", "party_level": 1, "party_size": 2, "start": "t",
         "scenes": [{
             "id": "t", "kind": "roleplay", "name": "T",
             "sets": "Dinner.", "exits": [], "max_beats": 1,
-            "npcs": [{"name": "Benwick", "wants": "an answer",
+            "npcs": [{"name": "Halvard", "wants": "an answer",
                       "looks": "a well-fed holy man"}]}]},
         Path("<driver>")).scene("t")
 
@@ -29843,7 +29843,7 @@ def the_dm_may_invent_but_not_contradict(out: Result) -> None:
         finally:
             board.strike()
 
-    bound = asked("Who was Gordi to you?")
+    bound = asked("Who was Odrick to you?")
     out.that(
         len(bound.standing) == 1
         and "do not contradict" in str(bound.standing[0]),
@@ -29874,7 +29874,7 @@ def the_dm_may_invent_but_not_contradict(out: Result) -> None:
     )
 
     # The control: a module nobody has ingested plays exactly as before.
-    plain = asked("Who was Gordi to you?", with_canon=False)
+    plain = asked("Who was Odrick to you?", with_canon=False)
     out.that(
         not plain.standing,
         "and a module with no graph behind it raises nothing and plays on",
@@ -29893,14 +29893,14 @@ def the_dm_may_invent_but_not_contradict(out: Result) -> None:
             schema: dict | None = None) -> str:
         del role, schema
         seen.append(messages[-1]["content"])
-        return "Benwick sets down his cup."
+        return "Halvard sets down his cup."
 
     llm.chat = tap  # ty: ignore[invalid-assignment]
     try:
         live = bt.Playing(scene=scene, canon=canon, told=gr.Graph())
         bt.Director(roles=llm.ROLES).react(
             live, [], [], None,
-            [bt.Standing("Gordi", ("he is missing, and worked for the banker",))])
+            [bt.Standing("Odrick", ("he is missing, and worked for the banker",))])
     finally:
         llm.chat = real_chat
     out.that(
@@ -29923,7 +29923,7 @@ def the_dm_may_invent_but_not_contradict(out: Result) -> None:
                         situation: str) -> bt.Intent:
                 del playing, situation
                 return bt.Intent(actor.slot, actor.name, played=True,
-                                 speech="What of Gordi?")
+                                 speech="What of Odrick?")
 
         only_theirs = bt.one_beat(
             pair, board,

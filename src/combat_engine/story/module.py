@@ -322,9 +322,9 @@ class Npc:
     #: text does not travel and a recurring character does.**
     #:
     #: The adventure introduces one as *"a thin, bald human friar named
-    #: Venn"* -- in the opening scene's read-aloud. Three scenes later the
+    #: in a single clause"* -- in the opening scene's read-aloud. Three scenes later the
     #: DM sees only that scene's text, which is somebody else's speech, so
-    #: it had nothing about Venn and guessed: *"Venn nodded slightly, her
+    #: it had nothing about that character and guessed: *"Orsa nodded slightly, her
     #: eyes downcast"*, twice in one scene, for a character the player had
     #: read described as a man one scene earlier.
     #:

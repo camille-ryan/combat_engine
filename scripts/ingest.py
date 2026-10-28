@@ -93,7 +93,8 @@ SCHEMA = {
 
 #: **The quote is the fact.** The first version asked for a one-sentence
 #: gloss as well, and the model filled it with the entity's own name --
-#: "Benwick", for Benwick -- in **38 of 38** cases, while putting the real
+#: the entity's name where a description belonged -- in **38 of 38**
+#: cases, while putting the real
 #: sentence in the quote. Rather than argue with it, the gloss was deleted:
 #: the page's own sentence is better than a paraphrase of it, is already
 #: validated against the source, and removes the only place in this stage

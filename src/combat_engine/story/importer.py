@@ -221,10 +221,10 @@ def _paragraphs(block: list[tuple[float, str]]) -> str:
     read-aloud arrives as one 986-character wall, which is legible on a page
     and is not legible in a terminal.
 
-    Length alone is not enough and says so twice on the first page tried. "A
-    thin, bald human friar named Venn approached you" is 50 characters
-    against a 65 measure and **begins** a paragraph; so does "First, I want
-    you to go to the prison grotto". Both are short because the font is
+    Length alone is not enough and says so twice on the first page tried.
+    One line describing a character runs 50 characters against a 65
+    measure and **begins** a paragraph; another opening a list of tasks
+    does the same. Both are short because the font is
     proportional and character count is a poor proxy for width.
 
     What separates them is punctuation: a line that *ends* a paragraph ends a
@@ -466,16 +466,16 @@ branches.
 **Describe every recurring character with `looks`.** Scene text does not
 travel: the adventure described one NPC in the opening read-aloud, and three
 scenes later the DM saw only that scene's prose -- somebody else's speech --
-so it had nothing to go on and wrote *"Venn nodded slightly, her eyes
+so it had nothing to go on and wrote *"Orsa nodded slightly, her eyes
 downcast"*, twice, for a man the player had read described one scene
 earlier. `voice` is how they speak and was never meant to carry this.
 
 **One name per character, and the page's own.** A character who appears in
 two scenes must carry the same `name` in both, taken from the adventure's
 text. Written with role words instead -- "the friar", "the spy" -- a player
-dined with Benwick and then spoke to "the friar" in the very next scene,
-and "the friar" was ambiguous on top, because the read-aloud says the friar
-is *Venn* and Benwick is his teacher.
+dined with a named host and then spoke to "the friar" in the very next
+scene, and "the friar" was ambiguous on top, because the read-aloud gives
+that title to a different character entirely.
 
 There is **no gate for this**: an NPC's name being findable in the scene's
 own prose passes for every entry in the module, since "friar" and "spy" are
@@ -613,7 +613,8 @@ rounding up to hard.
 
 A fact is read out to a player, so write it as the thing that is true, not
 as the page's instruction to the DM. The page says *"the character discovers
-that Benwick has a stellar reputation"*; the fact is *"Benwick has a stellar
+that the host has a stellar reputation"*; the fact is *"the host has a
+stellar
 reputation"*.
 
 **And nothing you need withheld goes here.** With five characters rolling,

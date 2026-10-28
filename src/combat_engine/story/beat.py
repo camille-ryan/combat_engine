@@ -474,12 +474,12 @@ def _whole(said: str) -> str:
     """
     said = said.strip()
     # **A quote mark only ends a sentence when it follows a stop.** Taking
-    # any quote as a terminator cut `...Venn moves to the door and says, "`
+    # any quote as a terminator cut `...Orsa moves to the door and says, "`
     # at the *opening* quote, which is the same dangling fragment one
     # character shorter.
     # **No length threshold.** A first version kept the text whole unless
     # the trim left more than 40 characters, which refused the very cases
-    # it was for -- `He nods. "Aye." Venn moves to the door and says, "`
+    # it was for -- `He nods. "Aye." Orsa moves to the door and says, "`
     # has its last finished sentence at character 15. If a complete
     # sentence exists, that is the reply; what follows it is the part the
     # budget cut off.
@@ -937,7 +937,7 @@ class Director:
             # **Unmeasured, deliberately recorded as such.** Three attempts
             # at a detector failed: a judge got both of its own controls
             # wrong twice, and an enum over "who acts" managed 3 of 4 --
-            # calling "Benwick sets down his cup and waits" an action by
+            # calling "the host sets down his cup and waits" an action by
             # the Fighter. An exact search for the character's name cannot
             # tell narration from an NPC addressing them, which is wanted.
             # So this ships on one observed fault and three precedents in

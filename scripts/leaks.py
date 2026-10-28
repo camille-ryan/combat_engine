@@ -531,6 +531,217 @@ CITED_REF = re.compile(
 CITED_MIN = 4
 
 
+#: How many consecutive words of a module's prose, in a tracked file, count
+#: as quoting the adventure.
+#:
+#: Eight. **This is not a vocabulary question**, which is what makes the
+#: check different in kind from every other pass in this file: an eight-word
+#: run is either copied or coincidence, and coincidence does not survive
+#: eight words of somebody else's sentence. So it needs none of the waivers
+#: the tree-wide walk needs, and has none of #494's blind spot.
+MODULE_RUN = 8
+
+#: A module name shorter than this is not evidence -- it is a word.
+#:
+#: Four, lowered from five after five was found to miss a four-letter
+#: character name that was sitting in three tracked files. The guard
+#: against a false positive is not the length on its own: the name has to
+#: be capitalised in the module's own cast list *and* match on a word
+#: boundary, so an ordinary lowercase word never reaches this test.
+MODULE_NAME_MIN = 4
+
+
+def _module_words(text: str) -> list[str]:
+    return re.findall(r"[a-z']+", text.lower())
+
+
+def _module_runs(text: str) -> set[str]:
+    words = _module_words(text)
+    return {
+        " ".join(words[i:i + MODULE_RUN])
+        for i in range(max(0, len(words) - MODULE_RUN + 1))
+    }
+
+
+#: Runs that are mechanical vocabulary rather than an adventure's prose.
+#:
+#: **The premise "coincidence does not survive eight words" is true for
+#: narrative and false for a rules formula**, which is the same correction
+#: `--cited` needed: its first run reported 1,379 hits, 287 of them because
+#: a monster ability's printed name is very often a generic combat phrase.
+#: Here the first run reported four, three of them phrases like "hit points
+#: equal to your healing surge value" -- in the adventure because
+#: `importer.read_aloud` takes *all* italic text and a stat block's flavour
+#: line is italic too.
+#:
+#: Most are removed by checking the run against the rules corpus in
+#: `game.db`, which every contributor has. These two are what is left, and
+#: they are listed rather than waived by a rule: a per-finding baseline that
+#: may shrink and never grow, the same shape as `DEFERRED` above and
+#: `cards.KNOWN`. A bare allowance would hide the next real one.
+#: **Matched as a substring, not as a whole run.** Keyed exactly, a
+#: neighbouring eight-word window of the same phrase slipped straight
+#: through -- the rulebook title below was caught as "...fallen lands
+#: heroes of the" and then again, one word along, as "of the fallen lands
+#: heroes of the forgotten". Shingles overlap, so an exact key only ever
+#: silences one of them.
+MODULE_BENIGN = {
+    "a minor action instead of a move action":
+        "generic 4e action vocabulary, not this adventure's prose",
+    # **Keyed on the distinctive fragment, not the whole title.** An
+    # eight-word window can start mid-title -- the one that slipped
+    # through was "of the fallen lands heroes of the forgotten", which
+    # contains neither title in full.
+    "fallen lands":
+        "half a rulebook title the read-aloud extractor picked off an "
+        "item block; a product name rather than adventure text",
+    "forgotten kingdoms":
+        "the companion rulebook, same reason. Both sit in a plan from "
+        "2026-10-07, which is tier 3 in #447's ordering -- avoid, do not "
+        "chase -- and rewriting a historical plan buys nothing",
+}
+
+
+def _rules_runs() -> set[str]:
+    """Every eight-word run the rules themselves use.
+
+    From `spec`, which is the text column on every table that has prose.
+    Built once; about 269,000 runs, which is a set lookup and costs
+    nothing next to reading the tree.
+    """
+    out: set[str] = set()
+    with contextlib.suppress(sqlite3.Error):
+        db = game()
+        for table in ("power", "monster_power", "class_feature", "item"):
+            cols = [r[1] for r in db.execute(f"pragma table_info({table})")]
+            if "spec" not in cols:
+                continue
+            for (spec,) in db.execute(f"select spec from {table}"):
+                out |= _module_runs(spec or "")
+    return out
+
+
+def _module_material() -> tuple[set[str], dict[str, str], int]:
+    """Every run of prose and every proper name the local modules hold.
+
+    Read from `modules/`, which is git-ignored -- so this returns nothing on
+    a fresh clone and the caller says so rather than passing.
+    """
+    runs: set[str] = set()
+    names: dict[str, str] = {}
+    seen = 0
+    for module in sorted((ROOT / "modules").glob("*/module.json")):
+        seen += 1
+        raw = json.loads(module.read_text())
+        for scene in raw.get("scenes", ()):
+            for key in ("sets", "brief"):
+                if scene.get(key):
+                    runs |= _module_runs(str(scene[key]))
+            people = [n.get("name", "") for n in scene.get("npcs", ())]
+            for who in (*people, scene.get("name", "")):
+                who = str(who).strip()
+                # A proper noun rather than a role word: at least one
+                # capitalised word. A cast entry written as "the halfling by
+                # the door" is the module's own paraphrase and names nobody.
+                caps = [w for w in who.split() if w[:1].isupper()]
+                if caps and len(who) >= MODULE_NAME_MIN:
+                    names[who] = module.parent.name
+        aloud = module.parent / "read-aloud.json"
+        if aloud.exists():
+            for blocks in json.loads(aloud.read_text()).values():
+                for block in blocks:
+                    runs |= _module_runs(str(block))
+    # Mechanical vocabulary is not this adventure's prose. See
+    # `MODULE_BENIGN` for why this is a filter and a short list rather
+    # than a looser rule.
+    rules = _rules_runs()
+    keep = {
+        run for run in runs
+        if run not in rules
+        and not any(benign in run for benign in MODULE_BENIGN)
+    }
+    return keep, names, seen
+
+
+def modules() -> int:
+    """Has a tracked file quoted an adventure the user owns? #902.
+
+    **The gap this fills is not #494's.** The tree-wide walk compares a file
+    against `localization/`, which holds the *compendium's* names -- monsters,
+    powers, items, races. An adventure module's characters and places were
+    never in the compendium, so a tracked file could carry a published
+    adventure's cast and two paragraphs of its prose and every pass in this
+    file would report clean. That is not a matcher wanting improvement;
+    there was nothing to match against.
+
+    It was found the way these always are. A design document written in this
+    repository quoted a dozen character and place names and two paragraphs of
+    read-aloud, and `leaks.py` passed it. I scrubbed it by hand, which is the
+    work a gate exists to replace.
+
+    Two tests, and the first is the one that matters:
+
+    * **an eight-word run** of a module's own prose appearing in a tracked
+      file. Copied or coincidence, and coincidence does not survive eight
+      words. No waivers, no vocabulary, no blind spot.
+    * **a proper name** out of a module's cast or its scene titles.
+
+    `modules/` is git-ignored, so on a fresh clone there is nothing to check
+    and this **skips and says so** -- `scripts/CLAUDE.md` is explicit that a
+    quiet skip is not a check.
+    """
+    runs, names, count = _module_material()
+    files = tracked()
+    if not count:
+        print(
+            "no modules under modules/, so there is nothing to check "
+            "against -- this machine holds no adventure. SKIPPED, not "
+            "passed: a machine with one would have checked it."
+        )
+        return 0
+
+    findings: list[tuple[Path, int, str]] = []
+    for path in files:
+        if path.suffix in {".png", ".jpg", ".pdf", ".sqlite", ".lock"}:
+            continue
+        try:
+            text = path.read_text(errors="replace")
+        except (OSError, UnicodeDecodeError):
+            continue
+        rel = path.relative_to(ROOT)
+        lines = text.splitlines()
+        # One finding per file for the run test: a file that quotes a page
+        # usually quotes it more than once, and the fix is the same edit.
+        for n, line in enumerate(lines, 1):
+            if len(_module_words(line)) < MODULE_RUN:
+                continue
+            shared = _module_runs(line) & runs
+            if shared:
+                quote = sorted(shared)[0]
+                findings.append((rel, n, f"quotes a module: {quote!r}"))
+                break
+        for name, where in names.items():
+            if not re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text):
+                continue
+            at = next((i for i, ln in enumerate(lines, 1) if name in ln), 0)
+            findings.append((rel, at, f"names {name!r}, from {where}"))
+
+    for rel, at, what in findings:
+        print(f"{rel}:{at}: {what}")
+    print(
+        f"\n{count} module(s) read: {len(runs):,} prose runs and "
+        f"{len(names)} names, against {len(files):,} tracked files"
+    )
+    if findings:
+        print(
+            f"{len(findings)} leak(s). An adventure's prose and its cast "
+            "belong in modules/, which is git-ignored, not in the tree."
+        )
+        return 1
+    print("no tracked file quotes a module or names its cast")
+    return 0
+
+
 def cited() -> int:
     """A file may not print the name of a ref it also cites.
 
@@ -1461,6 +1672,8 @@ def main() -> int:
         return feat_categories()
     if "--cited" in sys.argv:
         return cited()
+    if "--modules" in sys.argv:
+        return modules()
     if "--specs" in sys.argv:
         return specs()
     if "--history" in sys.argv:
