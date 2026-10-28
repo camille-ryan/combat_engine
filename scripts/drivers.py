@@ -32196,6 +32196,183 @@ def training_is_worth_exactly_five_on_a_check(out: Result) -> None:
     table.strike()
 
 
+def a_party_that_is_not_the_module_s_size_gets_the_page_s_rule(
+    out: Result,
+) -> None:
+    """#798. The fielded creatures were byte-identical at 4, 5 and 6.
+
+    The issue is titled "adjusts each encounter for party size **by
+    name**" and the page does nothing of the kind. Every chapter prints
+    the same two paragraphs and the per-encounter mention is an *example*
+    of applying them, not a specification: remove one of the lowest level
+    non-minions for a weak party, add one of the non-minions already here
+    for a strong one.
+
+    So there is no table to author, which is why this is built rather than
+    still waiting for somebody to play at a size other than five.
+
+    It fires only for a scene that **states its own XP**. A scene without
+    one is already scaled by headcount through `per_head`, and applying
+    the creature rule on top would count the same adjustment twice.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story.cast_list import resolve
+
+    def build(xp: int, foes: list[dict], size: int = 5) -> mod.Module:
+        raw = {"id": "probe", "party_level": 2, "party_size": size,
+               "start": "pit",
+               "scenes": [{"id": "pit", "kind": "combat", "name": "Pit",
+                           "exits": [], "xp": xp, "foes": foes}]}
+        return mod.parse(raw, Path("<driver>"))
+
+    mixed = [{"count": 2, "role": "soldier", "rank": "standard"},
+             {"count": 1, "role": "brute", "rank": "standard"},
+             {"count": 4, "role": "skirmisher", "rank": "minion"}]
+    scene = build(625, mixed).scene("pit")
+    at = {
+        size: resolve(scene, party_level=2, party_size=size, stated_size=5)
+        for size in (4, 5, 6)
+    }
+
+    # **The control first.** A party of the size the module assumes must
+    # come out untouched, or every assertion below is measuring the
+    # resolver's own variance rather than the rule.
+    out.that(
+        not any("party (" in n for n in at[5].notes),
+        "a party of the module's own size is left exactly as printed",
+        f"{len(at[5].refs)} creature(s), no rule note",
+    )
+    out.that(
+        len(at[4].refs) == len(at[5].refs) - 1,
+        "a weak party drops one creature",
+        f"4 -> {len(at[4].refs)}, 5 -> {len(at[5].refs)}",
+    )
+    out.that(
+        len(at[6].refs) == len(at[5].refs) + 1,
+        "and a strong party gains one",
+        f"6 -> {len(at[6].refs)}, 5 -> {len(at[5].refs)}",
+    )
+    # The one added is a second of something already in the fight -- the
+    # page says "another guard drake", not a new kind of creature.
+    extra = [r for r in at[6].refs if at[6].refs.count(r) > at[5].refs.count(r)]
+    out.that(
+        bool(extra) and all(r in at[5].refs for r in extra),
+        "the one it adds is a second of a creature already here",
+        f"{extra}",
+    )
+    # And what it moves is never a minion, either way.
+    from combat_engine.story.cast_list import _facts
+
+    moved = set(at[5].refs) - set(at[4].refs) | set(extra)
+    out.that(
+        bool(moved) and all(_facts(r)[4] != "minion" for r in moved),
+        "and what it moves is a non-minion, both directions",
+        f"{[(r, _facts(r)[4]) for r in moved]}",
+    )
+    # **Which one, not just that it was one**, and this needs a fight whose
+    # non-minions are at *different* levels. The resolver picks near the
+    # party's level, so the three above all come out level 2 and `min` and
+    # `max` are indistinguishable -- dropping the highest instead left
+    # every assertion above green. So the pick is posed directly, on refs
+    # chosen for their levels: 1, 3 and 6, with a minion among them.
+    from combat_engine.story.cast_list import _for_party_size
+    from combat_engine.story.reflavour import Dressed, Reflavour
+
+    def posed(size: int) -> Dressed:
+        # Real `Reflavour`s rather than `None` behind a suppression
+        # comment: that syntax silences nothing here (`ty` does not
+        # honour it, #883), so it was a structural fault and a genuine
+        # type error at once. A bare one is "cosmetic" and dresses
+        # nothing, which is what this needs.
+        made = Dressed(refs=["m1019", "m1063", "m1007", "m115725"],
+                       flavours=[Reflavour() for _ in range(4)])
+        # **Party level 3, not 2.** At 2 the levels 1 and 3 are equally
+        # near and the tie is broken toward the simpler creature, which is
+        # a fair reading of "the simplest ... whose level most closely
+        # matches" but makes the assertion a guess. At 3 the winner is
+        # unique and the rule is what is being read.
+        _for_party_size(made, scene, 3, size, 5)
+        return made
+
+    levels = {r: _facts(r)[1] for r in ("m1019", "m1063", "m1007", "m115725")}
+    out.that(
+        len({levels[r] for r in ("m1019", "m1063", "m1007")}) == 3,
+        "the posed fight really does hold three different levels",
+        f"{levels}",
+    )
+    weak = posed(4)
+    out.that(
+        "m1063" not in weak.refs and len(weak.refs) == 3,
+        "the one it drops is the lowest-level non-minion, as printed",
+        f"left with {weak.refs} from levels {levels}",
+    )
+    strong = posed(6)
+    gained = [r for r in strong.refs if strong.refs.count(r) > 1]
+    out.that(
+        sorted(set(gained)) == ["m1019"],
+        "and the one it adds is the non-minion nearest the party's level",
+        f"doubled {sorted(set(gained))}, levels {levels}, party level 3",
+    )
+    # **The lists stay parallel.** `flavours` runs alongside `refs`, so a
+    # bare `remove` dresses every creature after the gap as its neighbour.
+    out.that(
+        all(len(d.refs) == len(d.flavours) for d in at.values()),
+        "refs and flavours stay the same length through both edits",
+        f"{[(s, len(d.refs), len(d.flavours)) for s, d in at.items()]}",
+    )
+
+    # An all-minion fight has nothing the rule may move, and says so.
+    only_minions = build(
+        400, [{"count": 8, "role": "skirmisher", "rank": "minion"}]
+    ).scene("pit")
+    tiny = resolve(only_minions, party_level=2, party_size=4, stated_size=5)
+    out.that(
+        any("all minions" in n for n in tiny.notes),
+        "an all-minion fight is fielded as printed, and the note says why",
+        f"{[n[-60:] for n in tiny.notes if 'minion' in n]}",
+    )
+
+    # A scene with no stated XP is already scaled by headcount, so the
+    # rule must not fire on top of it.
+    budgeted = build(0, mixed).scene("pit")
+    plain = resolve(budgeted, party_level=2, party_size=4, stated_size=5)
+    out.that(
+        not any("party (" in n for n in plain.notes),
+        "a scene with no printed XP is left to the budget, not the rule",
+        f"{[n[:52] for n in plain.notes]}",
+    )
+
+    # **Through `run.step`, because the call site is what was wrong last
+    # time.** `#798`'s own comment records the mechanism being fully
+    # asserted while its only caller was not: `run` fields the party the
+    # module asks for, so `party_size` and `stated_size` agree and the
+    # rule never fires unless somebody brings their own party.
+    module = build(625, mixed)
+    five = run_mod.begin(module, seed=4)
+    four = run_mod.begin(module, seed=4, pcs=run_mod.party_for(4))
+    got = {}
+    for label, campaign in (("five", five), ("four", four)):
+        # **Not `god=True`.** God mode calls `_win` and never reaches
+        # `_fight`, so the fielding this is about does not happen -- the
+        # first version of this assertion passed `god` to keep the driver
+        # quick and measured nothing.
+        got[label] = run_mod.step(campaign, module, record=False)
+    out.that(
+        len(four.party.sheets) == 4 and len(five.party.sheets) == 5,
+        "a campaign can be given a party that is not the module's size",
+        f"four={len(four.party.sheets)} five={len(five.party.sheets)}",
+    )
+    out.that(
+        any("weak party" in n for n in got["four"].notes)
+        and not any("weak party" in n for n in got["five"].notes),
+        "and run.step applies the rule for it, and not for the other",
+        f"four: {[n[-44:] for n in got['four'].notes if 'party (' in n]}",
+    )
+
+
 def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     """#911. The challenge's bus and the fight's bus were different objects.
 
@@ -34281,13 +34458,21 @@ def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
 
     When a scene prints its own XP figure -- which every fight in the one
     converted chapter does -- the headcount scaling is never consulted, so
-    a party of six walks into a fight built for the module's five and the
-    fielded creatures are byte-identical. The approximation stays, because
-    a module that printed a number for its own party is more trustworthy
-    than our curve. What was wrong is that nobody was told.
+    a party of six walks into a fight built for the module's five. The
+    budget is still not rescaled, because a module that printed a number
+    for its own party is more trustworthy than our curve. What was wrong
+    is that nobody was told.
 
     `story/CLAUDE.md`: *a silent cap reads as "covered everything" when it
     did not.*
+
+    **The wording moved once the page's own rule landed.** This asserted
+    the note said the fight "is NOT scaled", which stopped being true:
+    `_for_party_size` now applies the adventure's weak/strong-party rule,
+    so the figure is unscaled and the *fight* is not. The assertions
+    below ask what they always meant to -- that a party which is not the
+    module's size is told so -- and `party_size_rule` covers what the
+    rule then does about it.
     """
     from random import Random
 
@@ -34308,12 +34493,12 @@ def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
         got = cast_list.resolve(
             scene, party_level=1, draw=Random(7),
             party_size=playing, stated_size=stated)
-        return [n for n in got.notes if "NOT scaled" in n]
+        return [n for n in got.notes if "used as printed" in n]
 
     stated = fight(552)
     out.that(
         bool(notes(stated, 6, 5)) and "6" in notes(stated, 6, 5)[0],
-        "a party larger than the module's is told the fight is not scaled",
+        "a party larger than the module's is told the figure is as printed",
         f"{notes(stated, 6, 5)}",
     )
     out.that(
@@ -34362,7 +34547,7 @@ def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
         staffed, seed=5, pcs=["fighter", "cleric", "rogue", "wizard"])
     made = runner.step(short, staffed, record=False)
     out.that(
-        any("NOT scaled" in n for n in made.notes),
+        any("used as printed" in n for n in made.notes),
         "and a campaign fielding fewer than the module wrote for is told",
         f"{[n[:70] for n in made.notes]}",
     )
@@ -40775,6 +40960,10 @@ DRIVERS = {
     "training_bonus": (
         training_is_worth_exactly_five_on_a_check,
         "the +5 for training, asserted by taking it away (#791)",
+    ),
+    "party_size_rule": (
+        a_party_that_is_not_the_module_s_size_gets_the_page_s_rule,
+        "a party that is not the module's size gets the page's rule (#798)",
     ),
     "borrowed_board": (
         a_challenge_can_run_on_the_fight_s_own_board,

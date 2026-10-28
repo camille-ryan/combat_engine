@@ -241,6 +241,100 @@ def _rank(
     return sorted(ordered, key=key)
 
 
+def _for_party_size(
+    out: Dressed, scene: Scene, party_level: int,
+    party_size: int, stated_size: int,
+) -> None:
+    """The adventure's own rule for a table that is not the size it assumes.
+
+    **It is a rule, not a table, which is what #798 had wrong.** The issue
+    is titled "adjusts each encounter for party size *by name*" and the
+    page does nothing of the kind. Every chapter prints the same two
+    paragraphs, and the per-encounter mention is an *example* of applying
+    them -- "you might subtract the guard drake" -- not a specification:
+
+        Weak Party: ... only four characters ... remove one of the lowest
+        level or least important non-minion monsters from the encounter.
+
+        Strong Party: ... six characters ... add one of the simplest
+        non-minion monsters among those in the encounter whose level most
+        closely matches the encounter level.
+
+    So it needs no authoring at all, which is why it is built now rather
+    than waiting for the trigger the issue set: a general rule over the
+    fielded list costs one function, where a per-encounter table would
+    have cost a schema field and a pass over every converted scene.
+
+    **One adjustment, not one per missing character.** The page says "a
+    weak party" and "remove one", and says nothing about a party of three.
+    Scaling it per head would be our curve again, which is the thing the
+    stated XP figure is trusted over.
+
+    **"Least important" is not modelled**, because nothing on a stat block
+    says it. Lowest level is the half that is measurable and is what the
+    page names first; the note says so rather than implying the pick was
+    the adventure's.
+    """
+    if not out.refs or not scene.xp:
+        return
+    if int(party_size) == int(stated_size) or not stated_size:
+        return
+
+    # `_facts` already carries the rank, cached -- a second loader call
+    # per ref would be the same answer at more cost.
+    bulk = [(ref, _facts(ref)[1]) for ref in out.refs
+            if _facts(ref)[4] != "minion"]
+    if not bulk:
+        out.notes.append(
+            f"{scene.id}: the party is {int(party_size)} against the "
+            f"module's {int(stated_size)}, and the adventure's rule only "
+            "moves non-minions -- this fight is all minions, so it is "
+            "fielded as printed"
+        )
+        return
+
+    if int(party_size) < int(stated_size):
+        drop = min(bulk, key=lambda pair: (pair[1], out.refs.index(pair[0])))
+        if len(out.refs) <= 1:
+            out.notes.append(
+                f"{scene.id}: the party is {int(party_size)} against the "
+                f"module's {int(stated_size)}, and the only creature in "
+                "this fight is the one the rule would remove -- fielded "
+                "as printed instead"
+            )
+            return
+        # **By index, because `flavours` runs parallel to `refs`.** A bare
+        # `refs.remove` leaves the two lists one apart and every creature
+        # after the removed one is dressed as its neighbour.
+        gone = out.refs.index(drop[0])
+        del out.refs[gone]
+        if gone < len(out.flavours):
+            del out.flavours[gone]
+        out.notes.append(
+            f"{scene.id}: a weak party ({int(party_size)} against the "
+            f"module's {int(stated_size)}), so the adventure's rule drops "
+            f"one non-minion -- {drop[0]}, the lowest level at {drop[1]}. "
+            "'Least important' is the page's other word for it and is not "
+            "modelled"
+        )
+        return
+
+    add = min(bulk, key=lambda pair: (abs(pair[1] - party_level), pair[1],
+                                      out.refs.index(pair[0])))
+    # The copy is dressed exactly as the creature it is a second of --
+    # the page says "another guard drake", not a differently flavoured one.
+    twin = out.refs.index(add[0])
+    out.refs.append(add[0])
+    if twin < len(out.flavours):
+        out.flavours.append(out.flavours[twin])
+    out.notes.append(
+        f"{scene.id}: a strong party ({int(party_size)} against the "
+        f"module's {int(stated_size)}), so the adventure's rule adds one "
+        f"more of a non-minion already here -- {add[0]}, level {add[1]}, "
+        f"nearest the party's {party_level}"
+    )
+
+
 def resolve(
     scene: Scene, *, party_level: int, draw: Random | None = None,
     party_size: int = SIDE, stated_size: int = SIDE,
@@ -281,10 +375,15 @@ def resolve(
     # adventure -- and said nothing to a party of four, which is the one
     # playing a fight built for somebody else.
     if scene.xp and int(party_size) != int(stated_size):
+        # **The budget is still not rescaled**, and that is deliberate: a
+        # module that printed a figure for its own party is more
+        # trustworthy than our curve. What changed is that the adventure's
+        # own creature rule is applied afterwards, so this no longer says
+        # the fight is unscaled -- `_for_party_size` reports what it did.
         out.notes.append(
             f"{scene.id}: the module states {scene.xp} XP for a party of "
-            f"{int(stated_size)}, so it is used as printed -- this fight "
-            f"is NOT scaled for the {int(party_size)} playing it"
+            f"{int(stated_size)}, so the figure is used as printed rather "
+            f"than rescaled for the {int(party_size)} playing it"
         )
     if want <= 0:
         out.notes.append(
@@ -361,4 +460,5 @@ def resolve(
                 f"({spent:.0f} of {want:.0f} XP spent)"
             )
 
+    _for_party_size(out, scene, party_level, party_size, stated_size)
     return out
