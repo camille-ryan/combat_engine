@@ -822,6 +822,45 @@ def modules() -> int:
     return 0
 
 
+def _stem(word: str) -> str:
+    """One word of a printed name, reduced for the mechanical-vocabulary test.
+
+    **Two reductions, and the second was happening by accident.** The line
+    this replaced was `w.strip("'s")`, with a comment that described only
+    the possessive: *"a feature whose name is `<class>'s <mechanic>` is two
+    mechanical words, and leaving the `'s` on made it look invented."*
+    True, and `str.strip` does not do that -- it removes **any** run of `'`
+    and `s` from both ends, so a plural came back singular too.
+
+    That second effect is **load-bearing and is kept deliberately**.
+    Measured before touching it: a strict possessive strip adds **34** hits
+    to `--cited`, and all 34 are the *plural of a word already in the
+    mechanical vocabulary* -- a monster ability called after the ordinary
+    piece of equipment it scatters, a file that defines a helper named
+    after it. That is precisely the class `--cited` was tuned to waive
+    when its first run reported 1,379 hits, 287 of them monster abilities,
+    and re-admitting it in plural form would undo that work. #476.
+
+    So the rule is stated rather than inherited from `strip`'s behaviour:
+    a trailing possessive goes, then a trailing plural `s`, and the result
+    is only ever used to ask "is this word mechanical". It is **not** used
+    to match text -- matching is exact, against the printed name.
+
+    `4,791` of the printed names read differently under the two spellings
+    and `1,871` are waived by this and not by a bare possessive strip, so
+    the difference is not a corner case.
+    """
+    word = word.lower()
+    if word.endswith("'s"):
+        word = word[:-2]
+    # A naive plural fold, which is all the vocabulary test needs: it asks
+    # membership of a set, so a wrong singular simply fails to match and
+    # the name is reported rather than waived -- the safe direction.
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        word = word[:-1]
+    return word
+
+
 def cited() -> int:
     """A file may not print the name of a ref it also cites.
 
@@ -920,10 +959,7 @@ def cited() -> int:
                 continue
             if _fold(name).lower() not in folded:
                 continue
-            # Possessives are stripped because the mechanical word is the
-            # stem: a feature whose name is "<class>'s <mechanic>" is two
-            # mechanical words, and leaving the `'s` on made it look invented.
-            words = [w.strip("'s").lower() for w in re.findall(r"[A-Za-z']+", name)]
+            words = [_stem(w) for w in re.findall(r"[A-Za-z']+", name)]
             if words and all(w in mechanical for w in words):
                 continue
             hits.append((str(path.relative_to(ROOT)), ref, name))
