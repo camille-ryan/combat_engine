@@ -1716,7 +1716,11 @@ def f3244(c: Cast) -> None:
     same prerequisite term, and it is not a class feature."""
 
 
-_F3245 = ("p2099", "p2248", "p10592", "p4542")
+#: **`p2099` is absent on purpose** -- its share of this clause moved
+#: into that row's body under #550, where it is one branch of an
+#: Arena Fighting chain rather than a rider that stacks. The other
+#: three are not migrated and stay here.
+_F3245 = ("p2248", "p10592", "p4542")
 
 
 @power("f3245", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

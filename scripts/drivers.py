@@ -19397,6 +19397,11 @@ MIGRATED = {
     # removed without the rule covering the case would be the instrument
     # loosened to make a number look better.
     "p1758": {"Arena Fighting": ("f978", "f985", "f981")},
+    # **Migrated by moving two riders, not by writing two clauses**, which
+    # is the correction this row's own docstring needed: `f973` registered
+    # `used={"p2099": ...}` and `f3245` reached it through `_on_hit_with`,
+    # so both clauses existed and stacked. #550.
+    "p2099": {"Arena Fighting": ("f992", "f973", "f3245")},
 }
 
 #: Rows migrated under #550 that have **no** chain yet to assert on, with
@@ -19405,8 +19410,6 @@ MIGRATED = {
 NO_CHAIN_YET = {
     "p997": "one Arena Fighting clause written (f994); the other four and"
             " the three Lesser Style ones are not",
-    "p2099": "one Arena Fighting clause written (f992); f973 and f3245 are"
-             " not, nor either Lesser Style one",
     "p992": "one Arena Fighting clause written (f993, #780), so there is a"
             " chain of one and nothing yet to be exclusive against; f3188,"
             " f977 and f987 are not written, nor either Lesser Style one."
