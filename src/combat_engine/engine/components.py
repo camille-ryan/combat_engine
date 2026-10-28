@@ -1695,6 +1695,27 @@ class Gear:
     #: a worn item is on the creature for the whole fight and a piece of
     #: ammunition is gone the moment it is loosed.
     quiver: list[Ammo] = field(default_factory=list)
+    #: How many copies of a throwable weapon are left, by weapon ref.
+    #:
+    #: **A dict rather than a field on `Weapon`, deliberately.** `Weapon` is
+    #: the dataclass `main`'s docstring records 86 callers for, and the count
+    #: is not a property of the kind of weapon -- a dagger is a dagger -- but
+    #: of what this creature happens to be carrying. The same argument that
+    #: put `stowed` here as a set of refs rather than a flag on each weapon.
+    #:
+    #: **Absent means untracked, not zero**, which is what keeps a monster
+    #: out of this: it carries no `Gear` at all, and `#516` is where its
+    #: equipment is owed. `query.ready_to_throw` answers True for a ref that
+    #: is not in here, so nothing that was never stocked is refused.
+    #:
+    #: A count reaching zero does **not** take the weapon out of
+    #: `weapons` -- the gate refuses the next throw instead. Removing it
+    #: would be the truer picture of a thrown dagger lying across the room,
+    #: and `ammunition.hurl` runs when the attack is *declared*, so the
+    #: weapon whose dice the fifth throw is about would be gone before it
+    #: rolled them. The rules let you pick the thing back up anyway, so a
+    #: spent weapon still in hand is the cheaper wrong answer. #520.
+    thrown_left: dict[str, int] = field(default_factory=dict)
 
     def proficient_with(self, arm: Weapon) -> bool:
         """Does a recorded band or grant cover this weapon?

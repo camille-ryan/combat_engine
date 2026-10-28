@@ -18,7 +18,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from .ammunition import nock, spend_load
+from .ammunition import hurl, nock, spend_load
 from .components import Defences, Health
 from .conditions import DROPPED
 from .durations import When
@@ -317,6 +317,10 @@ def attack(
     # The same shot, the same gate: a costed loader is empty after it
     # fires and `actions` offers the reload. #725.
     spend_load(world, attacker, power, branch)
+    # And the other kind of ranged weapon attack: a weapon thrown by hand
+    # is spent by throwing it. `nock` declines a throw and `hurl` takes it,
+    # so exactly one of the two pays for any given attack. #520.
+    hurl(world, attacker, power, branch)
 
     def roll(declared: AttackDeclared) -> None:
         # Read back off the event, because an interrupt may have moved the

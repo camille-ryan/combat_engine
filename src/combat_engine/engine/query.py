@@ -278,6 +278,30 @@ def ready_to_fire(world: World, eid: int, weapon: Any) -> bool:
     return getattr(weapon, "ref", "") not in gear.unloaded
 
 
+def ready_to_throw(world: World, eid: int) -> bool:
+    """Has this creature a copy of its throwable left to throw?
+
+    The sibling of `ready_to_fire` above and answers True in all the same
+    ways, which is the half a caller must not have to remember: **a weapon
+    nobody stocked is always ready.** `Gear.thrown_left` records a count
+    only for what `chargen` dealt, so a monster -- which carries no `Gear`
+    at all until `#516` -- and any weapon that arrived by some other road
+    are untouched by this, rather than refused.
+
+    False only for a tracked throwable that has been thrown down to zero,
+    which is the whole of "one net is infinite nets". #520.
+    """
+    from .components import Gear
+
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return True
+    arm = gear.thrown
+    if arm is None or arm.ref not in gear.thrown_left:
+        return True
+    return gear.thrown_left[arm.ref] > 0
+
+
 def holding(world: World, eid: int, what: str = "") -> list[Any]:
     """What this creature has in hand, filtered by a printed word.
 

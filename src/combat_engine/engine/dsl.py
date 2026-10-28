@@ -1661,8 +1661,16 @@ class Power:
         if kind == "ranged":
             # Unless it is thrown by hand, in which case a melee weapon is
             # exactly what it wants.
+            # **And there has to be one left**, which is the same half the
+            # load gate below carries and for the same reason: a thrown
+            # weapon is spent when it is thrown, so the sixth throw of five
+            # has nothing in the hand to throw. `ready_to_throw` answers
+            # True for anything untracked, so this only ever refuses a
+            # creature `chargen` stocked and that has thrown them all. #520.
             if self.thrown_by_hand:
-                return bool(gear.melee)
+                from .query import ready_to_throw
+
+                return bool(gear.melee) and ready_to_throw(world, actor)
             if gear.ranged is None:
                 return False
             # **And it has to be loaded**, which is the half that makes the

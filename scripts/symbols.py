@@ -726,7 +726,7 @@ READERS: dict[str, list[str]] = {
         "can_act", "can_move", "can_react", "can_shift", "can_run", "can_walk",
         "granted_actions", "held_by", "holding", "holds_somebody",
         "immune_to", "may_ride", "needs_loading", "ready_to_fire",
-        "rideable_by",
+        "ready_to_throw", "rideable_by",
     ],
     "what has already happened": [
         "attacked_since", "bloodied", "damaged_since", "dropped_since",

@@ -191,6 +191,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Does firing this weapon leave it empty until somebody reloads it?
 - `query.ready_to_fire(world: 'World', eid: 'int', weapon: 'Any') -> 'bool'`
   - Is this weapon loaded, for a creature that has to load it?
+- `query.ready_to_throw(world: 'World', eid: 'int') -> 'bool'`
+  - Has this creature a copy of its throwable left to throw?
 - `query.rideable_by(world: 'World', mount: 'int') -> 'frozenset[str]'`
   - Which rider sizes this creature may carry **despite the size rule**.
 

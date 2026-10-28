@@ -20013,7 +20013,7 @@ def a_target_line_naming_an_earlier_swing(out: Result) -> None:
     * the memory dies with the turn.
     """
     import combat_engine.content  # noqa: F401
-    from combat_engine.engine.dsl import REGISTRY, Target, candidates
+    from combat_engine.engine.dsl import REGISTRY, Power, Target, candidates
     from combat_engine.engine.events import Hit, Miss, TurnStart
     from combat_engine.engine.query import enemies
 
@@ -20032,20 +20032,27 @@ def a_target_line_naming_an_earlier_swing(out: Result) -> None:
         out.skip("i2133p1 is not declared")
         return
 
-    def pool(**fields) -> list[int]:  # noqa: ANN003
-        row.target = Target("enemy", 1, **fields)
-        return candidates(world, caster, row)
+    # **The row goes in as an argument rather than being captured**, which is
+    # the only reason this reads oddly. `REGISTRY.get` answers `Power | None`,
+    # the guard above narrows it, and `ty` drops that narrowing at a closure
+    # boundary -- a captured name could be rebound before the closure runs, so
+    # it is right to. That cost two above-baseline diagnostics in `types.py`
+    # on every run that touched this file, and the code was sound throughout:
+    # the fault was that nothing could see the guard from in here.
+    def pool(aimed: Power, **fields) -> list[int]:  # noqa: ANN003
+        aimed.target = Target("enemy", 1, **fields)
+        return candidates(world, caster, aimed)
 
     out.that(
-        pool(hit_by_me_this_turn=True) == [],
+        pool(row, hit_by_me_this_turn=True) == [],
         "nothing hit this turn offers no target at all",
-        f"it offered {pool(hit_by_me_this_turn=True)}",
+        f"it offered {pool(row, hit_by_me_this_turn=True)}",
     )
 
     world.bus.log.append(
         Hit(attacker=caster, target=struck, power="x", critical=False)
     )
-    got = pool(hit_by_me_this_turn=True)
+    got = pool(row, hit_by_me_this_turn=True)
     out.that(
         got == [struck],
         "after one blow lands, exactly that creature is offered",
@@ -20061,14 +20068,14 @@ def a_target_line_naming_an_earlier_swing(out: Result) -> None:
     # The two fields are not each other's negation, which is why they are
     # two fields: a miss must not satisfy the hit-shaped one.
     out.that(
-        pool(missed_by_me_this_turn=True) == [],
+        pool(row, missed_by_me_this_turn=True) == [],
         "a hit does not satisfy the missed-shaped field",
-        f"it offered {pool(missed_by_me_this_turn=True)} off a hit alone",
+        f"it offered {pool(row, missed_by_me_this_turn=True)} off a hit alone",
     )
     world.bus.log.append(
         Miss(attacker=caster, target=spared, power="x")
     )
-    missed = pool(missed_by_me_this_turn=True)
+    missed = pool(row, missed_by_me_this_turn=True)
     out.that(
         missed == [spared],
         "and a miss offers the creature that was missed, not the one hit",
@@ -20077,11 +20084,11 @@ def a_target_line_naming_an_earlier_swing(out: Result) -> None:
 
     world.bus.log.append(TurnStart(actor=caster, round=2))
     out.that(
-        pool(hit_by_me_this_turn=True) == []
-        and pool(missed_by_me_this_turn=True) == [],
+        pool(row, hit_by_me_this_turn=True) == []
+        and pool(row, missed_by_me_this_turn=True) == [],
         "both pools empty again once the creature's own turn begins",
-        f"hit={pool(hit_by_me_this_turn=True)} "
-        f"missed={pool(missed_by_me_this_turn=True)}",
+        f"hit={pool(row, hit_by_me_this_turn=True)} "
+        f"missed={pool(row, missed_by_me_this_turn=True)}",
     )
 
 
@@ -39925,6 +39932,215 @@ def a_mundane_shot_comes_out_of_a_finite_quiver(out: Result) -> None:
              f"drew {after and (after.kind, after.count)}")
 
 
+def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
+    """The other half of #520: one net was infinite nets.
+
+    `36fd41d` made a mundane *shot* finite. A thrown weapon was still free,
+    because nothing anywhere counted copies of one -- so the same card that
+    printed "you throw the net" could be used for the whole fight.
+
+    Camille's ruling, 2026-10-28: **5**, where ammunition is 50.
+    `ammunition.THROWN` carries the quote and the reason the numbers differ.
+
+    **The count is on `Gear`, not on `Weapon`.** `Weapon` is the dataclass
+    `Gear.main`'s docstring records 86 callers for, and a count is a fact
+    about what this creature is carrying rather than about the kind of
+    weapon -- the same argument that made `stowed` a set of refs here.
+
+    **Asserted through `Power.can_branch`, not through `ready_to_throw`.**
+    The reader on its own would stay green if nothing ever consulted it,
+    which is this component's documented failure mode -- a verb with no
+    reader. `can_branch` is what `actions` asks before offering the throw,
+    so going through it is what proves the refusal reaches a menu.
+
+    **And zero does not take the weapon out of the hand**, deliberately:
+    `hurl` runs when the attack is *declared*, so removing the weapon there
+    would delete the dice of the fifth throw on its way past. See
+    `Gear.thrown_left`.
+    """
+    from combat_engine import chargen
+    from combat_engine.content import declared
+    from combat_engine.engine import Bus, Grid, World
+    from combat_engine.engine.ammunition import FIRES, THROWN, hurl, is_a_throw, nock
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import Keyword
+    from combat_engine.engine.query import ready_to_throw
+    from combat_engine.engine.rng import Rng
+
+    def built(cls: str, seed: int = 1):  # noqa: ANN202
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = True
+        try:
+            world = World(Grid(24, 16), Rng(seed), Bus())
+            me = chargen.spawn(world, chargen.Character(
+                cls=cls, level=1, build="", feats=[], powers=[]), (5, 5))
+            return world, me
+        finally:
+            chargen.SCORED_CHOICES = was
+
+    # A real declared row that is thrown by hand, found rather than named so
+    # that the rule retitles itself if the family moves.
+    # `declared()` rather than `get()` throughout: its values are `Power`
+    # where `get` returns `Power | None`, so every call below needs no
+    # narrowing and `types.py` has nothing to say about it. Six
+    # above-baseline diagnostics in the first draft, all of this shape.
+    registry = declared()
+    rows = sorted(r for r, p in registry.items() if p.thrown_by_hand)
+    out.that(bool(rows),
+             "some declared row is thrown by hand, so there is a throw to "
+             "ask about",
+             f"{len(rows)} row(s)")
+    if not rows:
+        return
+    row = rows[0]
+    out.that(is_a_throw(row) and not is_a_throw("p1"),
+             "`is_a_throw` reads the header flag and is False for an "
+             "ordinary row",
+             f"{row}=True, p1={is_a_throw('p1')}")
+
+    # -- the spares are stocked ----------------------------------------
+    found = None
+    for cls in sorted(chargen.CLASSES):
+        for seed in (1, 2, 3):
+            world, me = built(cls, seed)
+            gear = world.need(me, Gear)
+            if gear.thrown_left and gear.thrown is not None:
+                found = (cls, seed, world, me, gear)
+                break
+        if found is not None:
+            break
+    out.that(found is not None,
+             "some class is dealt a throwable weapon and holds it, so there "
+             "is a spares to spend",
+             f"searched {len(chargen.CLASSES)} classes x 3 seeds")
+    if found is None:
+        return
+    cls, seed, world, me, gear = found
+
+    throwable = {w.ref for w in gear.weapons if w.thrown is not None}
+    out.that(set(gear.thrown_left) == throwable,
+             "one count per throwable weapon owned -- keyed by weapon ref, "
+             "where the quiver is keyed by kind of ammunition",
+             f"{cls}/{seed}: counts={sorted(gear.thrown_left)} "
+             f"throwable={sorted(throwable)}")
+    out.that(all(n == THROWN for n in gear.thrown_left.values()),
+             f"each holding {THROWN} copies, which is the supplied number",
+             f"{gear.thrown_left}")
+
+    # -- spending, and the refusal at the end ----------------------------
+    arm = gear.thrown
+    power = registry[row]
+    out.that(ready_to_throw(world, me) and power.can_branch(world, me, 1)
+             is not None,
+             "a full set of spares is ready to throw",
+             f"left={gear.thrown_left[arm.ref]}")
+
+    spent = [hurl(world, me, row) for _ in range(THROWN)]
+    out.that(all(s == arm.ref for s in spent),
+             "every throw spends a copy of the weapon in hand, and says "
+             "which weapon it spent",
+             f"{spent}")
+    out.that(gear.thrown_left[arm.ref] == 0,
+             f"so {THROWN} throws empty the spares exactly",
+             f"left={gear.thrown_left[arm.ref]}")
+    out.that(not ready_to_throw(world, me),
+             "and the next throw is refused -- which is the whole of #520: "
+             "one net is no longer infinite nets",
+             f"left={gear.thrown_left[arm.ref]} "
+             f"ready={ready_to_throw(world, me)}")
+    out.that(hurl(world, me, row) == arm.ref
+             and gear.thrown_left[arm.ref] == 0,
+             "and the count floors at zero rather than going negative, so a "
+             "refused throw cannot dig a hole",
+             f"left={gear.thrown_left[arm.ref]}")
+    out.that(arm in gear.weapons,
+             "the spent weapon is still in hand -- `hurl` runs when the "
+             "attack is declared, so removing it would delete the dice of "
+             "the throw that spent it",
+             f"held={[w.ref for w in gear.held]}")
+
+    # -- the refusal has to reach the menu, not just the reader ----------
+    # **The population is the rows the gate is about**, and getting this
+    # wrong is what the first draft of this rule did: it asserted over all
+    # 16 `thrown_by_hand` rows, 14 shut, and read as a bug in the refusal.
+    # Both survivors were right to survive and neither reaches the gate --
+    # `p11462` carries the flag on a row whose printed range is **melee**,
+    # so there is no ranged branch to shut and the weapon can still be
+    # swung; `p4798` is an area burst with no `Keyword.WEAPON`, so
+    # `can_branch` returns at the keyword gate well above this. Selected on
+    # the gate's own two preconditions, which does not mention
+    # `ready_to_throw` and so is not circular.
+    full, _ = built(cls, seed)
+    gear_full = full.need(me, Gear)
+    gated, skipped = [], []
+    for ref in rows:
+        p = registry.get(ref)
+        if p is None:
+            continue
+        if p.reach_of(1).kind == "ranged" and Keyword.WEAPON in p.keywords:
+            gated.append(ref)
+        else:
+            skipped.append(ref)
+    out.that(bool(gated),
+             "some thrown row's branch really is a ranged weapon attack, so "
+             "the gate has something to refuse",
+             f"{len(gated)} gated, {len(skipped)} not: {skipped}")
+    open_full = [r for r in gated if registry[r].can_branch(full, me, 1)]
+    out.that(len(open_full) == len(gated),
+             "every one of them is open to a creature with a full set of spares",
+             f"{len(open_full)} of {len(gated)} open")
+    for ref in gear_full.thrown_left:
+        gear_full.thrown_left[ref] = 0
+    shut = [r for r in gated if not registry[r].can_branch(full, me, 1)]
+    out.that(len(shut) == len(gated),
+             "and `can_branch` shuts every one of them once the spares are "
+             "empty, so the refusal reaches the action menu rather than "
+             "sitting in a reader nothing consults",
+             f"{len(shut)} of {len(gated)} shut")
+    out.that(all(registry[r].can_branch(full, me, 1) for r in skipped
+                 if Keyword.WEAPON not in registry[r].keywords
+                 or registry[r].reach_of(1).kind == "melee"),
+             "and the rows the gate is not about stay open with none "
+             "left -- a melee swing and an area burst are not throws of "
+             "a weapon and must not be refused by one",
+             f"{skipped}")
+
+    # -- untracked is ready, which is what keeps monsters out ------------
+    bare, me_b = built(cls, seed)
+    gear_b = bare.need(me_b, Gear)
+    gear_b.thrown_left.clear()
+    out.that(ready_to_throw(bare, me_b),
+             "a weapon nobody stocked is always ready -- absent is untracked "
+             "and not zero, which is what leaves a monster's claws and "
+             "`#516` alone",
+             f"counts={gear_b.thrown_left}")
+
+    # -- a throw is not a shot: nock must decline it ---------------------
+    # Hand-posed, and that is the finding. `chargen` deals **0 of 400**
+    # characters holding a throwable and a loaded launcher at once -- one
+    # hand per role, which is `#780`'s question -- so this fault is latent
+    # rather than live, and the only way to exercise it is to put both in
+    # hand. Raising the hand count would make the population non-empty,
+    # which is why the guard is worth having now.
+    posed, me_p = built(cls, seed)
+    gear_p = posed.need(me_p, Gear)
+    gear_p.stowed.clear()
+    launcher = [w for w in gear_p.held if w.group in FIRES]
+    out.that(bool(launcher) and gear_p.thrown is not None and bool(gear_p.quiver),
+             "posed holding a launcher with ammunition AND a throwable, "
+             "which chargen never deals",
+             f"held={[w.ref for w in gear_p.held]} "
+             f"quiver={[(a.kind, a.count) for a in gear_p.quiver]}")
+    if launcher and gear_p.quiver:
+        before = [a.count for a in gear_p.quiver]
+        nock(posed, me_p, row)
+        out.that([a.count for a in gear_p.quiver] == before,
+                 "and a throw spends no ammunition -- a `thrown_by_hand` row "
+                 "is ranged, so `nock` used to walk the held bow and loose "
+                 "an arrow to throw a dagger",
+                 f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
+
+
 def a_borrowed_row_records_which_one_was_taken(out: Result) -> None:
     """"The power you chose for your <trait>" has to be answerable.
 
@@ -40659,6 +40875,10 @@ DRIVERS = {
     "mundane_quiver": (
         a_mundane_shot_comes_out_of_a_finite_quiver,
         "a mundane shot comes out of a finite quiver, magic first (#520)",
+    ),
+    "thrown_spares": (
+        a_thrown_weapon_runs_out_after_five_throws,
+        "a thrown weapon runs out after five throws (#520)",
     ),
     "borrowed_pick": (
         a_borrowed_row_records_which_one_was_taken,

@@ -58,6 +58,60 @@ FIRES: dict[str, str] = {
 MUNDANE = 50
 
 
+#: How many copies of a throwable weapon a character carries.
+#:
+#: The other half of the same ruling as `MUNDANE`, and invented for the same
+#: reason -- the compendium prints no quantity. Camille, 2026-10-28, on
+#: `#520`:
+#:
+#:     For now, treat characters with mundane ammunition as having 50, and
+#:     throwing weapons as having 5.
+#:
+#: Five rather than fifty because a thrown weapon is a weapon: it is picked
+#: back up after the fight, where a loosed arrow is not, so the number is a
+#: handful of spares rather than a bundle.
+THROWN = 5
+
+
+def is_a_throw(power: str) -> bool:
+    """Is this row thrown by hand, rather than fired or swung?
+
+    The header flag is the whole answer and nothing is inferred from the
+    range line: `thrown_by_hand` is what the 22 rows that print `Ranged
+    weapon` and mean "throw the thing in your hand" already declare, and
+    `Power.can_branch` has gated on it since before any of this.
+    """
+    from .dsl import get
+
+    p = get(power)
+    return bool(p is not None and p.thrown_by_hand)
+
+
+def hurl(world: World, eid: int, power: str, branch: int = 0) -> str:
+    """Spend one copy of the weapon this throw was made with. Its ref, or "".
+
+    Beside `nock` because it is the same question -- what did declaring this
+    attack use up -- asked of the other kind of ranged weapon attack. The
+    count floors at zero and the weapon stays in hand; `query.ready_to_throw`
+    is what refuses the throw after that, for the reason `Gear.thrown_left`
+    gives.
+
+    `""` for anything untracked, which is a monster and any weapon chargen
+    did not stock. The honest answer there is that nothing was spent, not
+    that a throw was free.
+    """
+    if not is_a_throw(power):
+        return ""
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return ""
+    arm = gear.thrown
+    if arm is None or arm.ref not in gear.thrown_left:
+        return ""
+    gear.thrown_left[arm.ref] = max(0, gear.thrown_left[arm.ref] - 1)
+    return arm.ref
+
+
 def fits(kind: str, group: str) -> bool:
     """Can that launcher loose that ammunition? An empty kind fits any."""
     return not kind or kind == FIRES.get(group, "")
@@ -96,6 +150,15 @@ def nock(world: World, eid: int, power: str, branch: int = 0) -> str:
     from .resolve import _is_ranged
 
     if not _is_ranged(power, branch):
+        return ""
+    # **A throw is not a shot, and this gate was missing.** A
+    # `thrown_by_hand` row *is* ranged, so a ranger holding a longbow and a
+    # dagger spent an **arrow** to throw the dagger: `nock` walks `held`,
+    # finds the bow, and `loaded` hands it something that fits. Harmless for
+    # as long as the quiver was empty unless a magic piece had been bought
+    # -- and `36fd41d` put 50 ordinary arrows in it, which is what made a
+    # latent fault into a live one. `hurl` is the right spend for these.
+    if is_a_throw(power):
         return ""
     gear = world.get(eid, Gear)
     if gear is None or not gear.quiver:
