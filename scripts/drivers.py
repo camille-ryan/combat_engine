@@ -36427,6 +36427,125 @@ def immune_to_a_keyword(out: Result) -> None:
              "and keyword immunity is not condition immunity -- still dazeable",
              f"{fearless[0]}")
 
+def a_borrowed_row_records_which_one_was_taken(out: Result) -> None:
+    """"The power you chose for your <trait>" has to be answerable.
+
+    `c.borrow_row` reads a *set* off the registry, asks `world.decide` for
+    one of it, and hands it over. Until now the pick existed on the board in
+    exactly one place -- the label on `grant_row`'s effect, `"<ref> grants
+    <taken>"` -- so a row wanting to know which power its neighbour took had
+    to parse a label. #743 asked for a reader and argued a field would be
+    cleaner; #720 then built the field (`Powers.stored`, `c.store_row` /
+    `c.stored_row`) for a different card, so the whole of it is one line in
+    `borrow_row`.
+
+    **In `borrow_row` and not in `grant_row`**, which is the narrower place
+    and the right one: `grant_row` is handed a ref its caller already knows,
+    so there is nothing to record. A *choice* is the only thing worth
+    storing.
+
+    Measured across the tree: 15 rows call `c.borrow_row`, and **10 of 15**
+    record a pick on the audit board -- the other five are rows whose own
+    gate returns before they borrow. Every one of the ten stores a ref that
+    is genuinely in `Powers.known` afterwards, which is the property worth
+    asserting: the record and the grant cannot disagree.
+
+    **The two rows #743 was filed for are still blocked**, and not on this.
+    They read `rt:r6-t3`'s pick, and that trait never borrows: `r6.powers`
+    holds exactly one written power, so `granted`'s choice has one option.
+    The other leg of its printed fork is a *trait*, which `RaceLine` cannot
+    put in the same list. That is a separate gap and it is filed.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import use
+
+    def borrow(ref: str) -> tuple[Any, int, str, list[str]]:
+        """Run `ref` on its own board. Returns the pick and the grant labels."""
+        world, me, _start = A.board(ref, 1)
+        world.turn = me
+        use(world, me, ref, spend=False)
+        c = Cast(world=world, me=me, ref="drivers:borrowed")
+        labels = [str(e.label) for e in world.effects.of(me)
+                  if str(e.label).startswith(f"{ref} grants ")]
+        return world, me, c.stored_row(of=ref), labels
+
+    # Two different borrowers, so the per-row keying is exercised rather
+    # than assumed.
+    FIRST, SECOND = "f666", "f667"
+
+    world, me, pick, labels = borrow(FIRST)
+    out.that(bool(pick),
+             "a row that borrows records which row it took",
+             f"{FIRST} stored {pick!r}")
+    if not pick:
+        return
+
+    known = world.need(me, Powers)
+    out.that(pick in known.all,
+             "and the row it recorded is the row it actually granted",
+             f"{pick} in Powers.known: {pick in known.all}")
+
+    # **The old route and the new one must agree, and here is why the old
+    # one was not enough.** `f666` grants a *named* row and then borrows a
+    # chosen one, so it lays **two** labels of the identical shape -- and a
+    # reader parsing labels cannot tell which was the choice. The store
+    # holds only the borrow, which is the whole point of it.
+    out.that(any(lab.endswith(f" {pick}") for lab in labels),
+             "the pick the store holds is one the effect labels name",
+             f"{len(labels)} label(s), store={pick!r}")
+    out.that(len(labels) > 1,
+             "and this row lays more than one label of that shape, so the "
+             "label route could not have answered the question",
+             f"{len(labels)} labels")
+    named = [lab for lab in labels if not lab.endswith(f" {pick}")]
+    out.that(named and all(not lab.endswith(f" {pick}") for lab in named),
+             "the named grant is not what got stored -- a grant is not a "
+             "choice",
+             f"{len(named)} named grant(s), none of them the stored pick")
+
+    c = Cast(world=world, me=me, ref="drivers:borrowed")
+    out.that(c.stored_row(of=SECOND) == "",
+             "and a different row's slot is empty on this board, so the "
+             "store is keyed per borrowing row",
+             f"stored_row(of={SECOND}) = {c.stored_row(of=SECOND)!r}")
+    out.that(c.stored_row() == "",
+             "as is the reader's own slot, which it never wrote",
+             f"stored_row() = {c.stored_row()!r}")
+
+    # The second borrower, on its own board, records under its own ref.
+    world2, me2, pick2, _labels2 = borrow(SECOND)
+    out.that(bool(pick2),
+             "the second borrower records under its own ref too",
+             f"{SECOND} stored {pick2!r}")
+    c2 = Cast(world=world2, me=me2, ref="drivers:borrowed")
+    out.that(c2.stored_row(of=FIRST) == "",
+             "and not under the first one's",
+             f"stored_row(of={FIRST}) = {c2.stored_row(of=FIRST)!r}")
+
+    # -- the negative control: a row that does not borrow records nothing --
+    # Same shape of board, a row that grants a *named* row rather than
+    # choosing one. `grant_row` deliberately does not write here.
+    world3, me3, _s3 = A.board("f1512", 1)
+    world3.turn = me3
+    use(world3, me3, "f1512", spend=False)
+    c3 = Cast(world=world3, me=me3, ref="drivers:borrowed")
+    out.that(c3.stored_row(of="f1512") == "",
+             "a row that grants a named row records no pick -- there was no "
+             "choice to record",
+             f"stored_row(of=f1512) = {c3.stored_row(of='f1512')!r}")
+
+    # And the trait the two rows of #743 actually read still does not
+    # borrow, which is why they stay blocked. Asserted so the day it starts
+    # borrowing, this goes red and somebody goes and writes them.
+    _w4, _me4, pick4, _l4 = borrow("rt:r6-t3")
+    out.that(pick4 == "",
+             "rt:r6-t3 still borrows nothing, so #743's two rows stay "
+             "blocked on the race fork rather than on this reader",
+             f"stored_row(of=rt:r6-t3) = {pick4!r}")
+
+
 def an_enchanted_item_is_named_after_the_base_it_is_on(out: Result) -> None:
     """A magic item's row says what *kind* of weapon it is laid on.
 
@@ -36841,6 +36960,10 @@ def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
 
 
 DRIVERS = {
+    "borrowed_pick": (
+        a_borrowed_row_records_which_one_was_taken,
+        "a borrowed row records which one was taken (#743)",
+    ),
     "item_base_name": (
         an_enchanted_item_is_named_after_the_base_it_is_on,
         "an enchanted item's row names the base it is laid on (#346)",

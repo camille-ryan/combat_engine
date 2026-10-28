@@ -6265,6 +6265,19 @@ class Cast:
         if not taken:
             return ""
         self.grant_row(taken, on=self.me, until=until, uses=uses)
+        # **Recorded, not only granted.** Nine feats print a clause about
+        # "the power you chose for your <trait>", and until now the pick
+        # existed on the board in exactly one place: the label on
+        # `grant_row`'s effect, `f"{ref} grants {taken}"`. #743 asked for a
+        # reader and argued a field would be cleaner; #720 then built the
+        # field for a different card, so this is one line rather than a
+        # verb. `c.stored_row(of="<this ref>")` is the reader.
+        #
+        # Here rather than in `grant_row`, which is the narrower place and
+        # the correct one: `grant_row` is handed a ref the caller already
+        # knows, so there is nothing to record. **This** is where the choice
+        # is made, and a choice is the only thing worth storing.
+        self.store_row(taken, by=self.ref, on=self.me)
         return taken
 
     def conjure(
