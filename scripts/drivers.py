@@ -36574,6 +36574,9 @@ def an_enchanted_item_is_named_after_the_base_it_is_on(out: Result) -> None:
     is no printed name to substitute and `wire.item` correctly serves the
     ref.
     """
+    from combat_engine.api import render
+    from combat_engine.api import session as S
+    from combat_engine.api.render import _item_categories
     from combat_engine.api.wire import (
         _GENERIC_WEAPON_WORDS,
         _TRAILING_PUNCTUATION,
@@ -36581,6 +36584,9 @@ def an_enchanted_item_is_named_after_the_base_it_is_on(out: Result) -> None:
         item_of,
     )
     from combat_engine.db import game, localisation
+    from combat_engine.engine.components import Gear, Powers
+    from combat_engine.engine.query import team
+    from combat_engine.engine.types import Team
 
     wire = Wire(show_names=True)
     names = localisation()
@@ -36708,6 +36714,98 @@ def an_enchanted_item_is_named_after_the_base_it_is_on(out: Result) -> None:
     out.that(dark.item(ref, slug="greataxe") == ref,
              "and with names off the substitution serves the ref, not a name",
              f"{ref} -> {dark.item(ref, slug='greataxe')!r}")
+
+    # -- the armour and shield thirds, which are the same rule -----------
+    #
+    # **No pairing, and that is the difference.** A weapon enchantment needs
+    # `Weapon.item` to say which of several weapons it went onto. A
+    # character wears **one** suit and carries **one** shield, so
+    # `Gear.armour` and `Gear.shield` already name the base. Measured over
+    # four dealt parties: every one of 16 characters holding an `Armor` item
+    # held exactly one, so there is no second claimant.
+    from combat_engine.armour import ARMOUR_WORD, SHIELD_WORD
+
+    out.that(ARMOUR_WORD.get("chain") == "Chainmail",
+             "the display word comes off the table, not off `Gear.armour` -- "
+             "every reader says `chain` and the page prints `Chainmail`",
+             f"ARMOUR_WORD['chain'] = {ARMOUR_WORD.get('chain')!r}")
+    out.that(SHIELD_WORD.get(1) == "Light Shield"
+             and SHIELD_WORD.get(2) == "Heavy Shield",
+             "and a shield's weight is printed rather than inferred, "
+             "singular because a character carries one",
+             f"{SHIELD_WORD}")
+
+    # **The cross-category guard**, which is what makes one union of generic
+    # words safe instead of one set per category.
+    weapon_words = {"weapon", "weapons", "blade", "blades"}
+    armour_words = {"armor", "armour", "shield", "shields"}
+    crossed = []
+    for whole, category in _item_categories().items():
+        if category not in ("Weapon", "Armor", "Arms", "Implement"):
+            continue
+        entry = names.get(whole) or {}
+        nm = (entry.get("name") if isinstance(entry, dict) else str(entry)) or ""
+        w = [x.strip(_TRAILING_PUNCTUATION).lower() for x in nm.split()]
+        if len(w) < 2:
+            continue
+        ends = {w[0], w[-1]}
+        if category == "Weapon" and ends & armour_words:
+            crossed.append((whole, category))
+        if category in ("Armor", "Arms") and ends & weapon_words:
+            crossed.append((whole, category))
+    out.that(not crossed,
+             "no weapon-category item's name uses an armour word at either "
+             "end, and none in an armour category uses a weapon word -- so "
+             "one union of generic words cannot rename across categories",
+             f"{len(crossed)} crossed of {len(_item_categories())} items")
+
+    # And through the real renderer, on a dealt character.
+    subbed, total, worn = 0, 0, set()
+    for seed in (1, 2, 3):
+        sess = S.Session.create(seed=seed, level=5)
+        for eid in list(getattr(sess.world, "_alive", [])):
+            if team(sess.world, eid) is not Team.PC:
+                continue
+            gear = sess.world.get(eid, Gear)
+            known = sess.world.get(eid, Powers)
+            if gear is None or known is None:
+                continue
+            for row in known.all:
+                whole = item_of(row)
+                if not whole or _item_categories().get(whole) != "Armor":
+                    continue
+                total += 1
+                label = render._row_label(sess, eid, row)
+                if label != sess.wire.item(row, slug=""):
+                    subbed += 1
+                    worn.add(gear.armour)
+    out.that(total > 0,
+             "a dealt party holds armour item rows to render at all",
+             f"{total} Armor block(s) across three parties")
+    out.that(total and subbed >= total - 2,
+             "and nearly all of them name the suit the character is wearing "
+             "-- the exceptions being names like a robe, which is what the "
+             "thing is rather than a placeholder",
+             f"{subbed} of {total} substituted, bases seen: {sorted(worn)}")
+
+    # The shield half has no dealt example -- three characters carried a
+    # shield across those parties and none was dealt an `Arms` item -- so it
+    # is driven through `_worn_base` directly, and this says so rather than
+    # reporting a pass it did not earn.
+    class _Gear:
+        armour, shield = "plate", 2
+
+    arms = [w for w, c in _item_categories().items() if c == "Arms"]
+    out.that(bool(arms) and render._worn_base(arms[0], _Gear()) == "Heavy Shield",
+             "an Arms item reads the shield's weight (driven directly: no "
+             "dealt party in three held one)",
+             f"{len(arms)} Arms items, _worn_base -> "
+             f"{render._worn_base(arms[0], _Gear()) if arms else None!r}")
+    out.that(render._worn_base(sorted(blocks['trailing'])[0], _Gear()) == "",
+             "and a weapon-category item takes no armour word, whatever is "
+             "worn",
+             f"_worn_base on a Weapon item = "
+             f"{render._worn_base(sorted(blocks['trailing'])[0], _Gear())!r}")
 
 
 def an_element_sworn_leg_draws_its_own_element(out: Result) -> None:

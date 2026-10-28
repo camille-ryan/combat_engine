@@ -60,6 +60,28 @@ _REF_IN_TEXT = re.compile(
 #: #346.
 _GENERIC_WEAPON_WORDS = frozenset({"weapon", "blade"})
 
+#: The same for a suit of armour or a shield, whose base word comes off
+#: `armour.type` rather than `Weapon.slug`. Counted the same way:
+#:
+#:     leading    armor 16   shield 8
+#:     trailing   armor 155  shield 37
+#:
+#: **Plural forms included here and not above.** The page files shields as
+#: `Light Shields`, so a name can end on the plural where no weapon name
+#: does; the substituted word is singular either way, because a character
+#: carries one. #346, #452.
+_GENERIC_ARMOUR_WORDS = frozenset({"armor", "armour", "shield", "shields"})
+
+#: Every word that can stand in for "whatever this is laid on".
+#:
+#: One set rather than one per category, and that is checked rather than
+#: assumed: **no item in a weapon category uses an armour word at either end
+#: of its name, and none in an armour or shield category uses a weapon
+#: word** -- 0 of 1,016, asserted by `drivers.item_base_name`. So the union
+#: cannot rename across categories, and the caller's `slug` is what decides
+#: which base is substituted anyway.
+_GENERIC_BASE_WORDS = _GENERIC_WEAPON_WORDS | _GENERIC_ARMOUR_WORDS
+
 #: Punctuation a printed name can end on, for the trailing-word test.
 #: `U+2019` is the typographic apostrophe the compendium prints, and it
 #: is written as an escape below because `ruff` refuses that character
@@ -322,13 +344,13 @@ class Wire:
         if not slug:
             return name
         head, _, rest = name.partition(" ")
-        if head.lower() in _GENERIC_WEAPON_WORDS and rest:
+        if head.lower() in _GENERIC_BASE_WORDS and rest:
             return f"{_titled(slug)} {rest}"
         front, gap, tail = name.rpartition(" ")
         # `strip` because a trailing word can carry punctuation, and the
         # leading branch goes first so a name that is generic at both ends
         # keeps its tail rather than being rewritten twice.
-        if gap and tail.strip(_TRAILING_PUNCTUATION).lower() in _GENERIC_WEAPON_WORDS:
+        if gap and tail.strip(_TRAILING_PUNCTUATION).lower() in _GENERIC_BASE_WORDS:
             return f"{front} {_titled(slug)}"
         return name
 

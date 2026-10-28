@@ -77,3 +77,43 @@ def _basics() -> tuple[dict[str, int], ...]:
 
 
 ARMOUR, ARMOUR_CHECK, ARMOUR_SPEED, SHIELD_CHECK = _basics()
+
+
+#: What to **call** what a character is wearing, for display.
+#:
+#: The other four tables here are numbers a rule consults; this one is a
+#: word a page prints, and it is in this module for the same reason they
+#: are -- it is read off the `armour` table's `type` column, which is one of
+#: the two columns #452 settled as sayable (*"`armour.type` and
+#: `armour.base` are the gated, sayable columns, and their vocabulary is
+#: cloth/leather/hide/chainmail/plate/scale plus light and heavy shields"*).
+#: So it is a printed table, not behaviour, and nothing here decides
+#: anything.
+#:
+#: **It exists because `Gear.armour` is not the printed word.** Every reader
+#: in the tree says `chain` and the page says `chainmail` -- `_basics`
+#: above renames it on the way in and records why -- so a display that used
+#: the field directly would show a word the compendium does not print.
+#: #346's armour third is the caller.
+#:
+#: Shields are keyed on `Gear.shield`'s own 1 and 2 rather than on a word,
+#: because that is what the component holds, and **singular**: the page
+#: prints `light shields` as a category and a character carries one.
+def _words() -> tuple[dict[str, str], dict[int, str]]:
+    from combat_engine.db import game
+
+    worn: dict[str, str] = {}
+    shields: dict[int, str] = {}
+    for row in game().execute(
+        "SELECT type FROM armour WHERE kind = 'base' AND id BETWEEN 1 AND 8"
+    ):
+        printed = str(row["type"])
+        if printed.endswith("shields"):
+            weight = printed.split()[0]
+            shields[2 if weight == "heavy" else 1] = f"{weight.title()} Shield"
+            continue
+        worn["chain" if printed == "chainmail" else printed] = printed.title()
+    return worn, shields
+
+
+ARMOUR_WORD, SHIELD_WORD = _words()
