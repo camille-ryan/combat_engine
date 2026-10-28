@@ -470,6 +470,13 @@ so it had nothing to go on and wrote *"Orsa nodded slightly, her eyes
 downcast"*, twice, for a man the player had read described one scene
 earlier. `voice` is how they speak and was never meant to carry this.
 
+**One entry per person, even when the page serves them as a pair.** Two
+servants under one `npcs` entry read naturally and then broke three things
+that reason by name: the DM is offered the cast as an enum when choosing
+who answers, `looks` describes one person, and any check asking "is this
+name in the scene" cannot match half of a conjunction -- which reported
+eight false leaks against a clean playthrough.
+
 **One name per character, and the page's own.** A character who appears in
 two scenes must carry the same `name` in both, taken from the adventure's
 text. Written with role words instead -- "the friar", "the spy" -- a player
