@@ -36427,6 +36427,167 @@ def immune_to_a_keyword(out: Result) -> None:
              "and keyword immunity is not condition immunity -- still dazeable",
              f"{fearless[0]}")
 
+def an_element_sworn_leg_draws_its_own_element(out: Result) -> None:
+    """A leg sworn to an element must draw powers of that element.
+
+    `#464`: four sorcerer legs differ **only** in `Build.element`, that field
+    was read in play and never in the draw, and all four therefore drew a
+    byte-identical loadout. Two scoring terms fixed it and this is the gate
+    those terms never got.
+
+    **Why they never got one, which is the whole of `#906`.** The rule was
+    written, passed alone, and failed inside the suite -- and `#906`
+    bisected the suite to `drivers.reload` and recorded it as "reload leaves
+    state behind". That diagnosis is wrong. `reload` leaves nothing: it is
+    simply the first rule in those subsets whose body runs `import audit`,
+    and `scripts/audit.py` sets **`chargen.SCORED_CHOICES = False` at import
+    time**, deliberately and with its reasons measured (scored dealing put
+    80 rows out of reach). So the bisection found the first *importer*, not
+    a polluter, and the flag stays off for every rule after it.
+
+    The element terms are **scoring** terms, so with scoring off they are
+    inert by construction. The rule was asking a question the process had
+    switched off.
+
+    `drivers:chose` already wrote this down -- *"a process-wide flag that
+    `audit.py` sets to `False` at import time ... so this rule passed alone
+    and failed inside the suite"* -- and the honest fix it names is the one
+    taken here: **say which configuration each assertion is about** rather
+    than inherit whichever rule ran first.
+
+    **The comparison is own-element against the mean of the other three
+    legs**, not against their sum, and that is not a detail: a sum over
+    three legs is three times the sample, so `air` reads 75 against 100 and
+    looks like a *failure* while leaning on its element nearly twice as
+    hard as its neighbours do. A raw cross-leg total cannot be read.
+
+    What makes it a measurement of the scorer rather than of the corpus is
+    the unscored arm. With `SCORED_CHOICES = False` all four legs draw the
+    same loadout, so each leg's count of an element and the mean of the
+    other three's count of it are **exactly equal** -- 47 vs 47, 7 vs 7,
+    82 vs 82, 46 vs 46. A corpus-frequency effect would show in both arms;
+    this shows in one.
+
+    **What the plants found, and it is a property of `#464` rather than a
+    weakness here.** `#906` specified three: the positive term zeroed, the
+    mirror zeroed, and the `sworn is None` guard removed. Zeroing
+    **either** term alone leaves all ten assertions green --
+    `leans_on_element` rewards an on-element row and `offelement_build`
+    penalises an off-element one, so against a leg that *has* an element
+    the two are redundant and either separates the four legs on its own.
+    Zeroing **both** turns the five scored assertions red and leaves the
+    five configuration ones green, which is the attribution this rule can
+    honestly make: the element mechanism is live, not which half carries
+    it.
+
+    The guard plant is not run, deliberately. It changes what a leg with
+    **no** element scores, and all four legs measured here have one; that
+    case belongs with the other 86 legs and is a different measurement.
+    """
+    from random import Random
+    from statistics import mean
+
+    from combat_engine import chargen
+    from combat_engine.chargen import choices
+    from combat_engine.engine.dsl import get
+
+    SEEDS = 30
+    # **Whatever this process happens to be set to**, which is the one thing
+    # this rule must not assert a value for: `True` running alone, `False`
+    # inside the suite once any rule has imported `audit`. The property is
+    # that the rule hands it back unchanged, not what it was.
+    ambient = chargen.SCORED_CHOICES
+    legs = [b for b in chargen.BUILDS.get("sorcerer", [])
+            if getattr(b, "element", None) is not None]
+    out.that(len(legs) == 4,
+             "the sorcerer has four element-sworn legs to compare",
+             f"{[(b.name, str(b.element)) for b in legs]}")
+    if len(legs) != 4:
+        return
+
+    def draw(scored: bool) -> tuple[int, dict[str, dict[str, int]]]:
+        """`(seeds where all four legs drew the same, element counts per leg)`.
+
+        Pins the flag and puts it back. Inheriting it is the bug above.
+        """
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = scored
+        try:
+            counts: dict[str, dict[str, int]] = {b.name: {} for b in legs}
+            identical = 0
+            for seed in range(1, SEEDS + 1):
+                drawn = {}
+                for b in legs:
+                    rows = chargen.loadout("sorcerer", 1, build=b,
+                                           rng=Random(seed))
+                    drawn[b.name] = tuple(sorted(map(str, rows)))
+                    for ref in rows:
+                        p = get(str(ref))
+                        if p is None:
+                            continue
+                        for el in choices._elements_of(p):
+                            counts[b.name][el] = counts[b.name].get(el, 0) + 1
+                if len(set(drawn.values())) == 1:
+                    identical += 1
+            return identical, counts
+        finally:
+            chargen.SCORED_CHOICES = was
+
+    out.that("leans_on_element" in choices.WEIGHTS
+             and "offelement_build" in choices.WEIGHTS,
+             "both element terms are priced in WEIGHTS",
+             f"leans_on_element={choices.WEIGHTS.get('leans_on_element')} "
+             f"offelement_build={choices.WEIGHTS.get('offelement_build')}")
+
+    def lean(counts: dict[str, dict[str, int]]) -> dict[str, tuple[int, float]]:
+        """Per leg: its own element's count, and the mean of the other three's."""
+        got = {}
+        for b in legs:
+            own = str(b.element)
+            got[b.name] = (
+                counts[b.name].get(own, 0),
+                mean(counts[o.name].get(own, 0) for o in legs if o.name != b.name),
+            )
+        return got
+
+    # -- scored: the configuration `replay` and `fight` play with ------------
+    same, counts = draw(scored=True)
+    out.that(same == 0,
+             f"scored, none of {SEEDS} seeds draws one loadout for all four legs",
+             f"{same} of {SEEDS} seeds drew all four identical")
+
+    scored_lean = lean(counts)
+    for b in legs:
+        mine, theirs = scored_lean[b.name]
+        out.that(mine > theirs,
+                 f"scored, the {b.element!s}-sworn leg draws more of its own "
+                 "element than its neighbours do",
+                 f"itself {mine}, mean of the other three {theirs:.1f}")
+
+    # -- unscored: the control, and the same sample size --------------------
+    # A negative control on one seed would prove nothing; this is the same 30.
+    same_off, counts_off = draw(scored=False)
+    out.that(same_off == SEEDS,
+             "unscored, all four legs draw the identical loadout every seed -- "
+             "which is the state #464 found and #906 mistook for pollution",
+             f"{same_off} of {SEEDS}")
+
+    off_lean = lean(counts_off)
+    flat = [f"{b.name}: {off_lean[b.name][0]} vs {off_lean[b.name][1]:.1f}"
+            for b in legs]
+    out.that(all(off_lean[b.name][0] == off_lean[b.name][1] for b in legs),
+             "and unscored each leg's own-element count equals the mean of the "
+             "other three exactly, so the scored lean is the scorer and not "
+             "the corpus",
+             "; ".join(flat))
+
+    out.that(chargen.SCORED_CHOICES is ambient,
+             "and the flag is handed back as this process set it, so the rule "
+             "after this one inherits nothing from it",
+             f"found {ambient}, left {chargen.SCORED_CHOICES} "
+             "(True alone, False once any rule has imported audit)")
+
+
 def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
     """A once-per-board latch must not outlive the board it describes.
 
@@ -36516,6 +36677,10 @@ def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
 
 
 DRIVERS = {
+    "elemental_leg": (
+        an_element_sworn_leg_draws_its_own_element,
+        "a leg sworn to an element draws its own element (#464, #906)",
+    ),
     "board_latch": (
         a_once_per_board_latch_dies_with_the_board,
         "a once-per-board latch dies with the board it describes (#907)",
