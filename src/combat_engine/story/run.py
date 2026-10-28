@@ -274,6 +274,7 @@ def _fight(
     dressed = resolve(
         scene, party_level=module.party_level, draw=draw,
         party_size=len(campaign.party.sheets),
+        stated_size=module.party_size,
     )
     step.notes += dressed.notes
     if not dressed.refs:

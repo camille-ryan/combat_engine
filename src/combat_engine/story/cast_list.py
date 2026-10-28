@@ -243,7 +243,7 @@ def _rank(
 
 def resolve(
     scene: Scene, *, party_level: int, draw: Random | None = None,
-    party_size: int = SIDE,
+    party_size: int = SIDE, stated_size: int = SIDE,
 ) -> Dressed:
     """The creatures a combat scene fields, and how each one is dressed.
 
@@ -264,6 +264,28 @@ def resolve(
         float(scene.xp) if scene.xp
         else budget(party_level) * scene.share * per_head
     )
+    # **A stated XP figure overrides the headcount, silently until now.**
+    # When a scene prints its own number -- which every fight in the one
+    # converted chapter does -- `per_head` is never consulted, so a party
+    # of six walks into a fight built for the module's five and nothing
+    # says so. The fielded creatures are byte-identical at 4, 5 and 6.
+    #
+    # That is the thing this component is told not to do: `CLAUDE.md` --
+    # "a silent cap reads as 'covered everything' when it did not". The
+    # approximation stays, because a module that prints a number for its
+    # own party size is more trustworthy than our curve; what changes is
+    # that the reader is told the number is not being adjusted. #798.
+    # **Against the module's own stated size, not `SIDE`.** The first
+    # version compared with the standard four, so on a module written for
+    # five it warned a party of five -- which is exactly right for that
+    # adventure -- and said nothing to a party of four, which is the one
+    # playing a fight built for somebody else.
+    if scene.xp and int(party_size) != int(stated_size):
+        out.notes.append(
+            f"{scene.id}: the module states {scene.xp} XP for a party of "
+            f"{int(stated_size)}, so it is used as printed -- this fight "
+            f"is NOT scaled for the {int(party_size)} playing it"
+        )
     if want <= 0:
         out.notes.append(
             f"{scene.id}: no XP is written for level {party_level}, so the "

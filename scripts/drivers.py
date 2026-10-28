@@ -29729,6 +29729,98 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
         )
 
 
+def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
+    """A clamp this component was making silently. #798.
+
+    When a scene prints its own XP figure -- which every fight in the one
+    converted chapter does -- the headcount scaling is never consulted, so
+    a party of six walks into a fight built for the module's five and the
+    fielded creatures are byte-identical. The approximation stays, because
+    a module that printed a number for its own party is more trustworthy
+    than our curve. What was wrong is that nobody was told.
+
+    `story/CLAUDE.md`: *a silent cap reads as "covered everything" when it
+    did not.*
+    """
+    from random import Random
+
+    from combat_engine.story import cast_list
+    from combat_engine.story import module as mod
+
+    def fight(xp: int) -> mod.Scene:
+        raw = {"id": "p", "party_level": 1, "party_size": 5, "start": "f",
+               "scenes": [{"id": "f", "kind": "combat", "name": "F",
+                           "sets": "A cellar.", "exits": [], "xp": xp,
+                           "foes": [{"count": 2, "name": "sluice crawlers",
+                                     "words": ["beast", "natural"],
+                                     "role": "skirmisher",
+                                     "rank": "standard"}]}]}
+        return mod.parse(raw, Path("<driver>")).scene("f")
+
+    def notes(scene: mod.Scene, playing: int, stated: int) -> list[str]:
+        got = cast_list.resolve(
+            scene, party_level=1, draw=Random(7),
+            party_size=playing, stated_size=stated)
+        return [n for n in got.notes if "NOT scaled" in n]
+
+    stated = fight(552)
+    out.that(
+        bool(notes(stated, 6, 5)) and "6" in notes(stated, 6, 5)[0],
+        "a party larger than the module's is told the fight is not scaled",
+        f"{notes(stated, 6, 5)}",
+    )
+    out.that(
+        bool(notes(stated, 4, 5)),
+        "and so is a smaller one, which is the party actually short-changed",
+        f"{notes(stated, 4, 5)}",
+    )
+    # **Against the module's own size, not the standard four.** The first
+    # version compared with `SIDE`, so on a module written for five it
+    # warned a party of five and said nothing to a party of four.
+    out.that(
+        not notes(stated, 5, 5),
+        "while a party of the size the module was written for hears nothing",
+        f"{notes(stated, 5, 5)}",
+    )
+    # The control: with no stated XP the budget does scale, so there is
+    # nothing to warn about.
+    out.that(
+        not notes(fight(0), 6, 5),
+        "and a scene with no printed figure is scaled, so says nothing",
+        f"{notes(fight(0), 6, 5)}",
+    )
+
+    # **Through `run.step`, because the fixture cannot cover the call
+    # site.** `check.py --only play` plays a module written for the
+    # standard four, so dropping `stated_size` from the call defaults to
+    # the same number and changes nothing -- the break stayed green with
+    # the mechanism fully asserted and its only caller untested, which is
+    # the shape this suite keeps catching.
+    from combat_engine.story import run as runner
+
+    staffed = mod.parse({
+        "id": "probeH", "party_level": 1, "party_size": 5, "start": "f",
+        "scenes": [{"id": "f", "kind": "combat", "name": "F",
+                    "sets": "A cellar.", "exits": [], "xp": 400,
+                    "foes": [{"count": 2, "name": "sluice crawlers",
+                              "words": ["beast", "natural"],
+                              "role": "skirmisher", "rank": "standard"}]}]},
+        Path("<driver>"))
+    # **Exactly four, against a module written for five.** Any other size
+    # differs from `SIDE` as well, so the warning fires either way and the
+    # break cannot be seen -- a party of two left it green. Four is the
+    # one headcount where passing the module's figure and defaulting to
+    # the standard party give opposite answers.
+    short = runner.begin(
+        staffed, seed=5, pcs=["fighter", "cleric", "rogue", "wizard"])
+    made = runner.step(short, staffed, record=False)
+    out.that(
+        any("NOT scaled" in n for n in made.notes),
+        "and a campaign fielding fewer than the module wrote for is told",
+        f"{[n[:70] for n in made.notes]}",
+    )
+
+
 def the_importer_drops_the_summary_section_and_says_so(out: Result) -> None:
     """#833. A summary section invents a scene for every session it lists.
 
@@ -30148,6 +30240,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "stated_xp": (
+        a_stated_xp_figure_says_it_is_not_scaled,
+        "a printed XP figure says it is not scaled to the party (#798)",
     ),
     "summary_scenes": (
         the_importer_drops_the_summary_section_and_says_so,
