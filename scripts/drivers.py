@@ -36427,6 +36427,170 @@ def immune_to_a_keyword(out: Result) -> None:
              "and keyword immunity is not condition immunity -- still dazeable",
              f"{fearless[0]}")
 
+def an_enchanted_item_is_named_after_the_base_it_is_on(out: Result) -> None:
+    """A magic item's row says what *kind* of weapon it is laid on.
+
+    Camille's rule on #346, in their words: *"I'm mostly seeing <weapon name>
+    of <enchantment> or <enchantment> <weapon>. The <weapon> should be pretty
+    easy to always sub out for the correct kind."* Two shapes, and only the
+    **leading** one was built -- on a census that counted 15 items of 403 and
+    filed every other name under "not this shape". Re-measured over all 1,016
+    items in the four categories:
+
+        leading     39    Weapon 15   Armor 16   Arms 8
+        trailing   397    Weapon 203  Armor 155  Arms 37  Implement 2
+
+    So the shape that was missing is 13x the one that was built, and the
+    consequence was visible on a dealt character: **15 of 15** item rows
+    reaching a level-5 party's power list still ended in the generic word.
+
+    **Asserted without a printed name anywhere in this file.** The refs of
+    each shape are discovered from the localisation at run time and the
+    assertions are *relational* -- the substituted name differs from the
+    plain one in exactly one word, at the expected end, and that word is the
+    base weapon's own. Nothing here prints a name, and the evidence strings
+    report positions and word counts rather than text.
+
+    Skips, and says so, when `localization/` is absent: with names off there
+    is no printed name to substitute and `wire.item` correctly serves the
+    ref.
+    """
+    from combat_engine.api.wire import (
+        _GENERIC_WEAPON_WORDS,
+        _TRAILING_PUNCTUATION,
+        Wire,
+        item_of,
+    )
+    from combat_engine.db import game, localisation
+
+    wire = Wire(show_names=True)
+    names = localisation()
+    if not names:
+        out.that(False, "SKIPPED: localization/ is absent, so there is no "
+                        "printed name to substitute", "names table empty")
+        return
+
+    def shape(ref: str) -> str:
+        """`leading`, `trailing` or `neither`, off the printed name."""
+        entry = names.get(ref) or {}
+        nm = (entry.get("name") if isinstance(entry, dict) else str(entry)) or ""
+        words = [w.strip(_TRAILING_PUNCTUATION).lower() for w in nm.split()]
+        if len(words) < 2:
+            return "neither"
+        if words[0] in _GENERIC_WEAPON_WORDS:
+            return "leading"
+        if words[-1] in _GENERIC_WEAPON_WORDS:
+            return "trailing"
+        return "neither"
+
+    # Item **blocks**, which is what a power list shows, grouped by the shape
+    # of the item's own name.
+    blocks: dict[str, list[str]] = {"leading": [], "trailing": [], "neither": []}
+    rows = game().execute(
+        "SELECT ref FROM item WHERE category = 'Weapon'").fetchall()
+    owned = {r[0] for r in rows}
+    for ref in names:
+        if not isinstance(ref, str):
+            continue
+        # `item_of` rather than a second copy of the block pattern -- its
+        # docstring is public for exactly this reason.
+        whole = item_of(ref)
+        if not whole or whole not in owned:
+            continue
+        blocks[shape(whole)].append(ref)
+
+    out.that(all(blocks[k] for k in ("leading", "trailing", "neither")),
+             "the catalogue offers an item block of each of the three name "
+             "shapes to compare",
+             f"leading={len(blocks['leading'])} "
+             f"trailing={len(blocks['trailing'])} "
+             f"neither={len(blocks['neither'])}")
+    if not all(blocks[k] for k in ("leading", "trailing", "neither")):
+        return
+
+    def words(text: str) -> list[str]:
+        return text.split()
+
+    # -- the leading shape, which already worked --------------------------
+    ref = sorted(blocks["leading"])[0]
+    plain, subbed = wire.item(ref, slug=""), wire.item(ref, slug="longsword")
+    out.that(words(subbed)[0] == "Longsword",
+             "a name that LEADS with a generic word takes the base weapon's "
+             "word in front",
+             f"{ref}: first word became {words(subbed)[0]!r}")
+    out.that(words(subbed)[1:] == words(plain)[1:],
+             "and every later word is untouched",
+             f"{len(words(plain))} words in, {len(words(subbed))} out")
+
+    # -- the trailing shape, which is this change -------------------------
+    ref = sorted(blocks["trailing"])[0]
+    plain, subbed = wire.item(ref, slug=""), wire.item(ref, slug="greataxe")
+    out.that(words(subbed)[-1] == "Greataxe",
+             "a name that ENDS with a generic word takes it at the end",
+             f"{ref}: last word became {words(subbed)[-1]!r}")
+    out.that(words(subbed)[:-1] == words(plain)[:-1],
+             "and every earlier word is untouched",
+             f"{len(words(plain))} words in, {len(words(subbed))} out")
+    out.that(len(words(subbed)) == len(words(plain)),
+             "so the name keeps its length -- one word swapped, not appended",
+             f"{len(words(plain))} -> {len(words(subbed))}")
+
+    # -- a two-word slug is title-cased throughout ------------------------
+    # `holy-symbol` read `Holy symbol` before this change, and 40 holy
+    # symbols plus the hand crossbows are dealt as base weapons.
+    subbed = wire.item(ref, slug="hand-crossbow")
+    out.that(words(subbed)[-2:] == ["Hand", "Crossbow"],
+             "a two-word slug is capitalised on both words and loses its "
+             "hyphen",
+             f"tail reads {words(subbed)[-2:]}")
+
+    # -- the negative control, and its population must be independent -----
+    #
+    # **The first version of this was self-referential and a plant proved
+    # it.** It drew the control from `blocks["neither"]`, which `shape()`
+    # computes with `_GENERIC_WEAPON_WORDS` -- so widening that set to
+    # include four ordinary nouns moved exactly the items that would now be
+    # renamed *out* of the control population, and all ten assertions stayed
+    # green while the feature renamed things it must not. A control that
+    # classifies with the set it is policing cannot see the set change.
+    #
+    # So: fixed refs, chosen once by reading their printed names, and refs
+    # are not names so they may be written here. Each ends in an ordinary
+    # noun that no base weapon should ever displace.
+    FIXED = ("i601x1", "i1446x1", "i1318p1", "i3422p1")
+    live = [r for r in FIXED if (names.get(item_of(r) or r) or {})]
+    out.that(len(live) == len(FIXED),
+             "the four fixed control items are all in the catalogue",
+             f"{len(live)} of {len(FIXED)}: {live}")
+    unchanged = [r for r in live
+                 if wire.item(r, slug="greataxe") == wire.item(r, slug="")]
+    out.that(len(unchanged) == len(live),
+             "a name ending in an ordinary noun is left alone, whatever base "
+             "is offered",
+             f"{len(unchanged)} of {len(live)} unchanged")
+
+    # And the set itself, which is what the plant above actually attacked.
+    # Two words, because the census found only two trailing generic words in
+    # the weapon categories -- `weapon` 186 and `blade` 17. A third would
+    # need the same measurement behind it.
+    out.that(set(_GENERIC_WEAPON_WORDS) == {"weapon", "blade"},
+             "and only those two words count as a placeholder, which is what "
+             "bounds the whole rule",
+             f"{sorted(_GENERIC_WEAPON_WORDS)}")
+
+    # -- and no base means no substitution --------------------------------
+    ref = sorted(blocks["trailing"])[0]
+    out.that(wire.item(ref, slug="") == wire.item(ref),
+             "with no base weapon known the printed name is served as-is",
+             f"{ref}: slug='' and no slug agree")
+
+    # -- names off still serves the ref, which #346 must not break --------
+    dark = Wire(show_names=False)
+    out.that(dark.item(ref, slug="greataxe") == ref,
+             "and with names off the substitution serves the ref, not a name",
+             f"{ref} -> {dark.item(ref, slug='greataxe')!r}")
+
+
 def an_element_sworn_leg_draws_its_own_element(out: Result) -> None:
     """A leg sworn to an element must draw powers of that element.
 
@@ -36677,6 +36841,10 @@ def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
 
 
 DRIVERS = {
+    "item_base_name": (
+        an_enchanted_item_is_named_after_the_base_it_is_on,
+        "an enchanted item's row names the base it is laid on (#346)",
+    ),
     "elemental_leg": (
         an_element_sworn_leg_draws_its_own_element,
         "a leg sworn to an element draws its own element (#464, #906)",

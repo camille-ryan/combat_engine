@@ -47,10 +47,37 @@ _REF_IN_TEXT = re.compile(
 )
 
 #: The words an item's printed name uses to mean "whatever this is laid on".
-#: `Wire.item` replaces one of these with the base weapon's own word and
-#: leaves every other head noun alone. Measured: 14 items lead with the first
-#: and 1 with the second, out of 403 in a weapon category. #346.
+#: `Wire.item` replaces one of these, at **either end** of the name, with the
+#: base weapon's own word, and leaves every other noun alone.
+#:
+#: Re-measured over all 1,016 items in the four categories, because the first
+#: census counted only the leading position and so sized the feature at 15:
+#:
+#:     leading    weapon 14   blade  1
+#:     trailing   weapon 186  blade 17
+#:
+#: Both trailing words are singular, so there is no plural form to get wrong.
+#: #346.
 _GENERIC_WEAPON_WORDS = frozenset({"weapon", "blade"})
+
+#: Punctuation a printed name can end on, for the trailing-word test.
+#: `U+2019` is the typographic apostrophe the compendium prints, and it
+#: is written as an escape below because `ruff` refuses that character
+#: inline -- RUF001 in a string, RUF003 in a comment about the string.
+_TRAILING_PUNCTUATION = ",.'\u2019"
+
+
+def _titled(slug: str) -> str:
+    """A weapon's slug as a display word: `holy-symbol` -> `Holy Symbol`.
+
+    **Every word, not just the first.** The leading-word substitution used
+    to do `slug[:1].upper() + slug[1:]` on the already-dehyphenated string,
+    which reads `Holy symbol` for the 40 holy symbols and `Hand crossbow`
+    for the hand crossbows. Two of the base weapons a magic item is dealt on
+    are two words, so this was wrong more often than the single-word case
+    made it look.
+    """
+    return " ".join(w[:1].upper() + w[1:] for w in slug.replace("-", " ").split())
 
 
 def item_of(ref: str) -> str:
@@ -252,17 +279,37 @@ class Wire:
           project's own ruling -- thirty weapon words are in
           `sanitise.RULES_TERMS` and none is in `names.json`.
 
-        **Only a leading generic word is replaced**, and that is the whole
-        rule. Of 403 items filed under a weapon category, 15 lead with one
-        ("Weapon of ..." 14, "Blade of ..." 1) and 387 do not. The 387 are not
-        this shape at all: "Bracers of ..." is what the thing *is*, not a
-        placeholder standing in for a type, and substituting into those would
-        rename them wrongly.
+        **A generic word is replaced at either end, and the trailing case is
+        the common one.** This used to replace only a *leading* word, on a
+        census that counted 15 of 403 and concluded the feature was those 15.
+        That census asked the wrong question: it sorted every other name into
+        "not this shape", which is right about `Bracers of ...` -- that is
+        what the thing *is* -- and wrong about a name whose generic word
+        **trails**. Re-measured across all 1,016 items in the four
+        categories:
 
-        Armour and shields are the other half of #346 and are **not** here:
-        there is no `armour` table, so no equivalent of `Weapon.slug` exists
-        to substitute, and shields print light/heavy/barbed which nothing
-        extracts. That half is ETL work and is the prerequisite.
+            leading     39     Weapon 15   Armor 16   Arms 8
+            trailing   397     Weapon 203  Armor 155  Arms 37  Implement 2
+            neither    580
+
+        and the trailing weapon words are only two, both singular, so there
+        is no plural to get wrong: `weapon` 186 and `blade` 17. Camille's
+        comment on #346 named both shapes -- *"I'm mostly seeing <weapon
+        name> of <enchantment> or <enchantment> <weapon>"* -- and only the
+        first was built, which is why 15 of 15 item rows on a dealt
+        character's power list still read "... Weapon".
+
+        **Bounded by `slug` rather than by the name.** The substitution
+        happens only when the caller found a base weapon this item was
+        actually laid on (`Weapon.item == owner`), so a name that merely ends
+        in a generic word is never rewritten for a character who is not
+        carrying it on a weapon.
+
+        Armour and shields are the other half of #346 and are **not** here --
+        155 + 37 of that trailing count is theirs. There is no `armour` table,
+        so no equivalent of `Weapon.slug` exists to substitute, and shields
+        print light/heavy/barbed which nothing extracts. That half is ETL
+        work, it is #452, and it is the prerequisite.
         """
         if not self.show_names:
             return ref
@@ -276,7 +323,13 @@ class Wire:
             return name
         head, _, rest = name.partition(" ")
         if head.lower() in _GENERIC_WEAPON_WORDS and rest:
-            return f"{slug[:1].upper()}{slug[1:]} {rest}"
+            return f"{_titled(slug)} {rest}"
+        front, gap, tail = name.rpartition(" ")
+        # `strip` because a trailing word can carry punctuation, and the
+        # leading branch goes first so a name that is generic at both ends
+        # keeps its tail rather than being rewritten twice.
+        if gap and tail.strip(_TRAILING_PUNCTUATION).lower() in _GENERIC_WEAPON_WORDS:
+            return f"{front} {_titled(slug)}"
         return name
 
     def build(self, cls: str, leg: str) -> str:
