@@ -109,11 +109,20 @@ def p997(c: Cast) -> None:
     already keeps `f994` out of the same use; `f1300` is unbracketed and
     would otherwise stack.
 
-    **Four more Arena Fighting feats and three Lesser Style feats name
-    this row and are not written yet**, and the Lesser Style chain does
-    not exist. `f3230` is Arena Fighting and is one of the four; its
-    clause is once per encounter, which a body has no latch for, so it
-    cannot come here at all.
+    **Two more Arena Fighting feats and three Lesser Style feats name this
+    row and are not written yet**, and the Lesser Style chain does not
+    exist.
+
+    **`f3230` is now writable and this note used to say it was not.** It
+    said its clause "is once per encounter, which a body has no latch for,
+    so it cannot come here at all" -- true when written and falsified by
+    `c38c0cd2`, which added `c.once_per_board`: *"True the first time this
+    row asks on this board, False ever after"*, which is that sentence
+    exactly. So `f3230` belongs in the chain and is the next step here, not
+    an exclusion. #907 paid for this without knowing it.
+
+    `f979` is the one that genuinely cannot come: it is `todo=` on
+    `c.in_vehicle()` and nothing here works, so there is no clause to move.
     """
     arena = c.declare("Arena Fighting", "f994", "f972", "f971")
     if c.strike():

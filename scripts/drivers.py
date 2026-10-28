@@ -19402,14 +19402,20 @@ MIGRATED = {
     # `used={"p2099": ...}` and `f3245` reached it through `_on_hit_with`,
     # so both clauses existed and stacked. #550.
     "p2099": {"Arena Fighting": ("f992", "f973", "f3245")},
+    # **Its chain was always three and `NO_CHAIN_YET` said one.** That
+    # entry read "one Arena Fighting clause written (f994)" while the body
+    # had declared `f994`, `f972` and `f971` since an earlier wave, so the
+    # row was reported as having nothing to assert when it had a chain the
+    # rule can reach. Moved here; the honest residue is the *exclusivity*
+    # skip below, which is a statement about the board rather than the row:
+    # `f972` and `f971` read the world, so only `f994` can be made to fire.
+    "p997": {"Arena Fighting": ("f994", "f972", "f971")},
 }
 
 #: Rows migrated under #550 that have **no** chain yet to assert on, with
 #: why. Carried so the set of migrated rows is one list rather than two,
 #: and so a row cannot quietly drop out of the instrument's view.
 NO_CHAIN_YET = {
-    "p997": "one Arena Fighting clause written (f994); the other four and"
-            " the three Lesser Style ones are not",
     "p992": "one Arena Fighting clause written (f993, #780), so there is a"
             " chain of one and nothing yet to be exclusive against; f3188,"
             " f977 and f987 are not written, nor either Lesser Style one."
