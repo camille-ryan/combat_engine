@@ -29729,6 +29729,92 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
         )
 
 
+def the_model_cannot_roll_or_leave_the_graph(out: Result) -> None:
+    """#794's four constraints, as checks rather than as intentions.
+
+    They were written down before the model path was built and have been
+    true since, and **none of them was asserted** -- which is how a
+    guarantee gets deleted by somebody tidying. Each is a one-line
+    question here.
+    """
+    import inspect
+    from pathlib import Path
+
+    from combat_engine.story import beat as bt
+    from combat_engine.story import llm
+    from combat_engine.story import module as mod
+
+    # 1. The model never rolls. Not "is told not to" -- there is no
+    #    randomness in the file at all, so it cannot. Every die comes
+    #    through `table.check` into `engine.skills`.
+    source = inspect.getsource(bt) + inspect.getsource(llm)
+    rng = [w for w in ("random.", "randint", "randrange", "shuffle",
+                       "Random(") if w in source]
+    out.that(
+        not rng,
+        "nothing in the model layer can generate a number",
+        f"found {rng}",
+    )
+
+    # 2. The campaign cannot be moved off the graph. A choice is honoured
+    #    only if the scene lists it; anything else falls to the first exit.
+    graph = mod.parse({
+        "id": "p", "party_level": 1, "party_size": 2, "start": "a",
+        "scenes": [
+            {"id": "a", "kind": "rest", "name": "A", "sets": "x",
+             "exits": ["b"], "extended": False},
+            {"id": "b", "kind": "rest", "name": "B", "sets": "x",
+             "exits": [], "extended": False},
+        ]}, Path("<driver>"))
+    here = graph.scene("a")
+    out.that(
+        graph.next_of(here, "b") == "b"
+        and graph.next_of(here, "somewhere-else") == "b"
+        and graph.next_of(here, "") == "b",
+        "a scene exit the module does not list is refused, not followed",
+        f"{graph.next_of(here, 'somewhere-else')!r}",
+    )
+    out.that(
+        graph.next_of(graph.scene("b"), "a") == "",
+        "and a scene with no exits ends the module whatever is asked for",
+        f"{graph.next_of(graph.scene('b'), 'a')!r}",
+    )
+
+    # 3. No instrument needs the network. `Director(scripted=True)` answers
+    #    every call, which is what `check.py` runs -- asserted by pointing
+    #    a role at a dead port and using the scripted arm anyway.
+    dead = llm.Role(base_url="http://127.0.0.1:1")
+    scripted = bt.Director(scripted=True, roles={"dm": dead, "match": dead,
+                                                 "companion": dead})
+    quiet = bt.Playing(scene=mod.parse({
+        "id": "q", "party_level": 1, "party_size": 2, "start": "t",
+        # **Two in the cast, not one.** `answers` returns early when
+        # there is nobody to choose between, so a one-NPC scene never
+        # reaches the scripted branch and breaking it stayed green.
+        "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                    "sets": "A room.", "exits": [],
+                    "npcs": [{"name": "the host", "wants": "to pour"},
+                             {"name": "the cook", "wants": "to stir"}]}]},
+        Path("<driver>")).scene("t"))
+    out.that(
+        bool(scripted.react(quiet, [], []))
+        and scripted.answers(quiet, []) == ["the host", "the cook"]
+        and scripted.would_know("the host", "a jewel") in bt.KNOWING,
+        "the scripted path answers every call with no server at all",
+        "a scripted call reached for the network",
+    )
+
+    # 4. **No printed name in a prompt** is not asserted here, and that is
+    #    deliberate. It is two gates' job already -- `leaks.py` over the
+    #    whole tree and `leaks.py --modules` for an adventure's own cast,
+    #    both in `check.py`. The first attempt at a driver assertion
+    #    scanned the prompt constants for capitalised words and flagged
+    #    five: "Match", "Name", "Nobody", "Reach", "Right" -- every one an
+    #    ordinary sentence-initial capital. Keeping it would have meant a
+    #    hand-maintained list of common English words, which rots and
+    #    reports nothing. A worse copy of a gate is not a check.
+
+
 def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
     """A clamp this component was making silently. #798.
 
@@ -30240,6 +30326,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "dm_constraints": (
+        the_model_cannot_roll_or_leave_the_graph,
+        "the model cannot roll, leave the graph, or need a server (#794)",
     ),
     "stated_xp": (
         a_stated_xp_figure_says_it_is_not_scaled,
