@@ -19416,10 +19416,22 @@ MIGRATED = {
 #: why. Carried so the set of migrated rows is one list rather than two,
 #: and so a row cannot quietly drop out of the instrument's view.
 NO_CHAIN_YET = {
-    "p992": "one Arena Fighting clause written (f993, #780), so there is a"
-            " chain of one and nothing yet to be exclusive against; f3188,"
-            " f977 and f987 are not written, nor either Lesser Style one."
-            " Its three *unbracketed* clauses stack and are not a chain",
+    # **Two clauses are written, not one, and it still belongs here.** The
+    # old reason said "a chain of one and nothing yet to be exclusive
+    # against"; the body declares `f993` *and* `f977`. Probed as a
+    # migrated row and the chain rule went **red**: `[] of
+    # ['f993', 'f977']` -- 0 of 2 branches pay on this board, because both
+    # are trades and `c.choose` takes its first option, which is dealing
+    # the damage. So the conclusion was right and the reason was wrong,
+    # which is the shape worth catching: an entry can stay correct while
+    # describing something that is no longer true. #550.
+    "p992": "two Arena Fighting clauses are written (f993 #780, f977) and"
+            " neither is reachable here: both forgo damage, and `c.choose`"
+            " takes the first option, which is to deal it."
+            " `drivers.damage_forgone_for_a_rider` exercises the trade"
+            " instead. f3188 and f987 are unwritten, as are both Lesser"
+            " Styles. Its three *unbracketed* clauses stack and are not a"
+            " chain",
 }
 
 #: Feats of the exclusive category that name a migrated row and are **still
