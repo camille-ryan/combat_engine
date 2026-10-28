@@ -136,6 +136,28 @@ READ_ALOUD = 150
 GUTTER = 120
 
 
+#: Trademark and copyright marks, and how many make a block the publisher's
+#: own voice rather than the adventure's.
+#:
+#: Two. A credits line carries a mark per product named and the module in
+#: hand prints three in 153 characters; the adventure's prose carries none in
+#: 2,800. **This deliberately matches on the marks and not on the products
+#: they follow**, because the products are names and a name must not enter a
+#: tracked file -- the root `CLAUDE.md` rule applies to a filter pattern as
+#: much as to a column.
+CREDIT_MARKS = re.compile(r"[™®©]")
+CREDIT_MARKS_MIN = 2
+
+
+#: A page that grants permission to photocopy itself is a handout.
+#:
+#: The phrase is boilerplate rather than a name, which is what makes it
+#: usable here. It marks the pre-generated character sheets and the rules
+#: primer at the back of the module in hand -- pages 124, 125 and 131 --
+#: whose italics are long enough to pass `READ_ALOUD` and are not prose.
+HANDOUT = re.compile(r"permission is granted to photocopy", re.I)
+
+
 def read_aloud(page: object) -> list[str]:
     """The italicised boxed text on one page: what the DM reads out.
 
@@ -162,6 +184,31 @@ def read_aloud(page: object) -> list[str]:
 
     Blocks split where the baseline jumps more than a line's height, so two
     boxes in one column stay apart.
+
+    ## Two things that are italic and are not the adventure
+
+    `READ_ALOUD` was the only filter and it is a length proxy, so two kinds
+    of long italic block came through. **Neither is the one #909 was filed
+    about** -- that issue says a stat block's power flavour concatenates
+    into something long enough to pass, and a probe over the 80 blocks in
+    hand found no such block at all. What it found instead:
+
+    * **a credits line**, 153 characters, *identical on three pages*, naming
+      the publisher's products. `CREDIT_MARKS`.
+    * **the pre-generated character sheets and the rules primer** at the
+      back, which are hundreds of characters of italic explaining what an
+      ability score is. `HANDOUT`, which drops the whole page.
+
+    Dropping a whole page is the bigger hammer and it is the right one: a
+    page offering itself for photocopying is a form, and a form has no boxed
+    text on it. The cost if a publisher ever puts a player's letter on such
+    a page is that the letter is lost, which is recoverable by hand; the
+    cost of keeping these is that they reach an authoring brief as the
+    adventure's own words, which is not.
+
+    Repetition looked like the cleaner signal and **is wrong**: three blocks
+    repeat across pages here and one of them is a real item description,
+    printed twice because the item appears twice.
     """
     runs: list[tuple[float, float, str]] = []
 
@@ -205,7 +252,16 @@ def read_aloud(page: object) -> list[str]:
             last = y
         if block:
             out.append(_paragraphs(block))
-    return [_mend(b) for b in out if len(b) >= READ_ALOUD]
+    # The handout test reads every block, not only the long ones: the
+    # permission line is one short sentence and is the thing that identifies
+    # the page, so filtering by length first would throw away the evidence.
+    if any(HANDOUT.search(b) for b in out):
+        return []
+    return [
+        _mend(b) for b in out
+        if len(b) >= READ_ALOUD
+        and len(CREDIT_MARKS.findall(b)) < CREDIT_MARKS_MIN
+    ]
 
 
 #: A line this much shorter than the column's measure may end a paragraph.

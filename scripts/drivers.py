@@ -30121,6 +30121,115 @@ def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
     )
 
 
+class _Italics:
+    """A PDF page that draws the runs it is given, all of them italic.
+
+    `read_aloud` reads a page through `extract_text(visitor_text=...)`, so a
+    page is anything that calls that visitor. Driving the real extractor
+    with invented runs is the only way to assert what it keeps without
+    shipping a PDF, and `modules/` is git-ignored by design.
+    """
+
+    #: What `read_aloud` hands to `extract_text`: text, the current matrix,
+    #: the text matrix, the font dict, and the size. Only `tm[4]`/`tm[5]`
+    #: and the font are read, but the arity has to match.
+    Visitor = Callable[
+        [str, object, list[float], dict[str, str], float], None
+    ]
+
+    def __init__(self, lines: list[tuple[float, str]]) -> None:
+        self.lines = lines
+
+    def extract_text(self, visitor_text: Visitor) -> str:
+        font = {"/BaseFont": "/AAAAAA+SomeSerif-Italic"}
+        for y, text in self.lines:
+            visitor_text(text, None, [0.0, 0.0, 0.0, 0.0, 54.0, y], font, 10.0)
+        return ""
+
+
+def the_importer_keeps_boxed_text_and_drops_the_books_own_voice(
+    out: Result,
+) -> None:
+    """#909. Two long italic blocks that are not the adventure.
+
+    `READ_ALOUD` was the only filter and it is a length proxy. The issue
+    body says the impostor is a stat block's power flavour concatenating
+    into something long; a probe over all 80 blocks of the module in hand
+    **found no such block**, and found two other things instead -- a
+    credits line identical on three pages, and the pre-generated character
+    sheets at the back. 80 blocks to 71.
+
+    Both controls matter as much as the catches: one trademark mark is not
+    a credits line, and a long passage of ordinary prose is kept.
+    """
+    from combat_engine.story import importer
+
+    # Invented, every word. A real page's text here would put an
+    # adventure's prose in a tracked file -- `leaks.py --modules`.
+    prose = [
+        (700.0, "The stairwell opens on a room that has not been swept in a"),
+        (688.0, "generation. Someone has dragged the benches into a ring and"),
+        (676.0, "left a single chair facing the door, as though expecting you."),
+    ]
+    # **Over `READ_ALOUD`, deliberately.** A first draft of this fixture ran
+    # 101 characters, so the length filter dropped it and removing the mark
+    # rule left the driver green -- it was asserting the proxy it was
+    # written to replace. The real credits line is 153.
+    credits = [
+        (400.0, "SOMEBRAND™ SOMEBRAND Fantasy Roleplaying Game"),
+        (388.0, "Big Book of Heroes™ Bigger Book of Heroes™ Rules Digest™"),
+        (376.0, "Even Bigger Book of Heroes™ Monster Digest™ Starter Set™"),
+    ]
+    joined = " ".join(t for _, t in credits)
+    out.that(
+        len(joined) >= importer.READ_ALOUD,
+        "the credits fixture is long enough that length alone would keep it",
+        f"{len(joined)} chars against READ_ALOUD={importer.READ_ALOUD}",
+    )
+    page = importer.read_aloud(_Italics(prose + credits))
+    out.that(
+        len(page) == 1 and "stairwell opens" in page[0],
+        "the boxed text on a page survives, whole",
+        f"{len(page)} block(s): {[b[:34] for b in page]}",
+    )
+    out.that(
+        not any("Roleplaying Game" in b for b in page),
+        "while a credits line on the same page is dropped, by its marks",
+        f"{[b[:40] for b in page]}",
+    )
+
+    # **Control.** The rule is a mark *count*, not a mark. An adventure
+    # that happens to print one is not the publisher talking.
+    one = list(prose)
+    one[-1] = (676.0, one[-1][1] + " A banner™ hangs over the hearth.")
+    kept = importer.read_aloud(_Italics(one))
+    out.that(
+        len(kept) == 1 and "banner" in kept[0],
+        "and one mark alone does not make a block the publisher's",
+        f"{len(kept)} block(s)",
+    )
+
+    # **The whole page goes**, not the matching block: a page offering
+    # itself for photocopying is a character sheet, and the long italic
+    # paragraphs on it explain what an ability score is.
+    handout = importer.read_aloud(_Italics([
+        *prose,
+        (120.0, "Permission is granted to photocopy this page for personal use."),
+    ]))
+    out.that(
+        handout == [],
+        "a page granting photocopy permission yields nothing at all",
+        f"{len(handout)} block(s): {[b[:34] for b in handout]}",
+    )
+    # Control for that one: the same prose, no permission line, is kept --
+    # so the emptiness above is the marker's doing and not the layout's.
+    out.that(
+        len(importer.read_aloud(_Italics(prose))) == 1,
+        "though the identical page without that line keeps its block",
+        f"{len(importer.read_aloud(_Italics(prose)))} block(s)",
+    )
+
+
 def the_importer_drops_the_summary_section_and_says_so(out: Result) -> None:
     """#833. A summary section invents a scene for every session it lists.
 
@@ -30560,6 +30669,10 @@ DRIVERS = {
     "summary_scenes": (
         the_importer_drops_the_summary_section_and_says_so,
         "the importer drops an adventure's summary duplicates (#833)",
+    ),
+    "boxed_text": (
+        the_importer_keeps_boxed_text_and_drops_the_books_own_voice,
+        "read-aloud is the adventure's, not the credits' or a sheet's (#909)",
     ),
     "invent_not_contradict": (
         the_dm_may_invent_but_not_contradict,

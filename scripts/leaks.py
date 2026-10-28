@@ -575,31 +575,30 @@ def _module_runs(text: str) -> set[str]:
 #: line is italic too.
 #:
 #: Most are removed by checking the run against the rules corpus in
-#: `game.db`, which every contributor has. These two are what is left, and
-#: they are listed rather than waived by a rule: a per-finding baseline that
-#: may shrink and never grow, the same shape as `DEFERRED` above and
-#: `cards.KNOWN`. A bare allowance would hide the next real one.
-#: **Matched as a substring, not as a whole run.** Keyed exactly, a
-#: neighbouring eight-word window of the same phrase slipped straight
-#: through -- the rulebook title below was caught as "...fallen lands
-#: heroes of the" and then again, one word along, as "of the fallen lands
-#: heroes of the forgotten". Shingles overlap, so an exact key only ever
-#: silences one of them.
-MODULE_BENIGN = {
-    "a minor action instead of a move action":
-        "generic 4e action vocabulary, not this adventure's prose",
-    # **Keyed on the distinctive fragment, not the whole title.** An
-    # eight-word window can start mid-title -- the one that slipped
-    # through was "of the fallen lands heroes of the forgotten", which
-    # contains neither title in full.
-    "fallen lands":
-        "half a rulebook title the read-aloud extractor picked off an "
-        "item block; a product name rather than adventure text",
-    "forgotten kingdoms":
-        "the companion rulebook, same reason. Both sit in a plan from "
-        "2026-10-07, which is tier 3 in #447's ordering -- avoid, do not "
-        "chase -- and rewriting a historical plan buys nothing",
-}
+#: `game.db`, which every contributor has.
+#:
+#: **The baseline that used to sit here is empty, and that is the result of
+#: fixing #909 rather than a decision to trust the gate more.** Three runs
+#: were waived: a generic action phrase and two halves of a rulebook title.
+#: All three were in the module corpus only because `importer.read_aloud`
+#: filtered italic blocks by length alone, so a publisher's credits line
+#: and the pre-generated character sheets at the back of the book arrived
+#: as the adventure's prose. The extractor now drops both -- 80 blocks to
+#: 71 -- and with the waivers deleted this check is **clean on its own
+#: terms**, verified by emptying the dict before removing it.
+#:
+#: Two things worth keeping from the old note, because both will come back:
+#:
+#: * the waived phrases are still in a tracked plan from 2026-10-07, so if
+#:   an extractor regression ever puts a product name back in the corpus
+#:   this check goes red *there*. That is the gate working. The fix is the
+#:   extractor, which is what #909 was, and not a new waiver.
+#: * a baseline here must be **matched as a substring, not as a whole
+#:   run**. Keyed exactly, a neighbouring eight-word window of the same
+#:   phrase slipped straight through: the title was caught one word along
+#:   as a window containing neither title in full. Shingles overlap, so an
+#:   exact key only ever silences one of them.
+MODULE_BENIGN: dict[str, str] = {}
 
 
 def _rules_runs() -> set[str]:

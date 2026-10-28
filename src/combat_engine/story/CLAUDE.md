@@ -394,6 +394,48 @@ have and for modules from editions whose creatures we never will. If a change
 drops the name tier's hit rate, that is the number that matters, not the
 elegance of what replaced it.
 
+## A book is not all adventure, and the extractor must say where it stops
+
+The PDF carries three kinds of page and only one of them is the module:
+the **adventure**, the **publisher's own voice** (credits, trademarks,
+photocopy permissions), and **organized-play administration** (how to
+award renown, what to do when a character dies, pre-generated character
+sheets). All three are set in the same fonts and all three read as prose.
+
+Both stages were taking all three, and each needed its own fix because
+**they read different inputs**:
+
+* `importer.read_aloud` reads the PDF and filtered italics by length
+  alone. 9 of its 80 blocks were a credits line repeated on three pages
+  and the character sheets at the back -- 153 to 791 characters, so length
+  was never going to separate them. Now `CREDIT_MARKS` (two or more of
+  `(TM) (R) (C)` in a block) and `HANDOUT` (a page that offers itself for
+  photocopying yields nothing). 80 blocks to 71, and the #902 baseline in
+  `leaks.py` went from three waivers to **none**. #909.
+* `scripts/ingest.py` reads `pages/*.txt`, **not** `read-aloud.json`, so
+  the fix above does nothing for it. 44 of the graph's 126 entities and 70
+  of its 188 facts are administration tagged `page` -- which is the
+  provenance that means *canon, do not contradict* -- so the DM is holding
+  a store play program's scoring rules as established fiction. #915, open.
+
+Three things learnt that are worth not re-deriving:
+
+* **A filter here cannot name what it filters.** The credits line is
+  trademarks, and the root rule binds a filter pattern as much as a
+  column. Match the marks, not the products.
+* **Page spans do not separate administration from adventure.** `draft()`
+  computes them correctly from the outline and the publisher nested the
+  administration *inside* the chapter -- the depth-0 span is pages 1-7 and
+  swallows three admin sections.
+* **Register does not either.** Admin addresses the reader, so a
+  second-person test looks promising and measures **44% against 22%**,
+  with false positives like *"you arrive at the keep"*. A 2:1 ratio is not
+  a separator.
+
+And one about repetition, which is the signal that looks cleanest and is
+wrong: three read-aloud blocks repeat across pages and **one of them is a
+real item description**, printed twice because the item appears twice.
+
 ## Seams
 
 * **`story/__init__.py` is not edited by this work.** Arcade mode is being
@@ -414,7 +456,8 @@ uv run scripts/play.py --play <module> --seed 7   a whole adventure
 uv run scripts/play.py --play <module> --god-mode  the story half, no fights
 uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     challenge_refusal training_bonus challenge_costs_nothing \
-    beat_loop scene_audience module_refusals affordance_match
+    beat_loop scene_audience module_refusals affordance_match \
+    summary_scenes boxed_text
 uv run scripts/check.py --only play,drivers
 ```
 
@@ -434,6 +477,15 @@ coerce a nonsense value instead of refusing it left the whole suite green.
 A refusal nobody tests is a refusal that can be deleted by accident. The
 three it covers are the silent ones: a module that validates and then plays
 wrong.
+
+**A fixture can be too small to see the break.** `boxed_text` asserts that
+a credits line is dropped by its trademark marks, and the first version of
+its fixture ran **101 characters** against `READ_ALOUD = 150` -- so the
+length filter dropped it, removing the mark rule changed nothing, and the
+driver was **asserting the proxy it had been written to replace**. It now
+asserts its own fixture is longer than `READ_ALOUD` before asserting
+anything about marks. Where a new rule replaces an old one, the fixture has
+to defeat the old one or the break stays green.
 
 **Clear `__pycache__` between a break and its restore.** A restore that
 lands in the same second as the `.pyc` does not invalidate it, so the tree
