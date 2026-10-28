@@ -2458,6 +2458,38 @@ def outfit(
     return [w for w in belt if w.ref not in in_hand]
 
 
+def _stock_quiver(gear: Gear | None) -> None:
+    """Put ordinary ammunition in the quiver for each launcher owned.
+
+    Camille's ruling on `#520`, 2026-10-28: a character with mundane
+    ammunition has **50** of it. The number is supplied rather than printed
+    and `ammunition.MUNDANE` carries the quote.
+
+    **One entry per *kind*, not per weapon.** A character holding two bows
+    does not carry two separate bundles of arrows, and `loaded` walks the
+    quiver looking for something that `fits` the launcher's group -- so a
+    second entry of the same kind would simply never be reached. Keyed off
+    `FIRES`, the printed launcher-to-ammunition table.
+
+    **Weapons, not `held`.** A stowed crossbow still has bolts; what decides
+    whether ammunition is carried is owning the launcher, not having it in
+    hand this second.
+
+    Does nothing for a character that fires nothing, which is most of them:
+    `FIRES` has three entries and every melee weapon and implement is absent
+    from it.
+    """
+    from combat_engine.engine.ammunition import FIRES, MUNDANE
+    from combat_engine.engine.components import Ammo
+
+    if gear is None:
+        return
+    kinds = {FIRES[w.group] for w in gear.weapons if w.group in FIRES}
+    have = {a.kind for a in gear.quiver}
+    for kind in sorted(kinds - have):
+        gear.quiver.append(Ammo(ref="", kind=kind, count=MUNDANE))
+
+
 def power_swap(powers: list[str], feats: list[str]) -> list[str]:
     """The hand that is left after the feats that trade a card for one.
 
@@ -3300,6 +3332,22 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         gear = world.get(eid, Gear)
         gear.weapons += [replace(w) for w in belt]
         gear.stowed |= {w.ref for w in belt}
+    # **Ordinary ammunition for whatever launcher it owns.** Camille's
+    # ruling on #520, 2026-10-28 -- 50 pieces, a supplied number because the
+    # page prints none for a character. `ammunition.MUNDANE` carries the
+    # quote and the reasoning.
+    #
+    # **Owned, not held**, and after the belt for the same reason the belt
+    # is: a crossbow a feat bought and stowed still has bolts for it, and a
+    # character that fires nothing gets nothing. Keyed off the launcher's
+    # own group through `FIRES`, which is the printed table -- a bow takes
+    # arrows and a crossbow does not -- so no vocabulary is invented here.
+    #
+    # `ref=""` is what makes a mundane piece mundane: `nock` returns the
+    # drawn piece's ref onto `ev.ammo`, and an empty one is the honest
+    # answer that no *item* rode the shot, which is what `fired_with`
+    # already reads. The count still comes down, which is the whole of #520.
+    _stock_quiver(world.get(eid, Gear))
     # A racial skill bonus is a sheet number and not a thing that happens
     # in a fight, so it is laid straight into `Mods` where the armour
     # penalty and the enhancement bonus already live -- `engine/skills.py`

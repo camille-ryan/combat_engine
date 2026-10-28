@@ -36454,6 +36454,114 @@ def immune_to_a_keyword(out: Result) -> None:
              "and keyword immunity is not condition immunity -- still dazeable",
              f"{fearless[0]}")
 
+def a_mundane_shot_comes_out_of_a_finite_quiver(out: Result) -> None:
+    """A character carries 50 ordinary pieces and a shot spends one.
+
+    Camille's ruling on `#520`, 2026-10-28, quoted verbatim because the
+    previous "ruling" recorded against this issue was my own paraphrase and
+    said the opposite:
+
+        Typical play doesn't even track arrows, but since bookkeeping here
+        is easy, I think we can. For now, treat characters with mundane
+        ammunition as having 50, and throwing weapons as having 5.
+
+    So 50 is a **supplied** number, not a printed one. `Ammo.count`'s
+    docstring had already reserved the decision for whoever hands the
+    ammunition out, and `chargen._stock_quiver` is now that.
+
+    **The preference is the part that could have gone silently wrong.**
+    `ammunition`'s own rule is that a wielder with magic ammunition uses
+    it. Until now the quiver held nothing else, so `loaded` taking the first
+    fitting entry satisfied that by accident. With 50 ordinary arrows beside
+    one magic arrow, first-fitting spends the arrow and leaves the magic
+    piece forever unused -- which is the single thing the module exists to
+    do. Asserted both ways round.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Grid, World
+    from combat_engine.engine.ammunition import FIRES, MUNDANE, loaded
+    from combat_engine.engine.components import Ammo, Gear
+    from combat_engine.engine.rng import Rng
+
+    def built(cls: str, seed: int = 1):  # noqa: ANN202
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = True
+        try:
+            world = World(Grid(24, 16), Rng(seed), Bus())
+            me = chargen.spawn(world, chargen.Character(
+                cls=cls, level=1, build="", feats=[], powers=[]), (5, 5))
+            return world, me
+        finally:
+            chargen.SCORED_CHOICES = was
+
+    # A class the chassis gives a launcher to. Found rather than named, so a
+    # chassis change retitles the rule instead of silently skipping it.
+    found = None
+    for cls in sorted(chargen.CLASSES):
+        world, me = built(cls)
+        gear = world.need(me, Gear)
+        if any(w.group in FIRES for w in gear.weapons):
+            found = (cls, world, me, gear)
+            break
+    out.that(found is not None,
+             "some class is dealt a launcher, so there is a quiver to ask "
+             "about",
+             f"searched {len(chargen.CLASSES)} classes")
+    if found is None:
+        return
+    cls, world, me, gear = found
+
+    groups = sorted({w.group for w in gear.weapons if w.group in FIRES})
+    out.that(len(gear.quiver) == len(groups),
+             "one quiver entry per kind of launcher owned, not per weapon",
+             f"{cls}: launchers={groups} quiver={[a.kind for a in gear.quiver]}")
+    out.that(all(a.count == MUNDANE for a in gear.quiver),
+             f"each holding {MUNDANE} pieces, which is the supplied number",
+             f"{[(a.kind, a.count) for a in gear.quiver]}")
+    out.that(all(not a.ref for a in gear.quiver),
+             "and carrying no item ref -- which is what makes a piece "
+             "mundane, and what keeps `ev.ammo` empty so `fired_with` goes "
+             "on answering False for an ordinary shot",
+             f"{[a.ref for a in gear.quiver]}")
+
+    # -- a shot spends one, which is the whole of #520 --------------------
+    group = groups[0]
+    piece = loaded(world, me, group)
+    out.that(piece is not None and piece.count == MUNDANE,
+             "the launcher draws from that entry",
+             f"{piece and (piece.kind, piece.count)}")
+    before = piece.count
+    piece.count -= 1
+    out.that(loaded(world, me, group).count == before - 1,
+             "and spending one is visible in the quiver -- a mundane shot is "
+             "finite, where before #520 it was not",
+             f"{before} -> {loaded(world, me, group).count}")
+
+    # -- magic first: the assertion the ordering could have broken --------
+    world2, me2 = built(cls)
+    gear2 = world2.need(me2, Gear)
+    kind = FIRES[group]
+    gear2.quiver.append(Ammo(ref="i:driver-arrow", kind=kind, plus=1, count=2))
+    drawn = loaded(world2, me2, group)
+    out.that(drawn is not None and drawn.ref == "i:driver-arrow",
+             "with a magic piece in the quiver beside the 50, the magic one "
+             "is what the launcher draws",
+             f"drew {drawn and drawn.ref!r}")
+
+    gone = next(a for a in gear2.quiver if not a.ref)
+    out.that(gone.count == MUNDANE,
+             "and the ordinary pieces are untouched while it lasts",
+             f"mundane count={gone.count}")
+
+    # And once the magic runs out, the ordinary pieces are reached.
+    drawn.count = 0
+    after = loaded(world2, me2, group)
+    out.that(after is not None and not after.ref,
+             "when the magic piece is spent the launcher falls back to the "
+             "ordinary ones rather than to nothing",
+             f"drew {after and (after.kind, after.count)}")
+
+
 def a_borrowed_row_records_which_one_was_taken(out: Result) -> None:
     """"The power you chose for your <trait>" has to be answerable.
 
@@ -37085,6 +37193,10 @@ def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
 
 
 DRIVERS = {
+    "mundane_quiver": (
+        a_mundane_shot_comes_out_of_a_finite_quiver,
+        "a mundane shot comes out of a finite quiver, magic first (#520)",
+    ),
     "borrowed_pick": (
         a_borrowed_row_records_which_one_was_taken,
         "a borrowed row records which one was taken (#743)",

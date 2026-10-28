@@ -36,6 +36,27 @@ FIRES: dict[str, str] = {
     "sling": "stone",
 }
 
+#: How many ordinary pieces a character carries for a launcher it holds.
+#:
+#: **An invented number, and that is on the record.** The compendium prints
+#: no quantity for a character's mundane ammunition. Camille, 2026-10-28,
+#: quoted on `#520`:
+#:
+#:     Typical play doesn't even track arrows, but since bookkeeping here is
+#:     easy, I think we can. For now, treat characters with mundane
+#:     ammunition as having 50, and throwing weapons as having 5.
+#:
+#: So this is a supplied figure rather than a printed one, which is the
+#: opposite of the position a previous comment of mine on `#877` asserted --
+#: see the attribution note there. `Ammo.count`'s own docstring already
+#: anticipated it: *"that is not a printed rule … so it is a field rather
+#: than a constant, and whoever hands the ammunition out chooses."*
+#:
+#: `chargen` is the hander-out. The thrown half of the same ruling is not
+#: here, because a thrown weapon is a `Weapon` the thrower picks back up
+#: rather than a piece that is spent -- see `#520`.
+MUNDANE = 50
+
 
 def fits(kind: str, group: str) -> bool:
     """Can that launcher loose that ammunition? An empty kind fits any."""
@@ -43,13 +64,26 @@ def fits(kind: str, group: str) -> bool:
 
 
 def loaded(world: World, eid: int, group: str) -> Any:
-    """The piece this creature would draw for a shot from that group."""
+    """The piece this creature would draw for a shot from that group.
+
+    **Magic first, and the order is load-bearing now that mundane pieces
+    exist.** This module's own rule is that *"a wielder with magic
+    ammunition in the quiver uses it, rather than being asked each
+    shot"* -- and until `#520` the quiver held nothing else, so taking the
+    first fitting entry happened to satisfy that. With 50 ordinary arrows
+    in there too, first-fitting would spend an arrow and leave the magic
+    piece untouched, which is the one thing the module is for.
+
+    A mundane piece carries no `ref`, so sorting on `bool(ref)` is the whole
+    of the preference and needs no new field.
+    """
     gear = world.get(eid, Gear)
     if gear is None:
         return None
-    return next(
-        (a for a in gear.quiver if a.count > 0 and fits(a.kind, group)), None
-    )
+    fitting = [a for a in gear.quiver if a.count > 0 and fits(a.kind, group)]
+    if not fitting:
+        return None
+    return min(fitting, key=lambda a: not a.ref)
 
 
 def nock(world: World, eid: int, power: str, branch: int = 0) -> str:
