@@ -567,8 +567,23 @@ KNOWN_SILENT = {
     # harness fires each row on a fresh board, so nothing is being sustained.
     "i1964p1": "sustains one of its own minor-cost holds; a fresh board sustains nothing",
     "p14124": "sustains one of its own minor-cost holds; a fresh board sustains nothing",
-    # `c.restore_use` announces only a `Note`, which `f3235` documents.
-    "i2318p1": "gives back a sibling's use, which announces only a Note",
+    # **The reason here said "announces only a Note" and #899 falsified it.**
+    # `c.restore_use` emits `UseRestored` now, which is in `DID_SOMETHING`,
+    # so the announcement is no longer what stops this row being credited.
+    #
+    # The real cause, measured by wrapping the verb: it calls
+    # `restore_use("cf:warlock-f1s4")` on all 48 attempts and the caster
+    # **does not own that row** -- `ref in powers.all` is False -- so the
+    # verb refuses before it reaches the spend question at all. The board
+    # deals a character that is not a warlock on that pact leg.
+    #
+    # A different cause from `i1676p1`/`i3271p1` above, which *do* own their
+    # ref and fail on `times() == 0` (#901). Worth keeping distinct: one is
+    # "the board deals the wrong character", the other "the board never
+    # spends".
+    "i2318p1": "gives back a sibling's use the caster does not own, so the"
+               " verb refuses before the spend question; the board deals no"
+               " warlock on that pact leg",
     # The initiative order is not one of the five observables.
     "m4448a4": "adds initiative slots; the order is not an observable",
     # Deliberately empty, and its docstring predicts this exact line:

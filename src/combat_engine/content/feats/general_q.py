@@ -1609,8 +1609,13 @@ def f3235(c: Cast) -> None:
     and the boon's own `Dropped` watch hands that use back when a cursed
     enemy falls -- which is the moment this row wants.
 
-    It is read rather than hooked, because `c.restore_use` announces only a
-    `Note`. Two guards, and **both** are load-bearing -- driven on a board,
+    It is read rather than hooked, and the stated reason -- *"because
+    `c.restore_use` announces only a `Note`"* -- stopped being true in #899:
+    the verb emits `UseRestored`, which is attributable and in
+    `audit.DID_SOMETHING`. So hooking it is now possible, and this row is
+    left reading because reading works and the change would be behavioural
+    rather than a correction. Two guards, and **both** are load-bearing --
+    driven on a board,
     because the spent use alone looked like enough and is not:
 
     * the pact, because `chargen` deals every warlock all seven legs and
