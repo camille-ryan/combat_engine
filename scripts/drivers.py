@@ -29729,6 +29729,111 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
         )
 
 
+def a_scene_says_what_sort_of_place_the_fight_is_in(out: Result) -> None:
+    """#539, from the story side: `World.terrain` was never written to.
+
+    Initialised empty and never filled, so all **70** `c.terrain()` gates
+    in content were false in every fight -- the engine's signature failure,
+    silently false, at the largest scale measured.
+
+    This is option (1) from that issue, **the caller says**, with the
+    module as the caller: an adventure states the ground under every
+    encounter, drawn from the same closed `TERRAIN_WORDS` the gate
+    validates against. Nothing invents a word and nothing rolls a table,
+    so this is applying what the page printed rather than making a balance
+    call. `content.terrain.dress` -- the blocking squares and rough going
+    -- is the half still parked, and is not this.
+    """
+    from pathlib import Path
+
+    from combat_engine.engine.cast import TERRAIN_WORDS
+    from combat_engine.story import beat as bt
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as runner
+
+    def fight(*words: str) -> mod.Module:
+        return mod.parse({
+            "id": "probeT", "party_level": 1, "party_size": 4, "start": "f",
+            "scenes": [{"id": "f", "kind": "combat", "name": "F",
+                        "sets": "A cellar.", "exits": [], "xp": 400,
+                        "terrain": list(words),
+                        "foes": [{"count": 2, "name": "sluice crawlers",
+                                  "words": ["beast", "natural"],
+                                  "role": "skirmisher",
+                                  "rank": "standard"}]}]},
+            Path("<driver>"))
+
+    wet = fight("aquatic")
+    camp = runner.begin(wet, seed=5)
+    made = runner.step(camp, wet, record=False,
+                       director=bt.Director(scripted=True))
+    out.that(
+        any("aquatic" in n for n in made.notes),
+        "a scene's terrain reaches the fight and is reported",
+        f"{[n[:70] for n in made.notes]}",
+    )
+
+    # **On the world, and through the gate content actually reads.** The
+    # note alone proves nothing: one built from `scene.terrain` reads
+    # identically to one built from `world.terrain`, so the break that
+    # stopped writing to the world and kept the note left every assertion
+    # green. `run.ground` exists as a named function for this reason.
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Side as PcSide
+    from combat_engine.story import field_encounter
+
+    board = field_encounter(5, 1, enemies=[], party=camp.party)
+    out.that(
+        not board.world.terrain,
+        "a freshly fielded board knows nothing about its surroundings",
+        f"{board.world.terrain}",
+    )
+    said = runner.ground(board.world, wet.scene("f"))
+    out.that(
+        "aquatic" in board.world.terrain and said == "aquatic",
+        "and the scene's word is written onto the world itself",
+        f"terrain={board.world.terrain}, reported {said!r}",
+    )
+    asker = Cast(board.world, next(iter(board.world.each(PcSide)))[0], "probe")
+    out.that(
+        asker.terrain("aquatic") and not asker.terrain("snow"),
+        "so the gate content reads is true for that word and false for others",
+        f"aquatic={asker.terrain('aquatic')} snow={asker.terrain('snow')}",
+    )
+
+    # The control: a scene that states no ground leaves the set empty, so
+    # every gate stays false and nothing changes for a module without one.
+    bare = fight()
+    camp2 = runner.begin(bare, seed=5)
+    made2 = runner.step(camp2, bare, record=False,
+                        director=bt.Director(scripted=True))
+    out.that(
+        not any("fought in" in n for n in made2.notes),
+        "while a scene that names no ground says nothing and changes nothing",
+        f"{[n[:60] for n in made2.notes]}",
+    )
+
+    # **Only words the gate will accept.** `c.terrain` raises on anything
+    # outside its vocabulary, by design, so a module writing a word it has
+    # never heard of would turn a dead gate into a crash. The validator
+    # refuses it at load instead -- which is what keeps this write safe.
+    try:
+        fight("underwater")
+        refused = ""
+    except mod.ModuleError as exc:
+        refused = str(exc)
+    out.that(
+        "underwater" in refused,
+        "and a ground word the engine does not know is refused at load",
+        f"{refused[:90] or 'it loaded anyway'}",
+    )
+    out.that(
+        set(bare.scene("f").terrain) <= TERRAIN_WORDS,
+        "so whatever reaches the world is always in the gate's vocabulary",
+        f"{bare.scene('f').terrain}",
+    )
+
+
 def the_model_cannot_roll_or_leave_the_graph(out: Result) -> None:
     """#794's four constraints, as checks rather than as intentions.
 
@@ -30326,6 +30431,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "scene_terrain": (
+        a_scene_says_what_sort_of_place_the_fight_is_in,
+        "a scene's ground reaches the fight, so c.terrain() can be true (#539)",
     ),
     "dm_constraints": (
         the_model_cannot_roll_or_leave_the_graph,

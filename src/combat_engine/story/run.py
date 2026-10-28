@@ -41,6 +41,7 @@ from pathlib import Path
 from random import Random
 
 from combat_engine.engine import Ident, Side, Team
+from combat_engine.engine.ecs import World
 from combat_engine.engine.turns import Encounter
 from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
@@ -213,7 +214,7 @@ def seed_for(campaign: Campaign, scene: Scene, what: str) -> int:
     return _stream(campaign, scene, what).randrange(1 << 30)
 
 
-def _enemy_eids(world: object) -> list[int]:
+def _enemy_eids(world: World) -> list[int]:
     """Spawned enemies in spawn order, which is the order the refs went in.
 
     Entity ids are handed out in sequence, so sorting by id recovers the order
@@ -223,7 +224,7 @@ def _enemy_eids(world: object) -> list[int]:
     different flavours.
     """
     return sorted(
-        eid for eid, side in world.each(Side) if side.team is Team.ENEMY  # type: ignore[attr-defined]
+        eid for eid, side in world.each(Side) if side.team is Team.ENEMY
     )
 
 
@@ -282,12 +283,6 @@ def _fight(
         step.say("Nothing written could be fielded for this scene.")
         return
 
-    if scene.terrain:
-        step.notes.append(
-            f"{scene.id}: the module calls for "
-            f"{', '.join(scene.terrain)} and terrain.dress cannot yet be told "
-            "what sort of place a fight is in -- see #539"
-        )
 
     board_seed = seed_for(campaign, scene, "fight")
     fielded = field_encounter(
@@ -297,6 +292,27 @@ def _fight(
         party=campaign.party,
     )
     world = fielded.world
+
+    # **What sort of place the fight is in, which nothing ever said.**
+    # `World.terrain` was initialised empty and never written to, so all
+    # 70 `c.terrain()` gates in content were false in every fight -- the
+    # engine's signature failure, silently false, at the largest scale
+    # measured (#539).
+    #
+    # This is option (1) from that issue: **the caller says.** A module
+    # states the ground under every encounter, drawn from the same closed
+    # `TERRAIN_WORDS` the gate validates against, so nothing here invents
+    # a number or rolls a table -- it applies what the adventure printed.
+    # The parked half is `content.terrain.dress`, which arranges blocking
+    # squares and rough going and is a separate, balance-affecting call.
+    # These are just the words.
+    said = ground(world, scene)
+    if said:
+        step.notes.append(
+            f"{scene.id}: fought in {said} -- riders that only apply in "
+            "that sort of place are live"
+        )
+
     for eid, flavour in zip(_enemy_eids(world), dressed.flavours, strict=False):
         apply_flavour(world, eid, flavour)
 
@@ -523,7 +539,30 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         step.next_id = playing.leads_to
 
 
-def _keep(campaign: Campaign, scene: Scene, playing: object) -> None:
+def ground(world: World, scene: Scene) -> str:
+    """Tell the world what sort of place this is. Returns what it was told.
+
+    **A named function because the note alone could not prove the write.**
+    Inline, the only observable was a `Step` note, and a note built from
+    `scene.terrain` reads identically to one built from `world.terrain` --
+    so the break that stopped writing to the world and kept the note left
+    every assertion green. Pulled out, the driver can read `world.terrain`
+    and ask `Cast.terrain` directly, which is the thing content depends on.
+
+    Option (1) of #539: the caller says, and a module is the caller. The
+    words come from the same closed `TERRAIN_WORDS` the gate validates
+    against, refused at load if they do not, so nothing here invents one.
+    """
+    # No early return for a scene that names no ground. **It was there and
+    # breaking it changed nothing**, which is a dead line rather than an
+    # untested one: the union with an empty set is a no-op and joining an
+    # empty set gives `""`, so the caller writes no note either way.
+    world.terrain |= set(scene.terrain)
+    return ", ".join(sorted(world.terrain))
+
+
+def _keep(campaign: Campaign, scene: Scene,
+          playing: beat_mod.Playing) -> None:
     """Write down what the table established, so it binds from now on.
 
     **Camille's ruling is that invention is wanted and contradiction is
@@ -544,11 +583,11 @@ def _keep(campaign: Campaign, scene: Scene, playing: object) -> None:
     from combat_engine.story import graph as graph_mod
     from combat_engine.story.save import SAVES
 
-    told = playing.told  # type: ignore[attr-defined]
+    told = playing.told
     if told is None:
         return
     added = 0
-    for beat in playing.beats:  # type: ignore[attr-defined]
+    for beat in playing.beats:
         if not beat.reaction:
             continue
         for st in beat.standing:
