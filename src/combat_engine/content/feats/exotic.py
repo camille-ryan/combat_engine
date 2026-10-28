@@ -184,7 +184,8 @@ def f959(c: Cast) -> None:
     """
     ev = c.trigger
     foe = getattr(ev, "target", None)
-    if foe is None or not c.may("give up the damage to immobilise", who=c.me):
+    if foe is None or not c.may("give up the damage to immobilise",
+                                who=c.me, default=False):
         return
     c.cancel()
     c.condition(Condition.IMMOBILIZED, until=When.EONT, on=foe)

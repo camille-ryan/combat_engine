@@ -28929,7 +28929,7 @@ def a_weapon_the_build_chose(out: Result) -> None:
     from combat_engine.chargen import IMPLEMENTS, PRINTED
     from combat_engine.engine import DEX, Bus, Keyword, Rng, Trigger, World
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Build, Gear
+    from combat_engine.engine.components import Build, Gear, Powers
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import SecondWind
     from combat_engine.engine.grid import Grid
@@ -28999,11 +28999,38 @@ def a_weapon_the_build_chose(out: Result) -> None:
              "every rogue is dealt the feature, so every rogue is trained"
              " with both -- it carries no leg requirement",
              f"{sorted(trained)}")
-    out.that("w3621" not in trained and len(trained) == 4,
-             "and with those two and its chassis pair and nothing else:"
-             " reading `powers` grants exactly the refs a header names, not"
-             " every weapon any power mentions",
+    out.that("w3621" not in trained,
+             "and not every weapon a power *mentions*: `w3621` is named in a"
+             " row's text and in no row's header, and it is not trained",
              f"{sorted(trained)}")
+
+    # **This was `len(trained) == 4` and that was an expiring absolute.**
+    # It passed while the rogue's draw happened to hold one weapon-granting
+    # row; un-marking `f959` (#780) moved the draw, a different
+    # proficiency-granting feat came in, and the count read 5 on working
+    # code. The same shape as `drivers.charging`'s `speed == plain + 1`,
+    # which ordinary content work expired in exactly this way.
+    #
+    # The claim the prose makes is **"exactly the refs a header names"**, so
+    # that is what is asserted: every trained ref is either declared in the
+    # `proficiency=` header of a row this character holds, or is one of the
+    # two the class line itself carries. Draw-proof, and strictly stronger
+    # than a count -- a count cannot say *which* refs, and this names the
+    # offenders when it fails.
+    from combat_engine import chargen as _chargen
+
+    owned = set(world.need(me, Powers).all)
+    by_header = {
+        ref
+        for held in owned
+        if (row := REGISTRY.get(held)) is not None
+        for ref in (getattr(row, "proficiency", ()) or ())
+    }
+    chassis = {w.ref for w in (_chargen.CLASSES["rogue"].weapons or ())}
+    out.that(trained <= by_header | chassis,
+             "and nothing is trained that neither a header nor the chassis"
+             " names",
+             f"unexplained: {sorted(trained - by_header - chassis)}")
 
     # -- #719: the record ---------------------------------------------------
     world, me, c = built("fighter", "arena")
