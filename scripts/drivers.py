@@ -20031,10 +20031,16 @@ def a_target_line_naming_an_earlier_swing(out: Result) -> None:
     if row is None:
         out.skip("i2133p1 is not declared")
         return
+    # **Re-bound before the closure.** `row` is `Power | None` and the
+    # narrowing above does not reach inside `pool`, so `ty` reported two
+    # diagnostics the baseline does not hold the moment this file counted
+    # as changed. A binding the closure captures as non-optional is the
+    # fix; nothing about the test changes.
+    card = row
 
     def pool(**fields) -> list[int]:  # noqa: ANN003
-        row.target = Target("enemy", 1, **fields)
-        return candidates(world, caster, row)
+        card.target = Target("enemy", 1, **fields)
+        return candidates(world, caster, card)
 
     out.that(
         pool(hit_by_me_this_turn=True) == [],
@@ -32190,6 +32196,124 @@ def training_is_worth_exactly_five_on_a_check(out: Result) -> None:
     table.strike()
 
 
+def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
+    """#911. The challenge's bus and the fight's bus were different objects.
+
+    `table.lay` builds a board with nobody to fight on it, which is its
+    whole purpose. But a printed encounter can run a challenge **while**
+    the party fights -- a creature losing its regeneration when the
+    challenge ends is on the board the whole time -- and the two worlds
+    never coexisted, so there was nowhere to publish such an event.
+
+    `borrow` wraps a board somebody else built instead of making one, and
+    `lay` is now one caller of it.
+
+    The last two assertions are the ones that matter long-term:
+    `characters` repeats the rule `harvest` uses and **cannot share it**
+    -- `harvest` lives in arcade mode's `story/__init__.py`, which this
+    component imports and does not edit -- so the guard against the two
+    drifting is here.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Health, Ident, Side, Team
+    from combat_engine.engine.scaling import PRESETS
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import Party, _wear, field_encounter, harvest
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import table as tbl
+    from combat_engine.story.module import Scene
+
+    # -- a real fight, then a challenge on the same board ----------------
+    party = Party.of(level=2, seed=7)
+    fielded = field_encounter(11, 2, party=party)
+    world = fielded.world
+    foes = [e for e, s in world.each(Side) if s.team is Team.ENEMY]
+    encounter = Encounter(world)
+    encounter.start()
+    table = tbl.borrow(world, encounter, party)
+
+    out.that(
+        table.world is world and table.encounter.world is world,
+        "a borrowed table is the fight's own world, not a copy of it",
+        f"world {table.world is world} encounter {table.encounter.world is world}",
+    )
+    out.that(
+        bool(foes) and all(world.get(e, Side) is not None for e in foes),
+        "and the enemies are still standing on it",
+        f"{len(foes)} enemy entities",
+    )
+    # **The point of the issue**: one bus, so a trait on a creature in this
+    # fight has somewhere to hear the challenge from.
+    out.that(
+        table.world.bus is world.bus,
+        "so the challenge and the fight share one bus",
+        f"{table.world.bus is world.bus}",
+    )
+
+    scene = Scene(id="burn", kind="skill_challenge", name="Fires",
+                  complexity=1, level=2, primary=("athletics", "endurance"))
+    run = ch.play(scene, table, party_level=2)
+    out.that(
+        bool(run.attempts) and run.over,
+        "a challenge plays to its end on that board",
+        f"{len(run.attempts)} attempt(s), "
+        f"{run.successes} success(es), {run.failures} failure(s)",
+    )
+    out.that(
+        all(e in world.entities for e in table.eids),
+        "and its checks went through the fight's party, not spawned copies",
+        f"party eids {table.eids}",
+    )
+
+    # -- the drift guard: a familiar ahead of the characters -------------
+    # **Built so the familiar takes the lowest entity id.** #797's fault
+    # needs something PC-side sorting *before* a character; appending one
+    # cannot reproduce it, because a new entity sorts last and
+    # `zip(strict=False)` drops it harmlessly.
+    bare = World(Grid(12, 8), Rng(3), Bus())
+    bare.scaling = PRESETS["full"]
+    familiar = bare.spawn((9, 6))
+    bare.add(familiar, Side(team=Team.PC))
+    bare.add(familiar, Ident(ref="m9999"))
+    bare.add(familiar, Health(hp=7, max_hp=7, surges=0))
+    second = Party.of(level=2, seed=7)
+    for i, sheet in enumerate(second.sheets):
+        eid = chargen.spawn(bare, sheet.character, (2, 1 + i * 2))
+        _wear(bare, eid, sheet)
+
+    everyone = [e for e, s in bare.each(Side) if s.team is Team.PC]
+    out.that(
+        everyone and everyone[0] == familiar,
+        "the familiar really is ahead of the party, or this proves nothing",
+        f"PC side in order: {everyone}, familiar is {familiar}",
+    )
+    picked = tbl.characters(bare)
+    out.that(
+        familiar not in picked and len(picked) == len(second.sheets),
+        "characters() walks the party and skips the familiar",
+        f"picked {picked} for {len(second.sheets)} sheet(s)",
+    )
+    # **The agreement with `harvest`, asserted as a pairing.** A first
+    # version only checked that no sheet took the familiar's 7 hit points,
+    # which tests `harvest` and not `characters` -- breaking the ident
+    # filter here left it green, because the two rules are separate copies
+    # and only one had been broken. What ties them is that sheet *i* must
+    # describe the entity `characters` puts at *i*.
+    harvest(bare, second)
+    paired = [
+        (sheet.cls, sheet.hp, (health.hp if health else None))
+        for sheet, eid in zip(second.sheets, picked, strict=False)
+        if (health := bare.get(eid, Health)) is not None or True
+    ]
+    out.that(
+        bool(paired) and all(hp == got for _, hp, got in paired),
+        "and harvest wrote each sheet from the entity characters() pairs "
+        "it with, so the two rules still agree",
+        f"{[(c, hp, got) for c, hp, got in paired if hp != got] or 'all paired'}",
+    )
+
+
 def a_non_combat_scene_does_not_spend_the_party_s_powers(out: Result) -> None:
     """Arming is not spending, which cost the party its whole encounter kit.
 
@@ -40651,6 +40775,10 @@ DRIVERS = {
     "training_bonus": (
         training_is_worth_exactly_five_on_a_check,
         "the +5 for training, asserted by taking it away (#791)",
+    ),
+    "borrowed_board": (
+        a_challenge_can_run_on_the_fight_s_own_board,
+        "a challenge runs on the fight's own board, one bus (#911)",
     ),
     "challenge_costs_nothing": (
         a_non_combat_scene_does_not_spend_the_party_s_powers,
