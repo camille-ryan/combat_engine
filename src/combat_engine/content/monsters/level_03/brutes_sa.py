@@ -623,27 +623,43 @@ def m1659a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.conjure(defences_of=)", "Health.shared_with"),
+    todo=("c.conjure(defences_of=)",),
 )
 def m1659a5(c: Cast) -> None:
     """The creature shares its hit points with an object: attacking either hurts
     the creature, the object's defences copy the creature's, it resists 5 of
     everything, and it is destroyed when the creature falls.
 
-    **One of the three is writable now and two are not, which is why the
-    marker moved.** `c.conjure(defences=)` puts an attackable thing on the
-    board (#714) and `c.resist` gives it the 5 -- but `defences=` takes one
-    flat number for all four, and this card copies the **creature's** four,
-    which differ from each other. That is `defences_of=`, a distinct symbol
-    because `blocked.py` resolves a parameter name it can see on the
-    signature as existing and would report this row ready.
+    **One symbol, not two, and the one that went is the interesting half.**
+    `c.conjure(defences=)` puts an attackable thing on the board (#714) and
+    `c.resist` gives it the 5 -- but `defences=` takes one flat number for
+    all four, and this card copies the **creature's** four, which differ
+    from each other. That is `defences_of=`, a distinct symbol because
+    `blocked.py` resolves a parameter name it can see on the signature as
+    existing and would report this row ready.
 
-    **The second symbol is re-pointed**: it was `c.pass_on(attack=)`,
-    which landed and re-aims a swing the triggering power has not yet
-    rolled. That is not this clause. Nothing routes damage that landed on
-    one creature into another's `Health`, which is the shared-hit-points
-    half
-    and the reason the whole thing is `todo=` rather than `dropped=`."""
+    **`Health.shared_with` is retired: the routing it names exists.** This
+    said *"nothing routes damage that landed on one creature into another's
+    `Health`"*, and `m3039a4` does exactly that, one directory away --
+
+        ev.amount -= share
+        c.flat(share, dtype=ev.dtype, on=friend)
+
+    off a `c.watch(DamageRolled, ...)`, with its own docstring explaining
+    why it works: `Hit` is announced before the damage is rolled and
+    `DamageRolled` carries a **mutable `amount`**. `m3039a5` goes further
+    and takes the remainder over with `c.absorb`.
+
+    That row **splits** -- half here, half there -- where this card
+    **mirrors**: the blow lands in full on whichever was aimed at and in
+    full in the other pool. Same watcher with the decrement left out. So
+    the symbol named a *field* when what this clause needs is a watch it
+    can already write, which is the shape #780's
+    `c.pre_empt(damage_of=)` turned out to have as well. #846.
+
+    Still `todo=` rather than `dropped=`, because the object the clause is
+    about cannot be put on the board with the right defences yet, and
+    without the object there is nothing to share with."""
 
 
 # --------------------------------------------------------------------------
