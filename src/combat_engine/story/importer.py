@@ -86,20 +86,20 @@ def read_outline(reader: object) -> list[Heading]:
     found: list[Heading] = []
 
     def walk(items: object, depth: int) -> None:
-        for item in items:  # type: ignore[attr-defined]
+        for item in items:
             if isinstance(item, list):
                 walk(item, depth + 1)
                 continue
             title = str(item.get("/Title", "")).strip()
             try:
-                page = int(reader.get_destination_page_number(item))  # type: ignore[attr-defined]
+                page = int(reader.get_destination_page_number(item))
             except Exception:
                 page = -1
             if title:
                 found.append(Heading(title=title, depth=depth, page=page))
 
     try:
-        walk(reader.outline, 0)  # type: ignore[attr-defined]
+        walk(reader.outline, 0)
     except Exception:
         return []
     return found
@@ -218,7 +218,7 @@ def read_aloud(page: object) -> list[str]:
         if text.strip():
             runs.append((round(tm[5], 1), round(tm[4], 1), text))
 
-    page.extract_text(visitor_text=visit)  # type: ignore[attr-defined]
+    page.extract_text(visitor_text=visit)
     if not runs:
         return []
 
