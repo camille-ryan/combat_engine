@@ -603,6 +603,47 @@ rather than to a record of what the pages say. `MECHANICAL` argues the
 other way for a creature and is a different case: there the creature has
 a sentence and only its *name* looks mechanical.
 
+## A board can be borrowed, and the party on it has to be found
+
+`table.lay` builds a board with nobody to fight on it. `table.borrow`
+wraps one somebody else built -- a fight's -- so a challenge and a fight
+can share one world and one bus, which is what a trait firing when a
+challenge ends needs. `lay` is a caller of it. #911.
+
+**Finding the party on a board you did not spawn repeats `harvest`'s
+rule, and cannot share it.** `harvest` lives in `story/__init__.py`,
+which is arcade mode's and which this component imports and does not
+edit, and `table.py` already imports from it -- so the dependency cannot
+run the other way. `characters()` carries the same `c:` ident filter and
+`drivers.py borrowed_board` is what keeps the two from drifting.
+
+That guard needed two attempts and the first was useless: it asserted
+only that no sheet took the familiar's hit points, which tests `harvest`
+and not `characters`. Breaking the ident filter left it green, because
+the two rules are separate copies and only one had been broken. **Assert
+the pairing** -- sheet *i* must describe the entity `characters` puts at
+*i* -- and the same break turns it red.
+
+Nothing uses the shared board yet; no scene kind can say "this fight also
+runs a challenge". #922.
+
+## The page adjusts for party size by rule, and we had it as a table
+
+#798 was filed as "the module adjusts each encounter by name". It does
+not. Every chapter prints the same two paragraphs -- remove one
+lowest-level non-minion for a weak party, add one of the non-minions
+already here for a strong one -- and the per-encounter mention is an
+*example*, not a specification. So there was nothing to author and the
+whole thing is one function over the fielded list.
+
+Three calls worth keeping: **one adjustment, not one per missing
+character**, because the page says "remove one" and per-head scaling is
+our curve again; **"least important" is not modelled**, because no stat
+block says it, so lowest level is used and the note admits it; and it
+fires **only for a scene that states its own XP**, since a scene without
+one is already scaled through `per_head` and the rule on top would
+double-count.
+
 ## Seams
 
 * **`story/__init__.py` is not edited by this work.** Arcade mode is being
@@ -625,19 +666,19 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     challenge_refusal training_bonus challenge_costs_nothing \
     beat_loop scene_audience module_refusals affordance_match \
     summary_scenes boxed_text graph_furniture graph_administration \
-    recall_order
+    recall_order borrowed_board party_size_rule
 uv run scripts/check.py --only play,drivers
 ```
 
-**22 drivers and 192 assertions** cover this component, and **each was
+**24 drivers and 213 assertions** cover this component, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
 scene ending, whose text becomes a fact, both halves of the brief/sets
 split, each of the three furniture shapes, the contents pattern, the
 classifier's call site, its `sort` flag and its keep-on-an-empty-answer
-default, the DC sort, the lore guard and the cap that is not there. All
-went red.
+default, the DC sort, the lore guard, the cap that is not there, the
+borrowed board and each half of the party-size rule. All went red.
 
 Measured, because this sentence said "ten" for three commits after it
 stopped being ten. `uv run scripts/drivers.py <the list above>` prints the
