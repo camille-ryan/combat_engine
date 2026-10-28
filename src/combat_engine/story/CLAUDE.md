@@ -138,7 +138,7 @@ mode is output that reads as correct.
 
 ### A synthetic probe does not reproduce a fault this component produces
 
-**Seven for seven**, across five rounds of play-and-fix. Every fault found
+**Eight for eight**, across six rounds of play-and-fix. Every fault found
 by reading a transcript, put to an isolated probe, came back zero:
 
 | fault, seen in play | probe said |
@@ -147,6 +147,7 @@ by reading a transcript, put to an isolated probe, came back zero:
 | the DM grants an impossible action | 1/9, and the 1 was a judge error |
 | the DM narrates the player's character | 0/8, both arms |
 | the DM uses the wrong pronoun | 0/30, three arms |
+| the DM invents a party member | 0/8, and see below |
 
 A live beat carries four companion declarations, eight lore rows, three
 beats of recall and a cast of three. A probe carries one intent and one
@@ -154,10 +155,73 @@ NPC, and the fault lives in the difference. So **the transcript is the
 instrument** -- `logs/<module>.campaign.jsonl`, read by eye -- and a probe
 is only good for something already deterministic.
 
+**And replaying the real beat is not enough either**, which is stronger
+than the paragraph above and was learnt on #919. A DM that invented a bard
+and a paladin in a party of five, 5 mentions over 18 live replies:
+
+```
+live playthrough, 18 replies                               5
+synthetic beat, same NPC and intent, 8 samples             0
+the 4 real logged beats, inputs read back from the log     0
+the real beat with its real 3-beat history, 8 samples      0
+```
+
+Two traps in those rows. **A history-free replay is not an identical-input
+replay**: `react` reads `playing.recent()`, which appends `"They answered:
+{previous reaction}"`, so a fresh `Playing` silently drops part of the
+prompt -- I claimed inputs were identical when they were not. And the
+hypothesis that followed -- the DM is shown its own invention and repeats
+it, which would explain four mentions from one origin -- is **refuted**:
+the same beat with the bard in its history, against the same history with
+the bard scrubbed, gave 0 in 8 either way.
+
+So for a rare live-only fault there may be **no way to tell whether a fix
+worked**, and that is a reason to ship nothing rather than to ship on
+faith. See the next section for what the attempt cost.
+
 What probes *are* good for, and it is not nothing: measuring a quality that
 varies rather than a fault that is rare. The pronoun arms found 2/10 against
 8/10 on *whether the DM refers to a character at all*, which is real and
 shipped, while finding nothing at all about the fault that prompted it.
+
+### A list of names is an invitation, and that outweighs the rule beside it
+
+`Playing.cast()` says it about NPCs -- *"a name in a cast list is an
+invitation to write them a line, and no instruction above it outweighs
+that"* -- and #850 acted on it by keeping spare NPCs out of the prompt.
+**The same thing is true of the party, and #919 proved it by doing the
+opposite.**
+
+The DM was never told who the party is: it gets `WHO IS HERE` for the NPCs
+with a closed-set rule, and for the party only whoever declared something
+*this beat*. A party of fighter, cleric, rogue, wizard and ranger was given
+a bard in three places and a paladin in one. The obvious fix is to state
+the roster. Measured, same seed, same 18 beats:
+
+```
+                  ghost mentions   real members named who did nothing
+roster withheld          5                   1 / 18 replies
+roster supplied          0                  36 / 18 replies
+mean reply length      899c                1166c
+```
+
+Party members named per reply went 0.72 to 2.67, max 5 -- the whole party,
+every beat, mostly doing nothing. The prompt forbids exactly that in two
+places. Isolated on one beat the regression is **16 against 0 in 8
+samples**, so unlike the fault it is reliably measurable, which is what
+makes the trade legible.
+
+A closure with **no list** -- one sentence pointing at the blocks already
+present -- looked free on a synthetic beat (0 ghosts, 833c against 849c)
+and was worse than the baseline on the four real beats: 1 ghost against 0,
+16% longer. Both reverted; nothing shipped.
+
+**What stands is a structural lead, not a prompt.** `chargen` deals
+unnamed characters (#793), so the party's own names *are* class nouns and
+the DM is already writing "the cleric", "the wizard". *"The bard"* is not
+reaching outside the scene's vocabulary, it is continuing it. The
+prediction is that this dissolves when characters have names, and it costs
+one run on one seed to check.
 
 ### A judge is not always buildable, and six tries is enough
 
