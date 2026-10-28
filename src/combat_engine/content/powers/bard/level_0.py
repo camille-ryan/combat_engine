@@ -5,9 +5,9 @@ from __future__ import annotations
 from combat_engine.engine import (
     ENCOUNTER,
     MINOR,
-    ONE_ALLY,
     PERSONAL,
     SELF,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBurst,
     Keyword,
@@ -43,13 +43,14 @@ def p15849(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
 )
 def p2339(c: Cast) -> None:
     """"Twice per encounter, once per round" is `uses` and `once_per_round`.
-    `ONE_ALLY` already includes the caster, which is the printed "you or one
-    ally". The slide happens whether or not the surge is spent."""
+    `YOU_OR_ONE_ALLY` is one target out of the caster and the allies
+    together, which is the printed "you or one ally". The slide happens
+    whether or not the surge is spent."""
     if c.may("spend a healing surge"):
         c.surge(bonus=c.cha_mod)
     c.instead_of("slide", lambda: c.slide(1))

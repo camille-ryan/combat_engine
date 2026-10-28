@@ -68,6 +68,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -77,7 +78,6 @@ from combat_engine.engine import (
     Condition,
     DamageApplied,
     DamageType,
-    Defenses,
     Dropped,
     Effect,
     EffectExpired,
@@ -422,10 +422,11 @@ def i521p1(c: Cast) -> None:
 
 
 @power("i898p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBurst(1), target=ONE_ALLY)
+       reach=CloseBurst(1), target=YOU_OR_ONE_ALLY)
 def i898p1(c: Cast) -> None:
-    """`ONE_ALLY`'s pool includes the caster, which is "you or an adjacent
-    ally" exactly. The source's level is not a gate the save can ask."""
+    """`YOU_OR_ONE_ALLY` is one target out of the caster and the allies
+    together, which is "you or an adjacent ally" exactly. The source's level
+    is not a gate the save can ask."""
     if c.save(against="blinded"):
         return
     c.save(against="deafened")
@@ -600,7 +601,7 @@ def i2854p1(c: Cast) -> None:
 
 
 @power("i3093p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.HEALING])
+       reach=Melee(1), target=YOU_OR_ONE_ALLY, keywords=[Keyword.HEALING])
 def i3093p1(c: Cast) -> None:
     """`SurgeSpent` is announced after the surge has paid out, so the
     extra hit points are simply healed on top of it."""
@@ -751,7 +752,7 @@ def i715p1(c: Cast) -> None:
 
 
 @power("i803p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBurst(1), target=ONE_ALLY)
+       reach=CloseBurst(1), target=YOU_OR_ONE_ALLY)
 def i803p1(c: Cast) -> None:
     c.save(against="fear")
 
@@ -997,13 +998,15 @@ def i925p1(c: Cast) -> None:
     hold: list[Effect] = []
     spent: list[bool] = []
 
+    # **The wall's defences are deliberately zero and stay that way.** This
+    # copied the caster's onto the bomb's body, which undoes the thing
+    # `c.wall` sets them for -- `cast.py`'s comment there says it outright:
+    # "Attacks against it hit automatically, which is a defence of nothing
+    # rather than a special case in the attack." A thrown bomb sitting in a
+    # square is hit by anyone who swings at it, and giving it the thrower's
+    # AC made it as hard to break as the thrower. #825.
     zone = c.wall(1, at=here, hp=1, solid=False, until=When.ENCOUNTER)
     body = c.barrier(zone) if zone else None
-    mine = c.world.get(c.me, Defenses)
-    theirs = c.world.get(body, Defenses) if body is not None else None
-    if mine is not None and theirs is not None:
-        theirs.values.update(mine.values)
-        theirs.scale = mine.scale
 
     def detonate() -> None:
         if spent:
@@ -1157,9 +1160,28 @@ def i3316p1(c: Cast) -> None:
 
 @power("i3320p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Melee(1), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.stored_row()",))
+       dropped=("chargen.deals_consumables",))
 def i3320p1(c: Cast) -> None:
-    """Re-aimed, and the row now plays.
+    """Re-aimed twice, and the row plays. The missing clause is an
+    inventory, not a slot.
+
+    **Re-marked off `c.stored_row()`, which now exists and does not help.**
+    The slot landed in #720 and this row still cannot be finished: the card
+    has the wielder place *"a volatile alchemical item"* beside the crystal,
+    and nothing records which items a character carries. `Gear.worn` holds
+    **slot names** -- `alchemical`, `armor`, `neck`, `weapon` -- not refs,
+    so there is no set to choose the second item from and nothing to put in
+    the slot.
+
+    **Re-pointed, and it is not the same gap as the trap-kit rows'.** Those
+    want adventuring gear, which the ETL never imported at all. An
+    alchemical item is different: `game.db` carries **75** of them, in a
+    category of their own, so the refs exist and a list could hold them.
+    What does not happen is anybody being given one -- `chargen.loadout`
+    mentions neither "consumable" nor "alchemical" anywhere, so a dealt
+    character carries weapons, armour and a shield and no expendables. The
+    candidate set is empty for want of a dealer, not for want of a field.
+    #877.
 
     The delay is not the gap -- `c.watch(TurnEnd)` counting one turn is
     "at the end of your next turn", the same clock i925p1 uses -- so the
@@ -1340,7 +1362,7 @@ def i1691p1(c: Cast) -> None:
 
 
 @power("i2382p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=Melee(1), target=ONE_ALLY, dropped=("c.bonus(instead=)",))
+       reach=Melee(1), target=YOU_OR_ONE_ALLY, dropped=("c.bonus(instead=)",))
 def i2382p1(c: Cast) -> None:
     """Aimed at the escape attempt rather than at Acrobatics generally,
     which is what the card narrows it to. Still a bonus rather than the
@@ -1483,19 +1505,32 @@ def i3322p1(c: Cast) -> None:
 
 
 @power("i3324x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.store_row(ref)",))
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.deals_consumables",))
 def i3324x1(c: Cast) -> None:
-    """Linking one item to another has nothing to hold the link in: an
-    item cannot remember a second item's row."""
+    """**The link has somewhere to live now; what is missing is the other
+    item.**
+
+    `c.store_row(ref)` landed in #720 -- an item can remember a second
+    item's row, which is what this was marked for. It is still unwritable,
+    one step further on: the card links to *"another alchemical item in
+    hand or in an adjacent square"*, and nothing enumerates the items a
+    character carries. `Gear.worn` is a set of **slot names**, so the
+    candidate set for the link is empty on every board. Re-marked at the
+    real blocker rather than left on a symbol that now exists."""
 
 
 @power("i3324p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=NO_TARGET,
-       todo=("c.stored_row()",))
+       todo=("chargen.deals_consumables",))
 def i3324p1(c: Cast) -> None:
-    """Re-aimed: `c.use_power` runs somebody else's row now, so the hold
-    is only the link -- nothing records which item this one was tied to,
-    and without that there is no ref to set off."""
+    """The reader exists; the thing it would read does not.
+
+    `c.stored_row()` landed in #720, so "which item this one was tied to"
+    has a place to be recorded and a way to be read back. This row waits on
+    its other half, `i3324x1`, which cannot do the linking: nothing
+    enumerates a character's carried items, so there is never a second item
+    to link to. Re-marked off the symbol that now exists."""
 
 
 @power("i3481p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

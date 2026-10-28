@@ -14,6 +14,7 @@ from combat_engine.engine import (
     ONE_ALLY,
     REF,
     WILL,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBurst,
     Keyword,
@@ -93,7 +94,7 @@ def p11380(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.DIVINE, Keyword.HEALING],
 )
 def p11381(c: Cast) -> None:

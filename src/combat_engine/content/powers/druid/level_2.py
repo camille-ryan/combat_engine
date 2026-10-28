@@ -22,7 +22,6 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
@@ -36,6 +35,8 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     Ability,
     AreaBurst,
     Cast,
@@ -125,7 +126,7 @@ def p12326(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p13513(c: Cast) -> None:
@@ -144,7 +145,7 @@ def p13513(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p13514(c: Cast) -> None:
@@ -163,7 +164,7 @@ def p13514(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p13515(c: Cast) -> None:
@@ -242,8 +243,13 @@ def p14504(c: Cast) -> None:
 )
 def p16119(c: Cast) -> None:
     """The aura ends with the form as well as on its clock, which is why the
-    hold is tied to the shape. Partial concealment has nothing to read it.
+    hold is tied to the shape.
+
+    The concealment is laid too. This said *"partial concealment has nothing
+    to read it"* -- `query.concealment_of` is that reader and
+    `resolve.attack` consults it. #860.
     """
+    c.conceal(on=c.me, until=When.EONT)
     ring = c.aura(1, label=c.ref, until=When.EONT)
     foes = set(c.enemies())
 
@@ -260,7 +266,6 @@ def p16119(c: Cast) -> None:
         held.effect if held is not None else None,
         watching,
     )
-    c.note(f"{c.ref}: partial concealment, and there is none here")
 
 
 @power(
@@ -329,7 +334,7 @@ def p2726(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p5045(c: Cast) -> None:
@@ -368,7 +373,7 @@ def p9644(c: Cast) -> None:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PRIMAL,
     trigger="you take cold, fire, lightning, or thunder damage",
     on=Trigger(

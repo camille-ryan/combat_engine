@@ -47,6 +47,7 @@ def build(
     feats: dict[str, list[str]] | None = None,
     powers: dict[str, list[str]] | None = None,
     enemies: list[str] | None = None,
+    pcs: list[str] | None = None,
 ) -> tuple[World, Encounter]:
     """One fight, built from a seed.
 
@@ -63,6 +64,14 @@ def build(
     too, so writing a clause into a power could change which powers a
     character was dealt and every choice downstream of that. #783.
 
+    `pcs` names the party's classes, and `story.PARTY`'s four -- fighter,
+    cleric, rogue, wizard -- are the default on **every seed**. Measured
+    across all five fixture seeds: the same four, always. So every event
+    belonging to any other class was unreachable by any fixture, which is
+    how `Boosted` sat at zero with nothing to do about it -- `story`'s
+    `field_encounter` had taken `pcs` the whole time and nothing passed it.
+    #525.
+
     `enemies` pins the opposition, for exactly the same reason one step over.
     Which monsters a seed fields is drawn from every usable monster at the level
     now -- it used to be the first four by ref, the same four every seed -- so
@@ -72,7 +81,7 @@ def build(
 
     fielded = story.field_encounter(
         seed, level, scaling=scaling, math=math, feats=feats, powers=powers,
-        enemies=enemies,
+        enemies=enemies, pcs=pcs,
     )
     world = fielded.world
     # Beside `world.scaling` and `world.monster_math`, which are set the same way
@@ -81,7 +90,7 @@ def build(
     if not fielded.enemies:
         raise SystemExit(
             "no monster anywhere has all of its abilities written.\n"
-            "Run: uv run scripts/coverage.py --monsters --max-level 3"
+            "Run: uv run scripts/written.py --monsters --max-level 3"
         )
     if fielded.found_at != level:
         print(
@@ -135,6 +144,14 @@ def main() -> int:
         "way a rogue ever opens a fight with a sneak attack",
     )
     ap.add_argument(
+        "--milestones", type=int, default=0, metavar="N",
+        help="how many milestones the party has already reached today, for a "
+        "single fight. With --fights this is derived instead -- every two "
+        "completed encounters, Camille's ruling on #666 -- so a flag is only "
+        "needed to pose one fight mid-day, which is what c.milestone()'s "
+        "seven rows read",
+    )
+    ap.add_argument(
         "--rest",
         choices=("none", "short", "extended"),
         help="take a rest before the fight, which is the only way a daily "
@@ -147,6 +164,7 @@ def main() -> int:
         return _a_day(args)
 
     world, encounter = build(args.seed, args.level, args.scaling, args.monster_math)
+    world.milestones = max(0, args.milestones)
     policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
 
@@ -221,6 +239,15 @@ def _a_day(args: argparse.Namespace) -> int:
         # `doctrine.DAY` -- which is the right default for a standalone fight but makes
         # every fight look like fight one of four, including the last.
         world.fights_left = args.fights - n + 1
+        # **How many milestones the party has reached today**, which is the
+        # other thing only this loop knows. Camille's ruling on #666: every
+        # two completed encounters. `n` is 1-based and counts the fight about
+        # to be played, so `n - 1` is the number finished.
+        #
+        # Set before `encounter.start()` arms anything, so a trait that reads
+        # it at arming gets the right number -- `api/day.py` does the same
+        # through its `on_fielded` hook and for the same reason.
+        world.milestones = (n - 1) // 2
         policy = DoctrinePolicy()
         install(world, encounter, {}, default=policy)
         encounter.start()

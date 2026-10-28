@@ -28,7 +28,8 @@ these rows:
   heroic number is written.
 
 Recurring gaps, each named with the symbol it wants rather than
-approximated: `c.reshape_area()`, `c.kill()` and `c.darkvision()`.
+approximated: `c.kill()` and `c.darkvision()`. `c.reshape_area()` was on
+that list and landed on #614 -- `i2467p1` and `i683p1` both call it.
 "Ongoing 5 fire **and** necrotic damage" is one number of two types and
 not two numbers, and `c.ongoing(dtypes=)` is it.
 
@@ -82,10 +83,12 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    Gear,
     Hit,
     Initiative,
     Keyword,
     Melee,
+    Moved,
     Position,
     PowerUsed,
     Ranged,
@@ -112,6 +115,7 @@ from combat_engine.engine import (
     targets_me,
     would_hit_me,
 )
+from combat_engine.engine.events import WeaponHeld
 
 ITEM = "item"
 
@@ -356,8 +360,7 @@ def _first_hit_crits(c: Cast) -> None:
         if ev.attacker != c.me or done or result is None:
             return
         done.append(1)
-        result.critical = True
-        ev.critical = True
+        c.crit_becomes(True, ev=ev)
 
     c.watch(Hit, promote, until=When.EOT)
 
@@ -480,23 +483,51 @@ def i3028p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Dropped.was_held",),
 )
 def i3166p1(c: Cast) -> None:
-    """Bright light out to 4 squares, until extinguished or dropped.
+    """Bright light out to 4 squares, until extinguished or let go of.
 
     **"Bright light in a radius is the lamp case: no combat consequence of
     its own" was the reason and it stopped being true** -- bright light
     removes the concealment a dark square confers, which is a real
     consequence on any board that has one. #686.
 
-    "Until you extinguish it as a minor action" is `c.endable`. "Or until
-    you are no longer holding the candle" is the dropped clause: `Dropped`
-    is announced for a creature, not for an item leaving a hand, so there
-    is no moment to hang it on."""
+    "Until you extinguish it as a minor action" is `c.endable`.
+
+    **"Or until you are no longer holding it" is written now, and the old
+    note named the wrong event.** `Dropped` is indeed a creature falling
+    over; the moment wanted is `WeaponHeld`, which says that what is in a
+    hand changed and carries `drawn=False` for putting away. This item sits
+    in the implement slot, and an implement is a `Weapon` in `Gear` with
+    `group == "implement"`, so `Gear.implement` is the thing in hand.
+
+    The ref is **snapshotted at arming**, not read inside the handler: by
+    the time the stow is announced `Gear.implement` already answers
+    something else, or nothing.
+
+    Two soft edges, stated rather than papered over. Nothing records that
+    *this* item is the implement being held -- only that it occupies the
+    implement slot -- so a character carrying two implements would have
+    either of them end the light. And the holder the audit board deals has
+    no implement in `Gear` at all, so the watch is not armed there: the
+    light is what that board exercises, and the letting-go was measured by
+    hand through `c.stow` instead.
+    """
     held = c.light(4, on=c.me, until=When.ENCOUNTER)
-    if held is not None:
-        c.endable(held, ActionType.MINOR)
+    if held is None:
+        return
+    c.endable(held, ActionType.MINOR)
+    gear = c.world.get(c.me, Gear)
+    arm = gear.implement if gear is not None else None
+    if arm is None:
+        return
+    mine, ref, light = c.me, arm.ref, held
+
+    def let_go(ev: WeaponHeld) -> None:
+        if ev.actor == mine and ev.ref == ref and not ev.drawn:
+            c.end_effect(light, why="no longer held")
+
+    c.watch(WeaponHeld, let_go, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(
@@ -1159,16 +1190,57 @@ def i1977p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ILLUSION],
-    dropped=("c.invisible(when=)",),
 )
 def i2015p1(c: Cast) -> None:
-    """`c.invisible` names one watcher and takes no gate, so the range is
-    measured once when the power is used: an enemy that closes inside 5
-    squares afterwards still cannot see you, which the printed line would
-    not allow."""
+    """Unseen by whoever is more than 5 squares off, re-asked as they move.
+
+    **Re-aimed off `c.invisible(when=)`, which was never the shape.** The
+    old note here said the clause needed a gate re-asked at every look. It
+    does not, and `m1653a3` (`monsters/level_02/lurkers_sa.py`) is the
+    worked case: `c.invisible(to=)` holds a `HIDDEN_FROM` relation *per
+    watcher*, so this is one relation laid when a creature is far enough
+    off and taken away when it is not. The per-watcher `held` is kept for
+    that reason -- ending the whole label would un-hide the caster from
+    everybody still at range.
+
+    **`Moved` and not `MoveEnd`, which is where this differs from the
+    obvious reading.** `MoveEnd` is the event a row answering "an adjacent
+    enemy shifts" wants, but `movement.forced` emits none -- it steps the
+    victim and announces `ForcedMove` and `Moved`, and never reaches the
+    `MoveEnd` that `walk`, `shift` and `teleport` each emit. So a shove
+    into range would have left the caster hidden from a creature standing
+    next to it. `Moved` fires once per square for every kind of going, so
+    the recheck costs more and is asked of every move there is.
+
+    The asymmetry is the other half: when the caster moves, every enemy's
+    distance changed; when anybody else does, only that one's did -- and it
+    is rechecked only if it is an enemy, since the relation is laid against
+    enemies alone."""
+    me, ref = c.me, c.ref
+    held: dict[int, Any] = {}
+
+    def recheck(who: int) -> None:
+        if c.distance(who) > 5:
+            if who not in held:
+                eff = c.invisible(to=who, on=me, until=When.EONT)
+                if eff is not None:
+                    held[who] = eff
+            return
+        eff = held.pop(who, None)
+        if eff is not None:
+            c.end_effect(eff, on=me)
+
+    def stepped(ev: Moved) -> None:
+        foes = c.enemies()
+        if ev.actor == me:
+            for foe in foes:
+                recheck(foe)
+        elif ev.actor in foes:
+            recheck(ev.actor)
+
     for foe in c.enemies():
-        if c.distance(foe) > 5:
-            c.invisible(to=foe, on=c.me, until=When.EONT)
+        recheck(foe)
+    c.watch(Moved, stepped, until=When.EONT, on=me, label=ref)
 
 
 @power(
@@ -1833,8 +1905,7 @@ def i1104p1(c: Cast) -> None:
     theirs = getattr(result, "natural", 0)
     mine = c.roll("1d20")
     if mine > theirs and result is not None:
-        result.critical = True
-        c.trigger.critical = True
+        c.crit_becomes(True)
     elif mine < theirs:
         c.penalty("attack", 2, on=c.me, until=When.EONT)
 
@@ -2946,9 +3017,61 @@ def i683x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you use an arcane close blast attack power through this staff",
-    todo=("dsl.reshape_in_flight()",),
 )
 def i683p1(c: Cast) -> None:
-    """Turning a close blast into a smaller close burst changes the shape a
-    declared power covers, and a row's reach is header data nothing
-    rewrites at use time."""
+    """The blast becomes a burst two squares smaller, minimum 1.
+
+    **"A row's reach is header data nothing rewrites at use time" was the
+    hold and #614 answered it.** `c.reshape_area` lays the new shape on the
+    creature and `dsl.reach_of` resolves it per caster per use, so the
+    printed line stays the print and this staff's wielder throws a burst.
+    `i2467p1` is the shape this follows and sits in this file.
+
+    **`into` derives the burst from the blast it replaces**, which is why
+    `c.reshape_area` takes a callable: the card prints "2 squares smaller
+    than the blast", so the number belongs to whichever power is thrown and
+    cannot be a literal. `from_` is carried across for the same reason --
+    a blast measured from somewhere other than the caster stays measured
+    from there.
+
+    **No `on=Trigger`, and the printed Trigger line is why this is the
+    honest shape rather than the literal one.** Targets and the area are
+    chosen in `dsl.use` *before* `cast.used()` announces `PowerUsed`
+    (dsl.py:3517-3566), so a reshape laid in answer to that event would
+    reach the blast after it had already been aimed -- the next one, not
+    this one. A free action with no declared trigger is on the action menu,
+    because `dsl.usable`'s trait gate reads `p.triggers` and not the prose
+    (dsl.py:2932); so the wielder spends the staff and then throws, which
+    arrives at the printed shape one declaration earlier than the card
+    words it.
+
+    **Replacing, not `optional=True`.** The eleven rows that offer a second
+    aiming print "you can choose X instead of Y" and must keep both; here
+    the activation *is* the choice, so forcing it for that one attack is
+    right. `drivers.offered_aiming` names `i2467p1` for exactly this.
+
+    It ends on the use it was bought for rather than on being measured:
+    `dsl.area_of` is a query the renderer and `_aimings` both call, so a
+    one-shot would be gone before the power was thrown."""
+    held = c.reshape_area(
+        lambda r: CloseBurst(max(r.size - 2, 1), from_=r.from_),
+        kinds=("close_blast",),
+        keyword=Keyword.ARCANE,
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
+
+    def spent(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me:
+            return
+        row = get(getattr(ev, "power", ""))
+        # The printed line, so still a blast: `Power.reach_of` answers the
+        # header and only `dsl.reach_of` sees the reshape.
+        if row is None or row.reach_of().kind != "close_blast":
+            return
+        if Keyword.ARCANE not in row.keywords:
+            return
+        if held is not None:
+            c.world.effects.end(held, "spent")
+
+    c.watch(PowerUsed, spent, until=When.ENCOUNTER, on=c.me, label=c.ref)

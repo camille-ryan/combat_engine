@@ -20,6 +20,8 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBurst,
     DamageApplied,
@@ -52,7 +54,7 @@ def drops_me(world: World, me: int, ev: Any) -> bool:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(2),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PRIMAL,
 )
 def p11359(c: Cast) -> None:
@@ -181,7 +183,7 @@ def p11365(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5, from_="companion"),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p12530(c: Cast) -> None:
@@ -262,7 +264,7 @@ def p3847(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(1, from_="companion"),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p5545(c: Cast) -> None:

@@ -67,7 +67,7 @@ def p10201(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("ally", 1, label="bloodied"),
+    target=Target("team", 1, label="bloodied"),
     keywords=[Keyword.ARCANE, Keyword.HEALING],
 )
 def p4142(c: Cast) -> None:

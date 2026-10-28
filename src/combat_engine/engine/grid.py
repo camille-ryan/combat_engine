@@ -241,6 +241,24 @@ class Grid:
     #: board today: the reader lands with the model and costs nothing until
     #: something fills it. Same bargain `light` above strikes.
     porous: dict[Square, str] = field(default_factory=dict)
+    #: Squares held shut by a lock, and the DC to pick it. Opening a lock is
+    #: a **standard action adjacent to the lock** by the printed rules, and
+    #: `actions._picking` is what offers it; half of `f3447` is a `+4` to
+    #: exactly that check and had nothing to be a bonus to.
+    #:
+    #: Same bargain as `porous` and `light` above, and stated for the same
+    #: reason: **a square absent from this map is unlocked, which is every
+    #: square on every board today.** The action lands with the model and
+    #: costs nothing until something fills it, so the honest reading of
+    #: `audit.py` reporting the action unreachable is "no board has a lock
+    #: yet", not "the rule does not work". #786 says that caveat out loud
+    #: and #779 is the same shape.
+    #:
+    #: What a square *does* once unlocked is terrain's business, not this
+    #: map's: picking the lock removes the entry here and leaves `blocking`
+    #: and `porous` alone. Giving a door a DC, and opening it, is the second
+    #: half #786 scopes out.
+    locked: dict[Square, int] = field(default_factory=dict)
     #: How well lit a square is, where it is not bright. Absent means
     #: `Light.BRIGHT`, which is the whole board until something darkens it --
     #: so the map is empty on every board that never mentions light, and the
@@ -266,6 +284,24 @@ class Grid:
     #: recorded separately. **Movement only**: `movement.reachable` is the
     #: only reader, so nothing measures a reach or an area through one.
     links: dict[Square, frozenset[Square]] = field(default_factory=dict)
+    #: Where `dsl.aim_points` remembers the squares an area may be centred
+    #: on. Measured on six area rows: 1,615 calls, **11 distinct answers**,
+    #: and each call drives about 200 `line_of_effect` calls -- 331,927
+    #: across those six, of which 329,873 were repeats.
+    #:
+    #: **Keyed on its own inputs rather than on a version counter**, which
+    #: is what makes it safe: `blocking` above is a bare `set` that `c.wall`
+    #: and the zone writers mutate in place, so a counter would have to be
+    #: bumped at every write site and a missed one would let rows aim
+    #: *through a wall* while every timing still looked green. A key holding
+    #: the blocking set itself cannot go stale -- a mutation simply misses.
+    #:
+    #: Per-`Grid` and not global, so it dies with the board. `audit.py`
+    #: builds a fresh `World` per row and "shares nothing with any other",
+    #: and a cache outliving one board is the sweep flake that rule exists
+    #: to prevent.
+    aims: dict[object, tuple[Square, ...]] = field(
+        default_factory=dict, compare=False, repr=False)
 
     def floor(self, sq: Square) -> int:
         if sq in self.bridged:

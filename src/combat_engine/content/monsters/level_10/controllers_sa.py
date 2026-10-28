@@ -23,7 +23,9 @@ Conventions, inherited from `level_09/controllers_sa.py` and this level's own
   and the rest as keywords (`dropped=("Damage(dtypes=)",)`);
 * "+N vs <defence>, no roll at all" -- a card with no attack line and no
   defence to roll against lays its conditions outright
-  (`dropped=("etl.monster.attack_line()",)`), the established defect;
+  (`dropped=("compendium.attack_line",)`), the established defect -- the
+  line is missing in the source, so the symbol names the compendium and not
+  a parser;
 * "save ends both" is one `Effects.apply` call carrying every clause under
   one saving throw, never a condition plus a separately-timed penalty.
 
@@ -90,6 +92,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -908,7 +911,7 @@ def m1522a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Ranged(10),
-    target=UpTo(2, side="ally"),
+    target=UpTo(2, side="team"),
     keywords=[Keyword.TELEPORTATION, Keyword.RANGED],
     defect="the printed attack line names no defence",
 )
@@ -937,7 +940,8 @@ def m1522a1(c: Cast) -> None:
     this shape: the swing cannot be made and **none is invented**. So the
     `damage=` header is gone with it -- it was card data nothing could roll.
 
-    Re-marked off `etl.monster.attack_line()`, which blames this parser.
+    Re-marked off `etl.monster.attack_line()`, which blamed this parser --
+    a symbol since retired tree-wide for that reason.
     The defence is missing **in the source**, which is
     `compendium.attack_defence` and what six rows in
     `level_04/skirmishers_sa.py` already carry.
@@ -1588,7 +1592,7 @@ def m2507a4(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.HEALING, Keyword.CLOSE],
 )
 def m2507a5(c: Cast) -> None:
@@ -2389,8 +2393,8 @@ def m3788a3(c: Cast) -> None:
     # option every turn: it is part of sustaining, and offering it
     # separately would let the zone be walked on a turn the creature never
     # paid to sustain. One gap, and it is the sustain that has to carry a
-    # distance. #583
-    dropped=("c.sustain(moves=)",),
+    # distance -- and `c.on_sustain` is where that distance goes, not a
+    # `moves=` on the header. #583
 )
 def m3788a4(c: Cast) -> None:
     """The prone, blind and half-on-miss are exact; so is the re-attack on
@@ -2407,8 +2411,21 @@ def m3788a4(c: Cast) -> None:
     line is about every creature in there rather than one side of the
     fight.
 
-    What is left is the move action: nothing offers relocating a zone as a
-    choosable move, named in the module docstring."""
+    **The move is written and it hangs off the sustain, not off a menu.**
+    `zones._spawn` keeps the zone's hold as `Zone.effect`, which is what
+    `c.on_sustain` takes -- `p2979` and `p62` do the same -- so the
+    offer is made once per sustain actually paid for and never on a turn
+    the creature spent its move elsewhere. `c.may`, because the card says
+    *can*. `c.grant_action("move_zone", ...)` is the shape for the other
+    five rows in this family and would be wrong here for exactly that
+    reason: it is a standing option every turn.
+
+    **The re-attack reads the zone's live occupants, not the squares the
+    burst landed on.** That is the clause the move breaks if it is written
+    carelessly: `c.in_squares(area, ...)` closes over a frozenset taken at
+    cast time, so once the haboob had walked, entering it would be free and
+    standing on the old footprint would still be punished. `Zones` already
+    tracks membership and moves it with the zone."""
     if c.strike():
         c.hit()
         c.condition(Condition.PRONE, Condition.BLINDED, until=When.SAVE_ENDS)
@@ -2428,7 +2445,7 @@ def m3788a4(c: Cast) -> None:
 
     def tick(ev: Any) -> None:
         foe = ev.actor
-        if foe not in c.enemies() or foe not in c.in_squares(area, side="enemy"):
+        if foe not in c.enemies() or foe not in c.world.zones.occupants(haboob):
             return
         if c.strike(on=foe):
             c.hit(on=foe)
@@ -2440,6 +2457,18 @@ def m3788a4(c: Cast) -> None:
 
     c.watch(_ZE, tick, until=When.SUSTAIN, on=c.me, label=f"{c.ref} enter")
     c.watch(TurnStart, tick, until=When.SUSTAIN, on=c.me, label=f"{c.ref} start")
+
+    def wander() -> None:
+        """"...and can move it up to six squares by spending a move action."
+
+        Inside the sustain's payout, so the six squares cost the same move
+        action the sustain does rather than a second one.
+        """
+        if c.may("move the haboob up to six squares", who=c.me):
+            c.move_zone(haboob, 6)
+
+    held = c.world.get(haboob, Zone)
+    c.on_sustain(held.effect if held is not None else None, wander)
 
 
 @power(
@@ -2574,17 +2603,40 @@ def m4008a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("3d10", 5),
-    dropped=("etl.monster.summon_ref()",),
 )
 def m4008a2(c: Cast) -> None:
-    """The damage lands. What the Effect line puts on the board is printed
-    as "see below" and carries no ref, so `c.summon` has nothing to name --
-    and the two words the card uses instead are a creature's printed name,
-    which is why they are not written here either. Referred up: the block
-    whose ref follows this one is a swarm of the right type at a plausible
-    level, and only the compendium can say whether it is this one."""
-    if c.strike():
-        c.hit()
+    """The damage lands, and the Effect now puts `m4009` on the board.
+
+    **The referral this row asked for, answered.** Its note read: "the
+    block whose ref follows this one is a swarm of the right type at a
+    plausible level, and only the compendium can say whether it is this
+    one." It is. `m4009` is the swarm the card's "see below" points at --
+    checked against the compendium rather than inferred from the numbering,
+    though the numbering agrees -- and it is declared with three abilities
+    and is not defective, so it can be spawned.
+
+    No `after=`: this card prints no initiative clause, so the swarm rolls
+    its own count. `m5626a6` is the row in this family that does print one.
+
+    Adjacent to the **target**, which is what the card says, so the swarm
+    is set down with `_put_beside(c, swarm, victim)` rather than at
+    `c.here`. That helper and not `_free_square_beside`: its own docstring
+    records why -- the other one measures the *caster's* footprint, and "a
+    Large body offered a square a Medium one fits in simply does not
+    arrive." The creature being placed is somebody else.
+
+    With nowhere free beside the target the swarm still arrives, wherever
+    `c.summon` first put it, rather than vanishing: the card's Effect is
+    not conditional on space and a swarm that failed to appear would be a
+    clause silently dropped.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.hit()
+    swarm = c.summon("m4009")
+    if swarm and victim is not None:
+        _put_beside(c, swarm, victim)
 
 
 @power(

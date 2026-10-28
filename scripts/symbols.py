@@ -52,6 +52,7 @@ Nothing else is nested, because nothing else has a split the code insists on.
 from __future__ import annotations
 
 import argparse
+import ast
 import inspect
 import sys
 from collections.abc import Callable
@@ -75,8 +76,11 @@ CATEGORIES: dict[str, dict] = {
                 "add_target", "drop_target", "also_hits", "as_basic", "as_implement",
                 "as_ranged", "as_though_hit_by", "as_weapon", "attack",
                 "attack_with", "attacks_defence", "autohit", "basic",
-                "cast_from", "coup_de_grace", "crit", "disarm",
-                "flurry_of_blows", "grant_attack", "hit", "landed",
+                "becomes_burst",
+                "cast_from", "coup_de_grace", "crit", "crit_becomes",
+                "disarm",
+                "flurry_of_blows", "grant_attack", "hit", "hit_becomes",
+                "landed",
                 "provoke", "redirect", "retarget_defence", "strike",
                 "target",
             ]),
@@ -97,8 +101,10 @@ CATEGORIES: dict[str, dict] = {
             # the difference can be read at a glance. #682.
             ("dealing it", [
                 "absorb", "apply_poison", "b", "burns", "cushion", "damage",
-                "deals", "flat", "half_damage", "halve", "high_crit",
+                "deals", "flat", "floor_damage_dice", "half_damage",
+                "halve", "high_crit",
                 "maximise", "no_miss_damage", "ongoing", "quarry_damage",
+                "set_damage_faces",
                 "reduce", "sneak_damage", "w",
             ]),
             ("undoing it", [
@@ -114,21 +120,24 @@ CATEGORIES: dict[str, dict] = {
             "swim, burrow -- is not a verb; see the modes section."
         ),
         "sections": [
-            # **`c.shifted` was in here, beside `c.shift`, and means
+            # **`c.shifted` was in here, beside `c.shift`, and meant
             # shapechanged** -- "Has the creature taken a shape that is not
             # its own?". It is the reader for `c.form`, which is in
             # `effects`, so the writer and its reader were two files apart
             # while the reader sat under a verb it has nothing to do with.
             # The worst false friend found while placing all 397, because
             # `c.shift` is on the line above and `if c.shifted():` after a
-            # shift reads exactly right. #592 is the same shape on `c.held`.
+            # shift read exactly right. **Renamed `c.shaped` in #595**, after
+            # `Condition.SHAPED`; placing all 397 is what made it visible and
+            # the rename is what fixed it. #592 is the same shape on
+            # `c.held`, still open because that one has 40-odd callers.
             #
             # `c.hide`/`c.unhide` went to `modifiers` for a duller reason:
             # both docstrings are about being seen, not about moving.
             ("voluntary -- the creature spends its own movement", [
-                "charge", "charge_at", "flee", "hover", "jump", "move",
-                "moving_as", "overrun", "ride", "rise", "run_at", "shift",
-                "shift_as", "teleport", "walk_toward",
+                "charge", "charge_at", "dismount", "flee", "hover",
+                "jump", "move", "moving_as", "overrun", "ride", "rise",
+                "run_at", "shift", "shift_as", "teleport", "walk_toward",
             ]),
             ("forced -- somebody else moves it", [
                 "bull_rush", "pull", "push", "slide",
@@ -140,10 +149,11 @@ CATEGORIES: dict[str, dict] = {
                 "fall",
             ]),
             ("how far, and what stops it", [
-                "any_size_manoeuvre", "blocks_entry", "extend_every",
-                "extend_move", "forces", "ignores_difficult",
-                "ignores_difficult_in", "immovable", "no_walk", "phasing",
-                "may_enter", "resist_forced", "shares_space",
+                "any_size_manoeuvre", "blocks_entry", "difficult_for",
+                "extend_every",
+                "extend_move", "forces", "ignores_difficult", "ignores_difficult_in",
+                "ignores_hazards", "immovable", "no_walk", "phasing",
+                "may_enter", "resist_forced", "rideable", "shares_space",
                 "speed_of", "squares_for", "squeeze_through",
             ]),
             # **Two attack modifiers, filed under movement on purpose.**
@@ -171,7 +181,7 @@ CATEGORIES: dict[str, dict] = {
             ("writers -- a condition named after itself", [
                 "blinded", "cannot_shift", "dazed", "immobilized",
                 "insubstantial", "prone", "slowed", "stunned", "unconscious",
-                "weakened",
+                "weakened", "zone_condition",
             ]),
             # `c.cannot_approach` sits beside `c.leash` and not beside
             # `c.cannot_shift` in the same-named-writer list above, which is
@@ -243,7 +253,7 @@ CATEGORIES: dict[str, dict] = {
             # in `movement`, under `shift`. It has nothing to do with
             # shifting. See the note in `movement`'s sections.
             ("laid on a creature", [
-                "effect", "form", "in_form", "merge", "shifted", "stance",
+                "effect", "form", "in_form", "merge", "shaped", "stance",
                 "transfer",
             ]),
             ("summoning and companions", [
@@ -254,7 +264,7 @@ CATEGORIES: dict[str, dict] = {
             ("ending, suspending, watching", [
                 "aftereffect", "arm_trigger", "cancel", "dispel", "end_effect",
                 "endable", "lingers_label", "on_attack", "on_sustain",
-                "suspend_when", "watch",
+                "suspend_when", "watch", "suspend_trait",
             ]),
         ],
     },
@@ -270,10 +280,13 @@ CATEGORIES: dict[str, dict] = {
                 "amount_for", "attack_mod", "bonus", "boost_check",
                 "boost_roll", "change_amount", "change_dice", "dice_for",
                 "enhancement", "grants_in", "penalty", "rolls_with",
-                "shield_bonus", "treat_roll_as", "widen_areas",
+                "settle_attack", "shield_bonus", "treat_roll_as",
+                "widen_areas",
             ]),
             ("rerolls", [
+                "replace_roll",
                 "reroll_attack", "reroll_check", "reroll_damage",
+                "reroll_faces",
                 "reroll_initiative", "reroll_ones", "reroll_save",
             ]),
             ("resistance and vulnerability", [
@@ -292,7 +305,8 @@ CATEGORIES: dict[str, dict] = {
                 "damage_disadvantage",
                 "gains_advantage", "grants_advantage", "had_advantage",
                 "hide", "ignore_cover", "ignores_long_range", "invisible",
-                "no_advantage", "no_cover", "no_invisibility", "unhide",
+                "no_advantage", "no_cover", "no_invisibility",
+                "no_invisibility_in", "unhide",
             ]),
             # Not cover either: a relation between two creatures, where one
             # is answering for the other. Beside cover only because both end
@@ -302,7 +316,10 @@ CATEGORIES: dict[str, dict] = {
             ]),
             ("refusals", [
                 "cannot_attack", "cannot_be_flanked", "counts_as",
-                "counts_as_keyword", "forbid", "gains_property", "no_basic",
+                "counts_as_keyword", "forbid", "forgo_second_wind_heal",
+                "no_run",
+                "gains_property", "loses_property",
+                "no_basic", "no_coup_de_grace",
                 "no_healing", "no_provoke", "no_surges", "waive",
             ]),
         ],
@@ -342,7 +359,8 @@ CATEGORIES: dict[str, dict] = {
                 "ability_for", "b_mod", "cha_", "cha_mod", "con_", "con_mod",
                 "dex_", "dex_mod", "int_", "int_mod", "level", "mod",
                 "primary", "primary_mod", "score", "stats", "str_", "str_mod",
-                "total", "total_defence", "weapon_dice", "weapon_of",
+                "total", "total_defence", "weapon_dice", "weapon_group",
+                "weapon_of", "weapon_proficiency",
                 "weapon_range", "wearing", "wielding", "wis_", "wis_mod",
             ]),
             # `c.chosen_weapons` and `c.with_a_chosen_weapon` are here and
@@ -375,7 +393,9 @@ CATEGORIES: dict[str, dict] = {
                 # `query.since_turn_ended` is the boundary all three share.
                 # #757.
                 "attacked_me_since", "floored_me_since", "hurt_me_since",
-                "passive", "quarry", "race_of", "reach", "result", "turn_of",
+                "by_attack", "part_of", "passive", "quarry", "race_of",
+                "reach",
+                "result", "swings", "turn_of",
                 "with_a_chosen_weapon", "wounded",
             ]),
             # `c.telepathy` is the odd one here and is here on purpose.
@@ -413,13 +433,28 @@ CATEGORIES: dict[str, dict] = {
                 "spend_shrouds", "transfer_points",
             ]),
             ("charges and per-day uses", [
-                "ammunition", "charge_left", "per_day_left", "restore_charge",
+                "ammunition", "charge_left",
+                # Beside `per_day_left` because it is the same scope and the
+                # same reader: both answer a question about the *day*, not
+                # the fight. `cf:artificer-f0` reads them together -- its
+                # allowance is the printed 1 plus one per milestone. #666.
+                "milestone",
+                "per_day_left", "restore_charge",
                 "restore_use", "spend_charge", "spend_per_day",
             ]),
+            # `c.once_per_board` is here beside `payment_window` because it
+            # answers the same kind of question -- how often may this pay --
+            # over the one window that is not a turn or a round. The near
+            # misses are worth naming: `c.latch`/`c.latched` are the
+            # *payout* pair and are filed under conditions, and `c.first`
+            # guards a line within a single use and is under "who and
+            # where". Three verbs with "once" in their meaning on three
+            # different shelves is exactly what this file exists to answer.
             ("actions and turns", [
                 "action_point", "action_points", "end_turn", "extra_action",
                 "extra_turn", "grant_action", "grant_action_point",
-                "initiative", "payment_window", "swap_initiative",
+                "initiative", "once_per_board", "payment_window",
+                "swap_initiative",
             ]),
             # `c.recall_weapon` sits with `draw` and `stow` rather than
             # under movement, which is the other plausible shelf: it is
@@ -427,7 +462,8 @@ CATEGORIES: dict[str, dict] = {
             # `actions._picking_up` -- the adjacency version of the same
             # question -- is what it was written against. #736.
             ("cards and carried things", [
-                "draw", "draws_free", "give", "recall_weapon", "stow",
+                "draw", "draws_free", "give", "loads_free", "recall_weapon",
+                "stow",
             ]),
         ],
     },
@@ -440,7 +476,8 @@ CATEGORIES: dict[str, dict] = {
         "sections": [
             ("granting and spending a row", [
                 "borrow_row", "borrowed_rows", "expend_row", "expended",
-                "grant_row", "recast", "spellbook", "unspent", "use_power",
+                "grant_row", "recast", "spellbook", "store_row", "stored_row",
+                "unspent", "use_power",
                 "used",
             ]),
             ("changing what a row does", [
@@ -560,6 +597,32 @@ CTX_KEYS: dict[str, str] = {
     "reach": "the shape of the attack -- `Range.kind` verbatim.",
     "reroll_by": "the ref of whatever asked for the reroll.",
     "skill": "the skill being checked, lowercased.",
+    "provoked_by": (
+        "the **ref that opened the opportunity window** this swing is "
+        "coming through, and `\"\"` when a *move* opened it, because a move "
+        "is not a row. Written by `resolve.attack` off `World.provocation`, "
+        "which `c.provoke`, `dsl._survive_provoking` and `movement.step` "
+        "each park their window on for the duration of its emit. Read only "
+        "when `opportunity` is true, so an ordinary attack cannot inherit "
+        "one. #880."
+    ),
+    "provoked_kind": (
+        "how the provoker was moving when it opened the window -- "
+        "`movement.step`'s own `walk` / `shift` / `charge` -- and `\"\"` "
+        "when a row rather than a move opened it. **The absence is the "
+        "signal**: it is what lets \"provoked by this movement\" be told "
+        "from \"provoked by using a ranged power\", which `opportunity` "
+        "alone could not. #301 put it on the event, #880 carried it here."
+    ),
+    "provoked_mode": "how the provoker was travelling -- walk, fly, swim, "
+                     "burrow. #880.",
+    "provoked_reach": (
+        "the **provoking** row's `Range.kind`, in `reach`'s own vocabulary, "
+        "so \"an opportunity attack you provoke when using a ranged or an "
+        "area power\" is one gate. Narrower than `provoked_by` being "
+        "non-empty, which means only that *some* row opened the window -- "
+        "`c.provoke` opens one for arbitrary rows. #880."
+    ),
     "source": "who laid the effect.",
     "target": "who it lands on. The commonest key in the tree.",
     "when_": (
@@ -637,7 +700,8 @@ READERS: dict[str, list[str]] = {
     "where, and how far": [
         "adjacent", "charging", "distance_between", "kept_away_from",
         "leash_of", "line_of_effect",
-        "moving_as", "on_the_ground", "prefers_range", "range_profile",
+        "moved_this_action", "moving_as", "on_the_ground", "prefers_range",
+        "ran_this_action", "range_profile",
         "sealed", "speed", "squares", "telepathy_of",
     ],
     "seeing and being seen": [
@@ -648,20 +712,26 @@ READERS: dict[str, list[str]] = {
         "sees_through",
         "sheltered_from", "sight_capped", "unseen_by",
     ],
+    # `difficulty` is here with `defence` because both answer "what number
+    # does this have to beat". It is not about attacking, and no section was
+    # a clean fit -- a skill-check DC is the only *non-combat* number in
+    # this file -- so it goes beside the other target numbers rather than
+    # earning a section of one.
     "attacking and defending": [
-        "attack_penalty", "can_flank", "deals_half", "defence", "flanked_by",
-        "flankers", "grants_ca", "has_combat_advantage", "shield_bonus",
-        "takes_half",
+        "attack_penalty", "can_flank", "deals_damage", "deals_half", "defence", "difficulty",
+        "flanked_by", "flankers", "grants_ca", "has_combat_advantage",
+        "shield_bonus", "takes_half",
     ],
     "what a creature may do": [
-        "can_act", "can_move", "can_react", "can_shift", "can_walk",
+        "can_act", "can_move", "can_react", "can_shift", "can_run", "can_walk",
         "granted_actions", "held_by", "holding", "holds_somebody",
-        "immune_to",
+        "immune_to", "may_ride", "needs_loading", "ready_to_fire",
+        "rideable_by",
     ],
     "what has already happened": [
         "attacked_since", "bloodied", "damaged_since", "dropped_since",
         "hit_me_this_turn", "in_form", "granted_amount", "lingers",
-        "my_hits_this_turn", "my_misses_this_turn", "shifted",
+        "my_hits_this_turn", "my_misses_this_turn", "shaped",
         "since_turn_began", "since_turn_ended", "surge_value",
         "taking_ongoing",
     ],
@@ -874,10 +944,13 @@ SEE_ALSO: dict[str, list[tuple[str, str]]] = {
         ("cannot_shift", "conditions"),
         ("immobilized", "conditions"),
         ("slowed", "conditions"),
-        # The pointer exists to say "this is not what you think": an author
-        # who has just written `c.shift` and wants to ask whether it
-        # happened will look here, and `c.shifted` is about shapechanging.
-        ("shifted", "effects"),
+        # The pointer survives the rename. An author who has just written
+        # `c.shift` and wants to ask whether it happened still looks here --
+        # and the answer is that no such reader exists, because the engine
+        # does not record it. `c.shaped` is the shapechange reader, and it
+        # was called `c.shifted` until #595 precisely because the name drew
+        # people to the wrong question.
+        ("shaped", "effects"),
         ("hide", "modifiers"),
     ],
     "damage": [
@@ -972,7 +1045,82 @@ def _ctx_keys() -> list[str]:
     return out
 
 
-EXTRA = {"movement": _modes, "gates": _ctx_keys}
+def _condition_writers() -> list[str]:
+    """Which `Condition` members have a same-named `Cast` member, and what it is.
+
+    **Derived, never listed.** #594 asked for this and the reason it has to
+    be generated is in its own numbers: it says *"12 with a same-named
+    writer, 12 without"*, and measured it is **10 writers, 3 readers and 11
+    with nothing** -- partly because `c.shaped` arrived in #595 the same day,
+    and partly because two of the twelve it counted as writers are readers.
+
+    The writer/reader test is the **return annotation**, not the signature.
+    My first pass looked for `until=` and called `c.prone` a reader: it takes
+    `held=` instead, because prone lasts until the creature stands rather
+    than to a turn boundary, and it plainly writes -- `-> Effect | None`, via
+    `self.condition(Condition.PRONE, ...)`. A document generated on the
+    first test would have stated a falsehood, which is the whole argument
+    against hand-keeping one.
+
+    The three readers are the trap this answers. `c.marked` and `c.shaped`
+    return `bool`, and `c.dying` is a **property** -- so `c.dying` is the
+    state and `c.dying()` is a `TypeError`.
+    """
+    import inspect as _inspect
+
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.types import Condition as _Cond
+
+    writes: list[str] = []
+    reads: list[str] = []
+    props: list[str] = []
+    none: list[str] = []
+    for member in sorted(_Cond, key=lambda m: m.value):
+        name = member.name.lower()
+        attr = getattr(_Cast, name, None)
+        if attr is None:
+            none.append(name)
+        elif isinstance(attr, property):
+            # Kept apart from the callable readers: the comma-joined line
+            # ran "`c.dying` -- a property, so no parens, `c.marked`" and
+            # read as though the caveat covered the next name too.
+            props.append(f"`c.{name}`")
+        else:
+            try:
+                ret = str(_inspect.signature(attr).return_annotation)
+            except (TypeError, ValueError):
+                ret = ""
+            (writes if "Effect" in ret else reads).append(f"`c.{name}`")
+
+    out = ["## Which conditions have a same-named `Cast` member", ""]
+    out += [
+        "Generated from `Condition` and `Cast` together, so it cannot drift"
+        " from either. A **writer** returns an `Effect`; a **reader** returns"
+        " `bool` or is a property. #594.", "",
+        f"**{len(writes)} write** -- the printed condition, laid by the verb"
+        " named after it:", "",
+        "  " + ", ".join(writes), "",
+        f"**{len(reads) + len(props)} only read** -- these ask, they do"
+        " not lay:", "",
+        "  " + ", ".join(reads), "",
+        "  " + ", ".join(props)
+        + (" -- a **property**" if len(props) == 1 else " -- **properties**")
+        + ", so no parens: `c.dying` is the state and `c.dying()` is"
+          " `TypeError: 'bool' object is not callable`.", "",
+        f"**{len(none)} have no same-named member at all**, and are reached"
+        " three ways -- a differently-named verb that carries a relation too"
+        " (`c.grab` for `grabbed`, `c.dominate` for `dominated`), the generic"
+        " `c.condition(*conditions, until=)`, or nothing yet:", "",
+        "  " + ", ".join(f"`{n}`" for n in none), "",
+        "So a card naming one of the last group is **not** evidence of a gap:"
+        " check `c.condition()` and the relation verbs before marking a row.",
+        "",
+    ]
+    return out
+
+
+EXTRA = {"movement": _modes, "gates": _ctx_keys,
+         "conditions": _condition_writers}
 
 
 def _without_prose(text: str) -> str:
@@ -1006,29 +1154,107 @@ def _without_prose(text: str) -> str:
     return _re.sub(r"(?m)#[^\n]*", blank, text)
 
 
-def _gate_reads() -> list[tuple[str, str, str]]:
-    """Every `ctx.get("…")` in `content/`, as (ref, key, file).
+def _is_ctx(node: ast.expr) -> bool:
+    """Is this the attack context, under any of the three spellings in use?
 
-    The ref is the nearest `@power("…")` above the gate, which is what makes
-    a failure actionable: the author needs the row, not the line.
+    `ctx` is the common one; a lambda parameter is sometimes `_ctx`, and a
+    damage event carries its own as `ev.ctx` (`resolve.py` attaches it). The
+    regex this replaced matched all three by accident -- its pattern is a
+    substring of `_ctx.get(` and of `ev.ctx.get(` -- and a first AST draft
+    that insisted on a bare `ctx` Name silently dropped two real reads.
     """
-    import re
+    if isinstance(node, ast.Name):
+        return node.id == "ctx" or node.id.endswith("_ctx")
+    if isinstance(node, ast.Attribute):
+        return node.attr == "ctx"
+    return False
 
+
+def _gate_owner(
+    node: ast.AST, parent: dict[ast.AST, ast.AST]
+) -> str:
+    """Which row a gate belongs to, by its **enclosing function**.
+
+    **This was the nearest `@power("…")` above the gate, by offset, and that
+    is wrong for every row declared with a helper decorator.** A gate inside
+    `@_trait("f1302")` was attributed to whatever `@power` came last -- for
+    `f1302` that was `f1295b`, declared 638 lines earlier and with nothing
+    wrong with it. The message this check prints is *"the gate is never true
+    and the row does nothing"*, so handing over an innocent ref sends the
+    reader to the wrong body. #904.
+
+    Walks out through the enclosing functions and takes the first decorator
+    carrying a string-constant first argument, innermost first -- which
+    resolves `@power("p653")`, `@_trait("f1302")` and any future helper of
+    that shape without naming them.
+
+    A row minted by a helper whose `ref` is a **parameter** (`_leash(ref,
+    …)`) cannot be resolved statically at all, so this names the helper
+    function with `()` rather than guessing a ref. 363 gates are in that
+    position and the honest answer for them is "which helper", which is what
+    an author needs.
+    """
+    chain: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+    cur = node
+    while cur in parent:
+        cur = parent[cur]
+        if isinstance(cur, ast.FunctionDef | ast.AsyncFunctionDef):
+            chain.append(cur)
+    if not chain:
+        return ""
+    for fn in chain:
+        for dec in fn.decorator_list:
+            if (
+                isinstance(dec, ast.Call)
+                and dec.args
+                and isinstance(dec.args[0], ast.Constant)
+                and isinstance(dec.args[0].value, str)
+            ):
+                return dec.args[0].value
+    return f"{chain[-1].name}()"
+
+
+def _gate_reads() -> list[tuple[str, str, str]]:
+    """Every `ctx.get("…")` in `content/`, as (owner, key, file).
+
+    The owner is the **enclosing row**, resolved by AST rather than by
+    finding the nearest `@power` above the gate -- see `_gate_owner` for what
+    that got wrong and for the helper case it cannot resolve.
+
+    Measured across the swap: the same **1964** gates either way, with
+    **309** that had no owner at all now attributed and **530** file-and-key
+    pairs whose owner changed. Two reads the first AST draft dropped are
+    back; see `_is_ctx`.
+
+    An AST walk also makes `_without_prose` unnecessary here, since a
+    docstring is not a `Call` -- but that helper has other callers and stays.
+    """
     out: list[tuple[str, str, str]] = []
-    decorator = re.compile(r'@power\(\s*\n?\s*"([A-Za-z0-9_:+-]+)"')
-    getter = re.compile(r'ctx\.get\(\s*"([a-z_]+)"')
     for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
-        text = _without_prose(path.read_text(errors="replace"))
-        marks = [(m.start(), m.group(1)) for m in decorator.finditer(text)]
-        for hit in getter.finditer(text):
-            owner = ""
-            for at, ref in marks:
-                if at < hit.start():
-                    owner = ref
-                else:
-                    break
-            rel = path.relative_to(ROOT).as_posix()
-            out.append((owner, hit.group(1), rel))
+        try:
+            tree = ast.parse(path.read_text(errors="replace"))
+        except SyntaxError:
+            continue
+        parent: dict[ast.AST, ast.AST] = {}
+        for node in ast.walk(tree):
+            for child in ast.iter_child_nodes(node):
+                parent[child] = node
+        rel = path.relative_to(ROOT).as_posix()
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and _is_ctx(node.func.value)
+            ):
+                continue
+            if not (
+                node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                continue
+            out.append((_gate_owner(node, parent), node.args[0].value, rel))
     return out
 
 

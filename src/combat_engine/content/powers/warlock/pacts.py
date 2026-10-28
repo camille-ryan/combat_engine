@@ -86,21 +86,35 @@ def p16254(c: Cast) -> None:
     printed "cumulative with the enemy's existing vulnerability"; and the
     curse lasts the encounter, so "until the curse ends" is that clock.
     """
-    kind = c.element()
-    if kind is None:
-        return
-    amount = 5 * (1 + (c.level >= 11) + (c.level >= 21))
     me = c.me
 
-    def on_curse(ev: PowerUsed) -> None:
-        if ev.actor != me or ev.power != CURSE:
+    def payout() -> None:
+        kind = c.element()
+        if kind is None:
             return
-        for foe in ev.targets:
-            c.vulnerable(amount, kind, on=foe, until=When.ENCOUNTER)
+        amount = 5 * (1 + (c.level >= 11) + (c.level >= 21))
 
-    # `once` is spent only when the handler actually did something, so an
-    # unrelated power used in between does not burn the row's payout.
-    c.watch(PowerUsed, on_curse, until=When.ENCOUNTER, on=me, once=True, label=c.ref)
+        def on_curse(ev: PowerUsed) -> None:
+            if ev.actor != me or ev.power != CURSE:
+                return
+            for foe in ev.targets:
+                c.vulnerable(amount, kind, on=foe, until=When.ENCOUNTER)
+
+        # `once` is spent only when the handler actually did something, so
+        # an unrelated power used in between does not burn the row's payout.
+        c.watch(PowerUsed, on_curse, until=When.ENCOUNTER, on=me,
+                once=True, label=c.ref)
+
+    # **This leg's boon is a row, and the row is the payout**, so the whole
+    # body is what a card trading the boon away replaces. Plain
+    # `c.instead_of`, not `instead_of_now`: this row carries a declared
+    # trigger, so `Triggers._ask` has already offered each registered
+    # substitution and `c.variant` names the one taken -- the same reading
+    # as `cf:warlock-f1c10` and the opposite of `cf:warlock-f1`, whose
+    # three legs pay inside a watcher. #641.
+    from combat_engine.content.features.warlock import BOON
+
+    c.instead_of(BOON, payout)
 
 
 _SWUNG_AT_ME = "an enemy makes a melee or a ranged attack against you"

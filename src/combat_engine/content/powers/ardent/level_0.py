@@ -52,7 +52,7 @@ def p10272(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PSIONIC, Keyword.HEALING],
     uses=2,
     once_per_round=True,

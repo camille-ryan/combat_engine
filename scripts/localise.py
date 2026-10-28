@@ -11,7 +11,7 @@ printed prose lives, and nothing else in the repository may hold one. #344 asks
 for it to be *complete* for heroic tier and then frozen, which needs a number
 rather than an opinion -- so this is that number.
 
-**A field present but empty counts as missing.** The same rule `coverage.py`
+**A field present but empty counts as missing.** The same rule `written.py`
 applies to a row carrying a `todo=`: the only way to move the figure is to fill
 the field. An entry reading `{"name": ""}` is not a named entry.
 
@@ -25,7 +25,7 @@ This instrument reads `game.db` and the localisation and **exercises nothing**
 -- no board, no fight -- so it costs milliseconds. The ten-minute instrument is
 `audit.py` and this does not touch it.
 
-**Not in `check.py`, for the reason `coverage.py` is not.** It is a work list,
+**Not in `check.py`, for the reason `written.py` is not.** It is a work list,
 and a work list in the gate is a gate that is red until the work is finished --
 which trains people to ignore it. It exits non-zero so a human can use it as a
 gate deliberately, and the freeze in #351 is the thing that will.
@@ -41,7 +41,7 @@ It costs almost nothing to adopt, which is the useful part: monsters at 13 is
 heroic-only at the import. Traps are the one real narrowing, 354 of 631. So
 nothing is dropped and nothing ends up half-localised.
 
-For feats, `HEROIC` is reused from `coverage.py` rather than respelled, because
+For feats, `HEROIC` is reused from `written.py` rather than respelled, because
 **758 heroic feats print no tier line at all** and the fallback to `min_level`
 is the thing that gets forgotten.
 """
@@ -59,9 +59,9 @@ from pathlib import Path
 from combat_engine.db import game, localisation
 
 #: Heroic is `tier` when the page printed one and `min_level` when it did not.
-#: Lifted from `scripts/coverage.py` deliberately -- one definition, two
+#: Lifted from `scripts/written.py` deliberately -- one definition, two
 #: readers, so they cannot come to disagree about what heroic means.
-HEROIC_FEAT = "(tier = 'Heroic' OR (tier = '' AND min_level <= 10))"
+HEROIC_FEAT = "((tier = 'Heroic' OR tier = '') AND min_level <= 10)"
 
 #: Character options stop at 10, monsters and traps at 13. A trap is part of an
 #: encounter and an encounter is built at party level +3, which is the same
@@ -737,7 +737,7 @@ def main() -> int:
     tier = "every tier" if args.all_tiers else (
         f"heroic: character options to {CHARACTER_CEILING}, "
         f"monsters and traps to {MONSTER_CEILING}")
-    # **Never a bare percentage.** `coverage.py` learned this the hard way: its
+    # **Never a bare percentage.** `written.py` learned this the hard way: its
     # monster figure read 100% against a fifth of the corpus and nothing on the
     # line said which fifth. An instrument that scopes itself prints the scope.
     print(f"  counting {tier}")

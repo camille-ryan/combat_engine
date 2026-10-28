@@ -68,6 +68,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_OR_ONE_ALLY,
     Ability,
     ActionPointSpent,
     ActionType,
@@ -95,6 +96,7 @@ from combat_engine.engine import (
     SkillCheck,
     SurgeSpent,
     Swap,
+    TempHP,
     Trigger,
     TurnEnd,
     TurnStart,
@@ -110,7 +112,7 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Health, PowerPoints
 from combat_engine.engine.dsl import Power
 from combat_engine.engine.grid import spread
-from combat_engine.engine.query import has_combat_advantage, team
+from combat_engine.engine.query import has_combat_advantage, immune_to, team
 from combat_engine.engine.query import squares as squares_of
 
 #: The barbarian card this feat pairs with. **`p4807` is the compendium's
@@ -173,7 +175,18 @@ NO_COMPANION_CARD = (
 )
 #: The animal companion a different class feature grants, whose printed
 #: line is a *combined* attack -- one the character and the creature make
-#: together. Nothing pairs two attacks that way.
+#: together.
+#:
+#: **"Nothing pairs two attacks that way" is what this used to say and it
+#: is false now.** `p13506` makes both swings inside one body -- `c.strike()`
+#: for the character and `c.basic(who=beast)` for the companion -- and both
+#: hand back a bool, so "you hit *and* your companion hit" is two locals in
+#: one scope. What `f3797` is waiting on is not a facility: it is the #550
+#: clause in `p13506`, which lives in another component file. See that row.
+#:
+#: The symbol is left alone because it is doing duty for a second and
+#: unrelated need one tier up (`m3842a3`, level 13), and re-pointing half of
+#: a flattened symbol is worth less than retiring this half outright.
 COMBINED = ("c.combined_attack()",)
 #: A printed weapon the engine has no group and no ref for.
 WEAPON_REF = ("spec.weapon_ref()",)
@@ -795,7 +808,7 @@ def f3701(c: Cast) -> None:
 @power("f3702", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        proficiency=("w3597",),
-       todo=("c.redirect_damage()",))
+       todo=("monk.flurry_ongoing_instead()",))
 def f3702(c: Cast) -> None:
     """**Both of this row's old markers were false.** It claimed the sickle
     could not be asked for and that the flurry had no ref. Neither holds:
@@ -818,10 +831,33 @@ def f3702(c: Cast) -> None:
     chosen target "instead takes ongoing damage equal to the damage that you
     would have dealt". `PowerUsed` is announced before the body runs, so there
     is nothing to subtract yet, and by the time the damage lands it is already
-    paid. `c.pre_empt(ref, clause)` is that window and 29 rows wait on it -- the
-    largest group in the tree and the right one to join rather than mint a
-    thirtieth spelling. A watch written now could only *add* the ongoing damage
-    on top, making the row stronger than its card."""
+    paid. A watch written here could only *add* the ongoing damage on top,
+    making the row stronger than its card.
+
+    **Re-pointed, and the old symbol was wrong twice over.** It said
+    `c.pre_empt(ref, clause)` was the window and that 29 rows waited on it.
+    `c.pre_empt` **landed** -- engine/cast.py:9069, with its read half
+    `c.instead_of` at 9165 -- so nothing is waiting on a verb. And it is the
+    wrong route here, which `drivers.flurry_traded` rules on in as many
+    words: this card names the monk's *feature*, a monk holds whichever of
+    the five flurries its tradition granted, and five is a finite list -- so
+    `content/CLAUDE.md`'s rule applies and the clause is written into each
+    of the five bodies behind `c.feat`, not registered from outside.
+    `c.pre_empt` is for a feat naming a *class* of powers with no list to
+    edit. `f3171` is the worked twin and
+    `powers/monk/level_0._forgo_for_necrotic` is the shape: one helper, five
+    call sites, each gating the body's own `c.flat`.
+
+    So what is owed is a sibling of that helper -- gated on `c.feat("f3702")`,
+    `_holding_ref(c, "w3597")` and the printed choice, paying
+    `c.ongoing(<the amount the body was about to deal>)` and returning True
+    so each flurry skips its damage line. The amount is computed inside each
+    flurry body, which is why the five bodies change and this one does not;
+    f3702 then carries `implemented_in=` rather than a marker, the
+    convention at `content/feats/exploits.py:1099`.
+
+    "Choose one target of the power that is adjacent to you" needs no
+    choosing: all five flurries are `target=ONE_CREATURE` over `Melee(1)`."""
 
 
 # -- runepriest -------------------------------------------------------------
@@ -1177,8 +1213,7 @@ def f3733(c: Cast) -> None:
 
 
 @power("f3736", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("Defences.immune_keywords",))
+       reach=PERSONAL, target=SELF)
 def f3736(c: Cast) -> None:
     """A tome is one implement among many and the engine's only implement
     group is "implement", so the accuracy half cannot be narrowed to it.
@@ -1187,10 +1222,13 @@ def f3736(c: Cast) -> None:
     rather than once: a conjuration put down on round three has to start
     granting then, and enemies walk in and out of the ring.
 
-    "Immune to fear is immune to this" is re-aimed: `query.immune_to`
-    exists and answers for a `Condition`, and fear is a `Keyword` with no
-    condition to stand for it, so the gap is keyword immunity on the
-    creature and not a reader.
+    **"Immune to fear is immune to this" is written now.** The note here
+    said the gap was "keyword immunity on the creature and not a reader",
+    which was the right diagnosis: `Defences.immune_keywords` is that
+    field, and the facts were already in `game.db` -- `monster.immune`
+    holds the printed token and `loader` was filtering the column to
+    damage types, dropping **Immune fear on 61 monsters**.
+    `query.immune_to` answers a `Keyword` beside a `Condition`. #560.
     """
 
     # The accuracy half, which was not written: "a tome" had nothing to name,
@@ -1204,6 +1242,11 @@ def f3736(c: Cast) -> None:
             return
         things = [*c.my_zones(), *c.servants()]
         for foe in c.enemies():
+            # "An enemy immune to fear is immune to this." The ring is a
+            # fear effect, so a creature that cannot be frightened does not
+            # start granting combat advantage for standing beside it. #560.
+            if immune_to(c.world, foe, Keyword.FEAR):
+                continue
             if any(c.adjacent_to(thing, foe) for thing in things):
                 c.grants_advantage(on=foe, to="team", until=When.EONT)
 
@@ -1228,7 +1271,7 @@ def f3738(c: Cast) -> None:
 
 
 @power("f3739", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reload()",))
+       reach=PERSONAL, target=SELF)
 def f3739(c: Cast) -> None:
     """Crossbow is a group; a wand is not.
 
@@ -1240,8 +1283,13 @@ def f3739(c: Cast) -> None:
     cheap rate to the one weapon the card names, which is why the rest of
     the character's gear still costs a minor.
 
-    Loading a crossbow is the clause that stays dropped: there is no load
-    at all, so there is no cost to reduce."""
+    **The reload clause lands now, so nothing is dropped.** The old note
+    said "there is no load at all, so there is no cost to reduce", and it
+    was right: firing left a crossbow loaded forever. A `load minor`
+    weapon is empty after it fires and `actions._loading` offers the
+    reload at the printed minor, which is what `c.loads_free` lowers.
+    #675, #725."""
+    c.loads_free(only="crossbow", on=c.me, until=When.ENCOUNTER)
     c.draws_free(per_turn=1, only="w:wand", on=c.me, until=When.ENCOUNTER)
     # "with a crossbow **or a wand**". The wand half had no way to be said:
     # crossbow is a group and a wand is one implement among eight, so this
@@ -1965,7 +2013,7 @@ def _f3771_move(c: Cast, who: int) -> None:
 
 
 @power("f3771b", level=1, cls="", usage=ENCOUNTER, action=MOVE,
-       reach=CloseBurst(1), target=ONE_ALLY,
+       reach=CloseBurst(1), target=YOU_OR_ONE_ALLY,
        keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
        group=CHANNEL_DIVINITY)
 def f3771b(c: Cast) -> None:
@@ -2156,7 +2204,7 @@ def f3779(c: Cast) -> None:
     column from a weapon -- `ClassLine.shield` is a number -- so there is
     nowhere for a shield a character merely *may* carry to be written.
     """
-    from combat_engine.chargen import SHIELD_CHECK
+    from combat_engine.armour import SHIELD_CHECK
     from combat_engine.engine.skills import ENCUMBERED
 
     me = c.me
@@ -2186,23 +2234,65 @@ def f3780(c: Cast) -> None:
 
 
 @power("f3781", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:bard-f1s2",))
+       reach=PERSONAL, target=SELF, dropped=("cf:bard-f1s2",))
 def f3781(c: Cast) -> None:
-    """`cf:bard-f1s2` is a ref the prerequisite prints and no row carries:
-    `cf:bard-f1` writes that virtue inline on its `second-con` leg.
+    """A shift for the bard and for everybody standing next to it.
 
-    **Re-pointed off `TempHP.power`, which landed and is not the
-    blocker.** The event names the row that paid now -- and the row it
-    would name is `cf:bard-f1s2`'s *holder*, not `cf:bard-f1s2`, because
-    `cf:bard-f1` writes that virtue inline on its leg and nothing
-    declares the sub-option as a row of its own. So there is no ref to
-    gate on, and gating on the leg would catch every virtue it writes.
-    The missing ref is the gap.
+    **The gate names the holder, and "it would catch every virtue it
+    writes" was the wrong half.** `features/leaders_sb.py`'s `bard_virtue`
+    returns at the end of its `f1s0` leg and returns again unless
+    `c.build("f1s2")`, so its only `c.temp_hp` is inside the `f1s2`
+    branch: a `TempHP` whose `power` is `cf:bard-f1` is this option and no
+    other. `f1009` and `f470` bank the same argument.
 
-    The trigger here is *using* the virtue rather than the pool it lays,
-    so even `TempHP.power` was the wrong half -- a `PowerUsed` on the
-    sub-option is what this wants, and that needs the row to exist.
+    **"Using the feature" is the moment it pays, and that identification
+    is the one load-bearing reading here.** The old note wanted a
+    `PowerUsed` on the sub-option. There is no such use: the virtue is a
+    printed "you can" asked inside `reward`, capped by `once_this_round`,
+    and its whole observable act is the pool. One honest hole follows from
+    that and is recorded rather than papered over -- `resolve.temp_hp`
+    returns without emitting when the new pool is no larger than a
+    standing one, so a use swallowed by a bigger pool spends the round and
+    grants no shift. The fix for that belongs to the event, not here.
+
+    **The eligible allies are collected before anybody moves** -- "each
+    ally adjacent to you" is the board at the moment the virtue pays --
+    and the bard goes first, so the allies finish beside wherever it ended
+    up. That is the reading that makes the two sentences agree; nothing on
+    the card orders them.
+
+    "Your allies must end the shift in a square adjacent to you" is a hard
+    filter and not a preference: `c.shift(toward=)` only offers the near
+    squares first and would still allow a step out of reach, which is
+    `exploits._shift_beside`'s own note. Squares the ally already stands
+    in are excluded for its other reason -- standing still satisfies
+    adjacency and is never what a granted shift is for.
     """
+
+    def paid(ev: TempHP) -> None:
+        if ev.source != c.me or ev.power != "cf:bard-f1":
+            return
+        beside = [f for f in c.within(1, side="ally") if f != c.me]
+        if c.may("shift 1 square"):
+            c.shift(1)
+        mine = squares_of(c.world, c.me)
+        for friend in beside:
+            if not c.may("shift 1 square", who=friend):
+                continue
+            theirs = squares_of(c.world, friend)
+            spots = sorted(
+                sq
+                for sq in c.world.reachable_squares(friend, 1)
+                if sq not in theirs
+                and min(distance(sq, t) for t in mine) <= 1
+            )
+            # Asked of the bard: `c.choose` has no `who=`, and the square
+            # has to be computed here because the printed line narrows it.
+            where = c.choose(spots, f"{c.ref}: where that ally ends up")
+            if where is not None:
+                c.shift(1, who=friend, to=where)
+
+    c.watch(TempHP, paid, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power("f3782", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2298,17 +2388,45 @@ def f3786(c: Cast) -> None:
 
 
 @power("f3787", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_racial_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f3787(c: Cast) -> None:
-    """The critical half lands. "Double your racial bonus to damage" needs
-    to find a bonus somebody else laid and change its size, and a modifier
-    is a number with no handle on it once stored."""
+    """The critical half, and the doubling.
+
+    **"Double your racial bonus" needs no handle on the bonus.** The old
+    note asked for one -- a stored modifier is a number nothing can reach
+    back into -- and the stacking rule makes the question go away:
+    `Mods.split` buckets a damage modifier by `(type, kind)` and takes the
+    **max** within a bucket, so a second `kind="racial"` bonus of twice the
+    printed amount *is* the doubled total. It reads the same whether or not
+    `rt:r67-t0` is on the creature, which matters because nothing declares
+    that trait yet (`f3788` records the same debt for `rt:r67-t1`).
+    `ranger_c.f2398` is the precedent and argues it on the attack side.
+
+    The printed amount is read off `racial_trait` in `game.db` rather than
+    guessed: +1, rising at 11th and at 21st. Doubled, that is 2/4/6.
+
+    "Arcane attack powers" is two keys, not one: `ARCANE` off the row, and
+    `from_attack`, which is what keeps a zone's burn or an ongoing tick
+    from counting. "While you are bloodied" is `c.bloodied(me)` and not a
+    bare call -- the damage context's subject is whoever is being hit.
+    """
+    me = c.me
 
     def crit(ev: Any) -> None:
-        if ev.attacker == c.me and ev.critical and _keyword(ev.power, Keyword.ARCANE):
+        if ev.attacker == me and ev.critical and _keyword(ev.power, Keyword.ARCANE):
             c.prone(on=ev.target)
 
     c.watch(Hit, crit, until=When.ENCOUNTER)
+
+    doubled = 2 * (1 + (c.level >= 11) + (c.level >= 21))
+    c.bonus(
+        "damage", doubled, kind="racial", on=me, until=When.ENCOUNTER,
+        when=lambda ctx: bool(
+            ctx.get("from_attack")
+            and _keyword(ctx.get("power", ""), Keyword.ARCANE)
+            and c.bloodied(me)
+        ),
+    )
 
 
 @power("f3788", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2522,7 +2640,23 @@ def f3797(c: Cast) -> None:
     pairing of the two attacks rather than the creature.
 
     Re-aimed off `c.use_power()`: firing `p6189` is one line now, and
-    the whole remaining hold is the combined attack this rides on."""
+    the whole remaining hold is the combined attack this rides on.
+
+    **Read again, and the hold is no longer a facility.** `p13506`
+    (`powers/druid/level_0.py`) makes both swings in one body and both
+    return a bool, so the pairing the marker names is already there; the
+    remaining work is the #550 clause written *into* that row -- gated on
+    `c.feat("f3797")`, priced with `c.expend_row("p6189")`, paying
+    `p6189`'s own die to each of the two targets -- after which this row
+    becomes an `implemented_in=("p13506",)` pointer and the marker goes.
+    Left marked rather than half-written because the clause belongs in a
+    file this wave did not own, and a rider hung here instead would be the
+    pre-#550 shape the convention exists to retire.
+
+    The one judgement that edit still has to make is whether the
+    companion's basic counts as a weapon attack, which decides `c.w()`
+    against `"1d8"` for its half -- the same test `p6189`'s body makes off
+    the triggering row's keywords."""
 
 
 @power("f3798", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -17,6 +17,7 @@ from combat_engine.engine import (
     ONE_ALLY,
     REACTION,
     STANDARD,
+    YOU_OR_ONE_ALLY,
     Cast,
     Hit,
     Keyword,
@@ -59,7 +60,7 @@ def _ally_crit_within(squares: int) -> Callable[[World, int, Hit], bool]:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=MARTIAL,
 )
 def p1136(c: Cast) -> None:
@@ -78,7 +79,7 @@ def p1136(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.HEALING, Keyword.MARTIAL],
 )
 def p1137(c: Cast) -> None:

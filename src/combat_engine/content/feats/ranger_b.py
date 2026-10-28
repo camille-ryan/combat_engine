@@ -1056,7 +1056,8 @@ def f1381(c: Cast) -> None:
             return
         if ev.power == "p2483":
             c.bonus("damage", 2, on=pet, until=When.ENCOUNTER)
-            c.regeneration(2, until=When.ENCOUNTER, on=pet, while_bloodied=True)
+            c.regeneration(c.amount_for("p2483", 2), until=When.ENCOUNTER,
+                           on=pet, while_bloodied=True)
         elif ev.power == "p2484":
             c.bonus("speed", 2, on=pet, until=When.ENCOUNTER)
             c.bonus(AC, 1, on=pet, until=When.ENCOUNTER)

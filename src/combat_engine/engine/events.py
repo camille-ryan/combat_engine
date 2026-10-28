@@ -42,6 +42,37 @@ class Event:
     cancelled: bool = field(default=False, init=False, kw_only=True)
     reason: str = field(default="", init=False, kw_only=True)
 
+    def __init_subclass__(cls, **kw: Any) -> None:
+        """Refuse a field that would shadow one of `Event`'s own properties.
+
+        **`Boosted` declared `kind: str` and nothing noticed for the life of
+        the event.** `kind` is the property below -- the class name, which is
+        how the bus, the save format and every "did this row do it" test
+        name an event -- and a dataclass field of the same name silently
+        wins. So `Boosted(...).kind` answered `"check"`, `"attack"` or
+        `"save"`, `audit.DID_SOMETHING` could never match it, and 20 of the
+        38 rows whose only output is a boost reported SILENT while working
+        perfectly. `Event.wire()` shipped the wrong `kind` to the page too.
+
+        A rename fixes that one event; this stops the next one. Checked at
+        class creation, so it fires at import rather than in a verdict
+        nobody reads.
+        """
+        super().__init_subclass__(**kw)
+        taken = {
+            name
+            for name, value in vars(Event).items()
+            if isinstance(value, property)
+        }
+        clash = taken.intersection(cls.__annotations__)
+        if clash:
+            raise TypeError(
+                f"{cls.__name__} declares {sorted(clash)}, which would shadow "
+                f"Event's own property of that name. `kind` in particular is "
+                f"how the bus and the save format identify an event -- pick "
+                f"another name (`Boosted.roll_kind` is the worked example)."
+            )
+
     @property
     def kind(self) -> str:
         return type(self).__name__
@@ -343,6 +374,23 @@ class OpportunityWindow(Decision):
     controller (a player, or whatever plays the monsters) subscribes and
     answers. Opened while the provoker is still in the square it is leaving,
     because an opportunity attack interrupts the move.
+
+    **`by` is attached, not declared**, and that is deliberate. A row that
+    narrows on *what* provoked the opening needs the ref, and the two
+    non-movement emitters have it -- `c.provoke` from its caller,
+    `_survive_provoking` as the ranged power being used. But this class
+    appears **31 times in the committed fixtures** and `Event.wire()` ships
+    declared fields, so a real field moves every one of them for a value
+    five rows read. `Effect.by` and `Bloodied.weapon` are the precedent:
+    `setattr` it, read it with `getattr(ev, "by", "")`, and `replay` never
+    sees it.
+
+    Movement leaves it empty, because a move is not a row. **The absence is
+    the signal**, which is what lets `f1302` ask "provoked by *this
+    movement*" and `f2565` ask "provoked by using a ranged or area power" --
+    the two narrowings that `opportunity` alone cannot tell apart, and that
+    both of those rows' docstrings named as the reason their clause was
+    dropped. #880.
     """
 
     actor: int
@@ -846,6 +894,13 @@ class Dropped(Event):
     carries a source but announces before the creature is down, and a third
     left its row out. `by_me` works on this now.
 
+    **`weapon`** is the weapon the killing blow came through, attached
+    rather than declared -- the `Bloodied.weapon` pattern one event over,
+    which keeps it off `Event.wire()` and so out of the fixtures. `power`
+    says which row swung and not which weapon it swung, and three rows
+    carried `dropped=("Dropped.weapon",)` for want of that difference.
+    Read it with `getattr(ev, "weapon", "")`. #698.
+
     `power` is the row that did it, and seven rows need it: the printed
     line is almost never bare -- "with a melee basic attack", "with a
     ranged attack", "with a melee attack". `""` when nothing named the
@@ -1051,7 +1106,19 @@ class Boosted(Event):
     actor: int = 0
     amount: int = 0
     by: str = ""
-    kind: str = ""
+    #: Which kind of roll was added to -- "attack", "save" or "check".
+    #:
+    #: **Not `kind`, and the collision was silent and expensive.**
+    #: `Event.kind` is a property returning the class name, and this was the
+    #: one event class in the package declaring a *field* of that name --
+    #: which shadowed the property, so `Boosted(...).kind` answered
+    #: `"check"` and never `"Boosted"`. Two things read the class name off
+    #: that property and both were wrong for the whole life of the event:
+    #: `audit.DID_SOMETHING`, so every row whose only output is a boost
+    #: reported SILENT while working (20 of 38 such rows), and
+    #: `Event.wire()`, which ships `{"kind": self.kind}` to the page.
+    #: `Event.__init_subclass__` now refuses the name outright.
+    roll_kind: str = ""
     #: Whose roll was added to. Last because it has a default and because it
     #: arrived after the other four.
     rolled_by: int = -1
@@ -1098,6 +1165,185 @@ class Rerolled(Event):
     by: str
     old: int
     new: int
+
+
+@dataclass
+class CritChanged(Event):
+    """A blow stopped being a critical hit, or started being one.
+
+    **Nineteen rows write this by hand and nothing announced it**, so the
+    three whose whole printed effect is the demotion -- "the attack becomes a
+    normal hit" -- fired, were correct, and reported SILENT for as long as
+    they have existed. The other sixteen demote or promote as a *rider* on
+    something else, so they look credited while this clause of them is
+    equally unobservable: a regression in it alone would show up nowhere.
+
+    The same shape as `Rerolled` one field over, and `audit.py` makes the
+    argument against excusing it in its own words -- *"the real fix is an
+    event, not an excuse"*. Admitting `Rerolled` moved 105 rows. #861.
+
+    `by` is the ref of the row that changed it, which is what a rider would
+    narrow on, for `Rerolled.by`'s reason: "when *your* feat downgrades a
+    crit" must not pay out on somebody else's shield.
+
+    `critical` is the value **after** the change, so a listener reads the
+    new state rather than inferring it from a direction. Both writes happen
+    in `Window.BEFORE` of the `Hit`, before any damage is rolled, which is
+    why demotion changes the dice as well as the riders.
+    """
+
+    attacker: int
+    target: int
+    power: str
+    critical: bool
+    by: str
+
+
+@dataclass
+class BlowTurned(Event):
+    """A blow that had landed was turned aside, or one that missed was made
+    to land.
+
+    `CritChanged` one field over, and the same measured shape: **five rows
+    rewrite `AttackResult.hit` by hand and nothing announced it**, so the one
+    whose whole printed effect is that -- the attack misses, through the
+    illusion or turned by a stance -- fired, was correct, and reported SILENT
+    for as long as it had existed. The other four do it as a clause of
+    something else and look credited while this clause of them is equally
+    invisible.
+
+    `by` is the ref of the row that turned it, for `CritChanged.by`'s
+    reason: a rider narrowing on "when your trait turns a blow aside" must
+    not pay out on another creature's veil.
+
+    `hit` is the value **after** the change, so a listener reads the new
+    state rather than inferring a direction from the event's name.
+
+    **There is no `kind` field and there cannot be**: `Event.__init_subclass__`
+    refuses one. `Boosted` is why.
+    """
+
+    attacker: int
+    target: int
+    power: str
+    hit: bool
+    by: str
+
+
+@dataclass
+class BlowRedirected(Event):
+    """A blow was pointed at somebody else, or made to come from somebody
+    else.
+
+    `BlowTurned`'s sibling and the same omission: **turning a blow aside got
+    an event and moving one did not.** `c.redirect` rewrites the live
+    event -- `ev.target`, and `result.target` so the damage follows -- and
+    announced nothing, so a row whose whole printed effect is "the
+    triggering attack targets a creature adjacent to you instead" had no
+    observable of its own.
+
+    **The 43 rows of the 69 that looked credited were credited for the
+    redirected attack's own damage**, which is worse than the 26 that read
+    SILENT. `m115864a5` is the worked example: it fires, chooses a captive,
+    rolls, hits and moves the blow -- and what put it on the green side of
+    the list was the `DamageApplied` belonging to the power it had just
+    moved, landing inside its slice because the row put it there. An
+    unrelated chargen change altered which power the board provokes with,
+    the accident stopped, and the row went silent while firing *more* often
+    than before. #900.
+
+    `was_target` and `was_attacker` are the values **before** the move and
+    `target`/`attacker` the values after, for `BlowTurned.hit`'s reason: a
+    listener reads the new state rather than inferring a direction from the
+    event's name, and here it needs both ends -- "if an attack is redirected
+    away from you" and "if one is redirected onto you" are different
+    riders.
+
+    Only one end usually moves. `c.redirect(to=)` leaves `was_attacker ==
+    attacker` and `c.redirect(by=)` leaves `was_target == target`, so a
+    reader compares rather than assuming.
+
+    `by` is the ref that moved it, for `BlowTurned.by`'s reason.
+
+    **There is no `kind` field and there cannot be**: `Event.__init_subclass__`
+    refuses one. `Boosted` is why.
+    """
+
+    attacker: int
+    target: int
+    power: str
+    was_attacker: int
+    was_target: int
+    by: str
+
+
+@dataclass
+class UseRestored(Event):
+    """A spent use of a power was handed back.
+
+    `c.restore_use` did the work -- `Powers.restore` -- and announced it as
+    a `Note`, which `audit.DID_SOMETHING` deliberately refuses because a
+    `Note` carries no `by` and so cannot be attributed to the row that paid.
+    So the half-dozen rows whose entire Effect is that one line were
+    **silent by construction**, and `i3271p1` only showed it when an
+    unrelated chargen change made the row posable at all: it had sat on
+    `UNUSED` -- "could not be used on the test board at all" -- rather than
+    on the silent list, for its whole life. #899.
+
+    `UseSpent` is the mirror, and both exist for the reason
+    `RelationCleared` had to be added beside `RelationSet`: admitting one
+    direction and not the other leaves a row whose whole effect is the
+    inverse invisible.
+
+    `who` is the creature whose use came back, `power` the row restored, and
+    `by` the ref that restored it -- which need not be either of them.
+    """
+
+    who: int
+    power: str
+    by: str
+
+
+@dataclass
+class UseSpent(Event):
+    """A use of a power was spent **without the power running**.
+
+    `UseRestored`'s mirror, from `c.expend_row`: the price half of three
+    dozen printed lines, where a use is paid and the row never fires.
+    Nothing that goes through `dsl.use` says this, because using a power is
+    what those do -- so this is not emitted from the ordinary spend inside
+    `dsl.use`, which would announce every power use in the game and credit
+    every row for merely being used.
+
+    Same three fields as `UseRestored` and for the same reasons.
+    """
+
+    who: int
+    power: str
+    by: str
+
+
+@dataclass
+class RowStored(Event):
+    """An object was given a row to hold.
+
+    Announced because the storing **is** the printed effect of two of the
+    three cards that want it: an armour's Property whose whole text is
+    "during a rest you can store one power in it" does nothing else, and a
+    row whose only effect is a write no event reports is the shape
+    `audit.DID_SOMETHING` has had to admit seven times. Cheaper to announce
+    it now than to find it on the silent list later.
+
+    `holder` is the ref of the row doing the holding -- an item's Property --
+    and `row` is what it is holding. `by` is the row that did the storing,
+    which is usually the holder and need not be: a rest-time Property can
+    store on behalf of an item it is linked to.
+    """
+
+    holder: str
+    row: str
+    actor: int
+    by: str
 
 
 @dataclass
@@ -1419,6 +1665,22 @@ class WeaponHeld(Event):
 
 
 @dataclass
+class WeaponLoaded(Event):
+    """A weapon that had been fired is ready again.
+
+    Emitted by the reload action rather than inferred from the absence of a
+    ref in `Gear.unloaded`, for the reason this file keeps restating: a
+    reader that has to diff component state to notice something cannot be
+    written by a content row, and four rows are about what a reload costs.
+    #675, #725.
+    """
+
+    actor: int
+    ref: str
+    cost: Any = None
+
+
+@dataclass
 class WeaponChanged(Event):
     """A carried weapon's own fields changed in place.
 
@@ -1440,12 +1702,20 @@ class WeaponChanged(Event):
     `field` is which one moved -- `"properties"`, `"damage"`, `"range"` --
     and `what` is the value laid, so a listener can tell a silvered blade
     from a high-crit one without re-reading the weapon.
+
+    **`gone=True` is the same write run backwards**: the property named in
+    `what` was taken *off*. It defaults False, so every existing emitter and
+    reader means what it meant. The flag exists because `what` alone cannot
+    tell a grant from a revocation, and one row grants a property for the
+    length of a single attack and then removes it -- which would otherwise
+    announce itself twice in identical words. #844.
     """
 
     actor: int
     weapon: str
     field: str
     what: str = ""
+    gone: bool = False
 
 
 @dataclass

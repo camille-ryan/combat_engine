@@ -37,7 +37,11 @@ class Ability:
     section: str = "standard"
     usage: str = "at-will"
     action: str = "standard"
-    recharge: int = 0
+    #: The printed die threshold. **`None` is "the card prints a recharge
+    #: clause and no die"**, which is 440 conditional cards, and `0` is "no
+    #: recharge clause at all". The two were the same value until #488 and
+    #: the shared value was a guess. See `_one_ability`.
+    recharge: int | None = 0
     keywords: tuple[str, ...] = ()
     spec: str = ""
     #: Carried only so the localisation table can be built. Never stored in
@@ -738,6 +742,31 @@ def _abilities(m: Monster, body: str) -> None:
         for off, name in marks:
             if off < match.start() and name:
                 section = name
+        # **A bolded label ending in a colon is a clause of the ability
+        # above, not the start of a new one.** The earlier dialect splits
+        # abilities on bold headings, so a card's own colon-ended label --
+        # the one introducing its secondary attack -- read to the splitter
+        # as its own ability, which left the parent incomplete *and* gave
+        # the creature a standard at-will it does not have. `m4756a2` is
+        # the case: it promises "on a hit, <it> makes a secondary attack
+        # against the same target" and the line that attack rolls on was
+        # filed as `m4756a3`.
+        #
+        # **Folded, not dropped.** Returning early without the text would
+        # lose the payoff and leave the parent incomplete, which is the
+        # worse half of #485 rather than a fix for it.
+        #
+        # The colon is an exact discriminator, which #485's "1 of 13,432"
+        # already implied: no real ability name ends in one. Measured before
+        # landing -- names ending in a colon go 2 -> 0 and `monster_power`
+        # drops by exactly the one row.
+        if _is_clause_heading(head) and m.abilities:
+            tail = _ability_spec(body, match.end(), head, m.abilities[-1])
+            if tail:
+                parent = m.abilities[-1]
+                parent.spec = f"{parent.spec.rstrip()} {tail.lstrip()}".strip()
+            continue
+
         ability = _one_ability(head, index, section)
         if ability is None:
             continue
@@ -745,6 +774,18 @@ def _abilities(m: Monster, body: str) -> None:
         if ability.spec or ability.name:
             m.abilities.append(ability)
             index += 1
+
+
+def _is_clause_heading(head: str) -> bool:
+    """A bolded label ending in a colon: a clause, not an ability. #485.
+
+    `_one_ability` reads `<b>…</b>` as the name, so the earlier dialect's
+    bold-heading split cannot tell an ability from a labelled clause inside
+    one. The colon is what the pages use for the second and nothing for the
+    first.
+    """
+    name = re.search(r"<b>(.*?)</b>", head, re.S)
+    return bool(name) and text(name.group(1)).strip().endswith(":")
 
 
 def _is_footer(head: str) -> bool:
@@ -800,14 +841,32 @@ def _one_ability(head: str, index: int, section: str) -> Ability | None:
     elif printed:
         a.recharge = int(printed.group(1))
     elif "recharge" in low:
-        # **A conditional recharge, and 6 is still invented here.** "Recharge
-        # when first bloodied" prints no die at all, and `etl/CLAUDE.md`'s
-        # rule says store nothing rather than guess -- but a conditional
-        # recharge that parses to no die never comes back, which moves what
-        # ~1,000 monsters can do. That is a balance change and wants its own
-        # measurement, so it is deliberately left alone here and the glyph
-        # half lands on its own.
-        a.recharge = 6
+        # **A conditional recharge stores NULL, not 6.** "Recharge when
+        # first bloodied" prints no die at all, and `etl/CLAUDE.md` is
+        # explicit: *"Parse, or store nothing. A number you cannot read is
+        # `NULL`, not a guess."* Storing 6 said "and it also comes back on a
+        # natural 6", which no card says -- for **440** of them.
+        #
+        # **The balance worry this branch used to carry is void, and that is
+        # why it can land now.** It read "a conditional recharge that parses
+        # to no die never comes back, which moves what ~1,000 monsters can
+        # do". Nothing in `src/combat_engine/` reads this column: a content
+        # row declares its own `recharge=` and `actions.recharge` reads the
+        # header. The **only** reader is `scripts/cards.py`, and `#449`
+        # already set all 440 content rows to the 0 their cards print. So
+        # NULL here cannot change what any monster does -- it changes what
+        # one instrument compares against.
+        #
+        # `cards._recharge_fault` handles it by construction: it returns no
+        # fault when the printed value is falsy, which is honest, because a
+        # card with no die has no threshold to disagree with.
+        #
+        # **One card prints both** and must keep its die: `m4356a2` reads
+        # "recharge 6, or recharges when <it> takes cold or fire damage".
+        # It never reaches here -- `_RECHARGE_DIGIT` matches the 6 in the
+        # branch above -- which is what makes "has a condition" not mean
+        # "has no die". #488.
+        a.recharge = None
 
     words: list[str] = []
     for group in re.findall(r"\(([^)]*)\)", after):
@@ -841,7 +900,151 @@ def _ability_spec(body: str, start: int, head: str, a: Ability) -> str:
         line = f"{pair[0]}: {pair[1]}" if pair else text(para)
         if line.strip():
             lines.append(line.strip())
-    return _unglue("\n".join(lines).strip())
+    return _unglue(_drop_stray_attack_line("\n".join(lines).strip()))
+
+
+#: A leading attack-line run closed by a **double period**, ahead of the
+#: effect text it does not belong to.
+#:
+#: The seam is in the compendium, not in our parsing. `m1092`'s page reads,
+#: verbatim:
+#:
+#:     Flailing Branch (standard, at-will)
+#:     Reach 2; +17 vs AC; 2d8+6 damage.
+#:     Whipping Branches (standard, at-will)
+#:     +15 vs ; 2d6+5 damage.. Make up to four flailing branch attacks ...
+#:
+#: so the second ability carries an attack line with **no defence** and a
+#: `..` before the effect that tells you to make four of the first one.
+#: `+15 / 2d6+5` matches neither ability. #765.
+_STRAY_LINE = re.compile(
+    r"""^(?P<keep>(?:\([^\n]*\n)?)         # the action parenthetical LINE, kept
+    [ \t]*
+    (?:[^.;\n]*;[ \t]*)?                    # a "Reach 2; " prefix inside the run
+    \+\d+[ \t]*vs\.?[ \t]*[A-Za-z]+[ \t]*;  # the bonus and a NAMED defence
+    [^.\n]{0,60}?damage\.\.[ \t]*           # through "damage" and the seam
+    """,
+    re.X,
+)
+
+#: What must follow the seam for the run ahead of it to be stray: **prose
+#: carrying no damage of its own**.
+#:
+#: Two tests, and the second was found by a rebuild rather than by reading.
+#: Prose, so the five rows whose seam has nothing after it keep the line
+#: that *is* their attack. And no dice expression anywhere in the
+#: remainder, because a remainder with damage in it means the `..` is
+#: separating a **Hit line from an Effect line** rather than junk from
+#: text -- which is exactly `m1937a1`:
+#:
+#:     Targets a creature grabbed by <a creature>; +15 vs AC; 2d6+5
+#:     damage.. <the creature> shifts up to 3 squares before or after the
+#:     attack, pulling the target with it; 1d10 + 5 necrotic damage (no
+#:     attack roll required).
+#:
+#: Both halves are real there. `cards.py` caught it when a version without
+#: this test stripped the Hit line: *"m1937a1 damage 2d6 but the card
+#: prints 1d10"*.
+#:
+#: **It is the only one of the eleven whose remainder carries damage**, and
+#: the only one whose leading run is genuine, so the test separates them
+#: exactly.
+_AFTER_SEAM = re.compile(r"^\s*(?!\d)[A-Za-z]")
+
+#: A damage expression anywhere in the remainder. See `_AFTER_SEAM`.
+_OWN_DAMAGE = re.compile(r"\d+d\d+")
+
+
+def _drop_stray_attack_line(spec: str) -> str:
+    """Drop a leading attack line that belongs to no ability. #765.
+
+    **A NAMED defence only, and that is Camille's ruling talking, not a
+    tuning choice.** #612: *"If an attack says '+X vs. BLANK' it's
+    malformed"*, and with #600 that makes the whole compendium entry
+    defective -- the row is refused and `pick` stops offering the creature.
+    86 declared rows carry `defect="the printed attack line names no
+    defence"` on that ruling.
+
+    The first draft of this function matched a blank defence too and so
+    changed **68** specs, **54 of them rows under that ruling**. That is the
+    ruling undone by a parser: strip the blank line and the row no longer
+    looks defective, while the card is exactly as unwritable as it was.
+    *Knowing why a line is junk does not make the row writable* --
+    `drivers.blank_defence_is_defective` carries the correction in those
+    words, and this is the fourth session to walk into #612.
+
+    So the blank form belongs to #612 and the **named** form belongs here,
+    and the split is clean rather than negotiated: 11 named, 57 blank, and
+    **0 of the 11 carry a `defect=`**.
+
+    **Measured before writing it.** 75 of 13,459 specs open with the run;
+    11 have a named defence and are stray, 57 have a blank one and are the
+    ruling's, and 7 are neither -- the 7 being what makes this a rule rather
+    than a `sub`:
+
+    * **five have nothing after the seam at all** -- `m3554a0` is
+      `"+9 vs Reflex; 1d8 + 2 necrotic damage.."` and that *is* the row's
+      whole attack line, with a stray trailing dot. Stripping it would leave
+      an empty spec and lose the only mechanics the card has.
+    * **three are followed by a bare damage expression** -- `m2085a1`'s
+      remainder is `"1d8 + 5 damage."` and `m1929a1`'s is
+      `"1d10 + 7 necrotic damage (no attack roll required)."`. Those cards
+      are genuinely garbled and stripping the run would leave damage with no
+      line to roll it on, which is worse than the seam.
+    * **one is followed by a second attack line** -- `m1124a3` continues
+      `"+9 vs. Armor Class, two attacks; 1d10 + 4 damage"`, so both runs are
+      real.
+
+    Hence `_AFTER_SEAM`: strip only when what follows begins a sentence.
+
+    **All 11 delegate**, every one to `vs AC` -- "makes two warhammer
+    attacks", "make a melee basic attack against two separate targets",
+    "makes a bite attack and a m1454a6 attack" -- so the row has no line of
+    its own to roll and the run ahead of it belongs to nobody. That is the
+    whole argument for dropping it, and it is an argument the blank form
+    cannot make: there, the line may be the card's own with its defence
+    lost, which is why it is a defect and not a deletion.
+
+    The action parenthetical is kept, which the first draft of this dropped:
+    `(standard, at-will) Weapon` carries the usage and the keyword and is
+    the half of the head that is real.
+
+    **And it is matched unclosed**, which the first pattern was not.
+    `m876a1` and `m1499a1` open `"(standard, recharge"` with no closing
+    bracket -- the glyph that followed it is an image `text()` drops -- so a
+    a closed-bracket pattern could never match their head and both were
+    missed. Both
+    delegate ("makes a greatclub attack"), so both are stray. 66 -> 68.
+
+    **The prefix bound is structural, not a character count, and the first
+    one was a character count.** It allowed 40 characters before the `+N`,
+    which `m1937a1` overruns -- its clause is "Targets a creature grabbed
+    by <a named creature>; " -- so that row kept its stray line. Worse, the
+    bound was *name-length dependent*: this function runs during extraction,
+    **before** `_cross_reference` swaps names for refs, so how much text
+    sits in front of the `+N` depends on how long the printed name is. A
+    pattern whose behaviour varies with a name is not a pattern anybody can
+    reason about. `[^.;\n]*;` instead: any one clause with no sentence end
+    in it.
+
+    `m2346a1` stays spared and is the reason the prefix allows only one
+    semicolon clause: its head is
+    `"Close burst 1; targets enemies; +14 vs ; 4d8+5 damage.."` and the
+    range and target line are **real**. What is wrong there is the blank
+    defence on the row's own line, which is `#360` and must not be
+    conflated with this -- the mistake that produced 22 markers.
+
+    **A trailing `..` is a different artefact and is left alone.** 41 specs
+    end a sentence with one -- `"(save ends).."`, `"its next turn.."` -- and
+    this pattern is anchored at the start precisely so it cannot reach them.
+    """
+    found = _STRAY_LINE.match(spec)
+    if found is None:
+        return spec
+    rest = spec[found.end():]
+    if not _AFTER_SEAM.match(rest) or _OWN_DAMAGE.search(rest):
+        return spec
+    return found.group("keep") + rest
 
 
 #: A word run into the list marker that follows it -- `sickness3.` -- which

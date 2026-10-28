@@ -519,8 +519,7 @@ def f3089(c: Cast) -> None:
         who = c.choose(near, f"{c.ref}: give up the critical to heal", optional=True)
         if who is None:
             return
-        ev.critical = False
-        ev.result.critical = False
+        c.crit_becomes(False, ev=ev)
         c.surge(on=who, bonus=10)
 
     c.watch(Hit, offer, until=When.ENCOUNTER, on=me,

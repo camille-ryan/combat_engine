@@ -27,7 +27,7 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_OTHER_ALLY,
+    ONE_ALLY,
     PERSONAL,
     REACTION,
     REF,
@@ -282,7 +282,7 @@ def p10747(c: Cast) -> None:
     usage=AT_WILL,
     action=MOVE,
     reach=CloseBurst(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
 )
 def p10748(c: Cast) -> None:

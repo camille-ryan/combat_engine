@@ -50,6 +50,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.feats.paladin import _shaken_off
 from combat_engine.content.features.warlock import FELL
 from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.content.powers.monk.level_0 import FLURRIES
@@ -281,11 +282,21 @@ def _vs_ac_by_me(world: World, me: int, ev: Any) -> bool:
     return getattr(ev, "attacker", None) == me and getattr(ev, "vs", None) == AC
 
 
-def _used_by_me(ref: str):  # noqa: ANN202
+def _used_by_me(*refs: str):  # noqa: ANN202
+    """"When you use <ref>", for one row or for any of a named few."""
+
     def check(world: World, me: int, ev: Any) -> bool:
-        return getattr(ev, "actor", None) == me and getattr(ev, "power", "") == ref
+        return getattr(ev, "actor", None) == me and getattr(ev, "power", "") in refs
 
     return check
+
+
+#: The three cards `cf:artificer-f2` deals from. The feature itself is a
+#: declared row and is never *used* -- it is the budget, `action=NONE` --
+#: so "when you use that class feature" is a use of one of these.
+#: `feats/artificer_b.py` keeps the same tuple for the same reason, and
+#: says why a local copy beats a cross-file hook for one predicate.
+_INFUSIONS = ("p4128", "p7635", "p10187")
 
 
 def _resolved_by_me(*words: Keyword):  # noqa: ANN202
@@ -1410,6 +1421,26 @@ def i1825x1(c: Cast) -> None:
     `c.bonus("range", ...)` -- which the old marker pointed at -- is the
     wrong lever: it lengthens a row's own printed range line, which p6855
     already gets right.
+
+    **The marker is right about the obstacle and wrong about the answer,
+    and the answer is one line in another file.** This tree does not teach
+    a modifier to reach a literal; it teaches the laying row to *read a
+    raise*. #715 settled it -- "the answer is for the laying row to READ a
+    raise rather than for this one to reach into it, which is what
+    `c.change_amount` / `c.amount_for` has always been for" -- and
+    `i1986p1`, this row's own sibling, is written exactly that way.
+
+    So the finished shape is: `p6855` asks
+    `c.within(c.amount_for(SPREAD, 3), of=victim, side="enemy")` and this
+    row adds `c.change_amount(SPREAD, 5, on=c.me, until=When.ENCOUNTER)`
+    beside the bonus below. `amount_for` takes the largest, so the printed
+    3 and the raised 5 coexist, and the ordering is not a trap here -- this
+    is a standing trait and `p6855` reads the amount when its body runs,
+    which is the half `i1986p1` had to declare a trigger for.
+
+    Not written because `p6855` lives in `powers/warlock/level_1_c.py`,
+    which this wave did not own. The marker stays naming the symbol that
+    does not exist, rather than being re-pointed at a verb that does.
     """
     me = c.me
 
@@ -2157,7 +2188,7 @@ def i2115p1(c: Cast) -> None:
     target=SELF,
     trigger="an enemy under your cf:warlock-f4 drops to 0 hit points",
     on=Trigger(Dropped, _my_cursed_drop, "a creature you cursed drops"),
-    dropped=("warlock.boon_instead_of()",),
+    dropped=("c.decline_boon()",),
 )
 def i2305p1(c: Cast) -> None:
     """The curse is relational and `Relation.CURSED_BY` reads back, so the
@@ -2166,35 +2197,23 @@ def i2305p1(c: Cast) -> None:
     is why this stays `dropped=` and the row is a widening until the door
     lands.
 
-    **The gap is a door in the boon's own body, not a missing mechanism,
-    and the old symbol said otherwise.** "Nothing announces a pact boon" is
-    false. The boons are declared: `cf:warlock-f1`'s own watch pays three
-    legs inline, `cf:warlock-f1s4` pays a fourth, `cf:warlock-f1c10` is the
-    star pact's card and `p16254` the remaining leg's.
+    **Re-pointed off `warlock.boon_instead_of()`, which turned out to be
+    three gaps under one symbol.** That door landed: every payout offers
+    itself as the clause `features.warlock.BOON`, and `f3444` trades the
+    boon away through `c.pre_empt`. **This row cannot use it.** A
+    substitution has to be registered *before* the event, and the only
+    thing that registers before a fight is a trait -- `turns.arm_traits`
+    arms `action=NONE` rows with no declared trigger and nothing else. This
+    is a daily immediate reaction answering the very `Dropped` the boon
+    pays on, which is the header the card prints, so there is no earlier
+    moment to register from and no second block on this item to register
+    from instead.
 
-    What is missing is that **none of those payouts asks**.
-    `c.pre_empt(ref, what, clause)` is the registration and this row is one
-    of its callers; the read has to happen where the boon is paid.
-    `c.instead_of` cannot do it there -- it needs a non-zero `c.variant`,
-    which `dsl.use` settles from a chosen menu entry, and three of these
-    legs pay inside a `c.watch` callback where `variant` is 0 for ever.
-
-    `c.instead_of_now` is written for exactly that shape and says so: *"for
-    a clause that fires inside a watcher the row installed itself rather
-    than from a body the menu reached"*, with the invoker's covenant
-    manifestation as its worked case. It settles the objection too -- a
-    question inside a watcher is invisible to `policy/`, which is
-    acceptable **because a boon is a passive**: the AI never chose the
-    bargain and cannot be asked to weigh it differently.
-
-    `cf:warlock-f1c10` is the one exception and takes plain
-    `c.instead_of`, because it carries a declared trigger and so is offered
-    by the dispatcher -- the distinction that verb's own docstring draws
-    with `rt:r24-t0`.
-
-    So the symbol names a content door in `features/warlock.py` rather than
-    a `Cast` verb, because that is where the work is. #551's verdict, read
-    down to the mechanism. #641.
+    What it wants is to **forgo** a payout that is firing beside it, which
+    is `c.decline_boon()` -- `i2296x1` prints "instead of taking its normal
+    benefit" and had already coined the symbol for exactly this. One
+    symbol, one gap, so the two rows share it rather than this one riding a
+    verb that cannot reach it. #641.
     """
     c.bonus("attack", 1, kind="power", on=c.me, until=When.ENCOUNTER, once=True)
 
@@ -2535,10 +2554,30 @@ def i2607p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.healing_infusion()",),
+    trigger="you use cf:artificer-f2 on an ally",
+    on=Trigger(PowerUsed, _used_by_me(*_INFUSIONS),
+               "you use that class feature on an ally"),
 )
 def i2610x1(c: Cast) -> None:
-    """The trigger is one named class feature nothing models."""
+    """The old note said the trigger was one named class feature nothing
+    models. It is modelled: `cf:artificer-f2` is declared, a feat grants it,
+    and its three cards -- `p4128`, `p7635`, `p10187` -- are all declared
+    rows that announce a `PowerUsed`.
+
+    All three, not the heal alone. The card says "your cf:artificer-f2 class
+    feature", where the three feats riding on this feature elsewhere each
+    name one of the cards; the feature itself is the budget row and is never
+    used, so a use of it is a use of one of the three.
+
+    `PowerUsed` because the targets are picked before the body runs, which
+    is the one thing that event can be trusted for -- and nothing here reads
+    what the infusion laid, which is the case that needs `PowerResolved`
+    instead. "On an ally" needs no gate: all three declare `ONE_ALLY`.
+
+    Resistance with no type named is resistance to all damage, the way
+    `i2610p1` writes the same word."""
+    for who in c.trigger.targets:
+        c.resist(c.enhancement, on=who, until=When.EONT)
 
 
 @power(
@@ -2564,13 +2603,54 @@ def i2610p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.RADIANT],
-    todo=("query.lit_by(world, ref)",),
 )
 def i2612p1(c: Cast) -> None:
-    """Re-aimed. `p1225` is printed and declared, so the ref is no longer
-    the hold. The whole row measures the radius that row lights -- which
-    square is lit, and for how long -- and nothing on the board is lit or
-    unlit. Same hold as `i630p2` and `i1533p1`."""
+    """**The old note was wrong that nothing on the board is lit or unlit,
+    and wrong about both siblings it named.** The board has recorded
+    lighting since #685/#686: `query.light_level` is the reader, a carried
+    radius is a `light_radius` modifier, and `i1533p1` (above) and `i630p2`
+    (below) each *lay* one.
+
+    `c.total("light_radius")` rather than the literal, and read inside the
+    handler rather than closed over: the card says "within the radius of
+    the light", so a feat or a second source that widens the light widens
+    the burn, and the two numbers cannot drift apart.
+
+    **`query.light_level` is the wrong reader here**, which is worth saying
+    because it is the obvious one. It answers `BRIGHT` for every square on
+    a board nobody has darkened -- deliberately, so the attack path's light
+    term costs nothing -- so a burn gated on "is this square lit" would
+    cook every undead on every map. The question is the *radius*, not the
+    level.
+
+    The light itself is laid here. The printed Requirement is that the
+    spell is on **this staff**, and a staff is carried, so the staff's
+    light is a radius on the wielder -- `i1533p1`'s shape exactly. It is
+    laid rather than read because `p1225` is declared `out_of_combat` with
+    a `c.note` and sheds nothing; **if `p1225` is ever given its own
+    `c.light`, this line must go**, since two carried radii add and the
+    light would double.
+
+    `ev.ghost` is skipped the way `m6367a0`'s own turn watcher skips it: a
+    dead creature's turn is ticked so durations can reach their end, and
+    nothing should be burned on it.
+    """
+    me = c.me
+    # p1225's printed radius, which is the one thing about the spell this
+    # card borrows.
+    c.light(4, on=me, until=When.ENCOUNTER)
+    burn = c.enhancement
+
+    def dawn(ev: TurnStart) -> None:
+        who = ev.actor
+        if ev.ghost or who == me or not c.is_kind("undead", on=who):
+            return
+        radius = c.total("light_radius")
+        if radius and c.distance(who) <= radius:
+            c.flat(burn, dtype=DamageType.RADIANT, on=who)
+
+    c.watch(TurnStart, dawn, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} glare")
 
 
 @power(
@@ -3800,40 +3880,31 @@ def i630p2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("warlock.boon_instead_of()",),
+    todo=("warlock.pay_boon()",),
 )
 def i698x1(c: Cast) -> None:
     """Adds a second trigger to a class feature that is fully modelled.
 
-    **The gap is a door in the boon's own body, not a missing mechanism,
-    and the old symbol said otherwise.** "Nothing announces a pact boon" is
-    false. The boons are declared: `cf:warlock-f1`'s own watch pays three
-    legs inline, `cf:warlock-f1s4` pays a fourth, `cf:warlock-f1c10` is the
-    star pact's card and `p16254` the remaining leg's.
+    **Re-pointed off `warlock.boon_instead_of()`, which was two gaps under
+    one symbol.** That door landed -- each payout offers itself as the
+    clause `features.warlock.BOON` and `f3444` trades the boon away through
+    it -- and it does nothing for this row. A substitution replaces a
+    payout that is already firing; this card asks for the payout to fire on
+    an event it would not otherwise answer, which is the opposite
+    direction.
 
-    What is missing is that **none of those payouts asks**.
-    `c.pre_empt(ref, what, clause)` is the registration and this row is one
-    of its callers; the read has to happen where the boon is paid.
-    `c.instead_of` cannot do it there -- it needs a non-zero `c.variant`,
-    which `dsl.use` settles from a chosen menu entry, and three of these
-    legs pay inside a `c.watch` callback where `variant` is 0 for ever.
+    So: **the boon's payout has to be callable.** Three of the five refs in
+    `features.warlock.BOONS` are rows, which `c.use_power` would reach, but
+    `cf:warlock-f1` pays its three legs inline inside the watcher it
+    installs -- using that row again installs a second watcher and pays
+    nothing. The door is a helper in `features/warlock.py` paying whichever
+    leg the character took, and it has to reach the payouts in
+    `features/strikers.py` and `powers/warlock/pacts.py` to be true for
+    every pact.
 
-    `c.instead_of_now` is written for exactly that shape and says so: *"for
-    a clause that fires inside a watcher the row installed itself rather
-    than from a body the menu reached"*, with the invoker's covenant
-    manifestation as its worked case. It settles the objection too -- a
-    question inside a watcher is invisible to `policy/`, which is
-    acceptable **because a boon is a passive**: the AI never chose the
-    bargain and cannot be asked to weigh it differently.
-
-    `cf:warlock-f1c10` is the one exception and takes plain
-    `c.instead_of`, because it carries a declared trigger and so is offered
-    by the dispatcher -- the distinction that verb's own docstring draws
-    with `rt:r24-t0`.
-
-    So the symbol names a content door in `features/warlock.py` rather than
-    a `Cast` verb, because that is where the work is. #551's verdict, read
-    down to the mechanism. #641.
+    `f2759` is the same gap and carries the same symbol -- it takes the
+    boon early off `Bloodied` where this one adds `Bloodied` as a second
+    trigger. #641.
     """
 
 
@@ -4494,7 +4565,6 @@ def i2768x1(c: Cast) -> None:
         and not getattr(ev, "saved", True),
         "you fail a saving throw",
     ),
-    todo=("c.suspend_effect()",),
 )
 def i2796p1(c: Cast) -> None:
     """The trigger is real now -- `SavingThrow` carries `actor`, `saved`
@@ -4502,11 +4572,39 @@ def i2796p1(c: Cast) -> None:
     once-per-encounter row answering a failure is the printed "first"
     closely enough.
 
-    The payout is still missing. `c.ignore_condition` is the near
-    neighbour and suppresses a *condition* without ending it, but
-    `against` is a label and nothing reads back which conditions or
-    which burn an effect is carrying, so "that effect does not affect
-    you" cannot be aimed at the one that was failed."""
+    **The payout is written, and both halves of the old note were wrong.**
+
+    *Aiming at the hold that was failed.* `against` is not a bare label:
+    `durations.save` sets it to `str(eff)`, which opens with the effect's
+    own id, so the hold is findable again and the window is early enough
+    that it is still live. `feats.paladin._shaken_off` is that read and is
+    imported rather than copied -- one parser for one format.
+
+    *Lifting it without ending it.* `Effects.suspend`/`resume` is the pair
+    and `c.suspend_effect` was the wrong thing to wait for; `p16414` is the
+    same operation written out and its docstring argues the verb choice.
+    `c.end_effect` would be wrong twice here: the card says the effect
+    comes back, and ending a save-ends hold would stop it owing the throws
+    it still owes. A suspended effect keeps being saved against -- nothing
+    in `durations` skips one -- which is what makes the suppression a
+    reprieve rather than a cure.
+
+    The resumption hangs on a bookkeeping hold clocked at the printed
+    moment, `p16414`'s shape. A hold that ended on its own in the meantime
+    is skipped by `resume`, which refuses an ended effect.
+
+    The second printed sentence -- a changing effect not counting as the
+    first failure -- is the card narrowing which throw triggers this, and
+    `usage=ENCOUNTER` is already stricter than it: one firing a fight,
+    whatever changes.
+    """
+    hold = _shaken_off(c, getattr(c.trigger, "against", "") or "")
+    if hold is None:
+        return
+    if not c.world.effects.suspend(hold, f"{c.ref} shrugged it off"):
+        return
+    clock = c.world.effects.apply(c.me, c.me, When.EONT, label=f"{c.ref} respite")
+    clock.on_end.append(lambda: c.world.effects.resume(hold))
 
 
 @power(
@@ -4794,9 +4892,22 @@ def i3436x1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, by_keyword(Keyword.ARCANE)), "you hit with an arcane power"
     ),
-    todo=("c.difficult_for()",),
 )
 def i3436p1(c: Cast) -> None:
-    """Difficult terrain is a property of ground, not of a creature:
-    `c.zone` roughs up squares and nothing makes the whole board cost one
-    creature double."""
+    """Difficult terrain was a property of ground and not of a creature:
+    `c.zone` roughs up squares, and until #831 nothing made the whole board
+    cost one creature double. `c.difficult_for` is that, and this is the one
+    row in its family with **no geometry** -- "all squares" is the board, so
+    it takes the bare call rather than an area.
+
+    `c.trigger.target` and not `c.target`: the card says "each enemy that
+    you hit", and the enemy is the one named by the `Hit` that fired this,
+    which for an area power is one firing per enemy.
+
+    Save ends, which is what the card prints, and the save is the burdened
+    creature's -- so `When.SAVE_ENDS` is already measured against the right
+    creature and needs no second argument."""
+    foe = getattr(c.trigger, "target", None)
+    if foe is None:
+        return
+    c.difficult_for(on=foe, until=When.SAVE_ENDS)

@@ -11,6 +11,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - is this use a charge?
 - `c.charge_at(self, victim: 'int', ref: 'str' = '', *, who: 'int | None' = None) -> 'bool'`
   - Run at somebody and swing, with the swing marked as a charge.
+- `c.dismount(self, *, to: 'Square | None' = None) -> 'bool'`
+  - Get off, into an adjacent square. `c.ride`'s missing inverse.
 - `c.flee(self, squares_: 'int', *, on: 'int | None' = None) -> 'int'`
   - The target runs, under its own power, as far from you as it can.
 - `c.hover(self, squares_: 'int' = 0, *, across: 'int' = 0, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None) -> 'Effect | None'`
@@ -60,6 +62,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - "You can bull rush targets of any size."
 - `c.blocks_entry(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "An enemy cannot enter this creature's space by any means."
+- `c.difficult_for(self, on: 'int | None' = None, *, zone: 'int | None' = None, until: 'When' = <When.EOTNT: "end of target's next turn">) -> 'Effect | None'`
+  - Make ground cost double for **one creature**, nobody else.
 - `c.extend_every(self, kind: 'str', squares_: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Lengthen **every move of a kind**. `c.extend_every("shift", 1)`.
 - `c.extend_move(self, ref: 'str', squares_: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
@@ -70,6 +74,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Cross rough ground for nothing. `kind` names which sort, or all.
 - `c.ignores_difficult_in(self, zone: 'int', *, side: 'str' = 'team') -> 'None'`
   - "You and your allies can ignore difficult terrain in the zone."
+- `c.ignores_hazards(self, kind: 'str' = '', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Cross something that hurts, and take none of it.
 - `c.immovable(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - Cannot be pushed, pulled or slid. The counterpart of `c.no_provoke`.
 - `c.may_enter(self, *, sizes: 'Sequence[Size]' = (), side: 'str' = '', when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
@@ -80,6 +86,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Move through earth, rock and anything else in the way.
 - `c.resist_forced(self, squares_: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Shorten every push, pull and slide against this creature.
+- `c.rideable(self, *, sizes: 'tuple[Size, ...]' = (), on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'list[Effect]'`
+  - "A Medium creature can ride this." The size rule, relaxed.
 - `c.shares_space(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, difficult: 'bool' = True) -> 'Effect | None'`
   - Anyone may stand in this creature's square, and it costs them.
 - `c.speed_of(self, who: 'int | None' = None) -> 'int'`
@@ -130,5 +138,5 @@ English sense -- `burrow` leaves the ground and still falls;
 - `c.cannot_shift` is in [`conditions.md`](conditions.md) -- Cannot shift. Still walks, which is why this is not `immobilized`.
 - `c.hide` is in [`modifiers.md`](modifiers.md) -- Go unseen, and stay that way until something gives you away.
 - `c.immobilized` is in [`conditions.md`](conditions.md) -- (no docstring)
-- `c.shifted` is in [`effects.md`](effects.md) -- Has the creature taken a shape that is not its own?
+- `c.shaped` is in [`effects.md`](effects.md) -- Has the creature taken a shape that is not its own?
 - `c.slowed` is in [`conditions.md`](conditions.md) -- (no docstring)

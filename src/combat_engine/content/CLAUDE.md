@@ -215,6 +215,36 @@ which is the thing you do not know. **In this order:**
 12,017 lines, with `as_basic`/`no_basic`/`counts_as` and
 `instead_of`/`instead_of_now`/`pre_empt` sitting next to each other.
 
+## A row's own store must live on the world
+
+**Never `id(c.world)` as a dictionary key.** Ten rows in this tree kept a
+"once per fight" latch in a module-level dict keyed on it — "keyed on the
+world so a second encounter arms its own watch", which is what each author
+meant and the opposite of what the code did. CPython hands a collected
+object's address to the next allocation, and none of the ten ever removed an
+entry, so a latch outlived its board and the next `World` at that address
+read it as its own.
+
+Measured on one `audit.audit` call: **48 boards, 45 distinct `id(world)`
+values, 3 of them landing on an id already in the store.** The visible cost
+was an audit verdict that moved on every call in one process — `fired` 24,
+13, 23, 10, 1 — because a stale latch suppressed a row's arming and left an
+unspent shroud lying about for the next row to find. #907.
+
+So use the verb, which stores on the `World` and therefore cannot go stale:
+
+| the question | the verb |
+|---|---|
+| once on this board, ever | `c.once_per_board(c.me)` |
+| once this round, or this turn | `c.latch` / `c.latched` |
+| once per *use*, across its targets | `c.first` |
+
+A **balanced** re-entrancy guard — added and `discard`ed in a `finally`, as
+`engine/falling.py` and `monsters/level_13/misc_sa.py` do — is sound on
+`id(world)` and is deliberately left alone: its entry exists only while that
+world is live, and a live object's address is not reused.
+`drivers.board_latch` is the gate.
+
 ## Write refs, never names
 
 **Nothing you write may contain a printed name** — not a docstring, not a

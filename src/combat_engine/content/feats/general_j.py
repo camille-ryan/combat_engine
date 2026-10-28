@@ -49,25 +49,26 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
     FREE,
     MINOR,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REF,
     SELF,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     AttackRolled,
     Bloodied,
     Cast,
     CloseBurst,
+    Condition,
     DamageRolled,
     DamageType,
     Dropped,
@@ -111,8 +112,8 @@ DIVINE_HEAL = [Keyword.DIVINE, Keyword.HEALING]
 DEFENCES = (AC, FORT, REF, WILL)
 
 #: "You or one ally", which the ally pool already includes the caster in.
-ONE_OTHER_ALLY = Target("other_ally", 1)
-EACH_OTHER_ALLY = Target("other_ally", 99, everyone=True)
+ONE_ALLY = Target("ally", 1)
+EACH_ALLY = Target("ally", 99, everyone=True)
 
 #: A racial power the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
@@ -652,7 +653,7 @@ _granted("f1454", "f1454b")
 
 
 @power("f1454b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=ONE_ALLY, keywords=DIVINE_HEAL,
+       reach=CloseBurst(5), target=YOU_OR_ONE_ALLY, keywords=DIVINE_HEAL,
        group=CHANNEL_DIVINITY)
 def f1454b(c: Cast) -> None:
     """The d8 at the start of each of your turns ends itself either way,
@@ -711,7 +712,7 @@ _granted("f1458", "f1458b")
 
 
 @power("f1458b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=CloseBurst(5), target=ONE_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=YOU_OR_ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY,
        trigger="you or an ally within 5 squares uses his or her second wind",
        on=Trigger(SecondWind, either(about_me, ally_within(5)),
@@ -733,7 +734,7 @@ _granted("f1460", "f1460b")
 
 @power("f1460b", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_REACTION, reach=CloseBurst(10),
-       target=ONE_ALLY, keywords=DIVINE, group=CHANNEL_DIVINITY,
+       target=YOU_OR_ONE_ALLY, keywords=DIVINE, group=CHANNEL_DIVINITY,
        trigger="you or an ally within 10 squares is pushed, pulled or slid",
        on=Trigger(ForcedMove, lambda w, me, ev: _ours(w, me, ev.target, 10),
                   "one of ours is moved against its will"))
@@ -797,7 +798,7 @@ _granted("f1466", "f1466b")
 
 
 @power("f1466b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=ONE_OTHER_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1466b(c: Cast) -> None:
     """"Its next damage roll", so the modifier is spent on one roll."""
@@ -903,7 +904,7 @@ _granted("f1479", "f1479b")
 
 
 @power("f1479b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Melee(1), target=ONE_OTHER_ALLY, keywords=DIVINE,
+       reach=Melee(1), target=ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1479b(c: Cast) -> None:
     """The surge is spent for nothing and the temporary hit points are
@@ -936,7 +937,7 @@ _granted("f1483", "f1483b")
 
 
 @power("f1483b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=EACH_OTHER_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=EACH_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1483b(c: Cast) -> None:
     """"Each ally", not "you and each ally" -- the penalty half is why
@@ -961,7 +962,7 @@ _granted("f1487", "f1487b")
 
 
 @power("f1487b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=EACH_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=YOU_AND_EACH_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1487b(c: Cast) -> None:
     """"You and each ally": the ally pool already carries the caster, so
@@ -1473,15 +1474,42 @@ def f1639(c: Cast) -> None:
 
 
 @power("f1640", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF)
 def f1640(c: Cast) -> None:
-    """Pays out "the extra necrotic damage dealt", which is a component
-    of a roll rather than the roll. `DamageApplied` carries the total and
-    no power, so the component cannot be picked out of it."""
+    """Temporary hit points equal to the extra necrotic damage dealt.
+
+    **Reads a type, not an attribution, and that is the whole of why this
+    waited.** `c.part_of(DamageType.NECROTIC)` answers how much of the
+    blow being announced is necrotic, off the typed split `deal_damage`
+    has always built and now puts on the event. The old symbol
+    `c.rider_from(ref)` asked for the amount a *named row* contributed,
+    which `Mods.split` cannot give -- it keys by type with no ref in it.
+    No card here asks for the ref: all four print "the extra **necrotic**
+    damage".
+
+    **Wider than print by one case, and it is stated rather than hidden**:
+    any necrotic this character deals answers, not only `p8278`'s rider.
+    For an `r47` character those nearly coincide, and narrowing it would
+    need the attribution the cards do not ask for. If a second necrotic
+    source ever reaches one of these, that is the issue to file.
+
+    The old note was exactly right about the shape -- *"a component of a
+    roll rather than the roll"* -- and that component is now on the event.
+    """
+    me = c.me
+
+    def paid(ev: Any) -> None:
+        if ev.source != me:
+            return
+        extra = c.part_of(DamageType.NECROTIC, ev=ev)
+        if extra > 0:
+            c.temp_hp(extra, on=me)
+
+    c.watch(DamageRolled, paid, until=When.ENCOUNTER, on=me)
 
 
 @power("f1641", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF)
 def f1641(c: Cast) -> None:
     """**Unwritten, and it was worse than a marked row.** It was declared
     on `Trigger(Hit, ...)` gated on `ev.power == "p8278"`, and `p8278`
@@ -1495,8 +1523,36 @@ def f1641(c: Cast) -> None:
     modifier and is not the problem; the moment is. `DamageRolled`
     carries the blow, and the part a modifier contributed is not on it.
 
-    The body it had, kept for whoever closes that: on the hit, every
-    other creature this caster has cursed takes `c.con_mod` necrotic."""
+    **Written now.** `c.part_of(DamageType.NECROTIC)` answers how much of
+    the blow being announced is necrotic, off the typed split
+    `deal_damage` has always built and now puts on the event -- so the
+    moment is the rider paying out, which is exactly what the card names.
+
+    The set is the **cursed** one, not the marked one: `c.cursed(foe)`
+    asks whether *this* caster has cursed that creature, which is what
+    "also under your cf:warlock-f4" means. `f1662` is the sibling that
+    reads the marked set instead, and the two must not be confused.
+
+    **Reads a type, not an attribution.** The old symbol
+    `c.rider_from(ref)` asked for the amount a *named row* contributed,
+    which `Mods.split` cannot give -- it keys by type with no ref in it.
+    No card here asks for the ref: all four print "the extra **necrotic**
+    damage".
+
+    **Wider than print by one case, stated rather than hidden**: any
+    necrotic this character deals answers, not only `p8278`'s rider. For
+    an `r47` character those nearly coincide, and narrowing it would need
+    the attribution the cards do not ask for."""
+    me = c.me
+
+    def paid(ev: Any) -> None:
+        if ev.source != me or c.part_of(DamageType.NECROTIC, ev=ev) <= 0:
+            return
+        for foe in c.enemies():
+            if foe != ev.target and c.cursed(foe):
+                c.flat(c.con_mod, dtype=DamageType.NECROTIC, on=foe)
+
+    c.watch(DamageRolled, paid, until=When.ENCOUNTER, on=me)
 
 
 @power("f1642", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1520,26 +1576,67 @@ def f1642(c: Cast) -> None:
     c.set_origin(instead_of="living", until=When.ENCOUNTER)
 
 
-@power("f1643", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.dying_as()",))
+@power("f1643", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you drop to 0 hit points or fewer",
+       on=Trigger(Dropped, about_me, "you drop to 0 hit points or fewer"))
 def f1643(c: Cast) -> None:
-    """A minor action on the turn a racial trait buys by staying up at 0
-    hit points. `c.extra_action` is the payout and `Dropped` is the
-    moment, so neither half is what is missing.
+    """A minor action on each turn `rt:r47-t3` buys by keeping you up at 0
+    hit points.
 
-    **Re-aimed at the trait this hangs off.** The condition is "if you
-    choose to remain conscious due to `rt:r47-t3`", and
-    that row is itself unwritten on `c.dying_as()` -- `resolve` applies
-    the dying condition and nothing chooses what comes with it. Until it
-    does, there is no choice to have made and this row would pay out on
-    every knockdown."""
+    **The marker's premise is dead.** It said the trait this hangs off was
+    itself unwritten on `c.dying_as()`; `features/racial.py` has written
+    it and it carries no marker. `c.ignore_condition` *suppresses* the
+    unconsciousness without ending the effect that carries it, so the
+    softening is standing, unconditional and complete -- there is no
+    choice left to have made. Nor is there a "do you hold the trait"
+    question: the prerequisite is the race and `chargen.meets` enforces
+    it, so a character holding this feat holds that trait.
+
+    `ev.dead` keeps it off a creature killed outright, which has no dying
+    condition to soften -- the same guard the trait writes, for the same
+    reason.
+
+    **The grant waits for a `TurnStart` rather than being made now.**
+    `c.extra_action` drops an action into the budget the turn is already
+    spending, and `Encounter._begin` calls `Budget.refresh` *before* it
+    announces the turn -- so a grant made during the enemy's turn, which
+    is when a drop usually happens, would be wiped before it could be
+    spent. `p16431` waits for the same reason.
+
+    **Each such turn, not only the first**, because the card's condition
+    is the state and not the moment. The state is read back off the board:
+    dying with the unconsciousness suppressed is what `rt:r47-t3` makes
+    and nothing else does. Being healed out of it ends the "dropped"
+    effect, so the gate closes on its own and the watcher does not have to
+    be told.
+
+    `AT_WILL` and not `ENCOUNTER`: with a declared trigger an encounter
+    usage would spend the feat on the first knockdown of the fight, and
+    the card prints no such limit.
+    """
+    ev = c.trigger
+    if ev is None or getattr(ev, "dead", False):
+        return
+    me = c.me
+
+    def still_up(turn: TurnStart) -> None:
+        if turn.ghost or turn.actor != me:
+            return
+        if not c.is_(Condition.DYING, on=me) or c.is_(
+            Condition.UNCONSCIOUS, on=me
+        ):
+            return
+        c.extra_action(MINOR, on=me)
+
+    c.watch(TurnStart, still_up, until=When.ENCOUNTER)
 
 
 _granted("f1644", "f1644b")
 
 
 @power("f1644b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=Ranged(10), target=ONE_ALLY, keywords=DIVINE,
+       reach=Ranged(10), target=YOU_OR_ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY,
        trigger="you or an ally fails a check or a saving throw",
        on=(
@@ -1591,7 +1688,7 @@ def f1646(c: Cast) -> None:
 
 
 @power("f1652", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF, todo=("c.raise_rider(ref, by)",))
 def f1652(c: Cast) -> None:
     """**Unwritten, and it was silently false.** It laid a damage bonus
     gated on `ctx["power"] == "p8278"`, and the damage context's `power`
@@ -1599,9 +1696,15 @@ def f1652(c: Cast) -> None:
     rolls one -- it lays a rider on the next blow the character lands --
     so the gate was false in every fight and the bonus was never read.
 
-    "+2 to the damage dealt by `p8278`" means +2 on that rider, and the
-    rider is a part of somebody else's blow with no identity on the
-    event."""
+    "+2 to the damage dealt by `p8278`" means +2 **on that rider**, and
+    that is why this row is the one of the four that is still marked.
+
+    **Re-pointed.** `c.part_of` landed and gave its three siblings the
+    typed split off the event, so they read how much of a blow is
+    necrotic. That is a *read*. This card has to raise another row's
+    modifier before it pays, which is a write against a `Mod` the laying
+    row owns -- a different mechanism, and the one gap left of the four.
+    `c.raise_rider(ref, by)` names it."""
 
 
 @power("f1656", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1634,12 +1737,40 @@ def f1660(c: Cast) -> None:
 
 
 @power("f1662", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF)
 def f1662(c: Cast) -> None:
-    """The same dead trigger as f1641 and unwritten for the same reason:
-    `Trigger(Hit, ev.power == "p8278")` names a hit that `p8278` never
-    makes. The payout it wanted, once the moment exists, is `c.con_mod`
-    necrotic onto every other enemy this caster has marked."""
+    """Every other enemy this caster has marked takes necrotic equal to
+    its Constitution modifier when the extra necrotic lands.
+
+    The old note was right that `Trigger(Hit, ev.power == "p8278")` names
+    a hit that power never makes -- it is a free action laying a rider.
+    The moment is the rider paying out, which the typed split now says.
+
+    **Reads a type, not an attribution, and that is the whole of why this
+    waited.** `c.part_of(DamageType.NECROTIC)` answers how much of the
+    blow being announced is necrotic, off the typed split `deal_damage`
+    has always built and now puts on the event. The old symbol
+    `c.rider_from(ref)` asked for the amount a *named row* contributed,
+    which `Mods.split` cannot give -- it keys by type with no ref in it.
+    No card here asks for the ref: all four print "the extra **necrotic**
+    damage".
+
+    **Wider than print by one case, and it is stated rather than hidden**:
+    any necrotic this character deals answers, not only `p8278`'s rider.
+    For an `r47` character those nearly coincide, and narrowing it would
+    need the attribution the cards do not ask for. If a second necrotic
+    source ever reaches one of these, that is the issue to file.
+    """
+    me = c.me
+
+    def paid(ev: Any) -> None:
+        if ev.source != me or c.part_of(DamageType.NECROTIC, ev=ev) <= 0:
+            return
+        for foe in c.enemies():
+            if foe != ev.target and c.marked(foe, by=me):
+                c.flat(c.con_mod, dtype=DamageType.NECROTIC, on=foe)
+
+    c.watch(DamageRolled, paid, until=When.ENCOUNTER, on=me)
 
 
 @power("f1663", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

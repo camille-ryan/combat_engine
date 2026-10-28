@@ -872,8 +872,178 @@ def cited() -> int:
 _SPEC_TABLES = (
     "power", "monster_power", "class_feature", "companion", "item",
     "item_block", "feat", "race", "racial_trait", "trap", "disease",
-    "associate", "terrain",
+    "associate", "terrain", "build_option",
 )
+
+#: A table with a `spec` column that this walk deliberately does **not**
+#: read, and why. Empty is the right state; an entry is a recorded decision
+#: rather than an oversight, which is the whole difference #492 is about.
+#:
+#: The real case it exists for is `#457`'s themes: those specs average
+#: 4,712 characters, 6-30x every other table, which makes a per-spec pass
+#: impractical on them. A bare list could not say that, so a table left out
+#: for a reason looked identical to one nobody had noticed.
+_SPEC_EXCLUDED: dict[str, str] = {}
+
+
+def _spec_columns() -> frozenset[str]:
+    """Every table in the built database that actually has a `spec` column."""
+    db = game()
+    out = set()
+    for (name,) in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"):
+        if any(col[1] == "spec" for col in db.execute(
+                f"PRAGMA table_info({name})")):
+            out.add(name)
+    return frozenset(out)
+
+
+#: The scrub passes in `etl/build.py` that claim to cover every spec table,
+#: by the first line of their loop. Named rather than found by line number,
+#: which has already gone stale three times in this repo's prose.
+_BUILD_PASSES = ("_swap_sub_options", "_cross_reference_rest")
+
+
+def _build_spec_tables() -> tuple[frozenset[str], list[str]]:
+    """`etl/build.py`'s own spec-table tuple, and which passes read it.
+
+    Read with `ast` rather than imported, because the question is what the
+    **source** says and importing `etl` to ask it would pull the whole writer
+    in for a string literal.
+
+    Returns the tuple's contents and the names of the `_BUILD_PASSES` that
+    actually loop over it. A pass that goes back to a literal list of its own
+    is the fault this is here to catch, so it is reported as not reading it
+    rather than quietly passing.
+    """
+    import ast
+
+    src = (ROOT / "src" / "combat_engine" / "etl" / "build.py").read_text()
+    tree = ast.parse(src)
+    listed: frozenset[str] = frozenset()
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or not any(
+                getattr(target, "id", "") == "SPEC_TABLES"
+                for target in node.targets):
+            continue
+        # **Narrowed, and not only to satisfy `ty`.** `node.value` is any
+        # expression: `SPEC_TABLES = _derive()` or a comprehension would make
+        # `.elts` an `AttributeError` here, and an exception inside a leak
+        # gate is the one way this walk could stop asking its question
+        # without anybody choosing that. A non-literal leaves `listed` empty,
+        # which the caller already reports as the lists disagreeing.
+        if isinstance(node.value, ast.Tuple | ast.List):
+            listed = frozenset(
+                e.value for e in node.value.elts
+                if isinstance(e, ast.Constant) and isinstance(e.value, str))
+    reading = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name not in _BUILD_PASSES:
+            continue
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.For) and getattr(
+                    inner.iter, "id", "") == "SPEC_TABLES":
+                reading.append(node.name)
+                break
+    return listed, reading
+
+
+def tables() -> int:
+    """Do the lists that decide what gets scrubbed and checked agree?
+
+    **A table with a `spec` column has to be registered in three
+    hand-written places** -- two scrub passes in `etl/build.py` so
+    `sanitise.scrub` runs over it at import, and `_SPEC_TABLES` here so the
+    gate reads it afterwards -- and nothing connected them. The walk prints
+    "no printed names in any spec" whether it read a table or not, so a
+    missing entry looks exactly like a passing check: silent in both
+    directions, which `scripts/CLAUDE.md` names as the same fault as a check
+    that is too generous.
+
+    **It had happened three times before this existed.** `trap` (631 specs)
+    and `racial_trait` (151) were absent from one walk, which then printed
+    its clean line over 782 specs it had never read. Then `disease`,
+    `associate` and `terrain` were imported in one day and registered
+    nowhere, so three commit messages claimed a clean gate. And
+    `_sub_option_names`' own comment says *"every table that carries a
+    spec"* and had gone stale against six of them -- in the loop whose note
+    warns that a narrow scope "left the narrower scope to go stale against a
+    later build".
+
+    **A reconciliation, deliberately not a derivation.** Deriving the list
+    from the schema would silently start scrubbing any column somebody names
+    `spec`, including one that is not an authoring brief -- a gate that
+    changes scope without anyone deciding to, which is how `item.slot`'s 15
+    reward titles were missed. So the lists stay hand-written and this makes
+    them *agree*, with any difference named. `_SPEC_EXCLUDED` is where a
+    deliberate omission says so. #492.
+    """
+    live = _spec_columns()
+    if not live:
+        print("no built database to reconcile against", file=sys.stderr)
+        return 0
+
+    bad = 0
+    covered = set(_SPEC_TABLES) | set(_SPEC_EXCLUDED)
+    missing = sorted(live - covered)
+    if missing:
+        bad = 1
+        print(f"{len(missing)} table(s) carry a `spec` column and are in no "
+              f"list -- never scrubbed at import, never read by this walk:")
+        for name in missing:
+            n = game().execute(f"SELECT COUNT(*) FROM {name} "
+                               "WHERE spec IS NOT NULL AND spec != ''").fetchone()[0]
+            print(f"  {name}: {n} spec(s). Add it to `_SPEC_TABLES` and to "
+                  f"both passes in `etl/build.py`, or to `_SPEC_EXCLUDED` "
+                  f"with a reason.")
+
+    gone = sorted(set(_SPEC_TABLES) - live)
+    if gone:
+        bad = 1
+        print(f"\n{len(gone)} table(s) in `_SPEC_TABLES` have no `spec` "
+              f"column: {', '.join(gone)}. A walk over a column that is not "
+              f"there reads nothing and says it is clean.")
+
+    stale = sorted(set(_SPEC_EXCLUDED) - live)
+    if stale:
+        bad = 1
+        print(f"\n{len(stale)} `_SPEC_EXCLUDED` entries name a table that no "
+              f"longer has a spec column -- delete them: {', '.join(stale)}")
+
+    listed, reading = _build_spec_tables()
+    # **A pass this cannot see is a check that cannot fail**, which is the
+    # fault this whole function exists to close -- so it refuses rather than
+    # reporting clean. Caught on the first run: `_BUILD_PASSES` named two
+    # functions that do not exist, so the build half found nothing, said
+    # nothing, and printed the reconciled line over lists it had never read.
+    for want in _BUILD_PASSES:
+        if want not in reading:
+            bad = 1
+            print(f"\n`etl/build.py:{want}` does not loop over its own "
+                  f"`SPEC_TABLES` -- renamed, moved, or back to a literal "
+                  f"list of its own. Until it does, this walk cannot see "
+                  f"which tables that pass scrubs and would report the lists "
+                  f"reconciled without having compared them.")
+    short = sorted((live - set(_SPEC_EXCLUDED)) - listed)
+    if short:
+        bad = 1
+        print(f"\n`etl/build.py:SPEC_TABLES` scrubs {len(listed)} of "
+              f"{len(live - set(_SPEC_EXCLUDED))} spec tables. Absent, so "
+              f"their specs keep every printed name their pages mention: "
+              f"{', '.join(short)}")
+    drifted = sorted(listed ^ set(_SPEC_TABLES))
+    if drifted:
+        bad = 1
+        print(f"\n`etl/build.py:SPEC_TABLES` and `leaks._SPEC_TABLES` "
+              f"disagree about {', '.join(drifted)} -- one scrubs what the "
+              f"other does not read, or the reverse. These two lists are the "
+              f"whole of #492 and they have to match.")
+
+    if not bad:
+        shown = f", {len(_SPEC_EXCLUDED)} excluded by name" if _SPEC_EXCLUDED else ""
+        print(f"the spec tables reconcile: {len(live)} with a spec column, "
+              f"all registered for scrubbing and for this walk{shown}")
+    return bad
 
 
 def specs() -> int:
@@ -890,6 +1060,12 @@ def specs() -> int:
 
     index, _printed = _index(names)
     rules = vocabulary()
+
+    # **Before the walk, not after it.** A walk that is missing a table says
+    # "no printed names in any spec" over specs it never read, so the
+    # reconciliation has to be able to fail *first* -- otherwise the clean
+    # line is printed and the registration fault reads as a pass. #492.
+    registered = tables()
 
     db = game()
     found: list[tuple[str, str, str, list[str]]] = []
@@ -959,8 +1135,8 @@ def specs() -> int:
             print(f"  {table}.{ref}: {why}")
     print("no printed names in any spec")
     bad = _self_named_clauses()
-    return (bad or _unresolved_citations() or _unswapped_names(index)
-            or _entitled_names() or columns(index))
+    return (registered or bad or _unresolved_citations()
+            or _unswapped_names(index) or _entitled_names() or columns(index))
 
 
 #: `<Head> (<class>, <book>, page <N>)` -- the compendium's inline citation,
@@ -1068,11 +1244,36 @@ UNSWAPPED_KNOWN: dict[tuple[str, str, str], str] = {}
 #: by exactly one row of twenty-six thousand is believed on its uniqueness
 #: where `identifies` disbelieves it on its words. #628.
 #:
-#: **What is left is the other nine-tenths of the census**, and it is not
-#: the same bug. Eight feats name one class feature whose printed name is
-#: itself in `RULES_TERMS`, so the scrubber reads it as mechanics wherever
-#: it appears -- correct in general and wrong for these eight. Two traps
-#: name a power and a feat. Both want their own look.
+#: **What is left is 10 and none of it is owed. Looked at, 2026-10-26.**
+#: This used to read "correct in general and wrong for these eight", and
+#: that is backwards -- the scrubber is right about all eight and the
+#: baseline was mislabelling its own entries as debt.
+#:
+#: **The eight are a false attribution, not a missed swap.** They are feats
+#: printing the phrase that is *also* the title of one cleric build's
+#: feature, and every one of them means the **keyword category** rather
+#: than that row. `f1355` is the plain case: *"Your <phrase> powers that
+#: have a range of personal gain a range of close burst 5"* -- that is
+#: every power of that keyword, in any divine class, and substituting the
+#: warpriest's ref would name one build's feature where the card names a
+#: category. All three words of the title are in the rules vocabulary, so
+#: `identifies` refuses it, and refusing it is correct.
+#:
+#: The proof that nothing is missing is in the same specs: where the text
+#: *does* mean the class feature, **the swap already happened** --
+#: `cf:avenger-f2/cf:cleric-templar-f0/cf:invoker-f0/cf:paladin-f0`, the
+#: four-class alternation, appears wherever the sentence is about the
+#: feature. So both senses are handled, and the gate is flagging the one
+#: that must not be touched.
+#:
+#: **The two traps print a power's and a feat's name into `trap.spec`**, a
+#: table with no content rows: nothing in `content/` is authored from a
+#: trap, so no author reads them and nothing renders them. Tier 3 at
+#: worst (#447), and it would go the day traps are ingested as rows.
+#:
+#: So these 10 are **waived with a reason**, not work. The number can still
+#: only shrink and a new one is still red, which is the half worth having.
+#: #628.
 UNSWAPPED_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
     ("feat", "f1355", "cf:cleric-warpriest-f0"),
     ("feat", "f1432b", "cf:cleric-warpriest-f0"),
@@ -1243,7 +1444,8 @@ def _unswapped_names(index: dict[str, list[str]]) -> int:
             print(f"  {key[0]}.{key[1]} no longer prints {key[2]}'s name")
         return 1
     print(f"no NEW spec prints a uniquely-resolving name it does not cite "
-          f"({len(UNSWAPPED_BASELINE)} known, owed to the extraction)")
+          f"({len(UNSWAPPED_BASELINE)} known and waived with a reason --"
+          f" see UNSWAPPED_BASELINE, #628)")
     return 0
 
 

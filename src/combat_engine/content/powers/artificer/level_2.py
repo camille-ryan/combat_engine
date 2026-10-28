@@ -15,9 +15,9 @@ from combat_engine.engine import (
     INTERRUPT,
     MINOR,
     NO_TARGET,
-    ONE_ALLY,
     PERSONAL,
     SELF,
+    YOU_OR_ONE_ALLY,
     AttackDeclared,
     Cast,
     CloseBurst,
@@ -42,7 +42,7 @@ from . import servant_struck
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
     trigger="you or an ally are affected by a push, pull, or slide effect",
     on=Trigger(
@@ -65,7 +65,7 @@ def p10194(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p4202(c: Cast) -> None:
@@ -82,7 +82,7 @@ def p4202(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p7642(c: Cast) -> None:
@@ -133,7 +133,7 @@ def p7643(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p7644(c: Cast) -> None:

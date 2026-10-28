@@ -45,10 +45,70 @@ class World:
         self.terrain: set[str] = set()
         #: Whose turn it is. None between rounds and before combat starts.
         self.turn: int | None = None
+        #: How many milestones the party has reached **today**, not in this
+        #: fight. Camille's ruling on #666: *"An adventuring day consists of
+        #: 4-5 encounters, and a milestone is every two encounters."*
+        #:
+        #: On the `World` rather than on a component because it is a fact
+        #: about the day, not about a creature -- every character in the
+        #: party has reached the same number of them, and a fight fielded on
+        #: its own has reached none, which is what 0 means. Whoever fields
+        #: the encounter sets it: `api/day.py` from the legs already
+        #: finished, `scripts/fight.py --milestones` by hand.
+        #:
+        #: Read through `c.milestone()`; no row should touch this directly.
+        self.milestones = 0
         #: The fight in progress, once one has been made. A back-reference
         #: rather than a lookup, because a power body that summons something
         #: has to put it in the initiative order and had no way to reach it.
         self.encounter: Any = None
+        #: The `OpportunityWindow` currently open, or None. Live state about
+        #: the fight in progress, like `turn` and `encounter` above.
+        #:
+        #: It exists so `resolve.attack` can say **what provoked** an
+        #: opportunity attack. The chain is: a window opens knowing the ref,
+        #: the move kind and the mode -> a controller answers -> somebody
+        #: swings -> `resolve.attack` builds a context that used to carry
+        #: `opportunity=True` and nothing else about the provocation.
+        #: Threading it through every taker would touch each call site; one
+        #: field here keeps the knowledge in one place.
+        #:
+        #: **It cannot go stale, and that is structural rather than
+        #: careful.** All three emitters are a plain synchronous
+        #: `bus.emit(...)` and the window is a `Decision` -- the controller
+        #: takes the swing *inside* that call -- so the field is set and
+        #: cleared around one function call in a `finally`. `#880` deferred
+        #: itself over the risk of a stale provocation reading as a working
+        #: narrowing, and the synchronous emit is what removes it: nothing
+        #: can observe this outside the emit, even if a listener raises.
+        #:
+        #: Read through the attack context, never directly from a row.
+        self.provocation: Any = None
+        #: What each row has already done once on this board. Read and
+        #: written only through `Cast.latch`.
+        #:
+        #: **It is here because the obvious home is unsound.** Ten content
+        #: rows kept this in a module-level dict keyed on `id(world)` --
+        #: "keyed on the world so a second encounter arms its own watch",
+        #: as `powers/assassin/level_0.py` put it. CPython hands a
+        #: collected object's address to the next one allocated, and
+        #: nothing ever removed an entry, so a latch outlived its board and
+        #: the next `World` at that address read it as its own. Measured:
+        #: 48 audit boards produced **45 distinct ids**, and 3 of them
+        #: landed on an id already in the store.
+        #:
+        #: A set on the world cannot go stale, because it dies with the
+        #: board it describes -- the same argument `items/weapon.py` makes
+        #: for its `_range_pushed` latch, and the same one `#262` reached
+        #: for `policy.threat`, which needs a `clear()` called by hand
+        #: precisely because its caches are not here.
+        #:
+        #: A **balanced** guard -- added and discarded in a `finally`, as
+        #: `falling._FALLING` and `monsters/level_13/misc_sa._ECHOING` are
+        #: -- is sound on `id(world)` and deliberately left alone: its
+        #: entry exists only while that world is live, and a live object's
+        #: address is not reused.
+        self.latches: set[Any] = set()
         self._stores: dict[type, dict[int, Any]] = {}
         self._alive: list[int] = []
         self._next = 0
@@ -188,7 +248,16 @@ class World:
             return set(rough)
         ignored = moves.ignores | moves.ignores_when.get(kind, set())
         if "*" in ignored:
+            # **A blanket waiver takes the imposed squares with it**, and
+            # that is a ruling rather than an accident of line order. A
+            # creature that crosses difficult terrain for nothing crosses
+            # *this* for nothing: what a row imposes through
+            # `Movement.harder` is difficult terrain, and the waiver is
+            # written against the category and not against a cause. Reading
+            # it the other way would make the newest verb in the engine
+            # quietly beat every sure-footed feat in it. #831.
             return set()
+        imposed = self._imposed_on(for_, moves)
         # **Provenance, which is a different question from the label.** Five
         # rows print "ignores difficult terrain related to <a sort of
         # creature>" -- its own kind, or anybody's spider. A shared square
@@ -198,7 +267,7 @@ class World:
         # `forest` and is still difficult for the forest's reason. #659.
         made = self._shared_by() if moves.ignores_made_by else {}
         if not ignored and not made:
-            return set(rough)
+            return set(rough) | imposed
         return {
             sq
             for sq, kind_ in rough.items()
@@ -209,7 +278,41 @@ class World:
                     made.get(sq), moves.ignores_made_by
                 )
             )
-        }
+        } | imposed
+
+    def _imposed_on(self, for_: int, moves: Any) -> set[Any]:
+        """Squares that are rough for this creature and for nobody else.
+
+        Two sources, because the cards come in two shapes:
+
+        * `Movement.harder_everywhere` -- "treats **all squares** as
+          difficult terrain". Materialised here rather than at write time so
+          a board where nothing imposed it pays nothing; `difficult` is
+          called once per square examined during a move search.
+        * a live `Zone` naming this creature in `difficult_for` -- "squares
+          in the aura are difficult terrain **for that enemy**". On the zone
+          because the area follows a creature and `Zones.refresh` already
+          re-centres it, where a square set copied onto the burdened
+          creature would be a snapshot.
+
+        **Added after the waiver filter and never through it.** The filter
+        asks what sort of going each square is, and an imposed square is
+        rough for no reason the ground knows -- so a narrow waiver like
+        "ignores difficult terrain that is mud" has nothing to match on and
+        correctly does not touch it. Only the blanket `"*"` waiver reaches
+        it, and that is settled by its caller. #831.
+        """
+        out: set[Any] = set()
+        for _eid, zone in self.zones.all():
+            if for_ in zone.difficult_for:
+                out |= zone.squares
+        if moves.harder_everywhere:
+            out |= {
+                (x, y)
+                for x in range(self.grid.width)
+                for y in range(self.grid.height)
+            }
+        return out
 
     # -- shorthands the rest of the engine and every power body call ---------
 

@@ -2,7 +2,7 @@
 
 Three rows a conjuration or a zone makes possible: the arrow expended by
 firing it again, the bloom that bites whoever treads on it, and the thicket
-that snares whoever walks into it. Each was folded into its parent, where
+that entangles whoever walks into it. Each was folded into its parent, where
 it cost nothing; here each costs the action it prints.
 
 What is left unsaid on all three is the **origin square**. The parents put

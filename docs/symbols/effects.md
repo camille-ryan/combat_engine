@@ -33,7 +33,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Move a zone or a conjuration, keeping its shape.
 - `c.origin: Square | None`
   - the square an area was aimed at.
-- `c.reshape_area(self, into: 'Callable[[Range], Range]', *, ref: 'str' = '', kinds: 'Sequence[str]' = (), keyword: 'Keyword | None' = None, cls: 'str' = '', optional: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.reshape_area(self, into: 'Callable[[Range], Range]', *, ref: 'str' = '', kinds: 'Sequence[str]' = (), keyword: 'Keyword | None' = None, cls: 'str' = '', optional: 'bool' = False, retarget: 'Any' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Replace the **shape** of another row's area, for as long as this lasts.
 - `c.resize_aura(self, label: 'str' = '', *, plus: 'int' = 0, to: 'int' = 0, cap: 'int' = 0) -> 'int'`
   - Change a standing aura's radius in place, and say so.
@@ -49,7 +49,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Is this creature standing in dim light or darkness? Defaults to the
 - `c.wall(self, size: 'int' = 0, *, at: 'Square | None' = None, hp: 'int' = 0, blocks_sight: 'bool' = False, solid: 'bool' = True, difficult: 'bool | str' = False, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None, label: 'str' = '') -> 'int'`
   - Raise a barrier: `size` contiguous squares that stop a creature.
-- `c.zone(self, area: 'Iterable[Square]', *, label: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, difficult: 'bool | str' = False, blocks_sight: 'bool' = False, obscured: 'str' = '', exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = None) -> 'int'`
+- `c.zone(self, area: 'Iterable[Square]', *, label: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, difficult: 'bool | str' = False, blocks_sight: 'bool' = False, obscured: 'str' = '', obscured_for: 'str' = '', no_light: 'bool' = False, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = None) -> 'int'`
   - `obscured=Light.DIM` is "lightly obscured", `Light.DARK` is
 
 ## laid on a creature
@@ -62,7 +62,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Is the creature in one of the named forms? See `query.in_form`.
 - `c.merge(self, into: 'Square | None' = None, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Step inside something solid and stop being reachable.
-- `c.shifted(self, *, on: 'int | None' = None) -> 'bool'`
+- `c.shaped(self, *, on: 'int | None' = None) -> 'bool'`
   - Has the creature taken a shape that is not its own?
 - `c.stance(self, *, on: 'int | None' = None, conditions: 'Iterable[Condition]' = (), label: 'str' = '') -> 'Effect'`
   - Assume a stance. Whatever you were in, you are not in it now.
@@ -113,6 +113,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - "Whenever that creature attacks..." -- the commonest trigger in 4e.
 - `c.on_sustain(self, effect: 'Effect | None', fn: 'Callable[[], None]') -> 'bool'`
   - What happens each time this effect is sustained.
+- `c.suspend_trait(self, *conditions: 'Condition', on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, label: 'str' = '') -> 'list[Effect]'`
+  - "It loses insubstantial until the end of its next turn."
 - `c.suspend_when(self, held: 'Effect | None', event: 'type[Event]', pred: 'Callable[[Any], bool] | None' = None, *, for_: 'When' = <When.SONT: "start of source's next turn">, label: 'str' = '') -> 'Effect | None'`
   - Switch an effect off when something happens, and back on later.
 - `c.watch(self, event: 'type[Event]', fn: 'Callable[[Any], None]', *, until: 'When' = <When.EONT: "end of source's next turn">, window: 'Window' = <Window.AFTER: 2>, on: 'int | None' = None, once: 'bool' = False, label: 'str' = '') -> 'Effect'`

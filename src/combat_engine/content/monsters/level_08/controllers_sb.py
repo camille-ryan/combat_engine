@@ -1042,7 +1042,7 @@ def m5575a3(c: Cast) -> None:
     ),
 )
 def m5575a4(c: Cast) -> None:
-    victim = c.trigger.actor  # type: ignore[union-attr]
+    victim = c.trigger.actor
     if c.strike(on=victim):
         c.hit(on=victim)
 
@@ -2554,20 +2554,24 @@ def m6233a2(c: Cast) -> None:
     keywords=[Keyword.LIGHTNING, Keyword.THUNDER, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d6", 5, dtype=DamageType.LIGHTNING, kind=LIMITED),
-    dropped=("c.zone(obscured_for=)",),
 )
 def m6233a3(c: Cast) -> None:
-    """"Lightly obscured to creatures outside it" is one-directional and
-    `Zone.blocks_sight` is not -- it blinds both ways, which `c.zone`'s own
-    caution already warns against reaching for here. The marker is the same
-    `c.zone(obscured=)` the eleven plain rows wait on, because one kwarg
-    serves both and a second symbol would split the gap; what is particular
-    here is that it has to take a **direction**, not just a grade. The damage-at-turn-end
-    half is sayable and written: `c.burns` bites on entering or starting a
-    turn, not on ending one, so this is a `TurnEnd` watch hung on the zone's
-    own effect the way `level_08/controllers.py`'s `m4989a3` already does."""
+    """"Lightly obscured to creatures outside it" -- a dim zone, one way.
+
+    The direction is the whole of what was missing. `Zone.blocks_sight`
+    blinds both ways, which `c.zone`'s own caution warns against reaching
+    for, and a plain `obscured="dim"` would conceal the creatures inside
+    from each other as well -- wrong, and wrong in this creature's favour.
+    `obscured_for="outside"` is resolved when somebody looks, which it has
+    to be: who is outside changes every time anybody steps over the edge.
+
+    The damage-at-turn-end half was always sayable and is written: `c.burns`
+    bites on entering or starting a turn, not on ending one, so this is a
+    `TurnEnd` watch hung on the zone's own effect the way
+    `level_08/controllers.py`'s `m4989a3` already does."""
     if c.first:
-        ring = c.zone(c.area(), until=When.SUSTAIN, sustain=MINOR, label=c.ref)
+        ring = c.zone(c.area(), until=When.SUSTAIN, sustain=MINOR, label=c.ref,
+                      obscured="dim", obscured_for="outside")
         held = dict(c.world.zones.all()).get(ring)
         if held is not None and held.effect is not None:
             me = c.me

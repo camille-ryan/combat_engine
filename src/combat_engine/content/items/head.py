@@ -379,18 +379,108 @@ def i1550x1(c: Cast) -> None:
 
 
 @power("i3225x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.trained()",))
+       reach=PERSONAL, target=SELF)
 def i3225x1(c: Cast) -> None:
-    """`skills.py` has no training model, so "untrained" cannot be asked
-    and the blanket `skill` key reaches every check instead."""
-    c.bonus("skill", 1, on=c.me, until=When.ENCOUNTER, kind="item")
+    """"+1 item bonus to **untrained** skill checks."
+
+    **The old note was true when written and the bonus was over-granting
+    because of it.** It said *"`skills.py` has no training model, so
+    'untrained' cannot be asked and the blanket `skill` key reaches every
+    check instead"* -- so this paid on every check a character made,
+    trained ones included, which is strictly better than print. #565 built
+    both halves (`Skills.trained` holds the set, `class_skill` carries 205
+    rows across 25 classes) and the marker went stale without anybody
+    noticing, which `f1455`'s docstring records happening to the same
+    premise.
+
+    The shape is `f1455`'s, pointed the other way: the blanket `skill` key,
+    which `skills.modifier` totals for every check, narrowed by a gate so
+    it pays only on an **un**trained one. The context carries `actor` and
+    `skill`, which is what makes the gate answerable at all -- without
+    those keys it would be silently false, this component's named failure
+    mode.
+
+    Read off the context's actor rather than `c.me`, for `f1455`'s stated
+    reason: they are the same creature here, and asking the context keeps
+    it right if the bonus is ever laid on somebody else. No `Skills` at all
+    counts as untrained, which is the same direction the component's
+    absence already means everywhere else.
+
+    The level 14 and 24 steps are paragon and epic and are not written."""
+    from combat_engine.engine import Skills
+
+    me = c.me
+
+    def untrained_in_what_is_rolled(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("actor", me)
+        held = c.world.get(who, Skills)
+        return held is None or str(ctx.get("skill", "")) not in held.trained
+
+    c.bonus("skill", 1, on=me, until=When.ENCOUNTER, kind="item",
+            when=untrained_in_what_is_rolled)
 
 
 @power("i3225p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("query.trained()",))
+       reach=PERSONAL, target=SELF)
 def i3225p1(c: Cast) -> None:
-    """Granting training is the whole of the power and nothing is trained
-    in the first place."""
+    """"You gain training in one skill until the end of your next turn."
+
+    **The old note said "nothing is trained in the first place", which
+    #565 falsified.** `Skills.trained` holds the set and `class_skill`
+    carries 205 rows across 25 classes, so there is a set to add to and a
+    base training the +5 is already read from.
+
+    **Granted on the board and not in `chargen`, which is the distinction
+    that made this look blocked** -- and `Skills.trained` being a
+    `frozenset` is half the reason it reads that way. `f3431` records the rule for the
+    permanent case -- *"where training is granted is `chargen` and not a
+    body, because the sheet is made before the board is"*, with the card's
+    skill carried on `feat.trains`. That path cannot express a grant with a
+    **duration**: the sheet is made once and this lasts until the end of a
+    turn. So the set is added to here and an `Effect`'s `on_end` takes it
+    back, which is the arrangement the fighter stances already use for
+    their riders.
+
+    Offered over the skills the character is **not** already trained in,
+    because training a skill twice is not a choice the card gives and
+    would spend the day's use on nothing. Sorted, so a headless engine's
+    pick is stable.
+
+    The level 14 and 24 steps (until the end of the encounter, and two
+    skills) are paragon and epic and are not written. The out-of-combat
+    minute is not a duration this engine has."""
+    from combat_engine.engine import Skills
+    from combat_engine.engine.skills import SKILLS
+
+    held = c.world.get(c.me, Skills)
+    if held is None:
+        return
+    options = sorted(set(SKILLS) - set(held.trained))
+    if not options:
+        return
+    skill = c.choose(options, "which skill you are trained in")
+    if skill is None:
+        return
+    hold = c.effect(c.ref, until=When.EONT, on=c.me)
+    if hold is None:
+        # No hold means no way to give it back, and permanent training
+        # from a daily is worse than the clause not firing.
+        return
+    # **`Skills.trained` is a `frozenset`**, which is why the first version
+    # of this raised `AttributeError: 'frozenset' object has no attribute
+    # 'add'` -- and is a fair part of why granting training reads as
+    # chargen's job: the field is immutable by construction. So the set is
+    # rebound rather than mutated.
+    #
+    # Given back by **subtracting**, not by restoring the old set: a
+    # snapshot would undo any other grant laid in between, and the skill is
+    # known to have been absent because the choice was offered over the
+    # untrained ones.
+    held.trained = held.trained | {skill}
+    hold.on_end.append(
+        lambda: setattr(held, "trained", held.trained - {skill})
+    )
+    c.note(f"{c.ref}: trained in {skill} until the end of your next turn")
 
 
 @power("i838x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -936,17 +1026,48 @@ def i883x1(c: Cast) -> None:
     c.bonus(WILL, 1, on=c.me, until=When.ENCOUNTER)
 
 
+def _dazed_by_a_will_attack(world: World, me: int, ev: ConditionApplied) -> bool:
+    """"Dazed by an attack that targets your Will defense."
+
+    Which defence the attack went after is not on the event and does not
+    have to be: `ConditionApplied.power` is the ref of the row that laid
+    the condition and which defence a row goes after is header data,
+    `Power.attack.vs`. That is the same route `hands._defence_gate` takes
+    for a modifier's context, and it carries the same one imprecision --
+    a row whose *secondary* attack goes after a different defence than its
+    printed Attack line reads as the printed one.
+
+    **An empty `power` is a relation** -- a grab, a domination -- which
+    the event's own docstring says must be read as "nothing to ask about".
+    Not a Will attack, so no match, which is right rather than merely
+    cheap.
+    """
+    row = get(ev.power or "")
+    return (
+        ev.target == me
+        and ev.condition is Condition.DAZED
+        and row is not None
+        and row.attack is not None
+        and row.attack.vs is WILL
+    )
+
+
 @power("i933p1", level=8, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
        reach=PERSONAL, target=SELF,
        trigger="you would be dazed by an attack against your Will",
-       on=Trigger(ConditionApplied,
-                  lambda world, me, ev: (
-                      ev.target == me and ev.condition is Condition.DAZED),
-                  "you would be dazed"),
-       dropped=("ConditionApplied.vs",))
+       on=Trigger(ConditionApplied, _dazed_by_a_will_attack,
+                  "you would be dazed by an attack against your Will"))
 def i933p1(c: Cast) -> None:
-    """Which defence the attack went after is not on the event, so this
-    answers a daze from any source."""
+    """The defence narrowing is written now -- see the gate above; it was
+    marked as unsayable while the ref of the laying row had been on the
+    event all along.
+
+    Still a cure rather than a prevention, and that is the event's
+    ordering rather than this row's choice: `Effects.apply` installs the
+    condition and *then* announces it, deliberately, so an interrupt on
+    `ConditionApplied` can only take it back off. Nothing has acted on the
+    daze in between. The `Level 18:` and `Level 28:` lines are out of
+    scope."""
     c.cure(Condition.DAZED, on=c.me)
 
 

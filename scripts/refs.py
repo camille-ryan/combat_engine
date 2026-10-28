@@ -81,6 +81,54 @@ def _known() -> set[str]:
     return out
 
 
+#: Ref shapes the **importer** mints, so a declared row carrying one must
+#: have a database row behind it. Hand-coined refs are deliberately excluded:
+#: `mba`/`rba`/`bmba` are the engine's basic attacks, and `rt:<race>-origin`,
+#: `cf:<class>-oath` and friends are conventions the tree invents. Measured
+#: when this was written: 28 declared refs have no database row and **all 28
+#: are hand-coined** -- none matches a shape below, so this needs no baseline
+#: and a single hit is a real fault.
+_MINTED = (
+    re.compile(r"m\d+a\d+$"),              # a monster ability
+    re.compile(r"cf:[a-z-]+-f\d+(?:s\d+)?$"),  # a class feature or sub-option
+    re.compile(r"i\d+[px]\d+$"),           # an item power or property
+)
+
+
+def _minted_without_a_row() -> list[str]:
+    """A row declaring an importer-minted ref that the database does not hold.
+
+    **Two correct importer fixes were reverted in one afternoon for want of
+    this.** Both renumbered a positional ref and so re-pointed live content:
+    #812 recovered 94 dropped class-feature sections and moved 18 citations;
+    #485 removed one spurious monster ability and moved 4. Neither was
+    visible to any instrument -- #812's wide sweep was 21 of 22 clean with
+    **0 raise**, because the affected rows are marked and the audit never
+    fires them, and `refs.py`'s prose walk passed because these are
+    *decorator* refs rather than prose.
+
+    The only signal in either case was a number moving the wrong way
+    (`bonuses` counting 68 refs with no card where it had said 50), and the
+    second one I caught only because the first had just taught me to look.
+    That is not a check; it is me remembering. #559.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.db import game
+    from combat_engine.engine.dsl import REGISTRY
+
+    db = game()
+    held: set[str] = set()
+    for table in _TABLES:
+        try:
+            held |= {r[0] for r in db.execute(f"SELECT ref FROM {table}")}
+        except Exception:
+            continue
+    return sorted(
+        ref for ref in REGISTRY
+        if ref not in held and any(p.match(ref) for p in _MINTED)
+    )
+
+
 def _prose(path: Path) -> list[tuple[int, str]]:
     """Docstring and comment lines, with their line numbers."""
     lines = path.read_text(errors="replace").splitlines()
@@ -151,13 +199,24 @@ def main() -> int:
         for rel, num, ref, line in bad:
             print(f"{rel}:{num}  {ref}\n    {line[:110]}")
         print()
-    print(f"{seen} refs named in prose, {len(bad)} resolving to nothing")
+    # **The other direction, which is the one that let two reverts through.**
+    # Above asks whether a ref a row's *prose* names resolves. This asks
+    # whether a ref a row *is declared under* still has a database row --
+    # the question an importer change can break silently by renumbering.
+    orphans = _minted_without_a_row()
+    print(f"{seen} refs named in prose, {len(bad)} resolving to nothing;"
+          f" {len(orphans)} declared row(s) have no database row")
     if bad and not args.audit:
         for rel, num, ref, _ in bad[:20]:
             print(f"  {rel}:{num}  {ref}")
         if len(bad) > 20:
             print(f"  ... and {len(bad) - 20} more")
-    return 1 if bad else 0
+    for ref in orphans[:20]:
+        print(f"  {ref} is declared and the importer minted no row for it"
+              f" -- a renumbered ref, or a row the compendium no longer has")
+    if len(orphans) > 20:
+        print(f"  ... and {len(orphans) - 20} more")
+    return 1 if (bad or orphans) else 0
 
 
 if __name__ == "__main__":

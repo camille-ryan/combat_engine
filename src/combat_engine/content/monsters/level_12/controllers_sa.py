@@ -4332,10 +4332,9 @@ def m3804a1(c: Cast) -> None:
             return
         if _reach_kind(ev) != "melee":
             return
-        result = getattr(ev, "result", None)
-        if result is None:
+        if getattr(ev, "result", None) is None:
             return
-        result.critical = True
+        c.crit_becomes(True, ev=ev)
         c.flat(c.roll("1d12"), on=victim)
         c.world.effects.end(hold, "the marked blow landed")
 
@@ -6695,7 +6694,7 @@ def m6537a4(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.COLD, Keyword.FIRE, Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=13),
-    dropped=("Damage(bonus= conditional)",),
+    dropped=("Damage(bonus_if=)",),
 )
 def m6537a5(c: Cast) -> None:
     """Two numbers for one blow -- "+8, or +15 if the target is slowed or
@@ -6707,6 +6706,13 @@ def m6537a5(c: Cast) -> None:
     two for the same blow depending on the target. Until that exists the line
     cannot move up, and with it in the body the blow is not MM3-convertible
     and the policy cannot forecast it.
+
+    **Re-spelled from `Damage(bonus= conditional)`, which read as arrived.**
+    That clause is prose inside a parameter list, and `blocked._params_ok`
+    takes the text before the `=` -- so it asked "does `Damage` accept
+    `bonus`", which it does, and `todo.py` called this row finishable. The
+    gap the paragraph above describes is untouched; only the spelling was
+    wrong, and `bonus_if=` is a keyword that can actually arrive. #849.
 
     The flight is an Effect and happens whatever the attack did, once for the
     whole use -- `c.first` is where a once-per-power line goes.

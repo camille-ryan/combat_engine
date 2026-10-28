@@ -147,7 +147,7 @@ def shaman_f0(c: Cast) -> None:
 
 
 @power("cf:shaman-f0s0", **TRAIT,
-       dropped=("c.grant_action('call_companion')",))
+       dropped=("actions.call_companion()",))
 def shaman_f0s0(c: Cast) -> None:
     """The option `chargen` has been offering with no row behind it.
 
@@ -164,10 +164,9 @@ def shaman_f0s0(c: Cast) -> None:
     The second sentence is dropped. "If your spirit companion is not
     present at the start of your turn, you can summon it once during that
     turn as a free action" is a conditional line in the action menu, and
-    `c.grant_action`'s docstring is explicit that a word it does not know
-    "is carried, costs nothing and does nothing" -- so writing it without
-    the reader would be a modifier nothing consults, which is this
-    component's commonest bug. `c.call_companion` is the action; what is
+    `c.grant_action` refuses a word no reader looks for (#762) and in any
+    case only changes the cost of an action the menu already offers -- and the menu has no
+    kind for calling a companion. `c.call_companion` is the action; what is
     missing is offering it for free, once, only while the spirit is away.
     """
     _spirit_choice(c, "elemental", ("p12865", "p12866"))

@@ -49,11 +49,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import inspect
+import os
 import re
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
 from pathlib import Path
+from typing import Any
 
 from combat_engine import chargen
 from combat_engine.content import dummy, loader
@@ -137,6 +140,170 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **This row's premise is two things at once and the board poses one.**
+    # It triggers on the caster becoming bloodied, and pays only if an enemy
+    # is carrying a shroud *at that instant*. A shroud exists only after
+    # `p9400` has been used, `p9400` is not one of this row's `_siblings`,
+    # and nothing on the board uses it before `_provoke` wounds the caster.
+    #
+    # **It was green until #907, and that is the whole reason it is here.**
+    # A module dict keyed on `id(c.world)` outlived its board, so a recycled
+    # address made `p9400` return before installing its spend-watch and left
+    # an unspent shroud lying about for this row to find. So its green
+    # verdicts were bought by a bug -- `fired` read 24, 13, 23, 10, 1 across
+    # ten calls in one process -- and fixing the bug made the row honestly
+    # silent rather than newly broken. Nothing about the row changed.
+    #
+    # Proven by posing the premise by hand, on the board the audit builds:
+    #
+    #     no shroud, body run   nothing laid        (what the board poses)
+    #     shroud laid on a foe  'f1788 damage+4'    the printed bonus
+    #
+    # So SILENT is a statement about the board. Posing it properly is board
+    # work -- a pass that uses a class at-will *before* provoking, which is
+    # #816's neighbourhood -- and not a fault in this row.
+    "f1788": ("pays only while an enemy carries a shroud and the caster is "
+              "bloodied in the same instant; the board never uses p9400 "
+              "before it wounds the caster. Proven to lay damage+4 when a "
+              "shroud is posed by hand"),
+    # **Both of these were green for the wrong reason until #364**, which is
+    # the only interesting thing about them. Each prints a condition on the
+    # *ally* it heals or helps, and `candidates` used to put the caster in
+    # its own ally list -- so the row acted on itself, the board poses a
+    # bloodied caster, and the effect landed and counted. Excluding the
+    # caster is what the cards say and it is what made them honest.
+    #
+    # Neither row is wrong. Proven by posing the precondition the board does
+    # not:
+    #
+    #     m1585a6  ally bloodied to 67/202 -> Healed, ally 67 -> 82 (+15,
+    #              which is the printed number)
+    #     m5592a5  ally given a save-ends effect -> SavingThrow(actor=2,
+    #              against='e42[probe: slowed, save ends]',
+    #              granted_via='m5592a5')
+    #
+    # **`m1585a6` is gone from this list and `m5592a5` was never blocked by
+    # what this note said.** #856 called the gap "the board's sibling is
+    # always at full health", and it was half right:
+    #
+    # * the board **does** wound its ally -- a cleric spawned at half hit
+    #   points -- but only for a caster with a class. A monster row's only
+    #   ally is a second of its own kind, spawned full, and gets none of the
+    #   states the board poses on a character's ally. That is what is now
+    #   posed, per row, in `board`.
+    # * `m5592a5` wants a save-ends effect on the ally, and `board` has laid
+    #   one on the cleric ally since before this entry was written -- so the
+    #   reason recorded here was never the live one. It is left on the list
+    #   with its own cause, which is the same one: a monster row does not get
+    #   that cleric.
+    "m5592a5": ("grants a save to an ally carrying a save-ends effect; its "
+                "only ally is a copy of itself, which carries none. Proven "
+                "to roll one when it does"),
+    # Summons one of two creatures, chosen by which school benefit the
+    # character holds (Camille's ruling, 2026-10-21, #826). It fires 48
+    # times and returns on its first gate, because **this board's wizard is
+    # an arcanist/sha-ir build**: it holds `cf:wizard-arcanist-f0*` and
+    # `cf:wizard-sha-ir-f*` and no `cf:wizard-mage-f4s*` at all, so neither
+    # arm of the branch can be reached.
+    #
+    # So SILENT here is a statement about the board and not about the row.
+    # The row is proved by `drivers.school_summon` instead, which grants the
+    # feature and asserts through the body: necromancy summons `x10_27`,
+    # nethermancy `x10_28`, neither summons nothing, and the level-19
+    # `x10_29` never arrives. Planted by collapsing the branch to one
+    # creature -- red on the nethermancy arm and on the negative control.
+    #
+    # **The general fix is a pose, not more entries like this one.** A knob
+    # granting the `cf:`/feat ref a row gates on would reach this and
+    # `i3036p1` (which returns unless the wearer holds `f650b`, and the
+    # moved draw means this board's character does not) and every other row
+    # whose gate is "do I hold this". It moves verdicts in bulk, so it is
+    # not a change to make beside content work.
+    "p13984": "its branch needs a cf:wizard-mage-f4s3/s4 school benefit and"
+              " this board's wizard is an arcanist/sha-ir build -- proved in"
+              " drivers.school_summon instead",
+    # "You hit a cursed target with an arcane power using this rod." The row
+    # is correct and `_pose_cursed` below now curses every enemy, verified at
+    # the moment it is laid -- but the one creature the provocation swings at
+    # has lost the relation by the time the body runs, while the effect that
+    # laid it is still standing and `Effects.end` is never called for it:
+    #
+    #   foe=2 cursed=False enemies=[(2, False), (3, True), (4, True), (5, True), (6, True)]
+    #
+    # #822. The pose is kept rather than reverted: it is right for the other
+    # 45 of the 46 `c.cursed(` read sites, and reverting it would hide this.
+    "i2339p1": "the posed curse is gone from foes[0] by the time the body"
+               " runs, with its effect still standing -- #822",
+    # **The two rows #703 wrote, and the board cannot pose either.** Both
+    # answer a `DamageRolled` -- `c.trigger` is `None` when the auditor
+    # fires them, so `c.reroll_faces` is handed no event and there is
+    # nothing to reroll. Measured: firing each body on the board emits no
+    # `DamageRolled` at all.
+    #
+    # Each also gates on a property of *the blow* rather than of itself, so
+    # even a posed roll has to be of the right shape: `p16373` wants an
+    # arcane attack power, `i1756p1` a melee weapon attack. Proved working
+    # in `drivers.reroll_after` instead -- 12 assertions, with the gates
+    # plant-tested in both directions over 250 boards each.
+    "p16373": "answers a DamageRolled the board never poses, and gates on"
+              " the blow being arcane -- proved in drivers.reroll_after",
+    "i1756p1": "answers a DamageRolled the board never poses, and gates on"
+               " a melee weapon attack -- proved in drivers.reroll_after",
+    # `p10044` was excused here -- "an interrupt on taking damage, and the
+    # board poses no incoming blow" -- and the premise is **false now**.
+    # Measured across its own attempt: **10 `DamageRolled` events**, the
+    # board having gained ongoing-damage poses since the excuse was
+    # written. So the entry is removed rather than reworded: its stated
+    # reason is the thing that expired.
+    #
+    # **But it is not this list that proves the row works, and the
+    # difference matters.** The event that makes it un-silent is a `TempHP`
+    # from a sibling racial trait on the same board, not its own
+    # `c.set_damage_faces` -- the attribution question #690 and #697 are
+    # about. What proves the clause is `drivers.pinned_die`, which the old
+    # entry already pointed at: every face of an incoming 4d8 set to 1, a
+    # blow the caster is *dealing* left alone, and both halves plant red.
+    #
+    # So the row is covered either way, and by the instrument that can
+    # actually see it. Losing the excuse loses nothing.
+    "i3036p1": "returns early unless the wearer knows f650b, and the draw"
+               " stopped dealing it between 81f5229a1 and 00429a9e4 -- #783",
+    # **Became usable and is still quiet, which is two different facts.** At
+    # `81f5229a1` the auditor reported this UNUSED -- it could not be used on
+    # the board at all -- so it was never on the silent list.
+    #
+    # **The reason recorded here was wrong, and #899 measured the real one.**
+    # It said the board "poses no all-missed `PowerResolved`". It poses one:
+    # instrumenting `c.restore_use` shows this row reaching it **four**
+    # times, with a real ref off `c.trigger.power` rather than the `""` the
+    # old note describes.
+    #
+    # What stops it is one line further in. The board provokes every power
+    # use with `use(..., spend=False)` -- six sites in this file -- and
+    # `dsl.use` calls `powers.note_use` only inside its `if spend:` branch.
+    # So the use is never recorded as spent, `powers.times(ref)` is 0, and
+    # `c.restore_use` returns False on exactly the branch that **is** the
+    # printed Requirement. The row is correct; there is nothing to hand back.
+    #
+    # `spend=False` is deliberate -- it is what lets the board provoke the
+    # same power repeatedly without exhausting it -- so this wants a pose
+    # that spends and then lets the row restore, which is a separate board
+    # rather than a flag. Filed as #901.
+    "i1676p1": "restores a use, and the board provokes with spend=False so"
+               " powers.times() is 0 and there is nothing to hand back"
+               " -- UNUSED at 81f5229a1, reachable and quiet now; #901",
+    # The same row one item over, and found by the same route: #680's racial
+    # pick made its trigger reachable, so it left the `UNUSED` bucket and
+    # went straight onto the silent list. Measured identically -- two
+    # firings, a real ref (`p1767`), `times` 0 both times.
+    #
+    # **Worth keeping as a pair.** `UseRestored` (#899) took 28 rows off the
+    # silent list and these two are the residue, which is the evidence that
+    # the remaining cause is the board and not the missing event: the event
+    # lands, the restore never happens.
+    "i3271p1": "restores a use, and the board provokes with spend=False so"
+               " powers.times() is 0 and there is nothing to hand back"
+               " -- UNUSED until #680's racial pick reached it; #901",
     # "You bloody an enemy with an attack that uses **the augmented
     # weapon**", and the gate is written now that `Bloodied.weapon` exists
     # (#653). Two separate board facts keep it quiet, both measured:
@@ -146,17 +313,28 @@ KNOWN_SILENT = {
     #   already holds `w3612` with `item='i1159'` from its own kit -- so
     #   `c.my_weapon()` answers None and the gate cannot pass whatever the
     #   blow does. #699.
-    # * the blow that bloodies is a **rider's**, not the basic attack's:
-    #   `Bloodied(source=1, power='f274', weapon='')`. A rider is a row of
-    #   its own with its own `Cast` and no weapon keyword, so it stamps no
-    #   weapon even though the swing came through one. #698.
+    # * ~~the blow that bloodies is a **rider's**~~ -- **fixed, and this
+    #   half of the excuse is retired.** It read `Bloodied(source=1,
+    #   power='f274', weapon='')`, because a rider is a row of its own with
+    #   no weapon keyword and stamped nothing. The swing now stamps
+    #   `AttackResult.weapon` and every rider inside the attack inherits
+    #   it, so a bloodying rider carries the weapon. #698.
+    #
+    #   Kept in the note rather than deleted: an excuse that quietly loses
+    #   a premise is an excuse nobody can re-check, and this one still
+    #   stands on the **first** premise alone.
     #
     # Driven by hand: with `i1688` put on the weapon in hand,
     # `c.my_weapon()` answers it and the row's gate reads the right ref.
     # The row is strictly narrower than it was -- it used to heal on any
     # bloodying this wielder did, which was wider than the card.
-    "i1688p1": "needs the blow to come through its own weapon; the board's"
-               " weapon carries another item and the bloodying blow is a rider's",
+    # **Both premises are now gone and the entry with them.** The rider half
+    # went in #698 when the swing started stamping `AttackResult.weapon`;
+    # the first half -- "the board's weapon carries another item" -- was
+    # #699, and the board lays the item under test on the weapon now even
+    # when chargen already dealt a magic one. The hand-driven proof recorded
+    # above (*"with `i1688` put on the weapon in hand, `c.my_weapon()`
+    # answers it"*) is what the board does by itself.
     # "When you use your shifter racial power, the power's benefits extend to
     # one ally wielding a weapon affected by your `cf:artificer-f0s0`." Three
     # board facts have to line up at once and the board gives none of them:
@@ -253,6 +431,22 @@ KNOWN_SILENT = {
     # Writing the clause is what made it visible, which is the right
     # direction. The dummy posing a character in light armour would retire
     # both entries (#437).
+    # **Measured both ways before being excused here**, because an excuse
+    # that blames the board is how a real bug hides. The board's barbarian
+    # is dealt DEX 15, a modifier of exactly **+2**, and the card is "shift
+    # your Dexterity modifier squares instead of 2" -- so at +2 it grants
+    # nothing and the row returning is correct, not inert. Raised to DEX 18
+    # on the same board it lays `f1878 moves move:shift +2` and emits
+    # `EffectApplied`, gated to `cf:barbarian-f1s3` and refusing another
+    # row's shift.
+    #
+    # The first probe of this read `Mods` and found nothing, which looked
+    # like a dead row: `c.extend_every` delegates to `extend_move`, which
+    # lays an **Effect** under the reserved `MOVE_KIND` key. Checking the
+    # wrong store is the same trap as excusing without a measurement.
+    "f1878": "shifts its Dexterity modifier instead of 2; the board's"
+             " barbarian is dealt a modifier of exactly 2, so the card"
+             " grants nothing",
     "f1873": "holds only out of heavy armour; the board deals heavy armour",
     # **Four shield rows, and the same shape as `f1873` above.** Each lays
     # its bonus only when a shield is held -- "your shield bonus also
@@ -333,7 +527,6 @@ KNOWN_SILENT = {
     # enemy without the sense -- the card being odd, not the row wrong.
     "f3235": "needs a cursed enemy to fall with the pact leg's use already spent",
     "i1470p1": "hides from blindsight; the board fields no enemy that has it",
-    "i744p1": "needs an unused wizard attack power to expend; the printed cost refuses",
     # The same tome card at six other levels, all written to charge the
     # same printed price. `i744p1` has refused on this board since it was
     # written; the others refused only once they started charging, and a row
@@ -341,20 +534,32 @@ KNOWN_SILENT = {
     # a row doing nothing. The borrowable set is also empty for the
     # summoning and lightning ones -- see `i2717p1`'s docstring.
     #
-    # **The board is a fighter, which is why none of these can pay.** The
-    # price is "an unused wizard attack power" and `audit.board` deals a
-    # character, so the bearer holds a dealt class's powers and no wizard
-    # row at all. `drivers.tome_trade` is what proves the trade works: it
-    # plants the bearer's spell list and asserts the loan, the charge, the
-    # offer, and all three ways the old two-statement shape got it wrong.
-    # So this is an excuse about the board, which is the only kind allowed
-    # here -- and the second axis of `_attempts` cannot fix it, because
-    # posing the row differently does not deal it a different class.
-    "i2717p1": "needs an unused wizard attack power to expend; the printed cost refuses",
-    "i2895p1": "needs an unused wizard attack power to expend; the printed cost refuses",
-    "i2898p1": "needs an unused wizard attack power to expend; the printed cost refuses",
-    "i2899p1": "needs an unused wizard attack power to expend; the printed cost refuses",
-    "i2900p1": "needs an unused wizard attack power to expend; the printed cost refuses",
+    # **Six of these eight are gone, and the one sentence they shared was
+    # right.** It read: the board is a fighter, so the bearer holds no
+    # wizard row at all and the price cannot be paid -- *"and the second
+    # axis of `_attempts` cannot fix it, because posing the row differently
+    # does not deal it a different class"*. True, and the answer was not a
+    # pose: `board` lends the bearer a few of that class's dailies, for the
+    # rows that ask. `i744p1`, `i1098p1`, `i1461p1`, `i2895p1`, `i2899p1`
+    # and `i2900p1` all pay the price and act. #705.
+    #
+    # **The two below are re-stated, because the reason they shared is now
+    # false for them.** The price *is* payable and cards *do* exist to
+    # borrow -- measured per rung on each board:
+    #
+    #     i2717p1  rung 5: payable=2  borrowable=4
+    #     i2898p1  rung 2: payable=1  borrowable=1
+    #
+    # So the refusal is further in than the class, and it is not the board
+    # dealing the wrong one. Named as an unexplained observation rather
+    # than given a reason I have not established, which is the shape
+    # `m5466a2`'s entry had before #754 found its cause.
+    "i2717p1": "borrows by keyword and still does nothing with the price "
+               "payable and cards to borrow at the same rung -- measured, "
+               "rung 5: payable=2 borrowable=4. Unexplained; not the class",
+    "i2898p1": "borrows by keyword and still does nothing with the price "
+               "payable and cards to borrow at the same rung -- measured, "
+               "rung 2: payable=1 borrowable=1. Unexplained; not the class",
     # **`i3012p1` is deliberately NOT here, and that is the useful part.**
     # It was, and `audit.py` answered OUTGROWN on the next run: its price is
     # the widest of the seven -- a daily attack *or* utility -- so one of
@@ -367,30 +572,44 @@ KNOWN_SILENT = {
     # `implement_c._spend_unused`. Silent at every sweep since they were
     # written, and for the same reason as the six above -- now driven, which
     # is what moves them from unexplained to excused. #704.
-    # **A standing retype lays a labelled effect and nothing else**, and the
-    # arming at encounter start spends its own evidence: `board` records
-    # `EffectApplied` in `armed`, so the one event this row class emits is
-    # subtracted as setup noise. `i2339x1`, `i3147x1` and `i3170x1` are
-    # carried silent for exactly this and `i3343x1` joins them the moment it
-    # stops being `todo=`. Admitted here rather than to `silent_refs`, which
-    # may shrink and never grow -- and admitted on evidence, not assumption:
-    # `drivers.retype_two_types` runs this row's own body and reads both
-    # directions of its retype back off `Cast._retyped`. The real fix is for
-    # the harness to credit an effect whose **label** is new rather than
-    # subtracting the event class. Filed.
-    "i3343x1": "lays a standing retype and nothing else; `board` subtracts "
-               "EffectApplied as setup noise. Driven in drivers: fire reads "
-               "back as fire and necrotic, necrotic as necrotic and fire",
-    "i1098p1": "needs an unused wizard utility power to expend; the printed cost refuses",
-    "i1461p1": "needs an unused wizard daily attack power; the printed cost refuses",
+    # **The standing-retype excuse is gone, and `_claimed` is why.** It read:
+    # a retype lays a labelled effect and nothing else, the arming at
+    # encounter start spends its own evidence, so the one event the row class
+    # emits is subtracted as setup noise. True, and the cause was narrower
+    # than "subtracted as noise" -- `c.deals` stamps a **keyed** label
+    # (`deals:fire|implement|...`) rather than a ref, so `_claimed` could not
+    # attribute it to anybody. Keyed labels are credited positionally inside
+    # the row's own bounded slice now, and `i3343x1`, `i3147x1` and `i3170x1`
+    # all do something. #710.
+    #
+    # `i2339x1` was named in the same group and did **not** heal, for an
+    # unrelated reason worth not re-deriving: its body is gated on
+    # `c.element()`, which is `None` on all eight seeds, so it correctly does
+    # nothing on every board the harness can build. It stays on
+    # `silent_refs`. #885.
     "m1526a2": "resets an adjacent sprung trap; the board fields none",
     "m6115a0": "lends its square to siblings of its own stock; the board fields it alone",
     # Sustains. Both narrow to holds whose printed cost is a minor, and the
     # harness fires each row on a fresh board, so nothing is being sustained.
     "i1964p1": "sustains one of its own minor-cost holds; a fresh board sustains nothing",
     "p14124": "sustains one of its own minor-cost holds; a fresh board sustains nothing",
-    # `c.restore_use` announces only a `Note`, which `f3235` documents.
-    "i2318p1": "gives back a sibling's use, which announces only a Note",
+    # **The reason here said "announces only a Note" and #899 falsified it.**
+    # `c.restore_use` emits `UseRestored` now, which is in `DID_SOMETHING`,
+    # so the announcement is no longer what stops this row being credited.
+    #
+    # The real cause, measured by wrapping the verb: it calls
+    # `restore_use("cf:warlock-f1s4")` on all 48 attempts and the caster
+    # **does not own that row** -- `ref in powers.all` is False -- so the
+    # verb refuses before it reaches the spend question at all. The board
+    # deals a character that is not a warlock on that pact leg.
+    #
+    # A different cause from `i1676p1`/`i3271p1` above, which *do* own their
+    # ref and fail on `times() == 0` (#901). Worth keeping distinct: one is
+    # "the board deals the wrong character", the other "the board never
+    # spends".
+    "i2318p1": "gives back a sibling's use the caster does not own, so the"
+               " verb refuses before the spend question; the board deals no"
+               " warlock on that pact leg",
     # The initiative order is not one of the five observables.
     "m4448a4": "adds initiative slots; the order is not an observable",
     # Deliberately empty, and its docstring predicts this exact line:
@@ -637,9 +856,16 @@ KNOWN_SILENT = {
     # fired alone, has not happened.
     "m3290a4": "rerolls an attack roll; fired alone there is none behind it",
     "m3645a4": "rerolls an attack roll; fired alone there is none behind it",
-    # The board's one ally is a copy of the caster at **full** health, so a heal
-    # lands on nobody who needs it.
-    "m822a4": "heals undead allies in a burst; the board's one ally is unhurt",
+    # **Re-stated, because the recorded reason was wrong.** This said "the
+    # board's one ally is at full health, so a heal lands on nobody who
+    # needs it" -- and the body never asks about hit points at all. It opens
+    # `if not c.is_kind("undead", on=c.target): return`, so what stops it is
+    # the ally's **kind**, not its health, and wounding the copy (#856) does
+    # nothing for it. Checked by reading the body rather than trusting the
+    # note, after the health half of this board limit was closed and this row
+    # stayed silent.
+    "m822a4": ("heals undead allies in a burst; its only ally is a copy of "
+               "itself and reads as humanoid, so the kind gate returns"),
     # Terrain a bare grid has not got.
     "m960a5": "requires icy ground to teleport from; the board has none",
     # Round 11: the board carries `fire` and `object` scenery and nothing else, so
@@ -807,8 +1033,11 @@ KNOWN_SILENT = {
     "m790a5": "changes state without emitting anything for the audit to see (#375)",
     "m4325a5": "changes state without emitting anything for the audit to see (#375)",
     "m5596a7": "changes state without emitting anything for the audit to see (#375)",
-    # Needs an effect a *sibling row* laid and the harness never ran.
-    "m5709a2": "acts on a creature carrying a sibling row's own effect",
+    # **`m5709a2`'s excuse is gone**, and it read: needs an effect a
+    # *sibling row* laid and the harness never ran. True, and the sibling it
+    # waits on is its own creature's other ability -- a shape `_siblings`
+    # had no notion of until `_label_gated` read it off the row's own gate.
+    # #869.
     "m6686a1": "acts on a creature carrying a sibling row's own effect",
     "m3295a3": "acts on a creature carrying a sibling row's own effect",
     "m2784a3": "acts on a creature carrying a sibling row's own effect",
@@ -843,7 +1072,6 @@ KNOWN_SILENT = {
     # caster's own side is the second of its kind, spawned at full health --
     # the four wounded ones are all on the other team. Driven by hand: with
     # that ally at half hit points it is granted a melee attack and swings.
-    "m350a2": "grants a bloodied ally an attack; the board's only ally is unhurt",
     # A long jump plus "+2 to your fly speed (if any)". The jump is a skill
     # check nothing rolls, and the board's ranger has no fly speed, so the
     # printed row correctly does nothing here -- "if any" is the card's own
@@ -954,17 +1182,30 @@ KNOWN_SILENT = {
     # the book, p10145 comes out of it, and the +1 power bonus applies to
     # p10145 and to nothing else.
     "p7377": "swaps a prepared power for one in the book; the board deals no second one",
-    # Its target line is "an enemy affected by your `p12577`", which
-    # `c.suffering` answers by label. The board never uses `p12577`, so the
-    # pool is empty, `c.choose` returns None and the daze lands on nobody.
+    # **`p16380` was here and #680 retired it.** The entry read "dazes an
+    # enemy affected by `p12577`; the board never uses that power", and that
+    # was true, measured, and driven by hand with both controls when it was
+    # written. What falsified it is the racial pick: the dealt character now
+    # draws a power set that reaches `p12577`, so the pool the row selects
+    # from is no longer empty.
     #
-    # **Driven by hand, both controls**: `c.suffering("p12577")` returns `[]`
-    # on the board as posed, and `[2]` once that creature carries the attack
-    # penalty and the granted advantage `p12577` lays -- at which point the
-    # body dazes it (`Conditions(counts={MARKED: 1, DAZED: 1})`). So the row
-    # works and the board cannot pose it, which is the distinction this
-    # excuse exists to draw. #629's family.
-    "p16380": "dazes an enemy affected by p12577; the board never uses that power",
+    # Measured both ways rather than inferred, because the obvious suspect
+    # was the row being credited for somebody else's condition -- which is
+    # the fault #900 had just found in a different family on the same day:
+    #
+    #     arrangements where c.suffering("p12577") is non-empty
+    #       with #680's pick       6 of 16
+    #       without it             0 of 16
+    #
+    # and the row calls `c.dazed(on=2)` **itself**, once, on the creature
+    # actually carrying the effect. So it is credited for its own printed
+    # daze and not for a neighbour's.
+    #
+    # **One seed said the opposite and was wrong.** A single probe at seed 1
+    # reported `c.suffering("p12577") == []`, which reads exactly like
+    # borrowed credit. `_attempts` sweeps 8 seeds and 2 poses; the three
+    # seeds that pose it are 2, 4 and 8. An excuse must be retired against
+    # the arrangements the harness actually tries, not against one of them.
     # **The only row in the tree whose whole mechanical clause is a header
     # field.** Its body is empty by design: the trade is `swap=Swap(2,
     # utility=True)`, spent by `chargen.power_swap` when the character is
@@ -1011,9 +1252,6 @@ KNOWN_SILENT = {
     "f612": "nothing is on the floor to call back; a disarm is the only "
             "thing that drops a weapon and the board never does one. "
             "Driven: it fetches from nine squares at the printed twenty",
-    "i1252x1": "the same -- and its recall is gated on the class feature "
-               "besides. Driven: the thrown columns are written and the "
-               "recall fetches at any distance",
     # **Three rows #755 made reachable, and then showed doing nothing.**
     # Each was UNUSED before the total-defence and escape poses existed --
     # "this row cannot work" -- and each is now fired and judged. Two of the
@@ -1030,12 +1268,14 @@ KNOWN_SILENT = {
               "`p1450` and `times` is 0, so `c.restore_use` has nothing "
               "to restore. Reachable since #759's reroll pose, and "
               "correctly silent",
-    "m5466a2": "**unexplained, and #754 is the row.** Fired by hand with "
-               "the foe adjacent and a failed escape handed in, its body "
-               "deals 31 damage; offered 48 times by the harness it shows "
-               "nothing. The trigger, the predicate, the adjacency and the "
-               "immediate-action budget were each ruled out and measured. "
-               "This entry names an observation, not a reason",
+    # **`m5466a2`'s entry is gone and the unexplained thing is explained.**
+    # It read "offered 48 times by the harness it shows nothing", with the
+    # trigger, the predicate, the adjacency and the action budget each ruled
+    # out -- an honest observation and the wrong place to look. The escape
+    # pass forced its *failing* outcome with a loaded 1, and the row a
+    # failed escape provokes is offered **synchronously inside `attempt`**,
+    # so it rolled its own attack against that 1 and missed automatically
+    # every time. The outcome is arranged with a negative bonus now. #754.
     "cf:wizard-arcanist-f0s4": "the board's wizard holds no encounter attack "
                                "power to pay with. Driven on a chargen "
                                "wizard: it borrows one and expends another",
@@ -1059,7 +1299,71 @@ DID_SOMETHING = {
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
+    "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
 }  # fmt: skip
+# `BlowRedirected`, `UseRestored` and `UseSpent` are the **ninth and tenth**
+# classes, and the first of them is the one that says something new about this
+# list rather than just lengthening it.
+#
+# **`BlowRedirected` is `BlowTurned`'s sibling and shows that a green verdict
+# here can be an accident.** Turning a blow aside got an event in #861; moving
+# one did not, and `c.redirect` rewrote `ev.target` and `result.target` in
+# place while announcing nothing. 69 rows call it. 26 read SILENT -- and the
+# other **43 were credited with the redirected attack's own
+# `DamageApplied`**, which lands inside the row's slice precisely *because*
+# the row moved it there.
+#
+# That is the first entry admitted here where the rows on the **green** side
+# were the worse finding. `m115864a5` was on neither list: an unrelated
+# chargen change (#680/#743's racial pick) altered which power the board
+# provokes with, the borrowed damage stopped landing in its window, and the
+# row went silent while firing **21 times instead of 8**. Instrumenting its
+# body shows every one of the 21 doing the whole job. So the verdict for this
+# family was decided by whose damage fell in the slice, not by whether the row
+# worked -- #690's shape, one window further out. #900.
+#
+# **`UseRestored` and `UseSpent` are the `Note` case**, which the note at the
+# bottom of this comment predicted and which nothing had yet paid for.
+# `c.restore_use` and `c.expend_row` each ended in a `Note`, deliberately
+# refused here because a `Note` carries no `by`, so a row whose entire Effect
+# is one of those two lines was **silent by construction**. Two events rather
+# than one, for `RelationCleared`'s reason: admitting a direction and not its
+# mirror is how a row whose whole effect is the inverse stayed invisible.
+#
+# `i3271p1` is why this took so long to see. Its whole body is one
+# `c.restore_use`, and it was never on `silent_refs` -- it sat on **`UNUSED`**,
+# "could not be used on the test board at all", for its entire life. The same
+# chargen change made its trigger reachable and it went straight to silent.
+# **A row can carry a defect in the `UNUSED` bucket indefinitely**, where the
+# silent list would have named it, and that is worth knowing independently of
+# these three events. #899.
+# `BlowTurned` is the **eighth** class and `CritChanged`'s sibling one field
+# over: five rows rewrite `AttackResult.hit` by hand, and `m6283a4` -- whose
+# whole printed effect is that the blow misses -- reported SILENT for as long
+# as it existed, while the other four turn a blow aside as a clause of
+# something else and looked credited.
+#
+# **`m6283a4` is the row that proves the "nearly fits" rule in both
+# directions.** It is also one of `CritChanged`'s 19, because it clears
+# `critical` on the way -- and #861 deliberately did *not* re-point it, on
+# the grounds that crediting it for announcing a crit change would retire it
+# from the silent list on a clause nobody cares about and leave the real gap
+# undetectable. It stayed silent for one more day and is now credited for
+# the thing its card actually says. #862.
+#
+# `CritChanged` is the **seventh** class, and it is the shape the note below
+# names rather than a new one: *a verb that changes a number already on the
+# table*. "The attack becomes a normal hit" rewrites the criticality of a blow
+# already announced, and 19 rows did it by hand at 38 sites with nothing
+# saying so. Three of the 19 -- `f281b`, `i3101p1`, `m6283a4` -- are the rows
+# whose **whole** printed effect is that rewrite, so they had no second clause
+# to be visible by; the other sixteen demote or promote as a rider and looked
+# credited while this clause of them was just as unobservable.
+#
+# `f281b` is the worked case and the warning: it was marked `c.uncrit()` and
+# un-marked with the note *"nothing was missing"*. The writes were there. The
+# announcement was not, and no instrument could tell the difference. #861.
+#
 # `Rerolled` and `Boosted` are the **sixth** class of correct row admitted
 # here one at a time, and they arrived the way the note below predicts --
 # except the shape to watch for turns out to be wider than "a verb that is a
@@ -1283,6 +1587,173 @@ def _associated() -> dict[str, list[str]]:
     return out
 
 
+#: `ev.power == "<ref>"` inside a declared trigger predicate. The row's
+#: moment *is* another named row being used, and the predicate says which.
+_TRIGGER_REF = re.compile(
+    r'ev\.power\s*==\s*["\']([pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)["\']')
+
+
+#: `cls="wizard"` in a row's source, or in a helper it calls.
+_WANTS_CLASS = re.compile(r'cls\s*=\s*["\'](\w+)["\']')
+
+
+@cache
+def _priced_in_another_class(ref: str) -> str:
+    """The class whose powers this row charges a price in, or `""`.
+
+    Eight item rows charge a printed price in another class's power --
+    *"expend an unused wizard daily attack power of equal or higher
+    level"* -- and `audit.board` deals whatever class the dealer drew. On
+    48 of 48 attempts that is not a wizard, so the rows fire, refuse
+    correctly, and report silent. #705, and it is #663's argument in
+    another vocabulary: *"a row naming a weapon its board does not hold can
+    show nothing however it is posed"*, with `Powers.all` for
+    `Gear.weapons`.
+
+    **Two hops, because only two of the eight name the class themselves.**
+    The other six call `implement_b._tome_trade`, and *that* is where
+    `cls="wizard"` is written -- so reading the row alone finds nothing and
+    would have left six of eight still silent with the fix apparently in.
+    Same shape as `lint._clause_words` following a row into its helper.
+
+    Only a word `chargen.CLASSES` knows, which is what keeps this from
+    matching the `cls=ITEM` in every one of these rows' own headers -- that
+    is the item's own slot, not a price.
+    """
+    row = REGISTRY.get(ref)
+    src = _source_of(getattr(row, "body", None), ref)
+    if not src:
+        return ""
+    import ast as _ast
+    import textwrap as _tw
+
+    reached = [src]
+    try:
+        for node in _ast.walk(_ast.parse(_tw.dedent(src))):
+            if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name):
+                helper = _helpers().get(node.func.id)
+                if helper:
+                    reached.append(helper)
+    except (SyntaxError, ValueError):
+        pass
+    for text in reached:
+        for word in _WANTS_CLASS.findall(text):
+            if word in chargen.CLASSES and word != getattr(row, "cls", ""):
+                return word
+    return ""
+
+
+@cache
+def _helpers() -> dict[str, str]:
+    """Every module-level function in `content/`, by name, as source.
+
+    One pass, cached, because `_priced_in_another_class` asks about a
+    helper per row and the alternative is re-reading the tree 23,060 times.
+    """
+    import ast as _ast
+
+    out: dict[str, str] = {}
+    for path in sorted((ROOT / "src" / "combat_engine" / "content").rglob("*.py")):
+        try:
+            text = path.read_text()
+            tree = _ast.parse(text)
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        lines = text.splitlines(keepends=True)
+        for node in tree.body:
+            if isinstance(node, _ast.FunctionDef) and node.name not in out:
+                end = getattr(node, "end_lineno", node.lineno)
+                out[node.name] = "".join(lines[node.lineno - 1:end])
+    return out
+
+
+def _triggered_by(ref: str) -> list[str]:
+    """Rows this one's declared trigger waits for, by ref.
+
+    The fifth shape of sibling. `p16034` is `action=NONE` with
+    `on=Trigger(PowerUsed, lambda w, me, ev: ... ev.power == "p16033", ...)`
+    -- `turns.arm_traits` deliberately skips a row with a declared trigger,
+    so it waits for its moment, and **its moment is another named row being
+    used**, which the board never did. The verdict was about the board.
+    #779.
+
+    **The predicate is a closure and there is nothing to call**, which is
+    what `_typed_lenders` says about reading a gate. But the predicate is
+    written *inline in the decorator*, and `inspect.getsource` on a
+    decorated function returns its decorators too -- so the ref is in the
+    source even though it is not in any readable value. That is the one
+    thing that makes this cheap rather than a facility.
+
+    Measured: 8 rows name a literal ref this way, and `_siblings` already
+    reached 2 of them through a feat's `requires={"ref": ...}`. The other
+    six are what this adds, three of them reporting UNUSED.
+
+    A text search rather than an `ast` walk, deliberately and unlike
+    `_label_gated`: the pattern is `ev.power == "<ref>"`, which is already
+    unambiguous, and the alternative is walking a `Lambda` inside a
+    `keyword` inside a decorator `Call` to find the same comparison. The
+    docstring risk `_label_gated` guards against does not arise either --
+    no docstring writes `ev.power ==`.
+    """
+    row = REGISTRY.get(ref)
+    return _TRIGGER_REF.findall(_source_of(getattr(row, "body", None), ref))
+
+
+def _label_gated(ref: str) -> list[str]:
+    """Rows whose **effect label** this one's body tests for, by ref.
+
+    The fourth shape of sibling, and the one `_siblings` had no notion of:
+    a creature's *own other ability*. `m6283a4`'s printed Requirement is
+    that it be in the stance `m6283a3` raises, and its body opens
+
+        if not any(e.label == "m6283a3" for e in c.world.effects.of(me)):
+            return
+
+    `audit.board` starts the fight and arms traits; it does not *use* a
+    row, so the stance is never raised, the body returns at its first line,
+    and the row reports SILENT whatever it does downstream. #869.
+
+    **The ref the body names, not the creature's whole stat block.** Using
+    every `m6283a*` would pose attacks nobody asked for and change the
+    board under every later pass -- and most of them are irrelevant. The
+    body names exactly one thing it is waiting for, so that is what gets
+    posed, which makes this as narrow as the three shapes above it.
+
+    **`ast`, not a text search**, for the reason `query.deals_damage` is an
+    `ast` walk: a ref in a docstring explaining what a row waits for reads
+    identically to a ref in the gate, and several of these rows have such a
+    docstring. A `Compare` against an `Attribute` named `label` cannot sit
+    in prose.
+
+    Measured on the family this finds: 29 rows compare a label against a
+    declared ref, and 10 of them are already reached -- a second card, an
+    item's other block, a feat's named power -- by the shapes above. The
+    rest are the monster pairs.
+    """
+    import ast as _ast
+    import textwrap as _tw
+
+    row = REGISTRY.get(ref)
+    fn = getattr(row, "fn", None) or getattr(row, "body", None)
+    if not callable(fn):
+        return []
+    try:
+        tree = _ast.parse(_tw.dedent(inspect.getsource(fn)))
+    except (OSError, TypeError, SyntaxError):
+        return []
+    out: list[str] = []
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.Compare):
+            continue
+        sides = [node.left, *node.comparators]
+        if not any(isinstance(s, _ast.Attribute) and s.attr == "label"
+                   for s in sides):
+            continue
+        out += [s.value for s in sides
+                if isinstance(s, _ast.Constant) and isinstance(s.value, str)]
+    return out
+
+
 def _siblings(ref: str) -> list[str]:
     """The rows this one is printed beside, and cannot work without.
 
@@ -1308,6 +1779,8 @@ def _siblings(ref: str) -> list[str]:
     found = ITEM_BLOCK.match(ref)
     if found:
         out += _item_blocks().get(found.group(1), [])
+    out += _label_gated(ref)
+    out += _triggered_by(ref)
     seen: list[str] = []
     for other in out:
         if other != ref and other in REGISTRY and other not in seen:
@@ -1587,7 +2060,7 @@ def _source_of(body: object, ref: str = "") -> str:
 
 
 def board(ref: str, seed: int, pose: bool = False,
-          arm: str = "") -> tuple[World, int, set[str]]:
+          arm: str = "", element: bool = False) -> tuple[World, int, set[str]]:
     """A caster with the row, four creatures in reach, and the fight started.
 
     The third value is what got emitted while the encounter was starting,
@@ -1614,7 +2087,38 @@ def board(ref: str, seed: int, pose: bool = False,
         # A second of its kind, so a row reading "an ally within 10" has
         # one. A lone monster on a board of enemies can never satisfy its
         # own trigger, and several rows are about their friends.
-        loader.spawn(world, ref.split("a")[0], (7, 9), team=Team.ENEMY)
+        mate = loader.spawn(world, ref.split("a")[0], (7, 9), team=Team.ENEMY)
+        # **And wounded, for the rows that ask.** The copy is spawned at
+        # full health, and a character caster's ally is not: `board` wounds
+        # the cleric it spawns to half, because "a great many powers heal
+        # one". A monster row gets neither that cleric nor that wound -- its
+        # only ally is this copy -- so every monster row healing or helping
+        # a *bloodied* ally landed on nobody who needed it.
+        #
+        # Three `KNOWN_SILENT` entries were paying for exactly this, each
+        # with a by-hand proof already recorded beside it:
+        #
+        #     m1585a6   heals a bloodied ally -- proven to heal 15 when one is
+        #     m350a2    grants a bloodied ally an attack -- proven to swing
+        #
+        # A third, `m822a4`, reads "heals undead allies in a burst; the
+        # board's one ally is unhurt" and that reason is **wrong**: its body
+        # gates on `c.is_kind("undead", on=c.target)` and never asks about
+        # hit points at all. The gate below answers False for it, correctly
+        # -- it belongs to the *kind* half of this board limit, which is a
+        # different pose.
+        #
+        # **Only for the rows that ask**, which is the whole argument of
+        # #856: the board poses the caster 48 ways and nobody else at all,
+        # and wounding this copy for all ~15,000 monster rows to serve a
+        # handful is a corpus-wide baseline move. `_wanted_weapon` is the
+        # precedent -- a state posed per row, carrying no collateral for
+        # anyone who did not name it.
+        if mate is not None and _asks_a_bloodied_ally(ref):
+            from combat_engine.engine import Health as _Health
+
+            mate_health = world.need(mate, _Health)
+            mate_health.hp = max(1, mate_health.max_hp // 2)
         foe_team = Team.PC
     else:
         # A classless row -- the engine's own basic attacks -- is fielded on
@@ -1751,8 +2255,104 @@ def board(ref: str, seed: int, pose: bool = False,
                 if bow is not None and gear is not None:
                     gear.weapons.append(bow)
                     gear.wield(bow)
+            # **And onto the weapon, when chargen already dealt a magic
+            # one.** `equipment.equip` puts a weapon-slot item on a weapon
+            # that has no magic of its own; this build's axe already carries
+            # chargen's, so the item under test reached no weapon at all and
+            # `c.my_weapon()` -- "the weapon *this row's item* sits on" --
+            # answered None. Every row phrased "using this weapon" was then
+            # unprovable by construction, however it was posed.
+            #
+            # Measured on two boards, which is what shows it is the clash
+            # and not the mechanism:
+            #
+            #     i1688p1  weapons=[('w3612', item='i2882')]  my_weapon=None
+            #     i2842x1  weapons=[('w3612', item='i2842')]  my_weapon=w3612
+            #
+            # The second works because nothing else had claimed the axe. So
+            # the item under test takes it: the board exists to exercise one
+            # row, and the weapon it belongs to is the one that should carry
+            # it. Chargen's own magic is what gives way, because it is
+            # incidental here and the row under test is not. #699.
+            if magic.slot == "weapon":
+                from combat_engine.engine import Gear as _Gear
+
+                gear = world.get(caster, _Gear)
+                for held in (gear.weapons if gear is not None else []):
+                    if held.item != magic.ref:
+                        held.item = magic.ref
+                        held.enhancement = max(held.enhancement, magic.plus)
+                        break
         _hand_it_the_weapon(world, caster, declared)
         foe_team = Team.ENEMY
+
+    # **An element on the bearer's own build, when the row reads one.**
+    # `c.element()` reads `element:<type>` out of `Build.choices`, so arming
+    # it is one string -- and that is the whole reason it is done this way.
+    #
+    # Two earlier versions of this switched the character instead: the class
+    # to a sorcerer, or the build to an elemental leg. Both were net
+    # negative and a run said so each time. `chargen.build_for` picks "the
+    # build whose gear can actually hold this row", so replacing it silenced
+    # `f2045`; moving the class silenced `p16381`, whose board is arranged
+    # around its race. One row gained and two lost.
+    #
+    # Writing the choice leaves the class, the build, the gear, the race and
+    # the draw exactly as they were -- nothing but `c.element()` reads this
+    # key -- so the arming cannot cost another row anything. That is the
+    # property the two previous attempts did not have. #885.
+    if element:
+        from combat_engine.engine.components import Build as _Build
+
+        mine = world.get(caster, _Build)
+        if mine is not None and not any(
+                c.startswith("element:") for c in mine.choices):
+            mine.choices.add(f"element:{_ARMED_ELEMENT}")
+
+    # **A price in another class's power, for the rows that charge one.**
+    # Eight item rows print "expend an unused wizard daily attack power of
+    # an equal or higher level" and `audit.board` deals whatever class the
+    # dealer drew -- not a wizard on 48 of 48 attempts -- so each fired,
+    # refused correctly, and reported silent. #705.
+    #
+    # `i3012p1` is the control and was found by accident: its price is the
+    # widest of the family, *a daily attack **or** utility*, so one of the
+    # 48 dealt bearers happened to hold something it could pay with, and
+    # `audit.py` answered OUTGROWN the moment an excuse was written for it.
+    # The family was never un-poseable; it was one axis away.
+    #
+    # Lent rather than re-dealt: dealing a wizard would change the class
+    # under every other reader on the board, where appending to
+    # `Powers.known` touches only the question being asked -- the same
+    # bargain `_typed_rows`, `_range_lenders` and `second_wind` already
+    # strike here.
+    #
+    # Only for the rows that ask, which is what keeps it free of
+    # collateral: `_priced_in_another_class` reads the class off the row
+    # **and the helper it calls**, because six of the eight name it only
+    # inside `implement_b._tome_trade`.
+    priced = _priced_in_another_class(ref)
+    if priced:
+        from combat_engine.engine.actions import Usage as _Usage
+        from combat_engine.engine.components import Powers as _Powers
+
+        known = world.get(caster, _Powers)
+        if known is not None:
+            # Dailies at or below this row's level, both halves of the
+            # attack line, because the family splits on it: one row wants
+            # `attacks=True`, another `attacks=False`, and a third does not
+            # narrow at all.
+            swings = [
+                other for other, row in REGISTRY.items()
+                if row.cls == priced and not row.triggers
+                and row.usage is _Usage.DAILY
+                and row.level <= max(1, getattr(declared, "level", 1))
+            ]
+            with_line = [o for o in swings if REGISTRY[o].attack is not None]
+            without = [o for o in swings if REGISTRY[o].attack is None]
+            for other in [*sorted(with_line)[:3], *sorted(without)[:3]]:
+                if other not in known.all:
+                    known.known.append(other)
 
     from combat_engine.engine import Health
 
@@ -2051,6 +2651,18 @@ def board(ref: str, seed: int, pose: bool = False,
     # and a weapon put in hand afterwards is one it never saw. #663.
     if arm:
         _put_in_hand(world, caster, arm)
+    # **The day's milestone count, set before the traits arm**, beside `arm`
+    # and for exactly its reason. `f3536` is an `action=NONE` row, so it does
+    # its work as the encounter starts and a count raised afterwards is one
+    # it never saw -- it went on reporting SILENT through all 48 attempts
+    # with the knob in `_pose` firing correctly on every posed one of them.
+    #
+    # Safe this early in a way a dummy is not: this is one integer on the
+    # `World`, with no placement, no team and no effect, so posing it cannot
+    # take another row's shift with it. That is why it is hoisted and the
+    # other two wants are not. #666.
+    if pose and _wants_milestone(declared):
+        world.milestones = 1
     world.setup_effects = set(world.effects.live)
     Encounter(world).start()
     # And again once every trait on the board is armed. Two snapshots,
@@ -2154,12 +2766,46 @@ def board(ref: str, seed: int, pose: bool = False,
 #:
 #: "Dark" alone is deliberately not in here: it would catch every shadow
 #: keyword in the tree.
+#: **A third knob: the day.** `World.milestones` is 0 on every board this
+#: harness builds, which is the right default for a standalone fight and
+#: means a row whose clause only pays *after* a milestone can never show
+#: itself. `f3536` lays nothing at all below one -- deliberately, because
+#: three +0 modifiers would read as a working bonus -- so it reported
+#: "fired 48/8 times and did nothing" the moment it stopped being marked.
+#:
+#: Aimed by the **read**, the pattern `light_level` established: a row that
+#: asks `c.milestone()` is a row that wants a board which has reached one,
+#: whichever way round its own test runs. There is no printed phrase here to
+#: match on as well -- "milestone" in a card's prose is the mechanic itself,
+#: so the read is the whole signal. #666.
+#:
+#: One, not two or four. Every one of the seven rows branches on "at least
+#: one" or counts from zero, so one milestone separates both shapes from the
+#: default; a larger number would pay more without testing anything further.
+#:
+#: **It is applied in `board` rather than here**, because `_pose` runs after
+#: the traits arm and a passive row has already done its work by then. See
+#: `_wants_milestone` below.
 _WANTS = (
     ("grab", re.compile(r"grabb|GRABBED|c\.grabbing")),
     ("dark", re.compile(
         r"light_level|light_radius|dim light|darkness"
         r"|Light\.DIM|Light\.DARK")),
 )
+
+#: The milestone read, matched the way the light one is: a row that asks
+#: `c.milestone()` wants a board that has reached one, whichever way round
+#: its own test runs. **Not in `_WANTS`**, because that table is applied
+#: after the traits arm and this has to be set before them -- see `board`.
+_WANTS_MILESTONE = re.compile(r"c\.milestone\(")
+
+
+def _wants_milestone(declared) -> bool:  # noqa: ANN001
+    """Does this row read the day's milestone count?"""
+    if declared is None:
+        return False
+    src = _source_of(declared.body, getattr(declared, "ref", ""))
+    return bool(_WANTS_MILESTONE.search(src))
 
 #: A row whose **body** asks whether somebody is on the floor, for the cases
 #: `_WANTED_CONDITIONS` cannot see: the restriction is in the code rather
@@ -2247,6 +2893,46 @@ def _pose_conditions(world, caster: int, declared, src: str) -> None:  # noqa: A
         *sorted(wanted, key=lambda c: c.value),
         on=floored, until=When.ENCOUNTER,
     )
+
+
+#: A row whose **body** asks whether somebody is cursed.
+#:
+#: **Matched on the read, never on the write**, which is the discipline
+#: `_READS_FLOORED` above had to learn: `c.curse(` is the writer and belongs
+#: to every warlock row that *lays* one, where `c.cursed(` is the question
+#: and is exactly the 46 read sites across 28 files. Posing a curse for the
+#: writers would hand them a state their own clause is supposed to create.
+_READS_CURSED = re.compile(r"c\.cursed\(")
+
+
+def _pose_cursed(world, caster: int, declared, src: str) -> None:  # noqa: ANN001
+    """Curse the caster's enemies when the row asks whether they are cursed.
+
+    **Relational, so the direction is the whole of it.** `c.cursed` reads
+    `Relation.CURSED_BY` between *this* caster and the creature -- two
+    warlocks in a party curse separately and neither reads the other's -- so
+    a curse laid by anybody else answers False and the pose would do nothing
+    while looking like it had. It is laid from the caster's side for the same
+    reason `_pose_conditions` reads the enemy list from there.
+
+    Found by `i2339p1`, which fired on 4 of 8 attempts and did nothing every
+    time: it is gated on "you hit a **cursed** target", every other gate
+    passed, and nothing on any board had ever been cursed. 46 read sites were
+    in the same position.
+
+    `When.ENCOUNTER` rather than a shorter hold, and all the enemies rather
+    than one: a curse is the warlock's standing mark on whatever it is
+    fighting, and a row that reads it on its own target cannot be made to
+    agree with a pose that picked a different creature.
+    """
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.query import enemies as _enemies
+
+    if not _READS_CURSED.search(src):
+        return
+    hex_ = _Cast(world=world, me=caster, ref="audit:pose")
+    for foe in sorted(_enemies(world, caster)):
+        hex_.curse(on=foe, until=When.ENCOUNTER)
 
 
 def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
@@ -2350,6 +3036,14 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
             )
             if lit is not None:
                 _Cast(world=world, me=lit, ref="audit:pose").light(2, on=lit)
+
+    # **Last, because the loop above spawns creatures.** A dummy placed for
+    # the row under test is an enemy like any other and is usually the one
+    # the provocation then swings at, so a curse laid before the spawn
+    # reaches every creature except the one that matters: measured on
+    # `i2339p1`, enemies 3-6 came back cursed and the dummy at 2 -- the foe
+    # that was hit -- did not.
+    _pose_cursed(world, caster, declared, src)
 
 
 #: What starting a fight emits no matter who is in it. Subtracted from what
@@ -2663,8 +3357,29 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         offered by the real dispatcher, against its real predicate, with
         its real Requirement.
         """
+        # **"Did it pay out", not "did it go off".** #821: this asked
+        # `_fired`, which is the row's ref appearing on the bus -- its
+        # *trigger* being satisfied and its action budget allowed. The
+        # verdict the sweep reports is whether the row **did** something,
+        # which is a different question, so the first pose that merely fired
+        # the row ended the search and every later pose was never tried --
+        # including one that would have paid.
+        #
+        # Measured before the change: `i2002p1` fired on 4 of 8 attempts and
+        # `i2339p1` on 8 of 8, and neither did anything on any of them. Both
+        # are gated on `Hit` + `Keyword.ARCANE`, and the keyword pass picks
+        # the caster's *owned* arcane at-will first -- rightly -- so the
+        # owned candidate fired the row and the lent ones behind it were
+        # never swung.
+        #
+        # This is `a-driver-rule-must-run-the-rows-body` at the harness
+        # level: firing proves the predicate and the budget, never the
+        # clause. `_payout` is the verdict's own reader, so the two cannot
+        # answer differently.
         if _fired(world, ref, cursor):
-            return True
+            credited, _own, _nested, _dealt = _payout(world, ref, cursor)
+            if credited & DID_SOMETHING:
+                return True
         budget = world.get(caster, Budget)
         if budget is not None:
             budget.immediate_round = -1
@@ -3152,8 +3867,14 @@ def _dealt_by(world, refs: tuple[str, ...], cursor: int) -> bool:  # noqa: ANN00
     )
 
 
+#: A label that is a row's ref, which is the convention `_claimed` rests on.
+#: Anything else -- `deals:fire|implement|...` -- is a **keyed** label: a
+#: composite key some verb reads back, carrying no ref at all.
+_REF_LABEL = re.compile(r"(?:[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)")
+
+
 def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
-             also: tuple[str, ...] = ()) -> set[str]:
+             also: tuple[str, ...] = (), own: list | None = None) -> set[str]:
     """The `BY_NAME` kinds this row can be shown to have caused.
 
     **Why these are needed at all.** `DID_SOMETHING` had `EffectExpired` and
@@ -3179,6 +3900,29 @@ def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
     The cost of the convention is **under**-crediting: a row whose label does
     not begin with its ref reports silent and gets looked at. That is the safe
     direction; over-crediting is what #216 was.
+
+    **And for one row class the under-crediting was total**, which is #710.
+    A standing retype lays a labelled effect and emits nothing else, and
+    `c.deals` stamps a **keyed** label rather than a ref --
+    `deals:fire|implement|fire||||necrotic|` -- because `durations.py`,
+    `dsl.py` and `cast.py` all read that key back and four sites test
+    `label.startswith("deals:")`. So the one event the row class emits
+    carried no ref, `EffectApplied` is in `BY_NAME` and stripped from the
+    window, and the row reported silent while working perfectly. Measured
+    on three rows whose own slice holds exactly one `EffectApplied` and
+    whose `_claimed` came back empty.
+
+    So a keyed label is credited **positionally, inside the row's own
+    bounded slice** -- `own`, from `_its_own_slice`, which ends at this
+    row's own `PowerResolved`. `BY_NAME`'s warning that these "cannot be
+    taken from the window" is about the raw log, where 37 `EffectApplied`
+    land while a board dresses itself; the bounded slice is a different
+    object and only this row runs inside it.
+
+    Narrow in the direction that keeps the convention load-bearing: a label
+    that **is** a ref stays judged by ref, so an effect another row laid is
+    still that row's and not this one's. Only a label naming no row at all
+    -- which no row could ever claim by name -- falls through to position.
     """
     out: set[str] = set()
     # The row's own ref, plus any row it used from inside its own slice --
@@ -3191,7 +3935,43 @@ def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
         # `Effects.end` both pass the caller's ref as the reason.
         elif e.kind == "ConditionEnded" and str(getattr(e, "why", "") or "").startswith(names):
             out.add("ConditionEnded")
+    for e in own or ():
+        if e.kind != "EffectApplied":
+            continue
+        label = str(getattr(e, "label", "") or "")
+        if label and not _REF_LABEL.match(label):
+            out.add("EffectApplied")
     return out
+
+
+def _payout(
+    world,  # noqa: ANN001
+    ref: str,
+    cursor: int,
+) -> tuple[set[str], list | None, tuple[str, ...], bool]:
+    """What this row is credited with since `cursor`: `(kinds, own, nested, dealt)`.
+
+    **One reader, because there were about to be two.** The verdict builds
+    this set inline, and `_provoke`'s `probe()` needs *the same answer* --
+    #821 is precisely that it asked a different one. A second copy of the
+    expression would drift from this one, which is the fault this file has
+    paid for more than once (`_SPEC_TABLES`' three copies, `PROVOKE_NOISE`'s
+    two readers).
+
+    Returns the extras as well as the set because the caller needs them:
+    `own` bounds the window every later read uses, `nested` names the rows
+    this one used, and `dealt` is the by-name damage credit.
+    """
+    own = _its_own_slice(world, ref, cursor)
+    if own is None:
+        return set(), None, (), False
+    mine = {e.kind for e in own}
+    nested = _used_inside(own)
+    dealt = _dealt_by(world, (ref, *nested), cursor)
+    kinds = (mine - PROVOKE_NOISE - BY_NAME) | (
+        {"DamageApplied"} if dealt else set()
+    ) | _claimed(world, ref, cursor, nested, own=own)
+    return kinds, own, nested, dealt
 
 
 def _its_own_slice(world, ref: str, cursor: int) -> list | None:  # noqa: ANN001
@@ -3331,7 +4111,8 @@ def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
 #:     Rerolled       4    somebody rolls an attack again
 #:
 #: #755, and #753 is the same shape for a saving throw.
-_ORDINARY = ("TotalDefence", "Fell", "Escaped", "WeaponHeld", "Rerolled")
+_ORDINARY = ("TotalDefence", "Fell", "Escaped", "WeaponHeld",
+              "Rerolled", "TurnEnd")
 
 
 def _does_the_ordinary_things(
@@ -3478,21 +4259,32 @@ def _does_the_ordinary_things(
                 held = hand.grab(on=victim, by=caster)
                 if held is None:
                     continue
-                was = getattr(world.rng, "loaded", None)
-                world.rng.loaded = face
                 rearm()
-                try:
-                    # **A bonus on the winning pose, not just a loaded 20.**
-                    # The escape is rolled against the grabber's defence, and
-                    # a level-9 brute's beats a 20 outright -- so `m2619a2`,
-                    # whose card wants a creature that *succeeds*, stayed
-                    # UNUSED through a pose that could never let one. The
-                    # bonus is the instrument arranging the outcome the card
-                    # names, the same bargain the loaded die is.
-                    attempt(world, victim,
-                            bonus=50 if face == 20 else 0)
-                finally:
-                    world.rng.loaded = was
+                # **A bonus on both poses, and no loaded die at all.**
+                # The escape is rolled against the grabber's defence, and a
+                # level-9 brute's beats a 20 outright -- so `m2619a2`, whose
+                # card wants a creature that *succeeds*, stayed UNUSED
+                # through a pose that could never let one. The bonus is the
+                # instrument arranging the outcome the card names.
+                #
+                # **The failing pose used to force its outcome with a loaded
+                # 1, and that made one row permanently unhittable.** The row
+                # a failed escape provokes is offered **synchronously inside
+                # `attempt`**, so it rolls its own attack while that 1 is
+                # still loaded -- the `finally` that put the face back ran
+                # afterwards, which is too late. `m5466a2` is an immediate
+                # reaction that swings at the creature which failed: 48
+                # offers, 48 natural 1s, an automatic miss every time.
+                #
+                # Measured at the moment of the offer: `loaded=1`, distance
+                # 1, foe alive at 33 hp, `natural=1` and `total=14` against
+                # a defence of 13 -- so the roll **beat** the defence and the
+                # 1 refused it anyway. Releasing the face and re-rolling the
+                # same three boards: natural 12, 7 and 20, all hits.
+                #
+                # A negative bonus arranges the failure without touching the
+                # die, which is what the success arm was already doing. #754.
+                attempt(world, victim, bonus=50 if face == 20 else -50)
                 # Ended through the effect this pass laid, not by clearing
                 # the relation: the hold *is* the effect, and a failed
                 # escape leaves it standing for every pass below.
@@ -3584,7 +4376,194 @@ def _does_the_ordinary_things(
             hand.disarm(on=victim, catch=True)
             if _fired(world, ref, cursor):
                 return True
+
+    # -- the end of a turn -------------------------------------------------
+    #
+    # **23 rows declare `TurnEnd` and this harness never ended one**, so 21
+    # of them reported UNUSED -- "this row cannot work" rather than "the
+    # board never asked". The two that did fire are the proof the mechanism
+    # works: `TurnEnd` is emitted in exactly one other place, inside the
+    # saving-throw pass, so a predicate loose enough to match that one
+    # incidental emission got offered and the other twenty-one did not.
+    #
+    # `Encounter.end_turn` rather than a bare `bus.emit`, because the
+    # printed moment is more than the announcement: it settles a flyer,
+    # runs `_uncommanded` so a companion its owner ignored acts before the
+    # turn closes, and lets `Encounter._death_saves` run. A hand-rolled
+    # `TurnEnd` would fire the trigger while skipping the half of the
+    # moment some of these rows are about.
+    #
+    # **Three rollers, because the cards split on whose turn it is.** "At
+    # the end of your turn", "at the end of an enemy's turn" and "at the
+    # end of an ally's turn" are all printed, and one roller leaves two
+    # thirds of the family unexercised -- the same reason the escape pass
+    # above runs both outcomes.
+    #
+    # `world.turn` is saved and put back. `end_turn` reads it to decide
+    # whose turn is ending and sets it to `None` on the way out, and every
+    # pass after this one needs the caster's turn to be current -- leaving
+    # it `None` would quietly refuse their actions rather than this one's.
+    #
+    # **And where the other creature is standing when the turn ends**, which
+    # is a second axis on the same moment and the whole of #887. With the
+    # pose above and no distance variation, 15 of the 23 fired and the 8 left
+    # were every one of them a *distance* condition on top of the turn
+    # ending -- "an enemy ends its turn adjacent to you", "within 5 but not
+    # adjacent", "more than 10 squares away". `board` places a foe for
+    # *swinging*, which is one of those distances, and they are mutually
+    # exclusive: no single placement can offer more than one.
+    #
+    # `_TURN_END_RANGES` is four, chosen to straddle the printed thresholds
+    # rather than to be a sweep: adjacent, inside 5 and not adjacent, inside
+    # 10 and outside 5, and beyond 10. The last leg **moves the roller
+    # during its own turn**, from inside 10 to outside it, because `p16020`
+    # is about the *difference* between two moments -- "started its turn
+    # within 10 squares, ends it farther away" -- and no static placement
+    # can satisfy that.
+    #
+    # Scoped to rows that declare `TurnEnd`, so the cost is 23 rows paying
+    # four placements each rather than a fifth axis on `_attempts`. That is
+    # the lesson of #885: an axis that applies to every row buys its
+    # coverage with collateral on rows it has nothing to do with.
+    if "TurnEnd" in wants:
+        enc = getattr(world, "encounter", None)
+        if enc is not None:
+            rollers = [who for who in
+                       (caster, *foes[:1], *_allies_of(world, caster)[:1])
+                       if alive(world, who)]
+            # **The undisplaced legs first, all of them, exactly as #827
+            # left them.** Distance is the *outer* loop and the roller the
+            # inner one, which is not a tidiness choice: ending a turn
+            # expires effects, so the legs added here cost the board
+            # something, and spending that on the caster before the foe has
+            # had its unmoved leg is enough to break a row that worked.
+            #
+            # It did. `p12871b` requires `p12871`'s zone to be standing and
+            # triggers on an enemy ending its turn inside it; with the
+            # rollers outermost, the caster's four extra turn-ends expired
+            # the zone before the foe's first leg, and the row went from
+            # firing to **UNUSED** -- not silent, unusable, which reads as
+            # "this row cannot work". Deterministic, twice each way.
+            #
+            # So: every roller gets the old arrangement before any roller
+            # gets a new one, and a row that already fired never reaches the
+            # added legs at all.
+            for far in _TURN_END_RANGES:
+                for who in rollers:
+                    if _ends_a_turn_at(world, caster, who, enc, ref, cursor,
+                                       far, rearm):
+                        return True
+            # **A moving leg was written and removed**, and #887 argued
+            # specifically for it: "`p16020` wants a **change** in distance
+            # across one turn -- started within 10, ended farther -- so one
+            # placement cannot satisfy it". Reasonable, and wrong. With the
+            # four static placements in, `p16020` fires off the one at 12
+            # and so does `p6994`; the moving leg fixed both only when the
+            # static ones were absent. It cost an `Encounter._begin` call
+            # from inside the `TurnEnd` pose -- a `TurnStart` emitted where
+            # no row expects one -- to buy nothing, so it is out.
+            # **A "began a turn and went nowhere" leg was written and
+            # removed, and the reason is worth more than the leg.** "An
+            # adjacent enemy does not move on its turn" needs a turn that
+            # actually began, which none of the legs above give -- they
+            # assign `world.turn` rather than beginning one -- so the leg
+            # looked obviously owed. It moved **nothing**, because both rows
+            # that print the clause (`m2256a4`, `m45a4`) are **level 12**:
+            # paragon, outside the band this board poses at all, so their
+            # UNUSED is correct and no pose can change it. A change that
+            # does not move the number comes back out.
     return False
+
+
+#: Where the roller stands when its turn ends, as a distance from the
+#: caster. `None` is "wherever the board already put it", which is the
+#: arrangement #827 posed and the one 15 rows already fire on -- kept first
+#: so the cheap case stays cheap and nothing that worked stops working.
+#:
+#: `12` is outside every printed threshold in the family (the largest is 10)
+#: and inside a 24x16 board from the caster's start square.
+_TURN_END_RANGES: tuple[int | None, ...] = (None, 1, 3, 7, 12)
+
+
+def _stand_off(world, caster: int, who: int, far: int) -> bool:  # noqa: ANN001
+    """Put `who` exactly `far` squares east of the caster, through the grid.
+
+    False when it will not fit -- off the board, or somebody else is already
+    standing there. **Through `Grid.lift`/`Grid.place`, never
+    `Position.square` alone**: the occupant index is a separate map, and
+    writing the component without re-indexing leaves one creature in two
+    places for every pass after this one. The falling pass above carries the
+    same correction for the same reason.
+    """
+    from combat_engine.engine.components import Position as _Position
+
+    spot = world.get(who, _Position)
+    anchor = world.get(caster, _Position)
+    if spot is None or anchor is None:
+        return False
+    want = (anchor.square[0] + far, anchor.square[1])
+    if not world.grid.inside(want):
+        return False
+    held = world.grid.occupant(want)
+    if held not in (None, who):
+        return False
+    world.grid.lift(who)
+    spot.square = want
+    world.grid.place(who, frozenset({want}))
+    return True
+
+
+def _back_to(world, who: int, home) -> None:  # noqa: ANN001
+    """Put a displaced creature back, through the grid."""
+    from combat_engine.engine.components import Position as _Position
+
+    spot = world.get(who, _Position)
+    if spot is None or spot.square == home:
+        return
+    world.grid.lift(who)
+    spot.square = home
+    world.grid.place(who, frozenset({home}))
+
+
+def _ends_a_turn_at(world, caster: int, who: int, enc, ref: str,  # noqa: ANN001
+                    cursor: int, far: int | None,
+                    rearm: Callable[[], None]) -> bool:
+    """End `who`'s turn, optionally from `far` squares off the caster.
+
+    `far=None` is the arrangement #827 posed -- wherever the board already
+    put everybody -- and it is what the caller runs for every roller before
+    any displaced leg. See the caller for why that order is load-bearing.
+
+    `world.turn` is saved and put back: `end_turn` reads it to decide whose
+    turn is ending and sets it to `None` on the way out, and every pass
+    after this one needs the caster's turn to be current -- leaving it
+    `None` would quietly refuse their actions rather than this one's.
+    """
+    from combat_engine.engine.components import Position as _Position
+
+    spot = world.get(who, _Position)
+    if spot is None:
+        return False
+    home = spot.square
+    if far is not None and (
+            who == caster or not _stand_off(world, caster, who, far)):
+        return False
+    was_turn = world.turn
+    world.turn = who
+    # **`rearm` before every leg**, which the pose this replaced did and the
+    # first draft of it dropped. One immediate action per round is the
+    # printed rule, so leg 1 spends it and every later leg is refused
+    # however well the row works -- and dropping the call made two rows
+    # fire for the wrong reason, which only the plant found: with the range
+    # list pinned to the undisplaced leg they still fired, so the "fix" was
+    # the missing `rearm` rather than the distance.
+    rearm()
+    try:
+        enc.end_turn()
+    finally:
+        world.turn = was_turn
+        _back_to(world, who, home)
+    return _fired(world, ref, cursor)
 
 
 def _rolls_saves(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
@@ -3735,6 +4714,12 @@ def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: A
 _WANTED_WEAPON: dict[str, tuple[str, ...]] = {}
 
 _WEAPON_REF = re.compile(r'"(w[0-9]+|w:[a-z-]+)"')
+#: The cache behind `_wanted_by_word`, the fourth weapon axis. #864.
+_WANTED_BY_WORD: dict[str, tuple[str, ...]] = {}
+#: A quoted lower-case phrase in a body, which is the shape a printed weapon
+#: word takes when a gate names one -- `"heavy blade"`, `"high crit"`.
+#: Matched against the printed vocabulary afterwards, never trusted alone.
+_QUOTED_WORD = re.compile(r'"([a-z][a-z -]{2,20})"')
 
 
 def _required_weapon(row: object) -> list[str]:
@@ -3780,6 +4765,288 @@ def _required_weapon(row: object) -> list[str]:
             if isinstance(word, str) and _WEAPON_REF.fullmatch(f'"{word}"'):
                 out.append(word)
     return out
+
+
+@cache
+def _weapon_vocabulary() -> dict[str, str]:
+    """Every printed weapon word, to **one** weapon ref that carries it.
+
+    The word-to-weapon map `_any_weapon` is, widened in the one direction it
+    was missing: it matched `arm.group` and `arm.category` and not
+    `arm.properties`, so `versatile`, `high crit`, `reach`, `off-hand` and
+    `heavy thrown` resolved to nothing even when the right word was in hand.
+    11 of #864's 27 rows name one of those five.
+
+    **One weapon per word, picked by sorted ref**, which is the whole reason
+    this is a dict rather than a search. A body naming `heavy blade` must not
+    multiply into every heavy blade in the table: the axis below already runs
+    only for a row that showed nothing on every cheaper arrangement, and it
+    costs 3 faces x 2 poses x 8 seeds per weapon. Deterministic so two runs of
+    a seed arm the same thing.
+    """
+    out: dict[str, str] = {}
+    for arm in sorted(chargen.PRINTED.values(), key=lambda a: a.ref):
+        for word in (arm.group, arm.category, *(arm.properties or ())):
+            if word and word not in out:
+                out[word] = arm.ref
+    return out
+
+
+#: Printed `Weapon` columns a gate reads off what is in hand, and the
+#: column that has to be set for the gate to pass.
+_BY_FIELD = ("ranged", "thrown")
+
+#: What `_shoots` asks of a ranged weapon beyond the column being set.
+_PROJECTILE_GROUPS = frozenset({"bow", "crossbow", "sling"})
+
+
+#: `c.element()` -- the build's chosen damage type, which only five legs name.
+_ELEMENT_CALL = re.compile(r"\bc\.element\(")
+
+#: What an armed bearer's build is bound to. Fire because it is the element
+#: the most legs name and the one a row's own clause is likeliest to mention.
+_ARMED_ELEMENT = "fire"
+
+
+@cache
+def _wants_an_element(ref: str) -> bool:
+    """Does this row read `Build.element`, so it needs a bearer that has one?
+
+    **The sixth arming knob, and the first about the bearer rather than the
+    gear.** `_attempts` varies seed, die face, pose and weapon; it does not
+    vary the *build*, so whether a character with an elemental leg turns up
+    was left to whichever leg the seed's draw happened to pick. Only five
+    legs carry one -- the warlock's elemental and the sorcerer's four -- and
+    for an implement item the plausible classes have none, so `i2339x1`
+    (`breath = c.element(); if breath is not None:`) took the early return
+    on all eight seeds and read silent while being correct. #885.
+
+    **Not more seeds.** `_changed`'s docstring is explicit that the sweep's
+    cost has been measured and cannot be tuned away, and raising `TRIES`
+    makes every row pay for the odds on a few. The row wants **one
+    specific** board, which is what every knob in this family provides.
+
+    Docstrings stripped before the search, the trap `_wanted_by_field` fell
+    into and recorded: a note *explaining* that a row has no element would
+    otherwise arm one.
+    """
+    if REGISTRY.get(ref) is None:
+        return False
+    for who in (ref, *_siblings(ref)):
+        body = REGISTRY.get(who)
+        if body is None:
+            continue
+        try:
+            src = inspect.getsource(body.body)
+        except (OSError, TypeError):
+            continue
+        if _ELEMENT_CALL.search(_without_docstrings(src)):
+            return True
+    return False
+
+
+def _without_docstrings(text: str) -> str:
+    """`text` with every docstring removed. See `_wanted_by_field`'s `code`.
+
+    Both imports are function-local, the convention this file keeps for a
+    reason: a new module-level import in `audit.py` widens what the impact
+    map has to re-record.
+    """
+    import ast
+    import textwrap
+
+    try:
+        tree = ast.parse(textwrap.dedent(text))
+    except (SyntaxError, ValueError):
+        return text
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef | ast.ClassDef | ast.Module):
+            doc = ast.get_docstring(node, clean=False)
+            if doc:
+                text = text.replace(doc, "")
+    return text
+
+
+@cache
+def _wanted_by_field(ref: str) -> tuple[str, ...]:
+    """Weapon refs for the printed `Weapon` **column** this row's gate reads.
+
+    The fifth way to arm a weapon. `f139`'s whole body is
+    `if _shoots(c): c.bonus("range", 5, ...)`, and `_shoots` reads
+    `w.ranged and w.group in _PROJECTILE` off `Gear.held`; `f140` asks
+    `_throws`, which reads `w.thrown`. Neither names a ref, a word, or
+    anything in `requires_text` -- so all four existing knobs answered
+    nothing and both rows sat on `silent_refs`.
+
+    **The gate is in a helper, so the read is two hops**, the same as
+    `_priced_in_another_class`: the row calls `_shoots`, and `_shoots` is
+    where `w.ranged` appears. Reading the row alone finds nothing.
+
+    #629 measured that all 35 of the silent rows which *lay* something are
+    guarded on a board condition rather than broken, and named these two as
+    the cheap confirmation: *"build the two weapon knobs first and watch
+    whether `f139` and `f140` leave the list."*
+
+    One weapon per column, cheapest first, and `ranged` additionally wants
+    a projectile group because that is what `_shoots` asks -- a thrown
+    dagger has a printed range and is not fired, which is the distinction
+    `chargen` keeps two columns for and `_throws`' own docstring records
+    getting wrong once.
+    """
+    row = REGISTRY.get(ref)
+    src = _source_of(getattr(row, "body", None), ref)
+    if not src:
+        return ()
+    import ast as _ast
+    import textwrap as _tw
+
+    def code(text: str) -> str:
+        """`text` with its docstrings taken out.
+
+        **`_throws`' own docstring says `w.ranged`** -- explaining that it
+        used to read the wrong column -- so a text search over the helper
+        handed `f140` a crossbow as well as a thrown blade. That is the
+        trap `_label_gated` uses `ast` to avoid, and not applying it here
+        cost a wrong arrangement on the first run.
+        """
+        try:
+            tree = _ast.parse(_tw.dedent(text))
+        except (SyntaxError, ValueError):
+            return text
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.FunctionDef | _ast.ClassDef | _ast.Module):
+                doc = _ast.get_docstring(node, clean=False)
+                if doc:
+                    text = text.replace(doc, "")
+        return text
+
+    reached = [code(src)]
+    try:
+        for node in _ast.walk(_ast.parse(_tw.dedent(src))):
+            if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name):
+                helper = _helpers().get(node.func.id)
+                if helper:
+                    reached.append(code(helper))
+    except (SyntaxError, ValueError):
+        pass
+    text = "\n".join(reached)
+    out: list[str] = []
+    for column in _BY_FIELD:
+        # **`w.<field>`, not any `.<field>`.** The loose form matched
+        # `p992` and `f1841`, which have nothing to do with how a weapon
+        # reaches -- an over-broad knob costs every one of those rows a set
+        # of extra attempts and can credit a row on an arrangement its gate
+        # never asked for, which is the direction that matters.
+        if not re.search(rf"\b(?:w|weapon|held|wp)\.{column}\b", text):
+            continue
+        for other, weapon in sorted(chargen.PRINTED.items()):
+            if not getattr(weapon, column, None):
+                continue
+            if column == "ranged" and weapon.group not in _PROJECTILE_GROUPS:
+                continue
+            out.append(other)
+            break
+    return tuple(out)
+
+
+def _wanted_by_word(ref: str) -> tuple[str, ...]:
+    """Weapon refs for the printed weapon **words** this row's body names.
+
+    **The fourth way to arm a weapon, and the three that existed were all
+    blind to a feat.** `_hand_it_the_weapon` reads `requires_text` and
+    `trigger`; `_wields` reads `power.wields`, which has 333 entries and
+    **none** for a feat, because the column is on the `power` table and a
+    feat's card is in `feat`; `_wanted_weapon` reads the body for a *ref*.
+    A feat whose body says `_holding(c, "heavy blade", prop="high crit")`
+    falls through all three, and 27 rows on `silent_refs` are that shape --
+    26 of them feats. #864.
+
+    Matched against the printed vocabulary rather than guessed, so a quoted
+    string that merely looks like a weapon word cannot arm anything.
+
+    **Scored by how many of the row's words one weapon carries, not by
+    picking a weapon per word.** A gate usually names several together --
+    `f1841` says `off-hand` *and* `one-handed`, `f2708` says `heavy blade`
+    *and* `high crit` -- and it wants **one** weapon satisfying the lot. The
+    first draft took the two longest words and mapped each to its own
+    weapon, which handed `f1841` a spear and a club and dropped `off-hand`
+    entirely: the one word its gate turns on came third by length. Scoring
+    finds the weapon the gate would actually accept.
+
+    **Two at most, and they must be two *different* arrangements.** Taking
+    the top two scorers outright gave `f1841` `w3604` and `w3606`, whose
+    matched sets are identical -- both already print `heavy thrown` at 5/10,
+    which is the very thing that row grants, so it correctly changed nothing
+    on either and stayed silent through 144 attempts. The words a gate
+    *reads* and the word a row *writes* both live in this vocabulary and
+    cannot be told apart from the source, so the answer is to offer one
+    weapon per distinct matched set: the best match, and then the best
+    *other* match, which for that row is a weapon carrying `off-hand` and
+    `one-handed` and no throwing range -- one the clause can actually
+    change. 18 weapons are that shape.
+
+    Ties break by ref, so two runs of a seed arm the same thing.
+    """
+    if ref in _WANTED_BY_WORD:
+        return _WANTED_BY_WORD[ref]
+    row = get(ref)
+    src = _source_of(getattr(row, "body", None), ref)
+    vocabulary = _weapon_vocabulary()
+    named = {
+        found for found in _QUOTED_WORD.findall(src) if found in vocabulary
+    }
+    # A ref in the body already arms through `_wanted_weapon`; this axis is
+    # for the rows that name no ref at all, so it stands down rather than
+    # doubling the attempts for a row the other axis covers.
+    if _WEAPON_REF.search(src):
+        named = set()
+    best: dict[frozenset[str], tuple[int, str]] = {}
+    for arm in chargen.PRINTED.values():
+        hit = named & {arm.group, arm.category, *(arm.properties or ())}
+        if not hit:
+            continue
+        key = frozenset(hit)
+        if key not in best or arm.ref < best[key][1]:
+            best[key] = (-len(hit), arm.ref)
+    picked = tuple(
+        ref for _score, ref in sorted(best.values())[:2]
+    ) if named else ()
+    _WANTED_BY_WORD[ref] = tuple(dict.fromkeys(picked))
+    return _WANTED_BY_WORD[ref]
+
+
+@cache
+def _asks_a_bloodied_ally(ref: str) -> bool:
+    """Does this row's body ask whether somebody other than itself is hurt?
+
+    The gate on wounding the monster board's one ally. Read off the body
+    rather than the card, because the card is prose and the body is what
+    actually takes the early return.
+
+    `c.bloodied()` **bare** counts, and that is the case to get right: with
+    no argument it asks about `c.target`, which for an ally-target row is
+    the ally. A standing note of mine says eight rows once had that
+    backwards, so the reading is deliberate rather than incidental here.
+
+    Excluded: a body that only ever asks `c.bloodied(on=c.me)`. That is a
+    row about its own state and wounding its friend serves it nothing --
+    and the board already bloodies the caster on purpose, so the state it
+    wants is there.
+
+    Deliberately *not* also matching a row that names an ally's condition
+    or kind. Those are the other halves of the same board limit -- an
+    undead ally, a natural beast ally, a corpse -- and each wants a
+    different pose; folding them in here would make one symbol serve three
+    needs, which `content/CLAUDE.md` is explicit about.
+    """
+    import re as _re
+
+    row = REGISTRY.get(ref)
+    src = _source_of(getattr(row, "body", None), ref)
+    if not src:
+        return False
+    asks = _re.findall(r"c\.(?:bloodied|hurt|wounded|missing_hp)\(([^)]*)\)", src)
+    return any("c.me" not in arg for arg in asks)
 
 
 def _wanted_weapon(ref: str) -> tuple[str, ...]:
@@ -4010,8 +5277,24 @@ WIDE = (
     # wide is the honest answer and saying it outright is better than relying
     # on a path it no longer matches.
     "src/combat_engine/chargen/",
+    # **`story/` fields every board, so it has the property this list is
+    # for.** It decides who is on the board and where they stand, which is
+    # the input to every row's posing, and it was absent -- so a change
+    # there selected **zero** rows by exactly the argument the two comments
+    # above make for `etl/` and `chargen/`. Same shape, third instance: a
+    # package outside `content/` is invisible to the cross-cutting
+    # by-shape test, so it has to be named. #788.
+    "src/combat_engine/story/",
     "scripts/audit.py",
 )
+
+#: **A skip, which is neither a pass nor a failure.** `check.py` read any
+#: zero exit as `ok`, so an empty scope -- the normal state for "commit,
+#: then verify" -- printed `ok audit 1.2s` under a headline of "N
+#: instruments clean" while nothing had been checked. A third code keeps the
+#: decision in the only code that knows the scope was empty, and leaves both
+#: existing codes meaning what they meant. #466.
+NOTHING_IN_SCOPE = 3
 
 #: **Nothing. The exemption deleted itself when the file moved.**
 #:
@@ -4417,14 +5700,14 @@ def _attempts(out: Result):  # noqa: ANN202
     # global would not travel. The header is data and every worker reads it.
     claimed = get(out.ref)
     if claimed is not None and claimed.out_of_combat:
-        yield 1, None, False, ""
+        yield 1, None, False, "", False
         return
     for posed in (False, True):
         for face in LOADED:
             for seed in range(1, TRIES + 1):
                 if out.fired and (out.events & DID_SOMETHING):
                     return
-                yield seed, face, posed, ""
+                yield seed, face, posed, "", False
     # **A third axis, on the same principle as the posed one.** A row naming
     # a weapon its board does not hold can show nothing however it is posed,
     # because the reader walks `Gear.weapons` and finds no match. Paid only
@@ -4436,13 +5719,52 @@ def _attempts(out: Result):  # noqa: ANN202
     # and with the weapon pass pinned to `posed=False` it stayed silent with
     # both halves of its answer built and neither meeting the other. Two
     # axes that each run alone compose for nobody. #708.
-    for held in _wanted_weapon(out.ref):
+    # **The fourth axis**, and the three above it were all blind to a feat:
+    # the header-string path reads `requires_text`/`trigger`, `_wields` has no
+    # entry for any `f...` ref, and `_wanted_weapon` wants a ref. A body that
+    # names a printed weapon *word* fell through all three, which is 27 rows
+    # on `silent_refs`. Last, so a row that shows itself on a cheaper
+    # arrangement is never credited by this one. #864.
+    # **Fifth: the printed *field* a gate reads, not a word or a ref.**
+    # `f139` asks `_shoots(c)` and `f140` asks `_throws(c)`, and those
+    # helpers read `Weapon.ranged` and `Weapon.thrown` off what is in hand
+    # -- a column, where `_wanted_by_word` matches a printed *word* and
+    # `_wanted_weapon` a ref. Both rows fell through all four and sat on
+    # `silent_refs`, and #629 names arming these two as its own cheapest
+    # confirmation that the 35 guarded rows are guarded rather than broken.
+    # Last again, for the reason the line above is last. #629.
+    for held in (*_wanted_weapon(out.ref), *_wanted_by_word(out.ref),
+                 *_wanted_by_field(out.ref)):
         for posed in (False, True):
             for face in LOADED:
                 for seed in range(1, TRIES + 1):
                     if out.fired and (out.events & DID_SOMETHING):
                         return
-                    yield seed, face, posed, held
+                    yield seed, face, posed, held, False
+    # **Sixth: an element on the bearer's own build.** `c.element()` reads
+    # `element:<type>` out of `Build.choices` and only five legs in the game
+    # set one, so for a carried implement the draw never produces a bearer
+    # that has one -- `i2339x1`'s whole body is `breath = c.element(); if
+    # breath is not None:` and it took the early return on all eight seeds.
+    #
+    # **Last, and that placement is the whole of its safety.** Two earlier
+    # versions of this armed from inside `board()` for any row that reads
+    # the key, and both were net negative because they changed the
+    # character: replacing the build `chargen.build_for` chose silenced
+    # `f2045`, and switching the class silenced `p16381`, whose board is
+    # arranged around its race. One row gained, two lost.
+    #
+    # Here it is paid only by a row that has already shown nothing through
+    # every arrangement above -- the rule `#663` states for the weapon axes
+    # and the reason they carry no collateral. A row that acts without an
+    # element is never offered one, so it cannot be changed by this. #885.
+    if _wants_an_element(out.ref):
+        for posed in (False, True):
+            for face in LOADED:
+                for seed in range(1, TRIES + 1):
+                    if out.fired and (out.events & DID_SOMETHING):
+                        return
+                    yield seed, face, posed, "", True
 
 
 @contextlib.contextmanager
@@ -4502,6 +5824,13 @@ VERDICT_ROWS = (
     "p14271",    # an ordinary melee attack
     "p14262",    # a close burst that lays resist and vulnerability
     "mba",       # the engine's own melee basic
+    # Moved out of `VERDICT_SILENT` by #629's weapon-column knob: its gate
+    # is `_shoots(c)`, which reads `Weapon.ranged` off what is in hand, and
+    # the board now arms a crossbow for it. Pinned on the firing side so
+    # that losing the knob reds in seconds rather than at the next sweep --
+    # the reason `f2470` is pinned, and the plant that found the hole in
+    # this fixture.
+    "f139",
     "rba",       # and the ranged one
     "p1333",     # an attack whose damage rides on the attack ability
     # **A row that can only be provoked by a swing with a class on it.**
@@ -4527,7 +5856,18 @@ VERDICT_ROWS = (
 #: reports credit again, the window has been widened back.
 VERDICT_SILENT = (
     "f172",
-    "f139",
+    # **`f139` was pinned here and has moved to `VERDICT_ROWS`.** The
+    # premise above still holds for `f172` and no longer holds for it:
+    # #629's weapon-column knob arms a projectile weapon for the rows whose
+    # gate reads `Weapon.ranged`, so `_shoots(c)` is true and the row lays
+    # its bonus. Moved rather than deleted, which is the stronger end: a
+    # row whose right answer is "fires" is checkable, where dropping it
+    # would have left one fewer pin either way.
+    #
+    # The control this pair exists for is intact. `f172` is still gated on
+    # the two-weapon build nobody deals, and `f775` and `p13813` below are
+    # the stronger half by this fixture's own note -- bodies that "would
+    # report credit on any board at all". Widening the window still reds.
     # **Two rows whose bodies do nothing observable anywhere**, which is a
     # stronger control than the pair above and was wanted for a reason. #204's
     # two install nothing *on this board* -- they are gated on a two-weapon
@@ -4639,7 +5979,78 @@ def verdicts(refs: tuple[str, ...] = VERDICT_ROWS) -> list[str]:
     return wrong
 
 
+#: Set by `impact.py --record` to the base path for this run's coverage
+#: data. Absent on every ordinary run, which is why the hook below costs one
+#: `os.environ` lookup per row and nothing else.
+IMPACT = "COMBAT_ENGINE_IMPACT"
+
+#: Which directories to measure, `os.pathsep`-joined. `impact.NARROWABLE` is
+#: the authority and hands it over here, so the two cannot drift. Absent
+#: means the whole package, which is only what a hand-run would want.
+IMPACT_SOURCE = "COMBAT_ENGINE_IMPACT_SOURCE"
+
+#: This worker's `Coverage`, started lazily on its first row. One per
+#: process, never shared -- `data_suffix=True` gives each its own file and
+#: `coverage combine` merges them afterwards.
+_RECORDER: Any = None
+
+
+def _label_this_row(ref: str) -> None:
+    """Tag everything this row executes with its ref, while recording.
+
+    **The worker-side half of `impact.py`, and the half that did not exist.**
+    That file declared this environment variable and said `audit.py` reads
+    it; nothing did, so recording could only run in one process -- 1.0
+    rows/s against the pool's 20, which is the 6.4 hours #853 measured.
+    The instrumentation itself costs about 2x per worker; the rest was
+    entirely the serial-ness.
+
+    A measurement context has to be switched **inside the process doing the
+    work**, so it cannot be done from the parent. Started here rather than
+    in a pool `initializer` because `_run_all` runs serially for a small
+    scope and `--jobs 1`, and a lazy start covers both without a second
+    path.
+
+    `atexit` is what saves it: `ProcessPoolExecutor` gives no per-worker
+    teardown, and a worker that exits without saving contributes nothing --
+    silently, which is the failure `impact.record`'s context count is there
+    to catch.
+    """
+    global _RECORDER
+    base = os.environ.get(IMPACT)
+    if not base:
+        return
+    if _RECORDER is None:
+        import atexit
+
+        import coverage
+
+        where = os.environ.get(IMPACT_SOURCE, "")
+        _RECORDER = coverage.Coverage(
+            data_file=base,
+            data_suffix=True,
+            source=(where.split(os.pathsep) if where
+                    else [str(ROOT / "src" / "combat_engine")]),
+            branch=False,
+        )
+        _RECORDER.start()
+        atexit.register(_save_this_worker)
+    _RECORDER.switch_context(ref)
+
+
+def _save_this_worker() -> None:
+    """Stop and write this worker's slice. Registered with `atexit`."""
+    global _RECORDER
+    if _RECORDER is None:
+        return
+    recorder, _RECORDER = _RECORDER, None
+    with contextlib.suppress(Exception):
+        recorder.stop()
+        recorder.save()
+
+
 def audit(ref: str) -> Result:
+    _label_this_row(ref)
     out = Result(ref=ref)
     declared = get(ref)
     # A trait is armed by `Encounter.start`, not taken as an action, so by
@@ -4678,9 +6089,10 @@ def audit(ref: str) -> Result:
     # something on this face, the rest re-prove the same thing. Eight of them
     # meant twenty-four boards for every row, and the audit builds a hundred
     # thousand boards.
-    for seed, face, posed, held in _attempts(out):
+    for seed, face, posed, held, element in _attempts(out):
         try:
-            world, caster, _armed = board(ref, seed, pose=posed, arm=held)
+            world, caster, _armed = board(ref, seed, pose=posed, arm=held,
+                                          element=element)
             world.rng.loaded = face
             if not (trait or triggered):
                 # The rows this one is printed beside, **before** the
@@ -4719,7 +6131,7 @@ def audit(ref: str) -> Result:
                 out.events |= (mine_now - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt_now else set()
                 ) | _claimed(world, ref, world.fight_cursor,
-                             nested_now) | _own_unbinding(
+                             nested_now, own=own_now) | _own_unbinding(
                     own_now if own_now is not None
                     else world.bus.log[world.fight_cursor:]
                 )
@@ -4761,8 +6173,7 @@ def audit(ref: str) -> Result:
                 # provocation's damage is not: `PROVOKE_NOISE` drops both
                 # kinds wholesale, so a triggered row whose *whole content*
                 # is damage reported silent however well it worked.
-                own = _its_own_slice(world, ref, cursor)
-                mine = {e.kind for e in own} if own is not None else set()
+                credited, own, _nested, _dealt = _payout(world, ref, cursor)
                 # **Damage this row dealt, by name.** `PROVOKE_NOISE` drops
                 # both damage kinds wholesale -- it has to, the provocation
                 # is an attack -- so a triggered row whose whole content is
@@ -4772,8 +6183,6 @@ def audit(ref: str) -> Result:
                 # **Prefix, not equality.** `half_damage` stamps
                 # `"<ref> (half)"`, `absorb` `"<ref> (absorbed)"` and a zone
                 # burn `"<ref> zone"`, so `== ref` missed every one of them.
-                nested = _used_inside(own)
-                dealt = _dealt_by(world, (ref, *nested), cursor)
                 # Parenthesised. `-` binds tighter than `|`, so the old
                 # `mine - PROVOKE_NOISE | (mine & {"DamageApplied"})` read as
                 # `(mine - PROVOKE_NOISE) | (mine & {"DamageApplied"})` --
@@ -4781,9 +6190,7 @@ def audit(ref: str) -> Result:
                 # dealt it, and making the `detail` test above dead code.
                 # That one line is why #216's `f1305` reported
                 # `ok  ConditionApplied, DamageApplied` with its gate false.
-                out.events |= (mine - PROVOKE_NOISE - BY_NAME) | (
-                    {"DamageApplied"} if dealt else set()
-                ) | _claimed(world, ref, cursor, nested)
+                out.events |= credited
                 # **All three of these read the whole window and credited
                 # the provocation**, which for a row triggered by "you kill
                 # an adjacent creature" is the *caster* walking over and
@@ -4957,6 +6364,46 @@ def main() -> int:
     ap.add_argument("--jobs", type=int, default=0,
                     help="worker processes; 0 picks one per core, 1 stays serial")
     args = ap.parse_args()
+
+    # **A ref list and a way of choosing refs are different arguments, and
+    # nothing should be able to be read as both.** `wanted` below is
+    # `args.refs or (...)`, so a positional silently wins and the flag is
+    # discarded -- and every line explaining what a flag selected is guarded
+    # by `not args.refs`, so the run says nothing about having ignored it.
+    #
+    # `--since` is the one that bit, and it bit the way a reader would
+    # naturally use it: the header line prints the watermark sha, so
+    # pasting it back -- `--since 5154dbdb5` -- reads as "since that
+    # commit", and instead the sha went into the ref list, resolved to
+    # nothing, and the run audited **zero rows** under a header announcing
+    # the sweep it was measuring from. `--since` takes no argument by
+    # design; the help says so and the help is not where anybody looks.
+    #
+    # All four selectors, not just that one, because they come through the
+    # same `or` and lose the same way. `--class`, `--level` and
+    # `--monsters` are **filters** -- applied inside the loop over `wanted`
+    # -- so they compose with a ref list correctly and are left alone.
+    #
+    # `check.py` already does the right thing by hand: when the impact map
+    # narrows, it builds the command as
+    # `tuple(a for a in c.argv if a != "--changed") + tuple(mapped)`,
+    # dropping the flag rather than letting the refs shadow it. #881, #544.
+    _selectors = [
+        name for name, on in (("--changed", args.changed),
+                              ("--since", args.since),
+                              ("--sample", args.sample is not None),
+                              ("--calls", bool(args.calls)))
+        if on
+    ]
+    if args.refs and _selectors:
+        ap.error(
+            f"{' and '.join(_selectors)} chooses the rows, and so does a ref "
+            f"list -- {len(args.refs)} given: {' '.join(args.refs[:4])}"
+            + (" ..." if len(args.refs) > 4 else "")
+            + ". The refs would silently win and the flag be discarded. Drop"
+              " one.\n  (--since takes no argument: it reads the watermark."
+              " A sha passed to it is read as a ref.)"
+        )
 
     if args.verdicts:
         wrong = verdicts()
@@ -5412,6 +6859,21 @@ def main() -> int:
             print("\n  SKIPPED -- no row was in scope, so nothing was checked")
             print("  (`--changed` reads `git status`; on a clean tree use `--since` "
                   "for everything touched since the last full sweep)")
+            # **A skip is not a pass, and returning 0 for one made the suite
+            # claim otherwise.** `check.py` marked `ok` on any zero exit, so
+            # a clean tree -- which is the *normal* state for "commit, then
+            # verify" -- printed `ok audit 1.2s` and a headline of "N
+            # instruments clean" while the row-firing instrument had looked
+            # at nothing. That is `scripts/CLAUDE.md`'s first rule, broken
+            # for the most expensive instrument in the suite.
+            #
+            # The decision belongs here rather than in `check.py` parsing
+            # output: this is the only code that knows the scope was empty.
+            # A third code, so neither existing caller changes meaning --
+            # 0 is still "checked something and it was fine" and 1 is still
+            # "something is wrong". #466.
+            if not awake:
+                return NOTHING_IN_SCOPE
         return 1 if awake else 0
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
     # **Fires and does something is not the same as finished.** A `dropped=`
@@ -5456,8 +6918,26 @@ def main() -> int:
               + (" ..." if len(implemented) > 6 else ""))
     if broken or silent:
         if graded:
-            print(f"  {len(broken)} raise, {len(fresh)} newly silent, "
-                  f"{len(carried)} silent at the last full sweep too")
+            # **Named, not counted.** Every other line in this summary names
+            # its rows and this one did not -- and it is the one a reader has
+            # to act on, because a newly-silent row is the only verdict that
+            # means something you just did broke something.
+            #
+            # The count alone sends you to a diff against `silent_refs`, and
+            # that baseline is *routinely* stale: the watermark is withheld on
+            # a dirty tree (#723), and a content commit that moves a marker
+            # re-rolls the whole chargen draw through
+            # `choices.carries_a_marker`. Measured cost: in #885 the stale
+            # baseline said three rows were newly silent, the unchanged
+            # instrument said one of them was mine, and two design iterations
+            # went into fixing rows that were already silent before I
+            # started. #892.
+            fresh_refs = sorted(r.ref for r in fresh)
+            named = (" (" + ", ".join(fresh_refs[:8])
+                     + (" ..." if len(fresh_refs) > 8 else "") + ")"
+                     if fresh_refs else "")
+            print(f"  {len(broken)} raise, {len(fresh)} newly silent{named}"
+                  f", {len(carried)} silent at the last full sweep too")
         else:
             print(f"  {len(broken)} raise, {len(silent)} silent")
     if healed:

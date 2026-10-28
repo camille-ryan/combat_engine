@@ -1537,12 +1537,12 @@ def m2240a1(c: Cast) -> None:
     recharge=5,
     action=MOVE,
     reach=CloseBurst(5),
-    target=Target(side="other_ally", everyone=True),
+    target=Target(side="ally", everyone=True),
 )
 def m2240a2(c: Cast) -> None:
-    """`side="other_ally"` and not `EACH_ALLY`: the card says "each ally" and
-    the wider pool includes the caster, which would hand this creature its own
-    bonus. "Its next attack roll" is `once=True` -- the modifier is spent by
+    """`side="ally"` is everyone on this creature's side except the creature,
+    which is the printed "each ally" -- it does not hand itself the bonus.
+    "Its next attack roll" is `once=True` -- the modifier is spent by
     the first roll that reads it."""
     mate = c.target
     if mate is None:
@@ -1890,7 +1890,6 @@ def m3437a1(c: Cast) -> None:
         label="targets a helpless or unconscious creature",
         conditions=frozenset(_SENSELESS),
     ),
-    dropped=("Defences.insubstantial",),
 )
 def m3437a2(c: Cast) -> None:
     """The finisher works, and so does half the price it pays for it now.
@@ -1899,16 +1898,25 @@ def m3437a2(c: Cast) -> None:
     that this row's old marker said did not exist. `When.EONT` because the
     loser is the caster and the card says "until the end of its next turn".
 
-    Still dropped: `Defences` carries no insubstantial flag at all -- the
-    database column does not exist -- so "it loses insubstantial" has
-    nothing to take away, and writing `c.end_effect(carrying=INSUBSTANTIAL)`
-    would be a line that is false in every fight.
+    **"Loses insubstantial" is written, and nothing here had to change to
+    make it possible.** The old note said *"`Defences` carries no
+    insubstantial flag at all -- the database column does not exist"*, and
+    that stopped being true: `Defences` holds `half_always` (ungated sources,
+    counted), `half_when` (the gated ones) and `half_except`, and
+    `query.takes_half` reads all three.
+
+    So the trait was there to take away and what was missing was the
+    *taking*. `c.suspend_trait` is it, and **not** `c.cure`: curing the
+    condition spends the trait's duration, so an encounter-long
+    insubstantial would be gone for the fight where the card gives it up for
+    a turn. `c.suspend_when` argues the same point for the triggered case.
 
     `c.coup_de_grace` is the auto-critical rule itself and checks the
     helplessness again, which is why the kill is read off the body afterwards
     rather than from the method's answer."""
     victim = c.target
     c.lose_mode("fly", until=When.EONT)
+    c.suspend_trait(Condition.INSUBSTANTIAL, on=c.me, until=When.EONT)
     c.coup_de_grace()
     theirs = c.world.get(victim, Health)
     if theirs is None or theirs.hp <= 0:
@@ -2871,12 +2879,24 @@ def m5321a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignore_concealment()",),
 )
 def m5427a0(c: Cast) -> None:
-    """Concealment is not cover: `c.ignore_cover` reads the cover table and
-    nothing reads a concealment exemption, so the whole of this row waits on
-    one verb and there is nothing to half-write."""
+    """Its attacks see past concealment, and only concealment.
+
+    **The marker was right when written and went stale.** It said
+    `c.ignore_cover` "reads the cover table and nothing reads a concealment
+    exemption" -- true of the one pooled modifier, and `concealment_only=`
+    is the narrow waiver that landed with #771. It lays the separate
+    `ignore_concealment` key that `query.concealment_waived` reads, so cover
+    still stops this creature.
+
+    `m5477a0` is the written sibling and this is its shape without the
+    bloodied gate, which that card prints and this one does not.
+
+    `on=c.me` because the row has no target: a bare call would waive
+    concealment for nobody."""
+    c.ignore_cover(on=c.me, until=When.ENCOUNTER,
+                   concealment_only=True)
 
 
 @power(
@@ -3120,14 +3140,29 @@ def m5534a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Target.creature_kind",),
+    dropped=("etl.monster.species",),
 )
 def m5749a0(c: Cast) -> None:
     """The aura's grants go to the whole of its side: `c.grants_in` filters on
     `side` and on nothing a creature *is*, so the card's narrowing to allies
-    of one type word is the dropped half -- `Target.creature_kind`, read off
-    the compendium row -- and every ally inside gets the resistance and the
-    bonus. `kind=` is the word the card prints, which here is "power"."""
+    of one type word is the dropped half -- and every ally inside gets the
+    resistance and the bonus. `kind=` below is `c.grants_in`'s **bonus
+    type**, which the card also prints, and is a different word from the one
+    the narrowing wants.
+
+    **Re-pointed off `Target.creature_kind`, which was wrong twice over.**
+    This row is `target=NO_TARGET`: the narrowing is on an aura's grants and
+    not on any target line, so no `Target` field could ever reach it. And the
+    species word the card narrows to appears in **no stat block in the
+    corpus** -- 0 of them carry it in `kind`, `keywords` or `origin`,
+    measured across all three columns. A filter built today would therefore
+    match nobody and the aura would grant to nobody, which is worse than the
+    present too-wide grant rather than merely narrower.
+
+    So it is the same gap `m5878a5` already carries: for these blocks the
+    species word is in the creature's **name**, and a name cannot enter a
+    tracked file, so there is nothing to extract. #570.
+    """
     ring = c.aura(1, label=f"{c.ref} aura", until=When.ENCOUNTER, on=c.me)
     c.resist_in(ring, 5, DamageType.FIRE, side="team")
     c.grants_in(ring, AC, 2, side="team", kind="power")
@@ -3842,7 +3877,7 @@ def m857a0(c: Cast) -> None:
     recharge=5,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target(side="other_ally", everyone=True),
+    target=Target(side="ally", everyone=True),
     defect="the printed attack line names no defence",
 )
 def m857a1(c: Cast) -> None:

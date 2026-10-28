@@ -129,14 +129,18 @@ def legal(
     out.extend(_movement(world, encounter, actor))
     out.extend(_charges(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
+    out.extend(_mounting(world, encounter, actor))
+    out.extend(_picking(world, encounter, actor))
     out.extend(_sustaining(world, encounter, actor))
     out.extend(_dropping(world, encounter, actor))
     out.extend(_wielding(world, encounter, actor))
+    out.extend(_loading(world, encounter, actor))
     out.extend(_picking_up(world, encounter, actor))
     out.extend(_spending(world, encounter, actor))
     out.extend(_action_points(world, encounter, actor))
     out.extend(_manoeuvres(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
+    out.extend(_feinting(world, encounter, actor))
     out.extend(_delaying(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     return out
@@ -255,6 +259,85 @@ def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     if not hideable:
         return []
     return [Action(kind="hide", cost=ActionType.MINOR, targets=tuple(hideable))]
+
+#: The feint's once-per-encounter use, held on `Powers.charges`.
+#:
+#: **Not a row's use**, because the feint is not a row -- it is a printed
+#: action like a bull rush, so there is no ref whose `usage` could say
+#: "encounter". `charges` is for exactly this: per-encounter resources that
+#: are not a row's use, cleared with `used` by both rests, which is the
+#: right clock for "only once per encounter".
+FEINT_USE = "feint:used"
+
+#: What the feint's Bluff check is **for**, carried on `SkillCheck.purpose`.
+#:
+#: One card keys off it -- "a successful Bluff check in combat to gain combat
+#: advantage" -- and without it that row fires on any successful Bluff check
+#: against anybody, which is wider than its printed line.
+FEINT_PURPOSE = "combat-advantage"
+
+
+def _feinting(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Feinting: a Bluff check to gain combat advantage. Once per encounter.
+
+    The printed action, read off the Bluff skill entry rather than
+    remembered:
+
+        GAIN COMBAT ADVANTAGE
+        Action: Standard action. A creature can take this action only once
+                per encounter.
+        Opposed Check: Against an adjacent target's passive Insight.
+        Success: The feinting creature gains combat advantage against the
+                 target until the end of the feinting creature's next turn.
+
+    **Passive Insight, not an Insight check**, which is the one detail #785
+    had wrong -- it said "opposed by that enemy's Insight check". The
+    general Bluff entry offers both and this sub-entry picks passive, which
+    is also what `c.passive` exists for and what the hide action was
+    corrected to in #784.
+
+    One entry per adjacent enemy, the way `_manoeuvres` offers a bull rush,
+    so the choice of victim is a menu entry rather than a prompt inside the
+    execution -- which is what makes it clickable on the page.
+
+    **The AI is deliberately not taught to want this, on Camille's call:**
+
+        *"feint is generally not a good option. It has very niche use.
+        Rogues who can't sneak attack this turn might be the only ones who'd
+        want to use it."*
+
+    Which is right -- it spends a **standard** action, the most expensive
+    one, for combat advantage against a single target until the end of your
+    next turn, and simply attacking is usually better. So there is no
+    `is_feint` feature in `policy/`, and that is a decision rather than an
+    omission.
+
+    Measured before asking, which is how the question came up: adding the
+    feature at `is_hide`'s weight of 2.0 cost the `rated` policy **10
+    points of win rate at level 10** (+27% -> +17%) with every other row
+    unchanged, and 0.5 cost `scored` 3 points at level 5. Tuning a weight
+    until the harness stopped complaining would have been fitting to the
+    harness rather than to the game.
+
+    `drivers.feint` proves the action by **forcing** it --
+    `actions.perform(world, encounter, actor, action)` takes a chosen
+    `Action` and bypasses the policy entirely -- so nothing about the
+    evidence depends on the AI ever choosing to feint.
+    """
+    from .components import Powers
+    from .query import distance_between, enemies
+
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return []
+    known = world.get(actor, Powers)
+    if known is not None and known.charges.get(FEINT_USE, 0):
+        return []
+    return [
+        Action(kind="feint", cost=ActionType.STANDARD, targets=(foe,))
+        for foe in sorted(enemies(world, actor))
+        if alive(world, foe) and distance_between(world, actor, foe) <= 1
+    ]
+
 
 def _action_points(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Spending an action point for an extra action.
@@ -594,7 +677,7 @@ def _burst_origins(world: World, actor: int, p, augment: int = 0) -> list[Square
 
 
 def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
-    from .query import can_move, can_walk, speed
+    from .query import can_move, can_run, can_walk, speed
 
     out: list[Action] = []
     if is_(world, actor, Condition.PRONE):
@@ -619,7 +702,10 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # `c.bonus("run")` is read here so a stance can print a longer one:
     # the ranger's is speed + 4 and grants nothing, which is a change to
     # this menu rather than a power with a body.
-    if encounter.can_spend(actor, ActionType.MOVE) and can_walk(world, actor):
+    # **`can_run`, not `can_walk`.** This gated on the walk, so the only way
+    # to stop a creature running was `c.no_walk`, which stops it walking
+    # too -- and `m5452a2`'s card is a walk that cannot be run. #670.
+    if encounter.can_spend(actor, ActionType.MOVE) and can_run(world, actor):
         extra = 2 + _mods(world, actor, "run", {})
         far = speed(world, actor) + extra
         # Priced as a run, because `execute` walks it as one. Offering
@@ -670,7 +756,65 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
             )
             for dest in sorted(step):
                 out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
+
+    # **Dragging what you already hold, which is a granted action and not a
+    # flag on the grab.** `f970b` prints "while you have the target grabbed
+    # you can pull it 1 square as a minor action", and the marker for it
+    # named `c.grab(pull_as_minor=)` -- a parameter on the hold. It cannot
+    # be one: the clause is **a line in the action menu**, so a kwarg would
+    # have had to grow its own entry here anyway and would only have hidden
+    # where the work is. #888, split out of #560.
+    #
+    # One option per (victim, destination), because which square the victim
+    # is dragged to is the puller's choice and the whole point of the line
+    # -- the same reasoning `forced_squares` records for a push.
+    from .movement import forced_squares
+    from .types import Forced
+
+    for (what, pull) in _granted(world, actor):
+        if what != "pull_grabbed":
+            continue
+        if not encounter.can_spend(actor, pull):
+            continue
+        for victim in sorted(
+                world.relations.targets(Relation.GRABBED_BY, actor)):
+            spot = world.get(actor, Position)
+            if spot is None:
+                continue
+            for dest in sorted(forced_squares(
+                    world, victim, spot.square, Forced.PULL)):
+                out.append(Action(
+                    kind="pull_grabbed", cost=pull,
+                    targets=(victim,), dest=dest, path=(dest,),
+                ))
     return out
+
+
+#: The words `Cast.grant_action` may hand out -- **every one of them read in
+#: this file**, which is the whole point of the set living here.
+#:
+#: `c.grant_action` lays a bonus under `"<what> as <cost>"` and nothing
+#: validated the word, so a row could carry one nothing reads: it costs
+#: nothing, does nothing, and the row still fires and still audits green.
+#: That is #583, which cost nine rows, and it was **still live on one row**
+#: when this set was written -- `m3617a3` handed an ally
+#: `grant_action("attack", FREE)` and the ally never got an attack, because
+#: no reader has ever looked for that word.
+#:
+#: So the rule is the one #583's own write-up asked for: *"add the reader in
+#: `actions` at the same time as the word"*. Adding a word here without a
+#: reader below is the same bug with a longer fuse, and
+#: `drivers.granted_words` greps this file for the comparison that proves
+#: each word is consulted -- planted both ways.
+#:
+#: `Cast.recast` deliberately does **not** come through `grant_action`: its
+#: `what` is a power's ref, not a word, so it builds the same carrier by
+#: hand and this set does not constrain it.
+GRANTABLE = frozenset({
+    "aid_attack", "aid_defence", "command", "dismount", "escape",
+    "instinctive", "mount", "move_zone", "pull_grabbed", "second_wind",
+    "shift", "stand",
+})
 
 
 def _granted(world: World, actor: int) -> dict[tuple[str, ActionType], int]:
@@ -901,6 +1045,45 @@ def _wielding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     ]
 
 
+def _loading(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Reloading an emptied weapon, at the printed minor.
+
+    Offered the way `_wielding` offers a draw, and priced the same way: a
+    minor is the rule, `c.loads_free` is what four rows use to buy out of
+    it, and `loads_left` is the "once per turn" half -- spent, the cost
+    goes back to the printed minor rather than the reload going away.
+
+    Only a weapon in hand and actually empty is offered. Three weapons can
+    ever be empty (`query.needs_loading`), so for every other creature in
+    the game this returns `[]` after one set lookup. #675, #725.
+    """
+    from .components import Gear, Weapon
+    from .query import needs_loading
+
+    gear = world.get(actor, Gear)
+    if gear is None or not gear.unloaded:
+        return []
+    cheap = gear.load_cost is not None and gear.loads_left != 0
+
+    def price(w: Weapon) -> ActionType:
+        # **By group as well as by ref**, which `draw_only` does not need
+        # and this does: every card here names "a crossbow", and crossbow
+        # is a group of three. Matched the way `Cast.wielding` matches a
+        # printed word -- ref, then group -- rather than inventing a third
+        # spelling of the same question.
+        named = gear.load_only
+        if cheap and (not named or named in (w.ref, w.group)):
+            return gear.load_cost or ActionType.MINOR
+        return ActionType.MINOR
+
+    return [
+        Action(kind="load", cost=price(w), ref=w.ref)
+        for w in gear.held
+        if w.ref in gear.unloaded and needs_loading(w)
+        and encounter.can_spend(actor, price(w))
+    ]
+
+
 def _spending(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Eating the seed, expending the scroll -- a one-shot in somebody's hand.
 
@@ -948,6 +1131,91 @@ def _picking_up(world: World, encounter: Encounter, actor: int) -> list[Action]:
         if where is None or where.square not in here:
             continue
         out.append(Action(kind="pick_up", cost=cost, subject=eid, ref=item.ref))
+    return out
+
+
+def _picking(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Open Lock: a **standard action, adjacent to the lock**.
+
+    The printed rule, and the engine offered no such action -- so half of
+    `f3447` ("+4 to Thievery to open locks") had nothing to be a bonus to.
+    That row was re-aimed three times, twice at the wrong gap: it was filed
+    as a check not knowing what it was *for*, and the rules say these are
+    named actions rather than purposes. #786, on Camille's #735 call. The
+    sleight-of-hand half is deferred to the story engine, #787.
+
+    **No board carries a lock today**, so this is legal nowhere until
+    terrain grows one -- `Grid.locked`'s note says so, and the honest
+    reading of the action being unreachable is that, not that the rule is
+    broken. `drivers.open_lock` fills the map itself, which is how the rule
+    is driven at all.
+
+    Not in `GRANTABLE`: no card changes the cost of this one, and
+    `c.grant_action`'s docstring is explicit that a word with no reader is
+    carried, costs nothing and does nothing.
+    """
+    from .grid import spread
+    from .query import squares as occupies
+
+    if not world.grid.locked or not encounter.can_spend(
+        actor, ActionType.STANDARD
+    ):
+        return []
+    near = spread(occupies(world, actor), 1)
+    return [
+        Action(kind="open_lock", cost=ActionType.STANDARD, dest=sq)
+        for sq in sorted(world.grid.locked)
+        if sq in near
+    ]
+
+
+def _mounting(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Getting on, and getting off. Both printed move actions.
+
+    **Offered by default rather than granted by a card**, which is the
+    question #749 left open and the mounted-combat rules answered: it is a
+    general move action for anybody beside a creature meeting the
+    requirements, so `c.grant_action("mount", cost)` is only for a card that
+    changes the **cost**. That is why `f2726`'s grant was close to a no-op
+    and why its real gift is the size exception, not the action.
+
+    Three rows had no moment at which they could become true. `c.ride` set
+    the relation and nothing offered the action, so `m3227a2` and `m3230a2`
+    -- whose whole line is "a creature of that size may ride it" -- were
+    refused in play rather than merely incomplete.
+
+    **Dismount is a peer, not an afterthought**, and is offered whenever
+    mounted. The printed line moves the rider to an adjacent square, which
+    `c.dismount` does; a rider carried by its mount is deliberately absent
+    from the occupancy index, so clearing the relation without a step would
+    leave it nowhere the grid can see.
+
+    One entry per legal mount. `query.may_ride` is the single legality test
+    and holds the size rule *and* its exception, so this never asks about
+    size itself.
+    """
+    from .query import adjacent, creatures, may_ride
+
+    out: list[Action] = []
+    costs = {ActionType.MOVE} | {
+        cost for (what, cost) in _granted(world, actor) if what == "mount"
+    }
+    for cost in sorted(costs, key=lambda a: a.value):
+        if not encounter.can_spend(actor, cost):
+            continue
+        for beast in sorted(creatures(world)):
+            if adjacent(world, actor, beast) and may_ride(world, actor, beast):
+                out.append(Action(kind="mount", cost=cost, targets=(beast,)))
+
+    off = {ActionType.MOVE} | {
+        cost for (what, cost) in _granted(world, actor) if what == "dismount"
+    }
+    from .types import Relation
+
+    if world.relations.sources(Relation.RIDDEN_BY, actor):
+        for cost in sorted(off, key=lambda a: a.value):
+            if encounter.can_spend(actor, cost):
+                out.append(Action(kind="dismount", cost=cost))
     return out
 
 
@@ -1261,13 +1529,18 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
 
     if action.kind == "hide":
         from .cast import Cast
-        from .skills import check
 
-        # Stealth, as printed. A failed check is a spent minor and
-        # nothing else, which is the risk the action carries.
-        rolled = check(world, actor, "stealth", dc=10 + world.round)
-        if rolled.success:
-            Cast(world=world, me=actor, ref="hide").hide()
+        # **The check lives in `c.hide(check=True)` now, and the DC was
+        # invented here.** `dc=10 + world.round` is a number no card prints
+        # and it drifted upward as the fight went on, so hiding got harder
+        # the longer you waited for no printed reason. The printed
+        # arrangement is Stealth against the watchers' **passive
+        # Perception** -- `c.passive` exists for exactly this and says so --
+        # plus the movement penalty, which was charged nowhere. #784.
+        #
+        # A failed check is still a spent minor and nothing else, which is
+        # the risk this action has always carried.
+        Cast(world=world, me=actor, ref="hide").hide(check=True)
         return True
 
     if action.kind == "action_point":
@@ -1407,6 +1680,52 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
                     target=action.targets[0] if action.targets else None)
         return cast.coup_de_grace()
 
+    if action.kind == "feint":
+        # `_Powers` is aliased: a later branch of this same function imports
+        # `Powers` too, and a bare name assigned in one branch makes it local
+        # to the whole of `execute` -- which ruff's F823 caught as a read
+        # before assignment on that other branch.
+        from .cast import Cast
+        from .components import Powers as _Powers
+        from .skills import check as _check
+
+        if not action.targets:
+            return False
+        victim = action.targets[0]
+        # **No row, so no ref**, the same as a manoeuvre: nothing declares
+        # the feint, so the `Cast` is built on the action's own name and
+        # `c.ref` is what the log and the modifier's label read.
+        cast = Cast(world=world, me=actor, ref="feint",
+                    targets=[victim], target=victim)
+        # Spent whether or not it lands. "Only once per encounter" is about
+        # taking the action, and a failed feint is a spent standard the way
+        # a failed hide is a spent minor.
+        known = world.get(actor, _Powers) or world.add(actor, _Powers())
+        known.charges[FEINT_USE] = 1
+        # Against **passive** Insight, as the sub-entry prints -- not an
+        # opposed Insight check, which is what the general Bluff entry
+        # offers for a target actively trying to see through a deception.
+        rolled = _check(world, actor, "bluff",
+                        dc=cast.passive("insight", of=victim),
+                        target=victim, purpose=FEINT_PURPOSE)
+        if not rolled:
+            return True
+        # **Against that target only**, which is why this is
+        # `gains_advantage` with a gate rather than `grants_advantage` on
+        # the victim: the feinting creature has the advantage, and only
+        # when swinging at the creature it fooled.
+        # **`on=actor`, and the bare call was wrong.** `Cast._who(None)`
+        # returns `self.target`, so without this the modifier lands on the
+        # creature that was fooled -- which is `content/CLAUDE.md`'s
+        # "commonest single mistake", committed here in engine code.
+        # Measured before the fix: the Bluff check succeeded on three of
+        # nine seeds and `has_combat_advantage` was False on all nine.
+        cast.gains_advantage(
+            lambda ctx: ctx.get("target") == victim,
+            until=When.EONT, on=actor,
+        )
+        return True
+
     if action.kind in ("bull_rush", "grab", "aid_attack", "aid_defence"):
         # **No row, so no ref**, the same as a coup de grace: a manoeuvre is
         # an action taken on its own and nothing declares it. The `Cast` is
@@ -1441,6 +1760,59 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             if Condition.PRONE in eff.conditions:
                 world.effects.end(eff, "stood up")
         world.bus.emit(Note(text=f"{actor} stands"))
+        return True
+
+    if action.kind == "pull_grabbed":
+        # The grant says a square; `forced` is what moves anybody, so the
+        # pull goes through it rather than writing a `Position` by hand --
+        # a direct write leaves `Grid.occupants` stale and the board reads
+        # empty afterwards.
+        from .movement import forced
+        from .types import Forced
+
+        for victim in action.targets:
+            forced(world, actor, victim, Forced.PULL, 1, to=action.dest)
+        return True
+
+    if action.kind == "mount":
+        # Through `Cast.ride`, not `relations.set`, so the one verb content
+        # uses is the one the menu uses. The legality was settled on the
+        # offer side by `query.may_ride`; re-asking here would duplicate the
+        # size rule and its exception in a second place.
+        from .cast import Cast
+
+        for beast in action.targets:
+            Cast(world=world, me=actor, ref="action:mount").ride(on=beast)
+        return True
+
+    if action.kind == "dismount":
+        # `c.dismount` moves the rider out, which is the printed line, and
+        # clears the relation before stepping -- `movement.step` carries a
+        # rider with its mount, so a step taken while still astride would
+        # move the pair rather than set one down.
+        from .cast import Cast
+
+        Cast(world=world, me=actor, ref="action:dismount").dismount(
+            to=action.dest)
+        return True
+
+    if action.kind == "open_lock":
+        # The `+4` is read **per check** off a key of its own, not as a
+        # blanket Thievery bonus -- which is the one thing all three of
+        # `f3447`'s readings agreed on, because a standing bonus to the
+        # skill would raise every other use of it.
+        from .cast import Cast
+        from .components import Mods
+
+        dc = world.grid.locked.get(action.dest, 0)
+        mods = world.get(actor, Mods)
+        helped = mods.total("open_lock", {}) if mods is not None else 0
+        picker = Cast(world=world, me=actor, ref="action:open_lock")
+        if picker.check("thievery", dc, bonus=helped):
+            # Only the lock goes. What the square *does* once unlocked --
+            # whether it still blocks, or becomes a door -- is terrain's
+            # business and the second half #786 scopes out.
+            world.grid.locked.pop(action.dest, None)
         return True
 
     if action.kind == "escape":
@@ -1482,6 +1854,23 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
         return True
 
+    if action.kind == "load":
+        from .components import Gear
+
+        gear = world.get(actor, Gear)
+        if gear is None or not action.ref or action.ref not in gear.unloaded:
+            return False
+        gear.unloaded.discard(action.ref)
+        # Only a reload that actually used the cheap rate spends the
+        # allowance, exactly as a draw does.
+        if gear.load_cost is not None and action.cost == gear.load_cost \
+                and gear.loads_left > 0:
+            gear.loads_left -= 1
+        from .events import WeaponLoaded
+
+        world.bus.emit(WeaponLoaded(actor=actor, ref=action.ref,
+                                    cost=action.cost))
+        return True
     if action.kind == "wield":
         from .components import Gear
 

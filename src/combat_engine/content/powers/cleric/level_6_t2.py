@@ -5,7 +5,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     ENCOUNTER,
     MINOR,
-    ONE_ALLY,
+    YOU_OR_ONE_ALLY,
     Cast,
     Condition,
     Keyword,
@@ -22,7 +22,7 @@ from combat_engine.engine import (
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.DIVINE],
 )
 def p3681(c: Cast) -> None:

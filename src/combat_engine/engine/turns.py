@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from .components import Budget, Gear, Health, Initiative, Powers
+from .components import Budget, Gear, Health, Initiative, Movement, Powers
 from .conditions import rules
 from .durations import When
 from .events import (
@@ -391,6 +391,15 @@ class Encounter:
         self.world.turn = eid
         budget = self.world.get(eid, Budget) or self.world.add(eid, Budget())
         budget.refresh()
+        # **How far it has gone this action, cleared with the action economy
+        # itself.** `movement.walk` zeroes this at the top of each move
+        # action, which is what the Stealth rule asks for -- but a creature
+        # that does not move at all would otherwise still be carrying last
+        # turn's number when it hides. #784.
+        mv = self.world.get(eid, Movement)
+        if mv is not None:
+            mv.went = 0
+            mv.went_kind = ""
         # "Once per turn you can draw a weapon as a free action" is an
         # allowance like the action budget beside it, so it refills here
         # rather than from a watcher that would have to be installed per
@@ -399,6 +408,13 @@ class Encounter:
         gear = self.world.get(eid, Gear)
         if gear is not None and gear.draw_cost is not None and gear.draws_left >= 0:
             gear.draws_left = gear.draw_allowance
+        # **Its own guard, not a line inside the draw's.** The first version
+        # of this sat under `draw_cost is not None`, so a creature with a
+        # cheap reload and an ordinary draw never got its allowance back --
+        # silently, and in exactly the arrangement the four rows create.
+        # "Once per turn" is a turn's worth either way. #725.
+        if gear is not None and gear.load_cost is not None and gear.loads_left >= 0:
+            gear.loads_left = gear.load_allowance
         self.world.bus.emit(TurnStart(actor=eid, round=self.world.round))
 
     def end_turn(self) -> None:
@@ -661,8 +677,31 @@ def _rest_window(world: World, rested: list[int]) -> None:
     step rather than over seven rounds. A rest mid-fight is not a printed
     situation; the audit board is where it happens, and that board arms
     first.
+
+    **`started`, not the mere existence of an `Encounter`, and that
+    distinction was the whole of this function being a no-op.** The guard
+    read `world.encounter is not None`, and `Encounter.__init__` sets that
+    field -- so it was true from the moment the object was constructed,
+    before any fight had begun. `scripts/fight.py` builds the encounter and
+    *then* rests:
+
+        world, encounter = build(...)   # <- world.encounter is set here
+        short_rest(world)               # <- so this armed nothing
+        encounter.start(caught)
+
+    Measured in that exact order: **0** `arm_traits` calls during the rest,
+    against **14** with the field cleared by hand. So the fix this function
+    is documented as being had never run in the one path it was written for,
+    and the eight rows its own note says were dead stayed dead -- including
+    through the sweep, because the audit board arms before it provokes and
+    so cannot pose a rest at all.
+
+    Found because a `drivers` plant refused to go red: neutering this
+    function changed nothing, which is the tell that it was already doing
+    nothing. #498.
     """
-    if world.encounter is not None:
+    running = world.encounter is not None and world.encounter.started
+    if running:
         return
     for eid in rested:
         arm_traits(world, eid)

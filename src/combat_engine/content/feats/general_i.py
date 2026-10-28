@@ -54,6 +54,8 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     Ability,
     ActionPointSpent,
     ActionType,
@@ -711,7 +713,7 @@ _granted("f1378", "f1378b")
 
 
 @power("f1378b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=EACH_ALLY,
+       reach=CloseBurst(5), target=YOU_AND_EACH_ALLY,
        keywords=[Keyword.DIVINE, Keyword.RADIANT], group=CHANNEL_DIVINITY,
        )
 def f1378b(c: Cast) -> None:
@@ -738,7 +740,7 @@ _granted("f1379", "f1379b")
 
 
 @power("f1379b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(1), target=EACH_ALLY, keywords=DIVINE,
+       reach=CloseBurst(1), target=YOU_AND_EACH_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1379b(c: Cast) -> None:
     """"You and each ally in the burst": the ally pool already holds the
@@ -818,7 +820,7 @@ _granted("f1403", "f1403b")
 
 
 @power("f1403b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=CloseBurst(2), target=ONE_ALLY,
+       reach=CloseBurst(2), target=YOU_OR_ONE_ALLY,
        keywords=[Keyword.DIVINE, Keyword.FIRE], group=CHANNEL_DIVINITY,
        trigger="you miss an enemy with a melee or ranged attack",
        on=Trigger(Miss, _my_miss, "you miss with a melee or ranged attack"))
@@ -836,7 +838,7 @@ _granted("f1407", "f1407b")
 
 
 @power("f1407b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(3), target=EACH_ALLY, keywords=DIVINE,
+       reach=CloseBurst(3), target=YOU_AND_EACH_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1407b(c: Cast) -> None:
     """The narrowing to a charm, fear or psychic effect plays now. Those
@@ -938,7 +940,7 @@ _granted("f1430", "f1430b")
 
 
 @power("f1430b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(1), target=EACH_ALLY, keywords=DIVINE,
+       reach=CloseBurst(1), target=YOU_AND_EACH_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1430b(c: Cast) -> None:
     c.conceal(on=c.target, until=When.EONT)
@@ -1067,7 +1069,7 @@ _granted("f1444", "f1444b")
 
 
 @power("f1444b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=Ranged(5), target=ONE_ALLY, keywords=DIVINE,
+       reach=Ranged(5), target=YOU_OR_ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY, out_of_combat=True)
 def f1444b(c: Cast) -> None:
     """Rerolls a knowledge check. A check, not a fight."""

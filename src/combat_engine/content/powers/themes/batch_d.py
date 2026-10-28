@@ -30,6 +30,7 @@ from combat_engine.engine import (
     DEFENCES,
     EACH_OTHER,
     ENCOUNTER,
+    EVERY_DIE,
     FORT,
     FREE,
     INTERRUPT,
@@ -1008,18 +1009,69 @@ def p14103(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_ALLY,
     keywords=[Keyword.ARCANE],
-    todo=("c.replace_roll()",),
+    dropped=("story.extended_rest_lock()",),
 )
 def p14141(c: Cast) -> None:
     """Three recorded results standing in for the next three d20 rolls of
     three different kinds -- attack, save, skill -- spent in the order they
     come.
 
-    **Re-pointed off `c.boost_roll` (#495), which is a different mechanism.**
-    That verb adds to a roll that was made; this one says the roll is not
-    made at all -- a stored face is used instead. Nothing substitutes a d20
-    before it is rolled, and `c.treat_roll_as` is the near neighbour and
-    dictates only parity."""
+    `c.replace_roll` is the verb this waited on and now exists: the roll is
+    not made at all, a recorded face is used instead, which is why
+    `c.boost_roll` was the wrong neighbour (#495 re-pointed it once already)
+    and `c.treat_roll_as` the wrong one too -- that dictates only parity.
+
+    **In order, which is the whole of the bookkeeping.** The three faces are
+    kept in a list and popped from the front, so the first d20 the ally
+    makes of *any* of the three kinds takes the first recorded result. The
+    watches come off when the list empties, so the effect ends when all
+    three have been used exactly as printed.
+
+    Asked, not imposed: the card gives the recorded results to the ally and
+    the DM's discretion clause is explicitly about declining trivial rolls,
+    so `c.may` is put to the creature whose roll it is.
+
+    **`dropped=` for the day-scale half**, which is two clauses and one
+    mechanism: "when you next take an extended rest, the effect ends", and
+    the Special -- an ally who has had this cannot be targeted again until
+    after an extended rest. Both are a lock that outlives the encounter.
+    `Powers.per_day` is the board half of `story.Sheet.per_day` and counts
+    *uses of a row*, which is not this: this is a mark on the **target**
+    that has to survive into the next fight. The row plays without it; what
+    it loses is the restriction, which is the clause that makes it weaker,
+    so the shape of the error is a power slightly too available rather than
+    one that does nothing."""
+    mate = c.target
+    if mate is None:
+        return
+    kept = [c.roll("1d20") for _ in range(3)]
+
+    def spend(ev: Any, kind: str, *, whose: int) -> None:
+        # The empty list **is** the end of the effect. "When all three
+        # results have been used ... the effect ends" needs nothing taken
+        # off the bus: an exhausted list makes every handler a no-op, and
+        # the watches expire with the encounter anyway. There is no
+        # `c.unwatch`, and adding one for this would be a verb for a
+        # bookkeeping step that a guard already does.
+        if whose != mate or not kept:
+            return
+        if not c.may("use a recorded result", who=mate):
+            return
+        if c.replace_roll(kept[0], kind=kind, ev=ev):
+            kept.pop(0)
+
+    def on_attack(ev: AttackRolled) -> None:
+        spend(ev, "attack", whose=ev.attacker)
+
+    def on_save(ev: SavingThrow) -> None:
+        spend(ev, "save", whose=ev.actor)
+
+    def on_check(ev: SkillCheck) -> None:
+        spend(ev, "check", whose=getattr(ev, "actor", mate))
+
+    c.watch(AttackRolled, on_attack, until=When.ENCOUNTER, on=mate)
+    c.watch(SavingThrow, on_save, until=When.ENCOUNTER, on=mate)
+    c.watch(SkillCheck, on_check, until=When.ENCOUNTER, on=mate)
 
 
 @power(
@@ -1618,7 +1670,6 @@ def p16372(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
     trigger="you roll damage for an arcane attack power and dislike the result",
     on=Trigger(DamageRolled, by_me, "you roll damage"),
-    todo=("events.DamageRolled.dice",),
 )
 def p16373(c: Cast) -> None:
     """"As many of the damage dice as you like, and you must use the second
@@ -1626,12 +1677,27 @@ def p16373(c: Cast) -> None:
     the higher, and using it here would be a strictly better power.
 
     `c.reroll_ones(below=)` is not it either, for two reasons that are both
-    about *when*: it is a standing hold read inside `_roll_damage`, and this
-    is a no-action daily answering a roll already made. Its own docstring
-    names the hole -- "`DamageRolled` carries a total with no dice behind
-    it" -- so there is nothing on the event to reroll, whatever the
-    threshold. What the row wants is the faces on the event and a reactive
-    door onto them."""
+    about *when*: it is a standing hold read inside `_roll_damage_dice`, and
+    this is a no-action daily answering a roll already made. What the row
+    wanted was the faces on the event and a reactive door onto them, and
+    `c.reroll_faces` is that door -- the dice now ride on `DamageRolled` as
+    a plain attribute, the way a live `AttackResult` rides on `Hit`. #703.
+
+    `pick=EVERY_DIE` is "as many as you like". It does not mean every die
+    blindly: the floor is each die's own break-even, so a 6 on a d6 is left
+    alone, because rerolling it would throw it away. `_rolled_pick` has the
+    measurement that settled this.
+
+    **The arcane gate is read off the blow, not off this row.** "Damage for
+    an arcane attack power" is a property of whatever rolled, so the ref
+    comes from the damage context -- the same `ctx["power"]` the file's own
+    `p16372` already asks about two rows up. Gated here rather than in the
+    `Trigger` because the predicate is handed the event and not the
+    context."""
+    ctx = getattr(c.trigger, "ctx", None) or {}
+    if not _arcane_power(str(ctx.get("power", ""))):
+        return
+    c.reroll_faces(pick=EVERY_DIE)
 
 
 # -- x7_986: the underdark hand ----------------------------------------------

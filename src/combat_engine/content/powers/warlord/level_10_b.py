@@ -30,7 +30,6 @@ from combat_engine.engine import (
     AC,
     AREA_OR_CLOSE,
     DAILY,
-    EACH_ALLY,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
@@ -44,6 +43,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     AttackDeclared,
     Cast,
     CloseBurst,
@@ -184,7 +184,7 @@ def p10132(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(2),
-    target=Target("ally", 99, everyone=True, label="You and any ally in the burst"),
+    target=Target("team", 99, everyone=True, label="You and any ally in the burst"),
     keywords=MARTIAL,
 )
 def p10133(c: Cast) -> None:
@@ -236,7 +236,7 @@ def p10950(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True, label="Each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="Each ally in the burst"),
     keywords=HEALING_MARTIAL,
 )
 def p10951(c: Cast) -> None:
@@ -257,7 +257,7 @@ def p10951(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(3),
-    target=Target("ally", 2, label="You and one ally in the burst"),
+    target=Target("team", 2, label="You and one ally in the burst"),
     keywords=MARTIAL,
 )
 def p10952(c: Cast) -> None:
@@ -286,20 +286,23 @@ def p10952(c: Cast) -> None:
 )
 def p2565(c: Cast) -> None:
     """`c.reroll_attack` takes no bonus, so the combat advantage is the two
-    points it is worth on the roll, added afterwards and the outcome
-    recomputed from it -- the two lines `resolve.attack` runs itself once the
-    interrupt window closes. Nothing is added to an attack that already had
+    points it is worth on the roll, added afterwards with `c.boost_roll`,
+    which is the verb for adding to a roll already made and re-settles the
+    outcome on the way out. Nothing is added to an attack that already had
     the advantage; that is one grant, not two.
+
+    This re-settled by hand, and the formula was wrong twice: it dropped the
+    automatic hit on a natural 20, and it read a `critical` computed before
+    the +2 it was recomputing after. Both live, because the row answers a
+    `Miss` -- past `resolve.attack`'s own recompute, so what it wrote was
+    the answer. #868.
     """
     result = getattr(c.trigger, "result", None)
     if result is None or not c.reroll_attack():
         return
     if not result.advantage:
         result.advantage = True
-        result.total += 2
-    result.hit = result.critical or (
-        result.natural != 1 and result.total >= result.target_defence
-    )
+        c.boost_roll(2)
     c.note(f"{c.ref}: the swing is taken again with combat advantage")
 
 
@@ -342,7 +345,7 @@ def p2566(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label="Each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="Each ally in the burst"),
     keywords=HEALING_MARTIAL,
 )
 def p4573(c: Cast) -> None:
@@ -404,7 +407,7 @@ def _presence(c: Cast, who: int, pick: str) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=MARTIAL,
 )
 def p4574(c: Cast) -> None:

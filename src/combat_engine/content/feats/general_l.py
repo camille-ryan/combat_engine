@@ -37,8 +37,8 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
@@ -48,6 +48,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_AND_EACH_ALLY,
     Ability,
     ActionPointSpent,
     ActionType,
@@ -82,12 +83,13 @@ from combat_engine.engine import (
     Window,
     about_me,
     after_forced_reroll,
+    after_reroll_by,
     get,
     hits_me,
     power,
 )
 from combat_engine.engine.components import Health
-from combat_engine.engine.events import PowerUsed
+from combat_engine.engine.events import PowerResolved, PowerUsed, SecondWind
 from combat_engine.engine.query import alive, allies, distance_between, holding, team
 
 #: The `rt:r6-t3` choice: a 1st-level at-will borrowed from
@@ -141,6 +143,21 @@ def _used_any(*refs: str):  # noqa: ANN202
 
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.actor == me and ev.power in refs
+
+    return when
+
+
+def _finished(ref: str):  # noqa: ANN202
+    """`PowerResolved`, for a row that must read what the use *left behind*.
+
+    `dsl.use` emits `PowerUsed` **above** the body -- its own comment says
+    so, and `powers/cleric/second_card.py` is declared here for the same
+    reason -- so a feat reaching for the effect another row laid finds
+    nothing in the `_used` window. This is the one after.
+    """
+
+    def when(world, me: int, ev: PowerResolved) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power == ref
 
     return when
 
@@ -290,19 +307,50 @@ def _one_hand_free(world, eid: int) -> bool:  # noqa: ANN001
     return len(held) == 1 and not held[0].two_handed and not gear.shield
 
 
+def _my_roll_on_my_turn(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """An attack roll of mine, taken during my own turn.
+
+    `by_me` alone would also answer an opportunity attack, which is a
+    swing of mine on somebody else's turn -- and the card prints "during
+    your turn".
+    """
+    return ev.attacker == me and world.turn == me
+
+
 @power("f2544", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.boost_attack()",),
+       reach=PERSONAL, target=SELF,
        requires=_one_hand_free,
-       requires_text="a weapon in one hand and nothing in the other")
+       requires_text="a weapon in one hand and nothing in the other",
+       trigger="an attack roll you just made, during your turn",
+       on=Trigger(AttackRolled, _my_roll_on_my_turn,
+                  "you make an attack roll"))
 def f2544(c: Cast) -> None:
-    """The AC half. "A +1 bonus to an attack roll you just made" is a
-    number added to a die already down: `c.boost_check` does that for a
-    skill check and nothing does it for an attack.
+    """One free action buying either of two benefits, so the choice is the
+    row.
+
+    **The old note was stale.** "A +1 bonus to an attack roll you just
+    made" is a number added to a die already down, and `c.boost_roll`
+    (#495) is exactly that -- it adds to the triggering roll and re-decides
+    the outcome off the untouched natural, where `c.bonus("attack", ...)`
+    is read by the *next* swing.
+
+    **It reads `c.trigger`, so the roll has to be declared**, and the card
+    prints no trigger -- only a free action during your turn. Declaring the
+    attack roll narrows the AC half to the moment after a swing, and that
+    costs nothing in play: the AC bonus runs to the start of your next
+    turn, so it is worth most taken late in this one. `i3468p1` and
+    `m1796a3` are the same card shape -- a free action on "a roll you just
+    made" -- written the same way.
 
     The free-hand requirement is a fact about the board, so it is a
     `requires=` rather than a prerequisite column.
     """
-    c.bonus(AC, 1, on=c.me, until=When.SONT)
+    # The printed order: the roll first, so a headless run exercises the
+    # half that was missing rather than the one that always worked.
+    if c.choose(["the attack roll", "AC"], f"{c.ref}: which bonus") == "AC":
+        c.bonus(AC, 1, on=c.me, until=When.SONT)
+    else:
+        c.boost_roll(1, kind="attack")
 
 
 @power("f2545", level=1, cls="", usage=ENCOUNTER, action=FREE,
@@ -656,7 +704,7 @@ _grants("f2575", "f2575b")
 
 
 @power("f2575b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=EACH_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=YOU_AND_EACH_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f2575b(c: Cast) -> None:
     """"You and each ally in the burst" -- the caster is added on the
@@ -731,17 +779,25 @@ def f2578(c: Cast) -> None:
 
 
 @power("f2579", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus('skill:any')",))
+       reach=PERSONAL, target=SELF)
 def f2579(c: Cast) -> None:
-    """The attack half. "Or skill check" is dropped for the reason
-    `general_b.f629b` dropped it: a skill bonus is keyed `skill:<name>`
-    and the card names no skill."""
+    """Both halves. The old note deferred to `general_b.f629b` and that row
+    has since reversed itself, so the later reading is the one that stands:
+    `engine/skills.py` reads a bare `skill` key beside `skill:<name>` and
+    says so outright -- "a blanket `skill` modifier applies to every check"
+    -- which is exactly a bonus the card declines to pin to one skill.
+
+    The printed "or" is a choice made when the bonus is spent and nothing
+    carries that, so both one-shots are laid, as `f629b` lays them: a
+    character who both attacks and rolls a skill before the end of its next
+    turn takes it twice."""
     me = c.me
     mine = _slid_by_the_aura(c)
 
     def slid(ev: Any) -> None:
         if mine(ev):
             c.bonus("attack", 2, on=me, until=When.EONT, once=True)
+            c.bonus("skill", 2, on=me, until=When.EONT, once=True)
 
     c.watch(ForcedMove, slid, on=me, until=When.ENCOUNTER)
 
@@ -838,20 +894,63 @@ def f2617(c: Cast) -> None:
             c.restore_use(ref)
 
 
-@power("f2842", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2842", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.sustain_row()", "c.end_on_attack()"))
+       trigger="you use p377",
+       on=Trigger(PowerResolved, _finished("p377"), "you use that racial power"))
 def f2842(c: Cast) -> None:
     """Bolts a sustain standard onto `p377`, which the prerequisite names
-    by ref -- so the naming gap is closed and two others are not.
+    by ref.
 
-    Nothing adds a sustain clause to another row's effect: `sustain=` is
-    a header field of the row that lays the hold, and `c.on_sustain`
-    only says what an effect *this* row already made pays out. "Until
-    you attack" is the hold ten item blocks carry. The `f651` clause
-    only changes the cost of a sustain that cannot be added, so it is
-    not a marker of its own.
+    **The old note's premise was wrong about where a sustain lives.** It
+    said `sustain=` is a header field of the row that lays the hold. It is
+    not: the header only seeds `Effect.sustain_cost`, a field on the
+    *effect*, and `actions._sustaining` offers the sustain to the effect's
+    source for any live one carrying a cost, whichever row set it. So
+    reaching into `p377`'s hold and giving it a cost is the whole sustain
+    clause, and `c.on_sustain` then has somewhere to hang the price.
+
+    **`PowerResolved`, not `PowerUsed`, and that is the load-bearing
+    line.** `dsl.use` announces `PowerUsed` *above* the body -- its own
+    comment says the event "is right for 'when you use a power' and wrong
+    for anything reading a consequence" -- so a `_used("p377")` trigger
+    runs before `p377` has laid anything and finds no hold at all. `f719`
+    gets away with `_used` because it only arms watchers there and asks
+    `_under(c, "p377")` later; this row reads the effect in its own body,
+    so it needs the window after. `powers/cleric/second_card.py` is
+    declared on the same event for the same reason.
+
+    **"Until you attack" is re-armed here rather than left to `p377`.**
+    That power's own `_until_you_attack` watcher is `until=When.EONT`, so
+    it is gone by the second turn boundary -- which is exactly where a
+    sustained hold starts living. Without this watch the clause would stop
+    binding the moment sustaining began to matter.
+
+    `AT_WILL`, not `ENCOUNTER`: a declared trigger spends its usage when it
+    fires, and the card prints no limit of its own. The limit is `p377`'s
+    single encounter use, and `f2617`-style restores can hand that back.
+    `f719` is declared on the same power and reads the same way.
     """
+    me = c.me
+    # `c.invisible` labels `"p377 unseen"` and passes `by=self.ref`, so the
+    # laying row is asked by `by` rather than by parsing the label.
+    hold = next((eff for eff in c.world.effects.of(me) if eff.by == "p377"), None)
+    if hold is None:
+        return
+    hold.when = When.SUSTAIN
+    hold.sustain_cost = ActionType.STANDARD
+    # `sustained` is left alone: `effects.apply` set it to the round the hold
+    # was laid, which is what makes the first turn boundary free and the next
+    # one the one that charges -- the printed "until the end of your next
+    # turn" with nothing sustained.
+    price = 2 if c.feat(PLAGUE_FEAT) else 5
+    c.on_sustain(hold, lambda: c.flat(price, on=me))
+
+    def stop(ev: Any) -> None:
+        if ev.attacker == me:
+            c.end_effect(hold, why=f"{c.ref}: you attacked")
+
+    c.watch(AttackRolled, stop, until=When.ENCOUNTER, on=me, once=True)
 
 
 @power("f2871", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -963,25 +1062,67 @@ def f2846(c: Cast) -> None:
         c.hide(from_=foe, until=When.EONT)
 
 
-@power("f2849", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2849", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.ignore_cover(reroll=)", "c.retype_damage(dtypes=)"))
+       trigger="an attack p1450 made you roll again hits",
+       on=Trigger(Hit, after_reroll_by("p1450"),
+                  "the attack you rerolled hit"),
+       dropped=("c.ignore_cover(reroll=)",))
 def f2849(c: Cast) -> None:
-    """**Re-pointed. The reroll is announced now (#496) and neither clause
-    was waiting on that.** Two symbols, because the row prints two things
-    this engine cannot say and they fail for unrelated reasons.
+    """Two of the three clauses are written and the cover one is not.
 
-    The rerolled attack **ignores cover and concealment**. `c.ignore_cover`
-    takes a `when=` gate, so the obvious version is a gate on `reroll_by` --
-    and it would be silently false: cover is read inside `defence()` with
-    `resolve`'s own context, where `reroll` is always False. The reroll's
-    context exists only for the attack re-sum.
+    **The retype was never the gap the old note claimed.**
+    `DamageRolled.dtypes` is writable for exactly this, and "in addition to
+    its normal damage types" is the printed wording of what it says --
+    `(*ev.types(), ...)` rather than a replacement. What was genuinely
+    missing was a *moment*: `reroll_by` lives only in the attack context
+    (`cast.reroll_attack` builds it to re-sum the roll) and never reaches
+    the damage one, so a gated modifier could not see the reroll. The
+    settled `Hit` can: `after_reroll_by` reads `AttackResult.rerolled_by`,
+    and a `Hit` is announced before the body that rolled it deals its
+    damage. So the row declares that outcome and arms the retype for the
+    blow about to land. #496 is what made this sayable.
 
-    And it **adds two damage types** to whatever the rerolled attack already
-    deals. That is `f1231`'s gap and the same symbol: nothing retypes damage
-    another row is about to deal. The `f651` clause rides on top of that
-    one, so it is not separately blocked.
+    **Gated on the triggering power's ref, not just on the target**, which
+    is what keeps the `f651` burst below out of it: that is `c.flat` from
+    this row and would otherwise be the first `DamageRolled` the listener
+    saw, spending itself on damage that is already both types.
+
+    Spent by the blow it recolours, so an ongoing tick or a second rider
+    from the same power later in the turn is left alone -- the card speaks
+    about the attack's damage.
+
+    **Still dropped: the rerolled roll ignores cover and concealment.**
+    `c.ignore_cover` takes a `when=` gate and the obvious version is a gate
+    on `reroll_by` -- silently false, because cover is read inside
+    `defence()` with `resolve`'s own context, where `reroll` is always
+    False. `reroll_attack` re-sums modifiers and nothing else; the target
+    defence it compares against was settled at the first roll.
     """
+    me = c.me
+    foe = getattr(c.trigger, "target", None)
+    blow = getattr(c.trigger, "power", "")
+    if foe is None:
+        return
+    spent = False
+
+    def also(ev: DamageRolled) -> None:
+        nonlocal spent
+        if spent or ev.source != me or ev.target != foe or ev.detail != blow:
+            return
+        spent = True
+        ev.dtypes = (*ev.types(), DamageType.FIRE, DamageType.NECROTIC)
+
+    c.watch(DamageRolled, also, until=When.EOT, on=me,
+            window=Window.BEFORE, label=c.ref)
+    if not c.feat("f651"):
+        return
+    # "The target of that roll and each creature adjacent to it" -- no side
+    # is printed, so an ally standing next to the victim takes it too, and
+    # `c.within` centred on the victim already includes the victim.
+    for who in c.within(1, of=foe):
+        c.flat(1 + c.level // 2,
+               dtypes=(DamageType.FIRE, DamageType.NECROTIC), on=who)
 
 
 # -- the racial powers that are refs, so the rider is ordinary --------------
@@ -1147,7 +1288,7 @@ def f2847(c: Cast) -> None:
 
 @power("f2848", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.regeneration(add=)",))
+       )
 def f2848(c: Cast) -> None:
     """The payout half is written, and `Healed.regeneration` was the wrong
     name for its hold. `c.regeneration` ticks through `c.heal`, which puts
@@ -1165,6 +1306,18 @@ def f2848(c: Cast) -> None:
     me = c.me
     softened = c.feat(PLAGUE_FEAT, on=me)
     mine = set(allies(c.world, me))
+
+    # The raise, which was the dropped half. **The absolute total, not the
+    # printed delta**: `c.amount_for`'s rule is that the largest wins, so a
+    # +1 on a printed 2 is written as 3 -- the same way the aid grants say
+    # "a +3 bonus, rather than the normal +2". `p2483` reads the amount now
+    # rather than handing out a bare 2, which is what makes this consultable
+    # at all; a `change_amount` on a mechanic whose body hard-codes its
+    # number is `c.change_amount`'s own commonest bug.
+    #
+    # Heroic only. The card also says 2 at 11th level and 3 at 21st, which
+    # is paragon and epic and defers wholesale with the rest of the tier.
+    c.change_amount("p2483", 3, on=me, until=When.ENCOUNTER)
 
     def regained(ev: Any) -> None:
         if ev.target != me or ev.amount <= 0:
@@ -1268,20 +1421,56 @@ def f2702(c: Cast) -> None:
 def f2702b(c: Cast) -> None:
     """Declared on the hit rather than on the damage: `DamageApplied`
     does not say whether an attack caused it, and a hit that rolls no
-    damage is not a case this card has to tell apart."""
-    # Read rather than written in, so `f2703` can lengthen it. #502.
-    c.teleport(c.squares_for(c.ref, 3))
+    damage is not a case this card has to tell apart.
+
+    The teleport goes through `c.instead_of` so that `f2699` can trade it
+    away without costing the concealment printed beside it. The
+    distance is still read rather than written in, so `f2703` can
+    lengthen it. #502, #739."""
+    c.instead_of("teleport", lambda: c.teleport(c.squares_for(c.ref, 3)))
     c.conceal(on=c.me, until=When.SONT)
 
 
+def _f2699_chill(using: Cast) -> None:
+    """Cold damage to the triggering enemy in place of `f2702b`'s teleport.
+
+    `using` is `f2702b`'s own `Cast`, handed over by `c.instead_of`, so
+    `using.trigger` is the `Hit` that offered it and `attacker` is the
+    enemy the card means. The feat's own `c.target` went stale the moment
+    it finished arming, which is why the clause is written against the
+    using row.
+
+    5, then 10 at 11th and 15 at 21st, off the *using* row's caster --
+    `f2005`'s ladder reads the same way and for the same reason.
+    """
+    foe = getattr(using.trigger, "attacker", None)
+    if foe is None:
+        return
+    using.flat(
+        5 + 5 * (using.level >= 11) + 5 * (using.level >= 21),
+        dtype=DamageType.COLD, on=foe,
+    )
+
+
 @power("f2699", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.forgo_teleport()",))
+       reach=PERSONAL, target=SELF)
 def f2699(c: Cast) -> None:
-    """Damage to the triggering enemy *instead of* the teleport. The
-    enemy is readable now -- it is the attacker on the `Hit` `f2702b`
-    answered -- and the whole benefit is the replacement, which nothing
-    says: a clause of another row cannot be suppressed."""
+    """Damage to the triggering enemy *instead of* the teleport.
+
+    **The old note was stale on its last claim.** "A clause of another row
+    cannot be suppressed" is what `c.pre_empt` was built for (#479): it
+    keys on the clause rather than the row, so only the teleport is
+    replaced and `f2702b`'s concealment survives -- which is the trap the
+    verb exists to close, since granting the damage *and* the teleport
+    would be a strictly better feat than the printed one.
+
+    No trigger on the header. Each registration becomes its own entry in
+    the action menu, and `Trigger._ask` offers those for a declared-trigger
+    row like `f2702b`, so the choice is made where it can be clicked and
+    scored rather than by a question halfway through a body. `f2005` is the
+    twin. #739.
+    """
+    c.pre_empt("f2702b", "teleport", _f2699_chill)
 
 
 @power("f2700", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1345,15 +1534,25 @@ def f2564(c: Cast) -> None:
 
 
 @power("f2565", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("resolve.ctx.provoked_by",))
+       reach=PERSONAL, target=SELF)
 def f2565(c: Cast) -> None:
-    """The narrowing is dropped. The defence context carries
-    `opportunity` and nothing about *why* the window opened, so "an
-    opportunity attack you provoked by using a ranged power" cannot be
-    told from any other."""
+    """The narrowing is written now. `ctx["provoked_reach"]` is the
+    **provoking** row's shape in `ctx["reach"]`'s own vocabulary, so "a
+    ranged or an area power" is `"ranged"` or one of `AREA_OR_CLOSE`.
+
+    `opportunity` alone was the old gate and it was wider than printed: it
+    also paid for the opening your *walking away* gives, which is a move
+    and carries no provoking row at all. #880.
+    """
+    def provoked_by_a_ranged_power(ctx: dict[str, Any]) -> bool:
+        if not ctx.get("opportunity"):
+            return False
+        shape = ctx.get("provoked_reach", "")
+        return shape == "ranged" or shape in AREA_OR_CLOSE
+
     c.bonus(
         AC, 4, on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("opportunity", False),
+        when=provoked_by_a_ranged_power,
     )
 
 
@@ -1697,19 +1896,30 @@ def f2793b(c: Cast) -> None:
 
 @power("f2794", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w3609", "w3633"),
-       dropped=("chargen.DOUBLE_SCIMITAR",))
+       proficiency=("w3609", "w3633", "w3668"))
 def f2794(c: Cast) -> None:
     """Three named weapons rather than a group, and the weapon table
-    carries two of them by ref -- so the bonus is gated exactly rather
+    carries all three by ref -- so the bonus is gated exactly rather
     than on heavy blade, which would hand it to every longsword in the
     game. Heroic tier, so +2.
 
-    Dropped: the double scimitar. It is a double weapon and a `Weapon`
-    has one end, so `chargen` deals none."""
+    **The third weapon is written now and the old note was wrong twice.**
+    It said a `Weapon` has one end so `chargen` deals none. `Weapon.hands`
+    carries `double` as its own hand count -- `exploits._double_weapon_
+    shift_after_first` already reads it, and 22 rows in the table have it --
+    and `chargen.proficiency` reads this header's `proficiency=` straight
+    out of `PRINTED`, where `w3668` sits like any other arm.
+
+    **Only the primary end is declared.** The table also holds each
+    double's off-hand end as a row of its own (`priced=0`), but the engine
+    models the weapon as *one* object with `hands="double"`; nothing deals
+    a secondary end into `Gear.held`. Naming it here would let
+    `chargen.wield_options` price the off-hand half as a separate arm and
+    put it in a hand on its own, which is not a thing the page describes.
+    """
     c.bonus(
         "damage", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: _ref_in(c, "w3609", "w3633"),
+        when=lambda ctx: _ref_in(c, "w3609", "w3633", "w3668"),
     )
 
 
@@ -2433,12 +2643,65 @@ def f2609(c: Cast) -> None:
 
 
 @power("f2610", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("Weapon.heavy_thrown", "c.trade_accuracy()"))
+       reach=PERSONAL, target=SELF)
 def f2610(c: Cast) -> None:
-    """Heavy thrown is a printed weapon property the table does not
-    carry, and "take -2 to gain +2" is a choice made per attack that
-    nothing offers."""
+    """"Take -2 to gain +2", elected per attack. Heroic tier, so 2 and 2.
+
+    **The old note said nothing offers a per-attack choice. `c.may` does**,
+    and from inside an `AttackDeclared` handler: `powers/artificer/
+    level_2.py` asks the same question in the same window and lays a
+    `once=True` modifier on the attack being declared. `Window.BEFORE`, so
+    the penalty is standing when the roll is made.
+
+    **The weapon half was never the gap either.** `weapon.properties`
+    holds `heavy thrown` for nine entries (#226).
+
+    **Read off the attack rather than off the hand.** `c.wielding("heavy
+    thrown")` asks `Gear.main`, which is true for a character holding a
+    thrown weapon *and* a bow -- so every bowshot would have taken the
+    trade. `c.weapon_of(ev)` picks the weapon the way the attack did, and
+    with a bow in hand it answers the bow, which carries no such property.
+
+    **The damage half waits for the hit, and this is not fussiness.** The
+    card gives the bonus "if the attack hits"; a `once=True` damage bonus
+    is spent by `DamageRolled`, so laid at declaration it survives a clean
+    miss and is collected by the *next* throw -- a -2 paid once buying a
+    +2 twice. `elected` is the one blow the question was asked about, so
+    the payout can tell that blow from any other.
+    """
+    me = c.me
+    #: The (target, power) of the attack the trade was elected for. A list
+    #: rather than a flag, because the payout has to tell this blow from
+    #: another one declared in between.
+    elected: list[tuple[int, str]] = []
+
+    def heavy_throw(ev: Any) -> bool:
+        arm = c.weapon_of(ev)
+        return (
+            _reach_kind(ev.power) == "ranged"
+            and arm is not None
+            and "heavy thrown" in arm.properties
+        )
+
+    def offer(ev: AttackDeclared) -> None:
+        # Cleared on every declaration, elected or not: a blow nobody paid
+        # for must not collect the previous one's bonus.
+        elected.clear()
+        if ev.attacker != me or not heavy_throw(ev):
+            return
+        if not c.may("take -2 to the attack for +2 damage", who=me,
+                     default=False):
+            return
+        c.penalty("attack", 2, on=me, until=When.EOT, once=True)
+        elected.append((ev.target, ev.power))
+
+    def pay(ev: Any) -> None:
+        if ev.attacker == me and (ev.target, ev.power) in elected:
+            elected.clear()
+            c.bonus("damage", 2, on=me, until=When.EOT, once=True)
+
+    c.watch(AttackDeclared, offer, until=When.ENCOUNTER, window=Window.BEFORE)
+    c.watch(Hit, pay, until=When.ENCOUNTER)
 
 
 @power("f2629", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2551,50 +2814,137 @@ def f2725(c: Cast) -> None:
 
 
 @power("f2726", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.grant_action('mount')",))
+       reach=PERSONAL, target=SELF)
 def f2726(c: Cast) -> None:
-    """`c.ride` is the printed sentence and the size test is `Size.order`
-    -- `Size` is a `StrEnum`, so a bare `>` sorts the words. Mounting as
-    a move action is dropped: `c.grant_action` eats anything that is not
-    a shift or a stand."""
+    """The size test is `Size.order` -- `Size` is a `StrEnum`, so a bare
+    `>` sorts the words.
+
+    **What this card actually buys is the size exception, and the old note
+    had it as the action.** Mounting is a move action by the general rule,
+    so there was never a cost here to cheapen; `c.grant_action("mount")`
+    would be close to a no-op. The printed gift is riding a companion of
+    **your own size** where the rule demands strictly larger -- so the row
+    lays `c.rideable` on the companion and `query.may_ride` reads it,
+    which is the same facility the two monster rows write from the other
+    end. #749.
+
+    The ride stays, because the card says you can ride it; the standing
+    permission is what makes the menu offer it again after a dismount."""
     beast = c.companion()
     if beast is None:
         return
     mine, theirs = c.size_of(c.me), c.size_of(beast)
     if theirs.order >= mine.order and theirs.order >= Size.MEDIUM.order:
+        c.rideable(sizes=(mine,), on=beast)
         c.ride(on=beast)
 
 
-@power("f2868", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2868", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.second_wind(instead_of=)",))
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, lambda w, me, ev: ev.actor == me,
+                  "you take your second wind"))
 def f2868(c: Cast) -> None:
-    """`SecondWind` is the moment. What is left is the trade: nothing
-    refuses the hit points `Cast.second_wind` puts back, and without that
-    the ally is paid for free.
+    """Decline the hit points your second wind would restore; an ally
+    within 5 squares regains that many instead.
 
-    **Re-pointed, not re-diagnosed.** The marker used to read
-    `c.forgo_healing()`, which f2005 carried too -- and f2005 wanted
-    `c.pre_empt`, a verb that has existed since #479. One symbol for two
-    mechanisms made this row report as half of a pair when it is a single
-    card with a gap of its own: `c.pre_empt` keys on a **row ref** and the
-    row has to read the clause, and second wind is not a row. It is
-    `Cast.second_wind`, which is deliberately the only implementation and
-    has no `c.instead_of` on it. #740, and #739 for the other half."""
+    `SecondWind` was always the moment -- the note below has said so for
+    as long as the row existed -- and the trade is now sayable.
+    `c.forgo_second_wind_heal` records the refusal on the creature and
+    `Cast.second_wind` asks before it heals, because the row that declines
+    is a **standing trait** and the second wind is taken by the action
+    menu: there is no call here for it to pass an argument to. #740.
+
+    `ev.healed` is what the surge was **worth**, not what this creature
+    kept, which is exactly the number the card hands over -- so the ally's
+    half reads the announcement and needs no second arithmetic.
+
+    **Not a choice per use, and that is a narrowing the row owns.** The
+    card says "you *can* choose"; this declines for the whole encounter
+    once armed. The per-use decision would mean a `c.choose` inside
+    `Cast.second_wind`, which is the one implementation every door comes
+    through, and that is a larger change than this card justifies.
+
+    Why `c.pre_empt` was never the answer, kept from the old note: that
+    verb keys on a **row ref** and the row being changed has to read the
+    clause with `c.instead_of`. Second wind is not a row. #739 is the other
+    half of the symbol this one was split from.
+
+    **`AT_WILL`, not `ENCOUNTER`, and `lint` caught the difference.** A
+    triggered trait declared `ENCOUNTER` is spent on its first firing, and
+    this card prints no limit of its own -- the once-per-fight bound is
+    the second wind's, counted in `Powers`. The row carried `ENCOUNTER`
+    for as long as it carried a marker, where `lint` does not look;
+    un-marking it is what audited the header."""
+    me = c.me
+    c.forgo_second_wind_heal(on=me)
+    worth = getattr(c.trigger, "healed", 0)
+    if worth <= 0:
+        return
+    friends = [a for a in c.within(5, side="ally") if a != me]
+    if friends:
+        c.heal(worth, on=c.choose(friends, f"{c.ref}: which ally is healed"))
 
 
 @power("f2845", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("SavingThrow.effect",))
+       reach=PERSONAL, target=SELF)
 def f2845(c: Cast) -> None:
     """Splash damage equal to the ongoing damage a failed save leaves
-    standing. `SavingThrow` carries the label it was rolled against and
-    not the effect, so there is no number to copy.
+    standing.
 
-    Neither the two-type damage nor the `f651` clause is a hold any
-    more: `c.flat(dtypes=)` says the first and `c.feat` asks the second.
-    The marker is down to the number the whole row is."""
+    **The number was recoverable all along.** `SavingThrow` carries no
+    `Effect`, but `against=str(eff)` and that rendering opens with
+    `e<id>` (`durations.Effect.__str__`), so it names one live hold
+    uniquely: matching it against the list on the roller hands the object
+    back and `eff.ongoing[0]` is the burn. `f305b` reaches the effect it
+    was saved against the same way. `Effects.save` announces the throw
+    *before* it acts on the outcome, so the hold is still standing here.
+
+    `eff.source` is what says "ongoing damage from one of **your**
+    attacks" -- without it an ally's burn would splash too, which is the
+    control this row would otherwise have none of.
+
+    **`side="other"`, not `"any"`.** The circle is centred on the creature
+    that failed, and `"any"` is every creature on the board -- so it would
+    offer the roller as its own neighbour.
+
+    The watcher is deliberately unscoped: the creature rolling the save is
+    an enemy, not the character. `c.watch`'s `on=` names who holds the
+    trait and never which events it hears.
+    """
+    me = c.me
+    # Nobody takes a feat mid-fight, so the `f651` question is settled once
+    # while the trait arms -- the convention this whole tail follows.
+    extra = 5 if c.feat(PLAGUE_FEAT) else 0
+
+    def splash(ev: SavingThrow) -> None:
+        if ev.saved:
+            return
+        eff = next(
+            (e for e in c.world.effects.of(ev.actor) if str(e) == ev.against),
+            None,
+        )
+        if eff is None or eff.ongoing is None or eff.source != me:
+            return
+        near = c.within(1, of=ev.actor, side="other")
+        # The card says "one creature", which includes the character and
+        # its own allies -- so the pool stays wide and the *order* is what
+        # answers for a headless run. Unsorted, the first option was the
+        # caster standing next to the burning enemy, and the feat splashed
+        # its own holder every time. Stable, so enemies keep board order.
+        mine = set(c.enemies())
+        who = c.choose(
+            sorted(near, key=lambda n: n not in mine),
+            f"{c.ref}: who the burn splashes onto",
+        )
+        if who is not None:
+            c.flat(
+                eff.ongoing[0] + extra,
+                dtypes=(DamageType.FIRE, DamageType.NECROTIC),
+                on=who,
+            )
+
+    c.watch(SavingThrow, splash, until=When.ENCOUNTER)
 
 
 @power("f2858", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

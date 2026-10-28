@@ -91,6 +91,7 @@ from combat_engine.engine.events import (
     Dropped,
     EffectApplied,
     Escaped,
+    ForcedMove,
     Hit,
     Moved,
     MoveStart,
@@ -136,20 +137,42 @@ def _has_mode(c: Cast, who: int | None, mode: str) -> bool:
 
 def _revive_as_undead(c: Cast, label: str) -> None:
     """"Remains standing, gains the undead keyword, continues to fight
-    until the end of its next turn." Stood up inside the `Dropped` window
-    at 1 hit point, the shape `m5193a4` settled; guarded so the second,
-    genuine `Dropped` finds nothing left to do."""
+    until the end of its next turn."
+
+    **Held at 1 hit point inline, not from a watch.** This armed
+    `c.watch(Dropped, rise, ...)` from inside the dispatch of the very
+    `Dropped` that offered the row, so the handler was never called for
+    that event: the row fired, laid its subscription, and the creature died
+    anyway. It audited green because laying the effect counts as doing
+    something.
+
+    `resolve._check_down` reads the hit points **again** after the emit, and
+    its comment says it does so for exactly this shape -- "a row that
+    answers its own `Dropped` by healing itself" -- so the body only has to
+    set them. This is `m2066a3`'s shape, which was working all along.
+
+    The label guard stays and is load-bearing here in a way it is not for
+    `m2066a3`: both callers are `AT_WILL`, so without it the creature would
+    prop itself up again every time it dropped. #815.
+    """
+    from combat_engine.engine import Health
+
     me = c.me
     if any(e.label == label for e in c.world.effects.of(me)):
         return
     c.effect(label, until=When.ENCOUNTER, on=me)
 
-    def rise(ev: Dropped) -> None:
-        if ev.actor == me:
-            c.reanimate(on=me, hp=1)
-            c.set_origin("undead", on=me, until=When.EONT)
+    health = c.world.get(me, Health)
+    if health is not None:
+        health.hp = 1
+    c.set_origin("undead", on=me, until=When.EONT)
 
-    c.watch(Dropped, rise, until=When.ENCOUNTER, on=me, label=f"{label} rise")
+    def expire(ev: TurnEnd) -> None:
+        if ev.actor == me and not ev.ghost:
+            c.flat(999, on=me)
+
+    c.watch(TurnEnd, expire, until=When.EONT, on=me, once=True,
+            label=f"{label} expiry")
 
 
 def _swarm_traits(c: Cast) -> None:
@@ -1023,20 +1046,105 @@ def _on_line(c: Cast, who: int, sq: Square) -> bool:
     return any(_d(sq, s) <= 1 for s in _sq(c.world, who))
 
 
+_M2331_SPLITS = "it takes forced movement, or it drops to 0 hit points"
+_FORCED_STEP = frozenset(("push", "pull", "slide"))
+
+
+def _shoved_me(world: World, me: int, ev: Moved) -> bool:
+    """One step of a shove taken by this creature.
+
+    `movement.forced` announces `ForcedMove` **before** the shove and emits
+    no `MoveEnd` at all, so neither of those can answer "which squares has
+    it left": the first fires while it still occupies all of them and the
+    second never fires. `Moved` carries both ends of each step and its
+    `kind_` is the `Forced` word, which is what makes it the one readable
+    moment here.
+    """
+    return ev.actor == me and getattr(ev, "kind_", "") in _FORCED_STEP
+
+
+def _shove_began_at(world: World, me: int, ev: Moved) -> Square:
+    """The square this creature stood on when the shove it is taking began.
+
+    **Read off the log rather than off the step.** `ev.from_` is the start
+    of *one* square of travel, and "each square it formerly occupied" is
+    about the footprint the shove found the creature in -- so a push of 3
+    answered step by step would pay out for every square the body swept,
+    which is 15 rioters where the card gives 9. `ForcedMove` is announced
+    once per shove and bounds the walk.
+    """
+    anchor = ev.from_
+    for past in reversed(world.bus.log):
+        if isinstance(past, ForcedMove) and past.target == me:
+            break
+        if (isinstance(past, Moved) and past.actor == me
+                and getattr(past, "kind_", "") in _FORCED_STEP):
+            anchor = past.from_
+    return anchor
+
+
 @power(
     "m2331a2",
     level=10,
     usage=AT_WILL,
-    action=MOVE,
+    action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.summon(count=)",),
+    trigger=_M2331_SPLITS,
+    on=(Trigger(Moved, _shoved_me, "it is pushed, pulled or slid"),
+        Trigger(Dropped, about_me, "it drops to 0 hit points")),
 )
 def m2331a2(c: Cast) -> None:
-    """"Each square it formerly occupied now contains one m2332" splits
-    one creature into several at once -- `c.summon` makes exactly one
-    creature per call and names nowhere for the vacated footprint to
-    go."""
+    """One creature of this size leaving a square is one m2332 standing in
+    it, which is nine of them when the whole footprint goes.
+
+    **`c.summon(count=)` was never the gap.** The old note said the verb
+    "names nowhere for the vacated footprint to go", and `at=` is its
+    second parameter; the repeated call is the sanctioned shape for a row
+    that makes several at once -- `m3788a6` makes its pair that way, and a
+    hand-written walk over the squares mints no rows. `after=me` is the
+    printed "acts just after", which `c.summon` takes.
+
+    **The header was a move action with no declared trigger**, so the row
+    sat in the action menu and the card's two moments -- a shove and a
+    death -- reached nothing. Both are declared now, which is also why the
+    action is FREE rather than MOVE: nothing is spent on it.
+
+    The footprint the shove began in is read as the **translation of the
+    one it stands in now**, not from its size: `movement.step` moves
+    `pos.spans` by the step's own delta, so doing the same thing backwards
+    is exact for a creature whose footprint is not a plain square and needs
+    no size lookup.
+
+    A shove is several steps and this row answers each of them, so the
+    square is skipped when something already stands in it -- which after
+    step one is the rioter this row put there. That, with the bound
+    `_shove_began_at` gives, is what keeps a push of 3 at nine rioters
+    rather than one per square the body swept.
+
+    On a death the footprint is still standing: `resolve._check_down`
+    announces `Dropped` before `_die` lifts the body off the grid, so every
+    square the creature is about to leave is readable here and nowhere
+    later. That is also why the occupancy test lets *this* creature's own
+    squares through -- on that branch it is still in all nine of them."""
+    from combat_engine.engine.query import squares as _sq
+
+    me = c.me
+    ev = c.trigger
+    standing = set(_sq(c.world, me))
+    if not standing:
+        return
+    if isinstance(ev, Moved):
+        began = _shove_began_at(c.world, me, ev)
+        dx, dy = began[0] - ev.to[0], began[1] - ev.to[1]
+        vacated = sorted({(x + dx, y + dy) for x, y in standing} - standing)
+    else:
+        vacated = sorted(standing)
+    for sq in vacated:
+        sitting = c.world.grid.occupant(sq)
+        if sitting is not None and sitting != me:
+            continue
+        c.summon("m2332", at=sq, after=me)
 
 
 # ==========================================================================
@@ -1337,38 +1445,79 @@ def m4014a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="immobilized by it"),
+    target=Target(
+        side="enemy", count=1, label="immobilized by it",
+        conditions=(Condition.IMMOBILIZED,),
+        affected_by="m4014a2",
+    ),
     attack=Attack(vs=FORT, printed=11),
-    dropped=("Relation.IMMOBILIZED_BY", "c.sight_range(shared_only=)"),
+    dropped=("c.sight_range(shared_only=)",),
 )
 def m4014a1(c: Cast) -> None:
     """The restrained hold and the recurring damage both play.
 
-    The printed target is "a creature immobilized by it", which `Relation`
-    has no member for -- the six it carries are the grab, the mark,
-    domination, hiding, the curse and the quarry -- so `Target.relation`
-    cannot say this one and the pick stays in the body. Filtering on the
-    bare `Condition.IMMOBILIZED` would be wider than the card: it would
-    accept a creature held by somebody else entirely.
+    **"A creature immobilized by it" is `Target.affected_by`, and the old
+    note was hunting the wrong field.** It was right that `Relation` has no
+    member for being immobilised -- and it should not grow one, because the
+    field that says this already exists under another name. `affected_by`
+    names the *row* whose effect the target must be carrying, read off
+    `Effect.by`, and `m4014a2` is the sibling of this stat block that does
+    the immobilising. So the note's own worry -- that a bare
+    `Condition.IMMOBILIZED` would accept a creature held by somebody else
+    entirely -- is exactly what this rules out, and the pick comes out of
+    the body. It is in `dsl.candidates`' guard list, so the offer path
+    honours it rather than only the explicit-target arm.
 
-    "Line of sight and line of effect only to the m4014, and no creature
-    has it to the target" has no vision gate narrow enough to lay only
-    between two named creatures -- `c.sight_range` shrinks a radius, not
-    a line to one other creature."""
-    victim = next((f for f in c.grabbing() if c.is_(Condition.IMMOBILIZED, on=f)), None)
-    if victim is None or not c.strike(on=victim):
+    **Two faults fixed alongside it, neither named by the marker.** The body
+    threw `c.target` away and picked off `c.grabbing()` instead, so it swung
+    at whoever was being held rather than at whoever was offered; and the
+    printed "the target is no longer grabbed or immobilized" was never
+    honoured, so the hold this replaces stayed standing beside it.
+    `c.cure` is the removal, and it reaches both -- the grab is a relation
+    and the immobilisation is an effect, and `Effects.cure` clears either.
+
+    **The tick hangs off the engulf hold rather than carrying a `SAVE_ENDS`
+    of its own.** `c.watch(until=When.SAVE_ENDS, on=me)` lays a save-ends
+    effect on *this creature*, and `SAVE_ENDS` clocks on whoever carries it
+    -- so the damage stopped when the monster made a save it is not owed and
+    went on after the victim made the one it is.
+
+    The closing clause -- the target reappearing in a square of its choice
+    when this creature dies or it saves -- has nothing to undo: the victim
+    is never moved into this creature's space, so there is nowhere to put it
+    back from. Writing the displacement is a bigger change than the line of
+    sight the remaining marker names, and it is not what that marker is
+    about.
+
+    "Line of sight and line of effect only to the m4014, and no creature has
+    it to the target" still has no verb. One note for whoever takes it:
+    `c.sight_range` shrinks a radius and is probably the wrong symbol here
+    too -- `m6572a2` prints the second half of this sentence word for word
+    and is written as a refusal in the `AttackDeclared` window, which is a
+    shape that would serve both halves."""
+    victim = c.target
+    if victim is None or not c.strike():
         return
+    # Printed as a replacement: the engulf takes over from whatever hold
+    # brought the creature here, rather than stacking on top of it.
+    c.cure(Condition.GRABBED, Condition.IMMOBILIZED, on=victim)
     # No damage on the hit itself: the printed 3d8 + 5 lands at the start of
     # this creature's turn while the hold lasts, which is the `tick` below.
     # `c.hit()` raises without a damage line and was the wrong call here.
-    c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS, on=victim)
+    hold = c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS, on=victim)
+    if hold is None:
+        return
     me = c.me
 
     def tick(ev: TurnStart) -> None:
-        if not ev.ghost and ev.actor == me:
-            c.flat(c.roll("3d8") + 5, dtype=DamageType.NECROTIC, on=victim)
+        if hold.ended or ev.ghost or ev.actor != me:
+            return
+        c.flat(c.roll("3d8") + 5, dtype=DamageType.NECROTIC, on=victim)
 
-    c.watch(TurnStart, tick, until=When.SAVE_ENDS, on=me, label=f"{c.ref} {victim}")
+    watcher = c.watch(
+        TurnStart, tick, until=When.ENCOUNTER, on=me, label=f"{c.ref} {victim}",
+    )
+    hold.on_end.append(lambda: c.world.effects.end(watcher, "the hold ended"))
 
 
 @power(
@@ -1723,18 +1872,39 @@ def m4448a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.zones_near()",),
 )
 def m4448a6(c: Cast) -> None:
-    """Destroying an adjacent conjuration plays. A plain terrain zone has
-    no "near me" query the way a conjuration does -- `c.conjurations`
-    exists for the first half and nothing mirrors it for the second."""
+    """Both printed halves play, and `query.zones_near()` was a marker for
+    a reader that already existed.
+
+    The old note said a plain terrain zone has no "near me" query the way a
+    conjuration does. `c.conjurations` **is** that query for both: its loop
+    is `world.having(Zone)` followed by `world.having(Conjuration)`, and
+    `within` is measured off `zone.squares` for the first of the two. So is
+    the other end -- `c.dispel` routes a thing carrying a `Zone` to
+    `world.zones.end` and despawns a conjuration instead.
+
+    `within=1` is "in or adjacent to": `c.conjurations` measures from this
+    creature's own squares to the nearest square of the thing, so a zone
+    being stood in is 0 and one square off is 1.
+
+    **An aura is skipped, and that is not pedantry.** `c.conjurations`
+    answers with auras too -- an aura is a `Zone` carrying a radius -- and
+    the printed line names a zone or a conjuration. Left in, this creature
+    stripped the aura off every adjacent creature at the end of each of its
+    turns, which on a solo rolling one initiative per opponent is several
+    times a round."""
     me = c.me
 
     def check(ev: TurnEnd) -> None:
+        from combat_engine.engine.zones import Zone
+
         if ev.ghost or ev.actor != me:
             return
         for cid in c.conjurations(within=1, side="any"):
+            zone = c.world.get(cid, Zone)
+            if zone is not None and zone.aura is not None:
+                continue
             c.dispel(cid)
 
     c.watch(TurnEnd, check, until=When.ENCOUNTER, on=me, label=f"{c.ref} destroy")

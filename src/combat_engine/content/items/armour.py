@@ -82,6 +82,7 @@ from combat_engine.engine import (
     Dropped,
     Effect,
     EffectApplied,
+    EffectExpired,
     Healed,
     Hit,
     InitiativeRolled,
@@ -112,6 +113,7 @@ from combat_engine.engine import (
     both,
     by_bull_rush,
     by_charge,
+    by_keyword,
     by_me,
     by_melee,
     by_ranged,
@@ -594,7 +596,7 @@ def _no_armour_penalty(c: Cast, *, check: bool = False, speed: bool = False) -> 
     penalty", so a heavy shield's -2 goes on being charged; `_armour_penalty`
     adds the two and this cancels one of them.
     """
-    from combat_engine.chargen import ARMOUR_CHECK, ARMOUR_SPEED
+    from combat_engine.armour import ARMOUR_CHECK, ARMOUR_SPEED
     from combat_engine.engine.components import Gear
     from combat_engine.engine.skills import ENCUMBERED
 
@@ -881,19 +883,31 @@ def i1872x1(c: Cast) -> None:
 
 
 @power("i2137x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.move_through()",))
+       reach=PERSONAL, target=SELF)
 def i2137x1(c: Cast) -> None:
-    """Two of the three clauses turn on *who* rather than on the attack, and
-    both are askable: `dmg_ctx` has carried `source` since #302, and
-    `OpportunityWindow`'s context names whoever would swing. The creature
-    being a swarm is `query.kinds_of`.
+    """All three clauses turn on *who* rather than on the attack, and all
+    three are askable: `dmg_ctx` has carried `source` since #302,
+    `OpportunityWindow`'s context names whoever would swing, and
+    `may_enter`'s names the occupant of the square being crossed. The
+    creature being a swarm is `query.kinds_of`.
 
-    The move-through clause stays dropped, and `c.overrun` is not it: that
-    tramples whoever is in the way, where this is a standing *permission*
-    to cross a square. `c.shares_space` is the nearest thing and sits on the
-    creature being entered, so laying it on the swarm would open its square
-    to everybody on the board -- strictly stronger than print."""
+    **The move-through clause is written and the old note was two thirds
+    right.** It refused `c.overrun`, correctly -- that is a stated move
+    that tramples whoever is in the way, where this is a standing
+    permission -- and it refused `c.shares_space`, also correctly, since
+    that sits on the creature being *entered* and laying it on the swarm
+    would open its square to everybody on the board. What it missed is the
+    mover's side of the same question: `c.may_enter` (#626), narrowed by a
+    `when=` gate since #673, which is the whole of this sentence.
+    `items/waist.py`'s `i591p1` is the identical shape with minions in
+    place of swarms.
+
+    `ctx["occupant"]` is the key `movement.may_enter` passes, and
+    `movement._clear` asks it for every square of a path -- so the
+    permission covers moves other rows and the AI policy take, which is
+    what a Property has to do. "You cannot end your move in an occupied
+    space" needs nothing written: `movement._can_stop` refuses one whatever
+    the permission says."""
     c.resist(
         5, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: _is_swarm(c.world, ctx.get("source")),
@@ -901,6 +915,10 @@ def i2137x1(c: Cast) -> None:
     c.no_provoke(
         on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: _is_swarm(c.world, ctx.get("actor")),
+    )
+    c.may_enter(
+        when=lambda ctx: _is_swarm(c.world, ctx.get("occupant")),
+        on=c.me, until=When.ENCOUNTER,
     )
 
 
@@ -950,8 +968,8 @@ def i2285p1(c: Cast) -> None:
 
     **A torch is bright light to a radius of 5**, which is the one number
     here that is not on the card: looked up rather than guessed, and it is
-    the published equipment figure (an everburning torch prints the same 5,
-    a sunrod 20). So "like a torch" is `c.light(5)`.
+    the published equipment figure (`i189` prints the same 5 and `i386`
+    20). So "like a torch" is `c.light(5)`.
 
     The free action to end it is `c.endable`."""
     held = c.light(5, on=c.me, until=When.ENCOUNTER)
@@ -1004,10 +1022,21 @@ def i2417p1(c: Cast) -> None:
 
 
 @power("i2441x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.stealth_speed()",))
+       reach=PERSONAL, target=SELF)
 def i2441x1(c: Cast) -> None:
-    """Moving fast while hidden costs a Stealth penalty that is not
-    modelled, so there is no penalty to lift."""
+    """Lifts the Stealth penalty for moving fast while hiding.
+
+    **The penalty is charged now**, so there is something to lift: the hide
+    action rolls Stealth against passive Perception and takes -5 past two
+    squares, -10 for a run. `+5` on `"stealth:moved"` nets it to nothing for
+    the first and halves the second, and `c.hide` clamps the sum at 0 so a
+    waiver can never become a bonus.
+
+    **Its own key, not `skill:stealth`.** A bonus there would apply to every
+    Stealth check this character ever makes, which is not what the card
+    says and is the fault `f3447` refuses to commit. Only `c.hide` reads
+    this key. #784."""
+    c.bonus("stealth:moved", 5, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i2534x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -1084,14 +1113,35 @@ def i462x1(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="a creature you have marked targets you and an ally",
        on=Trigger(DamageRolled, targets_me, "a marked enemy hits you"),
-       dropped=("c.aegis()",))
+       dropped=("DamageRolled.among",))
 def i531p1(c: Cast) -> None:
     """The mark is asked in the body because the predicate gets no `Cast`.
-    Two clauses go unsaid and both are named: the mark has to be a
-    particular class feature's, and the attack has to catch an ally too --
-    the damage event is per-target and knows nothing of the rest."""
+
+    **Re-pointed off `c.aegis()`, which named a verb for two gaps that are
+    neither about a verb nor about each other.** Both unsaid clauses are
+    one level down:
+
+    * *"marked with your p3323 power"* -- **written now.** A mark used to
+      be a bare `Relation.MARKED_BY` triple recording **who** marked whom
+      and never which row laid it, so this could not tell the aegis from a
+      fighter's combat challenge and paid on any mark. `Relations` keeps
+      the laying ref in its value slot and `c.marked(via=)` asks for it;
+      the write cost nothing in the end, because `durations._install_state`
+      had `eff.by` in its hand all along and no content site or tuple had
+      to move. #875.
+    * *"targets you and at least one of your allies"* -- this fires on
+      `DamageRolled`, which carries `source`, `target` and `amount` and
+      nothing about the attack's other targets. `resolve` attaches
+      `among` to `Hit` and `Miss` as a plain attribute and not to the
+      damage events, so the whole target list is unreachable from here.
+      Three marked rows want it, the other two under `Hit.origin`.
+
+    So the row is still too generous, but in **one** direction rather than
+    two: the mark is now the right mark, and the "and at least one of your
+    allies" half is unasked. That is the shape of the error rather than an
+    inert clause."""
     foe = _foe(c)
-    if foe is None or not c.marked(on=foe):
+    if foe is None or not c.marked(on=foe, via="p3323"):
         return
     c.reduce(5 + c.enhancement, c.trigger)
 
@@ -1714,15 +1764,87 @@ def i533x1(c: Cast) -> None:
 @power("i540x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i540x1(c: Cast) -> None:
-    """Storing a power happens during a rest, and the whole property is
-    the bookkeeping around it."""
+    """One at-will or encounter martial power of the armour's level or
+    lower, stored in the armour until `i540p1` spends it.
+
+    **Settled when the Property arms, which is the start of the fight.**
+    The card says the storing happens during a rest and there is no
+    persistence between encounters, so a rest-time choice and an
+    arming-time choice are the same choice -- the argument
+    `c.borrow_row` already makes about a character-creation one.
+
+    "That you or an ally has" is the candidate set, so allies' known rows
+    count and not merely the wielder's: this armour's whole point is
+    carrying somebody else's trick. Filtered by the three things the card
+    names -- the martial keyword, at-will or encounter, and *"cannot store
+    a power of higher level than the armor"*, which is this row's own
+    level.
+
+    `c.store_row` and not `c.grant_row`: the latter hands the row to the
+    **creature**, which would let the wielder use it as its own power for
+    free, where the print has the armour hold it and charge a standard
+    action and -- for an encounter power -- an action point. #720.
+    """
+    mine = c.world.need(c.me, Powers)
+    seen: dict[str, None] = {}
+    for who in (c.me, *c.within(100, side="ally")):
+        held = c.world.get(who, Powers)
+        if held is None:
+            continue
+        for ref in held.known:
+            seen.setdefault(ref, None)
+    offered = sorted(
+        ref for ref in seen
+        if (row := get(ref)) is not None
+        and not row.unfinished
+        and row.usage in (AT_WILL, ENCOUNTER)
+        and Keyword.MARTIAL in (row.keywords or ())
+        and (row.level or 0) <= 3
+        # **A power, which a passive class feature is not.** `Powers.known`
+        # holds features and traits beside powers, and the first thing this
+        # stored was `cf:fighter-weaponmaster-f0` -- encounter usage, the
+        # martial keyword, level 0, and `action=NONE` with no attack, so
+        # `c.use_power` had nothing to run and `i540p1` spent an action
+        # point on nothing. The card says "power"; in this engine a power
+        # is the thing that costs an action.
+        and row.action is not ActionType.NONE
+    )
+    if not offered:
+        c.note(f"{c.ref}: nothing martial of its level to store")
+        return
+    pick = c.choose(offered, f"{c.ref}: the power stored in the armour")
+    if pick:
+        c.store_row(pick)
+    _ = mine
 
 
 @power("i540p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, todo=("c.stored_row()",))
+       reach=PERSONAL, target=SELF)
 def i540p1(c: Cast) -> None:
-    """There is nowhere to put a borrowed row: `c.grant_row` hands one to
-    a creature, not to an object."""
+    """Use the power the armour is holding; an encounter power costs an
+    action point as well.
+
+    `of="i540x1"` because the two halves of this card are two rows and the
+    Property is the one that stored it. Nothing stored is nothing to use --
+    the armour was never armed, or had no legal power to hold -- and the
+    row says so rather than inventing one.
+
+    **The action point is a cost and not a rider**, so a wielder who has
+    none cannot use the stored power at all: `c.action_point` returns False
+    when the pool is empty or the encounter's one has been spent, and the
+    row stops there. Reading the usage off the registry rather than
+    recording it at store time, so that a row re-pointed between the two
+    halves cannot disagree with itself. #720.
+    """
+    ref = c.stored_row(of="i540x1")
+    if not ref:
+        c.note(f"{c.ref}: the armour is holding nothing")
+        return
+    row = get(ref)
+    if row is not None and row.usage is ENCOUNTER and not c.action_point():
+        c.note(f"{c.ref}: no action point to spend on {ref}")
+        return
+    c.use_power(ref, spend=False)
 
 
 @power("i549x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -1894,8 +2016,7 @@ def i1352x1(c: Cast) -> None:
         if result is None or not _crit_on_me(c.world, c.me, ev):
             return
         if c.roll("1d20") >= 16:
-            result.critical = False
-            ev.critical = False
+            c.crit_becomes(False, ev=ev)
 
     c.watch(Hit, soften, until=When.ENCOUNTER, on=c.me, window=Window.BEFORE)
 
@@ -2028,9 +2149,49 @@ def i2017x1(c: Cast) -> None:
 
 
 @power("i2017p1", level=4, cls=ITEM, usage=AT_WILL, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.charges()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you use an arcane power and make an attack roll",
+       on=Trigger(AttackRolled, both(by_me, by_keyword(Keyword.ARCANE)),
+                  "you roll an attack for an arcane power"))
 def i2017p1(c: Cast) -> None:
-    """An item with a pool of its own is not a thing `Magic` carries."""
+    """**Re-pointed: a counted pool keyed by a string already exists.** The
+    old note said an item with a pool of its own was not a thing `Magic`
+    carries, which is true and is not the question -- the pool is
+    `Powers.per_day`, which `c.per_day_left` and `c.spend_per_day` reach by
+    any key at all. The key is the **item's** ref rather than this block's,
+    because the charges belong to the suit: `i2017x1` is the Property that
+    declares them and this is the only thing that spends them.
+
+    An extended rest is exactly what a per-day count refreshes on, so the
+    cadence is the printed one and not the per-encounter `c.charge_left`.
+
+    How many charges there are is a column and never a number to write
+    down: `c.enhancement` finds the plus of the piece this row came off.
+
+    "Any number of unused charges" is a real choice and is offered as one.
+    The engine with nobody playing takes the first option, so the list runs
+    upward from one -- the cheap answer is the headless default and spending
+    the lot stays available to whoever asks.
+
+    `c.boost_roll` and not `c.bonus("attack")`: the roll that triggered this
+    has already been summed, so a modifier laid here would be read by the
+    *next* attack. The declared trigger is what binds `c.trigger`, which is
+    where `boost_roll` looks for the roll. The one thing it cannot carry is
+    the printed bonus *type* -- it adds to `AttackResult.total` directly --
+    which costs nothing unless a second power bonus reaches the same roll.
+    """
+    pool = "i2017"
+    limit = c.enhancement
+    left = c.per_day_left(pool, limit)
+    if left <= 0:
+        return
+    wanted = c.choose(list(range(1, left + 1)), "charges to spend", optional=True)
+    if wanted is None:
+        return
+    spent = 0
+    while spent < wanted and c.spend_per_day(pool, limit):
+        spent += 1
+    c.boost_roll(spent, kind="attack")
 
 
 @power("i2023x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -2840,8 +3001,7 @@ def i3425x1(c: Cast) -> None:
 @power("i3425p1", level=5, cls=ITEM, usage=ENCOUNTER, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="you take damage that has a type",
-       on=Trigger(DamageApplied, targets_me, "you take damage"),
-       dropped=("c.on_expire()",))
+       on=Trigger(DamageApplied, targets_me, "you take damage"))
 def i3425p1(c: Cast) -> None:
     """**Re-pointed: `c.bonus` does carry a damage type.** `dtype=` is on the
     signature and is read for `"damage"` and `"crit_damage"`, so the extra
@@ -2853,13 +3013,44 @@ def i3425p1(c: Cast) -> None:
     untyped blow gives nothing to copy and the row pays nothing. It is asked
     in the body because `targets_me` is shared with four other rows here.
 
-    Still dropped: the clause that turns the die back on you if you do not
-    swing, which wants something to run when a one-shot expires unspent."""
+    **The unspent half is written, and needed no new verb.** `Effects.end`
+    emits `EffectExpired(what=str(eff), why=...)` for every non-instant
+    effect, and the two endings this row has to tell apart carry different
+    words: a spent `once=True` damage bonus is ended by `spend_damage` with
+    `why="used"`, and the clock running out is ended by the turn-end sweep
+    with `why="end of turn"`. So the test is for the sweep's word rather
+    than merely "not used" -- any other ending (the fight finishing,
+    somebody stripping the hold) is not the card's "you do not make an
+    attack" and pays nothing.
+
+    `str(eff)` is `e{id}[label, when]`, so the tag identifies this one hold
+    and a leftover watcher can never fire for somebody else's.
+
+    **The watcher is armed on the encounter and not on the hold.** An
+    effect's own subscriptions are torn down in `end` *before* it announces
+    its expiry, so a watch hung on the hold would never hear it -- `p10250`
+    carries the same note for the same reason.
+
+    "The power is not expended" is `c.restore_use`, which hands back the
+    use this firing spent."""
     hurt = getattr(c.trigger, "dtype", None)
     if hurt is None or hurt is DamageType.UNTYPED:
         return
-    c.bonus("damage", 0, dice="1d6", dtype=hurt, on=c.me,
-            until=When.EONT, once=True)
+    me, ref = c.me, c.ref
+    hold = c.bonus("damage", 0, dice="1d6", dtype=hurt, on=me,
+                   until=When.EONT, once=True)
+    if hold is None:
+        return
+    tag = str(hold)
+
+    def unspent(ev: EffectExpired) -> None:
+        if ev.what != tag or ev.why != "end of turn":
+            return
+        c.damage("1d6", dtype=hurt, on=me)
+        c.restore_use(ref, on=me)
+
+    c.watch(EffectExpired, unspent, until=When.ENCOUNTER, on=me,
+            label=f"{ref} unspent")
 
 
 @power("i461x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -3009,7 +3200,7 @@ def i1375p1(c: Cast) -> None:
         return
     result = getattr(c.trigger, "result", None)
     if result is not None and result.hit:
-        result.critical = True
+        c.crit_becomes(True)
 
 
 @power("i1615p1", level=6, cls=ITEM, usage=AT_WILL, action=MINOR,

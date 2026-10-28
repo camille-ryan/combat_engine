@@ -152,10 +152,46 @@ def f1720(c: Cast) -> None:
 
 
 @power("f1009", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:barbarian-f1s0",))
+       reach=PERSONAL, target=SELF, dropped=("cf:barbarian-f1s0",))
 def f1009(c: Cast) -> None:
-    """Raises the temporary hit points a class feature pays. Named in
-    prose with no ref."""
+    """Raises the temporary hit points one class-feature option pays.
+
+    **The benefit is written and the symbol now names something else.**
+    The old note said the option was "named in prose with no ref", which
+    stopped being the blocker twice over: `resolve.temp_hp` reads a
+    `temp_hp` term off the receiver, so there is a number to add to, and
+    `TempHP.power` names the row that paid -- which is what the gate reads
+    out of the context. `f1855` is the same move on a racial trait.
+
+    A modifier rather than a watcher, for `f1855`'s reason: the
+    non-stacking rule is applied *after* the term, so a watcher raising
+    `ev.amount` would already have lost to a standing pool.
+
+    **The gate names `cf:barbarian-f1`, not the option the card prints.**
+    No row carries `cf:barbarian-f1s0`; the option's body is written inline
+    on `cf:barbarian-f1`'s `rageblood` leg, so `cf:barbarian-f1` is the ref
+    that rides the `TempHP` this card is about. It is exact rather than
+    merely close, because that row's other leg `c.forbid`s and returns
+    before reaching its only `c.temp_hp` -- so a pool paid under that ref
+    *is* this option's. It stops being exact the day the feature pays
+    temporary hit points on a second leg.
+
+    **Dropped: the feat cannot be dealt.** Its printed prerequisite is
+    `{"ref": "cf:barbarian-f1s0"}`, and `chargen.meets` answers that
+    against the character's dealt list, which carries `f1s1`..`f1s3` and
+    never `f1s0` -- because no row declares it. The mechanism works: with
+    the ref present `meets` returns True. So the body is complete and what
+    is still owed is the option's own row, which is `primal_shadow.py`'s
+    ruling and `docs/blocked.json`'s `cf:barbarian-might-rest`, not a
+    clause here. `dropped=` rather than `todo=` because the row plays if it
+    is ever held, and `legal_feats` refuses a `todo=` row outright.
+
+    Untyped: the card prints no word in front of a bonus, and the belt
+    property that raises the same pool prints none either -- untyped
+    modifiers add, which is what both cards say.
+    """
+    c.bonus("temp_hp", 5, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("power") == "cf:barbarian-f1")
 
 
 @power("f1010", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

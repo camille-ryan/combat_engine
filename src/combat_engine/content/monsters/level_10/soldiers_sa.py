@@ -108,6 +108,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -5344,7 +5345,7 @@ def m956a2(c: Cast) -> None:
     uses=2,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.HEALING],
 )
 def m956a3(c: Cast) -> None:

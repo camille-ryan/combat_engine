@@ -848,7 +848,7 @@ write and they are not yours to invent a combat effect for.
 Declare them with `out_of_combat=True` and an empty-ish body -- see
 `content/powers/wizard/level_0.py`, where all four cantrips do this. The
 flag is the difference between *deliberately inert* and *not written yet*:
-`actions.legal` stops offering it in a fight and `coverage.py` still counts
+`actions.legal` stops offering it in a fight and `written.py` still counts
 it as done.
 
 **"A bonus to a skill check" used to head that list and it was wrong.** It
@@ -1009,7 +1009,7 @@ What that buys, and why it is not a stub:
 * **It is refused in play.** `dsl.usable` returns `not finished yet` for any
   row with a `todo`, so it is exactly as inert as the absence it replaced —
   never offered, never chosen, never half-resolved.
-* **It is counted partial and never done.** `coverage.py` prints three
+* **It is counted partial and never done.** `written.py` prints three
   states and the percentage is done over total, so a marker cannot move the
   number.
 * **It is named individually.** `audit.py` prints one `TODO` line per row,

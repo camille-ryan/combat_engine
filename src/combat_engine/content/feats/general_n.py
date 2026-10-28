@@ -116,6 +116,7 @@ from combat_engine.engine.query import (
     distance_between,
     enemies,
     flanked_by,
+    immune_to,
     race_skills,
     races_sized,
     spread,
@@ -136,8 +137,6 @@ PROFICIENCY = ("chargen.proficiency()",)
 #: "You can swap a power you know for this one." The card is handed over;
 #: giving one up is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
-#: A class feature named in prose with no `cf:` row behind it.
-FEATURE = ("c.class_feature()",)
 #: Another class's feature whose options each refuse themselves off
 #: `c.build`, so handing one to a character of a different class hands
 #: over a row whose body returns on its first line. The grant itself is
@@ -728,7 +727,7 @@ _granted("f2103", "f2103b", swap=Swap(3, Usage.ENCOUNTER))
 
 @power("f2103b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
-       attack=Attack(REF, vs=WILL), dropped=("c.pick_pocket()",))
+       attack=Attack(REF, vs=WILL), narrative=("skill:thievery",))
 def f2103b(c: Cast) -> None:
     """"Dexterity or Charisma" with one ability in the header: the roll
     carries the difference as `plus=` and the damage line reads the
@@ -736,8 +735,13 @@ def f2103b(c: Cast) -> None:
 
     "Grants combat advantage to **all** attackers" is `to="team"` --
     the relation names one beneficiary at a time, and my side is who it
-    matters to. Picking the pocket is a free-action Thievery check with
-    no combat consequence and nowhere to put its result.
+    matters to.
+
+    **The marker is `narrative=`, not a verb waiting to be built.**
+    Picking the pocket is a free-action Thievery check with no combat
+    consequence and nowhere to put its result -- which is the field's
+    whole definition, and the old `dropped=("c.pick_pocket()",)` named a
+    verb that should not exist and reported the row as work owed.
     """
     edge = max(0, c.cha_mod - c.dex_mod)
     if c.strike(plus=edge):
@@ -769,11 +773,16 @@ _granted("f2105", "f2105b", swap=Swap(9, Usage.DAILY))
 @power("f2105b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
        attack=Attack(REF, vs=AC),
-       dropped=("c.pick_pocket()",))
+       narrative=("skill:thievery",))
 def f2105b(c: Cast) -> None:
     """The Effect runs first, as printed: the shift is what brings you
-    into reach. The free-action Thievery check is dropped, and was going
-    unsaid here while f2103b named it.
+    into reach.
+
+    **The free-action Thievery check is `narrative=`.** It has no combat
+    consequence and nowhere to put its result, which is what that field
+    means; `dropped=("c.pick_pocket()",)` named a verb that should not be
+    built and counted the row as work owed. `f2103b` carries the same
+    sentence and the same marker.
 
     **Both halves of "during this shift can move through the target's
     space" are written now.** The permission never was the blocker --
@@ -860,12 +869,28 @@ _granted("f2107", "f2107b", swap=Swap(6, utility=True))
            Trigger(Miss, lambda w, me, ev: ev.target == me and ev.attacker != me,
                    "you are missed by an attack"),
        ),
-       dropped=("c.immune(keyword=)",))
+       )
 def f2107b(c: Cast) -> None:
     """Both halves of "hit or missed" are declared; declaring one would
-    have looked finished. Creatures immune to fear are the dropped
-    clause -- immunity in this engine is to conditions, not keywords."""
-    c.grants_advantage(on=c.trigger.attacker, until=When.EONT)
+    have looked finished.
+
+    **The fear clause is written now.** "You do not gain this bonus
+    against attacks from creatures immune to fear" is a gate on the
+    attacker, and `query.immune_to` answers a `Keyword` as well as a
+    `Condition` -- the printed word is the same word, and both enums are
+    `StrEnum`, so the modifier label needed no change. The standing half
+    comes off `Defences.immune_keywords`, which `loader` now keeps from
+    `monster.immune` rather than filtering the column down to damage
+    types: **61 monsters print Immune fear** and every one of them was
+    being dropped on the floor. #560.
+
+    The marker was re-pointed here from `c.immune(keyword=)` -- one absent
+    facility filed from both ends, so `blocked.py --group` counted the gap
+    twice."""
+    foe = c.trigger.attacker
+    if immune_to(c.world, foe, Keyword.FEAR):
+        return
+    c.grants_advantage(on=foe, until=When.EONT)
 
 
 _granted("f2108", "f2108b", swap=Swap(9, Usage.DAILY))
@@ -918,7 +943,7 @@ def f2108b(c: Cast) -> None:
 # not a standing effect. `c.light` exists now and writing it here would
 # shed the light permanently, which is a different and better feat.
 _granted("f2117", "f2117b", swap=Swap(2, utility=True),
-         dropped=("c.grant_action('light')",))
+         dropped=("actions.shed_light()",))
 
 
 @power("f2117b", level=1, cls="", usage=ENCOUNTER, action=FREE,
@@ -1200,12 +1225,26 @@ def f2129(c: Cast) -> None:
 
 
 @power("f2129b", level=1, cls="", usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH],
-       dropped=("c.bonus(of_ref=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH])
 def f2129b(c: Cast) -> None:
-    """Raising the attack bonus that *another* row grants is the dropped
-    clause: m1031a4's bonus lives inside its own effect and nothing can
-    reach in and rewrite one.
+    """**The last clause needed no reach into another row's effect.** The
+    old note said the trait whose bonus this raises is `m1031a4` and that
+    nothing could rewrite a number living inside its effect. The first half
+    is simply the wrong ref -- the card names `rt:r8-t0`, the racial trait
+    (features/racial.py:542); `m1031a4` is a monster's own copy of the same
+    clause and is nothing to do with this card. The second half is the
+    wrong question: `Mods.total` buckets bonuses by `kind` and takes the
+    **max** within a bucket (components.py:838), so "increases to +2" is a
+    second `kind="racial"` bonus of 2 and the +1 loses. Nothing is
+    rewritten.
+
+    `f2398` (ranger_c.py:461) and `f1863` (general_k.py:736) both argue
+    this about this same trait; this card is the unnarrowed one, so the only
+    gate is the trait's own.
+
+    **Gated on bloodied, because the bonus this raises exists nowhere
+    else**: against an unbloodied enemy `rt:r8-t0` lays nothing, so there
+    is no +1 for the card to increase and a flat +2 would be inventing one.
 
     "**Increase** fire resistance by 5" is read off `c.resistances` and
     added. A bare `c.resist(5)` was right while the method added; it
@@ -1218,6 +1257,12 @@ def f2129b(c: Cast) -> None:
     standing = c.resistances(on=me).get(DamageType.FIRE, 0)
     c.resist(standing + 5, DamageType.FIRE, on=me, until=When.ENCOUNTER)
     c.bonus("damage", 2, on=me, until=When.ENCOUNTER)
+    c.bonus(
+        "attack", 2, kind="racial", on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            (foe := ctx.get("target")) is not None and c.bloodied(foe)
+        ),
+    )
     c.grant_row("f2129c", on=me, until=When.ENCOUNTER)
 
 
@@ -1647,9 +1692,9 @@ def f2258(c: Cast) -> None:
     **The third unrelated thing the old symbol held.** Switching is a
     `Cast` verb, not an entry in the action menu, so it has no declared
     cost for a feat to cheapen -- "a free action instead of a minor" has
-    nothing to change. `c.grant_action` understands `shift` and `stand`
-    and silently eats anything else, so writing it that way would look
-    finished and do nothing. #620."""
+    nothing to change. `c.grant_action` changes the cost of an
+    action the menu already has and now raises on a word no reader looks
+    for (#762), so it was never the road here. #620."""
 
 
 # -- riders on a racial power named only in prose ---------------------------
@@ -1696,10 +1741,9 @@ def f2097(c: Cast) -> None:
 
 
 @power("f2099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("Weapon.brutal",))
+       reach=PERSONAL, target=SELF)
 def f2099(c: Cast) -> None:
-    """The range lands; brutal has no reader.
+    """Both halves land: the longer range, and brutal 2.
 
     Both halves are about one named weapon, which is why this asks by
     **ref** and not by group: the group holds more than one bow and the
@@ -1710,13 +1754,25 @@ def f2099(c: Cast) -> None:
     and `resolve._long_range` and `dsl._reach` both read that field, so the
     20/40 is consulted rather than merely recorded.
 
-    **Brutal stays dropped, and for a sharper reason than "nothing carries
-    it".** `c.gains_property` would put the word on the weapon happily --
-    `properties` is a free-form set -- and nothing in `engine/` reads it.
-    Writing it would be a property nothing consults, which is this
-    component's named failure mode, so the symbol names the **reader** that
-    is missing rather than the write that is easy."""
-    c.weapon_range(ranged=(20, 40), ref="w3630", on=c.me)
+    **Brutal is written now, and the old note had the diagnosis exactly
+    right**: *"`c.gains_property` would put the word on the weapon happily
+    -- `properties` is a free-form set -- and nothing in `engine/` reads
+    it. Writing it would be a property nothing consults."* So the gap was
+    the **reader**, and `Cast._brutal_floor` is it, folded into
+    `_reroll_floor` where the dice are in hand.
+
+    `"brutal 2"` on the weapon becomes a floor of **3**, because the
+    threshold is exclusive -- "2 or less" is "below 3", the same reading
+    `c.reroll_ones(below=3)` has for "a 1 or a 2". The operation was never
+    missing: `_rolled_above` replaces each low die individually and keeps
+    the faces that came up fine, which is what brutal prints.
+
+    No new field and no ETL change: `Weapon` has no `brutal` column and
+    neither does `game.db`, so the property set is the carrier, which is
+    the one the content tree can reach today. #840."""
+    me = c.me
+    c.weapon_range(ranged=(20, 40), ref="w3630", on=me)
+    c.gains_property("brutal 2", ref="w3630", on=me)
 
 
 @power("f2101", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1815,10 +1871,7 @@ def f2450(c: Cast) -> None:
         if ev.attacker != foe or spent:
             return
         spent.append(True)
-        ev.critical = False
-        result = getattr(ev, "result", None)
-        if result is not None:
-            result.critical = False
+        c.crit_becomes(False, ev=ev)
 
     def missed(ev: Miss) -> None:
         if ev.attacker == foe:
@@ -2039,12 +2092,27 @@ def f1217(c: Cast) -> None:
 
 @power("f1351", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.alignment()", "Mods.applied()"))
+       todo=("c.alignment()",))
 def f1351(c: Cast) -> None:
-    """Adds whatever a named power put on an attack roll to the damage
-    roll too, and only against an evil immortal. Alignment is not a thing
-    a creature carries, and nothing reads back how much a modifier
-    contributed to a roll that is already made."""
+    """Adds whatever `p6186` put on an attack roll to the damage roll too,
+    and only against an evil immortal creature.
+
+    **`Mods.applied()` is off the marker: that record exists.** It is
+    `events.Boosted` (events.py:1024), which carries `by` -- the ref that
+    paid -- `kind` to tell a boosted attack from a boosted save, and
+    `amount`, which is the number this card asks for. `f1490`
+    (feats/avenger.py:126) is this same card against a different narrowing
+    and is written that way: a `c.watch(Boosted, ...)`, and the creature
+    that was attacked read off the newest `AttackRolled` in the bus log,
+    which is safe because `p6186` is declared on that event.
+
+    Half the narrowing is readable too -- immortal is an origin, so
+    `c.is_kind("immortal", on=...)` answers it.
+
+    What is left is alignment, and nothing carries one: no component, no
+    column, no reader. Writing the immortal half alone would *widen* the
+    card, paying against every immortal rather than the evil ones, so the
+    row stays refused rather than playing wrong."""
 
 
 @power("f1352", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -17,12 +17,12 @@ from combat_engine.engine import (
     INTERRUPT,
     MINOR,
     ONE_ALLY,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REACTION,
     REF,
     SELF,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Cast,
     CloseBurst,
@@ -91,7 +91,7 @@ def p10285(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PSIONIC, Keyword.HEALING],
 )
 def p10286(c: Cast) -> None:
@@ -106,7 +106,7 @@ def p10286(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PSIONIC,
 )
 def p11102(c: Cast) -> None:
@@ -157,7 +157,13 @@ def p12952(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(3),
-    target=ONE_ALLY,
+    # **`team`, not `ally`: the triggering creature may be the caster.** The
+    # `on=` below says so already -- `either(by_me, ally_within(3))` -- and
+    # the printed trigger says "you or one ally". Declared `ONE_ALLY` while
+    # `candidates` happened to add the caster back, so it was right by
+    # accident; #364 took the accident away and this row stopped being
+    # usable until the declaration caught up with its own trigger.
+    target=YOU_OR_ONE_ALLY,
     keywords=PSIONIC,
     trigger="you or one ally in the burst misses with an opportunity attack",
     on=Trigger(
@@ -201,7 +207,7 @@ def p12954(c: Cast) -> None:
     usage=ENCOUNTER,
     action=REACTION,
     reach=Ranged(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=PSIONIC,
     trigger="an ally within 5 squares of you moves or shifts",
     on=Trigger(MoveEnd, ally_within(5), "an ally within 5 squares moves"),

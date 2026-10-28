@@ -1052,15 +1052,19 @@ _M4197_FELLED = "it drops to 0 hit points"
     attack=Attack(vs=REF, printed=7),
     trigger=_M4197_FELLED,
     on=Trigger(Dropped, lambda w, me, ev: getattr(ev, "actor", None) == me, _M4197_FELLED),
-    dropped=("Dropped.weapon",),
 )
 def m4197a2(c: Cast) -> None:
     """It turns to stone where it fell, and the stone lasts the fight.
 
-    "If it was reduced to 0 by a melee attack using a weapon" cannot be
-    asked: `Dropped` carries who struck the blow and not what struck it. So
-    the narrowing taken instead is adjacency -- whoever felled it and is
-    standing next to the statue -- and the weapon half is the dropped clause.
+    "If it was reduced to 0 by a **melee attack using a weapon**" is asked
+    now, both halves. `Dropped.weapon` is the weapon the killing blow came
+    through and is empty for a blow that came through none -- a spell, an
+    aura, ongoing damage -- so the gate is simply whether it is set. #698.
+
+    Adjacency carries the **melee** half and is kept for that: it was
+    standing in for the whole clause and is now doing the narrower job it
+    can actually do. A ranged weapon kill from across the board stamps a
+    weapon too, and the statue does not reach it.
 
     The weapon being stuck in the stone needs nothing of its own: `c.disarm`
     takes it out of the wielder's hands, and picking it back up costs an
@@ -1072,6 +1076,10 @@ def m4197a2(c: Cast) -> None:
         c.cover_in(statue, side="any")
     killer = getattr(c.trigger, "source", None)
     if killer is None or not c.adjacent(killer):
+        return
+    # The weapon half of the printed Requirement. Empty means the blow came
+    # through no weapon, and the statue takes nobody's hands.
+    if not str(getattr(c.trigger, "weapon", "") or ""):
         return
     if c.strike(on=killer):
         c.disarm(on=killer)

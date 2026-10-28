@@ -24,7 +24,6 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     DEX,
-    EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
@@ -43,6 +42,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionType,
     AdjacencyGained,
     AreaBurst,
@@ -227,6 +227,12 @@ def p12245(c: Cast) -> None:
     every rider on `Hit` skipped. A `c.bonus` cannot do it: the sum was
     taken when the die landed.
 
+    The re-settling is `c.settle_attack()`, which is the door for exactly
+    this -- a row that changed a number the outcome was judged from. Written
+    out by hand it could not **un-crit** a hit its own +2 had pushed below
+    the defence, so a critical that no longer reached the defence stayed a
+    critical and dealt maximum damage. #868.
+
     What this row does **not** do is re-measure against the ally's own
     defences. `c.redirect` moves the live result deliberately without
     rolling again, which is the engine's standing simplification and not
@@ -242,9 +248,7 @@ def p12245(c: Cast) -> None:
     if result is None:
         return
     result.target_defence += 2
-    result.hit = result.natural == 20 or (
-        result.natural != 1 and result.total >= result.target_defence
-    )
+    c.settle_attack()
 
 
 @power(
@@ -664,17 +668,62 @@ def p16098(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.CONJURATION, Keyword.ELEMENTAL],
-    dropped=("c.conjure(porous=)", "c.opportunity_from(square)"),
+    dropped=("c.opportunity_from(square)",),
 )
 def p16099(c: Cast) -> None:
     """Three solid conjurations that move on a move action, which `speed=`
-    already gives them. A guardian your allies can walk through but enemies
-    cannot is one wall for one side, and swinging from a guardian's square
-    is a standing leave `c.strike(from_=)` cannot be given."""
+    already gives them, and a wall that is a wall for one side only.
+
+    **The one-sided wall is the mover's permission, not the blocker's
+    property.** `c.may_enter` (cast.py:5786) took a `when=` gate in #673
+    and the context it is handed carries `mover` and `occupant`; a solid
+    conjuration is indexed in `grid.occupants` by `place` (cast.py:5554),
+    so it *is* the occupant the predicate is asked about.
+    `movement._clear` consults it on the way past. `i591p1`
+    (items/waist.py:711) is the worked sibling, with the same shape of gate.
+
+    **`c.shares_space` on the guardians is the wrong verb and would widen
+    the card.** It is read by `_can_stop` as well as by `_clear`, so it
+    would let any creature *end* its move in a guardian's square, and
+    `c.blocks_entry` does not take that back -- `_can_stop` never asks it.
+    Granting the mover's side instead leaves `_can_stop` refusing everybody,
+    which is what "move through" means: `i591p1`'s note settles that
+    reading.
+
+    **Granted per ally at cast time, which is an honest limit**, the same
+    one `c.swap_sight` records: an ally that arrives afterwards is not
+    covered. `When.ENCOUNTER` rather than `When.SUSTAIN` on the permission
+    is deliberate -- `c.bonus` carries no `sustain_cost`, so a sustained
+    modifier would lapse after one round and emit
+    `durations._warn_sustainless`'s note. A permission naming eids that
+    have been banished grants nothing, since nothing occupies their
+    squares.
+
+    Swinging from a guardian's square is still a standing leave
+    `c.strike(from_=)` cannot be given, and that is the remaining symbol.
+
+    **Found while writing this and not fixed here**: each `c.conjure` gets
+    its own effect carrying `sustain_cost=MINOR` (cast.py:5560), and
+    `durations._sustain_by_default` spends a minor out of the budget per
+    effect -- so of three guardians wanting a minor a round, one is kept and
+    two lapse at the first turn end. That is a fault in every row conjuring
+    more than one sustained thing, not in this clause, and closing it means
+    one carrier governing three conjurations rather than three carriers."""
     spots = [sq for sq in sorted(c.area()) if not c.in_squares([sq])][:3]
-    for sq in spots:
-        c.conjure(
-            at=sq, label=c.ref, until=When.SUSTAIN, sustain=MINOR, speed=3, solid=True
+    guards = tuple(
+        eid
+        for sq in spots
+        if (
+            eid := c.conjure(
+                at=sq, label=c.ref, until=When.SUSTAIN, sustain=MINOR,
+                speed=3, solid=True,
+            )
+        )
+    )
+    for friend in (c.me, *c.allies()):
+        c.may_enter(
+            when=lambda ctx, g=guards: ctx.get("occupant") in g,
+            on=friend, until=When.ENCOUNTER,
         )
 
 
@@ -958,14 +1007,14 @@ def p14149(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=Target("ally", 2),
+    target=Target("team", 2),
     keywords=MARTIAL,
 )
 def p14151(c: Cast) -> None:
-    """"You and one ally" is two targets from the `"ally"` pool, which in a
-    *target line* is the one that already includes the caster -- `dsl` and
-    `c.within` spell that side differently and only the latter leaves you
-    out."""
+    """"You and one ally" is two targets from `"team"`, the side including
+    the caster. The `"ally"` pool is the side *without* it -- the two spelled
+    the same side until #364 and no longer do, so a target line that means to
+    catch the caster has to say `"team"`."""
     for defence in ALL_DEFENCES:
         c.bonus(defence, 2, until=When.EONT, kind="power")
     c.no_advantage(on=c.target, until=When.EONT)
@@ -1676,15 +1725,35 @@ def p16394(c: Cast) -> None:
 
 # -- x7_988 -----------------------------------------------------------------
 
-#: "You must have a trap-making kit on your person." Mundane gear is not
+#: "You must have `i390` on your person." Mundane gear is not
 #: modelled, so the Requirement never refuses the row.
-#: "You must have a trap-making kit on your person."
+#: "You must have `i390` on your person."
 #: **Re-aimed off `c.carrying(ref)`.** That one arrived and is not this: it
 #: reads the `Item` component, which is a thing a *power* made and handed
 #: over, and a kit is ordinary equipment. `Gear` records weapons, a shield,
 #: armour, worn magic and ammunition and has no slot for the rest, so there
 #: is no ref to ask for -- and a printed Requirement is a `requires=` gate,
 #: handed `(world, eid)`, which cannot call a `Cast` method at all.
+#: *"You must have `i390` on your person."*
+#:
+#: **The import landed and the marker moves back to the field.** #876 is
+#: closed: `Category = 'Equipment'` is 233 rows in the same `Item` table,
+#: every one at `LevelSort = 0`, which is the only reason the heroic band
+#: dropped them. `game.db`'s `item` table is 1,877 -> 2,110 and `i390`
+#: exists, so there is now something a carried-items list could hold.
+#:
+#: **What is still missing is the list, and it cannot land alone.** This
+#: used to read "re-pointed off `Gear.carried`… adding the field first
+#: would make this Requirement permanently unmeetable", and that is still
+#: exactly right: an empty list refuses the Requirement for every
+#: character, and these three play today with the clause dropped. A row
+#: that plays without one restriction beats a row that never plays.
+#:
+#: So the field needs a *dealer* alongside it -- something that puts `i390`
+#: in the hands of a character whose rows ask for it -- which is #877's
+#: question about whether a dealt character carries ordinary kit. The
+#: marker names the field because that is the thing a row reads; the
+#: dealing is the half that makes it answer True.
 KIT = ("Gear.carried",)
 
 
@@ -1806,7 +1875,7 @@ def p16444(c: Cast) -> None:
     usage=DAILY,
     action=ActionType.IMMEDIATE_INTERRUPT,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     todo=("events.HazardTriggered",),
 )
 def p16445(c: Cast) -> None:

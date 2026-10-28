@@ -135,9 +135,23 @@ def p13331(c: Cast) -> None:
 
     Augment 1 slows whoever starts its turn in or beside the servant. The
     servant's own square is in the ring, so "in or adjacent to" is one
-    `spread`."""
-    spent = augment(c, 1)
-    servant = c.conjure(until=When.EONT, sustain=None, aura=1 if spent else 0)
+    `spread`.
+
+    **The offer is `(2, 1)` even though Augment 2 belongs to the other
+    block.** The points are spent *here* -- `augment` is called on this row
+    and `spend_points` happens once -- so a parent offering only 1 makes the
+    second block's Augment 2 unreachable for ever: `spent_on` can never
+    return 2 because 2 was never on the menu. The clause lives there and the
+    *choice* has to live here.
+
+    And the Augment 1 clause below is gated on `spent == 1`, not on `spent`
+    being truthy. An Augment line **replaces** the printed one above it
+    rather than adding to it, so at 2 points this row's own clause is not
+    paid at all.
+    """
+    spent = augment(c, 2, 1)
+    servant = c.conjure(until=When.EONT, sustain=None,
+                        aura=1 if spent == 1 else 0)
     if not servant:
         return
     bite = c.cha_mod

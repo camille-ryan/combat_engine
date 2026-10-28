@@ -65,6 +65,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Attack,
+    AttackRolled,
     Bloodied,
     Cast,
     Condition,
@@ -103,6 +104,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.components import Powers as _Powers
+from combat_engine.engine.query import deals_damage
 
 ITEM = "item"
 
@@ -260,14 +262,39 @@ def _on_next_hit(c: Cast, fn: Callable[[Any], None]) -> None:
     c.watch(Hit, seen, until=When.EOT, on=c.me, once=True)
 
 
+#: What the standing extra is worth before and after a milestone. All five
+#: cards print the same pair -- "an extra 1", and "if you've reached at least
+#: one milestone today, instead ... an extra 2". Read from the compendium for
+#: each of i825, i843, i1362, i1560 and i2691 rather than assumed from one.
+INFUSION_EXTRA = 1
+INFUSION_EXTRA_AFTER_MILESTONE = 2
+
+
 def _infusion(c: Cast, dtype: DamageType,
               gate: Callable[[dict[str, Any]], bool],
               *, until: When = When.ENCOUNTER) -> None:
     """The half these five dailies share: the weapon deals the new type
     from now until the attack is over, and every later attack of the same
-    shape deals 1 extra."""
+    shape deals 1 extra -- **or 2, after a milestone**.
+
+    The milestone branch is **binary** on all five, not a count: "if you've
+    reached at least one milestone today ... instead deal an extra 2". So
+    `c.milestone() >= 1`, never the number itself. `cf:artificer-f0` is the
+    one row in the family that wants the count, which is why `c.milestone()`
+    returns one and this asks a question of it. #666.
+
+    Read **once, here, at use time** rather than through a `when=` gate. The
+    card says "if you've reached at least one milestone today *before using
+    this power*" (i825 prints that clause in full; the others are the same
+    shape), so the figure is fixed when the daily is spent and does not
+    change if a milestone arrives later in the encounter. A gate would have
+    re-asked on every attack and quietly paid 2 for blows struck before the
+    milestone.
+    """
+    extra = (INFUSION_EXTRA_AFTER_MILESTONE if c.milestone() >= 1
+             else INFUSION_EXTRA)
     c.deals(dtype, on=c.me, until=When.EOT)
-    c.bonus("damage", 1, on=c.me, until=until, when=gate)
+    c.bonus("damage", extra, on=c.me, until=until, when=gate)
 
 
 # -- level 1 ----------------------------------------------------------------
@@ -598,12 +625,49 @@ def i1437p1(c: Cast) -> None:
 
 
 @power("i1743x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.roll_gate()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.boost_roll(kind_of_bonus=)",))
 def i1743x1(c: Cast) -> None:
     """"When your attack roll is 20 or lower" is a condition on the die,
-    and a modifier is decided before the die is read."""
-    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
-            when=_defence_gate(FORT))
+    and the old note was right that a modifier is decided before the die
+    is read -- and wrong that nothing else can say it. `c.boost_roll`
+    (#495) adds to a roll already made and `ev=` reaches it from inside a
+    watcher (#679), so the cap is written rather than dropped. The row as
+    shipped paid its +1 on **every** Fort attack, which is stronger than
+    print.
+
+    **"20 or lower" is the total, not the die.** A natural d20 is twenty
+    or lower in every fight, so reading it as the face would make the
+    clause a tautology and the whole sentence decoration. `result.total`
+    rather than `ev.total` for the same reason `resolve.attack` re-reads
+    it: an interrupt in this window may have moved the die, and the
+    locals were summed before that.
+
+    **`ev.vs` rather than `_defence_gate(FORT)`.** The event carries the
+    defence the attack actually went after, so a row whose secondary
+    attack goes after a different defence than its printed Attack line is
+    exact here -- which is the one imprecision the gate ships with.
+
+    What is given up, and the marker: a boost is a number added to the
+    total and carries no bonus *type*, so this +1 stacks with another item
+    bonus to attack rolls where the printed rule says the larger of the
+    two applies. 23 rows in the tree lay one, across different slots, so
+    the overlap is rare rather than impossible.
+    """
+    me = c.me
+
+    def cap(ev: AttackRolled) -> None:
+        # `result` rides on the event as a plain attribute rather than a
+        # field -- `resolve.attack` hangs it there to keep it off the wire
+        # -- so it is read the way `c.boost_roll` reads it.
+        result = getattr(ev, "result", None)
+        if ev.attacker != me or result is None or result.total > 20:
+            return
+        if ev.vs is not FORT or not _has_keyword(ev.power, Keyword.WEAPON):
+            return
+        c.boost_roll(1, kind="attack", ev=ev)
+
+    c.watch(AttackRolled, cap, until=When.ENCOUNTER)
 
 
 @power("i1895x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -736,21 +800,34 @@ def i1698p1(c: Cast) -> None:
 
 
 @power("i1756p1", level=6, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("events.DamageRolled.dice",))
+       reach=PERSONAL, target=SELF,
+       on=Trigger(DamageRolled, by_me, "after you make a damage roll"))
 def i1756p1(c: Cast) -> None:
     """`c.reroll_damage` rolls the whole expression again and keeps the
-    higher; this rerolls one die and keeps the second result.
-    **Re-pointed, and the symbol was the bug.** Five spellings were filed
-    across eight rows for one printed mechanism (#703) and the verb is
-    `c.reroll_ones(below=ANY_FACE, pick=...)`; four of the eight are written
-    now. What stops this one is **the moment, not the dice**: its clause
-    answers a damage roll that has already happened, and
-    `events.DamageRolled` carries a total with no dice behind it. The hold
-    `c.reroll_ones` lays is read *while* the dice are in hand, which a row
-    triggered afterwards cannot reach -- the same split `c.boost_roll(ev=)`
-    names for an attack roll, where the event does carry its live
-    `AttackResult`.
-"""
+    higher; this rerolls one die and keeps the second result **even if it is
+    lower**, which is why it is not that verb.
+
+    What stopped it was the moment rather than the dice: the clause answers
+    a damage roll that has already happened, and `c.reroll_ones` lays a hold
+    read *while* the dice are in hand. `c.reroll_faces` is the reactive
+    sibling, reading the live `Roll` off the event -- the same split
+    `c.boost_roll(ev=)` names for an attack roll. #703.
+
+    **A declared trigger, which this row did not have.** "Use this power
+    after you make a damage roll" is a printed trigger, and without one the
+    body was armed at the start of the fight and ran against no roll at all.
+
+    `pick=1` is "one damage die", and the melee-weapon gate is read off the
+    damage context: `ranged` says which it was, and the keyword comes from
+    the row that rolled. The `Level 16:` line raising it to two dice is out
+    of the heroic band and is not marked."""
+    ctx = getattr(c.trigger, "ctx", None) or {}
+    if ctx.get("ranged", False):
+        return
+    rolled = get(str(ctx.get("power", "")))
+    if rolled is None or Keyword.WEAPON not in rolled.keywords:
+        return
+    c.reroll_faces(pick=1)
 
 
 @power("i2134x1", level=6, cls=ITEM, action=ActionType.NONE,
@@ -867,8 +944,7 @@ def i806x1(c: Cast) -> None:
 @power("i806p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit with a weapon attack, before you deal damage",
-       on=Trigger(Hit, by_me, "you hit with a weapon attack"),
-       dropped=("c.strip_resistance()",))
+       on=Trigger(Hit, by_me, "you hit with a weapon attack"))
 def i806p1(c: Cast) -> None:
     """Re-aimed, and now it plays. "Reduce the resistance the target has
     **against your attack**" is an ignore read off the attacker, and
@@ -879,15 +955,54 @@ def i806p1(c: Cast) -> None:
     strips the resistance for everybody. A negative gated resist does
     nothing at all -- `deal_damage` clamps that term at zero.
 
-    Dropped: the printed hold is "(save ends)" on the target, and an
-    ignore lives on the attacker, where a save-ends clock would be the
-    wrong creature rolling. It runs to the end of the turn instead, which
-    is the attack the power is used for."""
+    **The marker said `c.strip_resistance()` and that named the wrong
+    gap.** Stripping resistance is written, twice over. What is still
+    dropped is the clock: the printed hold is "(save ends)" on the target
+    while the ignore is a `Mod` on the *attacker*, and
+    `durations.save` reads `eff.owner` for all three of the saver, the
+    save bonus and the `SavingThrow` it announces -- so a `SAVE_ENDS`
+    duration here would have the attacker rolling to end its own benefit.
+    `Effect.clock` can be reassigned to the target and that moves only
+    *when* the throw is taken, not whose it is.
+
+    `p2919` is the near miss worth not copying: it carries a save-ends
+    hold for somebody else by laying a **relation** on the target, which
+    works because a relation is directional. A `Mod` is not -- it is read
+    off the creature it sits on -- so the ignore cannot move to the target
+    and the trick does not transfer.
+
+    So it runs to the end of the turn instead, which is the attack the
+    power is used for.
+
+    **Re-pointed off `c.ignore_resistance(save_ends_on=)`**, which named a
+    parameter on this verb when the blocker is one level down and shared:
+    `durations.save` reads `eff.owner` for *all three* of who saves, whose
+    bonus applies, and who the `SavingThrow` is announced for. A parameter
+    here would still hand the throw to the wrong creature. What is missing
+    is a duration that can say **whose save ends it** separately from whose
+    effect it is -- `durations.save(saver=)` -- and that is one change
+    serving every verb with this shape rather than a kwarg per verb.
+
+    A census of marked rows whose note names this mismatch found two, and
+    the other (`m4014a1`) is blocked on a different symbol -- so it is
+    effectively a singleton and stays marked under #468's >=3 threshold."""
     foe = _foe(c)
     if foe is None:
         return
-    c.ignore_resistance(5, on=c.me, until=When.EOT,
-                        when=lambda ctx: ctx.get("target") == foe)
+    held = c.ignore_resistance(5, on=c.me, until=When.SAVE_ENDS,
+                               when=lambda ctx: ctx.get("target") == foe)
+    if held is not None:
+        # **Both fields, because they are two questions.** `clock` is when
+        # the throw is taken -- `eff.clock == ev.actor` at a turn's end --
+        # and `saver` is whose throw it is. `apply` set both to the owner,
+        # which here is the attacker carrying the `Mod`. Set on the
+        # returned effect rather than through a kwarg on the verb: the
+        # mismatch is not about resistance, so a `saver=` on
+        # `c.ignore_resistance` would be the per-verb shape #874 argued
+        # against, and `Gear`-style post-hoc writes onto a returned hold
+        # are the existing idiom (`powers/paladin/marks.py`).
+        held.clock = foe
+        held.saver = foe
 
 
 @power("i825p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
@@ -897,10 +1012,10 @@ def i806p1(c: Cast) -> None:
                   lambda world, me, ev: (
                       ev.actor == me and _has_keyword(ev.power, Keyword.FIRE)),
                   "you make a fire attack"),
-       dropped=("c.milestone()",))
+)
 def i825p1(c: Cast) -> None:
-    """Nothing counts the day's milestones, so the larger of the two
-    printed numbers is never the one that applies."""
+    """Both printed numbers now apply: `_infusion` reads `c.milestone()`
+    and pays 2 instead of 1 once the party has reached one. #666."""
     _infusion(c, DamageType.FIRE, _keyword_gate(Keyword.FIRE))
     _on_next_hit(c, lambda ev: c.ongoing(5, DamageType.FIRE, on=ev.target))
 
@@ -915,7 +1030,7 @@ def i825p1(c: Cast) -> None:
                       and row.reach is not None
                       and row.reach.kind == "ranged"),
                   "you make a ranged attack"),
-       dropped=("c.milestone()",))
+)
 def i843p1(c: Cast) -> None:
     """"Hit or miss" is read off the targets the use announced, which are
     chosen before the body and are trustworthy on `PowerUsed`."""
@@ -987,21 +1102,21 @@ def i1259p1(c: Cast) -> None:
                       and row.reach is not None
                       and row.reach.kind == "melee"),
                   "you make a melee attack"),
-       dropped=("c.milestone()",))
+)
 def i1362p1(c: Cast) -> None:
-    """The retype, the slow and the standing extra all play. What is dropped
-    is the milestone branch, and it is a **binary** one: the card pays 1
-    extra, and "if you've reached at least one milestone today" pays 2
-    instead. `_infusion` lays the 1, which is the printed non-milestone
-    branch -- so this row is **under**-paying a character mid-day rather
-    than over-paying one at the start of it, which is the safe direction to
-    be wrong in.
+    """The retype, the slow and the standing extra all play, and so does the
+    milestone branch now.
 
-    Carried a marker and no reason until now. The family's reasoning is in
-    #666, which read all seven cards: `cf:artificer-f0` wants a *count*
-    ("for each milestone"), these item rows want only *at least one*, and a
-    count answers both. It waits on a scope call -- does this engine model a
-    day -- so there is nothing to write here until that is answered.
+    It is a **binary** one: the card pays 1 extra, and "if you've reached at
+    least one milestone today" pays 2 instead. `_infusion` reads
+    `c.milestone()` and chooses, for this row and its four siblings.
+
+    #666 read all seven cards and settled the shape: `cf:artificer-f0` wants
+    a *count* ("for each milestone"), these item rows want only *at least
+    one*, and a count answers both -- so `c.milestone()` returns the number
+    and this asks a question of it. The scope call it was waiting on is
+    Camille's: an adventuring day is 4-5 encounters and a milestone is every
+    two of them.
     """
     _infusion(c, DamageType.COLD, _reach_gate("melee"))
     _on_next_hit(c, lambda ev: c.slowed(on=ev.target, until=When.EONT))
@@ -1114,8 +1229,7 @@ def i1486x1(c: Cast) -> None:
        on=Trigger(PowerUsed,
                   lambda world, me, ev: (
                       ev.actor == me and _has_keyword(ev.power, Keyword.DIVINE)),
-                  "you use a divine power"),
-       dropped=("c.milestone()", "query.deals_damage(ref)"))
+                  "you use a divine power"))
 def i1560p1(c: Cast) -> None:
     """Same shape as `i1362p1` and the same milestone clause: the branch is
     binary -- 1 extra becomes 2 "if you've reached at least one milestone
@@ -1131,17 +1245,24 @@ def i1560p1(c: Cast) -> None:
     paid the 1d6 anyway. A row stronger than its card, which is the
     direction never to leave alone.
 
-    **And the obvious gate is the trap.** `Hit` carries `power`, so
-    `get(ev.power).damage is None` looks like the question -- and it is not:
-    `p992`'s header also reads `damage=None` while its body deals damage
-    through `c.damage`. The header is one of *two* places damage comes from,
-    so "does this power normally deal damage" is not answerable from it, and
-    writing that gate would silently suppress the rider on most of the rows
-    that should get it. Hence a symbol rather than a fix.
+    **The gate reads both places damage comes from**, which is why it took a
+    reader rather than a one-line check. This docstring used to warn that
+    `get(ev.power).damage is None` "looks like the question and is not", and
+    it was right: **3,518** declared rows carry `damage=None` in the header
+    and deal damage in the body, `p992` among them, so a header-only gate
+    would have suppressed the rider on most of the rows that should get it.
+    `query.deals_damage` asks the header *or* the body and is now the
+    question. 10,530 of 23,060 rows normally deal damage. #782.
     """
     _infusion(c, DamageType.RADIANT, _keyword_gate(Keyword.RADIANT))
-    _on_next_hit(
-        c, lambda ev: c.damage("1d6", dtype=DamageType.RADIANT, on=ev.target))
+
+    def extra(ev: Hit) -> None:
+        # "If the power doesn't normally deal damage, no extra damage is
+        # dealt" -- the card's own last sentence, which nothing asked.
+        if deals_damage(ev.power):
+            c.damage("1d6", dtype=DamageType.RADIANT, on=ev.target)
+
+    _on_next_hit(c, extra)
 
 
 @power("i465x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -1219,11 +1340,29 @@ def i1438p2(c: Cast) -> None:
 
 @power("i1481p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(10), target=NO_TARGET, keywords=[Keyword.CONJURATION],
-       dropped=("c.zone_condition()",))
+       dropped=("c.zone_toll(check=, fail=)",))
 def i1481p1(c: Cast) -> None:
-    """A wall is raised and made difficult; `c.burns` gives a zone teeth
-    but only damaging ones, so restraining whoever pushes through it is
-    the clause with nowhere to go."""
+    """A wall is raised and made difficult; the thorns are the gap.
+
+    **Re-pointed off `c.zone_condition()`, which now exists and is the
+    wrong verb for this.** That one holds a condition for exactly as long
+    as the creature stands in the squares. This card prints a *toll* on
+    attempting to enter -- a Strength check against a DC -- and on failing
+    it a restraint that **outlives** being in the wall, ended by an escape
+    check and not by stepping out. Writing it with the zone verb would give
+    a creature that walks in a restraint it sheds by walking out, which is
+    the opposite of the printed sentence.
+
+    The three pieces that are missing: a gate on *attempting* to enter a
+    zone's squares (`movement.may_enter` asks only about occupied squares,
+    and `c.burns` is the only thing a zone does to an arrival -- damage),
+    the check against a printed DC at that moment, and a restraint whose
+    end condition is an escape attempt.
+
+    A singleton: a census of every marked row whose note mentions moving
+    through a wall or zone found four, and none of the other three wants
+    this. So it stays marked under #468's >=3 threshold rather than having
+    a mechanism built for one row."""
     c.wall(8, difficult=True, until=When.EONT, sustain=MINOR)
 
 
@@ -1312,15 +1451,39 @@ def i1151x1(c: Cast) -> None:
 
 
 @power("i1151p1", level=10, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
-       reach=Ranged(10), target=ONE_CREATURE, attack=Attack(STR, vs=AC),
-       dropped=("c.make_thrown()",))
+       reach=Ranged(10), target=ONE_CREATURE, attack=Attack(STR, vs=AC))
 def i1151p1(c: Cast) -> None:
     """Rolled here rather than through `c.basic(ranged=True)`, which asks
     for a ranged basic the wielder of a sword does not have -- the whole
     point of the row is that the melee weapon is the one being thrown.
-    Making it *count* as a heavy thrown weapon is the missing half."""
+
+    **Re-pointed twice, and the second marker was wrong about its own
+    shape.** The first was `c.make_thrown()`, closed by `held=True` on all
+    five weapon writers (#841) -- `ref=` and `group=` both name a *kind* of
+    weapon and a hands-slot block has no weapon ref of its own. The second
+    was `c.gains_property(until=)`, on the reading that "as if the weapon
+    had the heavy thrown property" needs a duration.
+
+    It does not. **The window is these three lines.** The card says the
+    property holds for *this attack*, and this row rolls its own attack, so
+    the window begins and ends inside the body -- no clock, and no `When`
+    rung, which is as well since none of the eleven means "this attack"
+    (`INSTANT` means resolved now and never held).
+
+    The over-grant the old note feared was real and is why the pair is
+    bracketed tightly: `i1151x1`'s `_throwing` gate and `i1756p1`'s
+    `_is_thrown` both believe the word, so a sword left heavy thrown would
+    pay those out for the rest of the fight. Both read it **lazily** --
+    `i1151x1` gates on `when=lambda ctx: ranged(ctx) and _throwing(c)`,
+    evaluated when the damage is rolled, which happens in `c.damage` below
+    -- so they see it for exactly the attack the card means.
+
+    #844, which is also where the argument against `until=` is written down
+    beside `c.loses_property`."""
+    c.gains_property("heavy thrown", held=True, on=c.me)
     if c.strike():
         c.damage(c.w(), c.str_mod)
+    c.loses_property("heavy thrown", held=True, on=c.me)
 
 
 @power("i1380p1", level=10, cls=ITEM, usage=AT_WILL, action=MINOR,
@@ -1353,10 +1516,13 @@ def i1380p2(c: Cast) -> None:
                       and row.reach is not None
                       and row.reach.kind == "melee"),
                   "you make a melee attack"),
-       dropped=("c.milestone()",))
+)
 def i2691p1(c: Cast) -> None:
     """The standing extra lasts to the end of the next turn here, not to
-    the end of the encounter, which is what this one prints."""
+    the end of the encounter, which is what this one prints.
+
+    The milestone branch is `_infusion`'s and is shared with its four
+    siblings. #666."""
     _infusion(c, DamageType.THUNDER, _reach_gate("melee"), until=When.EONT)
     _on_next_hit(
         c, lambda ev: c.damage("1d6", dtype=DamageType.THUNDER, on=ev.target))

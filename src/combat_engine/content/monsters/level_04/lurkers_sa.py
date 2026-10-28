@@ -121,7 +121,15 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import enemies, has_combat_advantage, hidden_from, is_, team
-from combat_engine.engine.triggers import Trigger, about_me, by_power, hits_me, targets_me
+from combat_engine.engine.triggers import (
+    Trigger,
+    about_me,
+    both,
+    by_melee,
+    by_power,
+    hits_me,
+    targets_me,
+)
 from combat_engine.engine.zones import Zone
 
 # --------------------------------------------------------------------------
@@ -708,19 +716,32 @@ def m4185a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.no_mode(name)", "Grid.aperture"),
+    dropped=("Grid.aperture",),
 )
 def m4185a4(c: Cast) -> None:
     """Everything the shape installs is tied to the form's own hold, or the
     bans outlive it; the free action out is `revert=FREE`, and what happens on
     the way out is hung on the same hold.
 
-    Two clauses are dropped. Nothing takes a movement mode **away** --
-    `c.mode` keeps the larger of the old and new speeds, by design -- so
-    "cannot fly" has no expression. Nor has folding through an aperture a Tiny
-    creature could manage: the grid has no apertures.
+    **"Cannot fly" is written now and the premise was stale.** The old note
+    said nothing takes a movement mode away because `c.mode` keeps the
+    larger of the two speeds. `c.lose_mode` (cast.py:6002) is the mirror of
+    that verb, including its undo, and **pops** the mode rather than zeroing
+    it -- which it has to, since `query.phasing` tests membership and not
+    the value. Five monster rows already call it; this one was missed when
+    the family was swept.
 
-    **Re-aimed, not written.** The second symbol was `c.move_through()`, and
+    Hung in the same tuple as the other three bans, so the form's own
+    `on_end` unwinds it with the rest -- the free-action revert has to give
+    the fly speed back, not only the clock. `c.lose_mode` returning `None`
+    for a creature that never had the mode is documented as not a fault,
+    which is the right behaviour for a form clause; this block prints
+    fly 6, so here it returns a hold.
+
+    One clause is still dropped: folding through an aperture a Tiny
+    creature could manage. The grid has no apertures.
+
+    **Re-aimed, not written.** That symbol was `c.move_through()`, and
     `movement.overrun` -- which exists, and which `level_11`'s `_through_them`
     already calls -- is not this clause: a trample covers a stated distance
     straight *through creatures*, where this is fitting through a gap in the
@@ -733,6 +754,7 @@ def m4185a4(c: Cast) -> None:
         c.cannot_attack(on=me, until=When.EONT),
         c.ignores_difficult(on=me, until=When.EONT),
         c.no_provoke(on=me, until=When.EONT),
+        c.lose_mode("fly", until=When.EONT, on=me),
     ):
         if held is not None:
             shape.on_end.append(lambda h=held: c.world.effects.end(h, "form ended"))
@@ -1913,7 +1935,7 @@ def m815a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("etl.monster.attack_line()",),
+    dropped=("compendium.attack_line",),
 )
 def m815a3(c: Cast) -> None:
     """The two holds play and are exact. What is missing is the attack line
@@ -1921,6 +1943,19 @@ def m815a3(c: Cast) -> None:
     damage, so the Hit has nothing to be conditional on and the conditions are
     laid outright. The same ETL defect as the 98 rows of #360, one step
     worse -- there the defence alone is gone.
+
+    **Re-spelled off `etl.monster.attack_line()`, which blamed a parser that
+    cannot be at fault.** Measured: `monster_power.spec` for this ability
+    carries no `" vs"` at all, and neither do `m2245a0` or `m2783a3` -- while
+    `m2783a0`, `m2783a2` and `m2783a4`, siblings on that same stat block,
+    each carry one. A parser that extracted the siblings did not lose these.
+    So this is #360's finding -- *"the blanks are in `Monster.Txt` as
+    shipped, no parser change can recover them"* -- and a symbol naming an
+    ETL fix was naming a fix that cannot exist.
+
+    `compendium.attack_line`, not `compendium.attack_defence`: that one is a
+    missing *defence* on a line that exists, and here there is no line at
+    all. One marker, one gap.
 
     "Speed becomes 2" is what `c.slowed` is; the opportunity-attack penalty is
     gated on the attack context, which carries `opportunity`.
@@ -1945,16 +1980,42 @@ def m815a3(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
-    todo=("etl.monster.trigger_text()",),
+    trigger="it is missed by a melee attack",
+    on=Trigger(Miss, both(targets_me, by_melee),
+               "it is missed by a melee attack"),
 )
 def m815a4(c: Cast) -> None:
-    """Refused in play, and the gap is in the data rather than in the engine:
-    the row is filed as an immediate reaction with **no trigger line at all**,
-    so there is nothing to declare and a reaction with no trigger can never
-    fire. Two other blocks in this wave print the sentence this one is missing;
-    guessing which it is would be inventing a rule. The shift itself is one
-    line and waits on the trigger, not the other way round.
+    """The trigger is recovered from the block's own action type, not guessed.
+
+    **The old note was right that this entry prints no trigger line.** It is
+    a pre-MM3 stat block and that format omits them; the ability appears as
+    "(immediate reaction; at-will)" and nothing more. So the sentence really
+    is absent here and the marker was not stale in the way a glossary change
+    would make it.
+
+    **What settles it is that the two sibling readings are not
+    interchangeable, and only one is a reaction.** The same racial trait is
+    printed on other blocks with a trigger, and it is printed *two different
+    ways*:
+
+    * `m1056a5` -- "immediate **reaction**, when **missed** by a melee
+      attack"
+    * `m3617`'s copy -- "immediate **interrupt**, when **targeted** by a
+      melee attack"
+
+    Those are different rules: one fires after a swing has missed, the other
+    before it resolves. Copying either at random would have been inventing a
+    rule, which is what the old note correctly refused to do. But this
+    block's own entry prints **immediate reaction**, and of the two printed
+    readings only one is a reaction -- so the action type this card does
+    carry picks the trigger it does not. Same shape as `m1056a5`, which is
+    the row that reading points at.
+
+    Recorded at length because the next reader will find the other sibling
+    first as often as not, and an interrupt here would let this creature
+    shift out of an attack that was going to hit.
     """
+    c.shift(1)
 
 
 @power(

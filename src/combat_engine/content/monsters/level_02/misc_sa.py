@@ -41,12 +41,12 @@ from combat_engine.engine import (
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REF,
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Attack,
     Cast,
@@ -407,12 +407,13 @@ def m6008a5(c: Cast) -> None:
     uses=2,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.HEALING],
 )
 def m6008a6(c: Cast) -> None:
-    """"2/Encounter" is `uses=2`. `ONE_ALLY`'s pool holds the caster as well,
-    which is what "m6008 or one ally" means."""
+    """"2/Encounter" is `uses=2`. "m6008 or one ally" is one target out of the
+    creature and its allies together, so `YOU_OR_ONE_ALLY` -- `ONE_ALLY` held
+    the caster only until #364. #858."""
     c.surge(on=c.target)
 
 
@@ -539,12 +540,12 @@ def m6009a3(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=Ranged(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
 )
 def m6009a4(c: Cast) -> None:
     """"The target takes a move action" drops one into the budget the turn is
-    already spending. `ONE_OTHER_ALLY`, because the printed line says "one
-    ally" and the pool `ONE_ALLY` names holds the caster too."""
+    already spending. `ONE_ALLY`, because the printed line says "one ally" and
+    that pool is the creature's side without the creature."""
     c.extra_action(MOVE, on=c.target)
 
 
@@ -555,7 +556,7 @@ def m6009a4(c: Cast) -> None:
     uses=2,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.HEALING],
 )
 def m6009a5(c: Cast) -> None:

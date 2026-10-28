@@ -745,8 +745,9 @@ def m2827a4(c: Cast) -> None:
 def m2827a5(c: Cast) -> None:
     """Ten back and a throw each, itself included.
 
-    Not `EACH_ALLY`: that includes the caster, which the printed line names
-    separately, and it takes a range where the printed line takes sight.
+    Not `EACH_ALLY`, which is the allies alone: the printed line names the
+    creature as well, and it takes a range where the printed line takes
+    sight -- so both halves are walked here instead.
     """
     for who in [c.me, *_visible_allies(c)]:
         c.heal(10, on=who)

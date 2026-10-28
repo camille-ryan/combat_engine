@@ -37,8 +37,8 @@ from combat_engine.engine import (
     AC,
     DAILY,
     EACH_ENEMY,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     RANGED,
     REACTION,
     STANDARD,
@@ -135,15 +135,23 @@ def _enemy_closes(radius: int) -> Any:
 
 
 def _heavy_thrown(world: World, eid: int) -> bool:
-    """"A heavy thrown weapon."
+    """A heavy thrown weapon, read off the printed property.
 
-    No weapon in the model carries a thrown flag -- what a thrown one has is
-    a `ranged` band on something you also swing -- and "heavy" is the
-    not-a-light-blade half. The same reading `warlord/level_1_c.py` settled.
+    **The inference this replaces was false, and both docstrings stated the
+    premise outright**: "no weapon in the model carries a thrown flag -- what
+    a thrown one has is a `ranged` band on something you also swing".
+    `game.db`'s `weapon.properties` carries `heavy thrown` on exactly **9**
+    weapons, which is what `warlord/level_5_b.py` has always read.
+
+    Measured over all 117 weapons: the property is true for 9, `ranged and
+    not a light blade` is true for 21, they agree on 105 and **disagree on
+    12** -- every one the same way, the property saying no and the inference
+    saying yes. All 12 are pure ranged weapons with no melee line at all:
+    bows, crossbows and a sling. So the rows gated this way were offered to
+    an archer holding a weapon nobody throws. #824.
     """
     gear = world.get(eid, Gear)
-    weapon = gear.main if gear else None
-    return bool(weapon and weapon.ranged and not weapon.is_light_blade)
+    return bool(gear and gear.main and "heavy thrown" in gear.main.properties)
 
 
 def _reach_weapon(world: World, eid: int) -> bool:
@@ -162,7 +170,7 @@ def _reach_weapon(world: World, eid: int) -> bool:
     usage=DAILY,
     action=REACTION,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger=_YOU_ARE_BLOODIED,
     on=Trigger(Bloodied, when=about_me, text=_YOU_ARE_BLOODIED),
@@ -403,7 +411,7 @@ def _back_off(c: Cast, friend: int, foe: int) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=UpTo(2, "other_ally"),
+    target=UpTo(2, "ally"),
     keywords=MARTIAL_WEAPON,
 )
 def p11614(c: Cast) -> None:
@@ -642,7 +650,7 @@ def _spent_encounter_attacks(world: World, who: int, cls: str = "") -> list[str]
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
 )
 def p4572(c: Cast) -> None:

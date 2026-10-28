@@ -36,7 +36,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
@@ -45,10 +44,12 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
     AttackDeclared,
+    AttackRolled,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -77,6 +78,7 @@ from combat_engine.engine import (
     TurnEnd,
     TurnStart,
     When,
+    Window,
     ally_within,
     both,
     by_me,
@@ -101,7 +103,7 @@ if TYPE_CHECKING:
 #: advantage to you", "of your size or smaller", "adjacent to your familiar".
 FILTER = ("Target.filter()",)
 
-ONE_OTHER_ALLY = Target("other_ally", 1)
+ONE_ALLY = Target("ally", 1)
 ANY_CREATURE = Target("any", 1)
 
 
@@ -325,13 +327,13 @@ def p11793(c: Cast) -> None:
 
 
 @power("p11796", level=10, cls="x7_643", usage=ENCOUNTER, action=INTERRUPT,
-       reach=CloseBurst(1), target=ONE_ALLY, keywords=[Keyword.MARTIAL],
+       reach=CloseBurst(1), target=YOU_OR_ONE_ALLY, keywords=[Keyword.MARTIAL],
        trigger="you are hit by an attack",
        on=Trigger(Hit, targets_me, "you are hit by an attack"))
 def p11796(c: Cast) -> None:
-    """`ONE_ALLY` is "you or one ally" -- the pool includes the caster -- so
-    the two printed halves are one target line and a test on who was
-    picked."""
+    """`YOU_OR_ONE_ALLY` is "you or one ally" -- one target out of the
+    caster and the allies together -- so the two printed halves are one
+    target line and a test on who was picked."""
     if c.target == c.me:
         c.spend_surge(on=c.me)
         c.temp_hp(c.surge_value(of=c.me), on=c.me)
@@ -680,7 +682,7 @@ def p14218(c: Cast) -> None:
     foe = getattr(c.trigger, "attacker", None)
     if foe is None:
         return
-    extra = c.int_mod if c.knows("cf:warlock-f1s3") else 0
+    extra = c.int_mod if c.knows("cf:warlock-f1s3") == c.me else 0
     burn = c.roll("1d6") + extra
     for who in c.within(1, of=foe):
         if who != foe:
@@ -703,7 +705,7 @@ def p14219(c: Cast) -> None:
     c.resist(have + 5 if have else 5, DamageType.FIRE, until=When.STANCE,
              on=c.me,
              when=lambda ctx: int(query.concealment_of(c.world, c.me, ctx)) > 0)
-    if not c.knows("cf:warlock-f1s3"):
+    if c.knows("cf:warlock-f1s3") != c.me:
         return
 
     def boon(ev: Any) -> None:
@@ -752,7 +754,7 @@ def p14220(c: Cast) -> None:
 
     c.watch(AttackDeclared, saw, until=When.SUSTAIN, on=c.me)
     c.watch(TurnEnd, settle, until=When.SUSTAIN, on=c.me)
-    if c.knows("cf:warlock-f1s3"):
+    if c.knows("cf:warlock-f1s3") == c.me:
         c.on_sustain(held, lambda: c.temp_hp(10, on=c.me))
 
 
@@ -793,7 +795,7 @@ def p15941(c: Cast) -> None:
 
 
 @power("p15942", level=6, cls="x7_924", usage=ENCOUNTER, action=INTERRUPT,
-       reach=Melee(1), target=ONE_OTHER_ALLY, keywords=[Keyword.MARTIAL],
+       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.MARTIAL],
        trigger="an enemy hits you with a melee or a ranged attack",
        on=Trigger(Hit, both(targets_me, either(by_melee, by_ranged)),
                   "an enemy hits you with a melee or ranged attack"))
@@ -809,7 +811,7 @@ def p15942(c: Cast) -> None:
 
 
 @power("p15943", level=10, cls="x7_924", usage=ENCOUNTER, action=MINOR,
-       reach=Melee(1), target=ONE_OTHER_ALLY,
+       reach=Melee(1), target=ONE_ALLY,
        keywords=[Keyword.MARTIAL, Keyword.HEALING])
 def p15943(c: Cast) -> None:
     """The ally *loses* the surge rather than spending it, so it is
@@ -926,7 +928,7 @@ def p16109(c: Cast) -> None:
 
 
 @power("p16110", level=2, cls="x7_951", usage=DAILY, action=MINOR,
-       reach=Melee(1), target=ONE_ALLY,
+       reach=Melee(1), target=YOU_OR_ONE_ALLY,
        keywords=[Keyword.ELEMENTAL, Keyword.HEALING],
        )
 def p16110(c: Cast) -> None:
@@ -1116,16 +1118,80 @@ def p16454(c: Cast) -> None:
            Trigger(SavingThrow,
                    both(lambda w, me, ev: getattr(ev, "actor", None) == me,
                         lambda w, me, ev: not ev.saved),
-                   "you fail a saving throw")),
-       todo=("c.bank_reroll()",))
+                   "you fail a saving throw")))
 def p16455(c: Cast) -> None:
-    """**Re-pointed: announcing a reroll (#496) does not reach this.**
+    """One reroll, banked, spent on whichever of three rolls comes first.
 
-    Every reroll verb in the engine acts on the roll being *answered*, read
-    off `c.trigger`. This card holds a reroll over a window and spends it on
-    some later roll of the character's choosing -- which is precisely the
-    roll it excludes. The missing thing is a stored, unspent reroll, not a
-    moment or a flag."""
+    **Written: `ev=` is the stored unspent reroll the old note asked for.**
+    That note was right that every reroll verb acts on the roll being
+    *answered* off `c.trigger`; `c.reroll_attack(ev=)`'s own docstring names
+    this card's shape as the reason the parameter exists -- a watch handler
+    closes over the `Cast` the **row** was built with, so `c.trigger` there
+    is the roll the row was offered on and not the one being watched. All
+    three verbs take it now.
+
+    `i3280p1` is the worked shape and
+    `drivers.each_banked_reroll_names_its_own_roll` holds it: three watches
+    sharing **one** latch, because `once=True` is per `c.watch` and three of
+    them are three rerolls rather than one. The flag is passed as well, so
+    no single kind can fire twice if the shared latch were ever removed.
+
+    **"But not the triggering one."** Excluded twice over, deliberately.
+    `Bus._run` builds its subscriber list before it dispatches, so a watch
+    armed inside an event's own window never sees that event -- and for the
+    attack half the triggering `AttackRolled` has settled before `Miss`
+    offers this row at all. The identity check against the roll this use
+    answered is the clause said in the row rather than inferred from the
+    dispatcher, and it is the control that has to stay quiet: without it the
+    failed save that fires this row is a candidate for its own reroll.
+
+    **The skill-check watch sits in `Window.BEFORE` and the other two do
+    not**, which is not a style choice. `skills.check` rolls the die,
+    announces it, and totals the modifiers **inside the resolve callback**
+    that `Bus.emit` runs between the two windows; `c.reroll_check` rewrites
+    `ev.natural` but recomputes the total through `c.boost_check`, which
+    reads `self.trigger` rather than the handed event. So a reroll in the
+    AFTER window moves the face and leaves `total` and `success` behind --
+    22 of 40 checks came out inconsistent that way, none in BEFORE. An
+    attack is the opposite case, since `resolve.attack` re-reads its result
+    after the emit, and `c.reroll_save` writes `ev.saved` itself.
+
+    "You must use the new result" is `keep="new"` on all three.
+    """
+    fired = c.trigger
+    spent: list[int] = []
+    mine = c.me
+
+    def ready(ev: Any) -> bool:
+        return not spent and ev is not fired
+
+    def bank_attack(ev: AttackRolled) -> None:
+        if not ready(ev) or ev.attacker != mine:
+            return
+        if c.may("reroll that attack roll, keeping the second result"):
+            spent.append(1)
+            c.reroll_attack(ev=ev, keep="new")
+
+    def bank_check(ev: SkillCheck) -> None:
+        if not ready(ev) or getattr(ev, "actor", None) != mine:
+            return
+        if c.may("reroll that check, keeping the second result"):
+            spent.append(1)
+            c.reroll_check(ev=ev, keep="new")
+
+    def bank_save(ev: SavingThrow) -> None:
+        if not ready(ev) or getattr(ev, "actor", None) != mine:
+            return
+        if c.may("reroll that saving throw, keeping the second result"):
+            spent.append(1)
+            c.reroll_save(ev=ev, keep="new")
+
+    c.watch(AttackRolled, bank_attack, until=When.EONT, on=mine, once=True,
+            label=c.ref)
+    c.watch(SkillCheck, bank_check, until=When.EONT, on=mine, once=True,
+            window=Window.BEFORE, label=c.ref)
+    c.watch(SavingThrow, bank_save, until=When.EONT, on=mine, once=True,
+            label=c.ref)
 
 
 @power("p16456", level=6, cls="x7_991", usage=ENCOUNTER, action=REACTION,
@@ -1183,7 +1249,7 @@ def p16589(c: Cast) -> None:
 @power("p16590", level=6, cls="x7_1004", usage=ENCOUNTER, action=MINOR,
        reach=CloseBurst(2), target=NO_TARGET,
        keywords=[Keyword.ARCANE, Keyword.ZONE],
-       dropped=("c.grant_action(move)",))
+       dropped=("actions.move_in_zone()",))
 def p16590(c: Cast) -> None:
     """"Difficult for your enemies" is the zone being rough plus the
     caster's side exempted inside it; `c.ignores_difficult` alone would
@@ -1287,19 +1353,54 @@ def p16677(c: Cast) -> None:
     c.effect(_THROUGH, until=When.EOT, on=c.me)
 
 
+#: The two skills this card names, as `SkillCheck.skill` spells them. An
+#: ability check announces the same event under `ability:<name>`, so neither
+#: of those can collide with these.
+_SENSED = ("insight", "perception")
+
+
 @power("p16678", level=10, cls="x7_1018", usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, todo=("c.roll_twice()",))
+       reach=PERSONAL, target=SELF)
 def p16678(c: Cast) -> None:
-    """**Re-pointed: a standing advantage, not a reroll (#496).**
+    """Two named skill checks rolled twice for the fight, the higher kept.
 
-    "Roll twice and take the higher" for a whole encounter is not a reroll
-    answering one settled roll -- it changes how every roll of a kind is
-    made. `c.reroll_damage` is the nearest thing and is the same idea on the
-    damage side, which is the argument that this belongs as its own standing
-    modifier rather than as a watcher that rerolls everything.
+    **Re-pointed again: it is neither a standing modifier nor every roll.**
+    The old note argued that an encounter-long "roll twice and take the
+    higher" belongs as its own modifier rather than as a watcher that
+    rerolls everything -- but the card names *two skills*, so there is
+    nothing blanket to guard against, and the tree has already settled the
+    encounter-long case as a watcher four times over in `avenger/oath.py`
+    and `bard/level_5_b.py`. `c.reroll_check(keep="best")` takes the max of
+    the two faces, which is the printed sentence exactly.
 
-    The other printed clause has no combat meaning at all, so nothing here
-    plays and the marker stays `todo=`."""
+    **`Window.BEFORE`, and that is the whole of this row.** `skills.check`
+    rolls the die, announces it, and totals the modifiers **inside the
+    resolve callback** that `Bus.emit` runs between the two windows.
+    `c.reroll_check` rewrites `ev.natural` but recomputes the total through
+    `c.boost_check`, which reads `self.trigger` rather than the handed
+    event -- so from the AFTER window the face changes and `total` and
+    `success` do not. Measured over 40 checks: 22 came out with
+    `total != natural + bonus` in AFTER and none in BEFORE. The attack
+    precedents above are the opposite case, because `resolve.attack`
+    re-reads its result after the emit, so the window cannot be copied
+    from them.
+
+    Not asked with `c.may`: the better of two faces is never the worse
+    outcome, so there is no choice for anybody to make -- the same call
+    `better_of_two` makes for the oath rows.
+
+    The other printed clause is a perfect memory of what was sensed, which
+    has no combat meaning at all and nothing is written for it.
+    """
+    mine = c.me
+
+    def twice(ev: SkillCheck) -> None:
+        if getattr(ev, "actor", None) != mine or ev.skill not in _SENSED:
+            return
+        c.reroll_check(ev=ev, keep="best")
+
+    c.watch(SkillCheck, twice, until=When.ENCOUNTER, on=mine,
+            window=Window.BEFORE, label=c.ref)
 
 
 # ---------------------------------------------------------------- x7_889 --
@@ -1349,7 +1450,7 @@ def p14365(c: Cast) -> None:
 
 
 @power("p16566", level=2, cls="x7_999", usage=ENCOUNTER, action=MINOR,
-       reach=Melee(1), target=ONE_OTHER_ALLY, keywords=[Keyword.DIVINE],
+       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.DIVINE],
        dropped=FILTER)
 def p16566(c: Cast) -> None:
     """The temporary hit points arrive either way -- the card says so for

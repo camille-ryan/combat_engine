@@ -18,8 +18,11 @@ Conventions, inherited from the level-1 to level-9 minion sweeps:
   attacker, so it is the target line itself --
   `Target(..., relation=Relation.GRABBED_BY)`, which makes the pool empty
   and the row unofferable while the creature holds nobody;
-* a printed escape DC has nowhere to go -- `c.grab` sets the hold and takes
-  no number -- so every grab here is `dropped=("c.grab(dc=)",)`;
+* a printed escape DC is `c.grab(dc=)`, which replaces the grabber's
+  defence rather than adding to it. This line used to read "has nowhere to
+  go -- `c.grab` sets the hold and takes no number -- so every grab here is
+  `dropped=("c.grab(dc=)",)`", and no row in the file carries that marker
+  any more;
 * self-destruction ("turns to ash and is destroyed") is a flat, unresisted
   amount of damage far past any plausible hit point total, the shape
   `level_08/minions_sa.py`'s `m6423a0` already settled.
@@ -907,15 +910,35 @@ def m6638a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature, or the creature it is holding if it holds one",
+        only_grabbed=True,
+    ),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("", 9, kind=MINION),
-    dropped=("c.restrict(only=)",),
 )
 def m6638a1(c: Cast) -> None:
-    """Keeping it to pincers against only the creature it holds is a
-    restriction on its own options that nothing in `Cast` can lay; the
-    combat-advantage half plays."""
+    """`Target.only_grabbed` is the restriction, and `c.restrict(only=)` was
+    the wrong half of a symbol serving three grains.
+
+    That symbol also carried "only a single standard action" and "cannot
+    use the escape action" -- a budget and an action word. What *this* card
+    prints is a narrowing of one row's target line, and the field for it
+    has existed since #654.
+
+    **Conditional, which is the whole reason it is not
+    `relation=GRABBED_BY`.** Holding nobody it narrows nothing, and that is
+    the state this row needs: its own hit is what takes the grab, so an
+    unconditional filter would refuse the attack in exactly the situation
+    it is printed for.
+
+    Narrowed in the header rather than in the body for #654's reason --
+    four rows discarded `c.target` and swung at whoever was held, so the
+    menu offered the whole board and `policy/` got a target it did not
+    choose.
+
+    The combat-advantage half was already here."""
     victim = c.target
     if c.strike():
         c.hit()

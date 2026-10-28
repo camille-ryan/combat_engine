@@ -340,7 +340,7 @@ def p4913(c: Cast) -> None:
     action=MOVE,
     reach=CloseBurst(5),
     target=Target(
-        "other_ally", 99, everyone=True,
+        "ally", 99, everyone=True,
         label="One ally in the burst, or each ally in the burst if you have "
               "reduced an enemy to 0 hit points during this turn",
     ),

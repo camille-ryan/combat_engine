@@ -11,9 +11,9 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
-    EACH_ALLY,
     ENCOUNTER,
     MINOR,
+    YOU_AND_EACH_ALLY,
     Cast,
     CloseBurst,
     DamageType,
@@ -50,7 +50,7 @@ def _far(ctx: dict[str, Any]) -> bool:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.PSIONIC],
 )
 def p11323(c: Cast) -> None:

@@ -39,6 +39,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.feats.exploits import _riders
+from combat_engine.content.feats.general_h import _swings
 from combat_engine.content.feats.styles import among
 from combat_engine.engine import (
     AC,
@@ -117,8 +118,6 @@ ASSOCIATED = ("feat.associated_powers",)
 #: split on newlines, so a clause's own commas are read as members.
 #: What arrives is a list of refs and no rules at all.
 CLAUSE = ("spec.associated_clause()",)
-#: A class feature named in prose, with no ref anywhere in the row.
-FEATURE = ("c.class_feature()",)
 
 
 def _under(c: Cast, ref: str) -> bool:
@@ -489,12 +488,6 @@ def f1127(c: Cast) -> None:
 # -- initiative, which is a component rather than a modifier ----------------
 
 
-#: Whose surge pool has already been raised, by world and creature. The
-#: sentence is about the character sheet and a trait re-arms every fight,
-#: so the ceiling has to move exactly once.
-_RAISED: dict[tuple[int, int], bool] = {}
-
-
 @power("f1031", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f1031(c: Cast) -> None:
@@ -509,11 +502,11 @@ def f1031(c: Cast) -> None:
     Latched per character, and the surge itself is handed over because a
     character arriving at the old ceiling is otherwise one short."""
     c.initiative(3, on=c.me)
-    key = (id(c.world), c.me)
+    # The sentence is about the character sheet and a trait re-arms every
+    # fight, so the ceiling has to move exactly once.
     health = c.world.get(c.me, Health)
-    if health is None or _RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 
@@ -865,6 +858,47 @@ def _p1758(c: Cast, ev: Any) -> None:
         c.flat(c.str_mod, on=ev.target)
 
 
+def _p87(c: Cast, ev: Any) -> None:
+    """"Extra damage if you hit with both attacks", against undead, while
+    armed with two melee weapons.
+
+    A `resolved` clause: the question is about the whole use, and no
+    earlier window has both swings in it. p87 rolls exactly two, so two
+    hits is both of them landing.
+
+    **Counted with `general_h._swings`, not with `exploits._hits`.** The
+    rolls on the resolved event are one per *target*, so the commonest
+    shape of this card -- both swings into one creature -- resolves with a
+    single roll on the event and read as one hit. That helper's docstring
+    has the measurement.
+
+    **The weapon pair is asked of the hands, not of the branch.** p87's
+    melee leg carries the same printed requirement, so reading the branch
+    would make the gate say nothing -- and the card asks about the
+    character, who can be holding two blades while taking the row's ranged
+    leg. `ranged is None` is how the ranger rows count a melee weapon, and
+    `Gear.held` is what is in hand rather than on the belt.
+
+    The extra damage is one lot, laid on the undead creature the use
+    caught: the clause names "an undead creature" in the singular, and the
+    row can hit two creatures with its two swings.
+    """
+    if c.wis_mod <= 0:
+        return
+    caught = _swings(c, ev)
+    if len(caught) < 2:
+        return
+    if len([w for w in c.held() if w.ranged is None]) < 2:
+        return
+    dead = [foe for foe in dict.fromkeys(caught) if _undead(c, foe)]
+    if not dead:
+        return
+    who = dead[0] if len(dead) == 1 else c.choose(
+        dead, "who takes the extra damage")
+    if who is not None:
+        c.flat(c.wis_mod, on=who)
+
+
 def _p620(c: Cast, ev: Any) -> None:
     if not _undead(c, ev.target):
         return
@@ -926,8 +960,11 @@ _riders("f1097", {"p1567": _p1567}, setup=_f1097)
 
 _riders("f1100", {"p841": _p841, "p835": _p835_will})
 
+# p87's clause is the only one of the four that is not about a single
+# blow: "if you hit with both attacks" is a question about the whole use,
+# which is the `resolved` window and nothing earlier.
 _riders("f1102", {"p835": _p835_swarm, "p1758": _p1758, "p620": _p620},
-        dropped=("c.hit_twice()",))
+        resolved={"p87": _p87})
 
 
 # -- the feats that grant a card -------------------------------------------
@@ -1429,15 +1466,19 @@ def f1125(c: Cast) -> None:
 def f621(c: Cast) -> None:
     """One named weapon rolls a d8, and becomes high crit.
 
-    **Both halves are the same write, and neither needs a door.**
-    `Gear.weapons` holds `replace(w)` copies made per character by
-    `chargen.spawn` -- the whole argument `c.weapon_dice` makes for
-    needing no reader -- and `Weapon.properties` has had a reader since
-    #240: `Cast._high_crit` pays a rolled extra `[W]` on a critical and
-    looks for the printed word in that field. So the property goes on this
-    character's own copy directly, the way `feats/paladin.py` reaches
-    `Health`. A set union, so arming the trait twice says the same thing
-    twice.
+    **The door exists now, and this said it did not.** `Weapon.properties`
+    has had a reader since #240 -- `Cast._high_crit` pays a rolled extra
+    `[W]` on a critical and looks for the printed word -- and the write
+    itself was hand-rolled here on the argument that it "needs no door".
+    `c.gains_property` is that door: `ref=` names one weapon, which is
+    exactly the `weapon.ref == "w3627"` loop this replaces. It writes
+    through `replace`, so `Weapon.__post_init__` runs and keeps `hands` in
+    step with `properties` (#842), and it announces `WeaponChanged`, which
+    the in-place union never did.
+
+    A seventh site of the same idiom, found while closing #843 -- that
+    issue listed six in `items/` and this one is in `feats/`. Arming the
+    trait twice still says the same thing twice.
 
     Re-aimed three times before this. `c.bonus('crit_range')` **exists**
     and is wrong twice over -- high crit is extra damage on a critical,
@@ -1446,10 +1487,7 @@ def f621(c: Cast) -> None:
     argument that nothing read the field, which stopped being true. Then
     `c.counts_as(property=)`, a new verb for a write a body can make."""
     c.weapon_dice("1d8", ref="w3627", on=c.me)
-    gear = c.world.get(c.me, Gear)
-    for weapon in gear.weapons if gear else ():
-        if weapon.ref == "w3627":
-            weapon.properties = weapon.properties | {"high crit"}
+    c.gains_property("high crit", ref="w3627", on=c.me)
 
 
 @power("f999", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

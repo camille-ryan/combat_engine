@@ -311,7 +311,7 @@ def p10639(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("ally", 99, everyone=True, label="You and each ally in the burst"),
+    target=Target("team", 99, everyone=True, label="You and each ally in the burst"),
     keywords=PRIMAL,
     out_of_combat=True,
 )

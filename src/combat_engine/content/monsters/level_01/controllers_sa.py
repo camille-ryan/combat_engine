@@ -125,7 +125,7 @@ def _not_grabbing(world: object, eid: int) -> bool:
     """
     from combat_engine.content.powers.fighter.holds import holds_somebody
 
-    return not holds_somebody(world, eid)  # type: ignore[arg-type]
+    return not holds_somebody(world, eid)
 
 
 @power(
@@ -251,7 +251,7 @@ def m4760a0(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(10),
-    target=Target(side="other_ally", count=1, ident=_SPAWN,
+    target=Target(side="ally", count=1, ident=_SPAWN,
                   label=f"{_SPAWN} ally"),
 )
 def m4760a1(c: Cast) -> None:

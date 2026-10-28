@@ -875,21 +875,35 @@ def m1779a0(c: Cast) -> None:
 @power(
     "m1779a1", level=8, usage=Usage.RECHARGE, recharge=4, action=STANDARD,
     reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.WEAPON],
-    attack=Attack(vs=AC, printed=13), damage=Damage("3d10", 5, kind=LIMITED),
     defect="the printed attack line names no defence",
 )
 def m1779a1(c: Cast) -> None:
-    """The shift afterwards covers the whole burst, so it is counted and
+    """A **basic attack against each creature in the burst**, which is what
+    the card says, and no attack line of its own.
+
+    The shift afterwards covers the whole burst, so it is counted and
     spent once rather than once per target. Where it ends -- adjacent to
     somebody else -- is left to the decider, the same as any other bare
-    shift in this tree."""
+    shift in this tree.
+
+    **The `attack=` and `damage=` this used to declare were invented.** It
+    carried `Attack(vs=AC, printed=13)` and `Damage("3d10", 5)`, lifted
+    from the stray run ahead of the effect text -- `+13 vs ; 3d10+5
+    damage..` -- with the `AC` supplied because the run names no defence at
+    all. The card's attack is the basic one, `m1779a0` at `+15 vs AC` for
+    `2d6+3`, and `c.basic` rolls whichever row the creature's basic
+    attack is rather than a copy of it. #767.
+
+    **The marker stays**, and that is #612 rather than a statement about
+    this body: a printed line reading `+N vs <blank>` is malformed and the
+    whole entry drops. Removing an invented roll is not the same as
+    deciding the card is writable -- *knowing why a line is junk does not
+    make the row writable* -- so this row is still refused in play and
+    `pick` still passes the creature over.
+    """
     if not c.first:
         return
-    hits = 0
-    for victim in c.targets:
-        if _secondary(c, 13, AC, victim):
-            c.damage("3d10", 5, on=victim)
-            hits += 1
+    hits = sum(1 for victim in c.targets if c.basic(on=victim))
     if hits:
         c.shift(hits)
 
@@ -1325,7 +1339,7 @@ def m4012a0(c: Cast) -> None:
     ),
     once_per_round=True, keywords=[Keyword.FIRE],
     attack=Attack(vs=FORT, printed=13), damage=Damage("1d6", 5),
-    dropped=("c.grant_action(move_grabbed)",),
+    dropped=("actions.move_grabbed()",),
 )
 def m4012a1(c: Cast) -> None:
     """The third clause -- for the rest of its turn it may haul the captive for
@@ -1727,7 +1741,7 @@ def m4382a2(c: Cast) -> None:
 
 @power(
     "m4382a3", level=8, usage=ENCOUNTER, action=MOVE, reach=PERSONAL, target=SELF,
-    dropped=("c.ignores_difficult(hazardous=)",),
+    dropped=("c.ignore_hazards()",),
 )
 def m4382a3(c: Cast) -> None:
     """Shift 6, through enemies and over liquid, ignoring rough ground.
@@ -1740,15 +1754,32 @@ def m4382a3(c: Cast) -> None:
     and nothing noticed because the shift still happened -- just not through
     anybody.
 
-    The two exemptions left are the marker. `kind` on
-    `c.ignores_difficult` is a terrain **label** -- the word the map and
-    `c.zone(difficult=)` give a square, like "web" or "mud" -- so there is
-    no label for hazardous terrain, which is damaging ground rather than
-    slow ground, and none for a squeezing penalty either. Marked rather
-    than approximated, because `ignores_difficult("hazardous")` would be a
-    label nothing writes and so silently nothing.
+    **The squeezing half is written and the note above it was stale.** It
+    said `kind` on `c.ignores_difficult` is a terrain label, which is true,
+    and then that there is "none for a squeezing penalty either" -- which
+    `c.waive` (#508) falsifies. Its whole premise is that a condition's
+    cost is several knobs and the cards turn them one at a time:
+    `conditions.RULES[Condition.SQUEEZING]` is `attack=-5`, `halve_speed`
+    and `grants_ca`, and "takes no penalties for squeezing" is all three.
+    Not `c.suppress` or `c.ignore_condition` -- the creature is still
+    wedged into the space, which is what makes the move legal at all.
+
+    **The hazardous half is a real gap and the marker is re-pointed to the
+    symbol that already names it.** `c.ignore_hazards()` is what `m6073a0`
+    carries for this same sentence, so the two rows group rather than
+    waiting on a synonym. `Grid` holds no hazardous category to be exempt
+    from, and `c.ignores_difficult` is a movement-**cost** waiver -- it is
+    driven entirely through `world.reachable_squares` -- so it cannot stop
+    damage however it is called. `m2960a5` is this card at level 8, is
+    finished with no marker, and its docstring claims hazardous terrain is
+    "the other half of `c.ignores_difficult`"; that is wrong and the row
+    over-claims.
     """
     c.ignores_difficult(on=c.me, until=When.EOT)
+    c.waive(
+        Condition.SQUEEZING, "attack", "halve_speed", "grants_ca",
+        on=c.me, until=When.EOT,
+    )
     c.shift(6, share=True)
 
 

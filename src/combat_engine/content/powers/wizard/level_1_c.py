@@ -21,7 +21,6 @@ from typing import Any
 from combat_engine.engine import (
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
@@ -34,6 +33,7 @@ from combat_engine.engine import (
     REF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     AreaBurst,
     Attack,
     Cast,
@@ -369,7 +369,7 @@ def p14545(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.CLOSE, Keyword.EVOCATION],
 )
 def p16274(c: Cast) -> None:

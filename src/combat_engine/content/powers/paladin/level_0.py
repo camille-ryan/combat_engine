@@ -98,7 +98,7 @@ def _on_the_triggering_hit(c: Cast, victim: int, fn: object) -> None:
 
     def check(ev: Hit) -> None:
         if ev.attacker == c.me and ev.target == victim:
-            fn()  # type: ignore[operator]
+            fn()
 
     c.watch(Hit, check, until=When.EOT, on=c.me, once=True, label=f"{c.ref} rider")
 

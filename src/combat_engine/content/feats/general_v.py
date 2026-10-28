@@ -105,30 +105,44 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Position, Powers
 from combat_engine.engine.query import concealment_of, creatures, is_, team, unseen_by
 
-#: A class feature the benefit names in prose, with no `cf:` ref to read.
-FEATURE = ("c.class_feature()",)
+#: **Retired.** It read `c.class_feature()` -- "a class feature the benefit
+#: names in prose, with no `cf:` ref to read" -- and both halves of that are
+#: false for all four rows that carried it, `f3531` to `f3534`. The clause
+#: each one dropped is "if you are in `f3529`", and the ETL resolves it: a
+#: **feat** ref, not a feature named in prose, and `f3529b` below is the power
+#: `f3529` grants, declared and fully written. Nothing is unresolved and no
+#: reader is missing.
+#:
+#: What is in the way is the **tier**. `f3529`'s own gate is `level>=11` and
+#: it replaces one of the `r44` aspect options, so the clause is reachable
+#: only at paragon -- the same band in which those four rows already leave
+#: their 11th- and 21st-level damage steps, and an out-of-tier clause carries
+#: no marker here. So the four are finished and nothing waits on this symbol.
+#:
+#: Kept as a comment rather than deleted because `#577` group 1 still reads
+#: it the old way: that triage predates the ETL resolving the name to `f3529`,
+#: and the `c.in_form()`-or-a-sibling decision it proposes is moot. The
+#: `i1942` pair that shared this symbol was always a different gap and is now
+#: on `etl.power.arcane_defiling`: the power has no ref in the corpus
+#: at all, so there is nothing for a hook to watch. See
+#: `feats/general_q.py` for the measurement. #878.
 #: A racial power named by its race rather than by a ref.
 RACIAL_POWER = ("c.on_racial_power()",)
-#: **Which manifestation `rt:r44-t2` is currently showing**, and the
-#: moment it is chosen. That trait is declared and refused in play, and
-#: the choice is **not** a build decision -- the card says "whenever you
-#: choose", which is a per-encounter moment with no event behind it. So
-#: this is not `c.race_option()`, which it carried: that symbol was doing
-#: duty for six different needs and one row's state is not one of them.
+#: **Retired.** It read `c.manifestation()` -- "which of this racial trait's
+#: several modes is the character in now", wanted by `f3530` for `rt:r44-t2`
+#: and by `f1521` and `f602` for `rt:r33-t0`. All three premises were false
+#: and in the same way: a race that offers a choice of modes offers a choice
+#: of **powers**, `RaceLine.one_of` says which races do, and
+#: `RaceLine.granted` puts the one taken in `Powers.known`. So the mode is
+#: recorded, by ref, in the place the compendium's own prerequisite lines read
+#: it from, and `features/racial._holds` is the reader this symbol was filed
+#: for. `rt:r33-t0` forks thirteen ways on it and `rt:r44-t2` is `_inert`
+#: because the power *is* the whole of the aspect.
 #:
-#: And **not the trait's own ref either**, which was the first re-point and
-#: was wrong in the way `todo.py` exists to catch: `rt:r44-t2` is declared,
-#: so a marker naming it can never go from absent to present and the row
-#: would have waited for ever. The gap is a *reader* for which
-#: manifestation is current, so the symbol names the reader.
-#:
-#: **And it is the same reader `f1521` and `f602` want**, which is why they
-#: share this symbol rather than a near-twin of it. All three ask "which of
-#: this racial trait's several modes is the character in now" -- an aspect
-#: of nature here, an elemental manifestation there. Two spellings for one
-#: gap is the exact fault that made `c.race_option()` cover six needs, and
-#: it would have been introduced by the commit that split it.
-ASPECT = ("c.manifestation()",)
+#: The three rows are written or re-pointed. Kept as a comment rather than
+#: deleted so the next reader meets the correction: the symbol argued that
+#: a mode is in-fight state where a race option is build-time, and for both
+#: of these races it is build-time.
 #: The three racial powers of `r44`, which the page offers as a choice.
 R44 = ("p7441", "p7442", "p7443")
 #: A power traded for another at build time.
@@ -1254,10 +1268,7 @@ def f3523(c: Cast) -> None:
     def glancing(ev: Hit) -> None:
         if ev.target != me or not ev.critical or c.roll("1d20") < 10:
             return
-        ev.critical = False
-        result = getattr(ev, "result", None)
-        if result is not None:
-            result.critical = False
+        c.crit_becomes(False, ev=ev)
 
     c.watch(Hit, glancing, until=When.ENCOUNTER, window=Window.BEFORE, on=me,
             label=f"{c.ref} glancing blow")
@@ -1368,23 +1379,35 @@ def f3529b(c: Cast) -> None:
 
 
 @power("f3530", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*ASPECT, "c.resist(once=)"))
+       reach=PERSONAL, target=SELF, todo=("c.resist(once=)",))
 def f3530(c: Cast) -> None:
-    """"Whenever you choose an aspect of nature" is `rt:r44-t2` --
-    a declared racial trait, and one that is refused in play because
-    nothing records which aspect was chosen or when. So there is no
-    moment to hang this on; and resistance spent by the first hit that
-    reads it is a shape `c.resist` has no flag for either.
+    """**Re-pointed off `ASPECT`, whose premise was false twice over.**
+    This said "whenever you choose an aspect of nature" had no moment,
+    because `rt:r44-t2` is refused in play and nothing records which
+    aspect was chosen. That row is not refused -- it is `_inert`, and its
+    own note says why: `RaceLine.one_of` holds for `r44`, so
+    `RaceLine.granted` deals exactly one of the three aspects and the
+    choice is recorded in `Powers.known`. `f3304` reads it from there and
+    carries no marker for it. Re-choosing is an extended-rest rule that
+    no fight reaches, so the choosing is the moment this row is armed.
 
-    `c.bonus(once=)` is not that flag forwarded. Its gated path lays a
-    `"resist <type>"` mod, which is neither a `Defense` nor `damage`,
-    `save` or `crit_range` -- so `once=` falls through to the attack-roll
-    branch and the resistance would be spent by the *resisting* creature's
-    own next swing. Fifth key that method has read in the wrong place."""
+    What is left is the one gap the marker still names: resistance
+    **spent by the first hit that reads it**. The printed line is resist
+    5 for the *next* attack that hits and deals that type; laying it for
+    the encounter instead is a row stronger than its card, so nothing is
+    written rather than half of it.
+
+    `c.bonus(once=)` is not that flag forwarded. `c.resist`'s gated path
+    lays a `"resist <type>"` mod, which is neither a `Defense` nor
+    `damage`, `save`, `skill`, `crit_range` nor `forced` -- and since
+    `drivers.once_spend_moments`, a key with no spend moment **raises**
+    rather than being quietly handed to the attack roll. So it now fails
+    loudly where it used to spend the resistance on the resisting
+    creature's own next swing. Either way there is no flag."""
 
 
 @power("f3531", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=FEATURE,
+       reach=PERSONAL, target=NO_TARGET,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3531(c: Cast) -> None:
@@ -1394,10 +1417,12 @@ def f3531(c: Cast) -> None:
     still true -- by `Moved` the shove has happened. `once=True` is the
     printed "the first time".
 
-    Dropped: the clause gating this on being in one of the class's own
-    manifestations -- a class feature the benefit names in prose, with no
-    `cf:` ref to read, which is what `FEATURE` says and `c.class_feature()`
-    collects. The 11th and 21st steps are out of scope.
+    **Un-marked off `c.class_feature()`, which was wrong about this row
+    twice.** The last clause is not a class feature named in prose: the
+    spec resolves it to `f3529`, a feat, whose granted power `f3529b`
+    is declared above. And nothing is waiting to be built -- `f3529`
+    gates on `level>=11`, so the clause sits in the same tier as this
+    card's own 11th- and 21st-level steps, which carry no marker either.
     """
     me = c.me
 
@@ -1415,14 +1440,16 @@ def f3531(c: Cast) -> None:
 
 
 @power("f3532", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=FEATURE,
+       reach=PERSONAL, target=NO_TARGET,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3532(c: Cast) -> None:
     """"Targets you" is `AttackDeclared`, which names one `target` --
     the close-or-area half is asked of the row that is being used, the
-    way `p7441` asks it. Dropped: the aspect clause, a class feature in
-    prose."""
+    way `p7441` asks it.
+
+    The aspect clause is `f3529`, a feat gated on `level>=11` -- out of
+    tier, like this card's own 11th- and 21st-level steps. See `f3531`."""
     me = c.me
 
     def sting(ev: Any) -> None:
@@ -1439,7 +1466,6 @@ def f3532(c: Cast) -> None:
 
 @power("f3533", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=FEATURE,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3533(c: Cast) -> None:
@@ -1447,9 +1473,11 @@ def f3533(c: Cast) -> None:
     gate rather than a guess at which row an opportunity attack is, and
     `Hit` carries the same as a plain attribute rather than a field.
 
-    One dropped clause left, the aspect. The two points are thunder and
-    carry that type, so a creature resisting thunder shrugs them off and
-    still takes the weapon.
+    The two points are thunder and carry that type, so a creature
+    resisting thunder shrugs them off and still takes the weapon.
+
+    The aspect clause is `f3529`, a feat gated on `level>=11` -- out of
+    tier, like this card's own 11th- and 21st-level steps. See `f3531`.
     """
     me = c.me
     opportune = lambda ctx: bool(ctx.get("opportunity"))  # noqa: E731
@@ -1464,12 +1492,14 @@ def f3533(c: Cast) -> None:
 
 
 @power("f3534", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=FEATURE,
+       reach=PERSONAL, target=NO_TARGET,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3534(c: Cast) -> None:
     """The melee half is read off the row that hit; `Hit` names it.
-    Dropped: the aspect clause."""
+
+    The aspect clause is `f3529`, a feat gated on `level>=11` -- out of
+    tier, like this card's own 11th- and 21st-level steps. See `f3531`."""
     me = c.me
 
     def burn(ev: Any) -> None:
@@ -1515,10 +1545,35 @@ def f3535(c: Cast) -> None:
 
 
 @power("f3536", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.milestone()",))
+       reach=PERSONAL, target=SELF)
 def f3536(c: Cast) -> None:
-    """Milestones are counted across an adventuring day and an encounter
-    knows nothing of them."""
+    """"For each milestone you've reached since your last extended rest, you
+    gain a +1 bonus to ability checks, saving throws, and skill checks."
+
+    A **count**, so this is the second of `c.milestone()`'s two shapes and
+    the other one that needed a number rather than a yes -- the five item
+    rows ask `>= 1`. #666.
+
+    **Three keys, because the engine reads three.** `"save"` is read by the
+    saving throw; `"skill"` is the wide key `skills.modifier` sums beside
+    `skill:<name>`; `"ability_check"` is the wide key the check's own
+    `finish` sums beside the rolled skill. There is no bare `"ability"` key
+    and writing one would have been a modifier nothing reads --
+    `cf:warlock-f1s*` already enumerates exactly these four minus attack,
+    which is this card's list.
+
+    Untyped and **not** `once=`: the card is a standing bonus until the next
+    extended rest, not something the first roll spends.
+
+    Zero milestones lays nothing at all rather than three +0 modifiers. A
+    +0 would read as a working bonus on the audit board and in `lint.py`'s
+    unread-modifier pass, which is the shape that hides a dead key.
+    """
+    got = c.milestone()
+    if not got:
+        return
+    for what in ("save", "skill", "ability_check"):
+        c.bonus(what, got, on=c.me, until=When.ENCOUNTER)
 
 
 # -- the mount pair ---------------------------------------------------------
@@ -1568,15 +1623,22 @@ def f3539b(c: Cast) -> None:
 
 
 @power("f3540", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.provoked_by()",))
+       reach=PERSONAL, target=SELF)
 def f3540(c: Cast) -> None:
-    """The attack context carries `opportunity`, so "against opportunity
-    attacks" is a gate. What it does not carry is what the mount was doing
-    when it provoked, which is the narrowing to a `m112a1` power."""
+    """What the mount was doing when it provoked is
+    `ctx["provoked_by"]` now, so the narrowing to `m112a1` is the ref
+    itself rather than a shape test. #880.
+
+    The bonus is on the mount and the gate is about the mount's own
+    provocation, which is the same creature here -- `c.bonus(on=mount)`
+    means the defence being rolled against is the mount's, and only the
+    mount provokes by using its own `m112a1`.
+    """
     mount = c.mount()
     if mount is not None:
         c.bonus(AC, 4, on=mount, until=When.ENCOUNTER,
-                when=lambda ctx: bool(ctx.get("opportunity")))
+                when=lambda ctx: bool(ctx.get("opportunity"))
+                and ctx.get("provoked_by") == "m112a1")
 
 
 @power("f3541", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

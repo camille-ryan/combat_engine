@@ -59,8 +59,6 @@ ARDENT_SURGE = "p10273"
 ARDENT_ERUPTION = "p12931"
 BLOODIED_ADVANTAGE = "p11060"
 
-#: A feature named in prose with no ref.
-FEATURE = ("c.class_feature()",)
 #: Spending power points emits a `Note` and no event.
 POINTS = ("c.on_points_spent()",)
 

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from combat_engine.engine import (
-    EACH_ALLY,
     ENCOUNTER,
     MINOR,
+    YOU_AND_EACH_ALLY,
     Cast,
     CloseBurst,
     Keyword,
@@ -21,7 +21,7 @@ from combat_engine.engine import (
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p5690(c: Cast) -> None:

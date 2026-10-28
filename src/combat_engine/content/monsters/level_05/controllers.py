@@ -48,7 +48,6 @@ from combat_engine.engine import (
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REACTION,
     REF,
@@ -484,11 +483,11 @@ def m3012a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
 )
 def m3012a3(c: Cast) -> None:
     """"One ally in the burst" excludes the m3012 itself, which is what
-    `ONE_OTHER_ALLY` is for. The step is printed as the ally's own choice of
+    `ONE_ALLY` is for. The step is printed as the ally's own choice of
     before or after, so it is offered as one."""
     friend = c.target
     if friend is None:
@@ -510,7 +509,7 @@ def m3012a3(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
 )
 def m3012a4(c: Cast) -> None:
     """A whole power handed to somebody else, not just a basic attack.
@@ -573,11 +572,6 @@ def m3112a0(c: Cast) -> None:
         c.hit()
 
 
-#: Which round each ally last drank from m3112a1, keyed by the world it
-#: happened in. The row is resolved once per target and one ally can stand
-#: beside three of them, so the printed once-a-round limit cannot live in
-#: the body.
-_M3112_FED: dict[tuple[int, int], int] = {}
 
 
 @power(
@@ -599,10 +593,11 @@ def m3112a1(c: Cast) -> None:
     for friend in c.within(1, of=c.target, side="ally"):
         if friend == c.me or not c.is_kind("undead", on=friend):
             continue
-        key = (id(c.world), friend)
-        if _M3112_FED.get(key) == c.world.round:
+        # The row is resolved once per target and one ally can stand beside
+        # three of them, so the printed once-a-round limit cannot live in the
+        # body -- the round goes in the latch key instead.
+        if not c.once_per_board(friend, c.world.round):
             continue
-        _M3112_FED[key] = c.world.round
         c.heal(5, on=friend)
 
 

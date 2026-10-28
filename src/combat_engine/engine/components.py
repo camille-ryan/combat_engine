@@ -296,6 +296,45 @@ class Movement:
     #: once -- a forest square with a swarm standing in it is still forest.
     #: #659.
     ignores_made_by: frozenset[str] = frozenset()
+    #: **The whole board costs this creature double**, which is what "treats
+    #: all squares as difficult terrain" prints.
+    #:
+    #: **The first additive entry here, and that was the gap.** The three
+    #: fields above are all waivers, and the filter in `World.difficult`
+    #: only ever *removes* squares, so rough ground could be made easier for
+    #: one creature and never harder. Three heroic rows print the other
+    #: direction and none could be written.
+    #:
+    #: A flag and not a square set. The two other rows in that family name
+    #: an **area** -- "squares in the aura", "all squares adjacent to you" --
+    #: and an area that is described relative to a creature follows it, so
+    #: those belong on `Zone.difficult_for`, where `Zones.refresh` already
+    #: re-centres the squares every round. A snapshot taken here would have
+    #: been the lesser reading of both cards; this field is for the one case
+    #: with no geometry to follow.
+    #:
+    #: Materialised in `World.difficult` rather than written out as squares,
+    #: so a board where nothing imposed it pays nothing -- that function is
+    #: called once per square examined during a move search. Written by
+    #: `c.difficult_for`. #831.
+    harder_everywhere: bool = False
+    #: What this creature crosses **without taking its damage**, by the same
+    #: tokens `ignores` uses: a `DIFFICULT_LABELS` word, or `"*"` for the
+    #: blanket form.
+    #:
+    #: **The twin of `ignores` and a different question.** That one waives
+    #: the *cost* of rough ground; this waives the *damage* a hazard laid
+    #: over it deals. Four monster rows print both halves in one sentence --
+    #: "ignore difficult terrain, and take no damage if the surface it moves
+    #: across would normally deal damage to it" -- and only the first half
+    #: was sayable, so each of them laid the exemption it could and dropped
+    #: the one it could not.
+    #:
+    #: A **set of tokens rather than a bool**, for `ignores`' reason: two
+    #: rows granting it must not step on each other's expiry, and an effect
+    #: discards exactly the token it added. Read by `Cast.burns`, which is
+    #: where every hazard's teeth are.
+    unharmed: set[str] = field(default_factory=set)
     #: How the creature is moving **right now**, or "" between moves.
     #:
     #: `modes` says what it *can* do and never what it *is* doing, so
@@ -304,6 +343,32 @@ class Movement:
     #: has the speed, which is not the printed sentence. Four rows across two
     #: waves asked for this.
     using: str = ""
+    #: How many squares this creature entered during its **current move
+    #: action**, and which kind of going that action was.
+    #:
+    #: The printed Stealth rule is *"a Stealth check at the end of a move
+    #: action; -5 if you moved more than 2 squares during it, -10 if you
+    #: ran"*, and nothing counted the distance -- so the penalty had no
+    #: number to be and four rows that only ever *waive* it had nothing to
+    #: waive. #784.
+    #:
+    #: **Squares entered, not budget spent.** `movement.walk` already
+    #: returns a cost, which is 2 for a difficult square -- so a creature
+    #: crossing two squares of rough ground has spent 4 and moved 2, and the
+    #: card says squares. Counted off the steps that actually landed.
+    #:
+    #: Reset at the top of each move action rather than per turn, because
+    #: "during that action" is what the rule says: a creature that walks six
+    #: squares, then takes a second move action for one, is 1 away from
+    #: where it checks. `Budget.refresh` clears it too, so a turn with no
+    #: movement reads 0 rather than last turn's number.
+    #:
+    #: Read by `query.moved_this_action` and `query.ran_this_action`; the
+    #: only consumer is the hide **action**, which is the only hide that is
+    #: a Stealth check -- a card reading "it becomes hidden" is not one, and
+    #: there are 85 of those.
+    went: int = 0
+    went_kind: str = ""
 
 
 @dataclass
@@ -373,6 +438,19 @@ class Defences:
         tuple[DamageType | None, int, Callable[[dict[str, Any]], bool]]
     ] = field(default_factory=list)
     immune: set[DamageType] = field(default_factory=set)
+    #: Keywords the creature cannot be affected by at all -- "Immune fear",
+    #: "Immune charm", "Immune sleep". **Not damage**, which is what
+    #: `immune` above is: this is the printed immunity to a whole class of
+    #: effect, and `query.immune_to` answers it beside the condition form.
+    #:
+    #: The data was there and was being thrown away. `monster.immune` holds
+    #: these tokens for the creatures that print them, and
+    #: `loader._stat_block` filtered the column to `DamageType` members
+    #: only -- so **disease on 488 monsters, fear on 61, gaze on 36, sleep
+    #: on 31 and charm on 27** were read out of the database and dropped on
+    #: the floor. Two feats were marked `dropped=` for want of the reader
+    #: while the facts were already in `game.db`. #560.
+    immune_keywords: set[Keyword] = field(default_factory=set)
     #: Types the creature's insubstantial trait does **not** halve -- "takes
     #: half damage from any damage source, except those that deal force
     #: damage". Counted rather than a set, for the same reason `Conditions`
@@ -690,7 +768,7 @@ class Counted:
         return any(n > 0 for n in self.counts.values())
 
     def __contains__(self, k: object) -> bool:
-        return self.counts.get(k, 0) > 0  # type: ignore[arg-type]
+        return self.counts.get(k, 0) > 0
 
     def __iter__(self) -> Iterator[Keyword]:
         return iter(self.live)
@@ -959,6 +1037,26 @@ class Powers:
     #: Rows taken away for a while. Not the same as spent: a forbidden row
     #: is one the creature still has and cannot currently reach.
     forbidden: set[str] = field(default_factory=set)
+    #: The subset of `forbidden` that is there because a **grant's uses ran
+    #: out**, rather than because anything prohibited the row.
+    #:
+    #: `c.grant_row(uses=N)` counts the holder's own `PowerUsed` and forbids
+    #: the row when they run out -- which is the only mechanism available,
+    #: since an at-will has no printed allowance to exhaust. But the two are
+    #: different facts, and one reader has to tell them apart:
+    #: `grant_attack(reentrant=True)` is "the target repeats *this* use", so
+    #: its docstring promises the usage limit stands aside. It did not,
+    #: because `usable` refuses anything in `forbidden` unconditionally and
+    #: two gates before it looks at `spent_ok`. #820.
+    #:
+    #: Narrow on purpose: a genuine prohibition -- "loses the ability to use
+    #: that power" -- is **not** in here and still refuses a reentrant
+    #: repeat, which is the whole reason this is a second set rather than a
+    #: flag on the first.
+    #:
+    #: Cleared by the same `undo` the forbid itself carries, so it cannot
+    #: outlive the limit that put it here.
+    spent_out: set[str] = field(default_factory=set)
     #: Keywords whose rows cannot be used. *"The target is dazed and cannot
     #: use powers that have the polymorph keyword"* -- two items print that,
     #: and `p12344`'s "cannot teleport" is the same thing said about a
@@ -1142,6 +1240,26 @@ class Powers:
     pre_empts: dict[tuple[str, str], list[tuple[Callable[[], Any], str]]] = field(
         default_factory=dict
     )
+    #: The same substitutions, **imposed rather than offered**.
+    #:
+    #: `pre_empts` above is "you **can** X instead of Y": each registration
+    #: is its own action-menu entry and `Cast.instead_of` reads the chosen
+    #: one off `Cast.variant`. Two heroic weapon blocks print the other
+    #: mood -- *"**Instead of** normal damage, each target hit takes ongoing
+    #: 5 fire damage"* -- where there is no choice to click and no variant to
+    #: settle, and the clause must apply to a swing nobody picked from a
+    #: menu at all: `Cast.basic` calls `dsl.use` with no `variant`, so an
+    #: optional registration is read as variant 0 and the printed clause
+    #: stands. The substitution was registered, offered nowhere, and silent.
+    #:
+    #: Keyed and shaped exactly like `pre_empts` so `instead_of` can read
+    #: both, and consulted **first**: an imposed clause is not a choice, so
+    #: it cannot be one of the options a variant indexes.
+    #:
+    #: Written by `c.pre_empt(forced=True)`. #712.
+    forced_clauses: dict[tuple[str, str], list[tuple[Callable[[], Any], str]]] = field(
+        default_factory=dict
+    )
     #: A spellbook: rows the creature **owns and has not prepared**.
     #:
     #: `known` is what can be used, and it was the only list there was -- so
@@ -1150,6 +1268,29 @@ class Powers:
     #: all. Owning and preparing are different states, and a wizard is
     #: mostly the difference between them.
     owned: list[str] = field(default_factory=list)
+    #: **A row held by an object rather than by a creature**, keyed by the
+    #: ref of the row doing the holding -- an item's Property -- and valued
+    #: with the ref it is holding.
+    #:
+    #: Three cards print this and none of them could be written: an armour
+    #: that stores a power until it is used, and two alchemical items that
+    #: link to a second item and set it off. `c.grant_row` is the near miss
+    #: and is the wrong shape, as `i540p1`'s note says: it hands a row to a
+    #: *creature*, so the power becomes the wielder's for the encounter,
+    #: where the printed thing is a property of the armour that the wielder
+    #: then spends an action on.
+    #:
+    #: **Keyed by the holder so two items cannot collide**, which is the
+    #: whole reason this is a dict and not a field: a character can wear an
+    #: armour that stores a power and carry a linked flask at the same time,
+    #: and each has to read back its own.
+    #:
+    #: On the wielder's `Powers` rather than on the item, because an item is
+    #: not an entity and there is no component to hang it on. That is sound
+    #: here precisely because nothing persists between encounters -- the
+    #: store is settled when the Property arms and dies with the fight,
+    #: which is the model `c.borrow_row` already argues for. #720.
+    stored: dict[str, str] = field(default_factory=dict)
 
     def prepare(self, ref: str, *, instead_of: str = "") -> bool:
         """Move a row out of the book and into the prepared list.
@@ -1474,6 +1615,35 @@ class Gear:
     #: weapon, which is what two of the three rows mean; the third is "draw
     #: and attack with a dagger", one weapon and not the rest.
     draw_only: str = ""
+    #: Ranged weapons that have been **fired and not yet reloaded**, by ref.
+    #:
+    #: Only a weapon whose printed properties include a *costed* load can
+    #: ever appear here. The table carries two forms and only one is a cost:
+    #: `load free` on seven weapons, `load minor` on three -- `w3629`
+    #: crossbow, `w3659` superior-crossbow, `w3662` blowgun. #725.
+    #:
+    #: **Spent rather than loaded, and the inversion is deliberate.** Held
+    #: as "which are loaded" it would have to be filled in everywhere a
+    #: creature is built -- `chargen.spawn`, `loader.spawn`, the audit
+    #: board, `story`, every drivers pose -- and one missed site is a
+    #: crossbow that can never fire, which looks exactly like a row that
+    #: does not work. Held as "which are empty" an untouched creature is
+    #: ready, which is both the common case and the safe default.
+    unloaded: set[str] = field(default_factory=set)
+    #: What a reload costs this creature, where `None` is the printed minor.
+    #: The mirror of `draw_cost` above and for the identical reason: four
+    #: rows print "you can load a crossbow as a free action", and what they
+    #: change is what it *costs*, which is a fact about the creature rather
+    #: than about any row. `c.loads_free` is what records it. #675, #725.
+    load_cost: ActionType | None = None
+    #: How many cheap reloads remain this turn. `-1` is unlimited, which is
+    #: what a card printing no limit means.
+    loads_left: int = -1
+    #: What `loads_left` refills to at the start of this creature's turn.
+    load_allowance: int = -1
+    #: Which weapon the cheaper reload applies to, by ref. Empty is every
+    #: weapon.
+    load_only: str = ""
     #: Weapon-requirement waivers: `(holding, satisfies)` pairs.
     #:
     #: "You can use a warhammer with any power that normally requires a

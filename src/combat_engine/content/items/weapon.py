@@ -62,6 +62,7 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     DamageType,
+    Defense,
     EffectApplied,
     Forced,
     Healed,
@@ -110,13 +111,19 @@ def _make_thrown(c: Cast, short: int, long: int) -> bool:
 
     Both writes are absolute, so arming the trait twice says the same thing
     twice.
+
+    **Re-pointed onto the engine verbs, which did not exist when this was
+    written.** `c.gains_property` and `c.weapon_range` do the same two
+    writes through `replace` and announce each on `WeaponChanged`, which the
+    hand-roll never did -- so the three rows that share this helper were
+    invisible to anything watching that event. What the re-point needed
+    first was a selector: both verbs offered `held=`, which is *every*
+    weapon in hand, and these cards are about the weapon the block is
+    printed on. `mine=` is that selector. #843.
     """
-    weapon = c.my_weapon()
-    if weapon is None:
-        return False
-    weapon.thrown = (short, long)
-    weapon.properties = weapon.properties | {"heavy thrown"}
-    return True
+    laid = c.gains_property("heavy thrown", mine=True)
+    c.weapon_range(thrown=(short, long), mine=True)
+    return bool(laid)
 
 
 def _longer_range(c: Cast, *, normal: int = 0, long: int = 0) -> bool:
@@ -130,6 +137,23 @@ def _longer_range(c: Cast, *, normal: int = 0, long: int = 0) -> bool:
     `thrown` as well as `ranged`, because the base-item restriction on these
     blocks is "any ranged **or any thrown**" and the field a thrown weapon
     answers with is the other one.
+
+    **This one stays hand-rolled, deliberately, and #843 is where the
+    decision is.** Its sibling `_make_thrown` above was re-pointed onto
+    `c.gains_property` and `c.weapon_range`; this one cannot be, because
+    `c.weapon_range` is **absolute** -- it takes the figures to set -- and
+    these two cards print a *relative* push, "+2 to both ranges". A
+    `push=` mode on the verb is the obvious shape and it is not obviously
+    right: a relative write has to answer what happens when two of them
+    land, and the engine's answer to that question everywhere else is
+    `c.bonus`, which takes a `max` rather than a sum and so would get this
+    wrong in the other direction. Two rows do not buy that decision.
+
+    So the latch below is the residue, and the thing to know about it is
+    that it is **per-row and per-weapon**, keyed `(id(weapon), c.ref)`: it
+    stops this row saying its own push twice, and does not stop the other
+    row saying its own. `feats.general.f139` and `f140` print the same
+    shape and are not on this helper.
     """
     weapon = c.my_weapon()
     if weapon is None:
@@ -416,12 +440,25 @@ def i849x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with a melee weapon attack using this weapon",
     on=Trigger(Hit, both(by_me, by_melee), "you hit with this weapon"),
-    todo=("c.store_damage()", "c.on_defiling()"),
+    defect=(
+        "the player's arcane defiling power is not in the"
+        " compendium: 0 Power or ClassFeature rows name it,"
+        " and the 2 Power rows whose names mention defiling"
+        " are paragon powers that consume it (#878)"
+    ),
 )
 def i1028p1(c: Cast) -> None:
     """The weapon banks the damage dealt and pays it back as temporary hit
     points the first time one particular kind of self-inflicted damage
-    happens. Neither the store nor that damage source exists."""
+    happens. Neither the store nor that damage source exists.
+
+    **`defect=` rather than `todo=`, and it swallows a verb want.** `dsl`
+    refuses the two markers together -- `defect=` says no symbol will ever
+    finish the row -- and that is the true statement here: the damage source
+    is the player's arcane defiling power, which is not in the compendium at
+    all. `c.store_damage()` would still be needed if it were, so the want is
+    recorded here rather than lost: this row is blocked on the source first
+    and on that verb second. #878."""
 
 
 @power(
@@ -1796,7 +1833,6 @@ def i1295x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE],
-    todo=("c.becomes_burst()",),
 )
 def i1300p1(c: Cast) -> None:
     """Rewrites the next ranged basic attack into a burst 1 centred on the
@@ -1811,7 +1847,27 @@ def i1300p1(c: Cast) -> None:
     want an edit to the shape, the defence and the damage of an attack not
     yet declared -- one symbol for the three together, because they are one
     printed sentence and splitting them would be the same mistake again.
-    #712."""
+
+    **Written on `c.becomes_burst`, which is that one symbol.** The three
+    edits go through the three doors that already existed --
+    `c.reshape_area`, `c.attacks_defence` and `c.pre_empt` -- and what the
+    verb adds is the shared gate (this creature's own ranged basic attack
+    ref, not the engine's generic one) and the one-shot that lifts all three
+    on the use rather than only on the clock.
+
+    The burst stays 1: the card's `burst 2` and `burst 3` lines are Level 14
+    and 24, which is out of band.
+
+    `c.ongoing` defaults to `When.SAVE_ENDS`, which is what the card prints,
+    so the duration is not restated here. It replaces the damage rather than
+    adding to it -- the whole of "instead of normal damage" -- and that is
+    what the `damage=` callable is: the clause `_ranged_basic` now reads
+    through `c.instead_of("damage", ...)`. #712."""
+    c.becomes_burst(
+        1,
+        vs=Defense.REF,
+        damage=lambda using: using.ongoing(5, DamageType.FIRE),
+    )
 
 
 @power(

@@ -94,8 +94,6 @@ def _reroll(c: Cast, result: Any) -> None:
     fresh = c.world.rng.d20().total
     result.total += fresh - result.natural
     result.natural = fresh
-    result.critical = fresh == 20
-    result.hit = fresh == 20 or (fresh != 1 and result.total >= result.target_defence)
 
 
 def _already(c: Cast, who: int, label: str) -> bool:

@@ -29,7 +29,6 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FREE,
     MINOR,
@@ -37,11 +36,12 @@ from combat_engine.engine import (
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     AttackDeclared,
     Bloodied,
     Cast,
@@ -83,7 +83,7 @@ _ENEMY_DIES = "an enemy dies within 5 squares of you"
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=DIVINE,
 )
 def p10089(c: Cast) -> None:
@@ -98,7 +98,7 @@ def p10089(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE, Keyword.RADIANT, Keyword.ZONE],
 )
 def p12612(c: Cast) -> None:
@@ -231,7 +231,7 @@ def p13927(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True, label="Each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="Each ally in the burst"),
     keywords=[Keyword.DIVINE, Keyword.FIRE, Keyword.RADIANT],
 )
 def p2834(c: Cast) -> None:
@@ -317,7 +317,7 @@ def p3468(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=DIVINE_HEALING,
 )
 def p488(c: Cast) -> None:
@@ -423,7 +423,7 @@ def p7409(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=DIVINE,
 )
 def p9985(c: Cast) -> None:

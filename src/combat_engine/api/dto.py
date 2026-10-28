@@ -340,3 +340,84 @@ class ChargenOptionsDTO(BaseModel):
     swings_a_weapon: bool
     races: list[ChoiceDTO] = Field(default_factory=list)
     feats: list[ChoiceDTO] = Field(default_factory=list)
+
+
+# -- the adventuring day ----------------------------------------------------
+#
+# **The page fixed this shape before the server existed.** `web/app.js`'s day
+# panel was written against a `DayStateDTO` that `/api/day` answered with a
+# 501, and its own comment is the contract: *"Nothing here is computed. Every
+# number is a field of DayStateDTO and every sentence is the server's; this
+# panel chooses layout."* So these fields are read off the renderer rather
+# than designed, and a field the panel does not read is not here.
+
+
+class DaySheetDTO(BaseModel):
+    """One character at one moment of the day.
+
+    Surges are **personal and do not pool**, which is why this is per
+    character and not a party total: a party can hold five surges and be
+    unable to spend one, because the character who needs them is not the one
+    holding them. The page's own note says that is the reason a day ends when
+    it does.
+    """
+
+    id: str
+    #: Resolved through `Wire`, so it is the wire id again when names are off.
+    label: str = ""
+    hp: int
+    hp_max: int
+    surges: int
+    surges_max: int
+
+
+class DayLegDTO(BaseModel):
+    """One fight of the day, and what it cost.
+
+    Three snapshots rather than one, because the interesting figure is a
+    difference: `rested` minus `ended` is what the rest bought back, and
+    `entering` minus `rested` is what the day has taken for good.
+    """
+
+    index: int
+    #: The multiple of the printed XP budget this leg was built to.
+    scale: float
+    #: `pending`, `fighting`, `won`, `lost`, or `drawn`.
+    status: str
+    rounds: int = 0
+    entering: list[DaySheetDTO] = Field(default_factory=list)
+    ended: list[DaySheetDTO] = Field(default_factory=list)
+    rested: list[DaySheetDTO] = Field(default_factory=list)
+    #: The server's sentence about the rest, written with wire ids because an
+    #: id is what survives the name switch. The page runs it through the same
+    #: rewriter an effect's text goes through.
+    rest_text: str = ""
+    #: True when a short rest could not heal everybody to full for want of
+    #: surges. The cliff the surge curve exists to show.
+    exhausted: bool = False
+
+
+class DayStateDTO(BaseModel):
+    """A day of fights, and where in it the party has got to."""
+
+    id: str
+    #: The encounter to play now. The page opens it straight after starting a
+    #: day or asking for the next leg.
+    encounter: str = ""
+    #: Which leg is current, by index into `legs`.
+    leg: int = 0
+    #: Every leg's multiplier, so the page can say what it is walking into
+    #: before the leg exists.
+    scales: list[float] = Field(default_factory=list)
+    legs: list[DayLegDTO] = Field(default_factory=list)
+    #: True between a finished fight and the next one being built, which is
+    #: when the page offers its button. False while a fight is in progress,
+    #: so the button cannot be pressed mid-encounter.
+    awaiting_next: bool = False
+    finished: bool = False
+    #: One sentence, shown when the day ends. The server's words.
+    outcome: str = ""
+    #: Milestones reached, which is every two completed encounters --
+    #: Camille's ruling on #666. Derived, not counted: a separate counter
+    #: could disagree with the legs it is counting.
+    milestones: int = 0

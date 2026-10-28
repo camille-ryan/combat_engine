@@ -254,7 +254,6 @@ def m1032a0(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d6", 5, kind=LIMITED),
-    dropped=("Defences.insubstantial",),
 )
 def m1032a1(c: Cast) -> None:
     """The attack, and two of the three things it costs.
@@ -273,13 +272,26 @@ def m1032a1(c: Cast) -> None:
     Gated on the actor *and* the ref: the event is global, and two of this
     creature on one board is an ordinary encounter.
 
-    Still dropped: `Defences` carries no insubstantial column, the same
-    half `m3437a2` and `m3440a4` name.
+    **All three things it costs are written now.** The old note said
+    *"`Defences` carries no insubstantial column"*, which stopped being
+    true: `half_always`, `half_when` and `half_except` are there and
+    `query.takes_half` reads them. What was missing was the taking, and
+    `c.suspend_trait` is it -- not `c.cure`, which would spend the trait's
+    duration outright where the card hands it back.
+
+    **Its timers join `lost`, which is why the verb returns them.** The
+    losses here do not run out on a clock: they are ended by
+    `PowerRecharged`, and ending a suspension's timer fires the resume. So
+    the trait comes back on the same event as the two movement modes, with
+    one loop over one list, rather than a second watcher that would have to
+    agree with this one.
     """
     me = c.me
     lost = [
         c.lose_mode("fly", until=When.ENCOUNTER),
         c.lose_mode("phasing", until=When.ENCOUNTER),
+        *c.suspend_trait(Condition.INSUBSTANTIAL, on=me,
+                         until=When.ENCOUNTER),
     ]
 
     def recharged(ev: PowerRecharged) -> None:
@@ -775,23 +787,43 @@ def m1173a3(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it drops to 0 hit points and is killed",
     on=Trigger(Dropped, about_me, "it drops"),
-    dropped=("c.grant_kind()",),
 )
 def m1173a4(c: Cast) -> None:
-    """"Remains standing ... until the end of its next turn" -- held open by
-    refusing to let the drop stick, the shape `m5183a3` settled nine levels
-    down. The undead keyword it also gains has nowhere to go: no verb adds a
-    kind word to a creature at runtime."""
+    """"Remains standing ... until the end of its next turn", written the way
+    `m2066a3` settled the identical sentence a level down.
+
+    **The hit points go back inline and not from a `c.watch`.** The old shape
+    armed a watch on `Dropped` from inside the dispatch of the very `Dropped`
+    that offered this row, so the handler was never called for it: the row
+    fired, laid its subscription, and the creature died anyway -- while
+    auditing green, because laying the effect counts as doing something.
+    `resolve._check_down` reads the hit points **again** after the emit, with
+    a comment saying it does so for exactly this shape, so the body only has
+    to set them.
+
+    The keyword is `c.set_origin`; `query.kinds_of` merges it with the stat
+    block's own type words, additively, which is the whole of what gaining
+    one can mean here.
+
+    `c.flat` at the end of its own next turn is what makes the window a
+    window -- the death goes through the ordinary pipeline. The guard is for
+    that second `Dropped`: this row is at-will, so without it the creature
+    props itself up again every turn, for ever."""
     me = c.me
+    guard = f"{c.ref} risen"
+    if any(e.label == guard for e in c.world.effects.of(me)):
+        return
+    c.effect(guard, until=When.ENCOUNTER, on=me)
+    health = c.world.get(me, Health)
+    if health is not None:
+        health.hp = 1
+    c.set_origin("undead", on=me, until=When.EONT)
 
-    def propped(ev: Dropped) -> None:
-        if ev.actor != me:
-            return
-        health = c.world.get(me, Health)
-        if health is not None and health.hp <= 0:
-            health.hp = 1
+    def expire(ev: TurnEnd) -> None:
+        if ev.actor == me and not ev.ghost:
+            c.flat(999, on=me)
 
-    c.watch(Dropped, propped, until=When.EONT, on=me, label=f"{c.ref} propped")
+    c.watch(TurnEnd, expire, until=When.EONT, on=me, once=True, label=c.ref)
 
 
 # ==========================================================================
@@ -1239,21 +1271,48 @@ _M1996_GRABBED: set[int] = set()
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    attack=Attack(vs=AC, printed=13),
-    damage=Damage("4d8", 5, kind=LIMITED),
     defect="the printed attack line names no defence",
 )
 def m1996a1(c: Cast) -> None:
-    """`c.overrun` walks the line and reports whose square was entered, in
+    """A **basic attack against each creature whose space it enters**, which
+    is what the card says, and no attack line of its own.
+
+    `c.overrun` walks the line and reports whose square was entered, in
     order -- the only way a trample can be written. `m1996a2` may convert
     one of these hits to a grab instead of damage; the flag it leaves is
-    read here before the damage is paid."""
+    read here before the damage is paid.
+
+    **The `attack=` and `damage=` this used to declare were invented.** It
+    carried `Attack(vs=AC, printed=13)` and `Damage("4d8", 5)`, lifted from
+    the stray run ahead of the effect text -- `+13 vs ; 4d8+5 damage..` --
+    with the `AC` supplied because the run names no defence. The card's
+    attack is the basic one, `m1996a0` at `+15 vs AC` for `2d8+4` with a
+    push and a prone, and `c.basic` rolls that row rather than a copy of
+    it -- which is also what keeps the grab conversion honest, since
+    `m1996a2` speaks about the attack this row makes. #767.
+
+    **One clause is lost in the swap and it is worth stating.** `m1996a2`
+    prints "the attack deals no damage; instead the target is grabbed", and
+    the old body could honour it because `c.strike` and `c.hit` are two
+    calls -- roll, then decline to pay. `c.basic` is one call and pays its
+    own damage, so there is no way to make it miss the damage and keep the
+    hit. The flag is still consumed so it cannot leak into the next use,
+    and the grab itself is `m1996a2`'s to lay.
+
+    That is a clause dropped, which would ordinarily take a `dropped=`
+    marker -- and `defect=` *cannot be combined with another marker*
+    (`content/CLAUDE.md`), nor should it be: the entry drops whole under
+    #612, so there is nothing for a second marker to make ready. Recorded
+    here instead, and the day #612's ruling is revisited this is the clause
+    to write.
+
+    **The marker stays**, and that is #612: `+N vs <blank>` is malformed
+    and the whole entry drops. Taking an invented roll out does not make
+    the card writable.
+    """
     for who in c.overrun():
-        if c.strike(on=who):
-            if who in _M1996_GRABBED:
-                _M1996_GRABBED.discard(who)
-            else:
-                c.hit(on=who)
+        c.basic(on=who)
+        _M1996_GRABBED.discard(who)
 
 
 def _hit_with_m1996a1(world: World, me: int, ev: Hit) -> bool:
@@ -3556,12 +3615,28 @@ def m5813a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.dim_light()",),
 )
 def m5950a0(c: Cast) -> None:
-    """The radius is real; nothing in this engine tracks light levels, so
-    there is no verb to dim bright light within it."""
+    """Bright light inside the radius is reduced to dim.
+
+    **The old note -- "nothing in this engine tracks light levels" -- was
+    true and stopped being so** (#686, #687). `c.dim` is the verb and not
+    `c.light`: that one makes a square bright however dark it is
+    underneath, where this only ever darkens, which is the order `c.dim`'s
+    own docstring states for this exact sentence. It is carried on the
+    creature rather than painted on the grid, so the radius travels with it
+    the way the aura does.
+
+    The aura stays beside it. It is what the board draws and what a row
+    asking "inside the aura" would read; the dimming is a radius and has no
+    membership of its own.
+
+    Not inert: `query.light_concealment` turns dim light into a `Cover` that
+    `resolve.attack_mods` takes the larger of, so this conceals whoever
+    stands in it -- including the creature itself.
+    """
     c.aura(5, label=c.ref, until=When.ENCOUNTER, on=c.me)
+    c.dim(5, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

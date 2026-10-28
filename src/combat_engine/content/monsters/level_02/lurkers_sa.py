@@ -772,7 +772,6 @@ def m3441a4(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d8", 1),
-    dropped=("c.amount_for('m305')",),
 )
 def m3519a0(c: Cast) -> None:
     """The hold, the two defences it buys and the narrowed claw all play, and
@@ -788,16 +787,24 @@ def m3519a0(c: Cast) -> None:
     `stacks=False` because the +2 is one standing modifier: untyped bonuses
     add, so clawing three times used to come to +6 to AC.
 
-    What still has nowhere to go is "that target takes 6 damage instead of 2
-    from the aura" -- it edits a *different* block's aura from here.
+    **"6 instead of 2 from the aura" is written, and it was two content
+    lines in two files.** Nothing in `engine/` moved.
+    `c.change_amount("m305a0", 6, on=victim)` appends to the **victim's**
+    `Powers.amounts`, and `m305a0`'s `scour` watcher now asks
+    `c.amount_for("m305a0", 2, who=ev.actor)` instead of handing out a bare
+    2. Laying the raise without the reader was the finished-looking no-op
+    the marker refused to write, which is why this waited for somebody
+    holding both files rather than one file of a parallel wave.
 
-    **Re-aimed off `c.aura_effect()`, which named a verb that is not the
-    blocker.** `c.change_amount("m305", 6, on=...)` already exists and is
-    exactly this sentence; it is inert, because `change_amount`'s own
-    docstring says a row must *read* the modifier with `c.amount_for` to be
-    changed by it, and `m305`'s aura hands out its number in the clear.
-    Laying the modifier here would be a finished-looking no-op, so the
-    marker names the reader that has to land in `m305` instead.
+    `when=` gates it on still holding, the same way the +2 defences below
+    are gated: the card's clause is about the creature *being grabbed*, so
+    it has to lapse when the grab does rather than running to the end of
+    the encounter. Laid on the victim and keyed on the aura's row, so a
+    second creature grabbed later gets its own.
+
+    `c.aura_effect()` was the first marker here and named a verb that is
+    not the blocker; the second named the reader, which is what was
+    actually missing.
     """
     victim = c.target
     held = c.grabbing()
@@ -811,6 +818,10 @@ def m3519a0(c: Cast) -> None:
         return
     c.hit(on=victim)
     c.grab(on=victim)
+    c.change_amount(
+        "m305a0", 6, on=victim, until=When.ENCOUNTER,
+        when=lambda ctx: victim in c.grabbing(),
+    )
     for defence in (AC, REF):
         c.bonus(
             defence, 2, on=c.me, until=When.ENCOUNTER, stacks=False,
@@ -1628,15 +1639,45 @@ def m5848a1(c: Cast) -> None:
     keywords=[Keyword.CHARM],
     requires=_has_been_hurt,
     requires_text="must have taken damage this encounter",
-    dropped=("c.untargetable()",),
+    dropped=("c.spend_action(who, cost)",),
 )
 def m5848a2(c: Cast) -> None:
     """A plain "+5 power bonus" against close and area attacks only, so the
     bonus is gated on the reach of whatever rolls it.
 
-    "Enemies think it is dead and cannot attack it without an Insight check"
-    is the clause with nowhere to go: nothing bars a creature from being a
-    target, and a check that unlocks one would need that first.
+    **The refusal is written, and the old note was wrong that nothing bars a
+    creature from being a target.** `m5746a3` in this file writes "cannot be
+    attacked" as one `AttackDeclared` watch in `Window.BEFORE` -- cancel
+    there and nothing is rolled and no rider fires -- and its docstring says
+    why the watch beats a `c.cannot_attack(on=foe, against=me)` per enemy:
+    the per-enemy spelling covers whoever is standing there now and misses
+    anything that arrives afterwards.
+
+    Narrower here than there, in two ways the card insists on.
+
+    **The reach gate is the complement of the bonus's**, not a melee/ranged
+    allow-list. One printed sentence partitions every attack -- close and
+    area ones get the +5, melee and ranged ones get the bar -- so writing
+    the bar as `not in _SPREADING` is what keeps the two halves from ever
+    disagreeing. An allow-list reads the same on any declared row and
+    differs on one the registry does not hold, where `_reach_kind` answers
+    `""`: it would let that attack through while the bonus also declined to
+    apply, which is neither half of the card.
+
+    **"An enemy cannot"**, so the attacker's side is asked. That is what
+    keeps a trap out of it -- a plate `terrain.arm` lays carries no `Side`
+    at all, so it is nobody's enemy and is not a creature that can be
+    fooled into thinking anything.
+
+    One Insight check per enemy, latched: the card unlocks that enemy, not
+    the fight, and a creature that saw through it does not have to see
+    through it again on its next swing.
+
+    Still dropped: the check costs the enemy a minor action and nothing
+    charges one creature for another's action -- `c.spend_action(who, cost)`,
+    the symbol `m4323a0` already waits on. So the roll happens when the
+    attack is declared, for free, which is a real and stated looseness: an
+    enemy with no minor left gets the check anyway.
     """
     _recharge_when_using(c, "m5848a3")
     c.prone(on=c.me)
@@ -1644,6 +1685,26 @@ def m5848a2(c: Cast) -> None:
         c.bonus(
             defence, 5, on=c.me, until=When.SONT, kind="power", when=_spreading_blow
         )
+
+    me, ref = c.me, c.ref
+    convinced: set[int] = set()
+
+    def looks_dead(ev: AttackDeclared) -> None:
+        if ev.target != me or ev.attacker in convinced:
+            return
+        if _reach_kind(getattr(ev, "power", "")) in _SPREADING:
+            return
+        if ev.attacker not in enemies(c.world, me):
+            return
+        if c.check("insight", 20, who=ev.attacker, against=me):
+            convinced.add(ev.attacker)
+            return
+        ev.cancel(f"{ref}: it looks dead")
+
+    c.watch(
+        AttackDeclared, looks_dead, until=When.SONT, on=me,
+        window=Window.BEFORE, label=f"{ref} looks dead",
+    )
 
 
 @power(

@@ -13,10 +13,10 @@ from combat_engine.engine import (
     INT,
     MINOR,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     REF,
     STANDARD,
+    YOU_OR_ONE_ALLY,
     AreaBurst,
     Attack,
     Cast,
@@ -72,7 +72,7 @@ def p10197(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.THUNDER],
 )
 def p10199(c: Cast) -> None:

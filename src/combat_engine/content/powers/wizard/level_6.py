@@ -53,7 +53,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
@@ -61,6 +60,8 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     Attack,
     AttackDeclared,
     Cast,
@@ -90,7 +91,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.components import Conjuration
-from combat_engine.engine.dsl import ANY_CREATURE, EACH_ALLY
+from combat_engine.engine.dsl import ANY_CREATURE
 from combat_engine.engine.zones import Zone
 
 ARCANE = [Keyword.ARCANE]
@@ -345,7 +346,7 @@ def p13985(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.CLOSE, Keyword.SHADOW],
 )
 def p13986(c: Cast) -> None:
@@ -404,14 +405,15 @@ def p14554(c: Cast) -> None:
     usage=ENCOUNTER,
     action=REACTION,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.CLOSE],
     trigger="an enemy ends its turn within 5 squares of you",
     on=Trigger(TurnEnd, enemy_within(5), "an enemy ends its turn within 5 squares of you"),
 )
 def p14555(c: Cast) -> None:
-    """The ally pool includes the caster, which is "you and each ally" exactly.
-    The shift is offered, not taken: the printed line says *can*."""
+    """`YOU_AND_EACH_ALLY` is the caster and the allies together, which is
+    "you and each ally" exactly. The shift is offered, not taken: the printed
+    line says *can*."""
     if c.target is not None and c.may("shift 1 square"):
         c.shift(1, who=c.target)
 
@@ -423,13 +425,13 @@ def p14555(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=ARCANE,
 )
 def p14556(c: Cast) -> None:
     """Removed outright rather than saved against: the printed line rolls
-    nothing. `ONE_ALLY`'s pool already includes the caster, which is "you or
-    one ally"."""
+    nothing. `YOU_OR_ONE_ALLY` is one target out of the caster and the
+    allies together, which is "you or one ally"."""
     who = c.target
     if who is None:
         return

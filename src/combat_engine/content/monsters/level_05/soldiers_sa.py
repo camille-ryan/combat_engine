@@ -91,8 +91,10 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionType,
     Attack,
+    Budget,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -114,6 +116,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import (
+    AttackDeclared,
     AttackRolled,
     Bloodied,
     DamageApplied,
@@ -820,7 +823,7 @@ def m1138a3(c: Cast) -> None:
     reach=Melee(1),
     # "an orc ally or one of its own kind" -- the union, which one
     # field cannot say. `ONE_ALLY` plus the two tests. #570.
-    target=Target(side="ally", count=1, kinds=frozenset({"orc"}),
+    target=Target(side="team", count=1, kinds=frozenset({"orc"}),
                   ident="own", kind_or_ident=True),
 )
 def m1138a4(c: Cast) -> None:
@@ -1536,7 +1539,7 @@ def m3306a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
 )
 def m3306a2(c: Cast) -> None:
     mate = c.target
@@ -1722,14 +1725,55 @@ def m3500a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("Budget.opportunity_turn",),
 )
 def m3500a3(c: Cast) -> None:
     """"Can make opportunity attacks against all enemies in reach that it has
-    marked" lifts the one-opportunity-attack-per-turn budget for every one of
-    them; nothing here can waive `Budget.opportunity_turn`, so the whole
-    printed benefit -- more than the ordinary single opportunity attack --
-    has nowhere to land."""
+    marked" lifts the one-opportunity-attack-per-turn cap for those enemies.
+
+    The cap is a single stamp -- `Encounter.can_spend` refuses an
+    opportunity action while `Budget.opportunity_turn` equals the turn stamp
+    and `spend` writes it -- so clearing the stamp once the swing has landed
+    lifts the cap with no verb at all. `m2233a2` is this same write without
+    the mark narrowing, and its docstring is the ruling for the shape.
+
+    **Latched per victim per turn**, because "all enemies" is one swing each
+    and not an unlimited stream at whoever keeps provoking. Read off
+    `Hit`/`Miss` rather than `ActionSpent`, because that event is emitted
+    *above* the stamp in `spend` and a reset there is overwritten a line
+    later.
+
+    The mark is asked of the victim with `by=me`: a bare `c.marked` would
+    be the same question, but spelling the grabber out is what keeps this
+    from paying off somebody else's mark.
+
+    **Only a swing at a marked enemy lifts the cap, which is deliberately a
+    little stingy.** The stamp is one flag and not per-target, so a creature
+    that spends its ordinary opportunity attack on an *unmarked* enemy keeps
+    the cap for the rest of the turn -- lifting it there would buy a second
+    swing at anybody, which the card does not grant.
+
+    The reach is the creature's own and needs nothing here: the swing is a
+    basic attack and measures itself."""
+    me = c.me
+    answered: dict[tuple[int, int | None], set[int]] = {}
+
+    def again(ev: Hit | Miss) -> None:
+        if ev.attacker != me or not getattr(ev, "opportunity", False):
+            return
+        if not c.marked(on=ev.target, by=me):
+            return
+        seen = answered.setdefault((c.world.round, c.world.turn), set())
+        if ev.target in seen:
+            return
+        seen.add(ev.target)
+        budget = c.world.get(me, Budget)
+        if budget is not None:
+            # -1 is never a turn stamp: `Encounter._turn_stamp` is
+            # `round * 1000 + index` and both are non-negative.
+            budget.opportunity_turn = -1
+
+    for announced in (Hit, Miss):
+        c.watch(announced, again, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # ==========================================================================
@@ -3067,22 +3111,61 @@ def m6572a1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=7),
-    dropped=("c.conceal(except_for=)",),
 )
 def m6572a2(c: Cast) -> None:
-    """"No creature other than it has line of sight to the grabbed target"
-    has no verb -- `c.conceal(except_for=)` is the gap. The grab, the
-    blind-and-restrain, the burn, tying them to the grab's own end, and the
-    "recharges when it has no creature grabbed" clock are all exact."""
+    """The grab, the blind-and-restrain, the burn, tying them to the grab's
+    own end, and the "recharges when it has no creature grabbed" clock are
+    all exact.
+
+    **"No creature other than it has line of sight to the target" is a
+    refusal in the `AttackDeclared` window, not concealment.** The old note
+    named a parameter on `c.conceal`, and that is the wrong mechanism:
+    concealment is a -5 to the attack roll, and the card prints line of
+    sight, which is not a penalty but a refusal.
+    `level_07/controllers_sa._no_sight_past` is this same veto pointed the
+    other way -- it refuses what a half-blinded creature swings *at*, this
+    refuses what is swung at the creature being held -- and its docstring is
+    the ruling for the shape. Hung on the blind-and-restrain effect's own
+    `subs`, so it is torn down exactly when that is.
+
+    `c.invisible(to=)` and `c.hide` were the other candidates and are both
+    wrong: they hold `HIDDEN_FROM`, which `query.has_combat_advantage` reads,
+    so making the held creature unseen by the rest of the board would hand
+    *it* combat advantage against everybody -- the opposite of the card.
+
+    It denies line of sight to **attacks** only, which is the one window the
+    engine has: a heal or an aid aimed at the held creature still lands.
+    That is the same limit the sibling helper accepts.
+
+    **Two faults fixed alongside it, neither named by the marker.** The grab
+    was laid without `c.strike()` at all, so the printed +7 vs Reflex was
+    never rolled and the hold landed on every use; and the printed escape DC
+    was not being passed, which left `escape.attempt` computing it off this
+    creature's own defence."""
     me, ref = c.me, c.ref
-    held = c.grab()
-    if held is not None:
-        body = c.condition(
-            Condition.BLINDED, Condition.RESTRAINED, until=When.ENCOUNTER,
-            ongoing=(10, DamageType.UNTYPED),
-        )
-        if body is not None:
-            held.on_end.append(lambda: c.world.effects.end(body, "no longer grabbed"))
+    if c.strike():
+        victim = c.target
+        held = c.grab(dc=15)
+        if held is not None and victim is not None:
+            body = c.condition(
+                Condition.BLINDED, Condition.RESTRAINED, until=When.ENCOUNTER,
+                ongoing=(10, DamageType.UNTYPED),
+            )
+            if body is not None:
+                held.on_end.append(
+                    lambda: c.world.effects.end(body, "no longer grabbed")
+                )
+
+                def unseen(ev: AttackDeclared, hold: Effect = body) -> None:
+                    if hold.ended or ev.attacker == me or ev.target != victim:
+                        return
+                    ev.cancel("nothing else has line of sight to it")
+
+                body.subs.append(
+                    c.world.bus.on(
+                        AttackDeclared, unseen, window=Window.BEFORE, owner=me
+                    )
+                )
     label = f"{ref} recharge"
     if not _armed(c, label):
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FREE,
     INTERRUPT,
@@ -18,6 +17,7 @@ from combat_engine.engine import (
     PERSONAL,
     SELF,
     STANDARD,
+    YOU_AND_EACH_ALLY,
     Bloodied,
     Cast,
     CloseBurst,
@@ -290,7 +290,7 @@ def _i_dropped_an_enemy(world: object, me: int, ev: object) -> bool:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
     trigger="you drop a non-minion enemy to 0 hit points with an invoker attack power",
     on=Trigger(Dropped, _i_dropped_an_enemy, "you drop a non-minion enemy"),

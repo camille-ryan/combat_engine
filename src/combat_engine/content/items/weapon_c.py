@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.strikers import pay_extra
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -72,7 +73,6 @@ from combat_engine.engine import (
     EffectApplied,
     Forced,
     ForcedMove,
-    Gear,
     Healed,
     Health,
     Hit,
@@ -105,20 +105,30 @@ from combat_engine.engine import (
 #: package does not re-export. It is the only place "you miss **every**
 #: target" can be asked, so it is imported from the module it lives in
 #: rather than approximated off a single `Miss`.
-from combat_engine.engine.events import DamageRolled, PowerResolved
-from combat_engine.engine.query import shifted
+from combat_engine.engine.events import Boosted, DamageRolled, PowerResolved
+from combat_engine.engine.query import shaped
 
 ITEM = "item"
 
 #: The four defences, for the cards printing "all defenses".
 _DEFENCES = (AC, FORT, REF, WILL)
 
+#: The rogue's extra damage, by the label `strikers.extra_damage` latches
+#: and pays under -- which is what `i3096x1` lifts the cap on. `i1340x1`
+#: raises the same feature's size through the `"<this> damage"` key.
+_SNEAK = "cf:rogue-scoundrel-f4"
+
 
 # -- gates on a context -----------------------------------------------------
 
 
 def _against(c: Cast, *words: str):  # noqa: ANN202
-    """Gate: the creature this damage or attack is aimed at is one of these."""
+    """Gate: the creature this is aimed at is one of these.
+
+    Serves a **skill check** as well as damage and attacks, because
+    `skills.modifier` puts the creature a check is about under the same
+    `target` key -- see `i3555x1`.
+    """
 
     def gate(ctx: dict[str, Any]) -> bool:
         foe = ctx.get("target")
@@ -1407,7 +1417,7 @@ def i1761x1(c: Cast) -> None:
     target=SELF,
     trigger="you make a damage roll and dislike the result",
     on=Trigger(Hit, by_me, "you hit with this weapon"),
-    dropped=("events.DamageRolled.dice",),
+    dropped=("events.DamageRolled.weapon_dice",),
 )
 def i1761p1(c: Cast) -> None:
     """`c.reroll_damage` rolls the whole damage twice and keeps the better,
@@ -1415,17 +1425,20 @@ def i1761p1(c: Cast) -> None:
     confining the reroll to the [W] dice and the critical dice is the part
     that cannot be said. Declared on the hit so the effect is standing when
     the damage is rolled -- afterwards is too late.
-    **Re-pointed, and the symbol was the bug.** Five spellings were filed
-    across eight rows for one printed mechanism (#703) and the verb is
-    `c.reroll_ones(below=ANY_FACE, pick=...)`; four of the eight are written
-    now. What stops this one is **the moment, not the dice**: its clause
-    answers a damage roll that has already happened, and
-    `events.DamageRolled` carries a total with no dice behind it. The hold
-    `c.reroll_ones` lays is read *while* the dice are in hand, which a row
-    triggered afterwards cannot reach -- the same split `c.boost_roll(ev=)`
-    names for an attack roll, where the event does carry its live
-    `AttackResult`.
-"""
+
+    **Re-pointed again, and the previous note contradicted this one.** A
+    #703 sweep appended "what stops this one is **the moment, not the
+    dice**" directly under the paragraph above, which says the moment is
+    fine and the `[W]` narrowing is the hold. The paragraph above was
+    right. The moment is now reachable either way -- `c.reroll_faces`
+    answers a `DamageRolled` and the live `Roll` rides on it -- so nothing
+    is left of the moment argument and the marker names the narrowing that
+    was always the real residue.
+
+    `roll.dice` is a flat list of faces. It cannot say which of them were
+    the `[W]` dice, which were the critical rider's, and which came from a
+    `dice=` bonus, so "reroll the weapon dice and the critical dice" has no
+    way to pick. That is `events.DamageRolled.weapon_dice`."""
     c.reroll_damage(on=c.me, until=When.EOT)
 
 
@@ -1491,7 +1504,7 @@ def i1880p1(c: Cast) -> None:
 def i2459x1(c: Cast) -> None:
     """+1 to every defence, but only against an attacker wearing a shape.
 
-    `shifted` rather than `in_form`: the card names no shape, it asks whether
+    `shaped` rather than `in_form`: the card names no shape, it asks whether
     the attacker is in its own one or not. A creature that has never changed
     shape answers no, which is the right way round here -- a bonus must not
     pay against everything merely because nothing was recorded.
@@ -1502,7 +1515,7 @@ def i2459x1(c: Cast) -> None:
     """
     for d in _DEFENCES:
         c.bonus(d, 1, on=c.me, until=When.ENCOUNTER,
-                when=lambda ctx: shifted(c.world, ctx.get("attacker", -1)))
+                when=lambda ctx: shaped(c.world, ctx.get("attacker", -1)))
 @power(
     "i2459p1",
     level=9,
@@ -2069,17 +2082,19 @@ def i968x1(c: Cast) -> None:
     thrown" to roll Strength rather than Dexterity. Same write as
     `c.weapon_dice` makes, on the same object.
 
+    **Written inline here, and that was the bug worth fixing.** The loop
+    this replaces mutated `properties` in place, which skips the `replace`
+    that re-runs `Weapon.__post_init__`, and announced nothing -- so the row
+    was invisible to every reader of `WeaponChanged`. `weapon.item ==
+    "i968"` is what `mine=` on both verbs now says, and this row is where it
+    was first spelled by hand. #843.
+
     `c.as_ranged` was the wrong half and is why this looked blocked: it is
     one attack's worth of reach, spent on the next swing, where this is a
     standing line on the weapon.
     """
-    gear = c.world.get(c.me, Gear)
-    if gear is None:
-        return
-    for weapon in gear.weapons:
-        if weapon.item == "i968":
-            weapon.properties = weapon.properties | {"heavy thrown"}
-            weapon.thrown = (5, 10)
+    c.gains_property("heavy thrown", mine=True)
+    c.weapon_range(thrown=(5, 10), mine=True)
 
 
 @power(
@@ -2562,22 +2577,43 @@ def i3001p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("PowerUsed.result",),
 )
 def i3055x1(c: Cast) -> None:
-    """The bonus is "equal to the result of the 1d6 roll" that m4421a6 made
-    and `PowerUsed` carries no result, so the die is rolled again here --
-    the same distribution and a different number."""
+    """The bonus is "equal to the result of the 1d6 roll", and that number
+    is on the record rather than lost.
+
+    **`events.Boosted` is the record the old marker said did not exist.**
+    `p6186` pays its die through `c.boost_roll`, which routes all three of
+    its paths through `Cast._boosted`, so `by` is the ref that paid and
+    `amount` is the number after the row decided it. `PowerUsed` carries
+    no result -- that much of the old note was true -- but it was the
+    wrong event to be reading. `f1490` takes the same number off the same
+    row.
+
+    **And the old watcher was armed on the wrong power**, so it had never
+    fired once: it waited on `m4421a6`, which the ETL writes as
+    `x_m4421a6` -- its mark for a ref it could not resolve -- and which is
+    declared nowhere in the tree. The item's own spec names `p6186`.
+
+    No `kind=` filter, unlike `f1490`. That row's card is about a boosted
+    *attack*; this one says "when you use your racial power", and the
+    power boosts a skill check or a saving throw just as readily. What the
+    item hands back is an attack bonus either way.
+    """
     c.as_implement(on=c.me)
 
-    def racial(ev: PowerUsed) -> None:
-        if ev.actor == c.me and ev.power == "m4421a6":
-            c.bonus(
-                "attack", c.roll("1d6"), kind="item", on=c.me, until=When.EONT,
-                once=True,
-            )
+    def paid(ev: Boosted) -> None:
+        # `actor` is the payer, which for this card is the wearer. See
+        # `Cast._boosted`: `rolled_by` is whose roll it was, and the two
+        # differ for a row that boosts somebody else's die.
+        if ev.actor != c.me or ev.by != "p6186":
+            return
+        c.bonus(
+            "attack", ev.amount, kind="item", on=c.me, until=When.EONT,
+            once=True,
+        )
 
-    c.watch(PowerUsed, racial, until=When.ENCOUNTER)
+    c.watch(Boosted, paid, until=When.ENCOUNTER)
 
 
 @power(
@@ -2608,20 +2644,55 @@ def i3055p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.extra_damage(applies=)",),
 )
 def i3096x1(c: Cast) -> None:
-    """Lifts the once-a-turn latch on `cf:rogue-scoundrel-f4`.
+    """Lifts the once-a-turn cap on `cf:rogue-scoundrel-f4` for a critical.
 
-    The feature is declared and its *size* is reachable -- `i1340x1` above
-    raises it through the `"<ref> damage"` key. Its **latch** is not: a
-    `paid` dict in `features.strikers.extra_damage`'s closure, keyed on
-    the round and the initiative slot, with nothing to clear or bypass it.
+    **The latch is reachable now and the old note's premise is gone.** It
+    was a `paid` dict inside `features.strikers.extra_damage`'s closure;
+    it is `Powers.latched` on the creature, and `c.latched`, `c.unlatch`
+    and the shared `strikers.pay_extra` are the three doors. #569.
 
-    Paying a second helping from here instead would double up rather than
-    guarantee one: on a critical the feature's own `Hit` watcher fires
-    too, and if it has not yet paid this turn the rogue would collect
-    twice. Which of the two watchers runs first is not ordered."""
+    **The double-pay the old note feared is real, and the gate against it
+    is the log and not the latch.** On a critical the feature's own `Hit`
+    watcher fires too, and which of the two runs first is not ordered --
+    so asking `c.latched` here cannot tell "the rogue already paid earlier
+    this turn" from "the feature just paid, on this very hit". The log
+    can: anything after the `Hit`'s own `seq` happened inside this hit, so
+    a payout found there means the feature got its ordinary use and the
+    card adds nothing. If instead this row pays first, `pay_extra` latches
+    and the feature then declines. Either order, exactly one payout.
+
+    `c.unlatch` before paying is what makes "even if you have already done
+    so this round or this encounter" true, and `pay_extra` re-latching is
+    what makes "does not count toward its use restriction" true: the cap
+    ends the fight in the state it was already in, so the ordinary use the
+    rogue had already spent is not handed back.
+
+    Paid through `pay_extra` rather than a bare `c.damage` so the feats
+    that raise the striker's dice and the one that forgoes a die are read
+    here as well -- that helper is where both live.
+
+    `cf:rogue-thief-f2` is the card's other build and is declared nowhere
+    in the tree, so there is no second label to pay; a rogue holding this
+    one is the whole of what can be asked.
+    """
+    me = c.me
+
+    def crit(ev: Hit) -> None:
+        if ev.attacker != me or not ev.critical or not c.feat(_SNEAK, on=me):
+            return
+        if any(
+            later.kind == "DamageRolled"
+            and later.source == me
+            and later.detail == _SNEAK
+            for later in c.world.bus.log[ev.seq:]
+        ):
+            return
+        c.unlatch(_SNEAK, on=me)
+        pay_extra(c, _SNEAK, c.sneak_damage(), on=ev.target, per_turn=True)
+
+    c.watch(Hit, crit, on=me, until=When.ENCOUNTER, label=c.ref)
 
 
 @power(
@@ -2861,16 +2932,29 @@ def i3510p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonus(against=)", "c.immune_power()"),
+    dropped=("c.immune_power()",),
 )
 def i3555x1(c: Cast) -> None:
     """The resistance gates on `source`, which the damage context carries.
-    A skill check has no target, so an Intimidate bonus "against draconians
-    and dragons" is laid for every check instead; and nothing makes a
-    weapon proof against one named monster row."""
+
+    **"A skill check has no target" was false, and `_against` already
+    reads the key.** `skills.modifier` puts `target` -- who the check is
+    *about* -- into the modifier context expressly so a gate can be hung
+    on it, and `c.check(..., against=foe)` is the door a row uses to say
+    who it is intimidating. So the same helper that narrows a damage or
+    attack gate here narrows this one, on the same dictionary key.
+
+    A check about a fact leaves `target` None, and `_against` is false
+    there -- which is the right way round: the bonus is printed "against
+    draconians and dragons" and a check about nobody is not that.
+
+    Still dropped: nothing makes a weapon proof against one named monster
+    row.
+    """
     c.resist(5, on=c.me, when=_dealt_by(c, "dragon", "draconian"))
     c.bonus(
-        "skill:intimidate", c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER
+        "skill:intimidate", c.enhancement, kind="item", on=c.me,
+        until=When.ENCOUNTER, when=_against(c, "dragon", "draconian"),
     )
 
 
@@ -2937,7 +3021,7 @@ def i3555p2(c: Cast) -> None:
     result = getattr(c.trigger, "result", None)
     if result is None:
         return
-    result.critical = True
+    c.crit_becomes(True)
     foe = getattr(c.trigger, "target", None)
 
     def felled(ev: Dropped) -> None:

@@ -28,7 +28,6 @@ from combat_engine.engine import (
     AT_WILL,
     CHA,
     DAILY,
-    EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
     ENCOUNTER,
@@ -40,7 +39,6 @@ from combat_engine.engine import (
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     OPPORTUNITY,
     PERSONAL,
     REACTION,
@@ -48,6 +46,8 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AdjacencyGained,
     AreaBurst,
@@ -79,6 +79,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     SavingThrow,
+    SkillCheck,
     Target,
     Trigger,
     TurnEnd,
@@ -652,7 +653,7 @@ def p12338(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=ARCANE,
 )
 def p12339(c: Cast) -> None:
@@ -762,7 +763,7 @@ def p12341(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=ARCANE,
 )
 def p12342(c: Cast) -> None:
@@ -962,13 +963,34 @@ def _my_save_failed(world: World, me: int, ev: SavingThrow) -> bool:
     keywords=MARTIAL,
     trigger="you fail a saving throw",
     on=Trigger(SavingThrow, _my_save_failed, "you fail a saving throw"),
-    todo=("c.unsave(succeed=)",),
 )
 def p14211(c: Cast) -> None:
-    """`c.unsave` turns a success into a failure and there is no other
-    half: nothing anywhere writes `saved = True`. Spending the surge
-    without the success would be a row that plays and only costs."""
-    ...
+    """The surge buys the success, and the write is `c.unsave`'s own door
+    read the other way.
+
+    **"Nothing anywhere writes `saved = True`" was false when it was
+    written.** `durations.save` announces the throw and then reads it back
+    -- `saved = rolled.saved`, and the effect ends if it is True -- which
+    is the whole of what `c.unsave` sets `ev.saved = False` through. Ten
+    content rows already write the success direction; `p4063` is the
+    nearest.
+
+    A declared `on=Trigger(...)` reaches it as surely as a `c.watch` does.
+    `triggers.WINDOW_OF` puts an `action=NONE` row with a printed Trigger
+    in `Window.AFTER`, and `Bus.emit` runs that window before it returns
+    the event -- so the body runs inside the emit `durations.save` is
+    still waiting on, and `c.trigger` is that live event.
+
+    **The surge is paid first and the success only follows if it was.**
+    Flipping first would hand a character with no surges left a free save.
+    Nothing refuses the *offer* for want of one -- the card prints no
+    Requirement -- so that is the one way this can cost its encounter use
+    and pay nothing, and it is what the page says.
+    """
+    ev = c.trigger
+    if ev is None or not c.spend_surge(on=c.me):
+        return
+    ev.saved = True
 
 
 # ==========================================================================
@@ -983,7 +1005,7 @@ def p14211(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(3),
-    target=Target("other_ally", 2),
+    target=Target("ally", 2),
     keywords=MARTIAL,
 )
 def p14159(c: Cast) -> None:
@@ -1028,7 +1050,7 @@ def _my_save_succeeded(world: World, me: int, ev: SavingThrow) -> bool:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger="you succeed on a saving throw",
     on=Trigger(SavingThrow, _my_save_succeeded, "you succeed on a saving throw"),
@@ -1055,7 +1077,7 @@ def _ally_rolled_lower(world: World, me: int, ev: InitiativeRolled) -> bool:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger="an ally rolls a lower initiative check than yours",
     on=Trigger(InitiativeRolled, _ally_rolled_lower, "an ally rolls lower"),
@@ -1176,7 +1198,7 @@ def p14214(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW, Keyword.TELEPORTATION],
-    dropped=("c.grant_action('teleport')",),
+    dropped=("actions.teleport_at_will()",),
 )
 def p14216(c: Cast) -> None:
     """The opening teleport, with the printed requirement on it.
@@ -1186,8 +1208,9 @@ def p14216(c: Cast) -> None:
     zone. `c.teleport(into=)` carries it. #685.
 
     The standing once-a-round 3-square teleport is the marker that stays --
-    it is an action `actions.legal` does not know and `c.grant_action`
-    silently eats the word. When that lands it will want the same
+    it is an action `actions.legal` does not know, and `c.grant_action`
+    changes a cost rather than adding a kind (it now raises on an unknown
+    word, #762). When that lands it will want the same
     requirement, which is the half of this clause the restriction is
     "on both" of."""
     c.teleport(
@@ -1527,7 +1550,7 @@ def p15937(c: Cast) -> None:
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=SHADOW,
     trigger="you make an attack roll and dislike the result",
     on=Trigger(
@@ -1583,7 +1606,7 @@ def p16047(c: Cast) -> None:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger="a creature hits or misses you with a melee or a ranged attack",
     on=(
@@ -1615,17 +1638,60 @@ def p16048(c: Cast) -> None:
         both(targets_me, either(by_melee, by_ranged)),
         "an enemy attacks you",
     ),
-    dropped=("c.pass_on(attack=)",),
 )
 def p16049(c: Cast) -> None:
     """Declared on `AttackDeclared` so the four points are in before the
-    roll, which is what an interrupt buys. Handing a miss on to a creature
-    you have swapped with is a re-aim of an attack already resolved, and
-    `c.redirect` only re-aims one still being declared."""
+    roll, which is what an interrupt buys. The second half waits for the
+    outcome and is hung on `Miss`.
+
+    **Written, and the marker it carried was wrong about the tree.** It said
+    `c.pass_on(after_the_roll=)`, on the reading that handing a miss on is a
+    *re-aim of an attack already resolved* and that nothing in the tree does
+    that. The card does not ask for a re-aim: it says the enemy **repeats
+    the attack** against the creature you swapped with -- a fresh swing, not
+    the old one pointed elsewhere.
+
+    That is `c.grant_attack(..., reentrant=True)`, whose own docstring calls
+    `reentrant` *"the target repeats the attack"*, and two rows already say
+    this sentence -- `p12198` and `p11725`, both handing the swing on with
+    `ref=getattr(ev, "power", "")`. So the only thing missing was the
+    pairing: lay the bonus in the interrupt, then catch the miss of that
+    same attack.
+
+    `once=True` and the two identity gates are what keep it to the
+    triggering attack: without them the watcher would hand on the next miss
+    of the encounter, by anybody, against anybody. #845."""
     if not [who for who in c.within(1, of=c.me) if who != c.me]:
         return
     for d in (AC, FORT, REF, WILL):
         c.bonus(d, 4, kind="power", on=c.me, until=When.EOT)
+
+    foe = getattr(c.trigger, "attacker", None)
+    if foe is None:
+        return
+
+    def handed(ev: Any) -> None:
+        # The *triggering* attack, and no other: this creature's swing, at
+        # me. `c.watch` cannot say "that one", so the handler says it.
+        if getattr(ev, "attacker", None) != foe:
+            return
+        if getattr(ev, "target", None) != c.me:
+            return
+        # "Other than the triggering enemy" is printed, and the foe would
+        # not be adjacent to me by accident -- a reach weapon puts it
+        # further out, so the exclusion is doing real work only sometimes
+        # and is written because the card writes it.
+        pool = [
+            who for who in c.within(1, of=c.me)
+            if who != c.me and who != foe
+        ]
+        mate = c.choose(pool, "who you trade places with")
+        if mate is None or not c.swap(mate):
+            return
+        c.grant_attack(
+            foe, on=mate, ref=getattr(ev, "power", ""), reentrant=True)
+
+    c.watch(Miss, handed, until=When.EOT, once=True)
 
 
 @power(
@@ -1635,7 +1701,7 @@ def p16049(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.MARTIAL, Keyword.WEAPON],
 )
 def p16050(c: Cast) -> None:
@@ -1833,7 +1899,7 @@ def p16404(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(2),
-    target=Target("other_ally", 99, everyone=True),
+    target=Target("ally", 99, everyone=True),
     keywords=MARTIAL,
     requires=_bloodied,
     requires_text="you must be bloodied",
@@ -1884,7 +1950,7 @@ def p16450(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=MARTIAL,
 )
 def p16451(c: Cast) -> None:
@@ -1901,18 +1967,62 @@ def p16451(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.ILLUSION],
-    dropped=("c.invisible(sustain=)",),
 )
 def p16452(c: Cast) -> None:
-    """The invisibility and its end on an attack are exact. `c.invisible`
-    takes no `sustain=`, so the minor action that would carry it past the
-    end of your next turn -- and the clause about moving costing you that
-    -- have nowhere to go."""
-    held = c.invisible(on=c.me, until=When.EONT)
-    c.on_attack(
-        lambda ev: c.end_effect(held, on=c.me, why="attacked"),
-        by=c.me, once=True, until=When.EONT,
-    )
+    """All three clauses. The sustain needed no parameter on `c.invisible`:
+    it is a plain field on the effect that verb hands back.
+
+    `Effect.sustain_cost` (durations.py:135) is what `actions._sustaining`
+    offers as an action and what `_sustain_by_default` spends, and an
+    `Effect` is a mutable dataclass that rows already rewrite -- `m4448a5`
+    rewrites `when`/`clock`/`latch` on a live hold. So the hold is laid
+    `When.SUSTAIN` and the cost written on afterwards.
+
+    **One wart, said out loud rather than left to be found.** `apply` runs
+    `_warn_sustainless` before this line can set the field, so the log
+    carries one `Note` saying this hold costs nothing to sustain. It is
+    false by the next statement. A `sustain=` pass-through on `c.invisible`
+    -- which `c.aura`, `c.zone` and `c.effect` all take -- would remove it,
+    and that is an engine line rather than a content one.
+
+    **`When.SUSTAIN` gives the printed base duration for free, which it
+    looked as though it would not.** The card is "until the end of your
+    next turn", with the sustain extending it, and a sustained hold lapses
+    at a turn end -- so this reads one turn short. It is not:
+    `Effects.apply` stamps `sustained` with the current round, and
+    `_on_turn_end` only considers a hold whose `sustained < round`. So the
+    round it is cast in is free and `_sustaining` offers the minor from the
+    next round on. Driven over two turn ends rather than reasoned about,
+    because the first reading of it was wrong.
+
+    **"If you move, you cannot sustain it" is the cost coming off**, not a
+    clause of its own: with no `sustain_cost` nothing can keep the hold
+    going, `_sustain_by_default` refuses it and `_sustaining` offers
+    nothing, so it runs out at the end of the next turn and not before --
+    which is the printed sentence exactly. Forced movement is excluded: the
+    card is about the character moving, and being pushed is not that."""
+    held = c.invisible(on=c.me, until=When.SUSTAIN)
+    if held is None:
+        return
+    held.sustain_cost = MINOR
+
+    def seen(ev: Any) -> None:
+        if not held.ended:
+            c.end_effect(held, on=c.me, why="attacked")
+
+    def grounded(ev: Any) -> None:
+        if ev.actor != c.me or ev.kind_ == "forced" or held.ended:
+            return
+        held.sustain_cost = None
+        c.note(f"{c.ref}: moved, so the hold can no longer be sustained")
+
+    # **Both watchers are `When.ENCOUNTER` and guard on `held.ended`
+    # instead.** A `When.SUSTAIN` watcher is the trap `_warn_sustainless`
+    # names: `c.watch` and `c.on_attack` take no `sustain_cost`, so the
+    # watcher would lapse after a round and the hold would outlive the
+    # thing that is supposed to end it.
+    c.on_attack(seen, by=c.me, once=True, until=When.ENCOUNTER)
+    c.watch(MoveEnd, grounded, on=c.me, until=When.ENCOUNTER)
 
 
 def _i_rolled_initiative(world: World, me: int, ev: InitiativeRolled) -> bool:
@@ -1951,14 +2061,39 @@ def p16453(c: Cast) -> None:
     reach=CloseBurst(1),
     target=Target("any", 1),
     keywords=ARCANE,
-    dropped=("c.reroll_attack(standing=)",),
 )
 def p16582(c: Cast) -> None:
-    """The blood price is exact. "Roll twice and use the higher result on
-    one attack roll you make this turn" is `c.reroll_attack(keep="best")`
-    held open for an attack that has not been declared, and that method
-    only answers a trigger."""
+    """The blood price, and the banked reroll it bought.
+
+    **The old note was wrong that the method "only answers a trigger".**
+    `c.reroll_attack` takes `ev=` for exactly this -- a roll that is not
+    the trigger -- and its own docstring names the case: a row that fires
+    now so a reroll can happen later is written as a `c.watch`, because a
+    handler closes over the `Cast` the *row* was built with and `c.trigger`
+    there is this minor action, not the swing. `keep="best"` is "roll twice
+    and use the higher result". `p14463` (bard/level_5_b.py:102) is the
+    worked sibling.
+
+    **`until=When.EOT` is the printed "one attack roll you make this
+    turn"**, and `once=True` is the "one". The hold is spent by the handler
+    doing something, so a declined offer leaves it armed for a later roll
+    this turn -- which is what lets the player choose *which* attack, the
+    choice the card is about. `c.reroll_attack` emits `Rerolled` (#496), so
+    the bus moves and the hold spends itself; `p14463`'s note about needing
+    a `c.note` to spend it predates that announcement.
+
+    `on=c.me` on the watch and a gate on the attacker, because this row has
+    a target and it is not necessarily the caster -- the damage is paid by
+    somebody willing, the reroll is the caster's."""
     c.flat(c.level)
+
+    def twice(ev: Any) -> None:
+        if ev.attacker != c.me:
+            return
+        if c.may(f"{c.ref}: roll this attack twice and keep the higher"):
+            c.reroll_attack(keep="best", ev=ev)
+
+    c.watch(AttackRolled, twice, on=c.me, until=When.EOT, once=True)
 
 
 @power(
@@ -2213,13 +2348,70 @@ def p16649b(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=ARCANE,
-    todo=("c.reroll_check(standing=)",),
 )
 def p16650(c: Cast) -> None:
     """A standing offer to buy a triple reroll with a healing surge, on
-    every roll for a turn. Every reroll verb in the vocabulary answers one
-    trigger and none of them can be left lying in wait."""
-    ...
+    every roll for a turn.
+
+    **`c.reroll_check(standing=)` was a stale marker.** It said every
+    reroll verb answers one trigger and none can be left lying in wait.
+    All three take `ev=` now -- `c.reroll_attack`, `c.reroll_check`,
+    `c.reroll_save` -- and each docstring says that argument exists for
+    exactly this: a banked reroll is a `c.watch`, and a watch handler
+    closes over this row's `Cast`, whose `trigger` is not the roll being
+    watched.
+
+    **`Window.BEFORE` for all three, and the check branch is why.**
+    `events.Bus.emit` runs BEFORE, then the resolve callback, then AFTER.
+    `skills.check` passes `finish` as that callback and `finish` is what
+    turns `natural` into `total` and `success`; `c.reroll_check` assigns
+    `natural` and recomputes neither, so an AFTER-window reroll changes
+    the die and leaves the old outcome standing. The attack and save
+    branches work in either window -- both of those verbs recompute the
+    outcome inline -- so one window for the three is correct rather than
+    a compromise.
+
+    **Three `keep="best"` calls, not one of something cleverer.** Each
+    rolls a fresh die and keeps the larger, so three of them leave
+    `max(printed, d1, d2, d3)` -- which is "reroll three times, taking
+    the highest result", read literally.
+
+    `c.spend_surge` is "spend a surge and gain nothing for it" in its own
+    docstring, which is this card's "spend a healing surge but regain no
+    hit points" exactly. It comes **before** the rerolls and its False
+    stops them: a reroll that happened and then found no surge left would
+    be free.
+
+    One handler over three events rather than three handlers, because the
+    three branches differ by one verb. `me not in (actor, attacker)` is
+    how one gate reads both field names -- `AttackRolled` says attacker
+    and the other two say actor.
+
+    Offered with the printed roll as the default, like every other
+    surge-priced option in the tree: a headless fight keeps its dice and
+    its surges."""
+    me = c.me
+
+    def thrice(ev: Any) -> None:
+        if me not in (getattr(ev, "actor", None),
+                      getattr(ev, "attacker", None)):
+            return
+        if not c.may("spend a healing surge to reroll three times, taking"
+                     " the highest", who=me, default=False):
+            return
+        if not c.spend_surge(on=me):
+            return
+        for _ in range(3):
+            if isinstance(ev, AttackRolled):
+                c.reroll_attack(ev=ev, keep="best")
+            elif isinstance(ev, SkillCheck):
+                c.reroll_check(ev=ev, keep="best")
+            else:
+                c.reroll_save(ev=ev, keep="best")
+
+    for event in (AttackRolled, SkillCheck, SavingThrow):
+        c.watch(event, thrice, on=me, until=When.EONT,
+                window=Window.BEFORE, label=f"{c.ref} {event.__name__}")
 
 
 @power(
@@ -2282,7 +2474,7 @@ def p16653(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=MARTIAL,
     dropped=("c.vehicle_speed()",),
 )
@@ -2341,7 +2533,7 @@ def p16558(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True),
+    target=Target("ally", 99, everyone=True),
     keywords=MARTIAL,
 )
 def p16559(c: Cast) -> None:

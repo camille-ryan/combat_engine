@@ -18,7 +18,6 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
@@ -27,13 +26,14 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     PERSONAL,
     REACTION,
     REF,
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     AttackRolled,
     Cast,
     CloseBurst,
@@ -398,11 +398,12 @@ def p10516(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.MARTIAL, Keyword.HEALING],
 )
 def p12678(c: Cast) -> None:
-    """"You or one ally": the ally pool already has the caster in it."""
+    """"You or one ally" is one target drawn from the caster and the allies
+    together, which is `YOU_OR_ONE_ALLY`."""
     who = c.target
     if who is not None and c.may("spend a surge", who=who):
         c.surge(on=who)
@@ -724,7 +725,7 @@ def p12853(c: Cast) -> None:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.MARTIAL, Keyword.ARCANE],
     trigger=_ELEMENTAL_DAMAGE,
     on=Trigger(DamageRolled, _burned_me, _ELEMENTAL_DAMAGE),

@@ -43,7 +43,6 @@ from combat_engine.engine import (
     AC,
     AREA_OR_CLOSE,
     DAILY,
-    EACH_ALLY,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
@@ -53,12 +52,13 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     PERSONAL,
     REF,
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     AreaBurst,
     Attack,
     AttackRolled,
@@ -563,7 +563,7 @@ def p16290(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.CLOSE],
 )
 def p16291(c: Cast) -> None:
@@ -630,7 +630,7 @@ def p16292(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.CLOSE],
 )
 def p2838(c: Cast) -> None:

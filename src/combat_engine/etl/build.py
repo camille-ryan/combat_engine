@@ -273,7 +273,7 @@ CREATE INDEX item_step_level ON item_step(level);
 -- One Property or one Power off an item's page. **This is the unit of
 -- work**, not the item: 1,877 heroic items carry 2,294 of these between
 -- them and 106 items have more than one Power. Without a ref each,
--- `coverage.py` cannot see a half-written item.
+-- `written.py` cannot see a half-written item.
 CREATE TABLE item_block (
   ref TEXT PRIMARY KEY, item_ref TEXT, idx INTEGER, kind TEXT,
   usage TEXT, action TEXT, keywords TEXT, spec TEXT
@@ -414,7 +414,7 @@ CREATE INDEX race_skill_race ON race_skill(race);
 -- trait's label is an ordinary printed name with an ordinary localisation
 -- entry. The key it was for -- re-pointing content's 94 invented refs -- is
 -- work that finished, and **nothing read the column afterwards**: not
--- `coverage.py`, not `spec.py` (whose `rt:` branch omits it deliberately), not
+-- `written.py`, not `spec.py` (whose `rt:` branch omits it deliberately), not
 -- the ETL. A name kept for a job that is over, one `SELECT *` away from an
 -- author, which is exactly how 15 reward titles reached one from `item.slot`.
 -- Dropped with its index. #433.
@@ -1787,19 +1787,36 @@ def _features(source: sqlite3.Connection, out: sqlite3.Connection,
         # tree moves. The level dialect has several sections and the primary
         # one has exactly one, so there it still counts 0, 1, 2 as before.
         ord_ = 0
+        #: Genuine features `_POWER_LIST` refused, filed after every section
+        #: so their ordinals land above the maximum this class already uses
+        #: and no `cf:` ref already in the tree moves. #812.
+        deferred: list = []
         for section in sections:
             got, ord_ = _section_rows(out, names, section, stem, bare, build,
-                                      ord_, per_level)
+                                      ord_, per_level, deferred)
             written += got
+        for body, marks, head, title in deferred:
+            ref = f"{stem}-f{ord_}"
+            written += _feature_row(out, names, ref, bare, ord_, build,
+                                    head, title)
+            written += _sub_features(out, names, ref, bare, ord_, build,
+                                     body, marks, cards=not per_level)
+            ord_ += 1
     return written
 
 
 def _section_rows(
     out: sqlite3.Connection, names: dict[str, dict[str, str]],
     section: str, stem: str, bare: str, build: str,
-    ord_: int, per_level: bool,
+    ord_: int, per_level: bool, deferred: list | None = None,
 ) -> tuple[int, int]:
-    """Every feature in one section, and the ordinal to carry on from."""
+    """Every feature in one section, and the ordinal to carry on from.
+
+    `deferred` collects the sections `_POWER_LIST` matches that are genuine
+    features after all -- see the guard below. They are filed by the caller
+    once every section has had its ordinals, so recovering them moves
+    nothing. #812.
+    """
     written = 0
     heads = list(_FEATURE_HEAD.finditer(section))
     for i, m in enumerate(heads):
@@ -1833,7 +1850,38 @@ def _section_rows(
         # leak.
         marks = _sub_marks(body, after_card=True)
         head = body[: marks[0][0]] if marks else body
+        # **A section with sub-options is never a power-list heading**, and
+        # leaving that out of the guard cost 94 sections and the 25
+        # sub-option rows under 7 of them. `_POWER_LIST` matches the
+        # *introducing sentence*, so it also ate a genuine feature whose
+        # sentence happens to be phrased "choose ... of the following" --
+        # and the options went with it.
+        #
+        # The tell was that one build's options survived and its near-twin's
+        # did not: half of `f3583`'s candidate list was present and half
+        # absent, the only difference being how the one sentence was worded.
+        # A heading that introduces a printed power list has no sub-marks
+        # and a feature with options always has them, so this makes the
+        # guard's intent testable instead of incidental. #812.
         if per_level and _POWER_LIST.search(" ".join(_plain(head).split())):
+            # **Sub-marks mean a genuine feature, and it is deferred rather
+            # than filed here.** Filing it in place is the one-line fix this
+            # guard's note describes, and it re-points 18 live citations:
+            # `ord_` is a single running counter across every section, so a
+            # row recovered in the middle pushes each later feature's
+            # ordinal up by one and a content row citing one of them names a
+            # different feature or none. Measured by rebuilding twice --
+            # cited `cf:` refs absent from `class_feature` went 5 -> 23 --
+            # and reverted in `d672208`.
+            #
+            # So the caller emits these after every section, at ordinals
+            # above the maximum this class already uses. Route (2) of the
+            # three on #812, which is the only one that moves nothing: the
+            # ref order stops matching the printed order for these 94, and
+            # that is the price. Making the refs non-positional is #559 and
+            # is the better answer when somebody takes it on.
+            if marks and deferred is not None:
+                deferred.append((body, marks, head, _titled(m.group(1))))
             continue
         ref = f"{stem}-f{ord_}"
         written += _feature_row(out, names, ref, bare, ord_, build,
@@ -2647,10 +2695,38 @@ def _companions(source: sqlite3.Connection, out: sqlite3.Connection,
         # ...and closes with the publication line.
         # The page opens `<name> <type> <name>`, so the type word sits
         # between the two copies and stops a plain repeat-strip.
+        # **The inflected forms first, longest first**, because cutting the
+        # bare name leaves its inflection behind: the page prints
+        # "<Name>s are tough, resilient..." and stripping `<Name>` alone
+        # left the spec opening on a bare `s`. 7 of 105 did, and
+        # `companion.spec` is one of only two spec columns parsed for
+        # numbers, so the opening is wrong in a column where the next regex
+        # added could anchor on it.
+        #
+        # `sanitise.plural` already derives these and `names.json` records
+        # them -- they were simply not consulted when cutting a row's own
+        # name off its own page. Longest first so "<Name>s" wins over
+        # "<Name>", which is the whole point. #637.
         for _ in range(3):
             for lead in (name, (kind or "").strip()):
                 if lead and spec.startswith(lead):
                     spec = spec[len(lead):].lstrip()
+        # **A leftover inflection at the head means the subject was cut.**
+        # The strip above removes the page's duplicated title -- it opens
+        # `<name> <type> <name>` -- and the third copy is the subject of the
+        # first sentence: "<Name>s are tough, resilient...". Removing the
+        # bare name from that leaves the spec opening on a lone `s`, which
+        # 7 of 105 did, and `companion.spec` is one of only two spec columns
+        # parsed for numbers -- so the opening is wrong in a column where
+        # the next regex added could anchor on it.
+        #
+        # Repaired at the head rather than by restructuring the strip:
+        # the inflection is the whole evidence that a subject was taken, so
+        # it is replaced by the ref the subject would have become anyway,
+        # which is what every other name in this spec becomes. #637.
+        subject = re.match(r"(?:\u2019s|'s|s)\s+(?=\S)", spec)
+        if subject:
+            spec = f"comp:{cid} {spec[subject.end():]}"
         spec = re.split(r"\s*Published in\b", spec)[0].strip()
         if len(spec) < 20:
             continue
@@ -3072,6 +3148,28 @@ def _links_resolve(source: sqlite3.Connection, out: sqlite3.Connection) -> tuple
     return found, total
 
 
+#: Every table carrying a `spec` column, which is every table whose text an
+#: author or the page is shown. **Both scrub passes read this one tuple**,
+#: because they used to carry a list each and both went stale: when `#492`
+#: built the reconciliation, `_cross_reference_rest` was 13 of 14 and
+#: `_swap_sub_options` was 8 of 14 -- missing `associate`, `build_option`,
+#: `disease`, `race`, `racial_trait` and `terrain` -- in a loop whose own
+#: comment says *"every table that carries a spec"* and records having been
+#: widened once already because a narrow scope "left the narrower scope to go
+#: stale against a later build". It did it again.
+#:
+#: Still hand-written, deliberately, and `leaks.tables()` is what keeps it
+#: honest. Deriving it from the schema would start scrubbing any column
+#: somebody happens to name `spec`, which is a gate changing scope with
+#: nobody deciding to -- how `item.slot`'s 15 reward titles were missed.
+#: The gate names a difference instead; it cannot invent one.
+SPEC_TABLES = (
+    "power", "monster_power", "class_feature", "companion", "item",
+    "item_block", "feat", "race", "racial_trait", "trap", "disease",
+    "associate", "terrain", "build_option",
+)
+
+
 def _cross_reference(
     out: sqlite3.Connection,
     names: dict[str, dict[str, str]],
@@ -3249,8 +3347,7 @@ def _swap_sub_options(
     # `scrub` anchors on `\b`, so "the dragon breathes" is untouched. Checked
     # after the fact -- zero corrupted substitutions across every table.
     swapped = 0
-    for table in ("power", "feat", "item", "item_block", "class_feature",
-                  "companion", "monster_power", "trap"):
+    for table in SPEC_TABLES:
         rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
         for ref, spec in rows:
             if not spec:
@@ -3627,9 +3724,7 @@ def _cross_reference_rest(
     # **`disease` is in this list deliberately.** A new table that misses it
     # keeps every printed name its pages mention, and the pages mention
     # creatures constantly -- "9 + two-thirds <creature>'s level". #389.
-    for table in ("power", "monster_power", "class_feature",
-                  "companion", "item", "item_block", "feat", "race",
-                  "trap", "racial_trait", "disease", "associate", "terrain"):
+    for table in SPEC_TABLES:
         rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
         for ref, spec in rows:
             if not spec:
@@ -3659,6 +3754,31 @@ def _cross_reference_rest(
             # saying which, and without offering an author something to
             # point a row at.
             monsters_ok = table in ("monster_power",)
+            # **An item whose text is about one named creature keeps the
+            # ref**, which is #610. The opaque token is right for the 103
+            # collisions below and wrong here: `i3475x1` prints "when a
+            # <creature> hits you with an attack, it becomes dazed", and an
+            # author handed `x_m6273` has been promised a token that cannot
+            # be resolved, so the clause stays dropped on a row that is one
+            # `Ident.ref` test from finished.
+            #
+            # **A bare creature ref only, never an ability**, and that is
+            # the discriminator rather than #610's "names exactly one
+            # monster" -- all eight `item_block` specs holding a token name
+            # exactly one, so the count decides nothing. Reading them
+            # splits 6/2 on this test and the split is exactly right:
+            #
+            # * the six creature refs are all genuine -- "conjure a
+            #   <creature>", "a <creature>'s <power> cannot stop this
+            #   weapon", "no larger than a Medium <creature>";
+            # * the two ability refs are the 103's own shape. `i1246x1`
+            #   reads "choose a specific kind of humanoid creature, such as
+            #   human, giant, or <X>" where X is somebody's *ability*, and
+            #   `i2728p1` uses an ability name as a state word. Both must
+            #   stay opaque.
+            #
+            # `monster_power` is untouched, so none of the 103 is re-opened.
+            creature_ok = table == "item_block"
             # **The creature this row belongs to**, for the guard below.
             # `m1107a0` belongs to `m1107`; a character's row has none.
             mine = re.match(r"^(m\d+)a\d+$", ref)
@@ -3713,7 +3833,11 @@ def _cross_reference_rest(
                         foreign and own_creature
                         and foreign.group(1) != own_creature
                     )
-                    if stranger or (other[:1] == "m" and not monsters_ok):
+                    a_creature = bool(re.fullmatch(r"m\d+", other))
+                    if stranger or (
+                        other[:1] == "m" and not monsters_ok
+                        and not (creature_ok and a_creature)
+                    ):
                         other = f"x_{other}"
                         names.setdefault(other, {"name": name})
                     others[name] = other

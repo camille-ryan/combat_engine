@@ -67,7 +67,7 @@ from combat_engine.engine import (
     World,
     power,
 )
-from combat_engine.engine.components import Stats
+from combat_engine.engine.components import Initiative, Stats
 from combat_engine.engine.events import Bloodied, Hit, MoveStart
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.triggers import Trigger, about_me, targets_me
@@ -599,14 +599,36 @@ def m790a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.initiative(fixed=)",),
 )
 def m790a5(c: Cast) -> None:
     """Acting a second and third time at fixed counts is `c.extra_turn(at=)`,
-    which takes an absolute count and fits exactly. Pinning its *own* roll
-    to exactly 25 instead of whatever initiative gave it has no counterpart:
-    `c.initiative` only ever adds a bonus. "Cannot delay or ready" gates
-    nothing the engine offers either way -- there is no delay or ready
-    action here to take."""
+    which takes an absolute count and fits exactly.
+
+    **The first count is written as a delta, which is exact rather than an
+    approximation.** `c.initiative` adds a bonus, true of the signature --
+    but `Encounter.adjust_initiative` (turns.py:259) does
+    `init.rolled += amount` and then lifts the creature out of the order and
+    splices it back in, and `Initiative.rolled` **is** the initiative count:
+    `_roll_initiative` sets it to `d20 + bonus + level_term` and sorts on
+    it. So `25 - rolled` sets the count to 25.
+
+    **The moment is right because of the order in `Encounter.start`**
+    (turns.py:111-135): `self.order = self._roll_initiative()` runs
+    *before* `self._arm_traits()`, so when this trait arms the roll has
+    already happened and the order already exists. `self.started` is still
+    False at that point, which is what lets `adjust_initiative` re-splice
+    rather than protect a turn in progress.
+
+    **`on=me` is required, not tidiness.** `c.initiative` follows
+    `c.target` and this row is `NO_TARGET`, so a bare call resolves to
+    nobody and returns 0 -- the certainty `content/CLAUDE.md` names.
+
+    "Cannot delay or ready" gates nothing the engine offers either way --
+    there is no delay or ready action here to take -- and "on each turn it
+    gains one standard action" is what a turn already is."""
+    me = c.me
+    standing = c.world.get(me, Initiative)
+    if standing is not None:
+        c.initiative(25 - standing.rolled, on=me)
     c.extra_turn(at=15)
     c.extra_turn(at=5)

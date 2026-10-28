@@ -2440,10 +2440,14 @@ _M5565_MISSED = "an enemy misses the m5565 with a melee attack"
 def m5565a0(c: Cast) -> None:
     """An odd die goes through the image; an even one finds the creature.
 
-    The `Hit` is answered in its interrupt window and the *result* is cleared
-    rather than the event cancelled: `resolve.attack` reads `result.hit` back
-    in the resolve callback and emits a `Miss` in the `Hit`'s place when the
-    two disagree, so every rider hung on the hit goes with it.
+    `c.hit_becomes(False)` in the `Hit`'s interrupt window, which is the
+    door for this: it clears the *result* rather than cancelling the event,
+    because `resolve.attack` reads `result.hit` back in the resolve callback
+    and emits a `Miss` in the `Hit`'s place when the two disagree, so every
+    rider hung on the hit goes with it. Cancelling the event by hand stops
+    the announcement and leaves the attack still saying it landed.
+
+    The write was hand-rolled here and announced nothing. #862.
 
     "A melee or a ranged attack" is those two range kinds and no others --
     `by_melee` counts a close burst as melee, which would let this trait turn
@@ -2458,7 +2462,7 @@ def m5565a0(c: Cast) -> None:
         if result is None or _holding_label(c, _M5565_LAPSED):
             return
         if result.natural % 2:
-            result.hit = False
+            c.hit_becomes(False, ev=ev)
         else:
             c.effect(_M5565_LAPSED, until=When.SONT, on=me)
 

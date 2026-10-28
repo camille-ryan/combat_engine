@@ -29,13 +29,17 @@ from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
+    AC,
     ENCOUNTER,
+    FORT,
     FREE,
     MINOR,
     NO_TARGET,
     ONE_ALLY,
     PERSONAL,
+    REF,
     SELF,
+    WILL,
     ActionType,
     Cast,
     CloseBurst,
@@ -46,12 +50,15 @@ from combat_engine.engine import (
     Trigger,
     TurnEnd,
     When,
+    by_opportunity,
     get,
     power,
 )
 from combat_engine.engine.events import (
+    AttackRolled,
     DamageRolled,
     Healed,
+    OpportunityWindow,
 )
 from combat_engine.engine.query import bloodied, enemies, team
 
@@ -305,12 +312,29 @@ def f671(c: Cast) -> None:
 
 
 @power("f738", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.familiar(defences=)",))
+       reach=PERSONAL, target=SELF)
 def f738(c: Cast) -> None:
-    """The gate of the chain: you have a familiar. The rider -- a defence
-    bonus per further familiar feat -- counts feats a character has, and
-    `c.feat` answers one at a time rather than a family."""
-    c.familiar()
+    """The gate of the chain: you have a familiar.
+
+    **The rider is written, and the marker named a parameter for something
+    that is a reader.** The old note was right that `c.feat` answers one
+    feat at a time; `c.feats(category=)` answers the family, matched as a
+    case-folded substring of `feat.category`, and this chain carries that
+    category in the column -- f738 to f741 all do. "Beyond this one" is the
+    count less itself, floored at nothing, so a character holding only the
+    gate gets no bonus at all.
+
+    Laid on the familiar at arming, which is the shape `f1337` has for its
+    speed bonus: a familiar called onto the board later in the fight gets
+    nothing. That is a property of the whole chain and not a narrowing of
+    this card.
+
+    Untyped, because the card prints no word before "bonus"."""
+    extra = max(len(c.feats(category="Familiar")) - 1, 0)
+    pet = c.familiar()
+    if extra and pet is not None:
+        for defence in (AC, FORT, REF, WILL):
+            c.bonus(defence, extra, on=pet, until=When.ENCOUNTER)
 
 
 @power("f739", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -469,12 +493,60 @@ def f768(c: Cast) -> None:
     c.watch(DamageRolled, paid, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
+def _provoked_by_run(c: Cast, me: int) -> bool:
+    """Was the opportunity attack being rolled right now provoked by `me`
+    running?
+
+    `movement.step` stamps the kind of move on the `OpportunityWindow` it
+    opens, and the swing is taken **inside** that window's dispatch --
+    `policy.install` performs the reaction from an `AFTER` listener, which
+    `Bus.emit` runs before it returns. So the most recent window in the log
+    is the one this roll belongs to, and `step` emits its windows one at a
+    time rather than all at once.
+
+    Read off the window rather than off a `MoveStart`/`MoveEnd` pair, which
+    was the other candidate: `walk` returns without emitting `MoveEnd` when
+    an interrupt cancels the `MoveStart`, so a flag set there stays set and
+    the reroll leaks onto a later swing that no run provoked.
+    """
+    for ev in reversed(c.world.bus.log):
+        if isinstance(ev, OpportunityWindow):
+            return ev.provoker == me and ev.kind_ == "run"
+    return False
+
+
 @power("f800", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.disadvantage(on=)",))
+       reach=PERSONAL, target=SELF)
 def f800(c: Cast) -> None:
     """Opportunity attacks made against you during a run roll twice and
-    take the lower. `c.reroll_attack(keep="worst")` is the same idea for
-    the roll you just made; nothing imposes it on somebody else's."""
+    take the lower.
+
+    **Re-pointed: `c.reroll_attack` does reach somebody else's roll.** The
+    old note said nothing imposed it on another creature's; `ev=` names the
+    roll when it is not the trigger, and that is the whole of what a watcher
+    needs -- `p1351` and `p12960` both reroll an enemy's attack this way.
+    "Roll twice and take the lower" and one reroll keeping the worse face
+    are the same two dice.
+
+    A trait with a `c.watch` rather than a declared trigger, because the row
+    has to be listening before the run starts -- and because a declared
+    trigger on `AttackRolled` could not tell a swing inside the run from one
+    outside it. `_provoked_by_run` is the half that can.
+
+    The reroll is applied in the `AttackRolled` window, which is early
+    enough: `resolve.attack` re-reads the defence and recomputes `hit` from
+    the live `AttackResult` after announcing the roll, so a face changed
+    here is judged with the rest rather than after it."""
+    me = c.me
+
+    def twice(ev: AttackRolled) -> None:
+        if ev.target != me or not by_opportunity(c.world, me, ev):
+            return
+        if not _provoked_by_run(c, me):
+            return
+        c.reroll_attack(keep="worst", ev=ev)
+
+    c.watch(AttackRolled, twice, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f651", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

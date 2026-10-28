@@ -24,7 +24,9 @@ import json
 import re
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -77,6 +79,34 @@ CHECKS = (
     # six verbs that exist marked missing by four agents in one afternoon.
     Instrument("symbols", ("uv", "run", "scripts/symbols.py"),
                "docs/symbols/ is current, and no gate reads an unknown key"),
+    # **Five claims the root `CLAUDE.md` makes in prose, and nothing checked
+    # them.** `grimp` builds the import graph, `import-linter` asserts
+    # contracts over it, and `.importlinter` holds the five: the ETL does not
+    # reach content, the kernel imports neither the ETL nor the wire, no
+    # package module imports the wire, `db.py` imports nothing from the
+    # package, and `engine -> content` stays at its known sites.
+    #
+    # Writing the file found **two of the five claims wrong**, which is the
+    # argument for having it:
+    #
+    # * `engine -> content` was documented as "five sites" at five line
+    #   numbers, all stale. It is four, at `query.py:675` and
+    #   `cast.py:7965,8132,8154`.
+    # * "nothing imports `api/` in Python at all" is false --
+    #   `drivers.py:14196,14245` imports `api.day` to play the day mode,
+    #   legitimately. The claim holds of the *package*, so that is what the
+    #   contract says.
+    #
+    # Scoped to **direct** imports (`allow_indirect_imports`), because that
+    # is what the prose claims -- a call site in a file. The transitive
+    # picture is a separate and more alarming finding, recorded in #852.
+    #
+    # Seconds, and proven load-bearing by planting a sixth
+    # `from combat_engine.content import loader` in `engine/grid.py`: the
+    # contract went BROKEN naming the file and line.
+    Instrument("seams", ("uv", "run", "--group", "dev", "lint-imports",
+                         "--config", ".importlinter"),
+               "the five component seams CLAUDE.md claims in prose"),
     Instrument("audit", ("uv", "run", "scripts/audit.py", "--changed"),
                "every declared row fires, and does something"),
     # **The instrument that says whether the one above means anything**, and it
@@ -141,6 +171,16 @@ CHECKS = (
     # import of `content/` and two queries. #486.
     Instrument("keywords", ("uv", "run", "scripts/keywords.py", "--quiet"),
                "every header declares the keywords its card printed"),
+    # **The fourth of the same question**, and the one the first three cannot
+    # reach: `bonuses` a bonus type, `cards` a stat block's numbers,
+    # `keywords` a keyword list -- and nothing asked whether a power's target
+    # *pool* can hold the thing its Target line names. It could not for
+    # eleven rows, which `audit.py` reports as working because the effect
+    # does land, on the wrong kind of thing. Six fixed on the first run and
+    # three of the eleven appear nowhere in the issue that found them.
+    # Seconds: one import of `content/` and two queries. #855.
+    Instrument("targets", ("uv", "run", "scripts/targets.py", "--quiet"),
+               "a target pool can hold the thing its printed line names"),
     # **Added because its new half caught a real fork on its first run**, and
     # because nothing else asks this question: a leg's fork decides which rows a
     # character is offered and which race scores best in a draw, and until
@@ -382,6 +422,118 @@ def _moved_lines(was: str, now: str) -> set[int]:
     return out
 
 
+def _corpus_of_map() -> int:
+    """How many rows the map was recorded over, for the narrowing message."""
+    try:
+        return int(json.loads((ROOT / "logs" / "impact.json").read_text())
+                   .get("corpus", 0))
+    except (OSError, ValueError, TypeError):
+        return 0
+
+
+def _rows_from_map() -> tuple[list[str], list[str]]:
+    """The rows the impact map says this change needs, and what to print.
+
+    **Automatic, not behind a flag**, which is the one design decision here
+    worth arguing. `_verbs_from_diff` makes the case against a flag about
+    itself -- "a flag you have to remember is a flag that gets forgotten, and
+    the one time it is forgotten is the time the wide run mattered" -- and the
+    same reasoning points the other way for a *narrowing* that fails open: a
+    flag nobody remembers means the saving never happens, while a forgotten
+    narrowing costs nothing because every doubt returns the wide run anyway.
+
+    So the asymmetry is the point. `--calls` narrows on a claim this file
+    cannot check (that content calls the changed function by name), so it is
+    opt-in and refuses loudly. The map narrows on a *recorded observation* of
+    which rows executed the changed function, and it is the recording's own
+    context control that makes the observation trustworthy -- so it can be the
+    default, and anything it is unsure about is simply not narrowed.
+
+    Returns `(refs, notes)`. An empty `refs` means no narrowing and the
+    caller's present behaviour stands, with `notes` saying why -- never
+    silently. A short map or a moved corpus is caught in `impact._load`.
+    """
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import impact
+    except Exception as exc:
+        return [], [f"impact map unavailable ({type(exc).__name__}), so the"
+                    f" audit's scope is unchanged"]
+
+    # **Asked in this order so a content-only run says nothing at all.**
+    # `impact._load` reports a stale or missing map by printing, which is
+    # right when the map was about to be used and is nagging on the hundreds
+    # of runs that were never going to use it. So the cheap question -- did
+    # anything narrowable change -- comes first.
+    changed = impact._changed_lines()
+    if not changed or not any(f.startswith(impact.NARROWABLE) for f in changed):
+        return [], []
+
+    # **An untracked file is invisible to `git diff`**, which is what the map
+    # reads, so a brand-new engine module would be narrowed around rather than
+    # audited. `_verbs_from_diff` uses `git status -uall` for its own reasons
+    # and this needs the same breadth.
+    done = subprocess.run(["git", "status", "--porcelain", "-uall"],
+                          cwd=ROOT, capture_output=True, text=True)
+    if done.returncode != 0:
+        return [], ["git status failed, so the audit's scope is unchanged"]
+    paths = [ln[3:].strip() for ln in done.stdout.splitlines() if ln[3:].strip()]
+    untracked = [ln[3:].strip() for ln in done.stdout.splitlines()
+                 if ln.startswith("??") and ln[3:].strip().endswith(".py")
+                 and ln[3:].strip().startswith("src/combat_engine/")]
+    if untracked:
+        return [], [f"untracked Python under src/ ({', '.join(untracked)}),"
+                    f" which no map has seen -- the audit's scope is unchanged"]
+
+    # **The other three things `audit.WIDE` names, which this must not
+    # narrow around.** `WIDE` is `engine/`, `etl/`, `chargen/` and
+    # `scripts/audit.py`; the map speaks for the first and for none of the
+    # rest. A change under `etl/` moves numbers every row reads, `chargen/`
+    # builds every sheet, and a change to the audit itself changes what every
+    # verdict means -- so any of them present is a refusal, not a union.
+    import audit as audit_mod
+
+    loud = [f for f in paths
+            if f.startswith(audit_mod.WIDE) and not f.startswith(impact.NARROWABLE)]
+    if loud:
+        return [], [f"{', '.join(sorted(loud))} changed, which audit.WIDE says"
+                    f" widens on its own -- the audit's scope is unchanged"]
+    if audit_mod._database_moved():
+        return [], ["data/game.db has moved since the last sweep, so every"
+                    " number a row reads may have -- the audit's scope is"
+                    " unchanged"]
+
+    got = impact._load()
+    if got is None:
+        return [], ["the impact map had nothing to say (see the line above),"
+                    " so the audit's scope is unchanged"]
+    if got.get("sampled"):
+        return [], [f"the impact map is a {got['corpus']}-row sample, so most"
+                    f" rows were never observed -- the audit's scope is"
+                    f" unchanged"]
+    refs, notes = impact.selection(got, changed)
+    if refs is None:
+        return [], [*notes, "the impact map says WIDE, so the audit's scope is"
+                            " unchanged"]
+    if not refs:
+        return [], []
+
+    # **The content half is unioned in, not dropped.** `selection` prints
+    # "deferring to audit.py --changed" for a file it does not speak for --
+    # and replacing `--changed` with the map's refs is precisely what stops
+    # that deferral happening. Caught by a probe that edited one `cast.py`
+    # method with three `scripts/` files also modified: it narrowed to the
+    # 71 engine rows and silently dropped the other half of the scope.
+    # `widen=False` is `--calls`' own door for this -- "the content half
+    # only" -- so the two selectors compose instead of overriding.
+    content = audit_mod._changed(widen=False)
+    both = sorted(set(refs) | set(content))
+    if content:
+        notes.append(f"# plus {len(content)} row(s) in changed content files,"
+                     f" which audit.py --changed would have selected")
+    return both, notes
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -414,8 +566,16 @@ def main() -> int:
         # `--changed` is the default because auditing everything is twenty
         # seconds today and minutes once the content is written, and most
         # runs have touched a handful of rows. Before a commit, run the lot.
+        # **`--all` has to reach `types` by adding a flag, not by removing
+        # one.** Every other instrument widens when `--changed` comes off;
+        # `types.py` takes no such flag and defaults to the files git says
+        # moved, so a wide run reported `no changed Python files` on a clean
+        # tree -- the one invocation meant to settle whole-tree debt,
+        # checking nothing. #870.
         wanted = [
-            Instrument(c.name, tuple(a for a in c.argv if a != "--changed"),
+            Instrument(c.name,
+                       tuple(a for a in c.argv if a != "--changed")
+                       + (("--all",) if c.name == "types" else ()),
                        c.catches, c.heavy)
             for c in wanted
         ]
@@ -444,6 +604,48 @@ def main() -> int:
                 c.catches, c.heavy)
             for c in wanted
         ]
+
+    mapped: list[str] = []
+    wide_why = ""
+    if args.all:
+        wide_why = "--all was asked for"
+    no_opinion = False
+    if not args.all and args.calls is None:
+        mapped, why = _rows_from_map()
+        # **Empty notes is the "no opinion" case and not a refusal**, which
+        # the gate below has to tell apart: `_rows_from_map` returns `[], []`
+        # when nothing narrowable changed or `selection` had nothing to say,
+        # and `[], [reasons]` when it refused. Those are opposite merge
+        # answers -- content-only is covered by `audit --changed`, a refusal
+        # means nothing looked at the rows -- and collapsing them is a bug I
+        # shipped in the first draft of `_merge_verdict`.
+        #
+        # Read off the notes rather than a third return value, and the
+        # failure mode is the safe one: a future author who adds a note to
+        # the no-opinion path makes the gate ask for a sweep that was not
+        # needed, never the reverse.
+        no_opinion = not mapped and not why
+        if not mapped:
+            # The first line that says WIDE is the operative one; the rest
+            # are the per-function accounting above it.
+            wide_why = next(
+                (line.strip("# ").strip() for line in why if "WIDE" in line),
+                (why[-1].strip("# ").strip() if why else "no reason given"),
+            )[:120]
+        for line in why:
+            print(line)
+        if mapped:
+            print(f"the impact map narrows the audit to {len(mapped)} row(s)"
+                  f" of {_corpus_of_map()} -- the rows observed to execute the"
+                  f" functions this change touches")
+            wanted = [
+                Instrument(
+                    c.name,
+                    tuple(a for a in c.argv if a != "--changed") + tuple(mapped)
+                    if c.name == "audit" else c.argv,
+                    c.catches, c.heavy)
+                for c in wanted
+            ]
 
     if args.only:
         keep = {n.strip() for n in args.only.split(",")}
@@ -475,6 +677,14 @@ def main() -> int:
         return 0
 
     failed: list[str] = []
+    #: Instruments that exited `audit.NOTHING_IN_SCOPE` -- they ran and
+    #: checked nothing. Counted apart from `failed` because a skip is not
+    #: a failure of the change in hand, and apart from the clean count
+    #: because it is not evidence either. #466.
+    skipped: list[str] = []
+    #: Instruments reporting drift above a recorded baseline -- real, already
+    #: landed, and not this change's fault. #870.
+    drifted: list[str] = []
     width = max(len(c.name) for c in wanted)
     at = _commit()
     # **Captured before anything runs, not after.** A whole-tree sweep
@@ -484,16 +694,54 @@ def main() -> int:
     # the same reason; measured by watching a green `--all` refuse to clear
     # the marker it had just earned. See `_clear_red`.
     began_clean = _tree_clean()
+    # **Run them concurrently, report them in order.** The futures are
+    # resolved in `wanted` order below, so the output still reads top to
+    # bottom exactly as it did -- which it has to: these lines are read by
+    # eye and diffed between runs, and a list that reshuffles is the thing
+    # `audit._run_all` chose `pool.map` over `as_completed` to avoid.
+    #
+    # Threads rather than processes: each one only waits on a
+    # `subprocess.run`, so there is nothing for the GIL to hold up.
+    # Not a `with` block: its exit waits for every future, which would hold
+    # all the output back to the end of the run instead of printing each
+    # verdict as it lands.
+    pool = ThreadPoolExecutor(max_workers=_LANES)
+    flight = {c.name: pool.submit(_run_one, c) for c in _submit_order(wanted)}
     for c in wanted:
-        started = time.monotonic()
-        done = subprocess.run(c.argv, cwd=ROOT, capture_output=True, text=True)
-        took = time.monotonic() - started
+        took, done = flight[c.name].result()
         tail = _summary(done.stdout) or _summary(done.stderr)
-        mark = "ok  " if done.returncode == 0 else "FAIL"
+        # **Three outcomes, not two.** An instrument that checked nothing
+        # exits `3` (`audit.NOTHING_IN_SCOPE`) and is marked SKIP, because
+        # reading it as `ok` is how a clean tree produced `ok audit 1.2s`
+        # under "N instruments clean" with no row fired. The skip is counted
+        # separately below, so the headline cannot absorb it. #466.
+        skipped_run = done.returncode == NOTHING_IN_SCOPE
+        if skipped_run:
+            skipped.append(c.name)
+        # **Drift is a fourth outcome**: something is above its baseline, it
+        # happened in an earlier commit, and it is neither clean nor a fault
+        # in the change in hand. Same arrangement as the sweep debt -- said
+        # out loud, withholds "all clean", does not fail the run. #870.
+        drifted_run = done.returncode == TYPE_DRIFT
+        if drifted_run:
+            drifted.append(c.name)
+        mark = ("SKIP" if skipped_run else "DRIFT" if drifted_run
+                else "ok  " if done.returncode == 0 else "FAIL")
         print(f"  {mark}  {c.name:{width}}  {took:5.1f}s  {tail}")
         _record(c.name, took, done.returncode == 0, at,
-                _scope(done.stdout))
-        if done.returncode != 0:
+                _scope(done.stdout),
+                by=("impact" if mapped and c.name == "audit"
+                    else "calls" if narrowed and c.name == "audit"
+                    else ""),
+                wide_because=(wide_why if c.name == "audit" and not mapped
+                              and not narrowed else ""))
+        # **A skip is not a failure either**, and the first version of this
+        # made it one: exit 3 is non-zero, so `audit` landed in `failed` and
+        # a clean-tree run -- the normal state after a commit -- went red
+        # every time. That is the "check that cannot pass" failure
+        # `scripts/CLAUDE.md` records, arriving from the other side of the
+        # same fix. Three categories means three, not two with a label.
+        if done.returncode != 0 and not skipped_run and not drifted_run:
             failed.append(c.name)
             if not args.verbose:
                 # The failing lines only, which is what is worth reading.
@@ -555,10 +803,24 @@ def main() -> int:
         if args.verbose:
             print("\n".join(f"          {x}" for x in done.stdout.splitlines()[-25:]))
 
+    pool.shutdown(wait=True)
+
     print()
     for line in _nightly_state():
         print(line)
+    for line in _map_state():
+        print(line)
     owed = _sweep_owed()
+    if mapped and not failed:
+        # **The same arrangement the `--calls` narrowing uses, and for a
+        # stronger reason.** The map's selection is proven sufficient for the
+        # function it names -- break one and every selected row goes red --
+        # but it is blind to a row that does not reach that function today and
+        # would after the change. So every instrument still ran and the
+        # verdict stands; what narrows is the claim.
+        print(f"the audit was narrowed by the impact map to {len(mapped)}"
+              f" row(s) -- evidence those rows work, not that nothing else"
+              f" broke; the wide sweep is still the backstop")
     if narrowed and not failed:
         # **Said even when every instrument is green, and before the verdict
         # line.** A narrowed audit is evidence the named verbs work and is
@@ -568,18 +830,53 @@ def main() -> int:
         # already uses: every instrument still ran, only the claim narrows.
         print(f"the audit was narrowed to {', '.join(narrowed)} -- evidence "
               f"those verbs work, not that nothing else broke")
+    if not _skip_code_matches():
+        print(f"WARNING: audit.py's NOTHING_IN_SCOPE no longer matches the"
+              f" {NOTHING_IN_SCOPE} this file mirrors, so a skip is being"
+              f" read as a pass again -- see #466")
+    if drifted:
+        print(f"{', '.join(drifted)}: a file is above its recorded baseline"
+              f" -- drift that already landed, not this change's fault, and"
+              f" invisible until a wide run asked")
+    if skipped:
+        # **Said before the headline, like the narrowing lines above.** The
+        # instrument that skipped is the one whose silence matters most --
+        # `audit` is the only one that fires rows -- so "checked nothing" has
+        # to be read before any count of clean ones.
+        print(f"{', '.join(skipped)} checked NOTHING -- a skip, not a pass"
+              f" (clean tree? `audit.py --since` covers everything touched"
+              f" since the last full sweep)")
     if failed:
         print(f"{len(failed)} unhappy: {', '.join(failed)}")
-    elif owed or narrowed:
+    elif skipped:
+        print(f"{len(wanted) - len(skipped)} of {len(wanted)} instruments"
+              f" clean, {len(skipped)} skipped"
+              + (f", {owed}" if owed else ""))
+    elif drifted:
+        print(f"{len(wanted) - len(drifted)} of {len(wanted)} instruments"
+              f" clean, {len(drifted)} reporting drift"
+              + (f", {owed}" if owed else ""))
+    elif owed or narrowed or mapped:
         # **The one sentence that means "nothing is outstanding" is withheld
         # while something is.** Every instrument still ran and still reported;
         # the verdict is not narrowed, only the claim.
         print(f"{len(wanted)} instruments clean"
               + (f", {owed}" if owed else "")
-              + (", and the audit was narrow" if narrowed else ""))
+              + (", and the audit was narrow" if narrowed or mapped else ""))
     else:
         print(f"all {len(wanted)} instruments clean")
+    for line in _top_up_map(bool(failed)):
+        print(line)
     for line in _clear_red(args.all, bool(failed), at, began_clean):
+        print(line)
+    # **`--all` is not the same as "a wide sweep ran"**, and conflating them
+    # made `--all --only types` report "a wide sweep just ran and is clean"
+    # having audited nothing. The claim needs the audit to have actually been
+    # among the instruments and to have come back green.
+    swept = (args.all and any(c.name == "audit" for c in wanted)
+             and "audit" not in failed and "audit" not in skipped)
+    for line in _merge_verdict(swept, bool(failed), mapped, wide_why,
+                               no_opinion, "audit" in skipped):
         print(line)
     return len(failed)
 
@@ -630,6 +927,15 @@ def _clear_red(whole_tree: bool, any_failed: bool, started_at: str,
         return []
     if any_failed or not whole_tree:
         return []
+    if IN_WORKTREE:
+        # **A fifth guard, and it arrived with the directory fix.** The
+        # marker now resolves to the *main* checkout (#848), so without this
+        # a green `--all` on a worktree branch would delete a red verdict
+        # about a commit that is not even on this branch. A sweep certifies
+        # the tree it read; this one did not read that one.
+        return ["         logs/NIGHTLY-FAILED left alone: this is a worktree,"
+                f" and the marker belongs to {MAIN.name}, which this run did"
+                " not sweep"]
     if not began_clean:
         return ["         logs/NIGHTLY-FAILED left alone: the tree was dirty"
                 " when this run started, so the sweep certifies no commit"]
@@ -651,15 +957,67 @@ def _clear_red(whole_tree: bool, any_failed: bool, started_at: str,
 WATERMARK = ROOT / "scripts" / "fixtures" / "audited.json"
 
 
+def _main_checkout() -> Path:
+    """The working tree the nightly actually runs in.
+
+    **`ROOT` is the wrong place to look from a worktree, and reading it
+    there reported a stale manual run as the schedule for days.** #848.
+
+    `nightly.sh` is installed with the *main* checkout as its
+    `WorkingDirectory`, so it writes its log and its marker into that
+    checkout's `logs/`. A worktree has its own `logs/`, git-ignored and
+    usually holding whatever a session last redirected there by hand -- so
+    `ROOT / "logs"` answers a different question than the one being asked,
+    and answers it confidently.
+
+    What that cost, measured on 2026-10-22: this worktree's `logs/` held a
+    manual sweep from `2026-10-21 09:33`, so every `check.py` here printed
+    `last run 2026-10-21 09:33 clean`. The real schedule had **SKIPPED at
+    03:07 on both the 21st and the 22nd** on a dirty tree, and
+    `NIGHTLY-FAILED` still read `FAILED at 81f5229` from the 20th. That is
+    exactly #543's trap -- a non-verdict leaving a real one standing --
+    re-entered through the directory rather than the marker, and the
+    function written to catch it could not see it.
+
+    `--git-common-dir` is the main `.git` from anywhere in the repository,
+    including from a worktree, so its parent is the main working tree. Falls
+    back to `ROOT` rather than raising: a missing git is a reason to report
+    less, not to fail the suite.
+    """
+    done = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=ROOT,
+                          capture_output=True, text=True)
+    if done.returncode != 0 or not done.stdout.strip():
+        return ROOT
+    common = Path(done.stdout.strip())
+    if not common.is_absolute():
+        common = (ROOT / common).resolve()
+    return common.parent
+
+
+#: The checkout the nightly writes into, which is this one unless we are in
+#: a worktree.
+MAIN = _main_checkout()
+#: True when `ROOT` is a worktree, so the nightly's verdict is about another
+#: tree and the schedule cannot reach this branch at all.
+#:
+#: **It no longer means "owes its own `--all`".** That was #848's judgement
+#: and it was withdrawn by its own measurement: `--all` is wide by
+#: definition, so a per-branch rule made 105 of 106 audit runs wide and the
+#: impact map unusable. A worktree merges *into* `master`, which the nightly
+#: does sweep, so `_merge_verdict` asks the narrower question -- has anything
+#: looked at the rows this change can affect -- and only the map's *refusal*
+#: still owes a wide sweep.
+IN_WORKTREE = MAIN.resolve() != ROOT.resolve()
+
 #: What the nightly leaves behind. `NIGHTLY-FAILED` is written on a red run
 #: and removed on a green one; `nightly-latest.log` is copied on every run
 #: **including a skip**, which is the asymmetry this reads.
-NIGHTLY_RED = ROOT / "logs" / "NIGHTLY-FAILED"
-NIGHTLY_LOG = ROOT / "logs" / "nightly-latest.log"
+NIGHTLY_RED = MAIN / "logs" / "NIGHTLY-FAILED"
+NIGHTLY_LOG = MAIN / "logs" / "nightly-latest.log"
 
 
 def _nightly_state() -> list[str]:
-    """What the 02:07 net last did, said where the decision to trust it is made.
+    """What the overnight net last did, said where the trust decision is made.
 
     **#543: a nightly that never ran is indistinguishable from one that
     passed.** The documented signal was `logs/NIGHTLY-FAILED` existing, and
@@ -697,10 +1055,20 @@ def _nightly_state() -> list[str]:
     has, so the file says when it ran; mtime is the fallback for a log
     from some older shape of the script.
     """
+    # Say which tree this came from when it is not ours. The old line was
+    # indistinguishable from a reading of our own `logs/`, which is how it
+    # went two days unnoticed -- so the fix is not only to read the right
+    # directory but to name it.
+    # And **not** "this worktree owes its own --all", which this said until
+    # #848's coverage half was withdrawn. Naming the tree is the load-bearing
+    # part; the merge rule is `_merge_verdict`'s to state, on the last line,
+    # where it can say which selector actually looked at the rows.
+    whose = f" (from {MAIN.name}, not this worktree)" if IN_WORKTREE else ""
     try:
         head = NIGHTLY_LOG.read_text()[:400]
     except OSError:
-        return ["nightly: no run on record -- `uv run bash scripts/nightly.sh`"]
+        return [f"nightly: no run on record{whose}"
+                " -- `uv run bash scripts/nightly.sh`"]
 
     stamped = re.search(r"(\d{4}-\d\d-\d\d) (\d\d:\d\d):\d\d", head)
     if stamped:
@@ -717,7 +1085,7 @@ def _nightly_state() -> list[str]:
         # is reported the same way and the marker is read with the same
         # suspicion. The difference is only when the obstacle arrived: a
         # dirty tree is seen before the run, commits landing are seen after.
-        out = [f"nightly: last attempt {when} MOVED{old} -- commits landed"
+        out = [f"nightly: last attempt {when} MOVED{old}{whose} -- commits landed"
                f" mid-sweep, so it certifies nothing"]
         if NIGHTLY_RED.exists():
             out.append(f"         logs/NIGHTLY-FAILED is from BEFORE that"
@@ -725,7 +1093,7 @@ def _nightly_state() -> list[str]:
         return [*out, *_stale_net()]
     if head.lstrip().startswith("SKIPPED"):
         why = "a check.py was running" if "already running" in head else "a dirty tree"
-        out = [f"nightly: last attempt {when} SKIPPED -- {why}{old}"]
+        out = [f"nightly: last attempt {when} SKIPPED -- {why}{old}{whose}"]
         if NIGHTLY_RED.exists():
             # The trap this function exists for: the marker is from an
             # earlier run and the protocol reads it as the current one.
@@ -734,8 +1102,8 @@ def _nightly_state() -> list[str]:
         return [*out, *_stale_net()]
     if NIGHTLY_RED.exists():
         why = NIGHTLY_RED.read_text().splitlines()[0]
-        return [f"nightly: last run {when} RED{old} -- {why}", *_stale_net()]
-    return [f"nightly: last run {when} clean{old}", *_stale_net()]
+        return [f"nightly: last run {when} RED{old}{whose} -- {why}", *_stale_net()]
+    return [f"nightly: last run {when} clean{old}{whose}", *_stale_net()]
 
 
 
@@ -760,8 +1128,25 @@ def _stale_net() -> list[str]:
     recent one whose first line is not `SKIPPED` is the last time every row
     was actually looked at. Silent when that is recent, so an ordinary
     morning gains no line.
+
+    **`MAIN`, not `ROOT`, and this read had #848's bug after #848 fixed
+    it.** The verdict line above resolves through `--git-common-dir`; this
+    one globbed the *worktree's* `logs/`, which holds whatever manual sweeps
+    were run here. Measured 2026-10-25: a `--all` footer read
+
+        nightly: last run 2026-10-25 01:55 clean
+                 the net last reached a verdict 2026-10-21 09:33, 3d ago
+
+    -- two lines about the same schedule, disagreeing, because the first read
+    the main checkout's three dated logs and the second read this worktree's
+    one. And it is the same stale `2026-10-21 09:33` manual log that the
+    docstring above is written about, reached a second way.
+
+    The direction matters for whether anybody acts on it: this read makes a
+    healthy net look three days unpaid, so the cost is a session going to
+    look for a schedule fault that is not there -- which is what happened.
     """
-    logs = sorted((ROOT / "logs").glob("nightly-20*.log"), reverse=True)
+    logs = sorted((MAIN / "logs").glob("nightly-20*.log"), reverse=True)
     for log in logs:
         try:
             head = log.read_text()[:200]
@@ -814,6 +1199,149 @@ def _skipped(log: Path) -> bool:
         return False
 
 
+def _map_state() -> list[str]:
+    """What the impact map holds, in words, on every run.
+
+    Same discipline as the nightly line beside it and for the same reason:
+    this one narrows what the audit looked at, so "how old is it, and is it
+    even being used" must not be a question anybody has to think to ask. A
+    selector nobody can see the state of is a selector that gets trusted
+    after it has stopped working.
+    """
+    path = ROOT / "logs" / "impact.json"
+    if not path.exists():
+        return ["impact map: none recorded -- every engine change audits all"
+                " rows (`impact.py --record`, 87 minutes)"]
+    try:
+        got = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return ["impact map: unreadable, so it narrows nothing"]
+    # **Age comes from the recorded commit, not the file's mtime**, and the
+    # difference is a lie this line told as soon as the top-up existed: a
+    # per-commit `--record --refs` rewrites the file, so three re-measured
+    # rows made a 9-hour-old full recording report "under an hour ago". That
+    # is the same shape as #543's marker trap -- a fresh write standing in
+    # for a fresh verdict -- so the age is read off `recorded_at`'s own
+    # commit date, which is what the map's *silence* can speak for. Falls
+    # back to the mtime only when git cannot answer, and says which.
+    at = got.get("recorded_at") or ""
+    stamped = got.get("recorded_when") or ""
+    try:
+        age = (datetime.now(tz=UTC)
+               - datetime.fromisoformat(stamped)).total_seconds() / 3600
+        how = ""
+    except (TypeError, ValueError):
+        # No stamp: a map written before the field existed. The file's mtime
+        # is the only remaining answer and it is **wrong in the flattering
+        # direction** once a top-up has rewritten the file, so say so rather
+        # than print a number that reads as a recording time.
+        age = (time.time() - path.stat().st_mtime) / 3600
+        how = " (file age -- this map carries no recording time)"
+    when = f"{age:.0f}h ago" if age >= 1 else "under an hour ago"
+    sha = at[:9] or "an unknown commit"
+    corpus = got.get("corpus", 0)
+    tail = " (a SAMPLE, so it narrows nothing)" if got.get("sampled") else ""
+    out = [f"impact map: {corpus} rows recorded {when} at {sha}{how}{tail}"]
+    # **And the top-ups since, which are the other half of "how fresh".**
+    # They are what keeps a new verb out of the fail-closed branch, so a
+    # line reporting only the full recording's age understates the map.
+    tops = got.get("topped_up") or []
+    if tops:
+        out.append(f"            plus {len(tops)} top-up(s) since, "
+                   f"{sum(len(t.get('rows', ())) for t in tops)} row(s)"
+                   f" re-measured")
+    # **Whether the engine has moved since**, which is the one fact that
+    # decides whether to re-record and the one this line did not carry. Age
+    # alone is the wrong question: a week-old map over an untouched engine
+    # is perfectly good, and an hour-old one is wrong about a verb added
+    # since. #866 measured the second case -- a new function is invisible to
+    # the map until the next recording, and `select` then omits its callers.
+    #
+    # **This no longer asks for an 87-minute re-record**, because a changed
+    # function is now handled where it is read: `selection` widens on any
+    # function whose own lines moved since `recorded_at`, so a moved
+    # `engine/` file is a note about reach rather than a job. What repairs
+    # it cheaply is recording the *rows*, which `--record --refs` does in
+    # seconds and `check.py` now does by itself on a clean commit.
+    if at:
+        done = subprocess.run(
+            ["git", "diff", "--name-only", at, "HEAD", "--",
+             "src/combat_engine/engine/"],
+            cwd=ROOT, capture_output=True, text=True)
+        moved = [f for f in done.stdout.splitlines() if f.strip()]
+        if done.returncode == 0 and moved:
+            out.append(
+                f"            engine/ has moved in {len(moved)} file(s) since,"
+                f" so a function changed in them audits WIDE until its rows"
+                f" are recorded (`impact.py --record --refs`, seconds)")
+    return out
+
+
+#: `audit.py`'s "ran and checked nothing" exit. Mirrored rather than imported
+#: because `check.py` must not import an instrument to read its verdict -- it
+#: runs them as subprocesses -- and asserted against the real one by
+#: `_skip_code_matches` below, so the two cannot drift apart silently.
+NOTHING_IN_SCOPE = 3
+
+#: `types.py`'s "a file is above its baseline on a whole-tree run" exit.
+#: Mirrored for `NOTHING_IN_SCOPE`'s reason and asserted the same way.
+TYPE_DRIFT = 4
+
+
+def _skip_code_matches() -> bool:
+    """Is the mirrored skip code still the one `audit.py` returns?
+
+    A mirrored constant is a second source of truth, which is the shape
+    `#492` is about -- two hand-kept lists and nothing reconciling them. One
+    import of a module-level int settles it, and the cost of being wrong is
+    a skip silently reading as a pass again.
+    """
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import audit as audit_mod
+        return bool(audit_mod.NOTHING_IN_SCOPE == NOTHING_IN_SCOPE)
+    except Exception:
+        return True
+
+
+def _unswept_since(sha: str) -> int:
+    """Commits after `sha` that a sweep has not covered.
+
+    **A commit whose whole content is the baseline the sweep itself wrote
+    does not count**, which is #519's second half and the reason this is a
+    walk rather than `rev-list --count`. A sweep certifies a sha and writes
+    it into `audited.json`; committing that watermark creates a commit the
+    sweep did not cover, so the debt line had a permanent floor of one and
+    every run said `owed since <sha>, 1 commit(s) back`. A floor nobody can
+    clear is a signal nobody reads -- and this one is the signal the whole
+    narrow-per-commit cadence leans on.
+
+    **Sound rather than convenient**: the tree at a baseline-only commit is
+    byte-identical to the swept one *except* for that file, so there is no
+    code the sweep did not see. It is excluded only when it is the commit's
+    **sole** path -- a commit touching the baseline and anything else still
+    counts, which is what stops this becoming a way to smuggle an unswept
+    edit in beside a re-record. A forged baseline is a different question
+    and `audit.py --verdicts` is what asks it.
+    """
+    done = subprocess.run(["git", "rev-list", f"{sha}..HEAD"],
+                          cwd=ROOT, capture_output=True, text=True)
+    if done.returncode != 0:
+        return 0
+    shas = [s for s in done.stdout.split() if s]
+    count = 0
+    for one in shas:
+        paths = subprocess.run(
+            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", one],
+            cwd=ROOT, capture_output=True, text=True)
+        touched = {p for p in paths.stdout.split() if p}
+        if paths.returncode == 0 and touched == {str(
+                WATERMARK.relative_to(ROOT))}:
+            continue
+        count += 1
+    return count
+
+
 def _sweep_owed() -> str:
     """Is a whole-tree audit outstanding, and since when?
 
@@ -848,9 +1376,7 @@ def _sweep_owed() -> str:
     except OSError:
         rebuilt = False
 
-    done = subprocess.run(["git", "rev-list", "--count", f"{sha}..HEAD"],
-                          cwd=ROOT, capture_output=True, text=True)
-    behind = int(done.stdout.strip()) if done.returncode == 0 and done.stdout.strip() else 0
+    behind = _unswept_since(sha)
     if rebuilt:
         return (f"wide sweep owed: the database was rebuilt after {sha[:9]}"
                 f" -- `check.py --all`")
@@ -889,19 +1415,335 @@ def _scope(text: str) -> tuple[int, int] | None:
     return (int(found.group(1)), int(found.group(2))) if found else None
 
 
+#: How many instruments may be in flight at once. The loop was a plain `for`
+#: with a blocking `subprocess.run`, so 21 instruments ran strictly one after
+#: another on a ten-core machine where sixteen of them are single-process.
+#: Measured: the twenty non-audit instruments are a stable **480s wide, 464s
+#: narrow**, and the longest single one is `drivers` at ~140s -- so the floor
+#: is the longest member, not the sum.
+#:
+#: Four rather than ten, deliberately. `audit` already runs ten worker
+#: processes of its own (`audit._run_all`), so a wide run has every core busy
+#: for most of its length and more lanes would mostly take cores away from
+#: it. Four collapses the 480s to roughly `drivers`' own 140s without
+#: oversubscribing.
+_LANES = 4
+
+#: Instruments that must not run beside each other, by group.
+#:
+#: **`audit` and `verdicts` are the same script.** `audit.py --changed`
+#: rewrites `fixtures/audited.json` at the end of a full clean run and
+#: `audit.py --verdicts` reads that baseline, so letting them overlap means
+#: `verdicts` can read a file mid-write. Nothing had to care while the loop
+#: was serial.
+#:
+#: **`api` and `browser` each start a uvicorn.** They pick their own free
+#: port, so they would not collide on one -- but both pay a cold `uv run`
+#: plus a full `combat_engine` import before a 20-second health poll, and two
+#: of those at once on a loaded machine is how that poll starts timing out.
+#: `scripts/CLAUDE.md` already records what server bookkeeping costs when it
+#: goes wrong: 69 orphaned uvicorns over three and a half days.
+_EXCLUSIVE: tuple[frozenset[str], ...] = (
+    frozenset({"audit", "verdicts"}),
+    frozenset({"api", "browser"}),
+)
+
+#: Instruments that need the machine to themselves.
+#:
+#: `browser.py` drives real Chromium and several of its checks are about
+#: **timing** -- "enemy tokens animate", "the button is gone while that fight
+#: is being played". An animation has a wall-clock duration, so no amount of
+#: waiting on a condition makes those robust to a loaded box: they were
+#: calibrated on a quiet one.
+#:
+#: Measured, and this is why the entry exists: putting the loop on four lanes
+#: turned "enemy tokens animate (0 of them slid)" red on its first full run,
+#: a *different* assertion from the one #847 is about. Two load-sensitive
+#: checks in one instrument is a pattern, not a coincidence.
+#:
+#: Costs almost nothing. `browser` is last in `CHECKS`, so by the time its
+#: turn comes the other lanes have largely drained; the full run measured
+#: 195s with it parallel and the same within noise with it solo.
+#: **`audit` is here because four lanes made a wide run 70% slower**, which
+#: is the opposite of the point and was measured only after the lanes
+#: landed:
+#:
+#:     wide, serial loop    ~1792s   (audit 1312 + the other twenty at 480)
+#:     wide, 4 lanes         3049s   audit alone went 1312s -> 2937s
+#:
+#: `audit._run_all` already runs one worker process per core, so during a
+#: wide sweep every core is busy and three more lanes do not find idle
+#: capacity -- they take it from the audit. It cost ~1625s on the audit to
+#: save ~330s elsewhere.
+#:
+#: Solo costs nothing narrow, where `--changed` on a clean tree is 0.6s, and
+#: it is the whole sweep wide either way.
+_SOLO: frozenset[str] = frozenset({"audit", "browser"})
+
+_LOCKS: dict[frozenset[str], threading.Lock] = {
+    group: threading.Lock() for group in _EXCLUSIVE
+}
+
+#: One permit a lane. A `_SOLO` instrument takes every permit, so nothing
+#: else is running while it does; everything else takes one.
+_GATE = threading.Semaphore(_LANES)
+#: So two solo instruments could not each hold some permits and wait for the
+#: rest. There is one today; the guard is for when there are two.
+_SOLO_TURN = threading.Lock()
+
+
+def _run_one(c: Instrument) -> tuple[float, subprocess.CompletedProcess]:
+    """One instrument, timed, held out of its exclusion group's way.
+
+    The locks are taken in `_EXCLUSIVE`'s own order so that an instrument in
+    two groups -- none is today -- could not deadlock against one in the
+    other order.
+    """
+    solo = c.name in _SOLO
+    if solo:
+        _SOLO_TURN.acquire()
+        for _ in range(_LANES):
+            _GATE.acquire()
+    else:
+        _GATE.acquire()
+    held = [_LOCKS[g] for g in _EXCLUSIVE if c.name in g]
+    for lock in held:
+        lock.acquire()
+    try:
+        started = time.monotonic()
+        done = subprocess.run(c.argv, cwd=ROOT, capture_output=True, text=True)
+        return time.monotonic() - started, done
+    finally:
+        for lock in reversed(held):
+            lock.release()
+        if solo:
+            for _ in range(_LANES):
+                _GATE.release()
+            _SOLO_TURN.release()
+        else:
+            _GATE.release()
+
+
+def _submit_order(wanted: list[Instrument]) -> list[Instrument]:
+    """`wanted`, reordered so no lane blocks early on a group-mate.
+
+    A thread waiting for its exclusion group holds a lane while doing
+    nothing, and the queue is FIFO -- so with `audit` and `verdicts`
+    adjacent in `CHECKS`, `verdicts` would take a lane and sit on it for the
+    whole 1,300-second audit. The second and later members of each group go
+    to the back instead.
+
+    Reporting order is unaffected: the caller resolves futures by name in
+    `wanted` order.
+    """
+    claimed: set[frozenset[str]] = set()
+    head: list[Instrument] = []
+    tail: list[Instrument] = []
+    for c in wanted:
+        group = next((g for g in _EXCLUSIVE if c.name in g), None)
+        if group is not None and group in claimed:
+            tail.append(c)
+            continue
+        if group is not None:
+            claimed.add(group)
+        head.append(c)
+    return head + tail
+
+
+#: Rows a per-commit top-up will record before it declines and says so. The
+#: recording costs ~4.3x an audit of the same rows, so this is a wall-clock
+#: budget rather than a correctness limit: a typical content commit moves a
+#: handful of rows, and a wave that moves hundreds is the nightly's job.
+TOP_UP_CAP = 40
+
+
+def _top_up_map(red: bool) -> list[str]:
+    """Record the rows this commit touched, so the map never goes stale.
+
+    **This is what stops "the map had no entry" being a standing excuse.**
+    A full recording is 83 minutes, so before `--record --refs` existed the
+    only way a row or a verb entered the map was to wait for the nightly --
+    and `selection` fails *closed* on a function it has never seen, so a
+    new verb's own edit selected **0 rows** and the run reported clean.
+    Recording the handful of rows that just changed is seconds and closes
+    that window inside one commit.
+
+    Declines, out loud, on each of the cases where recording would be
+    wrong or not worth it:
+
+    * **a red run**, for the nightly's reason -- a row that raises records
+      only the lines it reached before raising, so its ref list comes out
+      short in the direction that omits rows;
+    * **no map**, or a sampled one, which a top-up cannot repair;
+    * **nothing under `content/` changed**, so there is nothing to record
+      that the map does not already hold;
+    * **more rows than `TOP_UP_CAP`**, which is a content wave rather than
+      a commit.
+
+    It never *widens* anything and never fails the run: the map is a
+    selector that fails open, so a failed top-up costs a wide audit next
+    time and nothing else.
+    """
+    if red:
+        return ["map top-up skipped: the run was red, and a raising row"
+                " records a short ref list"]
+    path = ROOT / "logs" / "impact.json"
+    if not path.exists():
+        return ["map top-up skipped: no map to merge into"]
+    try:
+        held = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return ["map top-up skipped: the map is unreadable"]
+    if held.get("sampled"):
+        return ["map top-up skipped: the map is a sample, which a top-up"
+                " cannot repair"]
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import audit as audit_mod
+        rows = audit_mod._changed(widen=False)
+    except Exception as exc:
+        return [f"map top-up skipped: {type(exc).__name__} asking which rows"
+                f" changed"]
+    if not rows:
+        return []
+    if len(rows) > TOP_UP_CAP:
+        return [f"map top-up skipped: {len(rows)} rows changed, over the"
+                f" {TOP_UP_CAP}-row budget -- the nightly re-records"]
+    began = time.time()
+    done = subprocess.run(
+        ["uv", "run", "scripts/impact.py", "--record", "--refs",
+         ",".join(rows)],
+        cwd=ROOT, capture_output=True, text=True)
+    took = time.time() - began
+    # **The top-up goes in the same ledger as everything else it is traded
+    # against.** Camille asked for the map's usage *and timing* to be
+    # monitored, and the top-up is now a recurring per-commit cost paid to
+    # keep the narrowing available -- so "is the map earning its keep" has
+    # to net it off against the 1,230s a narrowed run saves, not ignore it.
+    # `ok=False` on a failure, so a top-up that stops working shows up as a
+    # red line in `--history` rather than as silence.
+    _record("map-topup", took, done.returncode == 0, _commit(),
+            scope=(len(rows), held.get("corpus") or 0), by="impact")
+    if done.returncode:
+        why = next((ln for ln in reversed(done.stdout.splitlines())
+                    if ln.startswith("#")), "no reason given")
+        return [f"map top-up FAILED in {took:.0f}s, so the map still does not"
+                f" hold these {len(rows)} row(s): {why.lstrip('# ')}"]
+    return [f"map topped up with {len(rows)} changed row(s) in {took:.0f}s,"
+            f" so an edit to what they call narrows next run"]
+
+
+def _merge_verdict(wide_run: bool, red: bool, mapped: list[str],
+                   wide_why: str, no_opinion: bool = False,
+                   audit_skipped: bool = False) -> list[str]:
+    """Whether this branch may merge on what just ran, and on what grounds.
+
+    **This is the line that decides whether the map is worth having.** The
+    rule it replaces -- *"a worktree owes its own `check.py --all` before it
+    merges"* (#848) -- made every merge pay a wide audit, so of 106 audit
+    runs on this ledger **105 were wide and 1 was narrow**, and the map saved
+    21 minutes against 22 hours spent sweeping. A selector that the gate
+    ignores is a selector nobody uses.
+
+    And the old rule contradicted the cadence it sits beside. `CLAUDE.md`
+    says of the nightly:
+
+        The sweep is a **net, not a gate** -- everything that catches a
+        regression in *seconds* already runs per commit -- so a regression
+        that lands at 10am being found at 3am is the right trade.
+
+    A worktree merges **into master**, which the nightly does sweep. So the
+    pre-merge wide run was buying a few hours against a window the file
+    accepts everywhere else, at 22 minutes a merge.
+
+    So the question the gate asks is narrower and answerable: **has anything
+    looked at the rows this change can affect?**
+
+    * the map **narrowed** -- yes: the rows observed to execute the changed
+      functions were audited, and they are green. Merge; the nightly sweeps
+      master tonight.
+    * the map **refused** -- no. Nothing has looked at the rows, because
+      "wide" means it could not say which they are. The wide sweep is owed
+      before merge, exactly as before.
+    * nothing under `engine/` changed -- `audit --changed` already covers
+      content properly, which is the case this instrument has always had no
+      opinion about.
+
+    Silent outside a worktree and silent on a red run: there is nothing to
+    decide if the branch is the main checkout, and nothing to say about
+    merging while an instrument is unhappy.
+    """
+    if not IN_WORKTREE or red:
+        return []
+    if wide_run:
+        return ["merge-ready: a wide sweep just ran and is clean"]
+    if no_opinion:
+        # **Unless `audit --changed` checked nothing**, which is the whole
+        # of #466 and would have made this line contradict the one above it
+        # in the same output: `audit checked NOTHING` followed by
+        # "`audit --changed` covered this branch's rows". It covered no
+        # rows. On a clean tree there is nothing uncommitted for it to
+        # cover, so the honest verdict names what actually certifies the
+        # branch -- the last wide sweep, or master's nightly.
+        if audit_skipped:
+            return ["merge-ready, but nothing audited this run: the scope was"
+                    " empty, so this rests on the last wide sweep and"
+                    " master's nightly rather than on anything that just"
+                    " ran."]
+        return ["merge-ready: nothing under engine/ changed, so"
+                " `audit --changed` covered this branch's rows."]
+    if mapped:
+        return [
+            f"merge-ready: the map narrowed the audit to {len(mapped)} row(s)"
+            f" -- the rows observed to execute what this change touched --"
+            f" and they are clean.",
+            "             master's overnight sweep is the backstop, which is the"
+            " same net CLAUDE.md accepts for every other regression.",
+        ]
+    return [
+        "wide sweep owed before merge: the map could not narrow this change,"
+        " so nothing has looked at the rows it can reach.",
+        f"             {wide_why or 'no reason recorded'}",
+    ]
+
+
 def _record(name: str, seconds: float, ok: bool, at: str,
-            scope: tuple[int, int] | None = None) -> None:
+            scope: tuple[int, int] | None = None, by: str = "",
+            wide_because: str = "") -> None:
     try:
         LEDGER.parent.mkdir(parents=True, exist_ok=True)
         row = {
             "when": datetime.now(tz=UTC).isoformat(timespec="seconds"),
             "name": name, "seconds": round(seconds, 2), "ok": ok, "commit": at,
+            # **How many instruments were in flight**, because without it the
+            # seconds stop being comparable across this change. A serial run
+            # and a four-lane run measure different things -- the second
+            # includes contention -- and `history`'s medians span both. 1 is
+            # the old behaviour.
+            "lanes": _LANES,
         }
         # **Only when the instrument said**, so a missing field means "this run
         # did not report its scope" and never "it covered nothing". `history`
         # counts the silent ones out loud rather than averaging over them.
         if scope:
             row["refs"], row["of"] = scope
+        # **Which selector narrowed it**, because `refs < of` alone cannot
+        # say. `--changed`, `--calls` and the impact map all produce narrow
+        # audit runs, and "is the map earning its 87-minute recording" is
+        # not answerable from a count that pools all three. Absent on a run
+        # nothing narrowed, which is what a wide sweep is.
+        if by:
+            row["by"] = by
+        # **Why a wide run was wide**, which `by`'s absence cannot say. The
+        # map refuses for six distinguishable reasons -- a genuinely hot
+        # function, a module-level change, an unmapped file, a moved corpus,
+        # a union over the ceiling, an `audit.WIDE` member -- and "is the map
+        # earning its recording" is a different question from "which of those
+        # six is costing us". Counting wide runs told us the first and
+        # nothing about the second, which is how a session spent an hour
+        # inferring the causes from six commits by hand.
+        if wide_because:
+            row["wide_because"] = wide_because
         with LEDGER.open("a") as fh:
             fh.write(json.dumps(row) + "\n")
     except OSError:
@@ -912,6 +1754,83 @@ def _commit() -> str:
     done = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                           cwd=ROOT, capture_output=True, text=True)
     return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def _map_history(rows: list[dict]) -> None:
+    """What the impact map has actually bought, against the wide sweep.
+
+    **Measured, not modelled.** The saving is the median narrowed run's
+    seconds against the median *wide* run's on the same ledger -- both real
+    timings from this machine -- rather than a per-row cost multiplied out.
+    A wide sweep is not N times a narrow one: the never-firing tail is 59%
+    of it, so arithmetic from a row count would flatter the map.
+
+    Silent until the map has narrowed something, because a line reading
+    "0 runs" every run is the noise `--history` exists to avoid. The map's
+    *existence* is reported by `_map_state` on every run regardless; this is
+    only the ledger half.
+    """
+    audits = [r for r in rows if r["name"] == "audit" and r.get("of")]
+    mapped = [r for r in audits if r.get("by") == "impact"]
+    if not mapped:
+        return
+    wide = sorted(r["seconds"] for r in audits if r["refs"] >= r["of"])
+    secs = sorted(r["seconds"] for r in mapped)
+    refs = sorted(r["refs"] for r in mapped)
+    med = secs[len(secs) // 2]
+    corpus = mapped[-1]["of"]
+    print(f"\n  the impact map narrowed {len(mapped)} audit run(s): "
+          f"median {refs[len(refs) // 2]} of {corpus} rows, {med:.0f}s")
+    if wide:
+        full = wide[len(wide) // 2]
+        print(f"  against a median wide sweep of {full:.0f}s -- "
+              f"{full - med:.0f}s saved a run, {(full - med) * len(mapped):.0f}s "
+              f"so far, {full / med:.0f}x" if med else "")
+    else:
+        print("  no wide sweep on this ledger to compare against yet")
+    calls = [r for r in audits if r.get("by") == "calls"]
+    if calls:
+        print(f"  (`--calls` narrowed {len(calls)} more, which the map does "
+              f"not account for)")
+
+    # **Net the top-up off, because it is the price of the line above.**
+    # Keeping the map fresh costs a few seconds on every clean commit, and
+    # a saving reported gross is the kind of number that makes a mechanism
+    # look better than it is -- which is the one thing `scripts/CLAUDE.md`
+    # forbids outright. Also reports failures separately: a top-up that
+    # quietly stopped working would otherwise show only as the map slowly
+    # ceasing to narrow anything.
+    tops = [r for r in rows if r["name"] == "map-topup"]
+    if tops:
+        paid = sum(r["seconds"] for r in tops)
+        broke = [r for r in tops if not r["ok"]]
+        print(f"  keeping it fresh cost {paid:.0f}s over {len(tops)} top-up(s)"
+              f" ({paid / len(tops):.0f}s each, "
+              f"{sum(r.get('refs', 0) for r in tops)} rows)"
+              + (f" -- {len(broke)} FAILED" if broke else ""))
+
+    # **The split and the reasons, which is the half that says what to fix.**
+    # "The map narrowed 1 run" is a score; "104 went wide and here is which
+    # cause each time" is a work queue. The six refusal reasons are not
+    # equally addressable -- a genuinely hot function is correct and
+    # permanent, `--all` is a choice, a module-level line is avoidable by
+    # the author, an unmapped file means the map is stale -- so pooling them
+    # hides the only actionable ones.
+    went_wide = [r for r in audits if not r.get("by")]
+    if went_wide:
+        spent = sum(r["seconds"] for r in went_wide)
+        saved = sum(r["seconds"] for r in mapped)
+        print(f"\n  {len(went_wide)} audit run(s) went wide, {spent / 60:.0f} "
+              f"minutes; {len(mapped)} narrowed, {saved / 60:.1f} minutes")
+        why: dict[str, list[float]] = {}
+        for r in went_wide:
+            key = r.get("wide_because") or "(not recorded)"
+            why.setdefault(key, []).append(r["seconds"])
+        for key, took in sorted(why.items(), key=lambda kv: -sum(kv[1])):
+            print(f"    {len(took):3} x {sum(took) / 60:5.0f} min  {key[:76]}")
+        if "(not recorded)" in why:
+            print("    -- `(not recorded)` predates this reporting; it is not"
+                  " an unknown cause, only an unlogged one")
 
 
 def history() -> int:
@@ -952,6 +1871,8 @@ def history() -> int:
         last = caught[-1]["when"][:10] if caught else "--"
         print(f"  {name:13} {len(runs):5} {secs[len(secs) // 2]:6.1f}s "
               f"{spent:7.0f}s {len(caught):7} {per:>10}  {last}")
+
+    _map_history(rows)
 
     total = sum(r["seconds"] for r in rows)
     caught = sum(1 for r in rows if not r["ok"])

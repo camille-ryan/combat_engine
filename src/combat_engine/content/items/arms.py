@@ -1480,14 +1480,12 @@ def i3101p1(c: Cast) -> None:
 
     Written here rather than as a verb because the interrupt window on
     `Hit` runs after `resolve` has recomputed both from the die, so
-    nothing recomputes them again afterwards."""
-    ev = c.trigger
-    if ev is None:
-        return
-    ev.critical = False
-    result = getattr(ev, "result", None)
-    if result is not None:
-        result.critical = False
+    nothing recomputes them again afterwards.
+
+    `c.crit_becomes` is the door for both writes **and** the announcement
+    this row had none of: the demotion is its whole printed effect, so it
+    reported SILENT while working. #861."""
+    c.crit_becomes(False)
 
 
 @power("i3206x1", level=8, cls=ITEM, action=ActionType.NONE,

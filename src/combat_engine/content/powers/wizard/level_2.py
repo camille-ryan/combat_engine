@@ -49,13 +49,13 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     PERSONAL,
     REACTION,
     REF,
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     AreaBurst,
     AttackDeclared,
     AttackRolled,
@@ -348,7 +348,7 @@ def p12742(c: Cast) -> None:
     usage=DAILY,
     action=REACTION,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.NECROMANCY, Keyword.SHADOW],
     trigger="a nonminion living creature dies within 5 squares of you",
     on=Trigger(
@@ -444,8 +444,8 @@ def p16278(c: Cast) -> None:
     area = c.area()
     if not area:
         return
-    c.zone(area, label=c.ref, until=When.EONT)
-    c.note(f"{c.ref}: creatures in the zone have partial concealment, and there is none here")
+    glare = c.zone(area, label=c.ref, until=When.EONT)
+    c.conceal_in(glare, side="any")
 
 
 @power(

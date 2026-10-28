@@ -15,14 +15,22 @@ That is the announcement, and five rows here were waiting on a verb for
 something they could already read. What is still shut is narrower and
 worth keeping apart:
 
-* the **latch**, a dict inside `extra_damage` keyed on the turn. It
-  cannot be reset, so "this use does not count" is written as one spare
-  payout handed out for later rather than as a use given back --
-  f818 and f2426 both do that, and neither can ever pay twice because
-  each spends its spare only once the class has already paid this turn.
-* the **condition**, the `applies=` callable that closure closes over.
-  Widening it from outside would mean a second latch beside the first
-  and two payouts in a turn, which is why f2076 still waits.
+* the **latch**, which is no longer shut and was the premise of the two
+  bullets this list used to open with. It was a dict inside
+  `extra_damage` keyed on the turn; it is `Powers.latched` on the
+  creature now, `c.latched`/`c.latch`/`c.unlatch` reach it, and
+  `strikers.pay_extra` is the shared payout that asks it before paying.
+  #569.
+
+  So "this use does not count" is a `c.unlatch` and a widening of the
+  condition is a second `Hit` watcher paying through `pay_extra` --
+  whichever watcher reaches a hit first pays and the other declines, in
+  either order, which is why no second counter is needed. f2076 is
+  written off exactly that. What is still here is the workaround built
+  on the dead premise: `_window`, `_round_of`, `_watch_payout`, `_pay`
+  and `_spare_use` below hand out a spare payout for later because "the
+  latch itself cannot be reset", and f818 and f2426 still read them.
+  They play correctly and can be replaced by the verbs.
 * the **dice**, which are rolled inside `c.damage` and gone *by the time
   `DamageRolled` carries them*. `c.bonus` reaches the total --
   `c.bonus("cf:rogue-scoundrel-f4 damage", n)` is what `extra_damage`
@@ -54,6 +62,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.features.strikers import pay_extra
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -82,6 +91,7 @@ from combat_engine.engine.events import (
     DamageRolled,
     Moved,
     PowerResolved,
+    SkillCheck,
 )
 from combat_engine.engine.query import allies, has_combat_advantage
 
@@ -92,11 +102,12 @@ from .styles import (
     used_one_of,
 )
 
-#: The narrower half of the extra damage: *when* it applies is the
-#: `applies=` callable closed over inside `strikers.extra_damage`, and a
-#: feat that widens it has nothing to widen -- see the module docstring
-#: for why a second latch beside the first is not the answer.
-APPLIES = ("c.extra_damage(applies=)",)
+#: **Retired.** It named "*when* the extra damage applies is a callable
+#: closed over inside `strikers.extra_damage`, and a feat that widens it
+#: has nothing to widen". The latch that made a second watcher unsafe is
+#: `Powers.latched` on the creature now and `strikers.pay_extra` is the
+#: shared payout that asks it, so a widening is a second `Hit` watcher
+#: paying through the same door -- `f2076` is written off that. #569.
 #: One weapon group standing in for another, for named rows only.
 #: Nothing adds to the distance somebody else's shift covers.
 #: **Retired: the two rows that shared it want different things.**
@@ -243,7 +254,7 @@ def _window(c: Cast) -> object:
 
 
 def _round_of(slot: object) -> int:
-    return slot[0] if isinstance(slot, tuple) else int(slot)  # type: ignore[index]
+    return slot[0] if isinstance(slot, tuple) else int(slot)
 
 
 def _watch_payout(c: Cast) -> Callable[[], object]:
@@ -892,14 +903,43 @@ def f1661(c: Cast) -> None:
 
 
 @power("f2076", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=APPLIES)
+       reach=PERSONAL, target=SELF)
 def f2076(c: Cast) -> None:
-    """Pays the extra damage without combat advantage when you are the
-    only creature beside the target. That is the `applies=` callable
-    `strikers.extra_damage` closes over, and widening it from out here
-    means a second watcher with a latch of its own -- which pays twice
-    in any turn that has one hit of each kind in it. The rapier half is
-    writable, see f2077, and is not what holds this up."""
+    """Pays the extra damage without combat advantage when you are the only
+    creature beside the target.
+
+    **The objection in the old note is spent, because the latch moved.** It
+    read "widening it from out here means a second watcher with a latch of
+    its own -- which pays twice in any turn that has one hit of each kind
+    in it". `strikers.pay_extra` is the shared payout and opens by asking
+    `c.latched`, so whichever of the two watchers reaches a hit first pays
+    and the other declines -- in either order, which is `f1722`'s own
+    reasoning for the ranger. The latch is `Powers.latched` on the
+    creature rather than a dict inside `extra_damage`'s closure. #569.
+
+    So this is a strictly disjoint widening of the feature's `applies=`:
+    that gate is combat advantage and nothing else, and one hit satisfying
+    both conditions still pays exactly once.
+
+    `side="other"` and not `"any"`: the circle is centred on the target and
+    `"any"` would count the target itself, so the comparison would never
+    be true. `"other"` is the pool with the centre left out, which makes
+    `== [me]` the printed "you are the only creature adjacent to it".
+
+    The rapier is asked by ref rather than as the light-blade group, for
+    the module docstring's reason -- the dagger every rogue starts with is
+    a light blade and is not a rapier.
+    """
+    me = c.me
+
+    def also(ev: Hit) -> None:
+        if ev.attacker != me or not _holding_ref(c, *_RAPIER):
+            return
+        if c.within(1, of=ev.target, side="other") != [me]:
+            return
+        pay_extra(c, _SNEAK, c.sneak_damage(), on=ev.target, per_turn=True)
+
+    c.watch(Hit, also, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # -- one weapon group standing in for another -------------------------------
@@ -1031,13 +1071,31 @@ _counts_as(
 
 @power("f826", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Weapon.off_hand_anyway", "c.reload()"))
+       todo=("Gear.off(ranged=)",))
 def f826(c: Cast) -> None:
     """A hand crossbow held in the off hand and reloaded one-handed.
-    `Gear.off` is the second *melee* weapon by construction, so there is
-    nowhere to put a shooter, and loading is not modelled at all -- which
-    makes "have a loaded one in your off hand" unaskable and the free
-    shot on a crit with it unreachable."""
+
+    **`c.reload()` is off this row's marker list, and it was never the
+    blocker.** A reload is a cost the engine charges now (#725) -- but only
+    for the three weapons printing `load minor`, and a hand crossbow
+    prints `load free`. So there is no reload to cheapen here and never
+    was: the one-handed reload this card mentions costs nothing by the
+    printed rule, which is why the rule bothers to say it.
+
+    What remains is the half that is real.
+
+    **Re-pointed, not closed.** `Weapon.off_hand_anyway` was the wrong
+    symbol and is retired everywhere else: no two-weapon reader consults a
+    property at all -- `Gear.off` is `melee[1]`, `Gear.two_weapon` counts
+    melee weapons -- so writing the word onto this card's weapon would buy
+    nothing. What the card needs is for the slot itself to hold a shooter.
+    This weapon is ranged, `Gear.melee` excludes it, and so it can never be
+    `Gear.off` however its properties read. That is a `Gear` change, and
+    `Gear.off(ranged=)` names it.
+
+    Loading is the second gap and is untouched, so the free shot on a
+    critical has two unaskable halves: which weapon is in the off hand, and
+    whether it is loaded."""
 
 
 @power("f2073", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1073,11 +1131,10 @@ def f2074(c: Cast) -> None:
 
 
 @power("f2405", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("Weapon.proficiency",))
+       reach=PERSONAL, target=SELF)
 def f2405(c: Cast) -> None:
     """Slings gain the high crit property, and print a better proficiency
-    bonus. One of the two is writable and the row plays now.
+    bonus. Both halves are written.
 
     **"Any way to rewrite the weapon a character is holding" exists**, and
     the premise under that note -- `Weapon` being "read off the item rather
@@ -1085,30 +1142,52 @@ def f2405(c: Cast) -> None:
     carrying `replace(w)` copies. `c.gains_property` is the writer and
     `_high_crit` is the reader. #676.
 
-    **The proficiency half is not a bonus and that is why it is still
-    marked.** The card says "treat slings as having a +3 proficiency bonus";
-    `w3628` prints **2**, and `cast.py:1748` already adds the held weapon's
-    printed figure to the attack. Measured through a swing: proficiency
-    0/2/3/5 gives +5/+7/+8/+10. So `c.bonus("attack", 3,
-    kind="proficiency")` would pay 3 on top of the 2 already there, and the
-    honest shape is a **set** -- a third weapon-field writer beside
-    `c.gains_property` and `c.weapon_dice`, which is what
-    `Weapon.proficiency` names.
+    **The proficiency half is a set and not a bonus**, which is the whole
+    reason it waited for a writer rather than being spelled with
+    `c.bonus`. The card says "treat slings as having a +3 proficiency
+    bonus"; `w3628` prints **2**, and the held weapon's printed figure is
+    already added to every swing. Measured again on `w3612`, forcing a
+    natural 10: proficiency 0/2/3/5 gives totals 17/19/20/22, one point of
+    attack per point. So `c.bonus("attack", 3, kind="proficiency")` would
+    pay 3 on top of the 2 already there -- too generous rather than inert,
+    which is the kind nothing notices. `c.weapon_proficiency` sets it.
+
+    The old note here pointed at `cast.py:1748` for the reader. That line
+    is in the middle of an unrelated docstring now; the measurement above
+    is what establishes the reader, and it is the honest form of the
+    claim.
 
     `f3784` lays a flat +2 for unarmed and is right, because unarmed prints
     0: there the delta and the printed figure coincide, which is why it
     does not settle this case."""
     c.gains_property("high crit", group="sling", on=c.me)
+    c.weapon_proficiency(3, group="sling", on=c.me)
 
 
 @power("f2429", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_distance(ref, n)",))
+       reach=PERSONAL, target=SELF, todo=("cf:rogue-scoundrel-f1s2",))
 def f2429(c: Cast) -> None:
     """Shortens the distance `cf:rogue-scoundrel-f1s2` asks a move to
     cover. That row is declared, so the name is not the hold -- the 3 is
     a literal inside its printed text and that feature is itself
     unwritten, so there is neither a number to rewrite nor a check to
-    move it on."""
+    move it on.
+
+    **Re-aimed off `c.change_distance(ref, n)`, which has existed all
+    along under another name.** `c.extend_move(ref, squares)` is "make a
+    named row move you further", keyed by ref, and `c.squares_for` is its
+    read half -- the entries add, so a *negative* entry shortens, which is
+    this card exactly. Its own docstring names what is actually missing:
+    "a row must read it to be changed, with `squares_for`. An
+    `extend_move` on a row whose body still hard-codes its distance is a
+    modifier nothing consults."
+
+    So the hold is the sibling row, not a verb, and the marker names the
+    sibling. `cf:rogue-scoundrel-f1s2` has an empty body and waits on
+    `c.stealth_speed()` and `c.hide(cover=)`; marking either of those here
+    would report this feat ready the day a symbol lands, which is one step
+    early -- the feature has to be *written* before there is a 3 to take a
+    square off."""
 
 
 @power("f2459", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1164,13 +1243,46 @@ def f2459(c: Cast) -> None:
     c.watch(Moved, paid, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
-@power("f2468", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.advantage_on_roll()",))
+@power("f2468", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1217 during your turn",
+       on=Trigger(PowerUsed, used_one_of("p1217"), "you use p1217"))
 def f2468(c: Cast) -> None:
-    """Roll two Stealth checks and keep the better after using `p1217`.
-    The trigger is a ref and `skills.check` rolls one die with no way to
-    ask for two -- `c.reroll_check` answers a check already made, which
-    is a different and worse bargain."""
+    """Two rolls and the higher on every Stealth check for the rest of the
+    turn, bought by using `p1217`.
+
+    **"A different and worse bargain" was an argument and not a
+    measurement, and it was wrong.** `c.reroll_check(keep="best")` rolls a
+    second d20 and keeps `max(old, fresh)`, which is the same distribution
+    as throwing two at once; `general_i.f1376b` settles the family in
+    those words for the identical printed sentence.
+
+    **A watch, not a modifier**, because the clause is about *how* a later
+    roll is made rather than what it adds, and those rolls have not
+    happened yet. `ev=` is required and is the whole reason the verb takes
+    it: a handler closes over this row's `Cast`, whose `trigger` is the
+    `PowerUsed` that armed the watch and not the check being watched.
+
+    The default `Window.AFTER` is right -- `skills.check` totals inside its
+    resolve callback, so a row answering afterwards still decides what the
+    check came to.
+
+    `When.EOT` is the printed "before the end of your turn" and every check
+    inside it, so no `once=`.
+
+    `AT_WILL`: the card prints no limit, and a triggered `action=NONE` row
+    declared `ENCOUNTER` is spent on its first firing -- the correction
+    `lint.py` made to `f1661` in this file.
+    """
+    def twice(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me:
+            return
+        if getattr(ev, "skill", "") != "stealth":
+            return
+        if c.may("roll twice and use the higher result"):
+            c.reroll_check(keep="best", ev=ev)
+
+    c.watch(SkillCheck, twice, on=c.me, until=When.EOT, label=c.ref)
 
 
 @power("f2890", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

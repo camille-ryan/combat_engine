@@ -27,7 +27,6 @@ from combat_engine.engine import (
     DAILY,
     EACH_ENEMY,
     MINOR,
-    ONE_ALLY,
     ONE_CREATURE,
     REF,
     STANDARD,
@@ -50,6 +49,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     SavingThrow,
+    Target,
     When,
     distance,
     get,
@@ -85,7 +85,10 @@ def _melee_row(ctx: dict[str, Any]) -> bool:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    # `label=` so the page prints the card's own line rather than "One
+    # ally". The pool is right and the rendering was not -- see the
+    # docstring, which has said why since the row was written. #855.
+    target=Target("ally", 1, label="One ally's weapon"),
     keywords=[Keyword.DIVINE],
 )
 def p11619(c: Cast) -> None:

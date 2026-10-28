@@ -8,6 +8,9 @@ same order, so a click cannot do something a policy could not have chosen.
 
 from __future__ import annotations
 
+from functools import lru_cache
+from typing import Any
+
 from combat_engine.engine import (
     Action,
     Budget,
@@ -526,7 +529,51 @@ def _row_label(session: Session, actor: int, ref: str) -> str:
             if weapon.item == owner and weapon.slug:
                 slug = weapon.slug.replace("-", " ")
                 break
+        if not slug:
+            slug = _worn_base(owner, gear)
     return session.wire.item(ref, slug=slug)
+
+
+@lru_cache(maxsize=1)
+def _item_categories() -> dict[str, str]:
+    """Every item's category, which is what says *which* base to substitute.
+
+    Read once. `category` is one of the gated, sayable columns -- the
+    vocabulary is `Weapon`, `Armor`, `Arms`, `Implement` and the rest, none
+    of which is a printed name.
+    """
+    from combat_engine.db import game
+
+    return {row["ref"]: row["category"] or ""
+            for row in game().execute("SELECT ref, category FROM item")}
+
+
+def _worn_base(owner: str, gear: Any) -> str:
+    """The armour or shield this item is laid on, as a display word.
+
+    **No pairing needed, and that is the difference from the weapon half.**
+    `equipment._onto_weapon` writes the item's ref onto `Weapon.item`
+    because a character holds several weapons and the clause is about one of
+    them. A character wears **one** suit of armour and carries **one**
+    shield, so `Gear.armour` and `Gear.shield` already name the base
+    unambiguously -- there is nothing to pair.
+
+    Checked rather than assumed: over four dealt parties, every one of 16
+    characters holding an `Armor` item held exactly **one**, so there is no
+    case where two armour enchantments would both claim the worn suit.
+
+    The word comes from `combat_engine.armour` and not from `Gear.armour`
+    directly, because the field is not the printed word -- every reader in
+    the tree says `chain` and the page prints `Chainmail`. #346, #452.
+    """
+    from combat_engine.armour import ARMOUR_WORD, SHIELD_WORD
+
+    category = _item_categories().get(owner, "")
+    if category == "Armor":
+        return ARMOUR_WORD.get(getattr(gear, "armour", ""), "")
+    if category == "Arms":
+        return SHIELD_WORD.get(int(getattr(gear, "shield", 0) or 0), "")
+    return ""
 
 
 def _option_label(session: Session, action: Action, p, actor: int = 0) -> str:  # noqa: ANN001
@@ -661,11 +708,13 @@ def _traits(session: Session, eid: int) -> list[dto.PowerDTO]:
                 keywords=[k.value for k in keywords_of(session.world, eid, p)],
                 attack_text=None,
                 damage=printed.get("damage") or None,
-                requirement_text=printed.get("requirement") or p.requires_text or None,
+                requirement_text=session.wire.in_text(
+                    printed.get("requirement") or p.requires_text or ""
+                ) or None,
                 hit_text=printed.get("hit") or None,
                 miss_text=None,
                 effect_text=printed.get("effect") or None,
-                targets=str(p.target),
+                targets=session.wire.in_text(str(p.target)),
                 available=False,
                 reason=None,
                 squares=[],
@@ -729,11 +778,13 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
                 keywords=[k.value for k in keywords_of(world, actor, p)],
                 attack_text=printed.get("attack") or (str(p.attack) if p.attack else None),
                 damage=printed.get("damage") or None,
-                requirement_text=printed.get("requirement") or p.requires_text or None,
+                requirement_text=session.wire.in_text(
+                    printed.get("requirement") or p.requires_text or ""
+                ) or None,
                 hit_text=printed.get("hit") or None,
                 miss_text=printed.get("miss") or None,
                 effect_text=printed.get("effect") or None,
-                targets=str(p.target),
+                targets=session.wire.in_text(str(p.target)),
                 available=bool(indices),
                 reason=None if indices else (why or "cannot be used here"),
                 squares=aims_at,

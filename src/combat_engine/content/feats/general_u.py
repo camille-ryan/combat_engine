@@ -61,6 +61,7 @@ from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.features.sorcerer import phase_of
+from combat_engine.content.features.warlock import BOON, BOONS
 from combat_engine.engine import (
     AT_WILL,
     CHA,
@@ -124,8 +125,18 @@ ASSOCIATED = ("feat.associated_powers",)
 #: #281. `ABILITY_SWAP` is gone: `c.rolls_with` exists and both rows that
 #: wanted it say the sentence now.
 _ASSOCIATED = {"f3427": ("p5919", "p1341"), "f3429": ("p1401", "p501")}
-#: Trading away the extra damage an augment would have dealt.
-FORGO = ("c.forgo_damage()",)
+# **`FORGO` is retired and this records why the constant is gone**, the way
+# `REACH` below does. It held `c.forgo_damage()` for a feat trading away the
+# extra damage an augment would have dealt. #606 read all six cards on that
+# symbol and found **two unrelated gaps and no missing verb**: three rows
+# want one die off a striker's rider, which `features/strikers.py`'s
+# `pay_extra` already parameterises, and three want a row to decline its own
+# damage, which `c.strike()` never charged for in the first place.
+#
+# Five of the six are written and carry no marker. The sixth, `f959`, is the
+# class-of-powers case and is `c.pre_empt(damage_of=)` under #780 -- a
+# different symbol for a different reason. So this one is at zero rows and
+# the constant had no readers.
 #: `f1028`'s own hold: a power's reach is header data and is never rewritten
 #: for one use, so no attack is ever "made using" it.
 #:
@@ -144,8 +155,6 @@ FORGO = ("c.forgo_damage()",)
 #: of hand is Camille's deferral to the story engine (#787), because it
 #: palms an unattended object and is judged by onlookers, neither of which
 #: is on a board. The escape half of the same card already plays.
-CIRCUMSTANCE = ("actions.open_lock()", "story.skill_use()")
-
 #: Large and up, for the three feats that turn on a big enemy.
 BIG = (Size.LARGE, Size.HUGE, Size.GARGANTUAN)
 #: The heal half of the artificer's infusion feature, by ref.
@@ -642,63 +651,69 @@ def f3443(c: Cast) -> None:
 
 @power("f3444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("warlock.boon_instead_of()",),
-       trigger="you drop an enemy you have cursed to 0 hit points",
-       on=Trigger(Dropped, both(by_me, cursed_by_me),
-                  "you drop an enemy you have cursed"))
+       dropped=("c.active_vestige()",))
 def f3444(c: Cast) -> None:
-    """Hands back the racial power in place of the pact boon.
+    """Hands back the racial power **in place of** the pact boon.
 
-    **Re-aimed, and the payout is written.** Two of the three holds were
-    stale. The spec names the racial power by ref -- `p1449`, the same
-    row `f3439` and `f3446` already spend and read -- so there is nothing
-    to look up, and `c.restore_use` is ref-agnostic: it reaches the
-    `Powers` store, which does not care that the row is racial. What is
-    genuinely missing is the price. "Instead of gaining your normal pact
-    boon" suppresses whichever pact the warlock took -- the card names no
-    one of them -- and nothing announces a pact boon or stands in its
-    way, so this row is free where the card charges for it.
+    The spec names the racial power by ref -- `p1449`, the same row `f3439`
+    and `f3446` already spend and read -- and `c.restore_use` is
+    ref-agnostic: it reaches the `Powers` store, which does not care that
+    the row is racial. The price is the half that needed building, and it
+    is built: each payout offers itself as the clause
+    `features.warlock.BOON` and this registers a substitution against every
+    ref in `BOONS`, because the card names no pact and cannot know which
+    leg the character took. `f3232` is the twin, trading one leg's narrower
+    `BOON_REGAIN` for a power point.
 
-    **The gap is a door in the boon's own body, not a missing mechanism,
-    and the old symbol said otherwise.** "Nothing announces a pact boon" is
-    false. The boons are declared: `cf:warlock-f1`'s own watch pays three
-    legs inline, `cf:warlock-f1s4` pays a fourth, `cf:warlock-f1c10` is the
-    star pact's card and `p16254` the remaining leg's.
+    **No trigger on the header any more, and that is the whole reshape.**
+    With a declared `on=`, the body ran only once the enemy was already
+    down -- which is the same `Dropped` the boon pays on, so the regain
+    landed *beside* the printed payout rather than instead of it and the
+    row was free where the card charges. A substitution has to be
+    registered before the event, so this is a trait and the boon's own
+    payout runs the clause. `f2005` carries the same reshape for the same
+    reason.
 
-    What is missing is that **none of those payouts asks**.
-    `c.pre_empt(ref, what, clause)` is the registration and this row is one
-    of its callers; the read has to happen where the boon is paid.
-    `c.instead_of` cannot do it there -- it needs a non-zero `c.variant`,
-    which `dsl.use` settles from a chosen menu entry, and three of these
-    legs pay inside a `c.watch` callback where `variant` is 0 for ever.
+    **Registered when `p1449` is spent, not when the fight starts.** The
+    printed clause is "if you have already used it that encounter", and
+    `c.instead_of_now` cannot take an offer back once it is accepted -- so
+    a clause offered with nothing to regain would trade the boon away for
+    nothing, which is worse than the row not firing.
 
-    `c.instead_of_now` is written for exactly that shape and says so: *"for
-    a clause that fires inside a watcher the row installed itself rather
-    than from a body the menu reached"*, with the invoker's covenant
-    manifestation as its worked case. It settles the objection too -- a
-    question inside a watcher is invisible to `policy/`, which is
-    acceptable **because a boon is a passive**: the AI never chose the
-    bargain and cannot be asked to weigh it differently.
+    Once per encounter is the registration lifting rather than a flag: the
+    effects `c.pre_empt` hands back drop their entries out of
+    `Powers.pre_empts` when they end, so the trade stops being offered
+    after it is taken.
 
-    `cf:warlock-f1c10` is the one exception and takes plain
-    `c.instead_of`, because it carries a declared trigger and so is offered
-    by the dispatcher -- the distinction that verb's own docstring draws
-    with `rt:r24-t0`.
+    **Six of the seven pacts now, and the marker is re-pointed rather than
+    dropped.** It used to read "two of the seven", naming `cf:warlock-f1`'s
+    three inline legs and `p16254` as payouts that did not offer the
+    clause; both offer it now, so that premise is spent. What is left is
+    `cf:warlock-f1c12`, which pays **nothing at all** until
+    `c.active_vestige()` lands -- so the gap is no longer "the payout does
+    not offer itself" but "there is no payout to trade", and the marker
+    names that symbol instead. One marker, one gap.
 
-    So the symbol names a content door in `features/warlock.py` rather than
-    a `Cast` verb, because that is where the work is. #551's verdict, read
-    down to the mechanism. #641.
+    A warlock on that one pact keeps the printed boon and is offered
+    nothing, which is still a narrowing rather than a widening.
+    `ENCOUNTER` on a trait armed once at the start of the fight is this
+    file's convention."""
+    armed: list[Any] = []
 
+    def regain(using: Cast) -> None:
+        using.restore_use("p1449")
+        while armed:
+            c.end_effect(armed.pop(), on=c.me, why="spent")
 
-    `ENCOUNTER` on a triggered trait is the card's own "once per
-    encounter" and not the #210 accident. "If you have already used it"
-    is the gate: `c.restore_use` would answer False anyway, but asking
-    first keeps the choice off the player when there is nothing to
-    choose."""
-    if "p1449" not in c.expended(on=c.me):
-        return
-    if c.may("regain p1449 instead of the pact boon"):
-        c.restore_use("p1449")
+    def offer(ev: PowerUsed) -> None:
+        if armed or ev.actor != c.me or ev.power != "p1449":
+            return
+        for boon in BOONS:
+            effect = c.pre_empt(boon, BOON, regain)
+            if effect is not None:
+                armed.append(effect)
+
+    c.watch(PowerUsed, offer, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power("f3446", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -720,7 +735,7 @@ def f3446(c: Cast) -> None:
 
 
 @power("f3447", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=CIRCUMSTANCE)
+       reach=PERSONAL, target=SELF, dropped=("story.skill_use()",))
 def f3447(c: Cast) -> None:
     """The escape half plays -- escaping a grab is a move action the engine
     offers and rolls, Acrobatics against the grabber's Reflex or Athletics
@@ -735,20 +750,25 @@ def f3447(c: Cast) -> None:
     object. They are named actions, not purposes, and the engine offers
     neither.
 
-    So the Thievery half splits, on Camille's call (#735):
+    The Thievery half split on Camille's call (#735), and the first of the
+    two is written now:
 
-    * **opening locks** is `actions.open_lock()`, and #786 says the honest
-      caveat out loud -- the action is buildable, but no square carries a
-      lock, so it would be legal nowhere until terrain grows one;
+    * **opening locks** is a standard action adjacent to the lock
+      (`actions._picking`, #786), so the `+4` has somewhere to be read.
+      The honest caveat stays: no square carries a lock yet, so the action
+      is legal nowhere until terrain grows one -- `Grid.locked` says so,
+      and that is why this clause is correct and currently unexercised in
+      play rather than working;
     * **sleight of hand** goes to the story engine (#787), because it palms
       an unattended object and is judged by onlookers, and neither of those
-      is on a board.
+      is on a board. That is the one symbol still marked.
 
-    The +4 has to be **per check** either way. A blanket Thievery bonus
-    would raise every use of the skill, which is the fault this note has
-    warned about since its first version and the one thing all three
-    readings agreed on."""
+    The +4 is **per check**, on a key of its own rather than on the skill.
+    A blanket Thievery bonus would raise every other use of it, which is
+    the fault this note has warned about since its first version and the
+    one thing all three readings agreed on."""
     c.bonus("escape", 4, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.bonus("open_lock", 4, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
 @power("f3448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -809,11 +829,36 @@ def f3451(c: Cast) -> None:
 
 
 @power("f3452", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.obscure(level=)",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.concealment_cap(within=, when=)",))
 def f3452(c: Cast) -> None:
-    """Downgrades total concealment to ordinary concealment. `c.conceal`
-    lays concealment on a creature and has no notion of a level on the
-    board to step down from."""
+    """Re-pointed: the gap is a **cap** on the grade, not a level to step.
+
+    The old marker was `c.obscure(level=)`, shared with `f765`, and reading
+    both cards showed one symbol over two unrelated clauses. `f765` chooses
+    what grade a zone is *laid* at and needed no verb at all; this one
+    changes what the holder **sees**, which is the attacker's side of an
+    attack already being measured.
+
+    What the card prints: while the holder is blinded or in darkness,
+    creatures within 2 squares have concealment *rather than total*
+    concealment -- given line of effect, and not if they are invisible for
+    some other reason.
+
+    So it is a ceiling on `resolve`'s `from_concealment`, and the existing
+    reader cannot express it. `concealment_waived` is a **threshold**:
+    `if from_concealment <= concealment_waived(...)` then it goes to zero.
+    Waiving at `PARTIAL` leaves total concealment standing untouched;
+    waiving at `SUPERIOR` clears it altogether and makes the feat far
+    stronger than print. Neither is "-5 becomes -2". That needs a separate
+    `min()` against a cap, read after the waiver, plus the gate -- within
+    2, the holder blinded or in darkness, line of effect to the square.
+
+    A singleton: a census of every marked row whose note mentions total
+    concealment found exactly this one, so it stays marked under #468's
+    >=3 threshold rather than having a modifier key, a reader and a
+    `resolve` branch built for one row. Filed so the shape is not
+    re-derived."""
 
 
 # -- the channel divinity pair ----------------------------------------------
@@ -908,7 +953,7 @@ def f3458(c: Cast) -> None:
        on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3459(c: Cast) -> None:
     """Unexpended is the test, so the row has to be known and not spent."""
-    if c.knows("p2482") is None or "p2482" in c.expended(on=c.me):
+    if c.knows("p2482") != c.me or "p2482" in c.expended(on=c.me):
         return
     c.insubstantial(on=c.me, until=When.SONT)
 

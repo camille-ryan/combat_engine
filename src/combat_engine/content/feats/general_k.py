@@ -115,8 +115,6 @@ R33 = (
 )
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
-#: A class feature named in prose with no ref behind it.
-FEATURE = ("c.class_feature()",)
 #: "You can swap one N-level power you know for this one." The card is
 #: handed over; giving a power *up* is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
@@ -597,19 +595,22 @@ def f1773(c: Cast) -> None:
 
 
 @power("f1832", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_concealment()",))
+       reach=PERSONAL, target=SELF, implemented_in=("rt:r4-t3",))
 def f1832(c: Cast) -> None:
-    """`rt:r4-t3` is declared and lays an aura, so "each
-    ally affected by it" is the creatures standing in that aura, and
-    `c.grants_in` would carry a modifier to them.
+    """Written into `rt:r4-t3`, the row this feat names (#550).
 
-    What is missing is **narrower** than the docstring here used to
-    claim. `c.ignore_cover` does waive the concealment -2 -- it is one
-    modifier for cover and concealment together, taken as the larger by
-    `query.cover_waived` -- so the verb is not absent. It cannot be held
-    to concealment alone, and a version that also waived cover is a
-    strictly stronger feat than the one printed. `p1831` wants the same
-    narrowing."""
+    **The narrowing it waited for landed.** This note said `c.ignore_cover`
+    "cannot be held to concealment alone, and a version that also waived
+    cover is a strictly stronger feat than the one printed" -- exactly
+    right, and `concealment_only=True` is that narrower key, with
+    `query.concealment_waived` reading it separately from cover (#771).
+    `p1831` wanted the same narrowing and was re-pointed when it landed;
+    this row was missed.
+
+    The clause reaches allies standing in the aura rather than the
+    character, so it is `c.grants_in` on the aura `rt:r4-t3` already lays,
+    not `c.ignore_cover` on one creature. The number is 2 and the reason it
+    is not 5 is in the comment beside it."""
 
 
 @power("f1835", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -631,8 +632,7 @@ def f1835(c: Cast) -> None:
 
 
 @power("f1836", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("power.keywords.spirit_in_headers",))
+       reach=PERSONAL, target=SELF)
 def f1836(c: Cast) -> None:
     """Swaps the die a racial power adds to a roll: 1d10 rather than 1d6.
 
@@ -654,21 +654,20 @@ def f1836(c: Cast) -> None:
     rather than two keywords' worth. `p6186` now says which kind of roll it
     is and which power rolled it, so the narrowing is exact.
 
-    **The spirit half is still dropped, and the marker moved one layer.** It
-    used to say `Keyword.SPIRIT`, which arrived with #589 -- the ETL's
-    keyword list had never been reconciled against the pages, and the word
-    is now recorded on **66 powers**.
+    **The spirit half is written now, and the marker's last layer paid
+    out.** It said `Keyword.SPIRIT` until #589 recorded the word on 66
+    powers in the database; it then said the *headers*, because the gate
+    reads `get(ref).keywords` -- `REGISTRY`, the content header -- and at
+    that point 66 in the database stood against 0 in the tree, so a widened
+    gate would have compiled, fired, and audited green off its Nature half
+    while the spirit half could never match anything. #486 closed and the
+    headers landed: `Keyword.SPIRIT` is now on 66 rows under
+    `powers/shaman/`, which is the database's count exactly.
 
-    That is not enough, and writing the clause on the strength of it would
-    have been **silently false**. The gate reads `get(ref).keywords`, which
-    is `REGISTRY` -- the *content header* -- and **no header declares the
-    keyword**: 66 in the database, 0 in the tree. So the widened gate
-    compiled, fired, and audited green off its Nature half while the spirit
-    half could never match anything.
-
-    So what this waits on is the 66 headers, which is `#486`'s family -- a
-    keyword the database names and no header declares -- and the marker now
-    says that instead of the enum.
+    Read off the row the context names rather than off this feat, for the
+    same reason `f718` does: `ctx["power"]` is the power that made the
+    attack roll, not the racial power adding to it, and the keyword is
+    printed on the former.
     """
 
     def narrowed(ctx: dict[str, Any]) -> bool:
@@ -677,7 +676,10 @@ def f1836(c: Cast) -> None:
         if ctx.get("roll_kind") != "attack":
             return False
         rolled = get(str(ctx.get("power", "")))
-        return bool(rolled and Keyword.BEAST_FORM in (rolled.keywords or ()))
+        return bool(
+            rolled
+            and {Keyword.BEAST_FORM, Keyword.SPIRIT} & set(rolled.keywords or ())
+        )
 
     c.change_dice("p6186", "1d10", when=narrowed)
 
@@ -734,20 +736,54 @@ def f1855(c: Cast) -> None:
 
 
 @power("f1863", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_racial_bonus()",),
-       trigger="you use p1628",
-       on=Trigger(PowerUsed, _used("p1628"), "you use that racial power"))
+       reach=PERSONAL, target=SELF)
 def f1863(c: Cast) -> None:
-    """The p1628 half plays: "the target" is what `PowerUsed.targets`
-    carries. Dropped: raising the attack bonus a racial *trait* already
-    grants -- the trait is prose, and nothing reaches into a bonus some
-    other row laid to make it bigger."""
-    foes = list(c.trigger.targets)
-    if not foes:
-        return
-    foe = foes[0]
-    c.bonus("damage", 2, on=c.me, until=When.EONT, kind="power",
-            when=lambda ctx: ctx.get("target") == foe)
+    """Both clauses, and the row had to stop being a declared trigger for
+    the first one to exist at all.
+
+    **The trait half.** `rt:r8-t0` is written and lays +1 `kind="racial"`
+    to attack rolls, gated on the target being bloodied. Two bonuses of one
+    kind do not add and the larger wins -- `Mods.total` buckets by `kind`
+    and takes the max -- so "increases to +2" is a second racial bonus of
+    2, not a second +1. `f2398` makes the same argument about the same
+    trait and is the shape copied here; the one difference is that this
+    card narrows to nothing, where that one narrows to a quarry. Gated on
+    bloodied anyway, because the bonus this raises exists nowhere else: an
+    unbloodied enemy never had the +1 for the card to increase.
+
+    **It is a standing modifier, so it cannot live in a triggered body.**
+    `turns.arm_traits` skips an `action=NONE` row that declares a
+    `Trigger`, by design, so until now this row ran only when `p1628` went
+    off and the trait clause had no moment to be laid in. The `p1628` half
+    is a `c.watch` instead, which is what the rest of the file's standing
+    riders do.
+
+    **And that half had never fired.** It read `PowerUsed.targets` for "the
+    target", and `p1628` is `target=NO_TARGET` -- it damages the enemy off
+    its own trigger -- so `dsl._auto_targets` hands back an empty list and
+    the body returned on its first line in every fight. `PowerUsed.trigger`
+    is the event it was used *in answer to*, which the event's own docstring
+    names as the thing `targets` is not a stand-in for: here that is the
+    `Hit`, and its `attacker` is the creature `p1628` burned.
+    """
+    me = c.me
+    c.bonus(
+        "attack", 2, kind="racial", on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            (foe := ctx.get("target")) is not None and c.bloodied(foe)
+        ),
+    )
+
+    def wrath(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p1628":
+            return
+        foe = getattr(ev.trigger, "attacker", None)
+        if foe is None:
+            return
+        c.bonus("damage", 2, on=me, until=When.EONT, kind="power",
+                when=lambda ctx: ctx.get("target") == foe)
+
+    c.watch(PowerUsed, wrath, on=me, until=When.ENCOUNTER)
 
 
 @power("f1869", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -946,16 +982,64 @@ def f1699(c: Cast) -> None:
 
 
 @power("f1702", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.reroll_check(standing=)",))
+       reach=PERSONAL, target=SELF)
 def f1702(c: Cast) -> None:
-    """A trait with a watch, not a triggered row: the skill bonus is a
+    """A trait with two watches, not a triggered row: the skill bonus is a
     standing modifier and would never be laid from inside a trigger.
-    `c.reroll_check` answers a check that has already been rolled and
-    needs `c.trigger`, so a standing "reroll each such check once" has
-    nowhere to live."""
+
+    **`c.reroll_check(standing=)` was a stale marker.** The old note said
+    the verb answers a check that has already been rolled and needs
+    `c.trigger`, so a standing "reroll each such check once" has nowhere to
+    live. It takes `ev=` now, and its own docstring says that argument is
+    for exactly this -- a banked reroll armed as a `c.watch`, whose handler
+    closes over this row's `Cast` and so has somebody else's `trigger`.
+
+    **`Window.BEFORE`, and that is the whole of the care this row needs.**
+    `events.Bus.emit` runs BEFORE, then the resolve callback, then AFTER,
+    and `skills.check` passes `finish` as that callback -- `finish` is what
+    computes `total` and `success` from `natural`. `c.reroll_check` assigns
+    `natural` and recomputes nothing (its `boost_check` call reads
+    `c.trigger`, not the `ev=` it was handed, so it is a no-op here). So a
+    reroll in the AFTER window changes the die and leaves the outcome
+    settled on the old one: the check is announced as rerolled and comes
+    out the same. **A sibling in the tree does it that way and is inert for
+    this reason** -- see the report against `items/consumable.py`'s
+    `bad_check`. Rerolling here instead lets `finish` settle `success` from
+    the new die.
+
+    The two watchers then compose in the printed order without being
+    sequenced: this one changes the die, `finish` settles the outcome, and
+    `slip` below reads that settled value in the ordinary window.
+
+    `keep="new"` is the card's "you must use the second result".
+
+    **Offered rather than taken, with the printed die as the default.** In
+    this window `success` is not settled yet, so the sibling's trick --
+    reroll only a check that failed -- is not available, and choosing a
+    threshold off `natural` would be inventing policy in a row. So it is a
+    `c.may`, and a headless fight keeps the first die.
+
+    **The card narrows to checks "made to gain combat advantage" and this
+    does not.** That circumstance is #785, which nothing rolls yet;
+    `SkillCheck.target` is the field intended for it. The `+3` and the
+    `slip` handler have always been at the wide "any bluff check" grain, so
+    the reroll joins them there rather than introducing the approximation.
+    Narrowing all three is one change against #785, not three."""
     me = c.me
     c.bonus("skill:bluff", 3, on=me, until=When.ENCOUNTER)
+
+    def retry(ev: Any) -> None:
+        if ev.actor != me or ev.skill != "bluff":
+            return
+        if c.may("reroll the check, and use the second result",
+                 who=me, default=False):
+            # Once per check by construction: `c.watch` does not re-enter a
+            # handler on an event it caused, and a reroll announces
+            # `Rerolled` rather than a second `SkillCheck`.
+            c.reroll_check(ev=ev, keep="new")
+
+    c.watch(SkillCheck, retry, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} reroll")
 
     def slip(ev: Any) -> None:
         if ev.actor == me and ev.skill == "bluff" and ev.success:

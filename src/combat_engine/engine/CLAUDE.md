@@ -111,12 +111,31 @@ made that a cycle.
 
 ## Seam
 
-* **Engine must not reach into `content/`.** It does, at five sites —
-  `cast.py:382,3982,4075,4095` and `query.py:380` — all function-local to
+**These are a gate now, not a paragraph.** `.importlinter` holds six
+contracts and `check.py --only seams` asserts them in 0.1s, so what follows
+is checked rather than believed. Making it a gate corrected every number
+this list used to carry.
+
+* **Engine must not reach into `content/`.** It does, at **four** sites —
+  `query.py:675` and `cast.py:7965, 8132, 8154` — all function-local to
   dodge the import cycle. The kernel needs a spawner and a row lookup and
   reaches into content to get them, which means **the kernel cannot run
-  without a built database**. Do not add a sixth; if you need one, that is
+  without a built database**. Do not add a fifth; if you need one, that is
   the issue to file.
+
+  This said **five** sites at `cast.py:382,3982,4075,4095` and
+  `query.py:380`, and every one of those five line numbers was wrong. A
+  count and five line numbers, all stale, is what a paragraph decays into
+  and why the contract exists.
 * `engine` → `etl` and `engine` → `api` are both **zero**. Keep them zero.
+* `engine` → `chargen` is **zero**, and this list never mentioned the
+  relationship while it was one. `skills.py:263` imported `ARMOUR_CHECK` and
+  `SHIELD_CHECK` from `chargen` — function-local, like the four above — and
+  the cost was not the edge but what it made true further out:
+  `etl.build → engine.skills → chargen → content` made the root file's
+  *"etl → content is zero"* false as a claim about the graph. Those two
+  constants are a printed table, not behaviour, so they moved to
+  `combat_engine/armour.py`, below every component. The edge is gone rather
+  than allow-listed. #852.
 * 638 of 677 content modules import from here, so a signature change here is
   a content-wide change. Say so in the commit.

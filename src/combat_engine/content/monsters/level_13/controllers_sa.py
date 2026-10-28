@@ -5214,15 +5214,16 @@ def m6276a1(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC, Keyword.ZONE],
     attack=Attack(vs=WILL, printed=17),
     damage=Damage("1d10", 9, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("c.zone(obscured_for=)",),
 )
 def m6276a2(c: Cast) -> None:
     """"In the origin square of the burst" is `c.origin`, which is the square
     the area was aimed at and the only record of it.
 
-    "Heavily obscured to enemies" is the dropped clause: `blocks_sight` is the
-    one thing a zone says about seeing and it applies to everybody, with no
-    degree and no side.
+    "Heavily obscured to enemies" is `obscured="dark"` with a side:
+    `blocks_sight` is the one thing a zone used to say about seeing and it
+    applies to everybody, with no degree and no side. Dark grades at -5 and
+    is cancelled by darkvision; the side keeps this creature's own allies
+    seeing through it, which an unconditional grade would not.
     """
     if c.strike():
         c.hit()
@@ -5231,7 +5232,8 @@ def m6276a2(c: Cast) -> None:
         if victim is not None and c.origin in squares(c.world, victim):
             c.blinded(until=When.EONT, on=victim)
     if c.first:
-        c.zone(c.area(), label=c.ref, until=When.EONT)
+        c.zone(c.area(), label=c.ref, until=When.EONT,
+               obscured="dark", obscured_for="enemies")
 
 
 @power(
@@ -5393,20 +5395,21 @@ def m6587a1(c: Cast) -> None:
     keywords=[Keyword.COLD, Keyword.THUNDER, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("3d6", 15, dtype=DamageType.COLD, kind=LIMITED, half_on_miss=True),
-    dropped=("c.zone(obscured_for=)",),
 )
 def m6587a2(c: Cast) -> None:
     """The miss line is written out, because `half_on_miss=True` is declared
     data nothing in the engine reads. The zone's rough going is exact;
-    "heavily obscured to enemies" is the dropped clause -- `blocks_sight` is
-    all a zone says about seeing, and it has no side."""
+    "Heavily obscured to enemies" is `obscured="dark", obscured_for=
+    "enemies"` -- a grade, which `blocks_sight` never had, and a side, which
+    keeps this creature's allies seeing through its own storm."""
     if c.strike():
         c.hit()
         c.blinded(until=When.SAVE_ENDS)
     else:
         c.hit(half=True)
     if c.first:
-        c.zone(c.area(), label=c.ref, until=When.EONT, difficult=True)
+        c.zone(c.area(), label=c.ref, until=When.EONT, difficult=True,
+               obscured="dark", obscured_for="enemies")
 
 
 @power(

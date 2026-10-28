@@ -42,15 +42,15 @@ from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     INTERRUPT,
     MINOR,
     MOVE,
     NO_TARGET,
     ONE_ALLY,
-    ONE_OTHER_ALLY,
     STANDARD,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     AttackRolled,
     Cast,
     CloseBurst,
@@ -183,7 +183,7 @@ def p12412(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=DIVINE_HEALING,
 )
 def p12618(c: Cast) -> None:
@@ -200,7 +200,7 @@ def p12618(c: Cast) -> None:
     usage=DAILY,
     action=INTERRUPT,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=DIVINE,
     trigger=_MY_SIDE_HURT,
     on=Trigger(DamageRolled, when=_my_side_hurt(5), text=_MY_SIDE_HURT),
@@ -284,7 +284,7 @@ def p12620(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[*DIVINE, Keyword.SHADOW],
 )
 def p13930(c: Cast) -> None:
@@ -305,7 +305,7 @@ def p13930(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[*DIVINE, Keyword.SHADOW],
 )
 def p13931(c: Cast) -> None:
@@ -331,7 +331,7 @@ def p13931(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=Ranged(20),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
 )
 def p3683(c: Cast) -> None:
@@ -356,7 +356,7 @@ def p3683(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=DIVINE,
 )
 def p7101(c: Cast) -> None:
@@ -394,7 +394,7 @@ def p7101(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=DIVINE_HEALING,
     requires=_not_bloodied,
     requires_text="you must not be bloodied",
@@ -439,7 +439,7 @@ def p7888(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=DIVINE_HEALING,
 )
 def p7889(c: Cast) -> None:

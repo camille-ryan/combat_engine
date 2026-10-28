@@ -17,7 +17,7 @@ from combat_engine.engine import (
     AC,
     ENCOUNTER,
     MINOR,
-    ONE_ALLY,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBurst,
     DamageType,
@@ -51,7 +51,7 @@ def _tier(level: int) -> int:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
     once_per_round=True,
 )
@@ -74,7 +74,7 @@ def p10187(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
     once_per_round=True,
 )
@@ -95,7 +95,7 @@ def p4128(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
     once_per_round=True,
 )

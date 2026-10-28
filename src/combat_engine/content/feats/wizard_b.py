@@ -51,9 +51,6 @@ from combat_engine.engine.components import Powers
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import PowerResolved, ZoneEntered
 
-#: A class feature the benefit names in prose with no ref.
-FEATURE = ("c.class_feature()",)
-
 
 def _keyword(ref: str, *words: Keyword) -> bool:
     p = get(ref)
@@ -209,7 +206,7 @@ def f1997(c: Cast) -> None:
 
 
 @power("f1995", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus('within')",))
+       reach=PERSONAL, target=SELF)
 def f1995(c: Cast) -> None:
     """Every wizard power reaches further, on a sliding scale. Same symbol
     f986 names for the melee side of it.
@@ -231,14 +228,26 @@ def f1995(c: Cast) -> None:
     rather than the row's own header, because `dsl.switched` has already
     resolved an alt range by the time the question is asked.
 
-    **The area half is still dropped, and it is the only clause in the tree
-    that wants `within`.** The card lengthens where an area burst may be
-    *placed*; `"blast_size"` is the burst's own radius, and laying `+2`
-    there turned a `burst 1 within 10` from 9 squares into 49. 56 wizard
-    rows print an area burst within 10 or 20, so the clause is not
-    theoretical. `_stretched`'s docstring says no printed line of this
-    shape lengthens `within` -- this is that line, and i2771x1 is the
-    other. #737, and the area half is #738."""
+    **The area half is written too, on `"within"` -- a third modifier kind,
+    not `"blast_size"`.** The card lengthens where an area line may be
+    *placed*; the radius is a different number, and laying `+2` there turns
+    a `burst 1 within 10` from 9 squares into 49. 56 wizard rows print an
+    area burst within 10 or 20, so the clause is not theoretical. #737 was
+    the ranged half; #738 is this one, and it put the field behind
+    `dsl.within_of` so the three readers that ask where an area line may go
+    cannot disagree.
+
+    **The area band is read off `within`, not `size`, and the card settles
+    it rather than this row guessing.** It says "if a c9 power has a range
+    of 10 squares or fewer" and then works the example itself: `burst 1
+    within 10` becomes `burst 1 within 12`. A burst of radius 1 is in the
+    first band on its `within` of 10 and would be in it on any reading of
+    `size`; the 20s are what tell the two apart, and `within` is the number
+    the printed word "range" means for an area line.
+
+    **Both area kinds, because the card says "area powers" and not "area
+    bursts".** A wall is the other one. The example is a burst because a
+    burst is the common case, not because a wall is excluded."""
     me = c.me
 
     def band(lo: int, hi: int):  # noqa: ANN202
@@ -256,8 +265,25 @@ def f1995(c: Cast) -> None:
 
         return gate
 
+    def area_band(lo: int, hi: int):  # noqa: ANN202
+        """"A c9 area power whose printed `within` falls in this band."""
+
+        def gate(ctx: dict[str, Any]) -> bool:
+            if ctx.get("range_kind") not in ("area_burst", "wall"):
+                return False
+            p = get(ctx.get("power", ""))
+            return (
+                p is not None
+                and p.cls == "wizard"
+                and lo <= p.reach_of().within <= hi
+            )
+
+        return gate
+
     c.bonus("range", 2, on=me, until=When.ENCOUNTER, when=band(0, 10))
     c.bonus("range", 5, on=me, until=When.ENCOUNTER, when=band(11, 20))
+    c.bonus("within", 2, on=me, until=When.ENCOUNTER, when=area_band(0, 10))
+    c.bonus("within", 5, on=me, until=When.ENCOUNTER, when=area_band(11, 20))
 
 
 # -- the racial fire family ------------------------------------------------

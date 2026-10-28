@@ -1210,13 +1210,28 @@ def m2777a3(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.PSYCHIC, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=13),
     damage=Damage("1d8", 9, dtype=DamageType.PSYCHIC, kind=LIMITED, half_on_miss=True),
-    dropped=("Target.creature_kind",),
+    dropped=("etl.monster.power_source",),
 )
 def m2777a4(c: Cast) -> None:
-    """Bloodied is the target line now; the arcane half stays dropped, because
-    `Target` has no notion of a creature's power source. "Requires chromatic
-    disk" is this creature's own permanent gear and not a fight-state fact, the
-    same reasoning `chargen.meets` gets for a feat's prerequisite."""
+    """Bloodied is the target line now; the arcane half stays dropped. The
+    "requires <this creature's own gear>" clause is permanent equipment and
+    not a fight-state fact, the same reasoning `chargen.meets` gets for a
+    feat's prerequisite.
+
+    **Re-pointed off `Target.creature_kind`: nothing records a power source,
+    so no target field could read one.** The old note said `Target` has no
+    notion of it, which is true and is the smaller half of the problem --
+    measured, the `monster` table has **no column** for a power source and
+    the word appears in **none** of `kind`, `keywords` or `origin` for any
+    block in the corpus. A `Target` field would have had nothing to filter
+    on, which is the "modifier nothing consults" shape read from the other
+    end: the gate would be uniformly False and look like a working row.
+
+    So the gap is upstream, in extraction, and the symbol now says so. A
+    power source is a character-side idea that a monster card prints only
+    occasionally, so whether it is extractable at all is the first question
+    for whoever picks this up. #570.
+    """
     if c.strike():
         c.hit()
         c.dazed(until=When.SAVE_ENDS)

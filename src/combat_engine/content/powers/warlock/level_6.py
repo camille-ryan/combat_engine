@@ -32,7 +32,6 @@ from combat_engine.engine import (
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REACTION,
     REF,
@@ -171,7 +170,7 @@ def p1402(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=Ranged(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
 )
 def p2264(c: Cast) -> None:

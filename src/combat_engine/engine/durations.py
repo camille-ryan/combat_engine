@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from .components import Budget, Conditions, Health, Mod, Mods
+from .components import Conditions, Health, Mod, Mods
 from .events import (
     ConditionApplied,
     ConditionEnded,
@@ -187,6 +187,22 @@ class Effect:
     #: its printed kind. Without it a wand that reshapes "the next area
     #: burst" would reshape a melee swing.
     reshape_when: Callable[[dict[str, Any]], bool] | None = None
+    #: A standing replacement for a row's **target line**, beside the
+    #: replacement for its shape above.
+    #:
+    #: Two heroic weapon blocks turn a single-target ranged basic attack into
+    #: "a burst 1 centered on the target", and the sentence goes on to say
+    #: "each **target** hit" -- so the line itself widens. Reshaping the
+    #: range alone left `_auto_targets` honouring the printed
+    #: `ONE_CREATURE`, which made the burst hit exactly one creature: the
+    #: right shape drawn on the board and the wrong number of rolls. A board
+    #: with only one enemy in the burst cannot tell those apart, and a plant
+    #: is what found it.
+    #:
+    #: Read by `dsl.target_of`, the door the way `dsl.reach_of` is the door
+    #: for `reshape`. Shares `reshape_when`, because a card rewriting both
+    #: rewrites them for the same attack. #712.
+    retarget: Any = None
     #: **Does the reshape replace the printed shape, or offer an alternative
     #: to it?** `False` replaces, which is what every caller meant until now
     #: and what `i2467p1` needs: the wand's *activation* is the choice, and
@@ -201,6 +217,39 @@ class Effect:
     #: Read by `dsl.branches_for`, which turns each one in force into an
     #: extra branch index, and by `dsl.reach_of`, which resolves that index.
     reshape_optional: bool = False
+    #: **Who rolls the saving throw that ends this**, when that is not the
+    #: creature the effect sits on. `0` means "the owner", which is every
+    #: effect in the tree but one.
+    #:
+    #: `durations.save` read `eff.owner` for *three* different questions --
+    #: who rolls, whose save bonus applies, and who the `SavingThrow` is
+    #: announced for -- so an effect that benefits one creature and is
+    #: ended by another's save could not be written at all. `i806p1`
+    #: prints "reduce the value of any resistance the target has against
+    #: **your** attack by 5 (save ends)": the `Mod` must sit on the
+    #: attacker, because that is what narrows the clause to your attack,
+    #: while the printed clock is a throw made by the target. A
+    #: `SAVE_ENDS` duration there had the attacker rolling to end its own
+    #: benefit.
+    #:
+    #: **Separate from `clock`, which is a different question.** `clock`
+    #: decides *when* the throw is taken (`eff.clock == ev.actor` at a
+    #: turn's end); this decides *whose throw it is*. Reassigning `clock`
+    #: alone moved the timing and left the roll with the wrong creature,
+    #: which is why #874 could not be solved with the field that already
+    #: existed. A row wanting the target's save at the target's turn end
+    #: sets both.
+    #:
+    #: `p2919` is the near miss and does not generalise: it carries a
+    #: save-ends hold for somebody else by laying a **relation** on the
+    #: target, which works because a relation is directional. A `Mod` is
+    #: read off the creature it sits on, so it cannot move. #874.
+    saver: int = 0
+
+    @property
+    def rolls_the_save(self) -> int:
+        """The creature whose saving throw ends this -- `saver` or `owner`."""
+        return self.saver or self.owner
 
     def __str__(self) -> str:
         bits = [self.label or "effect", self.when.value]
@@ -342,9 +391,11 @@ class Effects:
         drop_cost: ActionType | None = None,
         reshape: Callable[[Any], Any] | None = None,
         reshape_when: Callable[[dict[str, Any]], bool] | None = None,
+        retarget: Any = None,
         reshape_optional: bool = False,
         by: str = "",
         weapon: str = "",
+        saver: int = 0,
     ) -> Effect:
         # Ongoing damage of one type does not stack -- the highest applies.
         # The rule lived in `Cast.ongoing` alone, and this is the door a
@@ -425,7 +476,9 @@ class Effects:
             drop_cost=drop_cost,
             reshape=reshape,
             reshape_when=reshape_when,
+            retarget=retarget,
             reshape_optional=reshape_optional,
+            saver=saver,
         )
         # **The ref of the row that laid this, as a plain attribute.**
         #
@@ -529,7 +582,7 @@ class Effects:
                 # The row that laid the effect. `by` is defaulted from the
                 # label, so this is the ref for all 333 call sites without
                 # any of them saying anything.
-                power=eff.by,
+                power=eff.by,  # ty: ignore[unresolved-attribute]
             ),
             eff,
         ))
@@ -552,7 +605,13 @@ class Effects:
                 holder = self.world.add(eid, Mods())
             holder.items.append(mod)
         for kind, s, t in eff.relations:
-            self.world.relations.set(kind, s, t)
+            # `eff.by` is the ref of the row that laid this effect, stamped
+            # at `apply`. Passing it here is what gives every mark its
+            # provenance for free -- the alternative was widening the
+            # three-tuple above and moving ten content sites. #875.
+            self.world.relations.set(
+                kind, s, t, via=getattr(eff, "by", "") or "",
+            )
 
     def _install_conditions(self, eff: Effect, source: int, duration: str) -> None:
         """Lay the conditions and announce each one that was not already held.
@@ -590,7 +649,7 @@ class Effects:
                     _with_weapon(
                         ConditionApplied(
                             source=source, target=eff.owner, condition=c,
-                            duration=duration, power=eff.by,
+                            duration=duration, power=eff.by,  # ty: ignore[unresolved-attribute]
                         ),
                         eff,
                     )
@@ -883,6 +942,15 @@ class Effects:
                     self.end(eff, "start of turn")
 
     def _on_turn_end(self, ev: TurnEnd) -> None:
+        # **One sustain action per power, not per thing it put on the
+        # board.** Every `c.conjure` makes its own effect carrying
+        # `sustain_cost=MINOR`, and this charged the budget once each -- so
+        # a row conjuring two kept one and lost the other at this very turn
+        # end, and a row conjuring three lost two. The printed rule is one
+        # sustain for the power. Carried across the sweep rather than inside
+        # `_sustain_by_default`, because the ledger belongs to *this* turn
+        # end and not to any one effect. #819.
+        paid: set[tuple[int, str]] = set()
         for eff in list(self.live.values()):
             if eff.clock != ev.actor:
                 continue
@@ -915,7 +983,7 @@ class Effects:
             elif (
                 eff.when is When.SUSTAIN
                 and eff.sustained < self.world.round
-                and not self._sustain_by_default(eff)
+                and not self._sustain_by_default(eff, paid)
             ):
                 self.end(eff, "not sustained")
 
@@ -935,7 +1003,9 @@ class Effects:
                           "to sustain, so nothing can keep it going")
             )
 
-    def _sustain_by_default(self, eff: Effect) -> bool:
+    def _sustain_by_default(
+        self, eff: Effect, paid: set[tuple[int, str]] | None = None
+    ) -> bool:
         """Keep a sustained effect going if its action was never spent.
 
         The printed rule makes forgetting the default: sustain it or lose it.
@@ -947,14 +1017,49 @@ class Effects:
 
         Two effects both wanting a minor means the second one lapses, which
         is right: there is only one minor, and spending it here spends it.
+
+        **Asked through `Encounter.spend` rather than off `Budget` by name**,
+        and the old `getattr(budget, cost.value, 0) <= 0` was wrong twice:
+
+        * **five of the eight `ActionType` members name no `Budget` field.**
+          `Budget` has `standard`, `move`, `minor`, `immediate_round` and
+          `opportunity_turn`; `free`, `immediate_interrupt`,
+          `immediate_reaction`, `opportunity` and `none` are not fields, so
+          the `getattr` default fired and each read as a slot already at
+          zero. Measured before and after on the same board:
+
+              sustain=free          kept by default:  False -> True
+              sustain=minor         kept by default:  True  -> True
+              sustain=opportunity   kept by default:  False -> True
+
+          A `sustain=FREE` effect was therefore dropped at the first
+          turn-end of a later round, and one live row prints that cost.
+        * **it missed the downgrades.** A creature with a standard left and
+          no minor may pay a minor, which `DOWNGRADES` knows and a direct
+          read of one slot cannot -- so a sustain could lapse with an action
+          still in hand.
+
+        `Encounter.spend` is the one place that answers both, and it stamps
+        the round and turn markers that the immediate and opportunity costs
+        are kept on rather than decrementing a count that does not exist.
+        #776.
         """
         cost = eff.sustain_cost
         if cost is None:
             return False
-        budget = self.world.get(eff.source, Budget)
-        if budget is None or getattr(budget, cost.value, 0) <= 0:
+        # The row that laid it, so two conjurations from one power share one
+        # action. `by` falls back to the label for an effect that reached
+        # here without going through `apply`.
+        row = (eff.source, getattr(eff, "by", "") or eff.label)
+        if paid is not None and row in paid:
+            self.sustain(eff)
+            self.world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
+            return True
+        held = self.world.encounter
+        if held is None or not held.spend(eff.source, cost):
             return False
-        setattr(budget, cost.value, getattr(budget, cost.value) - 1)
+        if paid is not None:
+            paid.add(row)
         self.sustain(eff)
         self.world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
         return True
@@ -971,7 +1076,12 @@ class Effects:
         both of the turn's throws because nothing could say which this was.
         #671, #672.
         """
-        holder = self.world.get(eff.owner, Mods)
+        # **`rolls_the_save`, not `owner`, for all three questions here.**
+        # They are one creature for every effect but `i806p1`'s, where
+        # the `Mod` sits on the attacker and the printed throw is the
+        # target's. #874.
+        saver = eff.rolls_the_save
+        holder = self.world.get(saver, Mods)
         # With a context. It was called with none, so a `when=` gate on a
         # save bonus ran against `{}` and anything reading a key was
         # silently false -- "enemies within the aura take -2 to saving
@@ -983,7 +1093,7 @@ class Effects:
         # meant matching whatever string the row that laid the effect
         # happened to choose, which is its ref more often than not.
         ctx = {
-            "actor": eff.owner,
+            "actor": saver,
             "effect": eff,
             "label": eff.label,
             "conditions": frozenset(eff.conditions),
@@ -1021,7 +1131,7 @@ class Effects:
         # a printed line and had nowhere to go -- and then acted on.
         rolled = self.world.bus.emit(
             SavingThrow(
-                actor=eff.owner,
+                actor=saver,
                 against=str(eff),
                 natural=roll.total,
                 bonus=bonus,

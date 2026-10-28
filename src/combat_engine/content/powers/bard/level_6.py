@@ -32,7 +32,7 @@ def _hits_ally(world: World, me: int, ev: Event) -> bool:
     usage=DAILY,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
 )
 def p12515(c: Cast) -> None:
@@ -49,7 +49,7 @@ def p12515(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p14464(c: Cast) -> None:
@@ -64,7 +64,7 @@ def p14464(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
 )
 def p14465(c: Cast) -> None:
@@ -101,7 +101,7 @@ def p2361(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p2372(c: Cast) -> None:
@@ -199,7 +199,7 @@ def p5689(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p5692(c: Cast) -> None:

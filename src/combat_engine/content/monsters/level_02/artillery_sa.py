@@ -1310,12 +1310,20 @@ def m5844a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.reload()",),
 )
 def m6507a0(c: Cast) -> None:
-    """The whole trait is a cheaper reload, and loading is not a cost the
-    engine charges -- so there is nothing to make cheaper and no way to say the
-    sentence. Three class rows wait on the same verb."""
+    """Loads its crossbow as a free action.
+
+    **Written.** The old note was accurate -- "loading is not a cost the
+    engine charges, so there is nothing to make cheaper" -- and it is a
+    cost now: a `load minor` weapon is empty after it fires,
+    `can_branch` refuses the next shot, and `actions._loading` offers the
+    reload. #675, #725.
+
+    A trait, so it arms itself at the top of the fight and the creature
+    never pays a minor to reload for the rest of it.
+    """
+    c.loads_free(only="crossbow")
 
 
 @power(

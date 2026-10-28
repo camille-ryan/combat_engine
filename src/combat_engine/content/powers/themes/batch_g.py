@@ -31,7 +31,6 @@ from combat_engine.engine import (
     AC,
     ANY_CREATURE,
     DAILY,
-    EACH_ALLY,
     EACH_ENEMY,
     EACH_OTHER,
     ENCOUNTER,
@@ -41,7 +40,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
@@ -49,6 +47,8 @@ from combat_engine.engine import (
     REGISTRY,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     Ability,
     ActionType,
     Attack,
@@ -241,7 +241,7 @@ def p12259(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PRIMAL],
 )
 def p12260(c: Cast) -> None:
@@ -691,7 +691,7 @@ def p14132(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE, Keyword.HEALING],
 )
 def p14134(c: Cast) -> None:
@@ -708,7 +708,7 @@ def p14134(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(3),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
 )
 def p14135(c: Cast) -> None:
@@ -1039,12 +1039,31 @@ def p14221(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("c.recharge_roll()",),
+    dropped=("actions.recharge(disadvantage=)",),
 )
 def p14222(c: Cast) -> None:
     """The penalty is laid on each enemy with a live "am I inside" gate, so
     a creature that walks in later is covered and one that walks out is
-    not. Nothing touches a recharge roll."""
+    not.
+
+    **Still dropped, and re-aimed to the symbol the sibling row uses.** The
+    clause is a *disadvantage on somebody else's* recharge roll -- "enemies
+    in the aura must roll twice and use the lower result when attempting to
+    recharge a power" -- and not this row declaring a recharge of its own.
+    A triage pass read it the second way and judged the row writable off
+    `dsl.recharge` / `recharge_when` / `recharge_while`, which are header
+    data about the row that owns them and answer a different sentence.
+
+    `actions.recharge` is the one reader: it rolls `world.rng.roll("1d6")`
+    flat against the number in the header and consults no modifier of any
+    kind, so there is nowhere for either shape of this to go. `m2555a4`
+    reached the same line from the other end -- it wants a +1 and its note
+    says so -- which is why the symbol names that function rather than a
+    `Cast` verb. Two shapes of one hole, so two symbols: a bonus hook would
+    not let this row say "twice, keep the lower".
+
+    `c.reroll_attack(keep="worst")` and `c.damage_disadvantage` are the two
+    rolls that *do* have it, and neither reaches a recharge."""
     c.aura(2, label=c.ref, until=When.EONT, on=c.me)
     for foe in c.enemies():
         c.penalty(
@@ -1336,7 +1355,9 @@ def p16059(c: Cast) -> None:
     **Measured as adjacency**, which is reach 1 and so right for all but
     a reach weapon; `movement._threat` is what knows better and is engine
     side. Before and after off the event's own `from_`/`to`, the way
-    `_fled_from_me` below reads a retreat.
+    `_backed_away_this_turn` below reads a retreat -- except that this one
+    really is about the step, since an opportunity window answers the
+    square being left.
 
     Still dropped: "you must make every opportunity attack you can". That
     takes the choice away from whoever is deciding, and nothing content
@@ -1866,7 +1887,7 @@ def p16528(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PRIMAL, Keyword.BEAST_FORM],
 )
 def p16529(c: Cast) -> None:
@@ -1967,7 +1988,7 @@ def p16595(c: Cast) -> None:
     """The Prerequisite is a build-time gate and not this row's to enforce;
     what is checked here is the printed "if it is not expended"."""
     c.shift(c.speed_of())
-    if c.knows("p2473") is not None and "p2473" not in c.expended():
+    if c.knows("p2473") == c.me and "p2473" not in c.expended():
         c.use_power("p2473")
 
 
@@ -2133,7 +2154,6 @@ def p16018(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    dropped=("c.cannot_hide()",),
 )
 def p16019(c: Cast) -> None:
     """The concealment half plays, for everybody inside.
@@ -2151,31 +2171,60 @@ def p16019(c: Cast) -> None:
     `side="any"` because the printed word is "creatures", not allies or
     enemies; `_side` has had that pool all along.
 
-    **Still dropped: invisibility.** That is a `HIDDEN_FROM` relation and
-    `cover_waived` never consults it -- only `query.sees_through` does, on
-    the watcher. So "cannot benefit from invisibility" would need
-    something standing on the creature that stops it being hidden from
-    anybody, and the surface has only the per-watcher shapes:
-    `c.see_invisible`, `c.truesight(of=)`, `c.unhide` on oneself. The
-    marker is `m6644a2`'s, which is the same gap said about one creature
-    rather than a zone -- every hide method stops at doing or reading a
-    hide, never at refusing one. The caster's own sense is kept below as
-    the half of it that can be said.
+    **The invisibility half is written now, and this note's premise is
+    false twice over.** It said the surface *"has only the per-watcher
+    shapes: `c.see_invisible`, `c.truesight(of=)`, `c.unhide` on
+    oneself"*. `c.no_invisibility` landed with #774 and sits on whoever is
+    being looked at, which is exactly the direction the card needs; what
+    was genuinely missing was the geometry, and `c.no_invisibility_in` is
+    that -- `c.conceal_in`'s shape, taken on entering and given back on
+    leaving, so a creature walking in later is caught.
+
+    **`c.see_invisible(on=c.me)` is gone, and it was wider than print.**
+    It was kept here as *"the half of it that can be said"*, and it says a
+    different thing: the caster saw every invisible creature on the board,
+    aura or no aura. The card is about creatures *in the aura* and says
+    nothing about the caster's sight.
+
+    No marker: the card prints two clauses and both are written. The
+    `c.cannot_hide()` it carried is `m6644a2`'s gap -- that card forbids a
+    creature from *hiding*, which this one does not mention.
     """
     zid = c.aura(1, label=c.ref, until=When.ENCOUNTER, on=c.me)
     c.grants_in(zid, "no_cover", 5, side="any", kind="ignore cover")
-    c.see_invisible(on=c.me, until=When.ENCOUNTER)
+    c.no_invisibility_in(zid, side="any")
 
 
-def _fled_from_me(world: World, me: int, ev: Moved) -> bool:
-    """An enemy that was within 10 and has moved further off than it was."""
-    if ev.actor == me or ev.actor not in query.enemies(world, me):
+def _backed_away_this_turn(world: World, me: int, ev: TurnEnd) -> bool:
+    """An enemy that began its turn within 10 of me and is ending it off.
+
+    **The turn, not the step.** `Moved` is the only event carrying where a
+    creature came from, so the obvious declaration fires on any one step
+    away -- which pays out for an enemy that walks a square back and then
+    four squares in. The square the turn began in is on the log all the
+    same: `query.since_turn_began` is bounded by this creature's own
+    `TurnStart` and skips a ghost turn, so the first `Moved` it holds for
+    the mover starts where the turn did.
+
+    Both ends are measured anchor-to-my-footprint, which is how the rest of
+    this file reads a retreat, and "farther away" is farther than it began
+    rather than farther than 10.
+    """
+    if ev.ghost or ev.actor == me or ev.actor not in query.enemies(world, me):
         return False
     mine = query.squares(world, me)
     if not mine:
         return False
-    was = min(distance(ev.from_, sq) for sq in mine)
-    now = min(distance(ev.to, sq) for sq in mine)
+    steps = [
+        past for past in query.since_turn_began(world, ev.actor)
+        if isinstance(past, Moved) and past.actor == ev.actor
+    ]
+    # An enemy that never moved has not backed away, and there is no start
+    # square to read -- so this is the guard and not merely a shortcut.
+    if not steps:
+        return False
+    was = min(distance(steps[0].from_, sq) for sq in mine)
+    now = min(distance(steps[-1].to, sq) for sq in mine)
     return was <= 10 and now > was
 
 
@@ -2189,13 +2238,16 @@ def _fled_from_me(world: World, me: int, ev: Moved) -> bool:
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL, Keyword.TELEPORTATION],
     trigger="an enemy that started its turn within 10 squares ends it farther away",
-    on=Trigger(Moved, _fled_from_me, "an enemy backs away from you"),
-    dropped=("query.distance_at_turn_start()",),
+    on=Trigger(TurnEnd, _backed_away_this_turn, "an enemy backs away from you"),
 )
 def p16020(c: Cast) -> None:
-    """The printed trigger is measured across a whole turn; `Moved` is the
-    only event carrying where the creature came from, so the row fires on
-    one step away instead of on the turn's net distance.
+    """**`query.distance_at_turn_start()` was a reader that already
+    existed.** The old note said `Moved` is the only event carrying where
+    the creature came from, so the row could only fire on one step away
+    instead of on the turn's net distance -- and the turn's first `Moved`
+    answers the same question once the log walk is bounded by the mover's
+    own turn, which is `query.since_turn_began`. `TurnEnd` is an ordinary
+    declared trigger; nineteen rows in the tree already react to one.
 
     The teleport names its square, which is how it ignores line of sight.
     """

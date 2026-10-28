@@ -38,6 +38,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     Ability,
     ActionType,
     Attack,
@@ -140,7 +141,7 @@ _granted("f595", "f595b")
 
 
 @power("f595b", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-    reach=Ranged(10), target=ONE_ALLY, keywords=DIVINE, group=CHANNEL_DIVINITY,
+    reach=Ranged(10), target=YOU_OR_ONE_ALLY, keywords=DIVINE, group=CHANNEL_DIVINITY,
     trigger="you or an ally within range succeeds on a saving throw",
     on=Trigger(SavingThrow, _ally_saved, "an ally makes a saving throw"))
 def f595b(c: Cast) -> None:
@@ -218,7 +219,7 @@ _granted("f623", "f623b")
 
 
 @power("f623b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(10), target=ONE_ALLY, keywords=DIVINE,
+       reach=CloseBurst(10), target=YOU_OR_ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f623b(c: Cast) -> None:
     c.save(on=c.target)

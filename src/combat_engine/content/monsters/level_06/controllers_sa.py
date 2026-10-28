@@ -89,7 +89,8 @@ from combat_engine.engine import (
     World,
     power,
 )
-from combat_engine.engine.components import Health, Ident, Trap
+from combat_engine.engine.components import Conjuration, Health, Ident, Trap
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import (
     AdjacencyGained,
     AttackDeclared,
@@ -107,11 +108,14 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import (
+    alive,
     bloodied,
     distance_between,
     enemies,
     has_combat_advantage,
     is_,
+    is_trap,
+    squares,
     team,
 )
 from combat_engine.engine.triggers import (
@@ -808,13 +812,48 @@ def m1059a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.difficult_for()",),
 )
 def m115822a0(c: Cast) -> None:
     """"Squares in the aura are difficult terrain for that enemy" is terrain
-    keyed to one creature rather than to the ground -- `c.zone(difficult=)`
-    makes an area difficult for everybody, and there is no per-creature
-    form of it. Nothing here works yet."""
+    keyed to one creature rather than to the ground. `c.zone(difficult=)`
+    roughs an area for everybody standing in it, which on this card would
+    catch **the other enemies in the same aura** -- so the aura is laid
+    ordinary and each hit enemy is burdened inside it by name. #831.
+
+    **One aura, not one per enemy**, and the per-enemy clock rides on the
+    effect rather than on the zone: `c.difficult_for(zone=)` puts the id in
+    `Zone.difficult_for` and takes it out at the end of that creature's next
+    turn, which is the duration the card prints. The aura outlives every
+    one of them and `Zones.refresh` keeps its squares centred as the
+    creature moves -- which is why this is a zone and not a set of squares
+    copied onto the enemy.
+
+    **The trait is armed rather than declared, so it carries the watch.**
+    `turns.arm_traits` runs an `action=NONE` row with no declared trigger at
+    the start of the fight, which is the moment the aura should go down;
+    "whenever an enemy in the aura is hit" is then a `Hit` watch with the
+    aura membership asked at the moment of the hit, because an enemy outside
+    it takes nothing."""
+    from combat_engine.engine.zones import Zone
+
+    me = c.me
+    aura = c.aura(5, label=c.ref, on=me)
+
+    def burdened(hit: Any) -> None:
+        """Only an enemy, and only one standing in the aura when it was hit.
+
+        The attacker is not asked about: the card says "is hit by an
+        attack" and not "by this creature", so an enemy struck by its own
+        ally's blast is caught too -- which is the printed line.
+        """
+        foe = getattr(hit, "target", None)
+        if foe is None or foe not in c.enemies():
+            return
+        if not (squares(c.world, foe) & c.world.need(aura, Zone).squares):
+            return
+        c.difficult_for(on=foe, zone=aura, until=When.EOTNT)
+
+    c.watch(Hit, burdened, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -1280,6 +1319,24 @@ def m1526a2(c: Cast) -> None:
             return
 
 
+_M1526_SPRUNG = "a trap within 2 squares of it is triggered"
+
+
+def _trap_sprung_within_two(world: World, me: int, ev: AttackDeclared) -> bool:
+    """A trap going off **is** its attack, so there is no second event to wait
+    for and `events.TrapTriggered` was the wrong thing to ask for.
+
+    `terrain.dress` sets `Trap.sprung` and rolls the plate's attack in one
+    breath, with the trap itself as the attacker -- so the only moment a trap
+    announces anything is the `AttackDeclared` that comes out of
+    `resolve.attack`. `p14166` reads the same moment the same way. #74.
+    """
+    return (
+        is_trap(world, ev.attacker)
+        and distance_between(world, me, ev.attacker) <= 2
+    )
+
+
 @power(
     "m1526a3",
     level=6,
@@ -1287,12 +1344,18 @@ def m1526a2(c: Cast) -> None:
     action=ActionType.IMMEDIATE_INTERRUPT,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="a trap within 2 squares of it is triggered",
-    todo=("events.TrapTriggered",),
+    trigger=_M1526_SPRUNG,
+    on=Trigger(AttackDeclared, _trap_sprung_within_two, _M1526_SPRUNG),
 )
 def m1526a3(c: Cast) -> None:
-    """No event announces a trap being triggered, so the window this shift
-    answers never opens."""
+    """An interrupt, so the shift lands before the plate rolls -- which is
+    the whole of what the card buys and why the action column matters here.
+
+    The trap, not the creature: `m1526`'s block repeats its own ref for the
+    plate throughout (see this file's header), and `is_trap` is what tells
+    the two apart without the word.
+    """
+    c.shift(2)
 
 
 @power(
@@ -1875,18 +1938,60 @@ def m2539a1(c: Cast) -> None:
     keywords=[Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=9),
     damage=Damage("1d6", 4, kind=LIMITED),
-    dropped=("c.douse(zone=)",),
 )
 def m2539a2(c: Cast) -> None:
-    """Push, prone and the difficult-terrain area all land. Extinguishing
-    mundane fire and the fire-keyed zone or conjuration of whoever made it
-    is the gap `c.douse(zone=)` already names elsewhere in the tree."""
+    """Push, prone and the difficult-terrain area all land.
+
+    "Normal fire is extinguished within the area" walks the map's own
+    fires and puts out the ones the burst covers -- `p16244`'s loop without
+    its `loose=True`, because this card prints no "not controlled by a
+    creature" clause.
+
+    The last sentence is a Secondary Attack line with no ref of its own:
+    one roll per fire-keyed zone or conjuration against whoever made it,
+    the printed total taken back to a bonus by `scaling.trim` the way the
+    header's `Attack(printed=)` is. "Of fire" is asked of the row that laid
+    the thing -- `durations.keywords_of` off a zone's label, which is that
+    ref by convention, and off a conjuration's own ref -- and the creator
+    is `Zone.owner` or `Conjuration.by`. `p2273` is the sibling that
+    unmakes either this way; a conjuration goes out by ending the effect
+    it lives on, which is what despawns it.
+    """
     if c.strike():
         c.hit()
         c.push(2, anchor=c.origin)
         c.prone()
-    if c.first:
-        c.zone(c.area(), difficult=True, until=When.EONT, label=c.ref)
+    if not c.first:
+        return
+    area = c.area()
+    # Before this row lays its own zone, so the walk below has only other
+    # people's to consider.
+    for fire in c.scenery("fire"):
+        if squares(c.world, fire) & area:
+            c.douse(on=fire)
+    plus = c.world.scaling.trim(10, c.level)
+    # There is no creator to roll against for a zone the terrain laid, and
+    # none to roll against for one whose maker has already dropped -- so
+    # those are left standing rather than rolled at nobody.
+    for zid, zone in c.world.zones.all():
+        if not (zone.squares & area) or not alive(c.world, zone.owner):
+            continue
+        if Keyword.FIRE in keywords_of(zone.label) and c.attack(
+            plus, WILL, on=zone.owner
+        ):
+            c.world.zones.end(zid, c.ref)
+    # Materialised: `World.each` walks the live set, and unmaking a
+    # conjuration despawns it out from under the walk.
+    for eid, conj in list(c.world.each(Conjuration)):
+        if not (squares(c.world, eid) & area) or not alive(c.world, conj.by):
+            continue
+        if Keyword.FIRE in keywords_of(conj.ref) and c.attack(
+            plus, WILL, on=conj.by
+        ):
+            held = c.world.effects.live.get(conj.effect)
+            if held is not None:
+                c.world.effects.end(held, c.ref)
+    c.zone(area, difficult=True, until=When.EONT, label=c.ref)
 
 
 @power(
@@ -2107,7 +2212,6 @@ def m3440a3(c: Cast) -> None:
         for foe in enemies(world, eid)
     ),
     requires_text="targets a helpless or unconscious creature",
-    dropped=("Defences.insubstantial",),
 )
 def m3440a4(c: Cast) -> None:
     """The coup de grace, the heal, and now the fly speed it pays with.
@@ -2116,9 +2220,18 @@ def m3440a4(c: Cast) -> None:
     `c.mode` the old note said did not exist, and `When.EONT` is the
     printed "until the end of its next turn" with the caster as the loser.
 
-    Still dropped, and now one thing rather than two: `Defences` carries no
-    insubstantial column, so "loses insubstantial" has nothing to take
-    away. The same half `m3437a2` names.
+    **"Loses insubstantial" is written, and nothing here had to change to
+    make it possible.** The old note said *"`Defences` carries no
+    insubstantial flag at all -- the database column does not exist"*, and
+    that stopped being true: `Defences` holds `half_always` (ungated sources,
+    counted), `half_when` (the gated ones) and `half_except`, and
+    `query.takes_half` reads all three.
+
+    So the trait was there to take away and what was missing was the
+    *taking*. `c.suspend_trait` is it, and **not** `c.cure`: curing the
+    condition spends the trait's duration, so an encounter-long
+    insubstantial would be gone for the fight where the card gives it up for
+    a turn. `c.suspend_when` argues the same point for the triggered case.
 
     The body redirects to a qualifying enemy the way the Requirement itself
     asks, since the chooser's pick and the board's answer are not always
@@ -2137,6 +2250,7 @@ def m3440a4(c: Cast) -> None:
     # Paid before the swing, because the card prints the price first and a
     # creature that kills itself on the attack should still have paid it.
     c.lose_mode("fly", until=When.EONT)
+    c.suspend_trait(Condition.INSUBSTANTIAL, on=c.me, until=When.EONT)
     killed = c.coup_de_grace(on=victim)
     if killed:
         health = c.world.get(c.me, Health)

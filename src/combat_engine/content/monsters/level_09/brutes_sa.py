@@ -553,20 +553,33 @@ def m1471a1(c: Cast) -> None:
     keywords=[Keyword.ACID, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=10),
     damage=Damage("3d6", 6, dtype=[DamageType.ACID, DamageType.NECROTIC], kind=LIMITED),
-    dropped=("Cast.condition(ongoing_dtypes=)",),
 )
 def m1471a2(c: Cast) -> None:
-    """The hit roll is one blow of two types and the ongoing burn is the
-    same pair -- `Damage` and `c.condition`'s own `ongoing=` each take one
-    type, so the necrotic half of both is the part left out.
+    """The hold and the two-type burn on ONE save-ends clock.
 
-    **Re-aimed from `Cast.condition(ongoing=)`**, which resolves: the
-    keyword exists, so the old marker read ARRIVED the day it was written.
-    What is absent is a `dtypes` form of it. `c.ongoing` already takes
-    `dtypes=`, but on a second clock -- and "save ends both" is one."""
+    The old note was right that `c.condition` cannot say it -- its
+    `ongoing=` is a single `(amount, type)` pair -- and wrong that nothing
+    could. The door is one level down: `Effects.apply` takes
+    `ongoing_types=` for a burn that is more than one type at once, and its
+    stacking check compares whole *sets*, so this burn is not the plain acid
+    one and neither supersedes the other.
+
+    **Not `c.ongoing(dtypes=)`**, which lays a second effect and so a second
+    saving throw. The card prints "save ends **both**", which is one clock
+    carrying the condition and the burn together -- the reason
+    `c.condition`'s own `ongoing=` exists at all.
+
+    `m6372a2` is the same two-type burn through the same door without a
+    condition beside it.
+    """
     if c.strike():
         c.hit()
-        c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS, ongoing=(10, DamageType.ACID))
+        c.world.effects.apply(
+            c.target, c.me, When.SAVE_ENDS, label=c.ref, by=c.ref,
+            conditions=(Condition.IMMOBILIZED,),
+            ongoing=(10, DamageType.ACID),
+            ongoing_types=(DamageType.ACID, DamageType.NECROTIC),
+        )
 
 
 # ==========================================================================

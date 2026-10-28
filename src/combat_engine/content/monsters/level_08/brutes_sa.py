@@ -2077,7 +2077,7 @@ def _arm_m5494_claw_tracking(c: Cast) -> None:
     bucket = getattr(c.world, "_m5494_claws", None)
     if bucket is None:
         bucket = {}
-        c.world._m5494_claws = bucket  # type: ignore[attr-defined]
+        c.world._m5494_claws = bucket
     bucket[me] = hit_this_turn
 
     def mark(ev: Hit) -> None:

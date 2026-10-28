@@ -68,11 +68,6 @@ MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 
 SHROUD_MAX = 4
 
-#: (world, assassin) -> [watch armed]. The count lives on the creature as a
-#: `Shrouds` component; this is only the once-per-fight arming flag, keyed on
-#: the world so a second encounter arms its own watch.
-_SHROUDS: dict[tuple[int, int], list[int]] = {}
-
 
 def _wielding(name: str):  # noqa: ANN202
     """A `requires=` gate on holding one named weapon.
@@ -167,10 +162,12 @@ def p9400(c: Cast) -> None:
     if victim is None:
         return
     c.shroud(on=victim, cap=SHROUD_MAX)
-    armed = _SHROUDS.setdefault((id(c.world), c.me), [0])
-    if armed[0]:
+    # The count lives on the creature as a `Shrouds` component; this is only
+    # the once-per-fight arming flag, so that a second encounter arms its own
+    # watch. It was a module dict keyed on `id(c.world)`, which is the bug
+    # `World.latches` is about -- and this row is where it was found.
+    if not c.once_per_board(c.me):
         return
-    armed[0] = 1
     per = 0 if c.level < 11 else (3 if c.level < 21 else 6)
 
     def invoke(ev: Any) -> None:

@@ -130,6 +130,7 @@ from combat_engine.engine.query import (
     allies,
     distance_between,
     holding,
+    immune_to,
     squares,
     team,
 )
@@ -141,9 +142,40 @@ from combat_engine.engine.query import (
 #: marked "the brief prints a name and gives no ref", which is true -- the
 #: compendium holds no row of any kind by that name -- but it is not what
 #: would unblock them. Their clauses ride on the *act* of defiling, and
-#: `c.on_defiling()` is the hook two other rows already wait on. A ref would
-#: not help; the hook would.
-PROSE = ("c.on_defiling()",)
+#: **Re-pointed: the power these ride has no ref anywhere in the corpus.**
+#: Every one of these rows waits on "a use of arcane defiling" being
+#: announced, and the thing to announce was never imported. Measured:
+#:
+#:     localisation names mentioning "defil"        44
+#:       of those, monster refs                     28
+#:       non-monster: 5 feats, 1 item, 2 terrain,
+#:                    6 theme/path/destiny refs
+#:       a ref that IS the player's defiling power    0
+#:     power.spec rows mentioning defiling            0
+#:     class_feature rows mentioning defiling         0
+#:
+#: So the riders are imported -- 9 feat specs and 5 item blocks cite it --
+#: and the power they ride is not. **`m5441a5` is the near miss**: its
+#: printed name is the one the feats say, and it is a *monster* ability, so
+#: a search for the name finds something and it is not the player's version.
+#: Check the ref, not the name.
+#:
+#: `c.on_defiling()` named a hook, and a hook cannot be built for a row that
+#: does not exist: there is nothing to watch and no ref to key it on.
+#:
+#: **And the import it named cannot happen either**, which is what moved
+#: these three from `todo=` to `defect=`. Read out of the compendium
+#: directly: **0** `Power` or `ClassFeature` rows name the player's arcane
+#: defiling, and the only 2 `Power` rows whose names mention defiling at all
+#: are **paragon** (levels 11 and 12) powers that *consume* it. So there is
+#: nothing for `etl` to read, and a symbol-shaped marker claimed a wait that
+#: no work can end. `defect=` is the marker for exactly that and takes plain
+#: words. #878.
+DEFECT = (
+    "the player's arcane defiling power is not in the compendium: 0 Power or"
+    " ClassFeature rows name it, and the 2 Power rows whose names mention"
+    " defiling are paragon powers that consume it (#878)"
+)
 #: A rider on a *set* of powers the card names by category rather than by ref.
 #:
 #: **One row, not two, and the symbol is probably no longer the right one.**
@@ -216,14 +248,6 @@ def _wielding(what: str):  # noqa: ANN202
     return gate
 
 
-#: Raised once per fight per feat. A trait is armed at the start of every
-#: fight and the sentence is about the character sheet, so the pool must go
-#: up once however many fights it sees -- `feats/paladin.py` holds the same
-#: latch for the same reason.
-_SURGES_RAISED: dict[tuple[int, str, int], bool] = {}
-#: The same latch for the point `f3389` hands over.
-_POINT_GRANTED: dict[tuple[int, str, int], bool] = {}
-
 
 def _one_more_surge(c: Cast) -> None:
     """"Your number of healing surges increases by one."
@@ -233,11 +257,11 @@ def _one_more_surge(c: Cast) -> None:
     surge itself is handed over beside it: raising the ceiling alone leaves
     the character with no more to spend than it had.
     """
-    key = (id(c.world), c.ref, c.me)
+    # Raised once per board per feat, because a trait is armed at the start
+    # of every fight and the sentence is about the character sheet.
     health = c.world.get(c.me, Health)
-    if health is None or _SURGES_RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _SURGES_RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 
@@ -558,13 +582,48 @@ _swap("f3186", "f3186b", Swap(9, Usage.DAILY))
 
 
 @power("f3186b", level=1, cls="", usage=DAILY, action=STANDARD,
-       reach=Ranged(10), target=ONE_CREATURE,
+       reach=Ranged(10, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.RELIABLE, Keyword.WEAPON],
-       attack=Attack(STR, vs=REF), requires=_wielding("w3711"),
+       attack=Attack(STR, vs=REF), thrown_by_hand=True,
+       requires=_wielding("w3711"),
        requires_text="wielding the weapon this chain names")
 def f3186b(c: Cast) -> None:
     """Both ends of the weapon land on one roll, so the off-hand dice are
-    a second `c.damage` on the same hit rather than a second strike."""
+    a second `c.damage` on the same hit rather than a second strike.
+
+    **`by_weapon=True`, because the card prints "Ranged weapon" and no
+    number.** It was a bare `Ranged(10)`, which `w3711` cannot satisfy --
+    that weapon reaches 2 and throws 3/6 -- so `usable` refused the row and
+    was right to: the engine was doing exactly what the two numbers said.
+    The 10 was never printed; it came from prose the ETL could not read
+    (`feat.unparsed` is 1 for `f3186`, and there is no `power` row for this
+    `b`-suffixed card at all), so it is a stand-in.
+
+    `_reach_of` says what the flag is for: *"a row printing `Ranged weapon`
+    does not print a number, so the number the ETL wrote down is a stand-in
+    and must lose to the thing in hand."* With the flag the range is the
+    weapon's long throw and the 10 is only what is left if the hand holds
+    nothing.
+
+    **And `thrown_by_hand=True`, which is the half that was actually
+    refusing it.** `Power.can_branch` asks a `ranged` row for
+    `Gear.ranged` -- something to *fire* -- and `w3711` is thrown, so
+    `gear.ranged` is None and the branch was closed. `thrown_by_hand` is
+    the declared field for exactly that: *"unless it is thrown by hand, in
+    which case a melee weapon is exactly what it wants"*.
+
+    **The range was not the whole fault and the refusal message said so
+    misleadingly.** With only the range fixed, `usable` reported
+    *"wielding the weapon this chain names"* -- this row's own
+    `requires_text` -- while `p.requires(world, me)` returned **True**.
+    That is by design: `usable` prints `requires_text` when no branch is
+    open, and its own comment says callers *"should ask
+    `unmet_requirement`, not read these words"*. Worth knowing before
+    trusting that string: it names a gate that had already passed.
+
+    Read off the page by the main session, which is the one that can. The
+    three siblings in the chain are `Melee(1)` and all fire. #709.
+    """
     if c.strike():
         c.damage(c.w(), c.str_mod)
         c.damage(c.w(1, hand="off"))
@@ -632,7 +691,7 @@ def f3189(c: Cast) -> None:
 
 
 @power("f3190", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, defect=DEFECT)
 def f3190(c: Cast) -> None:
     """Lets a named ability ride an action point.
 
@@ -1542,8 +1601,13 @@ def f3235(c: Cast) -> None:
     and the boon's own `Dropped` watch hands that use back when a cursed
     enemy falls -- which is the moment this row wants.
 
-    It is read rather than hooked, because `c.restore_use` announces only a
-    `Note`. Two guards, and **both** are load-bearing -- driven on a board,
+    It is read rather than hooked, and the stated reason -- *"because
+    `c.restore_use` announces only a `Note`"* -- stopped being true in #899:
+    the verb emits `UseRestored`, which is attributable and in
+    `audit.DID_SOMETHING`. So hooking it is now possible, and this row is
+    left reading because reading works and the change would be behavioural
+    rather than a correction. Two guards, and **both** are load-bearing --
+    driven on a board,
     because the spent use alone looked like enough and is not:
 
     * the pact, because `chargen` deals every warlock all seven legs and
@@ -1575,7 +1639,7 @@ def f3235(c: Cast) -> None:
 
 @power("f3237", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=PROSE)
+       defect=DEFECT)
 def f3237(c: Cast) -> None:
     """Pays out when a daily is used *without* a named ability, and the
     beneficiary is picked by standing next to a familiar.
@@ -1644,7 +1708,7 @@ def f3243(c: Cast) -> None:
 
 
 @power("f3244", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, defect=DEFECT)
 def f3244(c: Cast) -> None:
     """A defence penalty that rides on a named ability used with a daily.
 
@@ -2207,10 +2271,10 @@ def f3389(c: Cast) -> None:
     swapping it for the new verb would hand the character nothing at all.
     """
     c.grant_row("cf:psion-f1", on=c.me, until=When.ENCOUNTER)
-    key = (id(c.world), c.ref, c.me)
-    if _POINT_GRANTED.get(key):
+    # `"point"` in the key because the surge latch above is per `(ref, me)`
+    # too, and a row reaching both clauses must latch them separately.
+    if not c.once_per_board("point", c.me):
         return
-    _POINT_GRANTED[key] = True
     pool = c.world.get(c.me, PowerPoints) or c.world.add(c.me, PowerPoints())
     pool.points += 1
 
@@ -2346,8 +2410,7 @@ def f3397(c: Cast) -> None:
 
 
 @power("f3402", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("query.immune_to(keyword)",))
+       reach=PERSONAL, target=SELF)
 def f3402(c: Cast) -> None:
     """The feature is `cf:ardent-f0` and its radius is a column, not a
     guess: `get(...).reach.size` is the burst the row declares, so this
@@ -2360,9 +2423,15 @@ def f3402(c: Cast) -> None:
 
     A trait, and `AT_WILL` rather than `ENCOUNTER`: the card prints no
     limit, and a triggered `action=NONE` row declared `ENCOUNTER` spends
-    a use every firing (#210). The dropped clause is "not immune to
-    fear" -- `query.immune_to` answers for a condition and a keyword
-    immunity is not something a creature carries.
+    a use every firing (#210).
+
+    **"An enemy not immune to fear" is written now.** The old note said a
+    keyword immunity "is not something a creature carries", and that was
+    wrong twice over: `query.immune_to` answers a `Keyword` as well as a
+    `Condition`, and the creatures carrying one were already in `game.db`
+    -- `monster.immune` holds the token and `loader` was filtering the
+    column down to damage types, dropping **Immune fear on 61 monsters**.
+    #560.
     """
     me = c.me
     declared = get("cf:ardent-f0")
@@ -2375,6 +2444,11 @@ def f3402(c: Cast) -> None:
         if not ev.critical or foe == me:
             return
         if foe not in c.within(radius, side="enemy"):
+            return
+        # "An enemy **not immune to fear**" -- the gate is on the enemy
+        # scoring the critical, and it guards the whole benefit: the push
+        # below is the same sentence's second half. #560.
+        if immune_to(c.world, foe, Keyword.FEAR):
             return
         c.penalty("attack", 2, on=foe, until=When.EOTNT)
         if c.bloodied(on=me):

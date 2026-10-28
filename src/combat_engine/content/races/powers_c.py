@@ -145,6 +145,21 @@ def _close_or_area(world: World, me: int, ev: Any) -> bool:
     return row is not None and row.reach_of(getattr(ev, "branch", 0)).kind in AREA_OR_CLOSE
 
 
+def _vs_ac_or_ref(world: World, me: int, ev: Any) -> bool:
+    """Was the blow dealt by an attack aimed at AC or Reflex?
+
+    `DamageRolled` carries no defence, so the question goes to the **row**
+    the event does name -- `m5788a0`'s ruling, and the same lookup
+    `_close_or_area` above makes for the reach. A row declaring
+    `Defense.ANY` answers no, which leaves the caster paying for the
+    interrupt rather than halving a blow the card may not cover.
+    """
+    row = get(getattr(ev, "detail", "") or getattr(ev, "power", "") or "")
+    if row is None:
+        return False
+    return getattr(row.attack_of(getattr(ev, "branch", 0)), "vs", None) in (AC, REF)
+
+
 # -- r1 ---------------------------------------------------------------------
 
 
@@ -508,8 +523,40 @@ def p2473(c: Cast) -> None:
     """The cloud blocks sight for everyone, which is terrain and so is a
     zone. "Blinded until they exit" is occupancy and not a sweep at the
     moment it forms, so each creature's blindness is held and ended when
-    it leaves; the caster is exempt either way."""
+    it leaves; the caster is exempt either way.
+
+    **`f765`'s clause is written here**, not in its own row, which is the
+    `implemented_in=` pattern: *"you can choose for it to lightly or
+    heavily obscure its area, instead of totally obscuring it. If you
+    reduce the darkness in this way, creatures inside the cloud are not
+    blinded."* A feat that changes one named power belongs in that power's
+    body -- it is a choice made where the zone is laid, and the feat row
+    has nothing of its own to do.
+
+    The two softer grades are the light model's: "lightly obscured" is
+    `obscured="dim"` and "heavily obscured" is `"dark"`, both graded by
+    `query.light_concealment` (-2 and -5) and both cancelled for whoever
+    can see in that light. Totally obscuring is `blocks_sight`, which is
+    terrain and binds both sides -- which is why the softer choices come
+    with no blinding, exactly as printed.
+
+    **Total is offered first on purpose.** `c.choose` takes the engine's
+    own pick from the head of the list, so the default stays the printed
+    power unmodified: a character holding the feat has an *option*, and
+    whether it is worth taking is `policy/`'s business rather than a
+    default this row should decide."""
     area = c.area()
+    thinner = ""
+    if c.feat("f765"):
+        thinner = c.choose(
+            ["", "dark", "dim"], "how thickly the cloud obscures"
+        ) or ""
+    if thinner:
+        # No blinding, which is the second half of the printed sentence --
+        # so the occupancy watch below is not armed at all rather than
+        # armed and gated.
+        c.zone(area, until=When.EONT, obscured=thinner)
+        return
     c.zone(area, until=When.EONT, blocks_sight=True)
     held: dict[int, Any] = {}
 
@@ -1195,17 +1242,17 @@ def p16547(c: Cast) -> None:
     trigger="you take damage from an area or a ranged attack against AC or Reflex",
     on=Trigger(
         DamageRolled,
-        both(targets_me, by_ranged),
-        "a ranged or area attack damages you",
+        both(targets_me, by_ranged, _vs_ac_or_ref),
+        "a ranged or area attack against AC or Reflex damages you",
     ),
-    dropped=("DamageRolled.vs",),
 )
 def p16550(c: Cast) -> None:
     """Re-aimed. `DamageRolled.power` was stale: `triggers._power_of`
     reads the row off `detail`, so `by_ranged` -- which is "ranged" and
     "area_burst" together, exactly the printed pair -- declares the shape
-    half. Which defence the attack was aimed at still cannot be read off
-    a damage event, so a Fortitude or Will shot is halved too."""
+    half, and `_vs_ac_or_ref` the defence half off the same lookup. A
+    declared predicate is handed an event and not a stash, so the power is
+    the only thing it can ask."""
     c.halve()
     c.jump(max(1, c.speed_of() // 2))
 
@@ -1467,30 +1514,44 @@ def p16472(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.CONJURATION],
-    dropped=("DamageRolled.vs",),
 )
 def p16475(c: Cast) -> None:
     """The shield is a pool of hit points read off a healing surge, and it
     lasts "until it is reduced to 0 hit points" -- so the two bonuses and
     the soak all end together when the pool empties.
 
-    Dropped: nothing on the damage event says which defence was hit, so
-    every blow may be soaked rather than only those against AC or
-    Reflex."""
+    Only a blow from an attack that hit AC or Reflex is soaked.
+    `DamageRolled` carries no defence, but `Hit` carries one as a plain
+    attribute (`resolve.py` attaches it so it stays off the wire), and the
+    hit is the printed trigger -- so watching the outcome rather than
+    `AttackRolled` also keeps half-damage-on-a-miss out of the pool. The
+    pair is matched on attacker and row, `i2403x1`'s shape, and the match
+    is spent as it is used: a rider's own packet carries its own `detail`
+    and so goes unsoaked, which leaves the shield weaker than the card
+    rather than stronger."""
     pool = [c.surge_value()]
+    aimed: set[tuple[int, str]] = set()
     holds = [
         c.bonus(AC, 2, kind="power", on=c.me, until=When.ENCOUNTER),
         c.bonus(REF, 2, kind="power", on=c.me, until=When.ENCOUNTER),
     ]
 
+    def landed(ev: Hit) -> None:
+        if ev.target == c.me and getattr(ev, "vs", None) in (AC, REF):
+            aimed.add((ev.attacker, ev.power))
+
     def soak(ev: DamageRolled) -> None:
         if ev.target != c.me or pool[0] <= 0:
             return
+        if (ev.source, ev.detail) not in aimed:
+            return
+        aimed.discard((ev.source, ev.detail))
         pool[0] -= c.reduce(min(pool[0], ev.amount), ev)
         if pool[0] <= 0:
             for hold in holds:
                 c.end_effect(hold)
 
+    holds.append(c.watch(Hit, landed, until=When.ENCOUNTER))
     holds.append(
         c.watch(DamageRolled, soak, until=When.ENCOUNTER, window=Window.BEFORE)
     )
@@ -1579,27 +1640,52 @@ def p16657(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_ALLY,
-    dropped=("Scenery.kind",),
+    target=Target("ally", 1, label="One x_m6564 or one weapon"),
 )
 def p16660(c: Cast) -> None:
-    """Targets the wielder, there being no target for a piece of gear: an
-    object on the board is `Scenery` and `Scenery.kind` is a free word
-    nothing sets to "armour" or "weapon", with no tie from a carried thing
-    back to whoever carries it.
-    The armour bonus ends when an attack against AC hits the wearer, which
-    is read off `AttackRolled` -- `Hit` does not say which defence it beat.
+    """Targets the wielder, there being no target for a piece of gear.
+    **That is a target-line formality and not a dropped clause**, which is
+    why this no longer carries one: both printed branches reach the same
+    creature the card's effect reaches, so nothing a body could ask about
+    the gear itself would change an outcome. (`Scenery.kind` and
+    `Scenery.by` both exist in any case -- `components.py` -- and nothing
+    on a board ever mints a `Scenery` for a worn thing, so neither was the
+    gap either.)
+
+    **It has its `label=` now, and the label carries a ref.** The convention
+    for a card naming a thing the engine has no entity for is
+    `Target(side, label=)` -- the pool is the bearer, the label is what the
+    page prints -- and four artificer enchantments render "One weapon or
+    implement" that way. This card's line names a **ref**, which used to
+    break the convention: `Target.label` reached `render` as raw text, so
+    the honest label printed `x_m6564` to a player, which is worse than the
+    generic pool string it replaced.
+
+    `wire.in_text` resolves it at display time, so the page shows the
+    creature's printed name to a reader who has `localization/` and the bare
+    ref to one who does not. **The ref and not the name is what is written
+    here**, which is the point: a name spelled into a `label=` is text the
+    page renders, shown to a player with no localisation -- the top row of
+    `#447` -- and a one-word ordinary name beside its own ref is the case
+    the tree-wide search is recorded as *not* catching. #895.
+
+    The armour bonus ends when an attack against AC hits the wearer, read
+    off the settled `Hit`: it carries the defence as a plain attribute, so
+    the old route through `AttackRolled` -- comparing the total to the
+    defence in a window where an interrupt can still move either number,
+    and getting a natural 1 or 20 wrong both ways -- is no longer needed.
+
     The printed requirement -- that this is used during a rest -- is not a
     question a board can be asked."""
     if c.choose(["armour", "weapon"], "what the power is used on") == "armour":
         worn = c.bonus(AC, 2, kind="power", until=When.ENCOUNTER)
         wearer = c.target
 
-        def landed(ev: AttackRolled) -> None:
-            if ev.target == wearer and ev.vs is AC and ev.total >= ev.defence:
+        def landed(ev: Hit) -> None:
+            if ev.target == wearer and getattr(ev, "vs", None) is AC:
                 c.end_effect(worn)
 
-        c.watch(AttackRolled, landed, until=When.ENCOUNTER, once=True)
+        c.watch(Hit, landed, until=When.ENCOUNTER, once=True)
         return
     c.bonus("attack", 2, kind="power", until=When.ENCOUNTER, once=True)
     c.bonus("damage", 2, kind="power", until=When.ENCOUNTER, once=True)

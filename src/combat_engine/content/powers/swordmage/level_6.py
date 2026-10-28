@@ -17,11 +17,11 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     PERSONAL,
     REF,
     SELF,
     WILL,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -287,7 +287,7 @@ def p4801(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
 )
 def p5748(c: Cast) -> None:

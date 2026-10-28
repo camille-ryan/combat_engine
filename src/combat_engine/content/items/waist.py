@@ -424,16 +424,34 @@ def i3523x1(c: Cast) -> None:
 
 
 @power("i640x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:barbarian-f1s0",))
+       reach=PERSONAL, target=SELF)
 def i640x1(c: Cast) -> None:
-    """`cf:barbarian-f1s0` is a ref the card prints and no row carries:
-    `cf:barbarian-f1` writes that option inline, on its `rageblood` leg,
-    and the temporary hit points come off a `Dropped` handler there.
+    """Adds a modifier to the temporary hit points one class-feature
+    option pays.
 
-    Even with a row it would not be enough. `TempHP` carries a source, a
-    target and an amount and no power, so a pool this feature laid cannot
-    be told from any other, and temporary hit points do not add -- a
-    second, larger pool laid from here would replace rather than raise."""
+    **Both of the blockers this row used to state have landed.** `TempHP`
+    carries the granting row as a ref now, so the pool *can* be told from
+    any other; and `resolve.temp_hp` adds a `temp_hp` term off the
+    receiver **before** the non-stacking comparison, so this raises the
+    feature's pool instead of laying a second one that would have to beat
+    it. `f1855` is the same shape on a racial trait and `f1009` on this
+    same pool.
+
+    **The gate names `cf:barbarian-f1`, not the option the card prints.**
+    No row carries `cf:barbarian-f1s0` -- the option is written inline on
+    `cf:barbarian-f1`'s `rageblood` leg -- so `cf:barbarian-f1` is the ref
+    that rides the `TempHP`. Exact, not merely close: the other leg
+    `c.forbid`s and returns before reaching that row's only `c.temp_hp`.
+
+    "You *can* add" is written as a standing modifier rather than an
+    offered choice, because a larger pool is never worse and there is
+    nothing to weigh.
+
+    Untyped, not an item bonus: the card prints no word in front of a
+    bonus at all, unlike `i654x1` two rows up, which says item and is
+    written that way."""
+    c.bonus("temp_hp", c.str_mod, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("power") == "cf:barbarian-f1")
 
 
 @power("i657x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -965,10 +983,23 @@ def i1455x1(c: Cast) -> None:
 
 
 @power("i2163x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_coup_de_grace()",))
+       reach=PERSONAL, target=SELF)
 def i2163x1(c: Cast) -> None:
-    """`c.coup_de_grace` consults nothing on its victim, and who may take a
-    belt off a corpse is not a fight."""
+    """Enemies cannot finish the wearer while it is helpless.
+
+    `c.no_coup_de_grace` is the prohibition, laid on the creature it
+    protects and consulted by the *actor's* verb -- `c.no_provoke`'s shape,
+    which #764 named as the precedent. `c.coup_de_grace` now asks before it
+    finishes anybody.
+
+    **A hold rather than an interrupt**, which is where it parts from
+    `c.no_provoke`: that one hangs on the opportunity window and vetoes it,
+    and finishing a helpless creature opens no window at all, so the verb
+    itself is the only place to consult.
+
+    No gate, because the card names none -- it is every enemy. Who may take
+    a belt off a corpse is the other printed sentence and is not a fight."""
+    c.no_coup_de_grace(on=c.me)
 
 
 @power("i643p1", level=9, cls=ITEM, action=MINOR,
@@ -980,14 +1011,6 @@ def i643p1(c: Cast) -> None:
     c.vulnerable(c.level // 2, on=c.me, until=When.EONT)
 
 
-#: Characters whose surge ceiling `i648x1` has already lifted, keyed by
-#: `(world, entity)`. A property is armed at the start of every fight and the
-#: sentence is about the character sheet, so without the latch the pool would
-#: climb once an encounter. `feats/paladin.py` keeps the same flag for the
-#: same printed line.
-_SURGE_RAISED: dict[tuple[int, int], bool] = {}
-
-
 @power("i648x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def i648x1(c: Cast) -> None:
@@ -996,11 +1019,9 @@ def i648x1(c: Cast) -> None:
     sentence. The idempotence this row named as the gap is the latch above
     and not a verb: `c.regain_surge` then hands the extra surge over, which
     is the half that lifting the ceiling alone does not do."""
-    key = (id(c.world), c.me)
     health = c.world.get(c.me, Health)
-    if health is None or _SURGE_RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _SURGE_RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 
@@ -1169,6 +1190,22 @@ def i3475p1(c: Cast) -> None:
     in the setting. So the row plays the exception for the one creature it
     can name and the ordinary hold for everything else, which is the printed
     rule minus one clause rather than the whole clause dropped.
+
+    **And the symbol will never arrive, which was checked rather than
+    assumed (#611, 2026-10-26).** The compendium's `Monster` table has
+    thirteen columns and not one of them could hold a maker -- ID, Name,
+    Level, Modifier, Role, IsNew, IsChanged, Source, Teaser, Txt, XP,
+    Keywords, PlainTxt. **Zero** pages anywhere contain the word
+    "creations", and all 22 that say "created by" mean it *in a fight* --
+    "minions created by this power", "a nightmare prison created by the
+    dragon's mind" -- which is precisely the `c.made_by` sense and not this
+    one. `m6273`'s own page records an origin and a kind and nothing else.
+
+    So the marker is a **permanent, accurate description** rather than a
+    wait: `todo.py` reports a row ready the day its symbol lands and this
+    one cannot, which is harmless and is why `dropped=` stays. Not
+    `defect=`, because under #600 that drops the whole entry and would
+    delete a working item to record one missing clause.
     """
     victim = c.target
     if not c.strike():
@@ -1193,7 +1230,7 @@ def i2208p1(c: Cast) -> None:
 
 @power("i2208p2", level=7, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(40), target=NO_TARGET, keywords=[Keyword.ILLUSION],
-       dropped=("c.zone(ends_on=)",))
+       dropped=("actions.touch()",))
 def i2208p2(c: Cast) -> None:
     """The illusion stands on the board as a conjuration, sustained by a
     minor.
@@ -1218,11 +1255,38 @@ def i2208p2(c: Cast) -> None:
     first of the two printed pops, and it is the one that needed an engine
     change (#714).
 
-    Still dropped: the other pop, a creature touching it or entering its
-    space. That is `c.zone(ends_on=)` and a different mechanism -- the
-    illusion occupies no square it could be entered through until a zone
-    is laid over it.
+    **The third pop is written, and `c.zone(ends_on=)` was a marker read
+    off a stale component docstring.** The old note here said the illusion
+    "occupies no square it could be entered through until a zone is laid
+    over it". `c.conjure`'s own docstring says the opposite and says why:
+    claiming the square always was the old behaviour, which made "when an
+    enemy enters its space" permanently false, and `solid=True` is now
+    what a wall of fire passes. This row conjures with the default, so its
+    square is enterable, `EnterSquare` fires for whoever steps in, and no
+    zone is wanted. `p13331` is the sibling doing exactly this, comparing
+    `ev.square` to the conjuration's own `Position`.
+
+    Ending it needs nothing new either: the hold whose id sits in
+    `Conjuration.effect` is the thing's life, which is the same bridge the
+    sustain half above already crosses.
+
+    **The illusion is excluded from its own watch**, which is load-bearing
+    rather than tidy: the sustain walks it ten squares, every step of that
+    emits `EnterSquare` for the illusion into the square it is arriving in,
+    and without the test the first sustain would pop the thing it was
+    sustaining.
+
+    The watch outlives the illusion and is inert once it is gone, rather
+    than being hung on the conjuration's own `When.SUSTAIN` -- a second hold
+    at that duration would print a second sustain cost the card does not.
+
+    Still dropped: "until a creature touches it". There is no action in the
+    menu by which a creature touches a thing, and adjacency is not it --
+    anything walking past would pop an illusion whose whole job is to be
+    approached.
     """
+    from combat_engine.engine.events import EnterSquare
+
     where = _free_near(c, of=c.me)
     if where is None:
         return
@@ -1235,10 +1299,18 @@ def i2208p2(c: Cast) -> None:
         c.move(10, who=illusion)
 
     conj = c.world.get(illusion, Conjuration)
-    c.on_sustain(
-        c.world.effects.live.get(conj.effect) if conj is not None else None,
-        drift,
-    )
+    hold = c.world.effects.live.get(conj.effect) if conj is not None else None
+    c.on_sustain(hold, drift)
+
+    def entered(ev: EnterSquare) -> None:
+        if ev.actor == illusion or hold is None or hold.ended:
+            return
+        pos = c.world.get(illusion, Position)
+        if pos is None or ev.square != pos.square:
+            return
+        c.world.effects.end(hold, f"{c.ref}: a creature entered its space")
+
+    c.watch(EnterSquare, entered, until=When.ENCOUNTER, label=f"{c.ref} entered")
 
 
 @power("i3469x1", level=8, cls=ITEM, action=ActionType.NONE,

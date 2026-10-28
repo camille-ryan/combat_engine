@@ -25,6 +25,8 @@ invisibility on `p1456` -- was waiting on a verb that already existed.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.engine import (
     AT_WILL,
     CHA,
@@ -49,7 +51,15 @@ from combat_engine.engine import (
     distance,
     power,
 )
-from combat_engine.engine.events import DamageApplied, Dropped, Moved, TurnStart
+from combat_engine.engine.events import (
+    AttackRolled,
+    DamageApplied,
+    Dropped,
+    Moved,
+    SavingThrow,
+    SkillCheck,
+    TurnStart,
+)
 from combat_engine.engine.triggers import Trigger, cursed_by_me
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -396,6 +406,61 @@ def p222(c: Cast) -> None:
     c.watch(TurnStart, chill, until=When.ENCOUNTER, on=c.me)
 
 
+def one_d20_bonus(c: Cast) -> None:
+    """"A +1 bonus to any single d20 roll you make during your next turn."
+
+    Shared with `f292`, which prints the same sentence again on top of this
+    one, so the shape lives here rather than twice.
+
+    **Four holds and one shared ender**, which is the whole of the
+    difficulty. Each key already spends itself at the moment it is *read*:
+    `c.bonus(once=True)` watches `AttackRolled` for `attack`, `SavingThrow`
+    for `save` and `SkillCheck` for `skill` and `ability_check`, and its own
+    comment records that getting that pairing wrong six times is why an
+    unrecognised key now refuses rather than guesses. But `once=` is per
+    hold, so four of them are four bonuses where the card gives one. The
+    ender is what makes them a single roll's worth, and `c.end_effect`'s
+    docstring names this as the sanctioned shape.
+
+    **Four keys because there are four readers**, and a single key would
+    reach only one of them: `skills.modifier` totals `skill:<name>` plus
+    `skill`, `skills.ability_check` totals the ability's own word plus
+    `ability_check`, `Effects.roll_saves` totals `save`, and none of those
+    sees `attack`.
+
+    Every one of the four is read **before** the ender can fire, which is
+    what makes the roll that spends the bonus the roll that got it: the
+    attack and save totals are summed before their events are announced,
+    and both check paths total inside the resolve callback `Bus.emit` runs
+    between the two windows. `Effects.end` is idempotent, so a key firing
+    its own spend before the shared ender reaches it costs nothing.
+
+    Untyped and stacking, which is the printed "cumulative": three drops in
+    one window lay three sets and the roll that spends them all adds +3.
+    """
+    me = c.me
+    holds = [
+        hold
+        for key in ("attack", "save", "skill", "ability_check")
+        if (hold := c.bonus(key, 1, on=me, until=When.EONT, once=True))
+        is not None
+    ]
+    if not holds:
+        return
+
+    def spend(ev: Any) -> None:
+        # `attacker` on an attack roll, `actor` on a save or a check. Both
+        # asked, because somebody else's roll must not spend this.
+        if (getattr(ev, "attacker", None) != me
+                and getattr(ev, "actor", None) != me):
+            return
+        for hold in holds:
+            c.end_effect(hold, why="spent on a d20 roll")
+
+    for event in (AttackRolled, SavingThrow, SkillCheck):
+        c.watch(event, spend, until=When.EONT, on=me, label=c.ref)
+
+
 @power(
     "p2263",
     level=1,
@@ -407,19 +472,18 @@ def p222(c: Cast) -> None:
     # Prerequisite: Star Pact. See p2094.
     trigger=_CURSED_DROPS,
     on=_ON_CURSED_DROPS,
-    dropped=("c.bonus(any_roll=)",),
 )
 def p2263(c: Cast) -> None:
-    # Printed as +1 to any single d20 roll during your next turn: attack,
-    # save, skill or ability check, the holder's choice. Only attack rolls
-    # can carry a modifier here, so that is what it lands on -- `once` spends
-    # it on the first roll, and the duration drops it if it goes unused.
-    # **Re-pointed: this is not what `c.boost_roll` turned out to be.** That
-    # verb (#495) adds to the roll on the table, and this bonus is banked
-    # *before* any of the four rolls happens -- it is a one-shot offered
-    # across attack, save, skill and ability check, spent by whichever comes
-    # first and lost at the end of the turn. `c.bonus(once=True)` does that
-    # for one kind of roll; the gap is a one-shot that spans kinds.
-    # "Cumulative" needs nothing -- three drops lay three of these and
-    # each is spent by the same roll, which is the printed +3.
-    c.bonus("attack", 1, on=c.me, until=When.EONT, once=True)
+    """+1 to any single d20 roll during your next turn, the holder's choice.
+
+    **Written: the one-shot spans kinds now.** The old note was right that
+    `c.bonus(once=True)` does it for one kind of roll and that the gap was
+    a one-shot spanning four. It was wrong that only attack rolls can carry
+    a modifier here -- the save and both check paths each read one -- so the
+    row no longer lands the whole card on the attack roll.
+
+    **Re-pointed: this is not `c.boost_roll` either.** That verb (#495) adds
+    to the roll on the table, and this bonus is banked *before* any of the
+    four rolls happens.
+    """
+    one_d20_bonus(c)

@@ -28,6 +28,7 @@ from combat_engine.engine import (
     STANDARD,
     WILL,
     WIS,
+    YOU_OR_ONE_ALLY,
     ActionPointSpent,
     ActionType,
     Attack,
@@ -348,11 +349,6 @@ def f127(c: Cast) -> None:
     c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER, when=_opportunity)
 
 
-#: Characters whose surge ceiling this file has already lifted, by world and
-#: creature. A trait arms at the start of every fight; the sentence is about
-#: the character sheet, so it must not climb once an encounter.
-_RAISED: dict[tuple[int, int], bool] = {}
-
 
 @power("f131", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
@@ -362,11 +358,9 @@ def f131(c: Cast) -> None:
     raised and the two surges handed over in the same breath -- `story`
     clamps `surges` to the sheet's number before the fight, so lifting the
     ceiling alone would give the character nothing to spend."""
-    key = (id(c.world), c.me)
     health = c.world.get(c.me, Health)
-    if health is None or _RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _RAISED[key] = True
     health.max_surges += 2
     c.regain_surge(2, on=c.me)
 
@@ -655,12 +649,14 @@ def f281b(c: Cast) -> None:
     riders a critical pays. The event's own copy is cleared too, for the
     listeners after this one that read it rather than the result.
 
-    It was marked `c.uncrit()`; nothing was missing.
+    **It was marked `c.uncrit()` and un-marked with "nothing was missing",
+    and that was wrong about one half.** The two writes were there; the
+    *announcement* was not, so this row fired, was correct, and reported
+    SILENT for its whole life -- demoting a crit is its entire printed
+    effect, so there was no second clause to be visible by.
+    `c.crit_becomes` is that door. #861.
     """
-    ev = c.trigger
-    ev.critical = False
-    if ev.result is not None:
-        ev.result.critical = False
+    c.crit_becomes(False)
 
 
 @power("f282", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -724,7 +720,7 @@ def f295(c: Cast) -> None:
 
 
 @power("f295b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(5), target=ONE_ALLY, keywords=DIVINE)
+       reach=Ranged(5), target=YOU_OR_ONE_ALLY, keywords=DIVINE)
 def f295b(c: Cast) -> None:
     c.bonus(WILL, 5, kind="power", until=When.SONT)
 
@@ -753,7 +749,7 @@ def f297(c: Cast) -> None:
 
 
 @power("f297b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(5), target=ONE_ALLY,
+       reach=Ranged(5), target=YOU_OR_ONE_ALLY,
        keywords=[Keyword.DIVINE, Keyword.HEALING])
 def f297b(c: Cast) -> None:
     """Regeneration 2 while bloodied. The 11th and 21st level steps are
@@ -1002,10 +998,23 @@ def f363(c: Cast) -> None:
 
 
 @power("f396", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reload()",))
+       reach=PERSONAL, target=SELF)
 def f396(c: Cast) -> None:
-    """Reloading as a free action. Loading a weapon costs nothing here
-    because it is not modelled at all, so there is no action to cheapen."""
+    """Reloading a load-minor crossbow as a free action.
+
+    **Written.** The old note said loading "is not modelled at all, so
+    there is no action to cheapen", and that was true: firing left a
+    crossbow loaded forever. `actions._loading` now offers the reload at
+    the printed minor and `c.loads_free` is what lowers the price. #675,
+    #725.
+
+    `only="crossbow"` is the group, which is what the card names -- and it
+    is the group rather than a ref because crossbow is three weapons.
+    Nothing else the character carries gets a cheaper reload, and nothing
+    else *can* need one: of the ten weapons printing a load property only
+    three print the costed `load minor`, and the blowgun is not a crossbow.
+    """
+    c.loads_free(only="crossbow")
 
 
 @power("f419", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

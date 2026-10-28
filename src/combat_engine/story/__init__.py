@@ -465,12 +465,19 @@ BAND = 3
 MOST = 12
 
 
-def budget(level: int) -> int:
+def budget(level: int, scale: float = 1.0) -> int:
     """The XP a standard encounter for this party is worth.
 
     One standard monster of the party's level per character, which is the printed
     rule. Read off the database rather than from a table here, so it cannot
     disagree with what the monsters are actually worth.
+
+    `scale` multiplies it, which is what an adventuring day's difficulty curve
+    is made of -- a soft opener and a hard finale around standard middles. It
+    is a **multiple of the printed budget** and not a second notion of
+    difficulty: at 1.0 this is unchanged, and `api.day.scales` is where the
+    default curve lives, because the curve is arcade-mode policy and the
+    printed rule is this. #666.
     """
     from combat_engine.db import game
 
@@ -482,11 +489,17 @@ def budget(level: int) -> int:
         "AND (rank IS NULL OR rank = 'standard') LIMIT 1",
         (level,),
     ).fetchone()
-    return (row[0] if row else 0) * SIDE
+    # **Rounded, not truncated.** `int()` on 0.75 of a 4x100 budget gives 300
+    # either way, but on an odd standard XP a truncation loses a creature's
+    # worth at the bottom of the band -- and `opposition` skips a candidate
+    # that would break the ceiling, so a budget one point short is a monster
+    # fewer rather than a rounding nicety.
+    return round((row[0] if row else 0) * SIDE * scale)
 
 
 def opposition(
     level: int, draw: Random | None = None, paradigm: str | None = None,
+    scale: float = 1.0,
 ) -> tuple[list[str], int, str]:
     """Monsters to field, and the level they came from.
 
@@ -509,20 +522,21 @@ def opposition(
     """
     for candidate in range(min(max(level, 1), 13), 0, -1):
         want = paradigm or (draw.choice(PARADIGMS) if draw else "standard")
-        fielded = _compose(candidate, want, draw)
+        fielded = _compose(candidate, want, draw, scale)
         # **Falls back to `standard` rather than to nothing.** A level with no
         # usable solo is the ordinary case -- there are two at level 10 and two at
         # level 5 -- and refusing the fight would make the paradigm a coin that
         # sometimes returns an empty board.
         if not fielded and want != "standard":
             want = "standard"
-            fielded = _compose(candidate, want, draw)
+            fielded = _compose(candidate, want, draw, scale)
         if fielded:
             return fielded, candidate, want
     return [], level, "standard"
 
 
-def _compose(level: int, paradigm: str, draw: Random | None) -> list[str]:
+def _compose(level: int, paradigm: str, draw: Random | None,
+             scale: float = 1.0) -> list[str]:
     """The refs for one paradigm, filled to the XP budget. `[]` if unbuildable.
 
     **Filled by XP rather than counted**, which is what reaching three levels
@@ -544,7 +558,7 @@ def _compose(level: int, paradigm: str, draw: Random | None) -> list[str]:
     from combat_engine.db import game
 
     db = game()
-    total = budget(level)
+    total = budget(level, scale)
     if not total:
         return []
     out: list[str] = []
@@ -661,6 +675,7 @@ def field_encounter(
     feats: dict[str, list[str]] | None = None,
     powers: dict[str, list[str]] | None = None,
     party: Party | None = None,
+    scale: float = 1.0,
 ) -> Fielded:
     """Build a board and put both sides on it.
 
@@ -682,6 +697,11 @@ def field_encounter(
 
     `enemies` names the opposition outright, for a caller that is not asking for
     a level-appropriate band.
+
+    `scale` multiplies the XP budget the opposition is drawn to, and is ignored
+    when `enemies` names them -- a caller that picked the monsters has already
+    decided what the fight is worth. It is how an adventuring day gets a
+    difficulty curve; see `api.day.scales`.
 
     `party` is a `Party` that has already fought. It replaces `pcs`, `level` and
     `feats` for the characters -- each sheet knows its own class, build, race and
@@ -732,7 +752,7 @@ def field_encounter(
         # would shift every roll after it, so a change to how monsters are
         # chosen would also change every attack in the fight and the two could
         # not be told apart.
-        pool, found_at, shape = opposition(level, Random(seed))
+        pool, found_at, shape = opposition(level, Random(seed), scale=scale)
     if not pool:
         return Fielded(world=world, enemies=[], found_at=found_at, paradigm=shape)
 

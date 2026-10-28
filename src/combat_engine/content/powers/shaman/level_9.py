@@ -28,6 +28,7 @@ from combat_engine.engine import (
     Ranged,
     RoundStart,
     Square,
+    Target,
     TurnStart,
     When,
     power,
@@ -258,7 +259,13 @@ def p9766(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Ranged(20),
-    target=ONE_ALLY,
+    # **Nothing is chosen here.** The printed line is "Your spirit
+    # companion" -- one determined creature, not a member of the ally pool
+    # -- and the body never reads `c.target`: it finds the spirit with
+    # `c.companion()`. `ONE_ALLY` made the page ask a player to pick an ally
+    # and then threw the answer away, so `count=0` is the honest shape and
+    # the label is the card's own line. #855.
+    target=Target("self", 0, label="Your spirit companion"),
     keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p12532(c: Cast) -> None:

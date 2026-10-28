@@ -1,0 +1,110 @@
+[importlinter]
+root_packages =
+    combat_engine
+include_external_packages = True
+
+# Five claims the root CLAUDE.md makes in prose about the component seams.
+# Nothing checked them, and measuring them to write this file found two
+# wrong: engine -> content is four sites and not five, with every line
+# number in the prose stale, and "nothing imports api/ in Python at all" is
+# false -- scripts/drivers.py does, legitimately. #334.
+
+[importlinter:contract:etl-never-reads-content]
+name = ETL does not reach into content
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    combat_engine.etl
+forbidden_modules =
+    combat_engine.content
+# The ETL writes game.db; content reads it. Measured zero on 2026-10-22.
+
+[importlinter:contract:engine-never-reaches-out]
+name = The kernel does not import the ETL or the wire
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    combat_engine.engine
+forbidden_modules =
+    combat_engine.etl
+    combat_engine.api
+# Both measured zero. The kernel decides rules; it neither extracts nor
+# serialises.
+
+[importlinter:contract:nothing-in-the-package-imports-the-wire]
+name = No package module imports the wire
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    combat_engine.engine
+    combat_engine.content
+    combat_engine.etl
+    combat_engine.chargen
+    combat_engine.policy
+    combat_engine.story
+    combat_engine.db
+forbidden_modules =
+    combat_engine.api
+# CLAUDE.md said "nothing imports api/ in Python at all". That is true of
+# the package and false of scripts/ -- drivers.py imports api.day to play
+# the day mode, which is the instrument doing its job. So the contract is
+# scoped to the package, which is the part that was actually being claimed.
+
+[importlinter:contract:db-is-below-everything]
+name = db.py imports nothing from the package
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    combat_engine.db
+forbidden_modules =
+    combat_engine.engine
+    combat_engine.content
+    combat_engine.etl
+    combat_engine.chargen
+    combat_engine.policy
+    combat_engine.story
+    combat_engine.api
+# This is what lets five readers reach one sqlite file without reaching
+# through each other. db.py is stdlib-only today.
+
+[importlinter:contract:engine-to-content-is-a-known-leak]
+name = engine -> content stays at the four known sites
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    combat_engine.engine
+forbidden_modules =
+    combat_engine.content
+ignore_imports =
+    combat_engine.engine.cast -> combat_engine.content.loader
+    combat_engine.engine.query -> combat_engine.content.loader
+# A fifth *module* pair goes red; the four existing sites are all
+# function-local imports of content.loader from cast.py and query.py, which
+# dodge an import cycle. The kernel needs a spawner and a row lookup, which
+# is why it cannot run without a built database. Do not add another; file an
+# issue instead.
+#
+# Note the granularity: this pins the module pair, not the call site, so a
+# fourth `from combat_engine.content import loader` inside cast.py is
+# invisible to it. That is the honest limit -- grimp works on modules.
+
+[importlinter:contract:engine-does-not-import-chargen]
+name = engine -> chargen is zero
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    combat_engine.engine
+forbidden_modules =
+    combat_engine.chargen
+# This was **one** site -- `engine/skills.py:263`, function-local, importing
+# `ARMOUR_CHECK` and `SHIELD_CHECK` -- and the seam table in `CLAUDE.md` never
+# mentioned the relationship at all. `import-linter` is what found it; grep
+# could not, because the cost was not the edge itself but what it made true
+# further out: `etl.build -> engine.skills -> chargen -> content`, so
+# "etl -> content is zero" was false as a claim about the graph.
+#
+# Fixed by moving rather than by documenting. The two constants are a printed
+# table, not behaviour, and five readers outside chargen wanted them -- so they
+# live in `combat_engine/armour.py` now, below every component, the same place
+# and for the same reason as `db.py`. The edge is gone instead of allow-listed,
+# which is why this contract has no `ignore_imports`. #852.

@@ -485,13 +485,13 @@ def m2544a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_hazards()",),
 )
 def m2544a1(c: Cast) -> None:
     """The trait m2543a3 already carries, and the same half of it is missing:
     crossing the stuff it lives in for nothing is a label the squares carry,
     but nothing exempts one creature from a hazard's damage."""
     c.ignores_difficult("blood", until=When.ENCOUNTER)
+    c.ignores_hazards("blood", until=When.ENCOUNTER)
 
 
 # ==========================================================================

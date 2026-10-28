@@ -29,12 +29,16 @@ Making an attack, and what the attack turns out to be.
   - Make the attack being answered simply hit. It cannot be rolled away.
 - `c.basic(self, *, on: 'int | None' = None, who: 'int | None' = None, ranged: 'bool' = False, window: 'str' = '') -> 'bool'`
   - Make a basic attack -- whichever row that creature's actually is.
+- `c.becomes_burst(self, size: 'int' = 1, *, vs: 'Defense | None' = None, damage: 'Callable[[Any], Any] | None' = None, ranged: 'bool' = True, on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'list[Effect]'`
+  - The next basic attack becomes a burst centred on its target.
 - `c.cast_from(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Determine line of sight and effect for your ranged and area
 - `c.coup_de_grace(self, *, on: 'int | None' = None) -> 'bool'`
   - Finish a helpless creature. An automatic critical, and nothing added.
 - `c.crit`
   - (no docstring)
+- `c.crit_becomes(self, critical: 'bool', *, ev: 'Any' = None) -> 'bool'`
+  - "The attack becomes a normal hit", or becomes a critical one.
 - `c.disarm(self, *, on: 'int | None' = None, weapon: 'Weapon | None' = None, catch: 'bool' = False, drops_at: 'int | None' = None) -> 'bool'`
   - Knock a weapon out of a hand. It lands in that creature's square.
 - `c.drop_target(self, who: 'int') -> 'bool'`
@@ -45,6 +49,8 @@ Making an attack, and what the attack turns out to be.
   - Let somebody else make an attack, now, out of turn.
 - `c.hit(self, *, on: 'int | None' = None, half: 'bool' = False) -> 'int'`
   - Deal the damage the header declared.
+- `c.hit_becomes(self, hit: 'bool', *, ev: 'Any' = None) -> 'bool'`
+  - "The attack misses", or it lands after all.
 - `c.landed`
   - Did the last attack hit? `c.hit()` is the damage; this is the question.
 - `c.provoke(self, attacker: 'int', *, on: 'int | None' = None, why: 'str' = '') -> 'None'`

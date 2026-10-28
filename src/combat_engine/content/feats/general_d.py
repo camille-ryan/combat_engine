@@ -47,6 +47,8 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.actions import FEINT_PURPOSE
+from combat_engine.engine.events import SkillCheck
 from combat_engine.engine.query import team
 
 DIVINE = [Keyword.DIVINE]
@@ -190,11 +192,28 @@ def f917(c: Cast) -> None:
 
 
 @power("f919", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Weapon.off_hand_anyway",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def f919(c: Cast) -> None:
-    """Lets any one-handed weapon count as an off-hand one. `Gear.off` and
-    `two_weapon` read the weapon's own properties and there is nothing
-    that rewrites them for a character."""
+    """Both clauses are settled before the fight starts, so the body has
+    nothing to do in one.
+
+    The skill training is a column: `feat.trains_from` holds the class this
+    card names and `chargen._from_class_list` takes the draw.
+
+    **The off-hand clause was a stale marker, and its stated reason was
+    false.** Letting any one-handed weapon count as an off-hand one is a
+    permission `Gear.wield` already grants -- a second weapon that is not
+    two-handed stays in hand -- and neither two-weapon reader consults the
+    property: `Gear.off` is `melee[1]` and `Gear.two_weapon` counts melee
+    weapons. `c.w(hand="off")` asks `Gear.off` and so tests nothing either.
+    `cf:ranger-f0s4` and `cf:barbarian-f1s3` print the same sentence and are
+    retired the same way.
+
+    Writing the word with `c.gains_property` would also be the wrong answer
+    rather than the missing one: nothing would read it, and the verb takes a
+    group or a ref and no hand count, so "any one-handed weapon" could only
+    be said as `every=True` -- which hands the word to two-handed weapons
+    too."""
 
 
 @power("f941", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -249,9 +268,29 @@ def f945(c: Cast) -> None:
             when=charm_or_fear)
 
 
-@power("f946", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+def _my_feint_landed(world, me: int, ev) -> bool:  # noqa: ANN001
+    """A successful Bluff check *this creature* made to gain combat advantage.
+
+    Three narrowings and the card prints all three. `purpose` is what makes
+    the middle one sayable: without it this fires on any successful Bluff
+    check against anybody, which is wider than the printed line and is the
+    shape `#735` is about in general.
+    """
+    return (
+        ev.actor == me
+        and ev.skill == "bluff"
+        and ev.success
+        and getattr(ev, "purpose", "") == FEINT_PURPOSE
+        and ev.target is not None
+    )
+
+
+@power("f946", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("actions.bluff()",))
+       trigger="you make a successful Bluff check to gain combat advantage "
+               "while bloodied",
+       on=Trigger(SkillCheck, _my_feint_landed,
+                  "your feint lands while you are bloodied"))
 def f946(c: Cast) -> None:
     """A slide on a successful Bluff check made in combat to gain combat
     advantage, while bloodied.
@@ -279,7 +318,26 @@ def f946(c: Cast) -> None:
     `c.check("bluff", c.passive("insight", of=foe))` -- it only gets to make
     the check because its own card hands it one off a trigger. `f1270` names
     the same absence from the other side. #785, Camille's call on #735.
-    """
+
+    **Written: the feint is an action now.** `actions._feinting` offers it --
+    standard action, adjacent enemy, once per encounter, Bluff against the
+    target's **passive** Insight -- so this trigger has a check to answer.
+
+    Two details the old note had slightly wrong, both read off the Bluff
+    skill entry rather than remembered. The contest is against **passive**
+    Insight, not "that enemy's Insight check": the general entry offers
+    both and the GAIN COMBAT ADVANTAGE sub-entry picks passive, which is
+    also what `f2092` above already does. And `usage` is **at-will**, not
+    encounter: the once-per-encounter limit is on the *action*, where
+    `actions` holds it on `Powers.charges`, so putting it here too would
+    spend a use at arming and refuse the rider for the rest of the fight
+    (the `#529` shape).
+
+    `ev.target` is who was fooled, so the slide needs no search -- and
+    `purpose` is what keeps this off every other Bluff check in the game."""
+    if not c.bloodied(on=c.me):
+        return
+    c.slide(1, on=c.trigger.target)
 
 
 @power("f947", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

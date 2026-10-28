@@ -1159,7 +1159,7 @@ def m3591a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True),
+    target=Target("ally", 99, everyone=True),
     keywords=[Keyword.CLOSE],
 )
 def m3591a3(c: Cast) -> None:

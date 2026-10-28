@@ -103,7 +103,9 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    Moved,
     MoveEnd,
+    PowerResolved,
     PowerUsed,
     Ranged,
     Relation,
@@ -121,7 +123,12 @@ from combat_engine.engine import (
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import ForcedMove
 from combat_engine.engine.grid import Square
-from combat_engine.engine.query import allies, bloodied, distance_between
+from combat_engine.engine.query import (
+    allies,
+    bloodied,
+    distance_between,
+    since_turn_began,
+)
 
 #: The racial zone `p2473` lays, by the label it carries.
 CLOUD = "p2473"
@@ -653,8 +660,7 @@ def f1255b(c: Cast) -> None:
     c.on_sustain(hold, lambda: c.damage(c.w(), on=victim))
 
 
-@_trait("f1277", dropped=("c.weapon_group()",),
-        proficiency=("w3662",))
+@_trait("f1277", proficiency=("w3662",))
 def f1277(c: Cast) -> None:
     """Two of the three rewrites land. The proficiency always did.
 
@@ -671,16 +677,33 @@ def f1277(c: Cast) -> None:
     these rows against it. `"high crit"` is a property with a live reader,
     `Cast._high_crit`, so that clause is not merely written but consulted.
 
-    What is left is the third: **re-filing the weapon's group**, which is
-    the one field with no writer. It is also the one with teeth here --
-    `cf:rogue-scoundrel-f4` and the rogue's group-gated rows are what the
-    card is really buying -- so `dropped=` and a symbol for that alone.
+The third has landed too: `c.weapon_group` re-files the
+    weapon, which is the field that had no writer.
+
+    **Two words, and only one of them can be the group.** The card names
+    the powers that take a crossbow *or* a sling, so the first becomes the
+    group and the second is laid as a property -- which costs nothing,
+    because `query.holding` asks `what in w.properties or w.group == what`
+    and answers to either. The weapon also keeps its own word, since
+    `c.weapon_group` carries the old group across as a property for exactly
+    this reason: measured, `holding("blowgun")` and `holding("crossbow")`
+    both return it afterwards where only the first did before.
+
+    **The "if you are a rogue" half is not enforced**, which is
+    `c.as_implement`'s call on the identical sentence shape and its
+    reasoning: nothing in `query` answers what class a creature is. The
+    exposure is narrower than it sounds -- the clause only bites on a row
+    that is group-gated in the first place -- but it is wider than print
+    for a non-rogue holding a crossbow-gated power, and that is said here
+    rather than left for somebody to find.
 
     The free-action reload is still not marked: nothing in the engine makes
     this weapon cost an action to load, so there is no cost to remove."""
     me = c.me
     c.weapon_range(ranged=(10, 20), ref="w3662", on=me)
     c.gains_property("high crit", ref="w3662", on=me)
+    c.weapon_group("crossbow", ref="w3662", on=me)
+    c.gains_property("sling", ref="w3662", on=me)
 
 
 _swap("f1276", "f1276b")
@@ -743,16 +766,64 @@ def f1279b(c: Cast) -> None:
         c.dazed(until=When.SAVE_ENDS)
 
 
-@_trait("f1288", usage=AT_WILL, proficiency=("w3663",),
-        dropped=("c.two_handed()",))
+@_trait("f1288", usage=AT_WILL, proficiency=("w3663",))
 def f1288(c: Cast) -> None:
     """The proficiency lands and the penalty hangs on the grab being made
     while that weapon is in hand -- `RelationSet` is the only event that
-    names both ends of a grab. The combat advantage clause turns on the
-    weapon being used *with two hands*, which is a fact about the grip
-    and not about the weapon; the light-blade clause re-files the weapon
-    into another group for a class feature's purposes."""
+    names both ends of a grab.
+
+    **"With two hands" is a fact about this weapon, and `c.two_handed()`
+    was a marker for a question already answerable.** The old note said the
+    clause "turns on the grip and not on the weapon". For `w3663` it is the
+    weapon: `game.db` records it `hands = 'two-handed'`, and
+    `Weapon.__post_init__` writes that word into `properties` as well --
+    deliberately, so a row gets one answer whichever field it reads --
+    which is the field `Weapon.two_handed` asks. So holding it *is* using
+    it with both hands, and `f650b` already reads the property this way.
+    It is asked rather than assumed, so the clause follows the weapon
+    rather than a constant.
+
+    **The grab is read, not sustained.** This module's own rule is that
+    "each turn you maintain the grab" is a sustained effect -- and that is
+    the rule for the rows that *make* the grab and pay for keeping it
+    (`f1291b` lays one). This feat makes no grab and may not add a sustain
+    cost to somebody else's, so what it needs is the standing record, which
+    is the `GRABBED_BY` relation `c.grabbing` reads. A gate consulted at
+    the moment of the swing is therefore true exactly while the grab is
+    still held, which is what maintaining it comes to.
+
+    `c.gains_advantage` rather than `c.grants_advantage`: the printed
+    sentence is "**you** have combat advantage against the target you are
+    grabbing", and the set it is about is whatever this character happens
+    to be holding at the time, which is not knowable when the trait arms.
+
+    One narrowing is not sayable and is **wider than print by nothing that
+    can happen**: the context carries `attacker`, `target` and `power`, so
+    "for the purpose of attacking again with the garrote" cannot be asked
+    of the weapon. It does not need to be -- `w3663` takes both hands, so
+    nothing else is in them, and every weapon attack made while the gate
+    holds is made with it.
+
+    The light-blade clause lands now. It re-files the weapon's group so
+    `cf:rogue-scoundrel-f4` and the rogue's group-gated rows take it, which
+    is `c.weapon_group` -- and **not** `c.counts_as(satisfies=, holding=)`,
+    which waives a printed weapon *Requirement* read by `wielding`, where
+    what this card buys is what `Weapon.is_light_blade` answers. That
+    reader is literally `self.group == "light blade"`, so the group is the
+    only field that can say it.
+
+    The weapon keeps its own word too: `c.weapon_group` carries the old
+    group across as a property, so a row asking for either answers.
+
+    **The "if you are a rogue" half is not enforced**, for the reason
+    `c.as_implement` gives on the identical sentence shape -- nothing in
+    `query` answers a creature's class. `f1277` is the sibling with the
+    same clause and the same caveat."""
     me = c.me
+    c.weapon_group("light blade", ref="w3663", on=me)
+
+    def garrote_in_both_hands() -> bool:
+        return any(w.ref == "w3663" and w.two_handed for w in c.held(on=me))
 
     def seized(ev: Any) -> None:
         if ev.kind_ is not Relation.GRABBED_BY or ev.source != me:
@@ -760,7 +831,11 @@ def f1288(c: Cast) -> None:
         if any(w.ref == "w3663" for w in c.held(on=me)):
             c.penalty("escape", 2, on=ev.target, until=When.ENCOUNTER)
 
+    def still_holding_it(ctx: dict[str, Any]) -> bool:
+        return ctx.get("target") in c.grabbing() and garrote_in_both_hands()
+
     c.watch(RelationSet, seized, until=When.ENCOUNTER, on=me)
+    c.gains_advantage(still_holding_it, until=When.ENCOUNTER, on=me)
 
 
 _swap("f1289", "f1289b")
@@ -1135,10 +1210,17 @@ def f1295b(c: Cast) -> None:
 # says which range that half printed, so a rider on a melee-or-ranged row
 # tells the two apart instead of paying out on both.
 #
-# **A row's second swing cannot be told from its first.** The riposte four
-# of these cards ride on is rolled longhand inside its own body, so its
-# `Hit` carries the same `power` as the opening attack and a rider hung
-# there would pay twice. Those clauses are `c.on_riposte()`.
+# **A row's second swing says which it is.** The riposte four of these
+# cards ride on is rolled longhand inside its own body, so its `Hit`
+# carries the same `power` as the opening attack -- and a rider hung there
+# used to pay on both, which is what `c.on_riposte()` named. p653 stamps
+# `as_="riposte"` on the counter now and the attack context carries the
+# same key (#501), so those clauses are written.
+#
+# **The damage context does not carry `as_`**, which is the half of it
+# that is still not askable: a damage-side gate cannot say which swing it
+# is. The one clause that adds to the counter's *damage roll* is laid at
+# the counter's own `Hit` instead -- see `_riposte_off_kind`.
 #
 # **A clause that is not about hitting does not belong on `Hit`.** f1302's
 # two writable clauses are about *the target of* the exploit, hit or not,
@@ -1167,6 +1249,43 @@ def _melee_half(ev: Any) -> bool:
     """
     p = get(getattr(ev, "power", ""))
     return p is not None and p.reach_of(getattr(ev, "branch", 0)).kind == "melee"
+
+
+def _swings(c: Cast, ev: Any) -> list[int]:
+    """Who a finished use hit, **one entry per swing**, oldest first.
+
+    `exploits._hits` reads `PowerResolved.rolls`, and that is one entry per
+    *target*, not per attack: `dsl.use` appends `cast.result` after the body
+    has run, so a row making two attacks inside one body run leaves the
+    second roll behind and the first is simply gone. Measured on p87, which
+    is exactly that row -- two swings at one creature resolve with **one**
+    roll on the event, so "if you hit with both attacks" read as one hit and
+    `exploits._twice` could never answer at all. Against two creatures the
+    body runs twice and both rolls are there, so the blindness is in the
+    single-target case alone, which is the half the cards care most about.
+
+    Every swing is on the bus either way -- `Hit` is emitted per roll -- so
+    the use's own span of the log is the honest reader. Back to the
+    `PowerUsed` that opened it, which `dsl.use` announces before the body; a
+    row cannot nest inside itself (`dsl._IN_FLIGHT` refuses it), so the
+    first one walking back is this use's own.
+
+    `PowerResolved.rolls` should be the one place this is asked, and its
+    own docstring says it is ("every `AttackResult` the use produced").
+    Until that is true, this is what `f1304`'s p87 clause here and
+    `f1102`'s in `general_g` read instead -- and `exploits._hits` is still
+    right for every clause about a swing the row hands somebody else,
+    which is one roll per target by construction.
+    """
+    hits: list[int] = []
+    for past in reversed(c.world.bus.log[:ev.seq]):
+        same = getattr(past, "power", "") == ev.power
+        if past.kind == "PowerUsed" and same and past.actor == ev.actor:
+            break
+        if past.kind == "Hit" and same and past.attacker == ev.actor:
+            hits.append(past.target)
+    hits.reverse()
+    return hits
 
 
 def _surprise_round(c: Cast) -> bool:
@@ -1300,6 +1419,62 @@ def _ongoing_on_riposte(c: Cast, ev: Any) -> None:
     if getattr(ev, "as_", "") != "riposte" or c.wis_mod <= 0:
         return
     c.ongoing(c.wis_mod, on=ev.target)
+
+
+def _riposte_off_kind(c: Cast, ev: Any) -> None:
+    """The counter's attack roll **and** damage roll, after an opening hit.
+
+    Both halves are owed only when the opening blow lands on one of the
+    four kinds, and p653 arms its riposte whether it hit or not -- so the
+    clause fires on the opening blow and has to carry the fact forward to
+    a swing that happens later. The latch is a closure over a one-shot
+    watcher, which is `_slow_instead_of_push`'s shape and keeps the memory
+    off the board.
+
+    The attack half is an ordinary gated bonus: the attack context carries
+    `as_`, so "of your riposte" is one key to read.
+
+    **The damage half cannot be gated the same way** -- the damage context
+    carries no `as_`, and both of this row's damage rolls are p653's
+    against the same creature, so a bonus laid at the opening hit would be
+    spent by the opening blow's own damage. Laid at the counter's `Hit`
+    instead: a one-shot damage bonus is spent by the damage roll that
+    applies it, and the next p653 damage roll after that `Hit` is the
+    counter's. `f992`'s p87 clause leans on the same ordering.
+    """
+    if getattr(ev, "as_", "") == "riposte" or c.int_mod <= 0:
+        return
+    if not _is_named_kind(c, ev.target):
+        return
+    me, amount = c.me, c.int_mod
+    # `once=True` because the card buys one counter's roll, not every
+    # counter until the turn comes round: a one-shot attack bonus is spent
+    # by the roll that *used* it, which is a riposte and nothing else.
+    c.bonus("attack", amount, on=me, until=When.SONT, once=True,
+            when=lambda ctx: ctx.get("as_") == "riposte")
+    paid: list[bool] = []
+
+    def counter(hit: Hit) -> None:
+        if paid or hit.attacker != me or hit.power != "p653":
+            return
+        if getattr(hit, "as_", "") != "riposte":
+            return
+        paid.append(True)
+        foe = hit.target
+        c.bonus("damage", amount, on=me, until=When.SONT, once=True,
+                when=lambda ctx: ctx.get("power") == "p653"
+                and ctx.get("target") == foe)
+
+    c.watch(Hit, counter, until=When.SONT, on=me,
+            label=f"{c.ref} riposte")
+
+
+def _cow_on_riposte(c: Cast, ev: Any) -> None:
+    """The attack penalty, on the counter the row grants rather than on the
+    blow that armed it -- `as_` is what tells those two apart."""
+    if getattr(ev, "as_", "") != "riposte":
+        return
+    c.penalty("attack", 2, on=ev.target, until=When.EONT)
 
 
 def _extra_if_held(c: Cast, ev: Any) -> None:
@@ -1461,14 +1636,40 @@ def _cow_on_granted_hit(c: Cast, ev: Any) -> None:
         c.penalty("attack", 2, on=foe, until=When.EONT)
 
 
+def _cow_if_both_hit(c: Cast, ev: Any) -> None:
+    """"If you hit with both attacks, **one** target takes the penalty."
+
+    A `resolved` clause: the question is about the whole use, and no
+    earlier window has both swings in it. p87 rolls exactly two, over one
+    creature or two, so two hits is both of them landing -- counted with
+    `_swings` rather than `_hits`, which cannot see the second swing into
+    a single target.
+
+    One penalty rather than one per hit, because the card says one target.
+    Where both swings went into the same creature there is nothing to
+    pick; where they caught two, the choice is the character's.
+    """
+    caught = _swings(c, ev)
+    if len(caught) < 2:
+        return
+    pool = sorted(set(caught))
+    who = pool[0] if len(pool) == 1 else c.choose(pool, "who takes the penalty")
+    if who is not None:
+        c.penalty("attack", 2, on=who, until=When.EONT)
+
+
 # p1061 adds to the attack roll of the basic attack that row hands an
 # ally, which is now an ordinary read; p653's clause rides the riposte,
-# which shares its row's `Hit`.
+# which shares its row's `Hit` and is told apart by `as_`.
+# **All four clauses are written and the marker is gone.** The riposte's
+# attack roll is a gated bonus and its damage roll is paid at the
+# counter's hit -- see `_riposte_off_kind` for why the two halves are
+# written in different places.
 # **p2099's entry has moved into p2099's body** (#550).
 _riders("f1298", {
     "p87": _extra_off_kind,
-}, granted={"p1061": _ally_adds_half_int},
-   dropped=("c.on_riposte()",))
+    "p653": _riposte_off_kind,
+}, granted={"p1061": _ally_adds_half_int})
 
 # p315's clause rides the swing that row hands an ally, p653 the
 # riposte, and the ranger's beast clause is still a printed name.
@@ -1497,27 +1698,51 @@ _riders("f1300", {
 }, granted={"p1061": _ally_adds_con})
 
 
-@_trait("f1301", dropped=("query.moved_this_turn()",))
+@_trait("f1301")
 def f1301(c: Cast) -> None:
-    """Two clauses, each rewriting the movement its row prints. One lands.
+    """Two clauses, each rewriting the movement its row prints. Both land.
 
     **`p919`: a move of 2 in place of its shift of 1.** Written as a
     substitution -- `p919` reads `c.instead_of("shift", ...)` at its own
     shift now -- rather than as a rider, which would have moved *and*
     shifted and given the ranger three squares where the card gives two.
 
-    **`p971`: still held, and the marker is re-aimed.** Its clause is "if
-    you didn't move before the attack, you can shift 1 as a free action
-    after", and `p971`'s move is an unconditional `c.move(2)` on its first
-    use. Nothing records whether a creature moved this turn, so the
-    condition cannot be asked -- which is `query.moved_this_turn()` and not
-    the rider verb this row was marked for. A rider hung on the hit would
-    pay the shift whether the move was taken or not.
+    **`p971`: written, and `query.moved_this_turn()` was a dead symbol.**
+    The note here read "nothing records whether a creature moved this
+    turn", and the log held every `Moved` the whole time:
+    `query.since_turn_began` bounds this creature's own turn off
+    `world.bus.log`, which is `drivers.squares_moved`'s ruling and #645.
+
+    **"You didn't move before the attack" is the whole turn, and that is
+    where this parts company with `f1303`'s clause on the same row.** That
+    card prints "chose not to move before the attack *while using this
+    exploit*" -- `p971`'s own walk and nothing else -- where this one is
+    unqualified, so a rogue who stepped in with a move action has moved
+    before the attack and collects nothing here.
+
+    `PowerResolved` is the printed "after the attack", and it is also the
+    earliest window that can see whether `p971`'s own `c.move(2)` was
+    taken: the use is announced *before* the body runs, so a `PowerUsed`
+    rider would read the turn as it stood before the walk.
     """
+    me = c.me
     c.pre_empt("p919", "shift", lambda using: using.move(2))
 
+    def shift_after(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p971":
+            return
+        if any(isinstance(past, Moved) and past.actor == me
+               for past in since_turn_began(c.world, me)):
+            return
+        # A free action costs nothing, so the printed "you can" is the only
+        # gate -- `exploits._forgo_shift_instead` reads its twin the same way.
+        if c.may("shift 1 square", who=me):
+            c.shift(1, who=me)
 
-@_trait("f1302", dropped=("query.provoked_by()",))
+    c.watch(PowerResolved, shift_after, on=me, until=When.ENCOUNTER)
+
+
+@_trait("f1302")
 def f1302(c: Cast) -> None:
     """Two of the four clauses are the same sentence on two rows: a
     defence bonus against *the target of* the exploit, which does not
@@ -1529,32 +1754,54 @@ def f1302(c: Cast) -> None:
     "Against that enemy" is a `when=` on the attacker, which the defence
     query is handed. No type word is printed, so the bonus is untyped.
 
-    Dropped: p971's clause lengthens the move its row prints, and
-    p1505's covers only the opportunity attacks *that* movement provokes
-    -- gating on `opportunity` alone would also pay for the openings a
-    ranged attack gives, which is more often than printed.
+    **The other two clauses are written now.** `p971` prints "+Cha to
+    defences against opportunity attacks provoked by **this movement**" and
+    `p1505` prints the same for "opportunity attacks made against you
+    **during that movement**", and the note this replaces said both were
+    dropped because gating on `opportunity` alone "would also pay for the
+    openings a ranged attack gives, which is more often than printed".
+
+    `ctx["provoked_kind"]` answers it: it is `movement.step`'s own kind --
+    `walk`, `shift`, `charge` -- and **empty when a row rather than a move
+    opened the window**. So the move case is the non-empty one, and the
+    ranged openings the old note worried about are excluded by
+    construction. #880.
+
+    Both clauses are the same gate, which is why they are one rider: the
+    printed difference between them is *which* movement, and neither card
+    narrows further than "the move this row is about". Hung on the same
+    `PowerUsed` watch so the span matches the clause above it.
     """
     me = c.me
     guarded = {"p4541", "p2620"}
+    moves = {"p971", "p1505"}
 
     def on_use(ev: Any) -> None:
-        if ev.actor != me or ev.power not in guarded or c.cha_mod <= 0:
+        if ev.actor != me or c.cha_mod <= 0:
             return
-        for foe in ev.targets:
+        if ev.power in guarded:
+            for foe in ev.targets:
+                for defence in (AC, FORT, REF, WILL):
+                    c.bonus(
+                        defence, c.cha_mod, on=me, until=When.SONT,
+                        when=lambda ctx, foe=foe: ctx.get("attacker") == foe,
+                    )
+        elif ev.power in moves:
             for defence in (AC, FORT, REF, WILL):
                 c.bonus(
                     defence, c.cha_mod, on=me, until=When.SONT,
-                    when=lambda ctx, foe=foe: ctx.get("attacker") == foe,
+                    when=lambda ctx: bool(ctx.get("opportunity"))
+                    and bool(ctx.get("provoked_kind")),
                 )
 
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", dropped=("query.moved_this_turn()",))
+@_trait("f1303", dropped=("c.within(extend=)",))
 def f1303(c: Cast) -> None:
     """All four refs resolve. p2099 goes in the place of the melee basic a
-    charge swings; p971 and p620 rewrite the movement and the targeting
-    their own rows print.
+    charge swings; p971 rewrites the movement its row prints and p620 the
+    pool its Special line picks from.
 
     **p1505 is written, and the old marker was looking at the wrong
     thing.** It named a field on the opportunity window, and no field was
@@ -1565,15 +1812,48 @@ def f1303(c: Cast) -> None:
     -- nothing evaluates it speculatively the way a `c.bonus` gate is
     evaluated.
 
-    What is left of that clause is "if you move **after** using this
-    exploit": nothing records whether the move came before or after the
-    swing, so a character who had already walked in gets the waiver too.
+    **"If you move after using this exploit" needs nothing recorded, and
+    the note here said it did.** The waiver is laid from inside the
+    `PowerUsed` handler, so it does not exist until the exploit is used --
+    a character who had already walked in cannot have spent it, because
+    there was nothing standing to spend. The ordering is the laying time
+    and not a fact about the move.
+
+    **p971: written, and `query.moved_this_turn()` was a dead symbol** --
+    `query.since_turn_began` has bounded the turn off `world.bus.log` all
+    along (`drivers.squares_moved`, #645). This card's gate is the
+    narrower of the two printings: "chose not to move *while using this
+    exploit*" is `p971`'s own `c.move(2)` declined and not the turn's
+    travel, so the span walked back here is from that row's `PowerUsed` to
+    its `PowerResolved` -- the only window the row's own walk can be in.
+    `f1301` prints the unqualified sentence and reads the whole turn.
+
+    **Still dropped, and it is p620's clause, not p971's.** "The ally you
+    allow to shift can be within 2 squares of you, instead of adjacent to
+    you or the target" rewrites the pool `warlord/level_1._beside` builds
+    out of two literal `c.within(1, ...)` calls inside `p620`'s own body,
+    and no modifier reaches a literal -- `i1825x1` is the same gap on the
+    same symbol. Note for whoever lands it: this card **substitutes** the
+    pool rather than growing it, so a parameter that only widens a radius
+    would give "within 2 of you *or* of the target", which is wider than
+    printed.
 
     No gate on possessing p2099: `dsl.basic_options` refuses a row the
     character does not have, which is the same question asked later and
     once."""
     c.as_basic("p2099", window="charge")
     me = c.me
+
+    def moved_after(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p971":
+            return
+        for past in reversed(c.world.bus.log[:ev.seq]):
+            if isinstance(past, Moved) and past.actor == me:
+                return
+            if (past.kind == "PowerUsed" and past.actor == me
+                    and past.power == "p971"):
+                break
+        c.move(2, who=me)
 
     def hit_and_run(ev: Any) -> None:
         if ev.actor != me or ev.power != "p1505":
@@ -1594,16 +1874,18 @@ def f1303(c: Cast) -> None:
         c.no_provoke(on=me, until=When.EOT, when=leaving)
 
     c.watch(PowerUsed, hit_and_run, on=me, until=When.ENCOUNTER)
+    c.watch(PowerResolved, moved_after, on=me, until=When.ENCOUNTER)
 
 
 # p4541's clause rides the basic attack that row hands an ally -- which
-# `granted_via` names now -- p653's the riposte, and p87's both of its
-# two attacks landing.
+# `granted_via` names now -- p653's the riposte, which `as_` tells from
+# the blow that armed it, and p87's both of its two attacks landing,
+# which only the `resolved` window sees.
 #
-# **p992's entry has moved into p992's body** (#550), which leaves this
-# row's only `clauses` leg empty.
-_riders("f1304", {}, landed={"p4541": _cow_on_granted_hit},
-   dropped=("c.on_riposte()", "c.hit_twice()"))
+# **p992's entry has moved into p992's body** (#550).
+_riders("f1304", {"p653": _cow_on_riposte},
+   resolved={"p87": _cow_if_both_hit},
+   landed={"p4541": _cow_on_granted_hit})
 
 # All four clauses are about the zone `p2473` lays. The two splash ones
 # are riders on a hit inside it and are written; p87's wants the zone to
@@ -1680,7 +1962,7 @@ def f1307(c: Cast) -> None:
     c.watch(Hit, swung, until=When.ENCOUNTER, on=me, label=f"{c.ref} riders")
 
 
-@_trait("f1308", dropped=("c.on_riposte()",))
+@_trait("f1308", dropped=("p653.riposte_hook",))
 def f1308(c: Cast) -> None:
     """Written by hand rather than through `_riders`: p4368's clause needs
     a memory of what happened on somebody else's turn, which a table of
@@ -1700,8 +1982,19 @@ def f1308(c: Cast) -> None:
     before the swing is rolled, which is exactly the window a one-shot
     grant of combat advantage has to be in.
 
-    Dropped: p653's clause rides the riposte, whose `Hit` carries the
-    same `power` as the opening swing.
+    **Dropped, and the marker is re-aimed.** It said p653's clause rides
+    the riposte and could not be told from the opening swing -- which is
+    `c.on_riposte()`, and which p653's `as_="riposte"` answers now. That
+    was never this card's clause. It does not hang anything on the
+    counter: it **widens what provokes one**, from the target attacking me
+    to the target attacking me *or any ally adjacent to me*.
+
+    That cannot be written from out here. p653 arms its riposte inside its
+    own body, behind a private latch, and reads nothing from outside -- so
+    a watcher armed here would counter in *addition* to the row's own and
+    hand the character two swings where the card prints one. The widening
+    belongs in p653, which is `f985`'s gap from the other side: that row
+    wants the same closure to let a feat decline the counter.
     """
     me = c.me
     c.as_basic("p2620", window="challenge")
@@ -1976,7 +2269,7 @@ def f1340(c: Cast) -> None:
     c.watch(Hit, on_hit, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1341", todo=("c.ignores_difficult_in(who=)",))
+@_trait("f1341")
 def f1341(c: Cast) -> None:
     """"That enemy treats all squares adjacent to you as difficult terrain
     until the end of your next turn."
@@ -1993,8 +2286,35 @@ def f1341(c: Cast) -> None:
     card by the whole opposing side.
 
     Three theme powers print "for enemies" and are written with the pair;
-    this is the one that names a creature, and it waits on the waiver taking
-    one."""
+    this is the one that names a creature, and `c.difficult_for(zone=)` is
+    that -- the burden goes on the zone by id, so the other enemies standing
+    in the same squares are on ordinary ground. #831.
+
+    **An aura 1, because "adjacent to you" follows you.** `Zones.refresh`
+    re-centres it every round, so the rough squares move with the character
+    for as long as the clause is live -- which matters here, since the
+    duration runs to the end of the character's *next* turn and the
+    character acts inside it. A set of squares taken at the moment of the
+    hit would have been right until they moved.
+
+    The aura is laid once and stands for the encounter; what the hit does is
+    add one enemy to it by name. So two hits on two enemies burden both
+    independently, each on the same clock, and the aura is not re-laid.
+
+    `_arcane_at_will` is the gate and was already in this file -- the card
+    says "an arcane at-will attack power", which is a keyword and a usage."""
+    me = c.me
+    aura = c.aura(1, label=c.ref, on=me)
+
+    def underfoot(hit: Hit) -> None:
+        if hit.attacker != me or not _arcane_at_will(getattr(hit, "power", "")):
+            return
+        foe = getattr(hit, "target", None)
+        if foe is None or foe not in c.enemies():
+            return
+        c.difficult_for(on=foe, zone=aura, until=When.EONT)
+
+    c.watch(Hit, underfoot, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @_trait("f1342")

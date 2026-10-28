@@ -31,6 +31,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     AreaBurst,
     Cast,
     CloseBurst,
@@ -93,7 +94,7 @@ def p11618(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(3),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=DIVINE_HEALING,
 )
 def p12607(c: Cast) -> None:

@@ -22,7 +22,6 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
@@ -36,6 +35,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_AND_EACH_ALLY,
     AreaBurst,
     Cast,
     CloseBurst,
@@ -387,12 +387,12 @@ def p13624(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PRIMAL,
 )
 def p13625(c: Cast) -> None:
-    """`EACH_ALLY`'s pool includes the caster, which is "you and each ally"
-    exactly."""
+    """`YOU_AND_EACH_ALLY` is the caster and the allies together, which is
+    "you and each ally" exactly."""
     c.ignores_difficult(on=c.target, until=When.ENCOUNTER)
     c.bonus("speed", 2, on=c.target, until=When.ENCOUNTER, kind="power")
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     ENCOUNTER,
-    ONE_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Cast,
     CloseBurst,
@@ -23,7 +23,7 @@ from combat_engine.engine import (
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=CloseBurst(3),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.MARTIAL],
     trigger="you roll initiative",
     on=Trigger(InitiativeRolled, about_me, "you roll initiative"),

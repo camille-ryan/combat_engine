@@ -8,7 +8,7 @@ nothing stores it; it is recomputed from the board whenever an attack asks.
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache, lru_cache
 from typing import TYPE_CHECKING, Any
 
 from .components import (
@@ -38,6 +38,7 @@ from .types import (
     Cover,
     DamageType,
     Defense,
+    Keyword,
     Light,
     Relation,
     Team,
@@ -236,6 +237,47 @@ def enemies(world: World, eid: int) -> list[int]:
     ]
 
 
+#: The one load property the table prices. Seven weapons print `load free`
+#: and three print this; nothing prints a third form. Named rather than
+#: spelled inline at each site, because a misspelling here reads exactly
+#: like a weapon that needs no loading -- the uniformly-dead gate this
+#: repository keeps finding.
+COSTED_LOAD = "load minor"
+
+
+def needs_loading(weapon: Any) -> bool:
+    """Does firing this weapon leave it empty until somebody reloads it?
+
+    True only for the three weapons whose printed properties include
+    `load minor` -- `w3629` crossbow, `w3659` superior-crossbow, `w3662`
+    blowgun. `load free` is a load the rules charge nothing for, so a
+    weapon carrying it is always ready and this answers False; so does
+    every weapon with no load property at all, which is most of them.
+
+    A free function rather than a `Weapon` method because `Weapon` is a
+    data record read by the ETL, the wire and `chargen` alike, and the
+    question is the engine's. #675, #725.
+    """
+    return COSTED_LOAD in (getattr(weapon, "properties", None) or ())
+
+
+def ready_to_fire(world: World, eid: int, weapon: Any) -> bool:
+    """Is this weapon loaded, for a creature that has to load it?
+
+    **A weapon that needs no loading is always ready**, which is the half a
+    caller must not have to remember: asking this about a longbow has to
+    answer True, or every bow in the game stops firing.
+    """
+    from .components import Gear
+
+    if not needs_loading(weapon):
+        return True
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return True
+    return getattr(weapon, "ref", "") not in gear.unloaded
+
+
 def holding(world: World, eid: int, what: str = "") -> list[Any]:
     """What this creature has in hand, filtered by a printed word.
 
@@ -410,9 +452,9 @@ def familiar_of(world: World, eid: int) -> int | None:
     """
     mine = [
         e for e in world.having(Companion)
-        if world.get(e, Companion).owner == eid  # type: ignore[union-attr]
+        if world.get(e, Companion).owner == eid  # ty: ignore[unresolved-attribute]
     ]
-    named = [e for e in mine if world.get(e, Companion).kind == "familiar"]  # type: ignore[union-attr]
+    named = [e for e in mine if world.get(e, Companion).kind == "familiar"]  # ty: ignore[unresolved-attribute]
     if named:
         return named[0]
     return mine[0] if mine else None
@@ -518,6 +560,37 @@ def charging(world: World, eid: int) -> bool:
     return mv is not None and mv.charging
 
 
+def moved_this_action(world: World, eid: int) -> int:
+    """How many squares this creature entered during its current move action.
+
+    The number the printed Stealth rule is about -- *"-5 if you moved more
+    than 2 squares during that action"* -- and nothing counted it, so the
+    penalty had no value and four rows that only ever waive it had nothing
+    to waive. #784.
+
+    **Squares, not budget.** `movement.walk` returns a cost that charges 2
+    for a difficult square, so a creature that crossed two squares of rough
+    ground has spent 4 and moved 2. The card counts squares.
+
+    0 between move actions and at the top of a turn, so a creature that has
+    not moved reads 0 rather than whatever it did last turn.
+    """
+    mv = world.get(eid, Movement)
+    return mv.went if mv is not None else 0
+
+
+def ran_this_action(world: World, eid: int) -> bool:
+    """Was this creature's current move action a **run**?
+
+    The other half of the Stealth rule, where running is -10 rather than
+    -5. Off `Movement.went_kind`, which `movement.walk` stamps from the
+    `kind` it was handed -- the same word `MoveStart.kind_` carries and
+    `movement.PRICED_KINDS` prices, so "ran" needed no new bookkeeping.
+    """
+    mv = world.get(eid, Movement)
+    return mv is not None and mv.went_kind == "run"
+
+
 def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
     """How far this creature moves, for the kind of move it is making.
 
@@ -597,6 +670,64 @@ def attack_penalty(world: World, eid: int) -> int:
 
 def deals_half(world: World, eid: int) -> bool:
     return any(rules_for(world, eid, c).weakened for c in active(world, eid))
+
+
+@cache
+def deals_damage(ref: str) -> bool:
+    """Does this power *normally* deal damage -- from either of the two
+    places damage comes from?
+
+    **The header alone is the trap, and `i1560p1`'s own docstring called
+    it.** Several cards end "if the power doesn\'t normally deal damage, no
+    extra damage is dealt", and `get(ref).damage is None` looks like the
+    question. It is not: **3,518** declared rows carry `damage=None` in the
+    header and deal damage in the body through `c.damage`, `p992` among
+    them. A header-only gate would have suppressed the rider on most of the
+    rows that should get it -- which is the fault pointed the other way, and
+    the reason that row carried a symbol instead of a fix.
+
+    So both places are read: the declared expression, or a damage call in
+    the body. `7,015` rows say it in the header, `3,518` only in the body.
+
+    **"Normally" is the row, not the roll.** A power that happens to roll
+    zero still normally deals damage, and one that deals it only through a
+    *rider* does not -- so this reads what the row can do and never the
+    event.
+
+    Cached: the answer is static for a given ref, and it reads source.
+    Unknown ref answers **False**, because a rider cannot pay out on a power
+    nobody declared and the alternative pays on every typo. #782.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from .dsl import get
+
+    row = get(ref)
+    if row is None:
+        return False
+    if row.damage is not None:
+        return True
+    fn = next((getattr(row, a) for a in ("body", "fn", "func")
+               if callable(getattr(row, a, None))), None)
+    if fn is None:
+        return False
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+    except (OSError, TypeError, SyntaxError):
+        return False
+    # **`ast`, not a regex over the source.** `inspect.getsource` includes
+    # the docstring, and a row explaining *why* it does not call `c.damage`
+    # would have matched a text search -- a false positive in the direction
+    # that pays the rider on a power the card excludes. A `Call` node cannot
+    # be in a docstring or a comment.
+    return any(
+        isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr in {"damage", "flat", "ongoing"}
+        for n in ast.walk(tree)
+    )
 
 
 #: Roles whose whole point is to stay out of melee, whatever else they can
@@ -1245,7 +1376,7 @@ def in_form(world: World, eid: int, *names: str) -> bool:
     return bool(live & wanted) if wanted else True
 
 
-def shifted(world: World, eid: int) -> bool:
+def shaped(world: World, eid: int) -> bool:
     """Has this creature taken a shape that is not its own?
 
     "A +1 bonus to all defences against creatures not in their natural form"
@@ -1253,6 +1384,14 @@ def shifted(world: World, eid: int) -> bool:
     with no arguments: that one is permissive about an unrecorded shape
     because a Requirement should not refuse an attack, where this one has to
     answer *no* for a creature nobody has transformed.
+
+    **Named `shaped` after `Condition.SHAPED`, which is the convention**, and
+    renamed from `shifted` because that was a false friend of `c.shift` --
+    they sat on consecutive lines of an alphabetical dump, so `if
+    c.shifted():` after a `c.shift(2)` read as the obvious way to ask whether
+    the step happened and was always False unless the creature was
+    polymorphed. No row ever called it, which is the only reason the rename
+    costs nothing. #595.
     """
     held = world.get(eid, Shapes)
     return bool(held is not None and held.live)
@@ -1334,6 +1473,29 @@ def can_walk(world: World, eid: int) -> bool:
         return False
     mods = world.get(eid, Mods)
     return not (mods is not None and mods.items and mods.total("no_walk", {}) > 0)
+
+
+def can_run(world: World, eid: int) -> bool:
+    """"It cannot run", with the walk left alone.
+
+    The run-only mirror of `can_walk`, and the reason it is a separate
+    reader rather than a flag inside that one: `c.no_walk` is documented
+    as *"it cannot use move actions to walk **or** run"*, so the only
+    prohibition this engine had took both. `m5452a2`'s whole card is a
+    move action spelled out -- it walks its speed and cannot run -- so
+    taking the walk away is not an option there. The walk **is** the row.
+
+    Refuses whatever `can_walk` refuses, because a creature that cannot
+    walk cannot run either; `no_run` is the extra bar on top. The same
+    relationship `c.cannot_shift` has to `c.no_walk`, and this file's own
+    note on that pair gives the reason it matters: *"a row printing only
+    one half was being written as the stronger card or dropped"*, which is
+    exactly what had happened. #670.
+    """
+    if not can_walk(world, eid):
+        return False
+    mods = world.get(eid, Mods)
+    return not (mods is not None and mods.items and mods.total("no_run", {}) > 0)
 
 
 # -- combat advantage -------------------------------------------------------
@@ -1512,10 +1674,64 @@ def granted_actions(world: World, eid: int) -> dict[tuple[str, str], int]:
     return out
 
 
+def rideable_by(world: World, mount: int) -> frozenset[str]:
+    """Which rider sizes this creature may carry **despite the size rule**.
+
+    The printed rule is that a mount must be *larger than* its rider, and
+    three rows relax it from two directions: a monster whose line is "a
+    Medium creature can ride this" and a feat whose line is "if your
+    companion is **your size or larger**". Both mounts involved are Medium,
+    so a Medium rider is barred outright by the general rule -- which makes
+    those lines real exceptions rather than restatements, and that was worth
+    measuring before building two facilities for one rule. #749.
+
+    Empty for almost every creature, which is what the ordinary rule means.
+    """
+    mods = world.get(mount, Mods)
+    if mods is None or not mods.items:
+        return frozenset()
+    out = set()
+    for m in mods.items:
+        what, sep, size = m.what.partition("rideable:")
+        if sep and not what and mods.total(m.what, {}) > 0:
+            out.add(size)
+    return frozenset(out)
+
+
+def may_ride(world: World, rider: int, mount: int) -> bool:
+    """Is this pairing a legal mount, by size and by exception?
+
+    The one legality test, read from whichever side the card wrote its
+    exception -- `rideable_by` is laid on the **mount** and a feat relaxing
+    the rule for its own companion lays it there too, with `on=`. #749's
+    comment is explicit that the two "gaps" are one rule relaxed from two
+    directions, and this is where that unification lives.
+
+    A creature cannot ride itself, and neither end may already be in a
+    mounted pairing -- the printed rule is one rider and one mount.
+    """
+    from .components import Position
+    from .types import Relation
+
+    if rider == mount or not alive(world, mount) or not alive(world, rider):
+        return False
+    if world.relations.targets(Relation.RIDDEN_BY, mount):
+        return False      # already carrying somebody
+    if world.relations.sources(Relation.RIDDEN_BY, rider):
+        return False      # already astride something
+    here = world.get(rider, Position)
+    there = world.get(mount, Position)
+    if here is None or there is None:
+        return False
+    if there.size.order > here.size.order:
+        return True
+    return str(here.size) in rideable_by(world, mount)
+
+
 def immune_to(
     world: World,
     eid: int,
-    cond: Condition,
+    cond: Condition | Keyword,
     source: int | None = None,
     power: str = "",
 ) -> bool:
@@ -1525,7 +1741,37 @@ def immune_to(
     of your next turn" is a window in which the condition never arrives,
     and stripping it afterwards is a different sentence that leaves every
     rider hung on `ConditionApplied` already paid out.
+
+    **A `Keyword` asks the other printed immunity** -- "Immune fear",
+    "Immune charm", "Immune sleep" -- which is to a whole class of effect
+    rather than to a condition. One function for both because the printed
+    word is the same word and the modifier label already is: `Condition`
+    and `Keyword` are both `StrEnum`, so `f"immune to {cond.value}"` needed
+    no change at all, and a row laying either through `c.immune` is read
+    here without knowing which kind it was.
+
+    **The standing half came from a column that was being thrown away.**
+    `monster.immune` holds these tokens and `loader._stat_block` filtered it
+    to `DamageType` members, so **disease on 488 monsters, fear on 61, gaze
+    on 36, sleep on 31 and charm on 27** were read out of `game.db` and
+    dropped. `Defences.immune_keywords` keeps them now, which is why this
+    reader answers True for a creature nobody cast anything on. Two feats
+    (`f2107b`, `f3402`) were marked `dropped=` for want of it while the
+    facts were already in the database. #560.
+
+    Damage immunity is **not** asked here and deliberately so:
+    `Defences.immune` is a set of `DamageType` read in
+    `resolve.deal_damage`, which is a different question (how much of a blow
+    lands) from this one (whether an effect may arrive at all). A
+    `DamageType` reaching this function would answer off `immune_keywords`,
+    where it is never stored, and correctly report False -- but the caller
+    would be asking the wrong reader, so the loader excludes those tokens
+    rather than letting both sets hold them.
     """
+    if isinstance(cond, Keyword):
+        shields = world.get(eid, Defences)
+        if shields is not None and cond in shields.immune_keywords:
+            return True
     mods = world.get(eid, Mods)
     if mods is None or not mods.items:
         return False
@@ -1727,17 +1973,31 @@ def light_level(
     answers `BRIGHT` for every square and the attack path's light term is a
     no-op. 13 rows wait on this; it is the model the other seven light
     symbols are written against.
+
+    **This does not read `Zone.obscured_for`**, and the asymmetry is
+    deliberate. A directional obscurity is a fact about who is *looking*,
+    and this function is handed a square and no looker -- so it answers the
+    square's own grade, which is the conservative answer and the one the
+    content readers want ("teleport me somewhere dim" is about the square,
+    not about an onlooker). `light_concealment` has the attacker and asks
+    `Zones.obscuring_for` for a scan already filtered to that looker.
     """
     worst = Light(world.grid.light.get(square, Light.BRIGHT))
     # `dark_zones` is the caller's own scan, passed in so a loop over the
     # target's squares does not re-walk every zone on the board for each one.
     if dark_zones is None:
         dark_zones = world.zones.dark()
+    # **Sealed, for a darkness a card says cannot be illuminated.** Collected
+    # in the same pass rather than a second walk, and only from a zone that
+    # actually covers this square -- a sealed zone two squares away seals
+    # nothing. #535.
+    sealed = False
     for zone in dark_zones:
         if square in zone.squares:
             level = Light(zone.obscured)
             if _DARKER[level] > _DARKER[worst]:
                 worst = level
+            sealed = sealed or zone.no_light
     if worst is Light.BRIGHT:
         # **Still has to ask about a carried dimmer**, which is the one
         # thing that can make a bright square darker. The early return was
@@ -1747,6 +2007,18 @@ def light_level(
         # every dimmer invisible on exactly the boards it is for. Caught by
         # `drivers.light_and_dim`'s first assertion. #687.
         return _dimmed(world, square)
+    # **A sealed square stops here**, before the carrier walk, which is the
+    # whole of what "cannot be illuminated" buys: the zone's own grade is the
+    # answer and no radius overrides it. Asked after the bright-board early
+    # return above, so a board nobody darkened pays nothing for this.
+    #
+    # A carried *dimmer* is not consulted either, and that is right rather
+    # than an oversight: `worst` is already at least this zone's grade, and
+    # the only thing a dimmer could do is darken it further -- which a
+    # sealed darkness has no card asking for. If one ever does, this is the
+    # line that has to learn about it. #535.
+    if sealed:
+        return worst
     # **A carried light moves, so it cannot be written into the terrain.**
     # `c.light(n)` lays a radius on the creature and this is what reads it:
     # anything within that radius is bright however dark the square itself
@@ -1918,7 +2190,13 @@ def light_concealment(world: World, attacker: int, target: int) -> Cover:
     if (not world.grid.light and not world.zones.darkening
             and not _anyone_dimming(world)):
         return Cover.NONE
-    dark_zones = world.zones.dark()
+    # **Filtered by who is looking**, which is the one place that can be
+    # done: this function has the attacker and `light_level` does not. Four
+    # rows print an obscurity with a side, and a zone whose side excludes
+    # this attacker is simply not in the scan -- so the whole chain below
+    # reads as if it were not there, rather than every reader learning
+    # about directions.
+    dark_zones = world.zones.obscuring_for(attacker)
 
     # The distance matters: a sense with a printed range stops answering past
     # it, which is the whole of what the range is for.
@@ -2538,3 +2816,26 @@ def dropped_since(
         and getattr(e, "actor", None) in who
         for e in world.bus.log
     )
+
+
+def difficulty(level: int, band: str) -> int | None:
+    """The printed DC for a named difficulty at a level. `None` if unknown.
+
+    4e prints many checks as a **band** rather than a number -- "Athletics
+    check (hard DC)" -- against one table of Easy/Moderate/Hard DCs by
+    level. `terrain.check_band` holds that word on 15 rows and
+    `disease.dc_shape = 'band'` on 8, each with the DC left null for want of
+    this. #491.
+
+    The table lives in `engine/difficulty.py`, read off the compendium's
+    `Glossary` entry 384 rather than recalled -- it has been got wrong here
+    from memory before. This is the reader, and it is here because this is
+    where readers live and where `docs/symbols/reading.md` finds them.
+
+    `None` means *unknown*, never "no DC": an unrecognised band is a parse
+    fault upstream, and a null level cannot be resolved at all, which is the
+    case the 8 band-shaped diseases are in -- their `level` is null too.
+    """
+    from .difficulty import difficulty as _dc
+
+    return _dc(level, band)

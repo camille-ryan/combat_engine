@@ -449,6 +449,21 @@ class Target:
     #: else is a weapon group or property. Without it the row is aimed at
     #: creatures that have nothing for it to do anything to.
     holding: str = ""
+    #: The target must have **something to take away** -- a printed "one
+    #: creature carrying equipment", where the effect animates or ruins what
+    #: it finds.
+    #:
+    #: **Not `holding=""`**, which is the no-filter default: `query.holding`
+    #: answers about what is *in hand*, so a creature in armour with a
+    #: shield and no weapon drawn passes it by being unfiltered rather than
+    #: by qualifying. This asks the wider question.
+    #:
+    #: Armour is deliberately **not** counted on its own: `Gear.armour`
+    #: defaults to `"cloth"` for every creature in the game, so a filter
+    #: that honoured it would pass everybody and read exactly like a filter
+    #: that worked. Weapons in hand, weapons on the belt, and a shield are
+    #: the things a card of this shape does something to.
+    carrying: bool = False
     #: The target must be a creature of **this block**, by ref -- "up to
     #: four of its own kind", "each ally of its own kind".
     #:
@@ -773,9 +788,21 @@ class Target:
             return self.label
         if self.side == "self":
             return "You"
+        # **`"team"` prints the caster, because that is the whole of what
+        # makes it a different pool from `"ally"`.** It was missing from this
+        # dict entirely, so printing a `team` target raised
+        # `KeyError: 'team'` -- the same latent crash `candidates`' pool dict
+        # had, in the second of the three places `"team"` has to be known.
+        # `_SIDES` below listed it the whole time, which is exactly the drift
+        # `_SIDES`' own comment says it exists to prevent and did not.
+        if self.side == "team":
+            if self.everyone:
+                return "You and each ally in the area"
+            return ("You or one ally" if self.count == 1
+                    else f"You or up to {self.count} allies")
         who = {
             "enemy": "creature", "ally": "ally", "any": "creature",
-            "other": "creature", "other_ally": "ally", "object": "object",
+            "other": "creature", "object": "object",
         }[self.side]
         if self.everyone:
             return f"Each {who} in the area"
@@ -787,7 +814,7 @@ class Target:
 #: guard and the pool cannot drift apart -- the guard exists because they
 #: could, and `KeyError: 'creature'` is what that looked like.
 _SIDES = frozenset({
-    "self", "enemy", "ally", "any", "other", "other_ally", "team", "object",
+    "self", "enemy", "ally", "any", "other", "team", "object",
 })
 
 ONE_CREATURE = Target("enemy", 1)
@@ -795,11 +822,15 @@ ONE_CREATURE = Target("enemy", 1)
 #: beneficial row pointed at it is unusable on the only creatures it is ever
 #: meant for.
 ANY_CREATURE = Target("any", 1)
+#: "One ally", and the caster is **not** one of its own allies -- the printed
+#: word, and what `Cast._side` has always answered on the body path.
+#:
+#: This comment used to say the opposite ("`ONE_ALLY`'s pool includes the
+#: caster, which reads as 'you or one ally'"), and it was accurately
+#: describing `candidates`, which disagreed with `_side` about the same
+#: word. #364 flipped the pool; a row that means you as well now says
+#: `YOU_OR_ONE_ALLY`.
 ONE_ALLY = Target("ally", 1)
-#: "One ally" where the printed line excludes you. `ONE_ALLY`'s pool
-#: includes the caster, which reads as "you or one ally" -- right for most
-#: rows and wrong for the ones that say otherwise.
-ONE_OTHER_ALLY = Target("other_ally", 1)
 SELF = Target("self", 1)
 EACH_ENEMY = Target("enemy", 99, everyone=True)
 EACH_CREATURE = Target("any", 99, everyone=True)
@@ -808,6 +839,23 @@ EACH_CREATURE = Target("any", 99, everyone=True)
 #: printed reading for some rows and plainly not for others.
 EACH_OTHER = Target("other", 99, everyone=True)
 EACH_ALLY = Target("ally", 99, everyone=True)
+#: **"You or one ally", and "you and each ally".** The `team` pool is allies
+#: *plus* the caster, and these two are the only honest way to declare a card
+#: that prints the word "you" beside the word "ally".
+#:
+#: Named after the printed phrases rather than as `ONE_TEAM`/`EACH_TEAM`,
+#: because the pool name answers "which creatures" and the printed line is
+#: what an author is matching against. `YOU_AND_ALLIES` already existed as a
+#: local constant in one content file, spelled with the `ally` pool, which is
+#: the mistake these exist to stop.
+#:
+#: **Until #364 these could not be written.** `candidates`' pool dict had no
+#: `"team"` key at all, so declaring it raised `KeyError` -- which is why 0
+#: rows used it and why 170 rows printing "you and each ally" were declared
+#: `ally` instead. They were correct only because `candidates` added the
+#: caster to the `ally` pool, which is the disagreement #364 is about.
+YOU_OR_ONE_ALLY = Target("team", 1)
+YOU_AND_EACH_ALLY = Target("team", 99, everyone=True)
 NO_TARGET = Target("self", 0, label="None")
 
 
@@ -1613,7 +1661,19 @@ class Power:
         if kind == "ranged":
             # Unless it is thrown by hand, in which case a melee weapon is
             # exactly what it wants.
-            return bool(gear.melee) if self.thrown_by_hand else gear.ranged is not None
+            if self.thrown_by_hand:
+                return bool(gear.melee)
+            if gear.ranged is None:
+                return False
+            # **And it has to be loaded**, which is the half that makes the
+            # load worth modelling at all. Three weapons print `load
+            # minor`; firing one empties it and `actions` offers the
+            # reload. A `load free` weapon and everything without a load
+            # property answer True here always -- `ready_to_fire` carries
+            # that, so this site does not have to remember it. #675, #725.
+            from .query import ready_to_fire
+
+            return ready_to_fire(world, actor, gear.ranged)
         if kind == "melee":
             return bool(gear.melee)
         return True
@@ -2073,17 +2133,18 @@ def area_of(
     Clipped to the board. A ranged 20 power on a board sixteen squares wide
     otherwise reports a reach that runs off the edge, and an interface that
     highlights what it is given lights up squares that are not there.
+
+    **`branch` is resolved by `_aimed_shape`, not by `Power.reach_of`.** This
+    read the header directly until #884, which made it answer for the printed
+    aiming whatever aiming actually ran: an index past the printed ones
+    *clamped* to the print, and an **optional** reshape was applied to the
+    printed aiming -- the one thing `optional=` exists to prevent. The swap
+    still lands below rather than inside the helper, because the
+    `blast_size` stretch needs the unswapped `kind` first; that ordering is
+    the reason this function does not come through `reach_of`'s door and it
+    is unchanged.
     """
-    r = p.reach_of(branch, augment)
-    # **The state-switched size first, before any stretch or swap.** "Close
-    # burst 2 (5 while bloodied)" is the printed line for this creature
-    # right now, so it is what a stretch adds to and what a reshape
-    # replaces -- the card the feat rewrites is the one the creature is
-    # holding. Applied here as well as in `reach_of`, because this function
-    # deliberately does not come through that door (the stretch needs the
-    # unswapped `kind` first) and a switch honoured at one site and not the
-    # other is `keywords_of`'s trap one field over. #657.
-    r = switched(world, actor, r)
+    r, swap = _aimed_shape(world, actor, p, branch, augment)
     # Every origin, unioned. One companion gives one origin and the same answer
     # as before; two give the area either of them could reach, which is what the
     # printed rule asks for on both of its sentences. See `origins`.
@@ -2105,7 +2166,13 @@ def area_of(
     # says and the opposite of what applying this first would do. No printed
     # pair of these is known; the order is stated so the answer is not an
     # accident of line order. #614.
-    swap = _reshaped(world, actor, {"power": p.ref, "range_kind": r.kind})
+    #
+    # **Whichever reshape this branch names**, settled above: the replacing
+    # one for a printed aiming, and for an index past the printed ones the
+    # *particular* offered reshape that contributed that index. This line
+    # used to ask `_reshaped` for the first match of either kind, so a
+    # character holding an optional reshape had it imposed on the printed
+    # aiming as well as offered beside it. #884.
     if swap is not None:
         r = swap(r)
     if r.kind == "close_burst":
@@ -2118,7 +2185,8 @@ def area_of(
     elif r.kind == "wall":
         # Everywhere the wall may be put, which is what an interface lights
         # up and what `c.wall` picks its run of squares out of.
-        out = spread(mine, r.within)
+        out = spread(mine, within_of(world, actor, r,
+                                     {"power": p.ref, "range_kind": r.kind}))
     elif r.kind in ("melee", "ranged"):
         out = spread(mine, _reach_of(world, actor, r, p.ref, stretch=stretch))
     else:
@@ -2280,43 +2348,112 @@ def reach_of(
       is not a thing any of the fifteen cards says, and widening it would
       make a dagger feat refuse the dagger.
 
-    `area_of` consults `_reshaped` itself and keeps doing so: it needs the
-    unswapped `kind` first to decide whether a `blast_size` stretch applies
-    at all, so the order there is stretch-then-swap and is documented on the
-    spot.
+    **The five sites that used to read the header are routed through here,
+    and the rule above is now true of `dsl.py`.** `#894` found them: three
+    wrapped the print in `switched(...)`, which is *half* the resolution --
+    it applies the state-switch and not the reshape -- and two read the
+    `kind` straight off the print. Measured rather than argued, with a
+    replacing reshape in force:
+
+        p.reach_of(0)                 Area burst 1 within 10
+        switched(p.reach_of(0))       Area burst 1 within 10
+        reach_of(world, actor, ...)   Close burst 1
+
+    So the `kind` itself moved, and the two sites branching on it --
+    `_can_land`'s first and `_auto_targets` -- demanded an origin for a row
+    that had become a close burst and needed none. `candidates` computed
+    `aimed` the same wrong way. That is a live disagreement under any
+    reshape, not a latent one, which is why this stopped being an
+    enhancement.
+
+    The sites are `candidates`, `_can_land` (both), `_within_reach` and
+    `_auto_targets`. `_within_reach` is the one the **action menu** reads,
+    so it is the site where a wrong answer is offered rather than merely
+    computed -- and the reason this change owes a `winrate` reading and not
+    only a plant.
+
+    `_aimed_shape` is now the only reader of `Power.reach_of` in this module
+    that holds a world, which is what makes the claim checkable: a sixth
+    site would show up as a second one.
+
+    `area_of` resolves its branch through `_aimed_shape` below, which is this
+    function's first half factored out, and still applies the swap itself: it
+    needs the unswapped `kind` first to decide whether a `blast_size` stretch
+    applies at all, so the order there is stretch-then-swap and is documented
+    on the spot. Before #884 it had a second copy of the resolution that read
+    the header, and the two answered differently.
+    """
+    r, swap = _aimed_shape(world, actor, p, branch, augment)
+    return swap(r) if swap is not None else r
+
+
+def _aimed_shape(
+    world: World, actor: int, p: Power, branch: int = 0, augment: int = 0
+) -> tuple[Range, Callable[[Range], Range] | None]:
+    """The shape a branch names for this creature, and the reshape owed it.
+
+    **One door for branch resolution**, which is the whole of #884.
+    `area_of` had its own copy reading `Power.reach_of` -- header data, which
+    cannot know what this creature was offered -- so an index past the
+    printed ones *clamped* to the print, and `Range.reach_of`'s clamp made
+    that silent rather than loud. Two readings of one index, and the blind
+    one was answering for all 456 `c.area()` call sites.
+
+    Returned as a **pair** rather than a finished `Range` because the two
+    callers need the swap at different moments: `reach_of` applies it at
+    once, `area_of` must measure its stretch against the unswapped `kind`
+    first. Handing back the callable is what lets them share the choice of
+    *which* reshape without sharing the moment it lands.
+
+    `switched` is applied on **every** path, including the extra index and
+    the fallback. It was applied only to the printed branch, which this
+    function's own argument says is wrong: a reshape replaces the line the
+    creature is holding right now, so "close burst 2 (5 while bloodied)"
+    has to be switched *before* the reshape sees it, whichever index asked.
+    No row in the tree is both state-switched and reshaped, so this is
+    inert today and correct rather than measured-as-different.
     """
     printed = p.branches
     if branch in printed:
-        r = p.reach_of(branch, augment)
         # **The state-switched size, before any reshape.** "Close burst 2 (5
         # while bloodied)" is the printed line for this creature right now,
         # and a reshape replaces *that* -- the card the feat is rewriting is
         # the one the creature is actually holding.
-        r = switched(world, actor, r)
+        r = switched(world, actor, p.reach_of(branch, augment))
         # A **replacing** reshape only. An optional one is reached through
         # its own index below, and applying it here as well would impose the
         # alternative on the printed aiming -- which is the whole thing
         # `optional=` exists to avoid.
-        swap = _reshaped(world, actor, {"power": p.ref, "range_kind": r.kind},
-                         optional=False)
-        return swap(r) if swap is not None else r
+        return r, _reshaped(world, actor,
+                            {"power": p.ref, "range_kind": r.kind},
+                            optional=False)
 
     # **An extra index**, contributed by an optional reshape in force for
     # this creature. Derived from the printed count rather than hard-coded:
     # a row with `reach.alt` already owns 0 and 1, so its first extra is 2.
+    #
+    # Applied to the row's **first** printed branch. Every one of the eleven
+    # cards names one alternative to one printed shape; a card offering an
+    # alternative to the *second* branch of a two-range row is not among
+    # them, and inventing a rule for it here would be a second opinion about
+    # what the pages say.
+    base = switched(world, actor, p.reach_of(printed[0], augment))
     extras = _offered(world, actor, p)
     spot = branch - len(printed)
     if 0 <= spot < len(extras):
-        # Applied to the row's **first** printed branch. Every one of the
-        # eleven cards names one alternative to one printed shape; a card
-        # offering an alternative to the *second* branch of a two-range row
-        # is not among them, and inventing a rule for it here would be a
-        # second opinion about what the pages say.
-        return extras[spot](p.reach_of(printed[0], augment))
+        return base, extras[spot]
 
     # A branch nothing offers. The print for branch 0, which is what every
     # caller that guessed an index got before any of this existed.
-    return p.reach_of(printed[0], augment)
+    #
+    # **Still a clamp, and deliberately not a raise.** #884 asked for the
+    # decision: `api.render` hands this an index chosen by the client, so
+    # raising turns a crafted request into a 500, and `turns`/`policy` walk
+    # `branches_for` in a loop where one bad index would stop a whole turn.
+    # The honest guard is the one that already exists a layer up --
+    # `can_branch_for` answers whether an aiming is open to this creature --
+    # and the clamp is what a caller that did not ask gets.
+    return base, None
 
 
 def can_branch_for(world: World, actor: int, p: Power, branch: int = 0) -> bool:
@@ -2432,6 +2569,40 @@ def _reshaped(
     return None
 
 
+def target_of(
+    world: World, actor: int, p: Power, augment: int = 0
+) -> Target:
+    """This row's target line **for this creature**, replacement applied.
+
+    `Power.target_of` is the printed line; this is the per-creature door, the
+    way `reach_of` is for the range. One mechanism writes it --
+    `Cast.becomes_burst`, through `Effect.retarget` -- because a card that
+    turns a single-target attack into an area says in the same sentence that
+    each creature in the area is a target.
+
+    **Read in `_auto_targets` and nowhere else, deliberately.** The other
+    three readers of the printed line are `candidates` and `actions`, which
+    offer and draw, and `Power.target_of`'s own caller inside `Power`. The
+    widened line is strictly more permissive -- a bigger `count` and
+    `everyone` -- so a site that keeps reading the print offers *fewer*
+    targets than the card, never more, and `_stands_right` (the filter on an
+    explicitly handed target) reads neither field. Pointing the offer path
+    at this as well is a fair next step and is not needed by either row.
+    #712.
+    """
+    printed = p.target_of(augment)
+    for eff in world.effects.of(actor):
+        if eff.retarget is None or eff.suspended:
+            continue
+        gate = eff.reshape_when
+        if gate is not None and not gate(
+            {"power": p.ref, "range_kind": p.reach_of(0, augment).kind}
+        ):
+            continue
+        return eff.retarget
+    return printed
+
+
 def _stretched(
     world: World, actor: int, kind: str, ctx: dict[str, Any] | None = None
 ) -> int:
@@ -2447,8 +2618,17 @@ def _stretched(
     Melee reads `"reach"` and a ranged line reads `"range"`. A blast or a
     burst reads `"blast_size"`: its size is the blast itself, so "increase
     the size of your blasts and bursts by 1" is that number and not the
-    `within` an area burst may be placed at, which no printed line of this
-    shape lengthens.
+    `within` an area burst may be placed at.
+
+    **Two printed lines lengthen that `within`, and this docstring used to
+    say none did.** `f1995` and `i2771x1` each state a range increase and
+    then extend it to area powers in as many words, one with a worked
+    example -- "an area burst 1 within 10 becomes an area burst 1 within
+    12". They are a **third** kind, `"within"`, and not `"blast_size"`:
+    laying their plus on the radius turns 9 squares into 49, which is a
+    different and much stronger clause than print. Read through
+    `within_of`, which is the one door all three placement readers use.
+    #738.
 
     `ctx` carries the row being measured, so "the range of your **arcane**
     powers" is a gate on the modifier rather than a blanket stretch of
@@ -2466,7 +2646,30 @@ def _stretched(
         return max(0, mods.total("range", ctx))
     if kind in ("close_burst", "close_blast", "area_burst"):
         return max(0, mods.total("blast_size", ctx))
+    if kind == "within":
+        return max(0, mods.total("within", ctx))
     return 0
+
+
+def within_of(
+    world: World, actor: int, r: Range, ctx: dict[str, Any] | None = None
+) -> int:
+    """How far from this creature an area line may be **placed**.
+
+    `Range.within` plus whatever lengthens it. Three readers ask this
+    question and before #738 all three read the field raw -- and one of
+    them, `Cast.wall`, hand-rolled the `spread` as well. They have to agree
+    or the longer range is offered and then refused one question later,
+    which is the failure both waiting rows' notes describe from #533: a
+    stretch that reached `area_of` and not the gate `actions.perform`
+    re-asks was worth nothing.
+
+    `aim_points` is the authority on whether a placement is legal -- it is
+    what `actions.legal` offers from and what `use` refuses against -- so a
+    stretch missing from it would light up a square the action then
+    declined.
+    """
+    return max(0, r.within + _stretched(world, actor, "within", ctx))
 
 
 def measured_from(world: World, actor: int, r: Range) -> int:
@@ -2561,16 +2764,45 @@ def aim_points(world: World, actor: int, p: Power, augment: int = 0) -> list[Squ
     # The form being used, not the printed base: an augment that turns a
     # melee swing into an area burst has a `within` the base row has not
     # got, and asking the base here offered the burst nowhere to land.
-    reach = switched(world, actor, p.reach_of(0, augment))
+    #
+    # **Through `reach_of` and not `switched` alone**, which is the same
+    # sentence one step further: `switched` applies a state-switched size and
+    # `reach_of` is "the door for reshapes" in its own words, so asking
+    # `switched` here saw a `c.reshape_area` that every other reader honoured.
+    # Measured: a reshape turning a ranged line into an area burst gave
+    # `reach_of` "Area burst 1 within 10" and `area_of` nine squares while
+    # this returned **nothing at all** -- so `use` refused the placement one
+    # question after the interface offered it, which is #533's failure and
+    # #738's. #712.
+    reach = reach_of(world, actor, p, 0, augment)
     if reach.kind == "close_blast":
         return sorted(blast_placements(mine, reach.size))
     if reach.kind in ("area_burst", "wall"):
-        return sorted(
-            sq
-            for sq in spread(mine, reach.within)
-            if world.grid.inside(sq)
-            and any(world.grid.line_of_effect(src, sq) for src in mine)
-        )
+        far = within_of(world, actor, reach,
+                        {"power": p.ref, "range_kind": reach.kind})
+        # **`reach_of` and `within_of` still run every time.** They are where
+        # every state-dependent answer is -- a reshape, a switched size, a
+        # modifier that lengthens the `within` -- and the comment above is
+        # the history of getting that wrong. Only the square enumeration
+        # below is remembered, and its key holds everything it reads:
+        # `mine`, `far`, the board's bounds (`inside`) and the blocking set
+        # (`line_of_effect`). Nothing else enters the comprehension.
+        grid = world.grid
+        mine_key = frozenset(mine)
+        key = (mine_key, far, grid.width, grid.height, frozenset(grid.blocking))
+        hit = grid.aims.get(key)
+        if hit is None:
+            hit = tuple(sorted(
+                sq
+                for sq in spread(mine, far)
+                if grid.inside(sq)
+                and any(grid.line_of_effect(src, sq) for src in mine)
+            ))
+            grid.aims[key] = hit
+        # A fresh list, because callers get a mutable one today and
+        # `actions.aimed` sorts and slices it. Handing out the cached tuple
+        # would make one caller's edit the next caller's answer.
+        return list(hit)
     return []
 
 
@@ -2710,10 +2942,31 @@ def candidates(
         return [actor]
     pool = {
         "enemy": enemies(world, actor),
-        "ally": [*allies(world, actor), actor],
+        # **The caster is not its own ally**, which is the printed word and
+        # is what `Cast._side` has always answered on the body path. This
+        # line said `[*allies(world, actor), actor]`, so the two halves of
+        # the engine disagreed about one word and the targeting half -- the
+        # one a player sees -- was the wrong one. A row printing "each ally
+        # in the burst shifts 1" moved the creature that is not a target,
+        # and because the row fired and emitted events the audit called it
+        # working. #364.
+        #
+        # A card that means you as well says "you and each ally", and that
+        # is `"team"` below. 185 rows declare it now; before this flip they
+        # could not, because `"team"` was absent from this dict and from
+        # `Target.__str__`, so they were declared `ally` and were correct
+        # only by the accident this line fixes.
+        "ally": allies(world, actor),
         "any": creatures(world),
         "other": [c for c in creatures(world) if c != actor],
-        "other_ally": allies(world, actor),
+        # **`"other_ally"` is gone**, and its absence is the point. It
+        # existed to say "the printed line excludes you" at a time when
+        # `"ally"` did not; #364 made `"ally"` mean exactly that, so the two
+        # were the same list and one of them was a trap -- a second spelling
+        # of a settled question, which is what `vocab.py` warns near-synonyms
+        # cost. 73 declarations retired into `ONE_ALLY`/`EACH_ALLY`, and
+        # `_SIDES` no longer lists it so a row naming it raises at import
+        # rather than quietly working.
         # **`"team"` was missing here entirely**, so a row declaring it
         # raised `KeyError` at targeting and no row in the tree used it --
         # which is why `_side`'s note that "a card meaning you as well says
@@ -2761,6 +3014,7 @@ def candidates(
         or aim.affected_by
         or aim.only_grabbed
         or aim.holding
+        or aim.carrying
         or aim.max_size is not None
         or aim.loose
         or aim.any_of
@@ -2769,7 +3023,12 @@ def candidates(
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
-    reach = p.reach_of(branch, augment)
+    # **Through the one door, not off the header.** A replacing reshape
+    # changes the `kind` -- `i2467p1` turns an area into a single square --
+    # so the print says "area burst" while this creature is holding a
+    # close burst, and `aimed` came out True for a row that needs no
+    # origin at all. #894.
+    reach = reach_of(world, actor, p, branch, augment)
     aimed = origin is not None and reach.kind in ("area_burst", "close_blast")
     if aimed and origin not in aim_points(world, actor, p, augment):
         return []
@@ -2956,7 +3215,18 @@ def usable(
         if (powers.only_attacks and p.attack is not None
                 and p.ref not in powers.only_attacks):
             return False, "it can only attack with another power"
-        if p.ref in powers.forbidden:
+        # **A repeat of a use-limited grant is let past, and nothing else
+        # is.** `spent_out` is the subset of `forbidden` that is there
+        # because a `grant_row(uses=)` allowance ran out, which is a spend
+        # rather than a prohibition -- and `spent_ok` is exactly
+        # `grant_attack(reentrant=True)`, whose docstring already promised
+        # "the in-flight guard **and the usage limit** both have to stand
+        # aside". They did not: this gate refused unconditionally, two
+        # gates before the `spent_ok` one below, so a granted use-limited
+        # row could never be repeated. `i2002p1` fired on 4 of 8 attempts
+        # and did nothing on every one. #820.
+        if p.ref in powers.forbidden and not (
+                spent_ok and p.ref in powers.spent_out):
             return False, "cannot be used right now"
         # **Two keyword prohibitions, and they point opposite ways.** Read
         # through `keywords_of` rather than `p.keywords`, for #483's reason:
@@ -3052,7 +3322,11 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
     adjacent square, and a blast that happens to point away from everybody
     reported itself unusable while three creatures stood in range.
     """
-    if p.reach_of(branch, augment).kind in ("area_burst", "close_blast"):
+    # The reshaped kind, for the reason `candidates` records above: this
+    # asks whether the row needs an origin, and a reshape is exactly what
+    # can stop it needing one. #894.
+    if reach_of(world, actor, p, branch, augment).kind in (
+            "area_burst", "close_blast"):
         return any(
             candidates(world, actor, p, aim, branch, augment)
             for aim in aim_points(world, actor, p, augment)
@@ -3064,7 +3338,10 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
         # sword -- which is every time a charge is the right thing to do.
         from .query import distance_between, enemies, speed
 
-        far = (switched(world, actor, p.reach_of(branch, augment)).size
+        # `switched` alone is half the resolution: it applies the
+        # state-switch and not the reshape, so a reshaped size read as the
+        # printed one. #894.
+        far = (reach_of(world, actor, p, branch, augment).size
                + speed(world, actor, {"charge": True}))
         return any(
             distance_between(world, actor, foe) <= far for foe in enemies(world, actor)
@@ -3105,6 +3382,12 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         from .query import holding
 
         if not holding(world, target, aim.holding):
+            return False
+    if aim.carrying:
+        from .components import Gear
+
+        kit = world.get(target, Gear)
+        if kit is None or not (kit.weapons or kit.stowed or kit.shield):
             return False
     if aim.loose:
         from .components import Scenery
@@ -3316,7 +3599,10 @@ def _within_reach(
       whose squares were entered, and a caller passes this only for one of them.
       A bare opt-out is what the next author copies by habit.
     """
-    r = switched(world, actor, p.reach_of(branch, augment))
+    # The whole resolution rather than the state-switch alone -- see #894.
+    # This one is read by the action menu, so it is also the site where a
+    # wrong answer is *offered* rather than merely computed.
+    r = reach_of(world, actor, p, branch, augment)
     if r.kind not in ("melee", "ranged") or charge or reached:
         return True
     if trigger is not None and type(trigger).__name__ in _DEPARTING:
@@ -3607,10 +3893,39 @@ def use(
                 continue
             cast.target = t
             cast.result = None
+            del cast.swings[:]
             p.body(cast)
-            if cast.result is not None:
-                rolls.append(cast.result)
-            landed = landed or bool(cast.result and cast.result.hit)
+            # **Every swing the body made, not the last one it happened to
+            # leave behind.** `cast.result` is written by `Cast.attack`, the
+            # single funnel every attack roll goes through, so a body with
+            # two roll sites overwrote the first and this sampled one entry
+            # for two swings.
+            #
+            # `rolls` then said one result per *target*, where
+            # `PowerResolved.rolls` is documented as every `AttackResult`
+            # the use produced -- which is what "reroll every attack roll
+            # you made with this power" has to be handed. Measured on a
+            # two-swing power: two `AttackRolled` on the bus, one entry
+            # here.
+            #
+            # And `landed` came off the same field, which is the part that
+            # reached a player: a RELIABLE power is refunded below when
+            # nothing landed, so a daily whose primary **hit** and whose
+            # off-hand missed was handed back, because the miss was what
+            # `result` ended as. Reproduced in all four cells; the one that
+            # passed was "primary misses, off-hand hits", because there the
+            # hit is last and survives. #810.
+            made = list(cast.swings)
+            if not made and cast.result is not None:
+                # `c.use_power` sets `result` off the inner use's
+                # `PowerResolved` without going through `Cast.attack`, so
+                # it leaves no swing here. Kept as the fallback rather than
+                # also appending there: those rolls belong to the inner
+                # use's own announcement, and folding them into this one
+                # would be a second change wearing this one's clothes.
+                made = [cast.result]
+            rolls.extend(made)
+            landed = landed or any(r.hit for r in made)
     finally:
         _RUNNING.pop()
         if fresh:
@@ -3676,9 +3991,24 @@ def _survive_provoking(world: World, actor: int, ref: str) -> bool:
     for foe in sorted(enemies(world, actor)):
         pos = world.get(foe, Position)
         if pos is not None and pos.squares & reach:
-            world.bus.emit(
-                OpportunityWindow(actor=foe, provoker=actor, why=f"{ref} is a ranged power")
+            # `by` is the ranged power being used, and the window is parked
+            # on the world for the duration of the emit so `resolve.attack`
+            # can carry it into the attack context. Four of #880's five rows
+            # narrow on exactly this -- "an opportunity attack you provoke
+            # when using a ranged or an area power" -- which `opportunity`
+            # alone cannot tell from a move.
+            window = OpportunityWindow(
+                actor=foe, provoker=actor, why=f"{ref} is a ranged power"
             )
+            window.by = ref  # ty: ignore[unresolved-attribute]
+            # Saved and restored rather than cleared, because windows nest
+            # -- see `movement.step`, where the same plant found it.
+            prior = world.provocation
+            world.provocation = window
+            try:
+                world.bus.emit(window)
+            finally:
+                world.provocation = prior
     return can_act(world, actor)
 
 
@@ -3699,8 +4029,11 @@ def _auto_targets(
     dropped the zone on the caster's own feet and the damage somewhere else
     entirely. Two answers to "where is this power" is one too many.
     """
-    want = p.target_of(augment)
-    if origin is None and p.reach_of(branch, augment).kind in ("area_burst", "close_blast"):
+    want = target_of(world, actor, p, augment)
+    # The reshaped kind: whether an origin must be chosen before targets is
+    # the same question `_can_land` asks, and takes the same answer. #894.
+    if origin is None and reach_of(world, actor, p, branch, augment).kind in (
+            "area_burst", "close_blast"):
         best: list[int] = []
         chosen: Square | None = None
         for aim in aim_points(world, actor, p, augment):

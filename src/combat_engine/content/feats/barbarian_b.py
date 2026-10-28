@@ -37,6 +37,7 @@ from combat_engine.engine import (
     DamageType,
     Hit,
     Keyword,
+    PowerRecharged,
     PowerUsed,
     SecondWind,
     Trigger,
@@ -68,11 +69,6 @@ def _used_one_of(*refs: str):  # noqa: ANN202
 def _took_the_charge(world, me: int, ev: object) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power == "p4809"
 
-#: A class feature named in prose with no ref.
-FEATURE = ("c.class_feature()",)
-#: "Use it as a heavy thrown weapon, normal range 5 and long range 10":
-#: a change to what the weapon *is*, which nothing in `Gear` rewrites.
-THROWN = ("c.make_thrown()", "c.weapon_range()")
 #: "Instead of": a printed swap for something a class feature does inside
 #: its own body. The feature has a ref now; declining half of what it does
 #: is the operation nothing has.
@@ -252,12 +248,40 @@ def f1858(c: Cast) -> None:
 
 
 @power("f1991", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("feat.category",))
+       reach=PERSONAL, target=SELF)
 def f1991(c: Cast) -> None:
-    """A damage bonus while raging that grows with how many nearby
-    allies have taken a feat of a particular category. `c.feat(ref)`
-    asks about one feat by ref; nothing groups feats into the families
-    the prerequisite lines name."""
+    """+1 to damage rolls while raging, and +1 more for each nearby ally
+    holding a feat of this feat's own printed category.
+
+    **The old note was half right and the half that mattered was wrong.**
+    `c.feat(ref)` does ask about one feat by ref, but feats are not
+    ungrouped: `feat.category` is a column in `game.db` -- the bracket
+    after a printed name -- and `c.feats(category=, on=)` reads it for
+    somebody *else*, which is the half that makes "nearby allies" askable
+    rather than only "you". #692. Ten feats carry this one.
+
+    **One gated +1 per ally, not one bonus of a counted size.** The count
+    is read when the damage is rolled, not when the trait is armed, and
+    allies move; `c.bonus` takes a fixed `value`, so the live read has to
+    sit in a `when=` gate, and untyped bonuses add -- which is what makes a
+    stack of +1s come to the printed total. The *pool* is walked once at
+    arming, because who holds which feat cannot change inside a fight,
+    where who is standing within 10 squares can.
+
+    No melee narrowing and no bonus type, both as printed: the card says
+    "damage rolls" and puts no word in front of "bonus".
+    """
+    c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: in_rage(c))
+    for mate in c.allies():
+        if not c.feats(category="Tribal", on=mate):
+            continue
+        c.bonus(
+            "damage", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx, who=mate: (
+                in_rage(c) and who in c.within(10, side="ally")
+            ),
+        )
 
 
 @power("f2296", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -379,22 +403,44 @@ def f1834(c: Cast) -> None:
 
 
 @power("f1878", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.movement_instead(squares=)",))
+       reach=PERSONAL, target=SELF)
 def f1878(c: Cast) -> None:
     """Shift Dexterity modifier squares instead of 2, on `cf:barbarian-f1s3`.
 
-    **Re-pointed at the group that holds the same gap.** The engine half
-    landed under another name: `c.extend_move(ref, n)` is "make a named row
-    move you further", entries add so `dex_mod - 2` says "instead of 2", and
-    `c.squares_for` is the read. What is missing is the read -- that feature
-    says `c.shift(2, who=me)` with the number in hand -- which is the
-    identical complaint `f980` files against p971, p2105 and p1505, so this
-    waits on the same symbol rather than on a verb of its own.
+    **`c.extend_every`, not `c.extend_move`, and that is the whole of what
+    unblocked it.** The old note was right that the feature says
+    `c.shift(2, who=me)` with the number in hand and so reads no
+    `c.squares_for` -- and that only blocks the ref-keyed verb.
+    `c.extend_every` is read inside `c.shift` itself and asks its gate with
+    `ctx["power"]`, which is the **moving row's own ref**, so the one row
+    this card names is sayable as a gate and the feature needs no change at
+    all. `f2263` and `f2469` are the same arrangement for "a swordmage
+    power" and "a martial encounter or daily power"; a single ref is the
+    narrowest case of it, not a different problem.
 
-    Not written as a second shift off the same `Bloodied`, the way `f1880`
-    duplicates a burn: the feature measures who grants combat advantage
-    *from where its shift ended*, so stepping further afterwards would read
-    the wrong squares and prompt twice for one printed shift."""
+    `dex_mod - 2` because the entries add: the card replaces the printed 2
+    rather than adding to it. Guarded at positive, so a barbarian whose
+    modifier is below 2 keeps the printed shift -- the card says "you can",
+    and nothing printed is made worse by holding a feat.
+
+    The budget is raised rather than a second step taken, for the reason
+    the old note gave and which still holds: the feature measures who
+    grants combat advantage *from where its shift ended*, so stepping
+    further afterwards would read the wrong squares and prompt twice for
+    one printed shift.
+
+    The feature's own prompt still reads "shift 2 squares" while the
+    budget is larger. That text is in a file this change does not touch
+    and it is wording, not distance -- `c.shift` offers every square the
+    raised budget reaches."""
+    extra = c.dex_mod - 2
+    if extra <= 0:
+        return
+
+    def the_whirl(ctx: dict[str, Any]) -> bool:
+        return ctx.get("power", "") == "cf:barbarian-f1s3"
+
+    c.extend_every("shift", extra, on=c.me, when=the_whirl)
 
 
 @power("f1880", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -492,6 +538,37 @@ def f2884(c: Cast) -> None:
 def f1841(c: Cast) -> None:
     """Throw an off-hand blade like a handaxe, at 5/10.
 
+    **Re-pointed, and the gate is no longer the story.** The old note said
+    the blocker was `dsl.can_branch` asking `gear.ranged is not None` for a
+    ranged branch, and that `Gear.ranged` means "can be fired". That is
+    accurate, and the compendium does say *"a creature can make a ranged
+    basic attack as long as it has something to throw **or** shoot"* -- so
+    the gate is wrong about the rule and `dsl._reach` has always agreed with
+    the page, substituting a thrown weapon's range *"fired first, then
+    thrown"*.
+
+    **Opening it was built, measured, and taken back out.** With the gate
+    admitting a thrown weapon, the printed rule holds and the AI gets
+    measurably worse, because the engine gives a thrown weapon **no cost**:
+    you throw the dagger and still have it. `scripts/winrate.py`, the smart
+    policies against the chassis baseline:
+
+        level  5 scored   +10% -> +3%
+        level  5 rated    +13% -> +7%
+        level 10 scored   +20% -> -10%     <- worse than the baseline
+        level 10 rated    +27% -> +10%
+
+    and the provocation lines say why: `rba is a ranged power x45` where it
+    had barely appeared, so the policy throws the free infinite dagger and
+    eats opportunity attacks for it. 6 of 7 replay fixtures diverged on the
+    policy taking it over real powers.
+
+    So this waits on **#520** -- "nothing runs out of a thrown weapon or a
+    mundane shot: one net is infinite nets" -- and not on the gate. That
+    issue's fix is counts on a weapon, with the ETL data already recorded
+    (#516); once a throw costs something, the gate can open and this row is
+    two lines. The order of work was the thing that needed finding. #838.
+
     **Half right, and the surviving half is the one that blocks.**
     `c.weapon_dice` proves a body *can* rewrite a `Weapon` -- `Gear.weapons`
     holds per-character copies -- so `thrown=(5, 10)` is writable here and
@@ -529,13 +606,22 @@ def f1841(c: Cast) -> None:
 
 
 @power("f1843", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Gear.ranged(thrown=)",))
+       reach=PERSONAL, target=SELF, todo=("chargen.IMPROVISED",))
 def f1843(c: Cast) -> None:
-    """The same for whatever is lying about, plus a feat bonus when one
-    is thrown. The bonus half cannot stand on its own either: an
-    improvised weapon is not a thing `Gear` holds, so there is nothing
-    for the gate to ask about -- and the throwing half is blocked at the
-    same read site as `f1841`, see there.
+    """"Use improvised melee weapons as heavy thrown weapons", plus a +2
+    feat bonus to attack and damage when you do.
+
+    **Re-pointed: this one never waited on the gate.** An improvised melee
+    weapon is not a thing `Gear` holds, and this card says "not including
+    unarmed attacks", so `chargen.UNARMED` is explicitly not it -- the
+    compendium's Improvised Weapons entry gives a separate line (Prof. --,
+    1d4, group "None or unarmed"). Both halves wait on the same thing: with
+    no improvised weapon in hand there is nothing to give a range to and
+    nothing for the bonus to narrow on. One weapon declared the way
+    `chargen.STAFF` and `chargen.TOME` are, plus a way to pick one up.
+
+    Kept separate from `f1841` deliberately: that row waits on #520, this
+    one does not, and the shared marker hid the difference.
     **Re-pointed: a range *write* landed and is not what this card needs.**
     `c.weapon_range` sets `Weapon.thrown` on this character's own copy, and
     `f1841`'s note was substantially right that it buys nothing here: the
@@ -559,13 +645,37 @@ def f1843(c: Cast) -> None:
     """
 
 
-# -- an event nothing emits ------------------------------------------------
+# -- the event the bus now carries -----------------------------------------
 
 
 @power("f1992", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.Recharged",))
+       reach=PERSONAL, target=SELF)
 def f1992(c: Cast) -> None:
     """A damage bonus against an adjacent enemy that recharges a power.
-    `actions.recharge` rolls the die and puts the row back silently --
-    it emits nothing at all, so the moment this feat turns on is not
-    one the bus ever mentions."""
+
+    **The premise was true when this was written and is not now.** The
+    note said `actions.recharge` puts the row back silently; `#605` minted
+    `PowerRecharged` and emits it on *both* recharge paths, and the event
+    carries `actor`, `ref` and `rolled`, which is everything this needs.
+    `m6180a3` watches it the same way.
+
+    `ev.rolled` is the printed "at the start of its turn". The die is
+    rolled by `actions.recharge`, which `policy.take_turn` calls before
+    the creature acts, and it is reported as the number that brought the
+    row back; `triggers.Triggers` restores a row whose printed *condition*
+    fired at any other moment and reports 0. Without that gate the feat
+    would pay on a mid-round condition recharge, which the card does not
+    print.
+    """
+    step = 2 + (c.level >= 11) + (c.level >= 21)
+
+    def boost(ev: PowerRecharged) -> None:
+        foe = ev.actor
+        if not ev.rolled or foe not in c.enemies() or not c.adjacent(foe):
+            return
+        c.bonus(
+            "damage", step, on=c.me, until=When.EONT,
+            when=lambda ctx: ctx.get("target") == foe,
+        )
+
+    c.watch(PowerRecharged, boost, until=When.ENCOUNTER, on=c.me, label=c.ref)

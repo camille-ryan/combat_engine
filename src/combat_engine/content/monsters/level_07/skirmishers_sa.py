@@ -650,7 +650,7 @@ def m1166a5(c: Cast) -> None:
 )
 def m1166a6(c: Cast) -> None:
     c.shift(1)
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     if c.strike(on=attacker):
         c.cure(Condition.MARKED, on=c.me)
         c.grants_advantage(on=attacker, until=When.EONT)
@@ -880,7 +880,6 @@ def _struck_with_a_copy_to_hand(world: World, me: int, ev: Hit) -> bool:
     keywords=[Keyword.PSYCHIC],
     trigger=_M1742_STRUCK,
     on=Trigger(Hit, when=_struck_with_a_copy_to_hand, text=_M1742_STRUCK),
-    dropped=("c.redirect(riders=)",),
 )
 def m1742a5(c: Cast) -> None:
     """The copy takes the blow instead, and takes it as psychic.
@@ -893,9 +892,27 @@ def m1742a5(c: Cast) -> None:
     announced and torn down by the packet it catches, because a reaction to a
     `Hit` resolves before the damage that hit is about to deal.
 
-    "Any effects or secondary attacks included in the attack are also
-    deflected" is the one half left: nothing moves a rider from one creature
-    to another, and the riders are laid by the attacking row's own body.
+    **"Any effects ... are also deflected" is written now, and it is
+    `c.pass_on`.** That verb was written for this exact moment and says so:
+    the reaction resolves before the blow, so there is nothing to
+    `c.transfer` yet, and it arms instead -- every condition the triggering
+    power puts on this creature while that power is still resolving is
+    picked up and handed over intact, saving throw and all. Bounded by the
+    log and by the event rather than by a clock, so it stands down the
+    moment another power is used.
+
+    **"Or secondary attacks" is written now, and the premise that blocked
+    it was false.** The note this replaces said "nothing re-aims an attack
+    roll a resolving body is about to make". `resolve.roll` reads its
+    target back off the `AttackDeclared` it is handed, and has done since
+    a commit whose own comment says the closure capturing the parameters
+    instead "did nothing at all and failed silently".
+
+    `c.pass_on(attack=True)` makes that assignment. The window was the
+    whole of why it looked impossible -- `roll` is the callback `emit`
+    runs, so a default AFTER listener fires once the attack has already
+    been rolled. `m82a5` is the same card one tier up and carries the
+    measurement.
     """
     me = c.me
     pack = _copies(c)
@@ -917,6 +934,7 @@ def m1742a5(c: Cast) -> None:
             label=f"{c.ref} deflect",
         )
     )
+    c.pass_on(c.trigger, to=dup, attack=True)
     c.note(f"{c.ref}: the blow is turned onto a copy")
 
 
@@ -976,7 +994,7 @@ def _adjacent_enemy_moving(world: World, me: int, ev: MoveStart) -> bool:
 def m1799a2(c: Cast) -> None:
     """`MoveStart`, not `MoveEnd`: by the time the enemy has actually left,
     `c.adjacent` is false precisely when the row should fire."""
-    foe = c.trigger.actor  # type: ignore[union-attr]
+    foe = c.trigger.actor
     if c.strike(on=foe):
         c.hit(on=foe)
         c.shift(1)
@@ -1284,7 +1302,7 @@ def m2785a3(c: Cast) -> None:
     on=Trigger(Hit, both(targets_me, by_melee), "it is hit by a melee attack"),
 )
 def m2785a4(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     mate = next(
         (
             a
@@ -1707,7 +1725,7 @@ def m3464a1(c: Cast) -> None:
     on=Trigger(AttackDeclared, _guards_the_target, "an enemy attacks a creature it is guarding"),
 )
 def m3464a2(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     _shift_up_to(c, 2, toward=attacker)
     if c.adjacent(attacker):
         _struck(c, "m3464a0", 1, attacker)
@@ -1881,7 +1899,7 @@ def m4242a2(c: Cast) -> None:
     on=Trigger(Hit, both(by_me, by_melee), "it hits with a melee attack"),
 )
 def m4242a3(c: Cast) -> None:
-    victim = c.trigger.target  # type: ignore[union-attr]
+    victim = c.trigger.target
     c.grants_advantage(on=victim, until=When.EONT)
     c.shift(1)
 
@@ -2004,7 +2022,7 @@ def m4364a3(c: Cast) -> None:
 )
 def m4364a4(c: Cast) -> None:
     c.shift(1)
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     c.grants_advantage(on=attacker, until=When.EONT)
 
 
@@ -2387,7 +2405,7 @@ def _grabbed_tries_to_escape(world: World, me: int, ev: Escaped) -> bool:
     on=Trigger(Escaped, _grabbed_tries_to_escape, "a creature it is grabbing attempts to escape"),
 )
 def m5571a3(c: Cast) -> None:
-    victim = c.trigger.actor  # type: ignore[union-attr]
+    victim = c.trigger.actor
     if c.strike(on=victim):
         c.hit(on=victim)
 
@@ -2531,7 +2549,7 @@ def m5674a2(c: Cast) -> None:
     ),
 )
 def m5674a3(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     _shift_up_to(c, c.speed_of(), toward=attacker)
     if c.adjacent(attacker):
         _struck(c, "m5674a1", 1, attacker)
@@ -2622,7 +2640,7 @@ def m5730a4(c: Cast) -> None:
         return ev.target == c.me and DamageType.PSYCHIC in ev.types()
 
     _recharge_on(c, DamageApplied, recharged)
-    victim = c.trigger.target  # type: ignore[union-attr]
+    victim = c.trigger.target
     c.flat(c.roll("2d6"), dtype=DamageType.PSYCHIC, on=victim)
 
 
@@ -2898,7 +2916,7 @@ def m5917a4(c: Cast) -> None:
     ),
 )
 def m5917a5(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     mate = next(
         (
             a
@@ -3061,7 +3079,7 @@ def _adjacent_enemy_hits_me(world: World, me: int, ev: Hit) -> bool:
     on=Trigger(Hit, _adjacent_enemy_hits_me, "an adjacent enemy hits it with a melee attack"),
 )
 def m5954a3(c: Cast) -> None:
-    attacker = c.trigger.attacker  # type: ignore[union-attr]
+    attacker = c.trigger.attacker
     hit = _struck(c, "m5954a0", 1, attacker)
     if hit:
         c.grants_advantage(on=attacker, until=When.EONT)

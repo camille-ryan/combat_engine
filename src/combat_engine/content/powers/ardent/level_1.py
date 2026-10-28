@@ -482,17 +482,51 @@ def p12933(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p12934(c: Cast) -> None:
-    """Neither augment is written. Augment 1 strips concealment *and*
-    invisibility: `c.no_cover` says the first, and the second is a
-    `HIDDEN_FROM` relation that only `c.see_invisible` answers -- and that
-    sits on whoever is looking, not on the creature being looked at, so half
-    the clause has no subject. Augment 2 hands an ally a reroll from inside a
-    watcher, and `c.reroll_attack` reads the attack off `c.trigger`, which a
-    watcher does not have."""
+    """Augment 2 is written; Augment 1 is not, and only 2 is offered.
+
+    **Augment 2 is written now that `c.reroll_attack` takes `ev=`.** The
+    reroll is handed to the next ally who misses, which is a watcher, and a
+    watcher has no `c.trigger` -- so the roll has to be named rather than
+    inferred. `ev=` does that.
+
+    **And the reroll buys something here, which is the part worth stating.**
+    A reroll after the power has resolved pays nothing -- that is #775, and
+    three rows are blocked on it. This one answers the **`Miss`**, which
+    `resolve.attack` emits inside a loop that re-announces as a `Hit` when
+    `result.hit` changes, so a new number that reaches the defence turns the
+    miss into a real hit with its riders. The window is the whole
+    difference.
+
+    **Augment 2 replaces the ally's bonus rather than adding to it.**
+    Augment 1 prints "As above, and ..."; Augment 2 restates the damage and
+    gives a different second sentence, so the +2 is the un-augmented form's
+    clause and does not apply at 2.
+
+    Augment 1 is left out of the offer, which is what `augment`'s own
+    docstring says to do: it strips concealment *and* invisibility, and the
+    second half is a `HIDDEN_FROM` relation that only `c.see_invisible`
+    answers -- and that sits on whoever is looking rather than on the
+    creature being looked at, so half the clause has no subject. It stays
+    in `docs/blocked.json`."""
+    spent = augment(c, 2)
     victim = c.target
     if victim is None or not c.strike():
         return
     c.damage(c.w(), c.cha_mod)
+    if spent == 2:
+        me, taken = c.me, [False]
+
+        def fumbled(ev: Miss) -> None:
+            """The **next** ally within 5 to miss this target, once."""
+            if taken[0] or ev.target != victim or ev.attacker == me:
+                return
+            if ev.attacker not in _friends(c, 5):
+                return
+            taken[0] = True
+            c.reroll_attack(ev=ev)
+
+        c.watch(Miss, fumbled, until=When.SONT, label=c.ref)
+        return
     pool = set(_friends(c, 1)) | set(_friends(c, 1, of=victim))
     ally = _pick(c, list(pool), "who gains the opening")
     if ally is not None:

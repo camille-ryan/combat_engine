@@ -162,10 +162,28 @@ def step(
             else:
                 left = not (spread(squares(world, other), reach) & target)
             if left:
-                world.bus.emit(
-                    OpportunityWindow(actor=other, provoker=eid, why="moved away",
-                                      kind_=kind, mode=mode)
+                # No `by`: a move is not a row, and **the absence is the
+                # signal**. `f1302` prints "opportunity attacks provoked by
+                # this movement" and `f2565` prints "that you provoke when
+                # using a ranged or an area power"; `opportunity` alone
+                # cannot tell those apart, which is what both of their
+                # docstrings gave as the reason their clause was dropped.
+                # `kind_` and `mode` are already here from #301. #880.
+                window = OpportunityWindow(
+                    actor=other, provoker=eid, why="moved away",
+                    kind_=kind, mode=mode,
                 )
+                # **Saved and restored, not set and cleared.** Windows nest:
+                # resolving one opportunity attack can move somebody and
+                # open another, and a `finally` that writes None would hand
+                # the outer window's remaining listeners no provocation at
+                # all. Found by a plant that failed to go red because of it.
+                prior = world.provocation
+                world.provocation = window
+                try:
+                    world.bus.emit(window)
+                finally:
+                    world.provocation = prior
 
     world.grid.lift(eid)
     pos.square = to
@@ -622,10 +640,19 @@ def walk(
     mv = world.get(eid, Movement)
     if mv is not None:
         mv.using = "" if mode == "walk" else mode
+        # **How far this move action goes, for the Stealth rule.** Zeroed
+        # here rather than per turn because the card says "during that
+        # action", so a second move action starts counting again. #784.
+        mv.went = 0
+        mv.went_kind = kind
     for sq in path:
         if not step(world, eid, sq, kind=kind, mode=mode):
             break
         spent += 2 if sq in world.difficult(eid, kind) else 1
+        # Squares entered, not budget spent -- `spent` charges 2 for rough
+        # ground and the printed penalty counts squares.
+        if mv is not None:
+            mv.went += 1
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_=kind))
     return spent

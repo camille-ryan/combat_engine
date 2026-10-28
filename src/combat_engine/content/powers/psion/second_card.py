@@ -147,10 +147,16 @@ def p13303b(c: Cast) -> None:
     against is still measured from the psion**, because that question is
     asked before the body runs and no header field moves it; the conjuration
     is laid in a square beside its caster, so the two rings differ by one.
+
+    Augment 2 is this block's dice, and the points were spent when the
+    parent conjured the shard, so `spent_on` reads them back. `spent == 2`
+    rather than a truthiness test: Augment 1 buys the shard's speed and
+    nothing here, and Augment 2 does not carry Augment 1's clause.
     """
     shard = _conjuration(c, "p13303")
+    spent = spent_on(c.me, "p13303")
     if c.strike(from_=shard):
-        c.damage("1d8", c.int_mod, dtype=DamageType.FORCE)
+        c.damage("2d8" if spent == 2 else "1d8", c.int_mod, dtype=DamageType.FORCE)
     if shard is not None:
         c.dispel(shard)
 
@@ -248,9 +254,16 @@ def p13322b(c: Cast) -> None:
 def p13331b(c: Cast) -> None:
     """A close burst is centred on the creature using it, which is what the
     printed range line says and all it says. The conjuration is spent on the
-    last target so that the whole burst resolves first."""
+    last target so that the whole burst resolves first.
+
+    Augment 2 is this block's dice, spent when the parent conjured, so
+    `spent_on` reads them back. The slow is in both forms because Augment
+    2's own Hit line restates it; Augment 1 is the parent's aura and is
+    written there, which is why the test is `== 2` and not truthiness.
+    """
+    spent = spent_on(c.me, "p13331")
     if c.strike():
-        c.damage("1d6", c.int_mod, dtype=DamageType.ACID)
+        c.damage("2d6" if spent == 2 else "1d6", c.int_mod, dtype=DamageType.ACID)
         c.slowed(until=When.EONT)
     if not c.last:
         return
@@ -389,6 +402,12 @@ def p13320b(c: Cast) -> None:
     Augment 1's clause is the parent's -- the anomaly becomes something the
     psion's allies can flank with -- and is written there. Augment 2 is this
     block's, and is the only augment read here.
+
+    **Augment 2 drops the slide**, which is not an omission. An Augment
+    Hit line replaces the base one rather than adding to it, and Augment 2
+    here prints damage and the daze and no slide. `p13331b` is the proof:
+    its Augment 2 restates its own slow, which it would not need to do if
+    the line were additive.
     """
     anomaly = _mote(c.world, c.me, "p13320")
     pos = c.world.get(anomaly, Position) if anomaly else None
@@ -403,7 +422,7 @@ def p13320b(c: Cast) -> None:
         c.dazed(on=who, until=When.EONT)
     else:
         c.damage("1d6", c.int_mod, dtype=DamageType.PSYCHIC, on=who)
-    c.slide(3, on=who, anchor=pos.square)
+        c.slide(3, on=who, anchor=pos.square)
 
 
 @power(

@@ -12,7 +12,7 @@
   02:07 rather than 02:00 on purpose: nothing else wants that minute, and a
   round hour is where every scheduled job on the machine lands at once.
 
-  `RunAtLoad` is false -- installing it should not start a 43-minute sweep.
+  `RunAtLoad` is false — installing it should not start a 43-minute sweep.
   stdout and stderr go to logs/, which is git-ignored, and `nightly.sh` writes
   its own dated log besides.
 -->
@@ -30,13 +30,23 @@
     <key>WorkingDirectory</key>
     <string>/Users/camille/proj/combat_engine</string>
 
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>2</integer>
-        <key>Minute</key>
-        <integer>7</integer>
-    </dict>
+    <!-- **An interval, not a calendar time, because a calendar time does not
+         survive a closed lid.** `StartCalendarInterval` fires at the named
+         instant only if the machine is awake; asleep, launchd defers it to
+         the next wake, and if there is no wake it is dropped. Measured over
+         seventeen nights: three produced no attempt at all, and every
+         on-time run was stamped `0307` while the outliers (`0320`, `0315`,
+         `0218`, `0219`) are deferred firings. #871.
+
+         It also settles a discrepancy nobody had: this said Hour 2 Minute 7
+         and the logs said 03:07, which the root `CLAUDE.md` records as a
+         fact without explaining. An interval has no hour to disagree about.
+
+         Hourly, with `nightly.sh` deciding whether it is *due* — so the
+         cost of a wrong hour is one `date` call, and the sweep still only
+         runs overnight unless it is badly overdue. See `_due` there. -->
+    <key>StartInterval</key>
+    <integer>3600</integer>
 
     <key>RunAtLoad</key>
     <false/>

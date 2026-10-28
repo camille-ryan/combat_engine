@@ -75,7 +75,6 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
@@ -94,6 +93,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -502,13 +502,18 @@ def m115788a2(c: Cast) -> None:
     usage=AT_WILL,
     action=MOVE,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
 )
 def m115788a3(c: Cast) -> None:
-    """`EACH_ALLY` includes the caster in the targeting path (#364), which is
-    right here -- the card moves the creature too -- so the only branch is
-    whose step has a destination named for it. "The allies must end adjacent"
-    is a square rather than a distance, which is what `to=` is for."""
+    """The card moves the creature too, so the pool has to be the side
+    *including* self: `YOU_AND_EACH_ALLY`. This said `EACH_ALLY` and leaned on
+    that pool holding the caster, which #364 made false -- leaving the
+    `c.target == c.me` branch below unreachable and the creature standing
+    still. The branch is the right shape and was the evidence: a guard that
+    can never be taken. #858.
+
+    "The allies must end adjacent" is a square rather than a distance, which
+    is what `to=` is for."""
     if c.target == c.me:
         c.shift(1)
         return
@@ -3279,23 +3284,34 @@ def m6581a2(c: Cast) -> None:
     keywords=[Keyword.COLD, Keyword.ZONE],
     attack=Attack(vs=REF, printed=7),
     damage=Damage("1d8", 4, dtype=DamageType.COLD, kind=LIMITED, half_on_miss=True),
-    dropped=("c.zone(difficult_exempt=)",),
 )
 def m6581a3(c: Cast) -> None:
     """The zone is laid once for the whole use, which is what `c.first` is for.
-    The exemption -- creatures with one particular movement mode cross it
-    freely -- is the dropped half: `c.zone` takes `difficult` for everybody or
-    for nobody.
 
-    **Re-pointed off `c.zone(exempt=)`, which landed and is the other half.**
-    That exempts a creature from a zone's **sight-blocking**, read by
-    `query._blinding_squares` which knows who is looking. This card waives
-    the **difficult** half, and `Zones.difficult_squares` answers per
-    *square* with no notion of who is moving -- so an exemption there is a
-    different reader and a different gap.
+    **The exemption wants no parameter: it wants the going named.** Both
+    halves of the old note are stale. `c.zone(difficult=)` is
+    `bool | str`, `Zones.difficult_squares` returns the *label* per square,
+    and `World.difficult(for_=)` drops a square whose kind the mover
+    ignores -- so a zone of named going is rough for everybody and free for
+    every creature carrying that mode, without this row naming one.
+
+    The printed exemption here is a movement mode, and the mode is
+    `c.ignores_difficult("ice")`, which five rows already carry.
+    `m1652a3` is the same clause on another stat block and made exactly
+    this correction; `p16097`, `p16470` and `themes/batch_h.p16064` make it
+    for the earth-walk spelling.
+
+    A *predicate* parameter would still be wanted by a card exempting on a
+    **sense** rather than on a kind of going -- `m2515a2` is that card --
+    and it is not this one.
+
+    Not written: nothing gives this creature its own mode, so it is slowed
+    by its own ice. That is the ETL not recording a stat block's movement
+    modes rather than a gap in this row, it is weaker than the card rather
+    than stronger, and `m1652a3` has the same hole.
     """
     if c.first:
-        c.zone(c.area(), difficult=True, until=When.EONT, label=c.ref)
+        c.zone(c.area(), difficult="ice", until=When.EONT, label=c.ref)
     if c.strike():
         c.hit()
         c.ongoing(5, DamageType.COLD)

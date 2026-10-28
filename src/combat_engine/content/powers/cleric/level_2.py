@@ -11,14 +11,14 @@ from __future__ import annotations
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     MINOR,
-    ONE_ALLY,
     REF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     AttackDeclared,
     Cast,
     CloseBurst,
@@ -38,7 +38,7 @@ from combat_engine.engine.dsl import ANY_CREATURE
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.DIVINE],
 )
 def p482(c: Cast) -> None:
@@ -106,7 +106,7 @@ def p91(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
 )
 def p945(c: Cast) -> None:
@@ -120,7 +120,7 @@ def p945(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(20),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
 )
 def p947(c: Cast) -> None:

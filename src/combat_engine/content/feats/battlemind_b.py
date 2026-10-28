@@ -75,8 +75,6 @@ TRIGGERING = ("PowerUsed.trigger",)
 #: Nothing lets a rider replace the triggering power's own printed effect:
 #: `PowerUsed` is a plain `Event`, so `c.cancel()` cannot stop it.
 INSTEAD = ("c.pre_empt(ref, clause)",)
-#: A class feature named in prose with no ref.
-FEATURE = ("c.class_feature()",)
 #: Spending power points emits a `Note` and nothing a trigger can watch.
 POINTS = ("c.on_points_spent()",)
 
@@ -504,13 +502,13 @@ def f3304(c: Cast) -> None:
         if ev.actor != me:
             return
         used = getattr(ev, "power", "")
-        if used == _ASPECTS["p7441"] and c.knows("p7441"):
+        if used == _ASPECTS["p7441"] and c.knows("p7441") == c.me:
             c.shift(1, who=me)
 
     def bites(ev: Hit) -> None:
         if ev.attacker != me or getattr(ev, "power", "") != _ASPECTS["p7442"]:
             return
-        if c.knows("p7442") and c.wis_mod > 0:
+        if c.knows("p7442") == c.me and c.wis_mod > 0:
             c.flat(c.wis_mod, on=ev.target)
 
     c.watch(PowerResolved, sharpened, until=When.ENCOUNTER, on=me,

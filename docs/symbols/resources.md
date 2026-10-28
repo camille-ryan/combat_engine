@@ -9,7 +9,7 @@ Things a creature spends, and the budget it spends them from.
 
 - `c.regain_surge(self, count: 'int' = 1, *, on: 'int | None' = None) -> 'int'`
   - "Each target regains a healing surge." Returns how many it now has.
-- `c.second_wind(self, *, on: 'int | None' = None, cost: 'ActionType' = <ActionType.STANDARD: 'standard'>) -> 'bool'`
+- `c.second_wind(self, *, on: 'int | None' = None, cost: 'ActionType' = <ActionType.STANDARD: 'standard'>, heal: 'bool' = True) -> 'bool'`
   - Take a second wind: a surge, and +2 to AC until your next turn.
 - `c.spend_surge(self, *, on: 'int | None' = None) -> 'bool'`
   - Spend a surge and gain nothing for it.
@@ -45,6 +45,8 @@ Things a creature spends, and the budget it spends them from.
   - Was that shot fired from the ammunition **this row belongs to**?
 - `c.charge_left(self, key: 'str', limit: 'int' = 1) -> 'int'`
   - How much of a per-encounter charge is left, for this creature.
+- `c.milestone(self) -> 'int'`
+  - How many milestones the party has reached today. `c.milestone()`.
 - `c.per_day_left(self, ref: 'str', limit: 'int') -> 'int'`
   - How many of a daily allowance are left today, for this creature.
 - `c.restore_charge(self, key: 'str', *, on: 'int | None' = None) -> 'bool'`
@@ -74,6 +76,8 @@ Things a creature spends, and the budget it spends them from.
   - "The target gains 1 action point", outside the encounter's limit.
 - `c.initiative(self, amount: 'int', *, on: 'int | None' = None) -> 'int'`
   - "Each target gains a +10 bonus to his or her initiative check."
+- `c.once_per_board(self, *key: 'object') -> 'bool'`
+  - True the first time this row asks on this board, False ever after.
 - `c.payment_window(self, *, per_turn: 'bool' = False) -> 'object'`
   - The window a "once per round" or "once per turn" payout sits in.
 - `c.swap_initiative(self, other: 'int') -> 'bool'`
@@ -87,6 +91,8 @@ Things a creature spends, and the budget it spends them from.
   - Make taking a weapon up cost less than the printed minor action.
 - `c.give(self, ref: 'str' = '', fn: 'Callable[[int], None] | None' = None, *, on: 'int | None' = None, uses: 'int' = 1, cost: 'ActionType' = <ActionType.MINOR: 'minor'>) -> 'int'`
   - Put a one-shot in somebody's hands for them to spend later.
+- `c.loads_free(self, *, cost: 'ActionType' = <ActionType.FREE: 'free'>, per_turn: 'int' = -1, only: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Make reloading cost less than the printed minor action.
 - `c.recall_weapon(self, *, within: 'int' = 0, on: 'int | None' = None) -> 'bool'`
   - Call a weapon that was yours back into your hand from a distance.
 - `c.stow(self, ref: 'str' = '', *, on: 'int | None' = None) -> 'bool'`

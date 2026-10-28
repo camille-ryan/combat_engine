@@ -557,9 +557,10 @@ def m115673a0(c: Cast) -> None:
 
     The coin is the die itself, read off the live `AttackResult` as
     `natural` -- the total would fold in every modifier, and the card names
-    the roll. Set inside the `Hit` interrupt window, because `resolve.attack`
-    recomputes the outcome from that object afterwards and turns `hit=False`
-    into a real `Miss`; a listener on `AttackRolled` has nothing to change.
+    the roll. Turned aside inside the `Hit` interrupt window with
+    `c.hit_becomes(False)`, because `resolve.attack` recomputes the outcome
+    from that object afterwards and turns the cleared `hit` into a real
+    `Miss`. The write was hand-rolled here and announced nothing. #862.
 
     Only melee and ranged attacks, which is what the card names. The blow
     that gets through takes the veil down, and the start of its next turn
@@ -580,7 +581,7 @@ def m115673a0(c: Cast) -> None:
         if _reach_kind(ev) not in ("melee", "ranged"):
             return
         if result.natural % 2:
-            result.hit = False
+            c.hit_becomes(False, ev=ev)
             return
         _drop_held(c, _M115673_VEIL, "the blow found it", on=me)
 

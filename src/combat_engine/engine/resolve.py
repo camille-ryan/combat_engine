@@ -14,11 +14,11 @@ Two deliberate seams for triggered effects to reach into:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from .ammunition import nock
+from .ammunition import nock, spend_load
 from .components import Defences, Health
 from .conditions import DROPPED
 from .durations import When
@@ -50,6 +50,7 @@ from .query import (
     light_concealment,
     takes_half,
 )
+from .rng import Roll
 from .types import Condition, DamageType, Defense, Relation
 
 if TYPE_CHECKING:
@@ -70,6 +71,43 @@ class AttackResult:
     #: from the die after the interrupt window, so a listener setting `hit`
     #: had it thrown away, and rigging `total` would be faking.
     forced: bool = False
+    #: The counterpart of `forced`: set by a row that says a landed blow
+    #: **misses** -- "the attack misses", through the illusion, turned aside.
+    #:
+    #: Needed for the same reason `forced` is, pointed the other way. The
+    #: outcome is recomputed from the die below, so a row in the
+    #: `AttackRolled` window that set `hit = False` had it thrown away --
+    #: and the one row that worked around that rewrote `natural` to 1,
+    #: which is the faking both `forced` and `treated` say not to do. It
+    #: made the die lie to every later reader so that one disjunct of the
+    #: recompute would come out false.
+    #:
+    #: A row in the `Hit` interrupt window can set `hit` directly and the
+    #: `confirm` callback turns it into a real `Miss`; this flag is what
+    #: makes the *earlier* window work too, so one verb serves both. #862.
+    turned: bool = False
+    #: **The weapon of record for this attack**, by ref, or `""` for an
+    #: attack that came through none.
+    #:
+    #: Stamped by the swing itself and inherited by every rider that pays
+    #: out inside it, which is the whole point: `Cast._swung_weapon` can
+    #: only answer for a row carrying the **weapon keyword**, and a rider is
+    #: a row of its own with its own `Cast` and no such keyword -- so the
+    #: blow that bloodied on `i1688p1`'s board reported
+    #: `Bloodied(power='f274', weapon='')` while the swing really did come
+    #: through the weapon.
+    #:
+    #: **Set only by a weapon attack**, which is what keeps the gate's other
+    #: direction intact: an implement power whose caster happens to hold a
+    #: sword stamps nothing here, so a rider inside *that* attack inherits
+    #: `""` rather than claiming the sword in the other hand. The negative
+    #: control in `drivers.swung_weapon` is the same assertion from the
+    #: other side.
+    #:
+    #: On the result rather than a world-level "attack in progress" field,
+    #: because this object is already threaded through the whole attack and
+    #: a rider reaches it as `ev.result`. #698, #653.
+    weapon: str = ""
     #: Who the blow finally landed on. Usually the creature it was aimed at
     #: -- but an interrupt may move it, and then the body that rolled this
     #: has to be told, or it deals its damage to the one that was missed.
@@ -184,6 +222,59 @@ def situational_attack(
     return situational
 
 
+def settle(result: AttackResult, *, floor: int = 20) -> None:
+    """**The hit-and-critical rule, in one place.** Reads the result as it
+    stands and writes `hit` and `critical` from it.
+
+    `floor` is the lowest natural that scores a critical -- `20 -
+    crit_range` -- and it belongs to the **critical only**. The automatic
+    hit is tied to the number the rule names: a natural 20 hits, a natural 1
+    misses, and a widener says you *score a critical hit* on 19 or 20, which
+    changes which hits become criticals and says nothing about what hits.
+
+    The other half is that a high roll is not enough on its own: the die
+    opens the door and the total still has to reach the defence, so a 20
+    fourteen short of an AC is a plain hit and not a critical.
+
+    `turned` outranks the die in both -- a blow a row has turned aside
+    neither hits nor crits, whatever was rolled -- and `forced` is the
+    counterpart pointed the other way: a row that said the attack simply
+    hits is not un-hit by arithmetic.
+
+    **`forced` is absent from the critical rather than negated in it**, and
+    the difference is not cosmetic. Omitting it means a forced attack is not
+    *made* a critical by the forcing, which is the whole of what the comment
+    on the old recompute asked for; negating it would additionally stop a
+    forced attack that rolled a natural 20 over the defence from critting,
+    and a row saying "the attack hits" does not say "and the die did not
+    land well". I wrote the negation first.
+
+    **This existed eight times before it existed once, and five of the
+    copies were wrong in four different ways.** Both branches here were
+    wrong about `crit_range` -- in opposite directions, the hit reading the
+    floor and the critical reading a bare 20 -- across `resolve.attack`,
+    `Cast.boost_roll` and `Cast.reroll_attack`; two copies dropped the
+    automatic hit entirely; one read a `critical` computed before the
+    arithmetic it was recomputing after; and three content rows re-settled
+    an outcome by hand after changing it, each missing a different term.
+    Every one of those was a silently wrong number on a live path.
+
+    So the rule has one home and `c.settle_attack()` is the door for a row
+    that changes a number the outcome was judged from. #868.
+    """
+    against = result.target_defence
+    result.critical = (
+        not result.turned
+        and result.natural >= floor
+        and result.total >= against
+    )
+    result.hit = not result.turned and (
+        result.forced
+        or result.natural == 20
+        or (result.natural != 1 and result.total >= against)
+    )
+
+
 def attack(
     world: World,
     attacker: int,
@@ -204,10 +295,14 @@ def attack(
     keep: str = "",
     hand: str = "main",
     as_: str = "",
+    weapon: str = "",
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
     result = AttackResult()
+    # The weapon of record, stamped once at the top so every rider that
+    # pays out inside this attack reads the same answer. See the field.
+    result.weapon = weapon
     # Was this swing bought with an action point? Rides the same road
     # `opportunity` and `charge` do -- in the attack context and on all four
     # attack events -- because two printed rows are about exactly that
@@ -219,6 +314,9 @@ def attack(
     # attack using this ammunition" is about *this* shot and there was
     # nothing on the wire that said which one.
     drawn = nock(world, attacker, power, branch)
+    # The same shot, the same gate: a costed loader is empty after it
+    # fires and `actions` offers the reload. #725.
+    spend_load(world, attacker, power, branch)
 
     def roll(declared: AttackDeclared) -> None:
         # Read back off the event, because an interrupt may have moved the
@@ -250,12 +348,43 @@ def attack(
         # opportunity attacks" cannot be written without it, and gating on
         # the power's ref instead catches a standard-action basic and misses
         # a creature whose opportunity attack is something else.
+        #
+        # **And `opportunity` alone was not enough**, which five rows said in
+        # their own words before anything carried the answer: it says an
+        # attack *is* an opportunity attack and never what provoked it, so
+        # "against opportunity attacks you provoke with a ranged power" and
+        # "provoked by this movement" could not be told apart and both paid
+        # out for the other. Read off the window that is open right now --
+        # see `World.provocation` -- rather than threaded through every
+        # taker. Only when `opportunity` is true, so an ordinary attack
+        # cannot inherit a provocation. #880.
+        window = world.provocation if opportunity else None
         ctx = {
             "attacker": attacker,
             "target": target,
             "power": power,
             "advantage": ca,
             "opportunity": opportunity,
+            # What opened the window this swing is coming through. Three
+            # keys because the rows split three ways: whether it was a row
+            # at all (`provoked_by` empty means a move), which row, and how
+            # the provoker was travelling.
+            "provoked_by": str(getattr(window, "by", "") or ""),
+            "provoked_kind": str(getattr(window, "kind_", "") or ""),
+            "provoked_mode": str(getattr(window, "mode", "") or ""),
+            # The provoking row's **shape**, in `reach`'s own vocabulary, so
+            # "an opportunity attack you provoke when using a ranged or an
+            # area power" is a gate in the words #644 already established
+            # rather than a second registry lookup in every row.
+            #
+            # Needed because `provoked_by` being non-empty means only "a row
+            # opened this", and `c.provoke` opens one for arbitrary rows --
+            # so the ranged-or-area question is narrower than "not a move"
+            # and `f2565` prints the narrower one.
+            "provoked_reach": _reach_kind(
+                str(getattr(window, "by", "") or ""), 0, world,
+                getattr(window, "provoker", None),
+            ) if window is not None else "",
             "charge": charge,
             # Who handed this swing over, and through which row. A bonus
             # to "the melee basic attack granted by your Combat
@@ -358,17 +487,14 @@ def attack(
         # high-crit weapons and on solos, and the number was hard-coded in
         # both of the places it is decided.
         floor = 20 - _mods(world, attacker, "crit_range", ctx)
-        # **A high roll is not enough on its own.** "If you land a natural 20,
-        # *and* the total of your attack roll is high enough to hit the
-        # target's defence, it's a critical hit" -- so the die opens the door
-        # and the total still has to walk through it. Without the second half
-        # a 20 that fell fourteen short of an AC was dealing maximum damage,
-        # and against anything far above its level a creature was critting on
-        # every 20 no matter how hopeless the swing.
-        #
-        # The **hit** is a separate question and is unchanged: a 20 hits.
-        result.critical = natural >= floor and total >= against
-        result.hit = natural >= floor or (natural != 1 and total >= against)
+        # **Only ever read inside the `AttackRolled` window**, because the
+        # recompute below overwrites both values unconditionally. So a plant
+        # here proves nothing -- reverting this call alone leaves every
+        # assertion in `drivers.crit_range` green -- and the plant goes on the
+        # recompute. It is kept correct for the listener that asks "did it
+        # hit" before the window closes, which is the same mechanism that
+        # made four content copies of this rule dead code. #868.
+        settle(result, floor=floor)
 
         rolled = AttackRolled(
             attacker=attacker,
@@ -402,6 +528,16 @@ def attack(
         # event said so -- the flag lived only in the roll's own context, so
         # a creature could not react to being hit by one.
         rolled.opportunity = opportunity
+        # And **what** provoked it, for the rows that narrow on the
+        # provocation rather than on the swing that came back. Attached
+        # like `opportunity` above and for the same reason: `i3085p1`
+        # answers a `Hit`, and the `Hit` named only the return blow.
+        # Empty when a move opened the window. #880.
+        # A local rather than the dict read, because a ctx value is typed
+        # as the union of everything a ctx holds; narrowing it once here is
+        # a real fix where blessing it would only hide the union.
+        provoked = str(ctx["provoked_by"])
+        rolled.provoked_by = provoked  # ty: ignore[unresolved-attribute]
         rolled.charge = charge
         # **Which swing this is, when one row makes two.** Hung on the event
         # the way `opportunity` and `charge` are. A row that grants a counter
@@ -437,13 +573,14 @@ def attack(
         # the locals threw the new number away and judged the old one. Every
         # reroll row in the tree was inert.
         floor = 20 - _mods(world, attacker, "crit_range", ctx)
-        # See the window above: the natural opens the door, the total has to
-        # reach the defence. `forced` hits without rolling well and so is not
-        # a critical either.
-        result.critical = result.natural >= floor and result.total >= against
-        result.hit = result.forced or result.natural >= floor or (
-            result.natural != 1 and result.total >= against
-        )
+        # **This is the authoritative judgement**, and the one a plant must
+        # break: it runs after the interrupt window, re-reads the defence and
+        # recomputes from the result rather than from the locals, because a
+        # listener in that window may have changed the die -- which is the
+        # whole of what `c.reroll_attack` does. Recomputing from the locals
+        # threw the new number away and judged the old one, and every reroll
+        # row in the tree was inert.
+        settle(result, floor=floor)
 
         # The `Hit`/`Miss` carries it too, so a row can answer "when it is
         # hit by an opportunity attack".
@@ -456,6 +593,7 @@ def attack(
         landed.among = among or (target,)
         landed.branch = branch
         landed.opportunity = opportunity
+        landed.provoked_by = provoked  # ty: ignore[invalid-assignment]
         landed.charge = charge
         landed.as_ = as_
         landed.granted_by = granted_by
@@ -507,6 +645,7 @@ def attack(
             ev.branch = branch
             ev.as_ = as_
             ev.opportunity = opportunity
+            ev.provoked_by = provoked  # ty: ignore[invalid-assignment]
             ev.charge = charge
             ev.granted_by = granted_by
             ev.granted_via = granted_via
@@ -910,6 +1049,9 @@ def deal_damage(
     dtypes: Sequence[DamageType] = (),
     unpreventable: bool = False,
     weapon: str = "",
+    roll: Roll | None = None,
+    reprice: Callable[[int], int] | None = None,
+    by_attack: bool = False,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -1047,7 +1189,12 @@ def deal_damage(
     if crit:
         parts = _add_mods(parts, _split_mods(world, source, "crit_damage", dmg_ctx))
         amount = sum(v for _, v in parts)
+    # The amount with every modifier in it and before *this* function's
+    # halving, which is the quantity a changed die has to be priced against.
+    whole = amount
+    halved = False
     if from_attack and deals_half(world, source):
+        halved = True
         amount = amount // 2
         parts = _rescale(parts, amount)
 
@@ -1062,6 +1209,56 @@ def deal_damage(
     # roll carries its own: `c.bonus(once=True)` decides whether the bonus
     # it is watching applied, and it was rebuilding a two-key context here.
     announce.ctx = dmg_ctx
+    # **The dice behind the total, and what a changed face is worth.** Both
+    # plain attributes, never fields: `Event.wire()` ships every declared
+    # field, so a field here would reach the page and move all 290
+    # `DamageRolled` lines across the seven replay fixtures. `AttackResult`
+    # rides on `Hit` the same way and for the same reason, and that is the
+    # precedent a row answering a damage roll was told to copy. #703.
+    if roll is not None and reprice is not None:
+        # `reprice` prices the dice as *the caller* did -- bonus,
+        # enhancement, and `c.half_damage`'s own halving. Everything this
+        # function added on top is independent of the faces, so it is one
+        # constant, and the composition is exact rather than a
+        # re-rolled approximation: re-running `_add_mods` would roll a
+        # critical rider's "+1d6" a second time.
+        extra = whole - reprice(roll.total)
+
+        def _priced(total: int, _r: object = reprice, _x: int = extra) -> int:
+            got = _r(total) + _x  # ty: ignore[call-non-callable]
+            return got // 2 if halved else got
+
+        announce.roll = roll  # ty: ignore[unresolved-attribute]
+        announce.reprice = _priced  # ty: ignore[unresolved-attribute]
+    # **What the blow is made of, by type.** `parts[0]` is what the power
+    # itself rolled and every part after it is a rider that named a type of
+    # its own -- which is the only place a rider's *amount* exists. Four
+    # feats print "the extra necrotic damage" and read it off nothing:
+    # `DamageRolled` carries one total, so a component of it could not be
+    # picked out.
+    #
+    # A plain attribute and a tuple, for #703's reasons: a field would reach
+    # the page and every replay fixture, and a tuple cannot be edited by a
+    # listener into something `_rescale` would then disagree with.
+    #
+    # **It is the split as announced, before any listener moves
+    # `ev.amount`.** A reader asking "how much of this is necrotic" wants
+    # the blow as rolled; the redistribution below is what keeps the typed
+    # parts consistent with whatever a listener did to the total, and a
+    # reader that wanted the post-listener split would have to ask after
+    # the emit, which no printed card does.
+    announce.parts = tuple(parts)  # ty: ignore[unresolved-attribute]
+    # **"Was an attack behind this blow", which `from_attack` is not.**
+    # That flag means "offered damage modifiers": it is `True` by default
+    # and only `Cast.absorb` and `falling` pass `False`, so a trait's flat
+    # payout and an ongoing tick both arrive with it set. Two content rows
+    # depend on that reading and argue it explicitly, so narrowing it would
+    # silently drop five feature cards' riders.
+    #
+    # This is the other fact, and the three rows waiting wanted **opposite
+    # values** of it -- which is what makes it discriminating where
+    # `from_attack` is not. #731.
+    announce.by_attack = by_attack  # ty: ignore[unresolved-attribute]
     rolled = world.bus.emit(announce)
     if rolled.cancelled:
         return 0
@@ -1287,6 +1484,11 @@ def deal_damage(
         dtypes=types if len(types) > 1 else (),
         resisted=resisted,
     )
+    # **The same provenance on the applied event**, because that is the one
+    # the three rows of #731 watch: the printed trigger is damage that
+    # *landed*, and a blow a resistance ate whole is not it. Attaching it
+    # only to `DamageRolled` would have left all three unable to read it.
+    landed_ev.by_attack = by_attack  # ty: ignore[unresolved-attribute]
     # An attribute, not a field -- see `DamageApplied.weapon`. A field
     # reached every replay fixture and all seven diverged.
     landed_ev.weapon = weapon  # ty: ignore[unresolved-attribute]
@@ -1304,7 +1506,7 @@ def deal_damage(
         crossed = Bloodied(actor=target, source=source, power=detail)
         crossed.weapon = weapon  # ty: ignore[unresolved-attribute]
         world.bus.emit(crossed)
-    _check_down(world, target, health, source, crit, detail)
+    _check_down(world, target, health, source, crit, detail, weapon)
     return landed
 
 
@@ -1415,7 +1617,7 @@ def temp_hp(
 
 def _check_down(world: World, eid: int, health: Health,
                 source: int | None = None, crit: bool = False,
-                power: str = "") -> None:
+                power: str = "", weapon: str = "") -> None:
     from .query import is_
 
     if health.hp > 0:
@@ -1425,7 +1627,7 @@ def _check_down(world: World, eid: int, health: Health,
     # nor for any blow that overshot, which in play is most kills. The
     # printed sentence every row using it carries is "drops to 0 hit points
     # **or fewer**", and those rows were missing almost every death.
-    world.bus.emit(Dropped(
+    went_down = Dropped(
         actor=eid, dead=health.hp <= health.dying_at, source=source,
         # The row that did it. Both callers already know it -- the damage
         # path carries `detail` and `Cast.kill` has `self.ref` -- so this
@@ -1436,7 +1638,17 @@ def _check_down(world: World, eid: int, health: Health,
         # in scope at the one site that calls this, so "but not by a
         # critical hit" costs a parameter rather than a new fact. #428.
         critical=crit,
-    ))
+    )
+    # **The weapon it came through, as an attribute rather than a field.**
+    # Exactly `Bloodied.weapon` one event over and for its reasons: `power`
+    # says which row swung and not which weapon it swung, and three rows
+    # carry `dropped=("Dropped.weapon",)` for want of the difference.
+    #
+    # An attribute, so it stays off `Event.wire()` and out of the fixtures --
+    # the `Effect.by` precedent, which is also why `Bloodied` does it this
+    # way. #698.
+    went_down.weapon = weapon  # ty: ignore[unresolved-attribute]
+    world.bus.emit(went_down)
     # Read hit points again. A row that answers its own `Dropped` by healing
     # itself -- the shape the `dying` flag exists for -- was healed inside
     # the emit and then knocked unconscious, prone and dying regardless,

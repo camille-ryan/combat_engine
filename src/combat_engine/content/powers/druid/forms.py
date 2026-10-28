@@ -86,7 +86,7 @@ def in_form(ref: str) -> Callable[[World, int], bool]:
     def check(world: World, eid: int) -> bool:
         return in_beast_form(world, eid) and behind(world, eid)
 
-    check.beast_form = True  # type: ignore[attr-defined]
+    check.beast_form = True
     return check
 
 

@@ -1724,20 +1724,23 @@ def m3227a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.grant_action('mount')",),
 )
 def m3227a2(c: Cast) -> None:
-    """The whole of this line is "a creature of that size may ride it".
+    """The whole of this line is "a creature of that size may ride it", and
+    it is a real **exception** rather than a restatement: the general rule
+    demands a mount *larger than* its rider and this creature is Medium, so
+    a Medium rider is barred outright without this. Measured before writing
+    it -- the opposite was the expectation. #749.
 
-    `c.ride` can establish the relation but nothing offers mounting as an
-    action, so there is no moment at which this row can become true. Named
-    rather than approximated: setting the relation from here would put a
-    rider on it that nobody chose.
-
-    `c.grant_action` is the right verb and the word is not in it: its own
-    docstring says anything outside `actions.legal`'s five words "is carried,
-    costs nothing and does nothing", so the word and the menu reader have to
-    land together, and both are engine work."""
+    `c.rideable` records the permission on the mount and `query.may_ride`
+    is the one legality test that reads it, so `actions._mounting` offers
+    the move action to whoever is standing beside this creature. The
+    relation is **not** set here: that would put a rider on it that nobody
+    chose, which is what the old note said and is still right."""
+    # `on=c.me`, which is load-bearing: this is a `NO_TARGET` row, so a
+    # bare call lays the permission on **nobody** -- `content/CLAUDE.md`'s
+    # commonest single mistake, and `lint.py` named it here.
+    c.rideable(sizes=(Size.MEDIUM,), on=c.me)
 
 
 # --------------------------------------------------------------------------

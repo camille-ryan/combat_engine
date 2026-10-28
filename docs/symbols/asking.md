@@ -120,11 +120,15 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Sum the modifiers to `what` on that creature.
 - `c.total_defence(self, *, on: 'int | None' = None, amount: 'int' = 2) -> 'bool'`
   - Hunker down: +2 to every defence until the start of your next turn.
-- `c.weapon_dice(self, dice: 'str', *, group: 'str' = '', ref: 'str' = '', on: 'int | None' = None) -> 'int'`
+- `c.weapon_dice(self, dice: 'str', *, group: 'str' = '', ref: 'str' = '', held: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Set the damage die of that creature's own weapons. Returns how many.
+- `c.weapon_group(self, becomes: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, on: 'int | None' = None) -> 'int'`
+  - Re-file what a weapon *is*, so a group-gated row will take it.
 - `c.weapon_of(self, ev: 'Any' = None) -> 'Weapon | None'`
   - Which weapon the attack behind this event was swung with.
-- `c.weapon_range(self, *, ranged: 'tuple[int, int] | None' = None, thrown: 'tuple[int, int] | None' = None, group: 'str' = '', ref: 'str' = '', on: 'int | None' = None) -> 'int'`
+- `c.weapon_proficiency(self, bonus: 'int', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, on: 'int | None' = None) -> 'int'`
+  - "You treat slings as having a +3 proficiency bonus." Returns how
+- `c.weapon_range(self, *, ranged: 'tuple[int, int] | None' = None, thrown: 'tuple[int, int] | None' = None, group: 'str' = '', ref: 'str' = '', held: 'bool' = False, mine: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Give that creature's weapons a printed range. Returns how many.
 - `c.wearing(self, prop: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Is this creature in armour of that kind? `c.wielding`'s sibling.
@@ -143,6 +147,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Is this creature bloodied -- by its hit points, or by a card.
 - `c.build(self, choice: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Did this character take that build? `c.build("infernal")`.
+- `c.by_attack(self, *, ev: 'Any' = None) -> 'bool'`
+  - Was an attack behind the blow being announced?
 - `c.chosen_weapons(self, *, on: 'int | None' = None) -> 'frozenset[str]'`
   - The weapon refs this character's build settled on, by ref.
 - `c.considered_bloodied(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
@@ -189,6 +195,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Whoever put that zone or conjuration on the board.
 - `c.missing(self, on: 'int | None' = None) -> 'int'`
   - How many hit points this creature is down. 0 when untouched.
+- `c.part_of(self, dtype: 'DamageType', *, ev: 'Any' = None) -> 'int'`
+  - How much of the blow being announced is of that damage type.
 - `c.passive(self, skill: 'str', *, of: 'int | None' = None) -> 'int'`
   - 10 plus a creature's check modifier -- what it notices unbidden.
 - `c.quarry(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
@@ -201,6 +209,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - the last `AttackResult`, or None. `.advantage` is whether the attack had combat advantage; asking again is too late.
 - `c.set_build(self, *choices: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, instead_of: 'str' = '') -> 'Effect | None'`
   - Stand on a build's leg that chargen did not deal you.
+- `c.swings: list[AttackResult]`
+  - every `AttackResult` this body has rolled for the current target, in order, where `result` is only the last. Read it when a clause says *every* attack roll you made; `result` answers "did that one hit". #810.
 - `c.turn_of(self) -> 'int | None'`
   - Whose turn it is, for a trigger that cares.
 - `c.with_a_chosen_weapon(self, ctx: 'dict[str, Any]', *, on: 'int | None' = None) -> 'bool'`

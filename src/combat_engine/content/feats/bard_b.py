@@ -32,6 +32,7 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     Condition,
+    DamageRolled,
     DamageType,
     Hit,
     Keyword,
@@ -40,15 +41,14 @@ from combat_engine.engine import (
     SavingThrow,
     SurgeSpent,
     Trigger,
+    TurnEnd,
     When,
+    Window,
     after_forced_reroll,
     power,
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import allies, line_of_effect, unseen_by
-
-#: A class feature the benefit names in prose with no ref.
-FEATURE = ("c.class_feature()",)
 
 #: The ref the prerequisite column gives for the heal three rows modify.
 WORD = "p2339"
@@ -347,7 +347,7 @@ def f1120(c: Cast) -> None:
 
 
 @power("f1144", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(clock=)",),
+       reach=PERSONAL, target=SELF,
        trigger="you use p1628",
        on=Trigger(PowerUsed, _used("p1628"), "you use that racial power"))
 def f1144(c: Cast) -> None:
@@ -355,20 +355,39 @@ def f1144(c: Cast) -> None:
     opposite direction from `c.can_see` -- so the sight is asked with the
     ally as the watcher, the way `warlord/level_7_c.py` asks it.
 
-    `PowerUsed` fires above the body, but the targets are chosen before
-    it, so "the triggering enemy" is readable here.
+    **"The triggering enemy" is on `p1628`'s own trigger, and this row
+    was reading an empty list.** That power is `NO_TARGET` and aims itself
+    at whoever hit its holder, so `PowerUsed.targets` is `[]` for it
+    always -- the old body's first line therefore found `None` and
+    returned, every time, which is why the row has been silent. `f827`,
+    `f767` and `f1543` all read through `PowerUsed.trigger` instead and
+    say so in their own notes; this is the fourth.
 
-    The window is dropped: the printed one is the *enemy's* next turn and
-    an effect's clock is its owner or its source, so a bonus sitting on
-    an ally cannot be timed by a third creature. `once=True` carries the
-    substance -- it is spent by that ally's next attack on the enemy --
-    and only an attack made out of turn late in the round would get it
-    when the card says it should have lapsed.
+    **The window is written now, and it does not come from `until=`.**
+    The old note was right about that half: `Effects.apply` sets
+    `clock = owner if when in _TARGET_CLOCKED else source`, so an
+    `EOTNT` hold sitting on an *ally* is timed by that ally and never by a
+    third creature -- it said "the enemy's next turn" and meant the
+    ally's. So the holds are kept in a local and ended from a
+    `c.watch(TurnEnd, ...)`, which is the half `c.end_effect` exists for.
+
+    **The latch is not optional here.** `p1628` answers a *hit* on its
+    holder, so it fires on the attacking enemy's own turn far more often
+    than not -- and the enemy's first `TurnEnd` after that is the end of
+    *that* turn, not of its next one. `Effects.apply` writes exactly this
+    latch for `EOTNT` (`world.turn == clock`); ending on the first
+    turn-end without it would make the bonus shorter than the broken
+    version it replaces.
+
+    `once=True` still carries the other half of the sentence -- it is
+    spent by that ally's next attack on the enemy -- and `c.end_effect` is
+    idempotent, so a hold already spent that way is left alone.
     """
-    foe = next(iter(c.trigger.targets), None)
+    foe = getattr(getattr(c.trigger, "trigger", None), "attacker", None)
     if foe is None:
         return
     me = c.me
+    held: list[Any] = []
     for friend in allies(c.world, me):
         if friend == me:
             continue
@@ -376,10 +395,29 @@ def f1144(c: Cast) -> None:
             continue
         if unseen_by(c.world, friend, me):
             continue
-        c.bonus(
-            "attack", 1, on=friend, until=When.EOTNT, kind="power", once=True,
-            when=lambda ctx: ctx.get("target") == foe,
+        laid = c.bonus(
+            "attack", 1, on=friend, until=When.ENCOUNTER, kind="power",
+            once=True, when=lambda ctx: ctx.get("target") == foe,
         )
+        if laid is not None:
+            held.append(laid)
+    if not held:
+        return
+
+    #: How many of the enemy's turn-ends to let past -- see the latch note.
+    waiting = [2 if c.world.turn == foe else 1]
+
+    def lapsed(ev: TurnEnd) -> None:
+        if ev.actor != foe or not held:
+            return
+        waiting[0] -= 1
+        if waiting[0] > 0:
+            return
+        for hold in held:
+            c.end_effect(hold)
+        held.clear()
+
+    c.watch(TurnEnd, lapsed, until=When.ENCOUNTER)
 
 
 @power("f1145", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -402,26 +440,61 @@ def f1145(c: Cast) -> None:
     c.grants_advantage(on=foe, to="ally", until=When.EONT, once=True)
 
 
+#: The five powers the Associated Powers line names. Every one of them
+#: prints the same sentence: the damage becomes that power's own type
+#: **and** necrotic, and the power gains the necrotic keyword.
+_NECROTIC_TOO = ("p1725", "p3705", "p1458", "p1167", "p2780")
+
+
 @power("f1231", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retype_damage(dtypes=)",))
+       reach=PERSONAL, target=SELF)
 def f1231(c: Cast) -> None:
-    """**Re-aimed twice, and the marker is now the real gap.**
+    """**Written. The third note said "both halves are missing" and both
+    halves were already here.**
 
-    The first two notes were about the ETL and both were wrong: the list
-    resolves and the spec carries `<ref> : <clause>` with the clause intact,
-    478 of 478. So `spec.associated_clause()` named nothing, and this row
-    read as blocked on an instrument when it was blocked on an engine verb.
+    The damage half is `DamageRolled.dtypes`, which is documented writable
+    and documented for exactly this -- "set this to say *and*, not
+    *instead*". `f2847` and `f2855` in `general_l.py` are the same shape
+    on a single power; this is five of them under one watcher, because the
+    sentence is identical five times over. The keyword half is
+    `c.counts_as_keyword`, which edits this creature's copy of a named row
+    rather than the shared header tuple.
 
-    What it actually wants, across all five of its riders identically: the
-    damage the named power deals becomes a second type **as well**, and the
-    power gains that keyword. Both halves are missing. `c.flat` and
-    `c.damage` take `dtype`/`dtypes` where the damage is dealt, so a row can
-    choose its own type -- but nothing retypes damage *another* row is about
-    to deal, and `Power.keywords` is header data no trait can add to.
+    **Laid from here rather than written into the five powers.** #550's
+    convention is for a clause the power has to *ask* about; a listener on
+    the blow needs no cooperation from the row that threw it, and `f1098`
+    makes the same argument for the same reason.
+
+    **A watcher rather than `c.deals(ref=, add=)`, which looks like the
+    purpose-built verb and would be short of the card.** `c.deals` is read
+    through `Cast._typed`, and only `c.damage` and `c.half_damage` call
+    that -- `c.flat` goes straight to `deal_damage`. Two of these five deal
+    part or all of their damage flat, so the tidier call would have
+    recoloured the hit line and left the rider the card speaks about
+    untouched. `DamageRolled` is emitted by every route.
 
     One symbol for five riders, which is usually the trap `CLAUDE.md`
-    warns about and here is not: the gap is the same sentence five times, so
-    the marker goes red and green honestly for every one of them. #299."""
+    warns about and here was not: the gap was the same sentence five
+    times, so it went red and green honestly for every one of them. #299."""
+    me = c.me
+
+    def rot(ev: DamageRolled) -> None:
+        if ev.source != me or ev.detail not in _NECROTIC_TOO:
+            return
+        # `p1725` is the one rider with a condition in front of it -- the
+        # target stepping away at the start of its own next turn -- and
+        # that moment is a turn later than the weapon damage. The thunder
+        # rider is the only blow dealt then, so it is the only blow the
+        # clause can be about.
+        if ev.detail == "p1725" and DamageType.THUNDER not in ev.types():
+            return
+        ev.dtypes = (*ev.types(), DamageType.NECROTIC)
+
+    c.watch(DamageRolled, rot, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
+    for ref in _NECROTIC_TOO:
+        c.counts_as_keyword(ref, Keyword.NECROTIC, on=me,
+                            until=When.ENCOUNTER)
 
 
 @power("f2091", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

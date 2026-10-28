@@ -38,11 +38,68 @@ def names_enabled() -> bool:
 #: and is where the printed name lives -- see `Wire.item`.
 _ITEM_BLOCK = re.compile(r"^(i\d+)[px]\d+$")
 
+#: A ref sitting inside a line of printed text. Anchored on word
+#: boundaries so a ref is not found inside an ordinary word, and it takes
+#: the `x_` prefix the ETL puts on a cross-reference it could not resolve --
+#: `x_m6564` is the case #895 was filed for.
+_REF_IN_TEXT = re.compile(
+    r"\b(?:x_)?[pmifrw]\d+[a-z]*\d*\b|\bcf:[\w-]+|\brt:[\w:-]+"
+)
+
 #: The words an item's printed name uses to mean "whatever this is laid on".
-#: `Wire.item` replaces one of these with the base weapon's own word and
-#: leaves every other head noun alone. Measured: 14 items lead with the first
-#: and 1 with the second, out of 403 in a weapon category. #346.
+#: `Wire.item` replaces one of these, at **either end** of the name, with the
+#: base weapon's own word, and leaves every other noun alone.
+#:
+#: Re-measured over all 1,016 items in the four categories, because the first
+#: census counted only the leading position and so sized the feature at 15:
+#:
+#:     leading    weapon 14   blade  1
+#:     trailing   weapon 186  blade 17
+#:
+#: Both trailing words are singular, so there is no plural form to get wrong.
+#: #346.
 _GENERIC_WEAPON_WORDS = frozenset({"weapon", "blade"})
+
+#: The same for a suit of armour or a shield, whose base word comes off
+#: `armour.type` rather than `Weapon.slug`. Counted the same way:
+#:
+#:     leading    armor 16   shield 8
+#:     trailing   armor 155  shield 37
+#:
+#: **Plural forms included here and not above.** The page files shields as
+#: `Light Shields`, so a name can end on the plural where no weapon name
+#: does; the substituted word is singular either way, because a character
+#: carries one. #346, #452.
+_GENERIC_ARMOUR_WORDS = frozenset({"armor", "armour", "shield", "shields"})
+
+#: Every word that can stand in for "whatever this is laid on".
+#:
+#: One set rather than one per category, and that is checked rather than
+#: assumed: **no item in a weapon category uses an armour word at either end
+#: of its name, and none in an armour or shield category uses a weapon
+#: word** -- 0 of 1,016, asserted by `drivers.item_base_name`. So the union
+#: cannot rename across categories, and the caller's `slug` is what decides
+#: which base is substituted anyway.
+_GENERIC_BASE_WORDS = _GENERIC_WEAPON_WORDS | _GENERIC_ARMOUR_WORDS
+
+#: Punctuation a printed name can end on, for the trailing-word test.
+#: `U+2019` is the typographic apostrophe the compendium prints, and it
+#: is written as an escape below because `ruff` refuses that character
+#: inline -- RUF001 in a string, RUF003 in a comment about the string.
+_TRAILING_PUNCTUATION = ",.'\u2019"
+
+
+def _titled(slug: str) -> str:
+    """A weapon's slug as a display word: `holy-symbol` -> `Holy Symbol`.
+
+    **Every word, not just the first.** The leading-word substitution used
+    to do `slug[:1].upper() + slug[1:]` on the already-dehyphenated string,
+    which reads `Holy symbol` for the 40 holy symbols and `Hand crossbow`
+    for the hand crossbows. Two of the base weapons a magic item is dealt on
+    are two words, so this was wrong more often than the single-word case
+    made it look.
+    """
+    return " ".join(w[:1].upper() + w[1:] for w in slug.replace("-", " ").split())
 
 
 def item_of(ref: str) -> str:
@@ -178,6 +235,48 @@ class Wire:
             return name
         return self.item(ref) if _ITEM_BLOCK.match(ref) else _plain(ref)
 
+    def in_text(self, text: str) -> str:
+        """Every ref inside a line of printed text, resolved to its name.
+
+        `Target(label=)`, `requires_text=` and `trigger=` are handed to the
+        page as **raw text**. So the `label=` convention -- the pool is
+        whoever holds the thing, the label is what the page prints instead
+        of the generic pool string -- worked for a line of ordinary rules
+        words and **broke for a line naming a ref**, which is what every
+        printed line naming a specific creature or item looks like in this
+        repository. `p16660`'s line is the case: "One x_m6564 or one
+        weapon".
+
+        **Resolved at display time and never written down, which is the
+        whole of why this is safe.** `show_names` is false when there is no
+        localisation, so the page then renders exactly the refs it rendered
+        before -- and a name has not entered a tracked file to get here.
+        The alternative anybody reaching for this would otherwise take is
+        spelling the name into the `label=`, which is `#447`'s **top row**:
+        text the page renders, shown to a player with no localisation. A
+        one-word ordinary name beside its own ref is also the case
+        `CLAUDE.md` records the tree-wide search as *not* catching, so there
+        would be no gate to catch it either.
+
+        **A ref with no name is left exactly as it was.** Not passed to
+        `_plain`, which prettifies and would turn an unresolvable ref into
+        something that reads like a name -- the status quo is the honest
+        answer for a ref nothing can resolve, and it keeps this change from
+        altering any line it cannot improve.
+
+        One mechanism over three fields rather than three fixes, because all
+        three reach `render` by the same raw route. #895.
+        """
+        if not text or not self.show_names:
+            return text
+        table = localisation()
+
+        def named(hit: re.Match[str]) -> str:
+            entry = table.get(hit.group(0)) or {}
+            return entry.get("name") or hit.group(0)
+
+        return _REF_IN_TEXT.sub(named, text)
+
     def item(self, ref: str, *, slug: str = "") -> str:
         """What to call a magic item's row: the **item's** name, not the block's.
 
@@ -202,17 +301,37 @@ class Wire:
           project's own ruling -- thirty weapon words are in
           `sanitise.RULES_TERMS` and none is in `names.json`.
 
-        **Only a leading generic word is replaced**, and that is the whole
-        rule. Of 403 items filed under a weapon category, 15 lead with one
-        ("Weapon of ..." 14, "Blade of ..." 1) and 387 do not. The 387 are not
-        this shape at all: "Bracers of ..." is what the thing *is*, not a
-        placeholder standing in for a type, and substituting into those would
-        rename them wrongly.
+        **A generic word is replaced at either end, and the trailing case is
+        the common one.** This used to replace only a *leading* word, on a
+        census that counted 15 of 403 and concluded the feature was those 15.
+        That census asked the wrong question: it sorted every other name into
+        "not this shape", which is right about `Bracers of ...` -- that is
+        what the thing *is* -- and wrong about a name whose generic word
+        **trails**. Re-measured across all 1,016 items in the four
+        categories:
 
-        Armour and shields are the other half of #346 and are **not** here:
-        there is no `armour` table, so no equivalent of `Weapon.slug` exists
-        to substitute, and shields print light/heavy/barbed which nothing
-        extracts. That half is ETL work and is the prerequisite.
+            leading     39     Weapon 15   Armor 16   Arms 8
+            trailing   397     Weapon 203  Armor 155  Arms 37  Implement 2
+            neither    580
+
+        and the trailing weapon words are only two, both singular, so there
+        is no plural to get wrong: `weapon` 186 and `blade` 17. Camille's
+        comment on #346 named both shapes -- *"I'm mostly seeing <weapon
+        name> of <enchantment> or <enchantment> <weapon>"* -- and only the
+        first was built, which is why 15 of 15 item rows on a dealt
+        character's power list still read "... Weapon".
+
+        **Bounded by `slug` rather than by the name.** The substitution
+        happens only when the caller found a base weapon this item was
+        actually laid on (`Weapon.item == owner`), so a name that merely ends
+        in a generic word is never rewritten for a character who is not
+        carrying it on a weapon.
+
+        Armour and shields are the other half of #346 and are **not** here --
+        155 + 37 of that trailing count is theirs. There is no `armour` table,
+        so no equivalent of `Weapon.slug` exists to substitute, and shields
+        print light/heavy/barbed which nothing extracts. That half is ETL
+        work, it is #452, and it is the prerequisite.
         """
         if not self.show_names:
             return ref
@@ -225,8 +344,14 @@ class Wire:
         if not slug:
             return name
         head, _, rest = name.partition(" ")
-        if head.lower() in _GENERIC_WEAPON_WORDS and rest:
-            return f"{slug[:1].upper()}{slug[1:]} {rest}"
+        if head.lower() in _GENERIC_BASE_WORDS and rest:
+            return f"{_titled(slug)} {rest}"
+        front, gap, tail = name.rpartition(" ")
+        # `strip` because a trailing word can carry punctuation, and the
+        # leading branch goes first so a name that is generic at both ends
+        # keeps its tail rather than being rewritten twice.
+        if gap and tail.strip(_TRAILING_PUNCTUATION).lower() in _GENERIC_BASE_WORDS:
+            return f"{front} {_titled(slug)}"
         return name
 
     def build(self, cls: str, leg: str) -> str:

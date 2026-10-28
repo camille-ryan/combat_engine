@@ -25,19 +25,19 @@ from combat_engine.engine import (
     ANY_CREATURE,
     AREA_OR_CLOSE,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
     INTERRUPT,
     MINOR,
     MOVE,
-    ONE_ALLY,
     PERSONAL,
     REF,
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     AreaBurst,
     AttackDeclared,
     Cast,
@@ -122,7 +122,7 @@ def p10373(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[*PRIMAL, Keyword.HEALING],
 )
 def p13528(c: Cast) -> None:
@@ -144,7 +144,7 @@ def p13528(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(3),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PRIMAL,
 )
 def p13529(c: Cast) -> None:
@@ -179,7 +179,7 @@ def p14515(c: Cast) -> None:
     usage=DAILY,
     action=MOVE,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p14516(c: Cast) -> None:
@@ -212,7 +212,7 @@ def p14516(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(1),
-    target=UpTo(2, "ally"),
+    target=UpTo(2, "team"),
     keywords=[*PRIMAL, Keyword.ELEMENTAL],
 )
 def p16123(c: Cast) -> None:
@@ -237,7 +237,7 @@ def p16123(c: Cast) -> None:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
     trigger="you or an ally within 10 squares of you is pulled, pushed, or slid",
     on=Trigger(
@@ -423,7 +423,7 @@ def p51(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[*PRIMAL, Keyword.POLYMORPH],
 )
 def p9666(c: Cast) -> None:

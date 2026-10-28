@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.armour import ARMOUR_SPEED
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -115,8 +116,6 @@ from combat_engine.engine.query import (
 SWAP = ("chargen.power_swap()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
-#: A class feature named in prose with no ref behind it.
-FEATURE = ("c.class_feature()",)
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
 #: The three racial powers of `r44`, which the page offers as a choice.
@@ -565,10 +564,9 @@ def f2944(c: Cast) -> None:
 
 
 @power("f2945", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.teleport(within=)",))
+       reach=PERSONAL, target=SELF)
 def f2945(c: Cast) -> None:
-    """The aiming is written; the teleport's leash is not.
+    """Both clauses are written.
 
     "Reach is header data the action menu reads before anything runs" was
     the hold, and #614 answered it: `c.reshape_area(optional=True)`
@@ -577,19 +575,39 @@ def f2945(c: Cast) -> None:
     it -- which is what "**instead of**" means on a card that also says
     "you can **choose**".
 
-    **The second clause is dropped and is a real gap.** "The square you
-    teleport into as part of this power must be within the area of the
-    burst" restricts a *destination set*, and `c.teleport` takes `to=`,
-    `toward=` and `away_from=` -- a named square, or a direction. Naming
-    one square would take the choice off the player, which is the whole
-    point of the clause being a restriction rather than an instruction, so
-    the honest shape is a set the decider picks from.
+    **The second clause landed with #884.** "The square you teleport into as
+    part of this power must be within the area of the burst" restricts a
+    *destination set*, and it is written in `p11052` -- per the
+    one-named-power convention -- gated on which aiming ran rather than on
+    holding this feat, because the reshape is `optional=True` and the
+    printed aiming restricts nothing.
 
-    `p11052` is where it would go, per the one-named-power convention: its
-    body teleports `max(1, speed // 2)` unconstrained, and the clause would
-    gate on `c.feat`. Marked rather than half-written, because a teleport
-    that ignores the leash is stronger than the card -- the feat buys reach
-    *and* would keep an unrestricted blink.
+    What the marker was waiting for was **not** the signature it named.
+    `c.area()` grew no `branch=`; it reads `c.branch`, which is the shape
+    the issue's own comment predicted and warned would leave this marker to
+    be cleared by hand. `blocked._params_ok` can only ask about a
+    signature, so nothing went red. #832.
+
+    **Re-pointed off `c.teleport(within=)`, and the note that carried it
+    was stale.** It said `c.teleport` takes `to=`, `toward=` and
+    `away_from=` -- a named square or a direction -- and concluded that
+    "the honest shape is a set the decider picks from" does not exist.
+    `into=` landed in #685 and is exactly that: a `Callable[[Square],
+    bool]` narrowing the destination list before the decider sees it. The
+    enumeration was true when written and nothing connected the two, which
+    is #832 and is what found this.
+
+    Naming **which** squares was #884, and it was two faults stacked rather
+    than a missing parameter: `c.area()` passed no branch, so it answered
+    for the printed close burst 1 whatever aiming ran, and `area_of`
+    resolved a branch through the header-only `Power.reach_of`, which
+    *clamps* an offered index. Both read one aiming while another was in
+    use, and `_aimed_shape` is now the one door that resolves it.
+
+    A `c.feat` gate could not have stood in, which is why this waited on
+    the engine rather than being written around: the reshape is
+    `optional=True`, so a character holding this feat may still aim the
+    printed burst, and the printed card restricts the teleport not at all.
 
     **Re-pointed off `c.recast(reach=)`, which was one symbol over two
     mechanisms.** This row rewrites a *named row's area* -- its size or
@@ -789,7 +807,8 @@ _granted("f3015", "f3015b")
 
 
 @power("f3015b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(10), target=Target("object", 1), dropped=("Scenery.kind",))
+       reach=Ranged(10), target=Target("object", 1),
+       dropped=("c.place_scenery(kind=)", "query.wearer_of()"))
 def f3015b(c: Cast) -> None:
     """Re-aimed. `Target("object")` is a real target line -- the pool is
     `query.scenery` and `query.targetable` lets a thing with no hit
@@ -799,8 +818,23 @@ def f3015b(c: Cast) -> None:
 
     The two branches under it are still named: a weapon whose attacks
     lose damage and armour whose wearer loses AC are both about which
-    *kind* of object this is, and `Scenery.kind` is a free word nothing
-    sets to either, with no tie from a worn thing back to its wearer."""
+    *kind* of object this is, with no tie from a worn thing back to its
+    wearer.
+
+    **Re-pointed off `Scenery.kind`, which exists.** `components.Scenery`
+    declares `kind: str = "object"`, so a marker naming the field reported
+    arrived the moment `blocked._surface` could resolve a bare class name
+    (#849) -- while the row is no better off, because **nothing in the tree
+    constructs a `Scenery` at all**: zero `Scenery(` call sites outside its
+    own definition. So the field is not the gap; a writer is, and that is
+    the same finding `c.scenery`'s own history records -- *"`c.scenery` was
+    never the gap: the gap is that nothing puts a piece of scenery on the
+    board"*.
+
+    Two symbols because the docstring names two gaps: nothing places an
+    object of a given kind, and nothing reads back from a worn thing to
+    whoever wears it. `Gear.worn` is that relation pointing the other way
+    -- a creature's items, not an item's creature."""
     c.vulnerable(c.level // 2 + c.int_mod, until=When.EONT)
 
 
@@ -985,7 +1019,7 @@ def f3046(c: Cast) -> None:
     def boosted(ev: Any) -> None:
         if getattr(ev, "by", "") != "cf:artificer-f0s0":
             return
-        if getattr(ev, "kind", "") != "attack":
+        if getattr(ev, "roll_kind", "") != "attack":
             return
 
         def landed(hit: Any) -> None:
@@ -1454,13 +1488,31 @@ def f3121(c: Cast) -> None:
 
 
 @power("f3122", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reroll_ones(group=)",))
+       reach=PERSONAL, target=SELF)
 def f3122(c: Cast) -> None:
-    """Axe is a real group, so the attack bonus plays. Rerolling a
-    damage die that came up 1 is read where the dice are rolled, and
-    `DamageRolled` carries a total with no dice behind it."""
+    """Axe is a real group, so the attack bonus plays. The reroll plays too:
+    the old note said the dice were unreachable, and `c.reroll_ones` is read
+    inside `_roll_damage` where they are in hand.
+
+    **`pick=1`, not the loop.** The card says "reroll **one** damage die
+    that results in a 1, but you must use the second result" -- one die, one
+    try, and a second 1 stands. `pick=0` is the stronger card, "until it
+    shows a different number", and would be a free upgrade.
+
+    **The gate is split in two and that is not a style choice.** The axe
+    half rides on `when=`, which reads live `Gear` and never touches the
+    context; the weapon half rides on `keyword=`, which the engine answers
+    off the row being rolled. It cannot be one `_weapon_attack` gate:
+    `_reroll_pick` asks the floor hold with `_reroll_ctx()` but asks the
+    **count** hold (`#n`) with no context at all, so a gate reading
+    `ctx["power"]` answers False there and the count comes back 0 -- which
+    `_roll_damage` reads as no clause. Measured over 600 rolls of 1d6 with
+    an axe in hand: this shape leaves 16 ones (one reroll of a 1 in 36, as
+    printed), the single-gate shape leaves 102, and so does a mace."""
     c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
             when=_weapon_attack(c, "axe"))
+    c.reroll_ones(pick=1, keyword=Keyword.WEAPON, on=c.me,
+                  until=When.ENCOUNTER, when=lambda ctx: _group(c, "axe"))
 
 
 @power("f3123", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1707,11 +1759,26 @@ def f3139(c: Cast) -> None:
 
 
 @power("f3140", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Gear.armour_speed",))
+       reach=PERSONAL, target=SELF)
 def f3140(c: Cast) -> None:
-    """Waives the speed penalty for heavy armour. `Gear` carries the
-    armour as a word and `Movement.speed` never looks at it, so there is
-    no penalty here to waive."""
+    """Waives the speed penalty for heavy armour.
+
+    **The old note said `Movement.speed` never looks at the armour, so
+    there was no penalty to waive. It is levied once, at build time:**
+    `chargen.spawn` writes `speed=speed + ARMOUR_SPEED.get(line.armour, 0)`,
+    so giving it back is a square of speed rather than a rule about armour.
+    `rt:r2-t3` is the same sentence and reads it the same way.
+
+    Read off `ARMOUR_SPEED` rather than off a hand-kept tuple of the heavy
+    weights, which is `rt:r2-t3`'s #713: only `chain`, `scale` and `plate`
+    carry the -1 there and those are exactly heavy armour, so the table is
+    the narrowing and a second list agreeing with it by hand is what got
+    chain wrong once already. Laid only when there is a penalty to undo, or
+    the same character in leather would walk a square too fast."""
+    gear = c.world.get(c.me, Gear)
+    cost = ARMOUR_SPEED.get(gear.armour, 0) if gear is not None else 0
+    if cost:
+        c.bonus("speed", -cost, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3141", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

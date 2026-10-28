@@ -37,6 +37,7 @@ from typing import Any
 from combat_engine.content.items.feet import _grabbing
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     CHA,
     DAILY,
     DEX,
@@ -70,19 +71,23 @@ from combat_engine.engine import (
     DamageApplied,
     DamageRolled,
     DamageType,
+    Defense,
     Dropped,
     Effect,
     EffectApplied,
     Forced,
     ForcedMove,
+    Gear,
     Healed,
     Hit,
     Keyword,
     Melee,
     Miss,
+    Mod,
     MoveStart,
     OpportunityWindow,
     Position,
+    PowerResolved,
     PowerUsed,
     Ranged,
     Relation,
@@ -205,6 +210,35 @@ def _swung_by(who: int):  # noqa: ANN202
 
 
 # -- predicates -------------------------------------------------------------
+
+
+def _provoked_by_a_ranged_power(ev: Any, cls: str = "") -> bool:
+    """Did a ranged or area row open the window this blow came through?
+
+    `ev.provoked_by` is the ref that provoked, attached by `resolve.attack`
+    and **empty when a move opened the window** -- which is the distinction
+    `opportunity` alone could not draw, and the reason two rows here had
+    their clause dropped. #880.
+
+    The shape is asked of the row rather than taken from the event, because
+    only the ctx carries `provoked_reach`; a trigger gets the ref and looks
+    it up, the way `powers/battlemind/level_2.py` already does.
+
+    `cls` narrows further for the row whose card names a class.
+    """
+    ref = str(getattr(ev, "provoked_by", "") or "")
+    if not ref:
+        return False
+    p = get(ref)
+    if p is None or (cls and p.cls != cls):
+        return False
+    kind = p.reach_of(getattr(ev, "branch", 0)).kind
+    return kind == "ranged" or kind in AREA_OR_CLOSE
+
+
+def _ranged_sorcery_provoked(world: World, me: int, ev: Any) -> bool:
+    """The trigger half of the above, for `i3085p1`'s printed class."""
+    return _provoked_by_a_ranged_power(ev, "sorcerer")
 
 
 def _crit_by_me(world: World, me: int, ev: Any) -> bool:
@@ -1088,19 +1122,36 @@ def i2011p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.provoked_by()",),
+    dropped=("resolve.ctx.provoked_weapon",),
 )
 def i2060x1(c: Cast) -> None:
-    """The attack context carries `opportunity`, so the defence gate is
-    exact; what it cannot say is *what* provoked the opening, so the bonus
-    also applies to an opportunity attack your walking away provoked."""
+    """The openings a *move* gives no longer pay. `ctx["provoked_reach"]`
+    is the provoking row's shape, so "provoked by making a ranged attack"
+    is exact and walking away -- which carries no provoking row at all --
+    is excluded by construction. #880.
+
+    **Still dropped, and the remaining half is narrower than it was**:
+    "with **this weapon**". The window knows the provoking *ref* and
+    nothing knows the weapon yet, because the weapon of record is a
+    parameter to `resolve.attack` and is decided when the attack rolls --
+    strictly later than the moment a ranged power's use opens the window.
+    So the residue is an opportunity attack provoked by a ranged attack
+    made with a *different* weapon, where it used to be any opportunity
+    attack at all.
+    """
+    def provoked_by_a_ranged_attack(ctx: dict[str, Any]) -> bool:
+        if not ctx.get("opportunity"):
+            return False
+        shape = ctx.get("provoked_reach", "")
+        return shape == "ranged" or shape in AREA_OR_CLOSE
+
     c.bonus(
         AC,
         2,
         kind="item",
         on=c.me,
         until=When.ENCOUNTER,
-        when=lambda ctx: bool(ctx.get("opportunity")),
+        when=provoked_by_a_ranged_attack,
     )
 
 
@@ -1358,13 +1409,29 @@ def i2744p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an attack using this weapon",
     on=Trigger(Hit, by_me, "you hit an enemy with this weapon"),
-    todo=("c.reroll_attacks_against()",),
 )
 def i2821p1(c: Cast) -> None:
     """A standing "roll twice and use either" against one creature.
-    `c.reroll_attack` rerolls the attack being answered and `c.grants_advantage`
-    is a flat +2 -- neither is this, and substituting one would be a
-    different number in every fight."""
+
+    `c.reroll_attack(ev=)` is the shape: the premise this row rested on --
+    that the verb only mends the roll being answered -- is retired by that
+    parameter, and the verb is attacker-agnostic (it re-totals the
+    modifiers for `ctx["attacker"]`), so an ally's roll is mended with the
+    ally's numbers. `keep="best"` is *"use either result"*, which is the
+    holder picking, and not `"new"`.
+
+    No `once=`: the card puts no limit on how many of those rolls get the
+    second die, only a window and a victim."""
+    foe = c.target
+
+    def twice(ev: AttackRolled) -> None:
+        if getattr(ev, "target", None) != foe:
+            return
+        if getattr(ev, "attacker", None) not in {c.me, *c.allies()}:
+            return
+        c.reroll_attack(ev=ev, keep="best")
+
+    c.watch(AttackRolled, twice, until=When.EONT)
 
 
 @power(
@@ -1783,12 +1850,23 @@ def i3558p1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
-    dropped=("c.aegis()",),
+    dropped=("chargen.feature_choice()",),
 )
 def i457p1(c: Cast) -> None:
-    """Treating the mark as a particular class feature's mark cannot be
-    said: a mark is a relation and carries no flavour of which row laid
-    it."""
+    """Re-pointed, because the gap it named was not the one holding it.
+
+    "A mark carries no flavour of which row laid it" was true and is fixed:
+    `Relations` records the laying ref and `c.marked(via=)` asks for it
+    (#875). That is not enough for this card, which says *"treat each mark
+    as if you applied it with your **chosen** aegis"* -- and the three
+    aegises are sub-options of `cf:swordmage-f1` (`s0`, `s1`, `s2`, naming
+    `p3322`, `p5736` and `p3323`), so laying the mark as the right one
+    needs to know which the swordmage picked. Nothing records a
+    class-feature sub-choice, which is the symbol this now waits on along
+    with four other rows.
+
+    `c.aegis()` was a verb name for neither half, which is why it went.
+    The mark itself lands, so this stays `dropped=` rather than `todo=`."""
     c.mark(until=When.SAVE_ENDS)
 
 
@@ -2794,13 +2872,34 @@ def i2853p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.THUNDER],
-    todo=("c.becomes_burst()",),
 )
 def i2878p1(c: Cast) -> None:
     """The same card as `i1300p1` a level up, against Fortitude and with
-    the weapon's own damage rather than an ongoing burn. Re-pointed with
-    it: see that row for why `c.next_attack_becomes()` was two mechanisms
-    and this is the other one. #712."""
+    the weapon's own damage rather than an ongoing burn. Written with it:
+    see that row for why `c.next_attack_becomes()` was two mechanisms and
+    this is the other one.
+
+    **"Thunder damage equal to the normal damage" is a replacement and not
+    a retype**, which is why it goes through `damage=` rather than
+    `c.deals(dtypes=)`. The two read the same on this card and would come
+    apart on the next: a retype standing on the creature would also colour
+    the *next* basic attack, and the hold here is spent by this one.
+
+    The recipe is `_ranged_basic`'s own -- `c.w(1)` and `c.attack_mod`, read
+    off the `Cast` of the attack being made rather than off this row's, so
+    it follows whichever ability the weapon in hand resolved to and
+    whichever weapon that is. Writing the numbers here would have frozen
+    both at the moment the daily was spent.
+
+    The burst stays 1: `burst 2` is Level 14 and `burst 3` is Level 24,
+    which is out of band. #712."""
+    c.becomes_burst(
+        1,
+        vs=Defense.FORT,
+        damage=lambda using: using.damage(
+            using.w(1), using.attack_mod, dtype=DamageType.THUNDER
+        ),
+    )
 
 
 @power(
@@ -4352,15 +4451,24 @@ def i3056p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="an enemy hits you with an opportunity attack",
     on=Trigger(
-        Hit, both(targets_me, by_opportunity), "an opportunity attack hits you"
+        Hit,
+        both(targets_me, by_opportunity, _ranged_sorcery_provoked),
+        "an opportunity attack provoked by a ranged or area power hits you",
     ),
-    dropped=("query.provoked_by()",),
+    dropped=("resolve.ctx.provoked_weapon",),
 )
 def i3085p1(c: Cast) -> None:
-    """Which class the provoking row belonged to is `get(ref).cls` and would
-    be askable; *what provoked the opening* is not, and the `Hit` the row
-    answers names only the swing that came back. So any opportunity attack
-    that lands on the wielder arms it."""
+    """The `Hit` named only the swing that came back; it carries
+    `provoked_by` now, so the printed Trigger's two askable halves are
+    asked: the opening was given by a ranged or area row, and that row
+    belongs to the class the card names. #880.
+
+    **Still dropped**: "through **this** item". The weapon of record is a
+    parameter to `resolve.attack`, decided when the attack rolls, which is
+    later than the use that opened the window -- so nothing knows which
+    implement the provoking power went through. The residue is the same
+    ranged power used through a different one.
+    """
     c.flat(5)
 
 
@@ -4891,17 +4999,35 @@ def i1566p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonus(compute=)",),
 )
 def i1623p1(c: Cast) -> None:
-    """The card counts the enemies afresh at each swing; a modifier carries
-    a fixed number or a die expression and nothing else, so the count is
-    taken once when the minor action is spent."""
-    c.bonus(
-        "damage",
-        len(c.within(1, side="enemy")),
-        on=c.me,
-        until=When.EOT,
+    """**Re-pointed: `Mod.roll` already counts afresh at each read.** The
+    old note said a modifier carries a fixed number or a die expression and
+    nothing else, so the count had to be taken once when the minor action
+    was spent. `Mod.roll` is a callable consulted inside `Mod.amount`, and
+    both `Mods.total` and `Mods.split` read through that -- so it is called
+    once per time the modifier is read, which is once per roll, and a crowd
+    that changes between swings is counted at each one.
+
+    `c.bonus` only reaches `roll` through a dice string, which cannot say
+    "count the enemies". A body may build its own `Mod` and hand it to
+    `effects.apply(mods=)` instead; `features/sorcerer.py` does exactly this
+    for the same printed shape ("a bonus equal to the number of conscious
+    enemies adjacent to you") and nothing on `Cast` was in the way.
+
+    Untyped and `value=0`: the whole number comes out of `roll`."""
+    me = c.me
+
+    def crowd() -> int:
+        return len(c.within(1, side="enemy"))
+
+    c.world.effects.apply(
+        me,
+        me,
+        When.EOT,
+        label=c.ref,
+        by=c.ref,
+        mods=[(me, Mod(what="damage", value=0, label=c.ref, roll=crowd))],
     )
 
 
@@ -5097,6 +5223,67 @@ def i2981x1(c: Cast) -> None:
     c.watch(Hit, landed, until=When.ENCOUNTER)
 
 
+def _hit_twice(world: World, ev: Any) -> int | None:
+    """The one creature a finished use hit with two separate attacks.
+
+    **Not off `PowerResolved.rolls`**, which is the obvious reading and is
+    blind to exactly this question: `dsl.use` appends one roll per
+    *target* after the body has run, so two swings into one creature leave
+    one roll behind and the first is gone. Measured -- a single-target p87
+    resolves with one roll and two `Hit`s.
+
+    The swings are on the bus, so the use's own span of the log answers
+    it: back to the `PowerUsed` that opened the use, which is announced
+    before the body. A row cannot nest inside itself
+    (`dsl._IN_FLIGHT`), so the first one found walking back is this use's.
+
+    The property beside this tallies hits by hand across `Hit`s and a
+    turn, which is the same conclusion reached from the other end -- but
+    a declared trigger has no trait to keep a tally in, and this needs
+    none.
+    """
+    seen: list[int] = []
+    for past in reversed(world.bus.log[:ev.seq]):
+        same = getattr(past, "power", "") == ev.power
+        if past.kind == "PowerUsed" and same and past.actor == ev.actor:
+            break
+        if past.kind == "Hit" and same and past.attacker == ev.actor:
+            if past.target in seen:
+                return past.target
+            seen.append(past.target)
+    return None
+
+
+def _two_melee_in_hand(world: World, eid: int) -> bool:
+    """"A power that requires two melee weapons", asked of the character.
+
+    Nothing on a row says what its weapon requirement *is* -- `requires`
+    is a callable and `requires_text` is prose -- so the printed condition
+    is read off the hands instead. A melee weapon is one that is not
+    fired, which is how every ranger row counting the pair reads it, and
+    `Gear.held` is what is in hand rather than what is on the belt.
+
+    The two questions part company only for a row that *permits* the pair
+    without requiring it, and a character holding two melee weapons
+    cannot have taken such a row's ranged leg: a bow takes both hands.
+    """
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return False
+    return len([w for w in gear.held if w.ranged is None]) >= 2
+
+
+def _ranger_pair_twice(world: World, me: int, ev: Any) -> bool:
+    if ev.actor != me or not _two_melee_in_hand(world, me):
+        return False
+    row = get(ev.power or "")
+    return (
+        row is not None
+        and row.cls == "ranger"
+        and _hit_twice(world, ev) is not None
+    )
+
+
 @power(
     "i2981p1",
     level=7,
@@ -5105,12 +5292,24 @@ def i2981x1(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    todo=("c.hit_twice()",),
+    trigger="you hit one target twice with a ranger power needing two "
+            "melee weapons",
+    on=Trigger(PowerResolved, _ranger_pair_twice,
+               "you hit one target twice with that power"),
 )
 def i2981p1(c: Cast) -> None:
-    """The class half is `get(ref).cls`; what cannot be *declared* is the
-    second hit, because a `Trigger` predicate is handed one event and no
-    history, and a daily has no trait to keep the tally in."""
+    """The class half is `get(ref).cls`. The second hit **is** declarable:
+    the old note said a `Trigger` predicate is handed one event and no
+    history, and the history is in the bus log -- `PowerResolved` is
+    emitted once the use is over, so the whole use is behind it. See
+    `_hit_twice`, which does not trust that event's own `rolls`.
+
+    "Grants combat advantage" with nobody named is the whole side, which
+    is `to="team"`.
+    """
+    foe = _hit_twice(c.world, c.trigger)
+    if foe is not None:
+        c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="team")
 
 
 @power(
@@ -5923,7 +6122,7 @@ def i2359x1(c: Cast) -> None:
     usage=DAILY,
     action=MOVE,
     reach=CloseBurst(5),
-    target=Target(side="ally", count=2),
+    target=Target(side="team", count=2),
     keywords=[Keyword.TELEPORTATION],
 )
 def i2359p1(c: Cast) -> None:

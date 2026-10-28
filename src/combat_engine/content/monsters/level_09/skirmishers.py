@@ -75,8 +75,8 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REACTION,
     REF,
@@ -409,12 +409,14 @@ _M147_LAPSED = "m147a0 lapsed"
 def m147a0(c: Cast) -> None:
     """An odd die goes through the image; an even one finds the beast.
 
-    The `Hit` is answered in its interrupt window and the *result* is
-    cleared rather than the event cancelled: `resolve.attack` reads
-    `result.hit` back in the resolve callback and emits a `Miss` in the
-    `Hit`'s place when the two disagree, so every rider hung on the hit goes
-    with it. Cancelling the event by hand stops the announcement and leaves
-    the attack still saying it landed.
+    `c.hit_becomes(False)` in the `Hit`'s interrupt window, which is the
+    door for this: it clears the *result* rather than cancelling the event,
+    because `resolve.attack` reads `result.hit` back in the resolve callback
+    and emits a `Miss` in the `Hit`'s place when the two disagree, so every
+    rider hung on the hit goes with it. Cancelling the event by hand stops
+    the announcement and leaves the attack still saying it landed.
+
+    The write was hand-rolled here and announced nothing. #862.
 
     "A melee or a ranged attack" is those two range kinds and no others --
     `by_melee` counts a close burst as melee, which is right for the rows it
@@ -429,7 +431,7 @@ def m147a0(c: Cast) -> None:
         if result is None or _holding_label(c, _M147_LAPSED):
             return
         if result.natural % 2:
-            result.hit = False
+            c.hit_becomes(False, ev=ev)
         else:
             c.effect(_M147_LAPSED, until=When.SONT, on=me)
 
@@ -1309,7 +1311,7 @@ def m461a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.HEALING],
 )
 def m461a2(c: Cast) -> None:

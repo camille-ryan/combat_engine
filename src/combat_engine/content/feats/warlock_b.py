@@ -91,9 +91,6 @@ SHADOW = "cf:warlock-f3"
 #: neither the at-will nor the boon it gates can tell which one it is.
 #: `cf:warlock-f1s6` and its two cards carry the same symbol.
 VESTIGE = ("c.active_vestige()",)
-#: A class feature named in prose with no ref -- the vestiges, which are
-#: a whole subsystem the engine has never heard of.
-FEATURE = ("c.class_feature()",)
 #: "Instead of": a printed swap for half of what a class feature does
 #: inside its own body. Declining that half is the operation nothing has.
 INSTEAD = ("c.pre_empt(ref, clause)",)
@@ -723,7 +720,7 @@ def f1358(c: Cast) -> None:
 
 
 @power("f2759", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("warlock.boon_instead_of()",))
+       reach=PERSONAL, target=SELF, todo=("warlock.pay_boon()",))
 def f2759(c: Cast) -> None:
     """Takes the boon early, when a cursed enemy is first bloodied,
     and pays for it with the curse.
@@ -735,37 +732,28 @@ def f2759(c: Cast) -> None:
     (the curse is a labelled hold `Effects.end` would lift); the thing
     bought is not.
 
-    **The gap is a door in the boon's own body, not a missing mechanism,
-    and the old symbol said otherwise.** "Nothing models the boon" is
-    false. The boons are declared: `cf:warlock-f1`'s own watch pays three
-    legs inline, `cf:warlock-f1s4` pays a fourth, `cf:warlock-f1c10` is the
-    star pact's card and `p16254` the remaining leg's.
+    **Re-pointed off `warlock.boon_instead_of()`, which was two gaps under
+    one symbol.** That door landed -- each payout now offers itself as the
+    clause `features.warlock.BOON` and `f3444` trades the boon away through
+    it -- and it does nothing for this row. A substitution replaces a
+    payout that is *already firing*; this card asks for the payout to fire
+    from an event of its own, which is the opposite direction and needs no
+    `c.pre_empt` anywhere in it.
 
-    What is missing is that **none of those payouts asks**.
-    `c.pre_empt(ref, what, clause)` is the registration and this row is one
-    of its callers; the read has to happen where the boon is paid.
-    `c.instead_of` cannot do it there -- it needs a non-zero `c.variant`,
-    which `dsl.use` settles from a chosen menu entry, and three of these
-    legs pay inside a `c.watch` callback where `variant` is 0 for ever.
+    So: **the boon's payout has to be callable.** Three of the five refs in
+    `features.warlock.BOONS` are rows (`c.use_power` would reach those),
+    but `cf:warlock-f1` pays its three legs inline inside the watcher it
+    installs, so using that row again installs a second watcher and pays
+    nothing. A helper in `features/warlock.py` that pays whichever leg the
+    character took is what both rows waiting on this want, and it cannot
+    be written from here: `features/strikers.py` and
+    `powers/warlock/pacts.py` hold the payouts it would have to reach.
 
-    `c.instead_of_now` is written for exactly that shape and says so: *"for
-    a clause that fires inside a watcher the row installed itself rather
-    than from a body the menu reached"*, with the invoker's covenant
-    manifestation as its worked case. It settles the objection too -- a
-    question inside a watcher is invisible to `policy/`, which is
-    acceptable **because a boon is a passive**: the AI never chose the
-    bargain and cannot be asked to weigh it differently.
+    `todo=` rather than `dropped=`: writing only the price -- removing the
+    curse -- would make the row strictly worse than not having it.
 
-    `cf:warlock-f1c10` is the one exception and takes plain
-    `c.instead_of`, because it carries a declared trigger and so is offered
-    by the dispatcher -- the distinction that verb's own docstring draws
-    with `rt:r24-t0`.
-
-    So the symbol names a content door in `features/warlock.py` rather than
-    a `Cast` verb, because that is where the work is. #551's verdict, read
-    down to the mechanism. #641.
-
-    `i698x1` and `i2305p1` are the same gap and carry the same symbol.
+    `i698x1` is the same gap and carries the same symbol. `i2305p1` is a
+    third thing again and carries `c.decline_boon()`. #641.
     """
 
 
@@ -977,7 +965,7 @@ def f2194(c: Cast) -> None:
 
 @power("f2195", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("DamageApplied.from_attack",))
+       )
 def f2195(c: Cast) -> None:
     """A second creature burns whenever a named row's fire lands.
 
@@ -986,23 +974,33 @@ def f2195(c: Cast) -> None:
     ordinary watch. `c.flat` here carries this feat's own ref, so the
     splash cannot feed itself.
 
-    "Because you took damage" is dropped. That row pays twice -- once on
-    the hit and once more when the warlock is hurt -- and both arrive as
-    the same event with the same `detail`. Nothing on `DamageApplied`
-    says which half of a row dealt it, so the splash also fires on the
-    first payment, which is one extra 5 fire damage per use.
+    **"Because you took damage" is written now.** That row pays twice --
+    once on the hit and once more when the warlock is hurt -- and both
+    used to arrive as the same event with the same `detail`, so the splash
+    fired on the first payment too: one extra 5 fire damage per use.
 
-    Re-read and still dropped. `from_attack` is an **argument** to
-    `resolve.deal_damage` and is not a field on the event it emits, so
-    there is nothing for a content row to read; i1826x1 holds the same
-    marker for the same two blows. This is a one-field widening of
-    `DamageApplied`, not a row that can be written today.
+    **`c.by_attack()` is the fact, and it is not `from_attack`.** That flag
+    means "offered damage modifiers": it is `True` by default and only
+    `Cast.absorb` and `falling` pass `False`, so a trait's payout and an
+    ongoing tick both arrive with it set. Widening the event with it would
+    have exposed a field true for almost every blow in the game. #731.
+
+    `p1458` deals its hit with `c.damage` and its rebound with `c.flat`,
+    and `c.by_attack()` is False for the second -- which is why `c.flat`
+    does **not** claim its cast's attack even inside an attack body. The
+    rebound runs from a `c.watch` closure that captured the same `Cast`,
+    so reading `self.result` there would have answered True for both
+    blows and told these two rows apart not at all.
+
+    `i1826x1` is the item side of the same pair and closes with it.
     """
     me = c.me
 
     def splash(ev: DamageApplied) -> None:
         if ev.source != me or ev.detail != "p1458" or ev.amount <= 0:
             return
+        if c.by_attack(ev=ev):
+            return      # the hit itself, not the "because you took damage" half
         pool = [
             foe for foe in c.within(5, of=ev.target, side="enemy")
             if foe != ev.target

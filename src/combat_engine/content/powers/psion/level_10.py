@@ -7,7 +7,6 @@ from typing import Any
 from combat_engine.engine import (
     AREA_OR_CLOSE,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     MINOR,
     MOVE,
@@ -15,6 +14,7 @@ from combat_engine.engine import (
     ONE_CREATURE,
     PERSONAL,
     SELF,
+    YOU_AND_EACH_ALLY,
     ActionType,
     Cast,
     CloseBurst,
@@ -82,7 +82,7 @@ def p11324(c: Cast) -> None:
     usage=DAILY,
     action=MOVE,
     reach=CloseBurst(3),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.PSIONIC, Keyword.TELEPORTATION],
 )
 def p13342(c: Cast) -> None:

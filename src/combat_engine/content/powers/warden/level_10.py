@@ -44,7 +44,7 @@ def _ally_hurt_nearby(world: World, me: int, ev: DamageRolled) -> bool:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PRIMAL, Keyword.ILLUSION, Keyword.TELEPORTATION],
 )
 def p13605(c: Cast) -> None:
@@ -138,7 +138,7 @@ def p9866(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PRIMAL,
 )
 def p9867(c: Cast) -> None:

@@ -292,6 +292,7 @@ def p6994(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.DIVINE],
+    dropped=('When.TEMP_HP_GONE',),
 )
 def p6995(c: Cast) -> None:
     """The concealment has no expression -- the engine keeps no such state
@@ -299,4 +300,4 @@ def p6995(c: Cast) -> None:
     points is gone. The temporary hit points are the half that is sayable.
     """
     c.temp_hp(5 + c.level, on=c.me)
-    c.note(f"{c.ref}: you also have concealment while those last, and there is none here")
+    c.note(f"{c.ref}: the concealment should last exactly as long as the temporary hit points")

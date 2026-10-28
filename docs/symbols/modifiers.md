@@ -31,6 +31,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - A negative modifier. **It takes no `kind`, and that is the rule.**
 - `c.rolls_with(self, ref: 'str', ability: 'Ability', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[Any, int], bool] | None' = None) -> 'Effect | None'`
   - Make a named row attack with a different ability.
+- `c.settle_attack(self, *, ev: 'Any' = None) -> 'bool'`
+  - Judge the attack again from the numbers as they now stand.
 - `c.shield_bonus(self, *, of: 'int | None' = None) -> 'int'`
   - What this creature's shield adds to AC and Reflex. 0 for none.
 - `c.treat_roll_as(self, parity: 'str', *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
@@ -40,12 +42,16 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
 
 ## rerolls
 
+- `c.replace_roll(self, face: 'int', *, kind: 'str' = '', ev: 'Any' = None) -> 'bool'`
+  - Use a number you already have **instead of** the one that was
 - `c.reroll_attack(self, *, keep: 'str' = 'new', bonus: 'int' = 0, ev: 'Any' = None) -> 'bool'`
   - Make an attack roll again. `keep` is new, best or worst.
 - `c.reroll_check(self, *, keep: 'str' = 'new', bonus: 'int' = 0, ev: 'Any' = None) -> 'int'`
   - Roll a skill check again. `keep` is new, best or worst.
 - `c.reroll_damage(self, *, keyword: 'Keyword | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Roll the damage twice and use the higher result."
+- `c.reroll_faces(self, *, ev: 'Any' = None, pick: 'int' = 1, below: 'int' = 0) -> 'int'`
+  - Reroll faces of a damage roll **already made**, keeping the second
 - `c.reroll_initiative(self, *, on: 'int | None' = None) -> 'int'`
   - Take a new initiative check and move in the order. Returns the roll.
 - `c.reroll_ones(self, *, below: 'int' = 2, pick: 'int' = 0, keyword: 'Keyword | None' = None, ref: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
@@ -88,7 +94,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - The target grants combat advantage -- to you, an ally, or your side.
 - `c.had_advantage(self, ev: 'Any' = None) -> 'bool'`
   - Did *that* attack have combat advantage? Reads the event.
-- `c.hide(self, *, from_: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.hide(self, *, from_: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, check: 'bool' = False) -> 'Effect | None'`
   - Go unseen, and stay that way until something gives you away.
 - `c.ignore_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, once: 'bool' = False, concealment_only: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "You ignore cover and concealment when attacking."
@@ -102,6 +108,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "The target does not benefit from cover or concealment."
 - `c.no_invisibility(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "The target cannot benefit from invisibility."
+- `c.no_invisibility_in(self, zone: 'int', *, side: 'str' = 'any') -> 'None'`
+  - "Creatures in the zone cannot benefit from invisibility."
 - `c.unhide(self) -> 'None'`
   - Give yourself away deliberately.
 
@@ -124,16 +132,24 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You can use a warhammer with any power that requires a light blade."
 - `c.counts_as_keyword(self, ref: 'str', keyword: 'Keyword', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Your <row> is considered an arcane attack power."
-- `c.forbid(self, ref: 'str' = '', *, keyword: 'Keyword | None' = None, lacking: 'Keyword | None' = None, usage: 'Usage | Sequence[Usage] | None' = None, only: 'str | Sequence[str]' = (), attacks_only: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
+- `c.forbid(self, ref: 'str' = '', *, keyword: 'Keyword | None' = None, lacking: 'Keyword | None' = None, usage: 'Usage | Sequence[Usage] | None' = None, only: 'str | Sequence[str]' = (), attacks_only: 'bool' = False, ran_out: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - Take a row away for a while. "Loses the ability to use ..."
-- `c.gains_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, on: 'int | None' = None) -> 'int'`
+- `c.forgo_second_wind_heal(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You can choose to regain no hit points" from your second wind.
+- `c.gains_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, mine: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Lay a printed weapon property on that creature's weapons. Returns how many.
+- `c.loses_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, on: 'int | None' = None) -> 'int'`
+  - Take a weapon property back off. Returns how many weapons changed.
 - `c.no_basic(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Take away what this creature's basic attack *is*, not the ability.
+- `c.no_coup_de_grace(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - "Enemies cannot perform a coup de grace against you." A standing
 - `c.no_healing(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "The creature cannot heal."
 - `c.no_provoke(self, *, from_: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.EOTNT: "end of target's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Walking away from that creature does not give it an opening.
+- `c.no_run(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
+  - "It cannot run." The walk is left alone.
 - `c.no_surges(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "The target cannot spend healing surges."
 - `c.waive(self, condition: 'Condition', *what: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

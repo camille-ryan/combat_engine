@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from .components import Powers
@@ -146,6 +147,46 @@ def _shrugging(ev: Event, eid: int) -> Condition | None:
     return None
 
 
+@cache
+def _watched(_rows: int) -> dict[type[Event], set[Window]]:
+    """Every event class a declared row triggers off, and in which windows.
+
+    **Keyed on `len(REGISTRY)` rather than on nothing**, so a row declared
+    after the first call invalidates this instead of being silently missed.
+    Rows are only ever added -- `dsl.power` raises on a duplicate ref -- so
+    the count is a sufficient witness that the answer could have moved.
+
+    `Triggers.arm`'s own docstring is the justification: the set is fixed once
+    content has imported, and it was being rebuilt from a 23,060-row walk on
+    every `Encounter.start()`.
+    """
+    from .dsl import REGISTRY
+
+    watched: dict[type[Event], set[Window]] = {}
+    for p in REGISTRY.values():
+        window = WINDOW_OF.get(p.action)
+        if window is None:
+            continue
+        for trig in p.triggers:
+            watched.setdefault(trig.event, set()).add(trig.window or window)
+    return watched
+
+
+@cache
+def _recharge_events(_rows: int) -> tuple[type[Event], ...]:
+    """Every event class a printed recharge condition names. See `_watched`.
+
+    Sorted by name so the subscription order is stable between runs, which it
+    has to be: `Bus.on` appends, and a replay compares logs by index.
+    """
+    from .dsl import REGISTRY
+
+    return tuple(sorted(
+        {t.event for p in REGISTRY.values() for t in p.recharges},
+        key=lambda e: e.__name__,
+    ))
+
+
 @dataclass
 class Triggers:
     """The dispatcher. One per encounter; owned by it."""
@@ -161,18 +202,16 @@ class Triggers:
         watched classes is fixed at import time and is small, and a listener
         that walks the creatures is cheaper than a subscription per creature
         per row -- of which a fight would hold several hundred.
+
+        **The registry walk is memoised, because "fixed at import time" above
+        is the whole argument for doing it.** This ran twice over all 23,060
+        declared rows on *every* `Encounter.start()` -- so once per board, and
+        a row that never fires builds 48 boards. Measured at 8ms of self time
+        a call, 144 calls over three silent rows.
         """
         from .dsl import REGISTRY
 
-        watched: dict[type[Event], set[Window]] = {}
-        for p in REGISTRY.values():
-            window = WINDOW_OF.get(p.action)
-            if window is None:
-                continue
-            for trig in p.triggers:
-                watched.setdefault(trig.event, set()).add(trig.window or window)
-
-        for etype, windows in watched.items():
+        for etype, windows in _watched(len(REGISTRY)).items():
             for window in sorted(windows, key=lambda w: w.name):
                 self._subs.append(
                     self.world.bus.on(
@@ -192,10 +231,7 @@ class Triggers:
         # without running the row, and it has to be disarmed again. Asking
         # "is this ref spent?" at the moment the event fires needs no state at
         # all and cannot leak a watcher. #449.
-        for etype in sorted(
-            {t.event for p in REGISTRY.values() for t in p.recharges},
-            key=lambda e: e.__name__,
-        ):
+        for etype in _recharge_events(len(REGISTRY)):
             self._subs.append(self.world.bus.on(etype, self._recharge))
 
     def _recharge(self, ev: Event) -> None:
@@ -387,7 +423,7 @@ class Triggers:
             who = getattr(ev, "attacker", None) or getattr(ev, "actor", None)
             if who == eid:
                 who = getattr(ev, "target", None)
-        elif side in ("ally", "other_ally", "any", "other"):
+        elif side in ("ally", "any", "other"):
             who = getattr(ev, "target", None) or getattr(ev, "actor", None)
         else:
             return None
@@ -669,6 +705,49 @@ def _power_of(ev: Event):  # noqa: ANN202
     return get(getattr(ev, "power", "") or getattr(ev, "detail", "") or "")
 
 
+def _attacker_of(ev: Event) -> int | None:
+    """Who made the attack, whichever field the event keeps it in.
+
+    The companion of `_power_of` and the same split: an attack event spells
+    it `attacker` (`AttackRolled`, `Hit`, `Miss`), a damage or drop event
+    spells it `source` (`DamageRolled`, `DamageApplied`, `Bloodied`,
+    `Dropped`). `source` is nullable and is `None` for ongoing damage, a
+    failed death save, and anything else with no attacker -- which the
+    three readers below treat as "fall back to the print", the same answer
+    they give when `_power_of` finds no row.
+
+    **Needed because the reach is per-creature and the creature is not the
+    subscriber.** `by_melee` and friends are handed `me`, which is whoever
+    is *watching* -- usually the victim. Reading the reshape off `me` would
+    be the wrong creature's and worse than reading the header. #898.
+    """
+    who = getattr(ev, "attacker", None)
+    return who if who is not None else getattr(ev, "source", None)
+
+
+def _reach_as_made(world: World, ev: Event, p: Any) -> Any:
+    """The shape the attack was **made** with, not the one it prints.
+
+    `dsl.reach_of`'s rule is that every reader holding a world and an actor
+    comes through it, because a replacing reshape can change the `kind`
+    itself -- `i2467p1` prints "its area changed to 1 square", so a card's
+    printed `area_burst` is a `close_burst` in that creature's hands. #894
+    fixed five sites in `dsl.py` on exactly this and these three were a
+    sixth, seventh and eighth, in another module and so outside its sweep.
+
+    Falls back to the print when the event names no attacker, which is the
+    honest answer rather than a guess: with nobody to read a reshape off,
+    the card is all there is.
+    """
+    from .dsl import reach_of
+
+    who = _attacker_of(ev)
+    branch = getattr(ev, "branch", 0)
+    if who is None:
+        return p.reach_of(branch)
+    return reach_of(world, who, p, branch)
+
+
 def by_melee(world: World, me: int, ev: Event) -> bool:
     """Was the attack that caused this a melee one?
 
@@ -680,7 +759,7 @@ def by_melee(world: World, me: int, ev: Event) -> bool:
     p = _power_of(ev)
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind in (
+    return _reach_as_made(world, ev, p).kind in (
         "melee", "close_burst", "close_blast",
     )
 
@@ -707,15 +786,24 @@ def by_melee_only(world: World, me: int, ev: Event) -> bool:
     p = _power_of(ev)
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind == "melee"
+    return _reach_as_made(world, ev, p).kind == "melee"
 
 
 def by_ranged(world: World, me: int, ev: Event) -> bool:
+    """Was it a **ranged or area** attack? "A ranged attack damages you."
 
+    The only member of this family that had no docstring at all, which is
+    some part of why it was the one nobody checked -- #898 found it and its
+    two siblings reading the printed reach with a world in hand.
+
+    `ranged` and `area_burst` together, because the printed clauses this
+    serves name both and no card in the tier separates them. 56 rows carry
+    it.
+    """
     p = _power_of(ev)
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind in ("ranged", "area_burst")
+    return _reach_as_made(world, ev, p).kind in ("ranged", "area_burst")
 
 
 def by_opportunity(world: World, me: int, ev: Event) -> bool:
@@ -989,7 +1077,7 @@ def both(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int, 
     def check(world: World, me: int, ev: Event) -> bool:
         return all(c(world, me, ev) for c in checks)
 
-    check.parts = checks  # type: ignore[attr-defined]
+    check.parts = checks  # ty: ignore[unresolved-attribute]
     return check
 
 
@@ -1000,7 +1088,7 @@ def either(*checks: Callable[[World, int, Event], bool]) -> Callable[[World, int
     def check(world: World, me: int, ev: Event) -> bool:
         return any(c(world, me, ev) for c in checks)
 
-    check.parts = checks  # type: ignore[attr-defined]
+    check.parts = checks  # ty: ignore[unresolved-attribute]
     return check
 
 

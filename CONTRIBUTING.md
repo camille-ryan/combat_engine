@@ -95,7 +95,7 @@ while everything absent could be counted, and it stops working at ~1,900
 items and ~1,675 feats against an engine that has never modelled either:
 the absences become the majority and the reason for each lives nowhere. It
 is only safe because **a half-written row cannot look finished** —
-`coverage.py` counts it partial and never done, `audit.py` names it on its
+`written.py` counts it partial and never done, `audit.py` names it on its
 own line, `issues.py` keeps the bucket open, and `todo.py` fails the build
 when a wanted symbol arrives or when markers pass a tenth of the tree.
 

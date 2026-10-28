@@ -78,6 +78,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Attack,
     Budget,
@@ -2807,16 +2808,38 @@ def m884a0(c: Cast) -> None:
 
 @power(
     "m884a1", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
-    reach=Melee(2), target=ONE_CREATURE, damage=Damage("3d10", 5, kind=LIMITED),
+    reach=PERSONAL, target=NO_TARGET,
     defect="the printed attack line names no defence",
 )
 def m884a1(c: Cast) -> None:
+    """**The card makes no attack**, which is the whole of #767 for this row.
+
+    Printed: move 3 squares; every smaller creature whose space it enters is
+    pushed 1 and knocked prone; after moving it may use `m884a2`. No attack
+    roll, no damage, and no target -- so `target=ONE_CREATURE` and
+    `reach=Melee(2)` were describing a swing nobody prints.
+
+    **What this used to do was invent one.** It declared
+    `Damage("3d10", 5)` and rolled `c.attack(trim(12), AC, on=c.target)`,
+    both taken from the stray run ahead of the effect text -- `+12 vs ;
+    3d10+5 damage..` -- with the `AC` supplied because the run names no
+    defence. The swing was reachable without it anyway: `m884a2` is a free
+    action gated on `_just_rampaged`, which is the effect laid at the end
+    of this body, so the card's "after moving, it can use <the sweep>" was
+    already written.
+
+    **The marker stays**, and that is #612: a printed line naming no
+    defence is malformed and the whole entry drops. Taking the invented
+    roll out does not make the card writable -- and here there is nothing
+    left to write, because the trample is already correct.
+    """
     me = c.me
-    bonus = c.world.scaling.trim(12, c.level)
-    if c.attack(bonus, AC, on=c.target):
-        c.damage("3d10", 5)
     for caught in c.overrun():
-        if c.size_of(on=caught) < c.size_of(on=me):
+        # **`.order`, not a bare `<`.** `Size` is a `StrEnum`, so the plain
+        # comparison that stood here compared the *words*: "large" <
+        # "medium" is True, so on this Large creature the push and the prone
+        # never fired on a Medium victim and did fire on a Gargantuan one.
+        if c.size_of(on=caught).order < c.size_of(on=me).order:
             c.push(1, on=caught)
             c.prone(on=caught)
     c.effect("m884a1 rampage", on=me, until=When.EOT)
@@ -2870,12 +2893,40 @@ def m884a3(c: Cast) -> None:
 
 @power(
     "m884a4", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL,
-    target=NO_TARGET, todo=("c.passes_through()",),
+    target=NO_TARGET,
 )
 def m884a4(c: Cast) -> None:
-    """Moving through a smaller creature's space -- while still refusing to
-    end its own move there -- has no verb; `c.phasing` is for terrain, not
-    for other creatures' squares."""
+    """It may cross a smaller creature's square, and still not stop there.
+
+    The old note was right that `c.phasing` is terrain and not another
+    creature's square, and `c.may_enter` is the verb that was missing when
+    it was written (#673): the **mover's** own permission, consulted by
+    `movement._clear`. `c.shares_space` is the mirror and would be wrong
+    here -- it opens this creature's square to the whole board and still
+    refuses it a step through anybody.
+
+    **`when=` rather than `sizes=`.** The card says smaller *than it*,
+    which is relative; `sizes=` is an absolute list. The gate is handed
+    `occupant` and closes over this `Cast` for the rest.
+
+    **`Size.order`, not a bare `<`.** `Size` is a `StrEnum`, so comparing
+    two of them compares the words -- "large" < "medium" is True -- and
+    `order` exists for exactly this.
+
+    The second printed clause needs nothing written: "it cannot end its
+    movement in an occupied space" is `movement._can_stop`, which refuses
+    one whatever the entry permission allows.
+    """
+    me = c.me
+
+    def smaller(ctx: dict[str, Any]) -> bool:
+        them = ctx.get("occupant")
+        return (
+            them is not None
+            and c.size_of(on=them).order < c.size_of(on=me).order
+        )
+
+    c.may_enter(when=smaller, on=me, until=When.ENCOUNTER)
 
 
 @power("m884a5", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -2943,7 +2994,7 @@ def m897a3(c: Cast) -> None:
 
 @power(
     "m897a4", level=7, usage=Usage.RECHARGE, recharge=6, action=MINOR,
-    reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.FIRE, Keyword.HEALING],
+    reach=Melee(1), target=YOU_OR_ONE_ALLY, keywords=[Keyword.FIRE, Keyword.HEALING],
 )
 def m897a4(c: Cast) -> None:
     mate = c.target if c.target is not None else c.me

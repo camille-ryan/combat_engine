@@ -165,7 +165,16 @@ class Session:
         scaling: str = "full",
         pcs: list[str] | None = None,
         enemies: list[str] | None = None,
+        party: story.Party | None = None,
+        scale: float = 1.0,
+        on_fielded: Callable[[Session], None] | None = None,
     ) -> Session:
+        # **`party` and `scale` are what an adventuring day adds**, and both
+        # are pass-throughs to `story.field_encounter` rather than anything
+        # this method decides. A day hands the same `Party` to every leg so
+        # the wear carries across, and a `scale` so each leg is built to its
+        # own share of the printed XP budget. `api.day` is the caller; a
+        # single fight passes neither and is unchanged.
         # **One place fields an encounter**, and it is not here any more: this
         # method and `scripts/fight.build` were the same six steps twice over,
         # with the replay fixtures pinning the other one. #229.
@@ -188,7 +197,8 @@ class Session:
         _threat_cache.clear()
 
         on_board = story.field_encounter(
-            seed, level, scaling=scaling, pcs=pcs, enemies=enemies
+            seed, level, scaling=scaling, pcs=pcs, enemies=enemies,
+            party=party, scale=scale,
         )
         world = on_board.world
         if not on_board.enemies:
@@ -208,6 +218,15 @@ class Session:
             scaling=scaling,
         )
         session._install()
+        # **The one moment the party as it walked in exists.** `create` ends
+        # by running the monsters' turns, so by the time it returns the
+        # enemies may already have had a round -- a caller that snapshots the
+        # party from the returned session is reading the party *after* being
+        # shot at, not before. A day's per-leg curve is read as "walked in
+        # with, left with", and without this hook its first number was
+        # already the second one.
+        if on_fielded is not None:
+            on_fielded(session)
         # Attached before the fight starts, so initiative and the traits
         # armed at the top of round one are in the file like everything
         # else. A transcript that begins on round two is a transcript of
@@ -220,6 +239,10 @@ class Session:
                 "scaling": scaling,
                 "pcs": list(pcs or PARTY),
                 "enemies": fielded,
+                # Recorded so a transcript of a day's third fight says it was
+                # the third and what it was built to, which the log otherwise
+                # cannot distinguish from a standalone fight at that level.
+                "scale": scale,
             },
         )
         session.transcript.attach(world)

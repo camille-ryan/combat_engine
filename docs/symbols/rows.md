@@ -21,6 +21,10 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
   - "You can use a power you already know for a cheaper action."
 - `c.spellbook(self, *, of: 'int | None' = None) -> 'list[str]'`
   - The rows this creature owns and has not prepared.
+- `c.store_row(self, ref: 'str', *, by: 'str' = '', on: 'int | None' = None) -> 'bool'`
+  - Put a row into this object, for the object to hand back later.
+- `c.stored_row(self, *, of: 'str' = '', on: 'int | None' = None) -> 'str'`
+  - What that object is holding, or `""`.
 - `c.unspent(self, *, cls: 'str' = '', level: 'int' = 0, usage: 'Any' = None, attacks: 'bool | None' = None, group: 'str' = '', on: 'int | None' = None) -> 'list[str]'`
   - The refs `c.expend_row` would accept. The complement of `c.expended`.
 - `c.use_power(self, ref: 'str', *, on: 'int | None' = None, who: 'int | None' = None, spend: 'bool' = True, again: 'bool' = False) -> 'bool'`
@@ -36,9 +40,9 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
   - Run whatever this use substituted for this clause, or the clause.
 - `c.instead_of_now(self, what: 'str', default: 'Callable[[], Any]', *, on: 'int | None' = None) -> 'Any'`
   - Offer a registered substitution **at the clause**, and run what is
-- `c.pass_on(self, ev: 'Any' = None, *, to: 'int | None' = None) -> 'Effect | None'`
+- `c.pass_on(self, ev: 'Any' = None, *, to: 'int | None' = None, attack: 'bool' = False) -> 'Effect | None'`
   - Whatever conditions the attack being answered would apply, land
-- `c.pre_empt(self, ref: 'str', what: 'str', clause: 'Callable[[Any], Any]', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.pre_empt(self, ref: 'str', what: 'str', clause: 'Callable[[Any], Any]', *, forced: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "When you use <row>, you can X **instead of** Y."
 - `c.prepare(self, ref: 'str', *, instead_of: 'str' = '', on: 'int | None' = None) -> 'bool'`
   - Prepare a row out of the spellbook, putting one back if it swaps.

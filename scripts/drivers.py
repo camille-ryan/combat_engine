@@ -58,6 +58,29 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 
+def must[T](value: T | None, what: str) -> T:
+    """`value`, or a loud failure naming what was missing.
+
+    **`World.get` answers `C | None` and a rule that reads straight through
+    it is wrong twice.** The type checker says so -- 19 of this file's
+    diagnostics were `Attribute ... is not defined on None` -- and the
+    runtime consequence is worse than the complaint: a board that did not
+    deal the component silently takes the `None` branch, the comprehension
+    over it is empty, and the assertion passes on nothing. That is the
+    shape `scripts/CLAUDE.md` names as a check that cannot fail, and it is
+    indistinguishable from the rule working.
+
+    So this raises rather than returning a default. A driver rule that
+    cannot find the thing it is about has not proved anything, and saying so
+    is strictly better than a green line. #882.
+    """
+    if value is None:
+        raise AssertionError(
+            f"this board has no {what}, so the rule reading it proves nothing"
+        )
+    return value
+
+
 class Result:
     """What one driver saw. Pass/fail with the numbers attached."""
 
@@ -67,7 +90,16 @@ class Result:
         self.skipped: list[str] = []
         self.passed = 0
 
-    def that(self, ok: bool, what: str, detail: str = "") -> None:
+    def that(self, ok: object, what: str, detail: str = "") -> None:
+        """Record one assertion. `ok` is read for **truthiness**, not as a
+        `bool`.
+
+        Annotated `bool` for a long time and ten call sites did not pass
+        one: `out.that(seen and seen[0].critical, ...)` hands over the empty
+        list when `seen` is empty, which is the idiom and is correct. The
+        annotation was the thing that was wrong, not the callers -- `if ok:`
+        is all this does with it. #882.
+        """
         if ok:
             self.passed += 1
             print(f"    ok    {what}")
@@ -1088,7 +1120,8 @@ def two_types(out: Result) -> None:
         if getattr(pw, "summon", None) is not None
         and getattr(pw.summon, "damage", None) is not None
     ]
-    multi = [pw for pw in summons if pw.summon.damage.dtypes]
+    multi = [pw for pw in summons
+             if must(pw.summon, "a summon block").damage.dtypes]
     out.that(
         not multi,
         f"no summon block prints two types yet, so its forwarding is untested "
@@ -1296,7 +1329,7 @@ def forms(out: Result) -> None:
     """
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.durations import When
-    from combat_engine.engine.query import in_form, shifted
+    from combat_engine.engine.query import in_form, shaped
 
     world, caster, _ = _board()
     c = Cast(world=world, me=caster, ref="drivers:forms")
@@ -1306,14 +1339,15 @@ def forms(out: Result) -> None:
              "with no shape recorded, a Requirement passes")
     out.that(in_form(world, caster, "beast"),
              "whichever shape it names -- nothing is ruled out")
-    out.that(not shifted(world, caster),
-             "but it has not SHIFTED, which is the other question")
+    out.that(not shaped(world, caster),
+             "but it is not SHAPED, which is the other question -- the"
+             " reader that answers no for a creature nobody transformed")
 
     beast = c.form(until=When.ENCOUNTER, name="beast")
     out.that(in_form(world, caster, "beast"), "once in beast form, beast passes")
     out.that(not in_form(world, caster, "humanoid", "hybrid"),
              "and the shapes it is NOT now refuse -- the gate bites")
-    out.that(shifted(world, caster), "and it counts as shifted")
+    out.that(shaped(world, caster), "and it counts as shaped")
 
     hybrid = c.form(until=When.ENCOUNTER, name="hybrid")
     out.that(in_form(world, caster, "beast") and in_form(world, caster, "hybrid"),
@@ -1328,7 +1362,7 @@ def forms(out: Result) -> None:
     out.that(in_form(world, caster, "hybrid"), "and leaves the other standing")
 
     world.effects.end(hybrid, "driver")
-    out.that(not shifted(world, caster), "with both gone it is itself again")
+    out.that(not shaped(world, caster), "with both gone it is itself again")
     out.that(in_form(world, caster, "beast"),
              "and a Requirement is permissive once more")
 
@@ -1366,17 +1400,17 @@ def forms(out: Result) -> None:
     world, caster, _ = _board()
     c = Cast(world=world, me=caster, ref="drivers:forms")
     held = c.form(until=When.ENCOUNTER, name="beast")
-    out.that(shifted(world, caster), "laid")
+    out.that(shaped(world, caster), "laid")
     world.effects.suspend(held)
-    out.that(not shifted(world, caster), "suspended, the form lifts")
+    out.that(not shaped(world, caster), "suspended, the form lifts")
     world.effects.resume(held)
-    out.that(shifted(world, caster), "and comes back")
+    out.that(shaped(world, caster), "and comes back")
 
     # The negative control: a form laid with no name records nothing, so the
     # name is what does the work.
     world, caster, _ = _board()
     Cast(world=world, me=caster, ref="drivers:forms").form(until=When.ENCOUNTER)
-    out.that(not shifted(world, caster),
+    out.that(not shaped(world, caster),
              "a form laid with no name records no shape at all")
 
     # ---- end to end, through a real grantor row (#477) ------------------
@@ -1393,9 +1427,9 @@ def forms(out: Result) -> None:
     from combat_engine.engine.dsl import use
 
     world, caster, _ = _board("m2812a4", 1)
-    out.that(not shifted(world, caster), "before using it, no shape is recorded")
+    out.that(not shaped(world, caster), "before using it, no shape is recorded")
     use(world, caster, "m2812a4")
-    out.that(shifted(world, caster),
+    out.that(shaped(world, caster),
              "using a real printed polymorph row records a shape -- this is"
              " the rule that catches a grantor which forgot `name=`")
     out.that(in_form(world, caster, "wolf") or in_form(world, caster, "bugbear"),
@@ -3217,6 +3251,514 @@ def rough_ground_that_knows_who_made_it(out: Result) -> None:
     )
 
 
+def a_weapon_write_rebuilds_the_weapon(out: Result) -> None:
+    """Three weapon writers mutated a `Weapon` in place and skipped its own
+    post-init, which is the thing that keeps `hands` and `properties` saying
+    the same word.
+
+    `Weapon.__post_init__` exists for that mirroring and an attribute
+    assignment on a live object never runs it, so `c.weapon_dice`,
+    `c.gains_property` and `c.weapon_range` could leave the two fields
+    disagreeing. `c.as_implement` and `c.weapon_group` already used
+    `replace` with a write-back; these three now do. #842.
+
+    **The mirroring only fills a blank**, and knowing that is what makes
+    this rule discriminating. It reads
+
+        if not self.hands:
+            for word in _HAND_COUNTS: ...
+
+    so a weapon that already prints a hand count is untouched by the fix,
+    and posing one would assert nothing -- the first version of this probe
+    did exactly that and showed a longbow carrying *both* "two-handed" and
+    "one-handed" with `hands` unchanged, which is an author laying a
+    contradictory word and a different complaint. The reachable case is a
+    weapon with **no** printed hand count, which is the 38 hand-written ones
+    the post-init's own docstring is about.
+
+    Measured at both shas on that case:
+
+        before   hands ''            properties ['two-handed']   disagree
+        after    hands 'two-handed'  properties ['two-handed']    agree
+
+    **And a control for the other way to get this wrong.** A conversion to
+    `replace` that forgets to write the new object back into `gear.weapons`
+    loses the change in silence -- the issue's own comment flags it, because
+    `c.as_implement` rebuilds the list by identity (`w is arm`) and a reader
+    that misses that keeps the old object. So each of the three is asserted
+    to be **visible afterwards**, which is the half a mirroring assertion
+    cannot see.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Weapon
+
+    def armed(**kw):  # noqa: ANN003, ANN202
+        """A board whose character holds exactly one hand-written weapon."""
+        world, me, _ = _posed("f1873", 1)
+        gear = world.need(me, Gear)
+        blade = Weapon(ref="w0000", damage="1d8", group="club", **kw)
+        gear.weapons = [blade]
+        gear.stowed = set()
+        return world, me, gear, blade
+
+    # -- the bug: a blank hand count must follow the property -------------
+    world, me, gear, blade = armed()
+    out.that(blade.hands == "" and not blade.properties,
+             "a hand-written weapon starts with no printed hand count --"
+             " the case the mirroring exists for and the only one it can"
+             " reach",
+             f"hands {blade.hands!r}, props {sorted(blade.properties)}")
+    laid = Cast(world=world, me=me, ref="f1873").gains_property(
+        "two-handed", every=True, on=me)
+    now = gear.weapons[0]
+    out.that(laid == 1 and "two-handed" in now.properties,
+             "laying the property reports one weapon and the property is"
+             " **visible on the weapon in `gear.weapons`** -- the control"
+             " for a `replace` whose result was never written back, which"
+             " loses the change in silence",
+             f"{laid} laid, props {sorted(now.properties)}")
+    out.that(now.hands == "two-handed",
+             "**and `hands` followed it**, which is the whole of #842: the"
+             " post-init mirrors the two fields and an in-place write never"
+             " ran it, so `hands` stayed empty while `properties` said"
+             " two-handed",
+             f"hands {now.hands!r}")
+    out.that(now is not blade,
+             "by rebuilding the weapon rather than editing it -- the"
+             " identity change is what proves the post-init ran at all",
+             f"{now is not blade}")
+
+    # -- a weapon that already prints one is left alone -------------------
+    world, me, gear, blade = armed(hands="one-handed",
+                                   properties=frozenset({"one-handed"}))
+    Cast(world=world, me=me, ref="f1873").gains_property(
+        "light blade", every=True, on=me)
+    now = gear.weapons[0]
+    out.that(now.hands == "one-handed" and "light blade" in now.properties,
+             "a weapon that already prints a hand count keeps it while"
+             " gaining an ordinary property -- the mirroring fills a blank"
+             " and does not overwrite a printed answer",
+             f"hands {now.hands!r}, props {sorted(now.properties)}")
+
+    # -- the other two writers: visible afterwards ------------------------
+    world, me, gear, blade = armed()
+    moved = Cast(world=world, me=me, ref="f1873").weapon_dice(
+        "2d6", ref="w0000", on=me)
+    out.that(moved == 1 and gear.weapons[0].damage == "2d6",
+             "c.weapon_dice's new die is visible on the weapon afterwards",
+             f"{moved}, {gear.weapons[0].damage}")
+    out.that(gear.weapons[0] is not blade,
+             "and it rebuilt rather than edited", f"{gear.weapons[0] is not blade}")
+
+    world, me, gear, blade = armed()
+    reach = Cast(world=world, me=me, ref="f1873").weapon_range(
+        ranged=(10, 20), ref="w0000", on=me)
+    now = gear.weapons[0]
+    out.that(reach == 1 and now.ranged == (10, 20),
+             "and c.weapon_range's new range is too. Both numbers go into"
+             " **one** `replace`: two in a row would run the post-init twice"
+             " and throw the first answer away",
+             f"{reach}, {now.ranged}")
+    out.that(now is not blade,
+             "rebuilt, not edited", f"{now is not blade}")
+
+
+def a_basic_attack_that_becomes_a_burst(out: Result) -> None:
+    """*"The next ranged basic attack you make with this weapon before the
+    end of your turn becomes a burst 1 centered on the target. Use your
+    normal attack bonus, but against Reflex. Instead of normal damage, each
+    target hit takes ongoing 5 fire damage."*
+
+    One printed sentence rewriting three things about an attack not yet
+    declared -- shape, defence and damage -- and two heroic weapon blocks
+    print it. #712 insisted the three land together rather than as three
+    narrowings, because #711 had just been split for exactly that.
+
+    **Four things had to be true and three of them were silently false.**
+
+    * `aim_points` read `Power.reach_of` where `dsl.reach_of` is "the door
+      for reshapes" in its own words, so a reshaped range gave nine squares
+      from `area_of` and **nowhere to aim** -- `use` then refused the
+      placement one question after the interface offered it.
+    * `use`'s explicit-target arm filters by `_within_reach`, and an area
+      line measured against one creature keeps nobody -- so the swing did
+      not happen at all: no `AttackDeclared`, no damage, and the hold not
+      even spent. `Cast.basic` centres an area-shaped basic attack on the
+      creature it was aimed at, which is what the card prints.
+    * `c.pre_empt` is "you **can** X instead of Y" -- an action-menu entry
+      read off `Cast.variant` -- and these cards impose their clause with
+      nothing to click. `Cast.basic` calls `use` with no variant, so the
+      registration was read as variant 0 and the printed damage stood.
+      `forced=True` is the mood the table was missing.
+    * the hold was spent on `PowerUsed`, which fires **before**
+      `AttackDeclared`. Measured order: `PowerUsed`, `AttackDeclared`,
+      `DamageApplied`, `PowerResolved`. So it lifted the defence and the
+      damage mid-use and left only the reshape -- which is read during
+      targeting, earlier still. Two thirds of the card missing, with the
+      third that worked making it look wired up.
+
+    A bow is put in the caster's hands, because `Power.can_branch` reads the
+    **printed** kind and correctly demands something to fire -- the audit
+    board's character for both rows carries none, and `usable` answered
+    `(False, 'requirement not met')` before any of this.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.chargen import LONGBOW
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY, aim_points, reach_of, usable
+    from combat_engine.engine.events import AttackDeclared, DamageApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    rba = REGISTRY["rba"]
+
+    def armed(ref: str):  # noqa: ANN202
+        """`ref`'s board with a bow in hand, which the card requires."""
+        world, me, _ = _posed(ref, 1)
+        gear = world.need(me, Gear)
+        gear.weapons = [LONGBOW]
+        gear.stowed = set()
+        return world, me, sorted(enemies(world, me))
+
+    def crowd(world, foe: int, friend: int) -> None:  # noqa: ANN001
+        """Stand `friend` next to `foe`, so a burst 1 catches both.
+
+        **Without this the rule could not tell the two routes apart**, and a
+        plant proved it: `use`'s explicit-target arm accepts a creature for
+        an area line and connects -- with *that one creature*. The card says
+        "each target hit", so centring the burst on the target and letting
+        `_auto_targets` fill it is the difference, and it is invisible on a
+        board where only one enemy stands in the burst.
+
+        Lift, move, re-index: `Position.square` alone leaves `Grid`'s
+        occupant index naming the old square.
+        """
+        from combat_engine.engine.components import Position
+
+        there = world.need(foe, Position).square
+        beside = (there[0] + 1, there[1])
+        world.grid.lift(friend)
+        world.need(friend, Position).square = beside
+        world.grid.place(friend, frozenset({beside}))
+
+    def swing(world, me: int, ref: str, foe: int):  # noqa: ANN001, ANN202
+        """Make the basic attack and report what was declared and dealt."""
+        said: list[tuple[int, str]] = []
+        dealt: list[tuple[int, str]] = []
+        world.bus.on(AttackDeclared, lambda ev: said.append((ev.target, str(ev.vs))))
+        world.bus.on(
+            DamageApplied,
+            lambda ev: dealt.append((ev.amount, str(getattr(ev, "dtype", "?")))),
+        )
+        world.rng.loaded = 20
+        made = Cast(world=world, me=me, ref=ref).basic(on=foe, ranged=True)
+        return made, said, dealt
+
+    def burns(world) -> list[tuple[int, str]]:  # noqa: ANN001
+        return [
+            (e.ongoing[0], str(e.ongoing[1]))
+            for e in world.effects.live.values()
+            if getattr(e, "ongoing", None)
+        ]
+
+    # -- the control: no hold, so the printed card stands -----------------
+    world, me, foes = armed("i1300p1")
+    out.that(usable(world, me, rba)[0],
+             "a ranged basic attack is usable with a bow in hand -- the"
+             " premise of everything below, and false on the bare board",
+             f"{usable(world, me, rba)}")
+    out.that(str(reach_of(world, me, rba, 0)) == "Ranged 10"
+             and not aim_points(world, me, rba),
+             "and is a Ranged line with nothing to aim at: a single-target"
+             " row has no placement squares, which is the gap the symbol"
+             " names",
+             f"{reach_of(world, me, rba, 0)}, {len(aim_points(world, me, rba))} aims")
+    made, said, dealt = swing(world, me, "i1300p1", foes[0])
+    out.that(made and said and said[0][1] == "ac" and dealt,
+             "unaided it rolls against AC for ordinary weapon damage -- the"
+             " negative control, and the thing all three edits move",
+             f"{said}, {dealt}")
+
+    # -- i1300p1: shape, defence and damage, all three --------------------
+    world, me, foes = armed("i1300p1")
+    REGISTRY["i1300p1"].body(Cast(world=world, me=me, ref="i1300p1"))
+    shape = reach_of(world, me, rba, 0)
+    out.that(shape.kind == "area_burst" and shape.size == 1,
+             "with the daily spent the basic attack is a burst 1,"
+             " `within` the distance the weapon already threw",
+             f"{shape}")
+    out.that(len(aim_points(world, me, rba)) > 0,
+             "**and it has somewhere to land.** `aim_points` read the"
+             " printed header, so a reshape gave an area with no placement"
+             " and `use` refused what the interface had offered",
+             f"{len(aim_points(world, me, rba))} aims")
+    crowd(world, foes[0], foes[1])
+    # Everybody a burst 1 centred on the target would actually catch,
+    # derived rather than counted by hand: a third enemy already stood
+    # inside it on this board and a literal 2 was wrong for that reason.
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.grid import spread
+    from combat_engine.engine.query import squares as _sq
+
+    inside = spread({world.need(foes[0], Position).square}, 1)
+    caught = {f for f in foes if _sq(world, f) & inside}
+    made, said, dealt = swing(world, me, "i1300p1", foes[0])
+    out.that(made, "the swing happens", f"{made}")
+    out.that(len(said) == len(caught) and len(caught) > 1,
+             "**and it catches both enemies standing in the burst**, which"
+             " is \"each target hit\". The explicit-target arm of `use`"
+             " accepts a creature for an area line and connects with that"
+             " one creature only -- so this is the assertion that tells the"
+             " two routes apart, and a plant showed nothing else does",
+             f"{len(said)} declared of {len(caught)} in the burst: {said}")
+    out.that(said and all(vs == "ref" for _t, vs in said),
+             "it rolls against Reflex, which the card says and the printed"
+             " line does not",
+             f"{said}")
+    out.that(not dealt,
+             "**and deals no ordinary damage**, which is the whole of"
+             " \"instead of normal damage\" and the clause `c.pre_empt`"
+             " could not impose because it is an offered menu entry",
+             f"{dealt}")
+    out.that((5, "fire") in burns(world),
+             "the burn is there instead: ongoing 5 fire, save ends by"
+             " `c.ongoing`'s own default",
+             f"{burns(world)}")
+    out.that(str(reach_of(world, me, rba, 0)) == "Ranged 10",
+             "and the hold is spent by the attack, so the *next* basic"
+             " attack is the printed one again. Spent on `PowerResolved`:"
+             " `PowerUsed` fires before `AttackDeclared` and lifted two of"
+             " the three edits mid-use",
+             f"{reach_of(world, me, rba, 0)}")
+
+    # -- i2878p1: the same card, the other defence, damage retyped --------
+    world, me, foes = armed("i2878p1")
+    REGISTRY["i2878p1"].body(Cast(world=world, me=me, ref="i2878p1"))
+    out.that(reach_of(world, me, rba, 0).kind == "area_burst",
+             "i2878p1 reshapes the same way")
+    made, said, dealt = swing(world, me, "i2878p1", foes[0])
+    out.that(said and all(vs == "fort" for _t, vs in said),
+             "against Fortitude where its twin says Reflex -- the pair is"
+             " what shows the defence is read off the card and not fixed in"
+             " the verb",
+             f"{said}")
+    out.that(dealt and all(t == "thunder" for _a, t in dealt),
+             "and it *does* deal damage, retyped thunder: \"equal to the"
+             " normal damage\" is a replacement whose recipe is the basic"
+             " attack's own, read off the Cast of the attack being made",
+             f"{dealt}")
+    out.that(dealt and dealt[0][0] > 0,
+             "a real number rather than nothing -- the two rows differ in"
+             " exactly this, and a verb that dropped the damage for both"
+             " would pass i1300p1's assertion above",
+             f"{dealt}")
+
+    # -- the gate: a melee basic attack is not touched --------------------
+    world, me, foes = armed("i1300p1")
+    REGISTRY["i1300p1"].body(Cast(world=world, me=me, ref="i1300p1"))
+    mba = REGISTRY["mba"]
+    out.that(str(reach_of(world, me, mba, 0)) == "Melee 1",
+             "the melee basic attack is left alone -- the card says"
+             " *ranged*, and the hold is scoped to the creature's own ranged"
+             " basic ref rather than to basic attacks at large",
+             f"{reach_of(world, me, mba, 0)}")
+
+    for ref, want in (("i1300p1", Defense.REF), ("i2878p1", Defense.FORT)):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} waits on nothing", f"{REGISTRY[ref].unfinished}")
+        out.that(want in (Defense.REF, Defense.FORT),
+                 f"and the defence {ref} names is one the engine has")
+
+
+def ground_made_harder_for_one_creature(out: Result) -> None:
+    """*"Each enemy that you hit treats all squares as difficult terrain."*
+
+    Three heroic rows print difficult terrain imposed on **one creature**,
+    and `Movement` carried three waivers and no adder -- `World.difficult`'s
+    per-creature branch only ever *removed* squares, so rough ground could
+    be made easier for one creature and never harder. #831.
+
+    **Two shapes, because the cards come in two, and the split is the
+    finding.** The issue specified one square set on the creature for all
+    three. That is the lesser reading of two of them: "squares in the aura"
+    and "all squares adjacent to you" describe their area relative to a
+    creature, and `Zones.refresh` re-centres an aura every round, so a
+    snapshot would be exact for the turn after the hit and stale once
+    anybody moved. So the area cards burden a **zone** by id
+    (`Zone.difficult_for`) and only the board-wide card sits on the creature
+    (`Movement.harder_everywhere`).
+
+    The assertion that earns the split is the one that moves the character
+    and checks the rough ground moved with them.
+
+    **And the narrowing is the other half of the point.** m115822a0's aura
+    holds six enemies on this board and exactly one of them is burdened --
+    `c.zone(difficult=)` would have roughed the ground for all six, which
+    is the card inverted.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import enemies
+
+    def posed(ref: str):  # noqa: ANN202
+        world, me, _ = _posed(ref, 1)
+        return world, me, sorted(enemies(world, me))
+
+    def hit(world, me: int, foe: int, power: str = "x") -> None:  # noqa: ANN001
+        world.bus.emit(Hit(attacker=me, target=foe, power=power, critical=False))
+
+    # -- i3436p1: the whole board, and nobody else's -----------------------
+    world, me, foes = posed("i3436p1")
+    foe, spare = foes[0], foes[1]
+    away = world.need(foe, Position).square
+    probe = (away[0] + 3, away[1])
+    out.that(probe not in world.difficult(foe),
+             "an ordinary square is not difficult for anybody -- the control"
+             " for the three lines below",
+             f"{probe}")
+    c = Cast(world=world, me=me, ref="i3436p1")
+    c.trigger = Hit(attacker=me, target=foe, power="x", critical=False)
+    REGISTRY["i3436p1"].body(c)
+    out.that(probe in world.difficult(foe),
+             "and is difficult for the enemy i3436p1 hit: the card says"
+             ' "all squares", so the burden has no geometry and sits on the'
+             " creature",
+             f"{probe}")
+    out.that(probe not in world.difficult(spare),
+             "**not for another enemy**, which is the whole of what this"
+             " verb adds -- `c.zone(difficult=)` roughs ground for everyone"
+             " standing on it and could not say this at all",
+             f"{spare}")
+    out.that(probe not in world.difficult(me),
+             "and not for the character who laid it", f"{me}")
+
+    # -- f1341: an area that follows the creature it is described from -----
+    world, me, foes = posed("f1341")
+    foe, spare = foes[0], foes[1]
+    arcane = next(
+        d.ref for d in REGISTRY.values()
+        if d.usage.name == "AT_WILL" and d.attack is not None
+        and "arcane" in str(d.keywords).lower()
+    )
+    c = Cast(world=world, me=me, ref="f1341")
+    REGISTRY["f1341"].body(c)
+    mine = world.need(me, Position).square
+    beside = (mine[0] + 1, mine[1])
+    out.that(beside not in world.difficult(foe),
+             "laying f1341's aura burdens nobody by itself -- the ground is"
+             " ordinary until a hit names a creature",
+             f"{beside}")
+    hit(world, me, foe, arcane)
+    out.that(beside in world.difficult(foe),
+             "and the square beside the character is difficult for the enemy"
+             " just hit with an arcane at-will",
+             f"{beside}")
+    out.that(beside not in world.difficult(spare)
+             and beside not in world.difficult(me),
+             "for that enemy and for nobody else -- not the other enemy in"
+             " the same square, and not the character",
+             f"spare {beside in world.difficult(spare)},"
+             f" me {beside in world.difficult(me)}")
+    far = (mine[0] + 6, mine[1])
+    out.that(far not in world.difficult(foe),
+             "and only where the card says: a square six off is adjacent to"
+             " nothing and stays ordinary",
+             f"{far}")
+
+    # **The assertion the design turns on.** A square set copied onto the
+    # enemy would pass everything above and fail this.
+    world.grid.lift(me)
+    moved = (mine[0] + 4, mine[1])
+    world.need(me, Position).square = moved
+    world.grid.place(me, frozenset({moved}))
+    world.zones.refresh()
+    out.that(beside not in world.difficult(foe),
+             "**and the rough ground follows the character.** Four squares"
+             " on, the old adjacent square is ordinary again",
+             f"{beside}")
+    out.that((moved[0] + 1, moved[1]) in world.difficult(foe),
+             "while the square now beside them is difficult. Four squares"
+             " and not two, because at two the old square is still adjacent"
+             " to the new position and a snapshot passes either way",
+             f"{(moved[0] + 1, moved[1])}")
+
+    # -- f1341's gate: the keyword and the usage both --------------------
+    world, me, foes = posed("f1341")
+    foe = foes[0]
+    REGISTRY["f1341"].body(Cast(world=world, me=me, ref="f1341"))
+    mine = world.need(me, Position).square
+    beside = (mine[0] + 1, mine[1])
+    daily = next(
+        d.ref for d in REGISTRY.values()
+        if d.usage.name == "DAILY" and d.attack is not None
+        and "arcane" in str(d.keywords).lower()
+    )
+    hit(world, me, foe, daily)
+    out.that(beside not in world.difficult(foe),
+             "an arcane power that is NOT at-will arms nothing -- the card"
+             " names a keyword and a usage and the gate reads both",
+             f"{daily}")
+
+    # -- m115822a0: one enemy in an aura of six --------------------------
+    world, me, foes = posed("m115822a0")
+    c = Cast(world=world, me=me, ref="m115822a0")
+    REGISTRY["m115822a0"].body(c)
+    centre = world.need(me, Position).square
+
+    def within(f: int) -> bool:
+        there = world.need(f, Position).square
+        return max(abs(a - b) for a, b in zip(there, centre, strict=True)) <= 5
+
+    inside = [f for f in foes if within(f)]
+    out.that(len(inside) >= 2,
+             "the aura holds at least two enemies, or the narrowing below"
+             " cannot be posed at all",
+             f"{len(inside)} of {len(foes)}")
+    burdened, untouched = inside[0], inside[1:]
+    out.that(centre not in world.difficult(burdened),
+             "the aura is ordinary ground before anybody is hit in it")
+    hit(world, me, burdened)
+    out.that(centre in world.difficult(burdened),
+             "and difficult for the enemy hit inside it")
+    out.that(all(centre not in world.difficult(f) for f in untouched),
+             "**and ordinary for the other enemies standing in the same"
+             " aura**, all of them. This is the card the per-ground flag"
+             " inverts: it would have roughed the floor for every one",
+             f"{len(untouched)} others, "
+             f"{sum(centre in world.difficult(f) for f in untouched)} rough")
+
+    # -- the ruling: a blanket waiver beats the imposition ---------------
+    world, me, foes = posed("i3436p1")
+    foe = foes[0]
+    c = Cast(world=world, me=me, ref="i3436p1")
+    c.trigger = Hit(attacker=me, target=foe, power="x", critical=False)
+    REGISTRY["i3436p1"].body(c)
+    away = world.need(foe, Position).square
+    probe = (away[0] + 3, away[1])
+    out.that(probe in world.difficult(foe), "the burden is standing")
+    world.need(foe, Movement).ignores.add("*")
+    out.that(probe not in world.difficult(foe),
+             "and a creature that ignores difficult terrain outright"
+             " ignores this too -- stated in `World.difficult` as a ruling,"
+             " because the alternative is the newest verb in the engine"
+             " quietly beating every sure-footed feat in it",
+             f"{probe}")
+
+    for ref in ("i3436p1", "f1341", "m115822a0"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} waits on nothing: the three symbols #831 found for"
+                 " one gap are all at zero",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_target_line_about_standing_on_the_floor(out: Result) -> None:
     """"Targets enemies in the burst **touching the ground**", and three more.
 
@@ -3820,20 +4362,27 @@ def a_trait_credited_through_one_event(out: Result) -> None:
     # is inverted rather than deleted: the same four rows, the same shape,
     # and now none of them is silent.
     #
-    # `f396` is not in the set. It was silent for the same *reason* and its
-    # body names no weapon ref at all -- `_wanted_weapon` reads
-    # `ref="wNNNN"` out of the source -- so the axis cannot reach it and
-    # saying so here is the honest half of the count.
+    # `f396` was outside the set and pinned as **still silent**, because it
+    # names no weapon ref for `_wanted_weapon`'s axis to read. That was the
+    # honest limit of #663's fix and it is no longer why the row behaves as
+    # it does: `f396` had an empty body, because loading a weapon was not a
+    # cost the engine charged and there was nothing for the row to say.
+    # #725 made it a cost, the row now calls `c.loads_free`, and it is not
+    # silent for a reason that has nothing to do with the weapon axis.
+    #
+    # Inverted rather than deleted, which is what the paragraph above did to
+    # its own predecessor and for the same reason: the row, the shape and
+    # the count stay visible, and a regression in either direction shows.
     armed = {ref: A.audit(ref).silent for ref in ("f3785", "f2099", "f2400", "f621")}
     out.that(not any(armed.values()),
              "the four rows that name a weapon in their body are credited"
              " now, where every one of them used to be silent for want of"
              " gear -- #663's third axis",
              f"{armed}")
-    out.that(A.audit("f396").silent,
-             "and `f396` is still silent, because it names no weapon ref for"
-             " the axis to read -- the limit of the fix, stated rather than"
-             " rounded off",
+    out.that(not A.audit("f396").silent,
+             "and `f396` is no longer silent either -- not because the weapon"
+             " axis reached it, which it still cannot, but because loading is"
+             " a cost now and the row has a body to spend it. #725",
              f"{A.audit('f396').events}")
 
 
@@ -8924,26 +9473,26 @@ def class_form(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.dsl import get
     from combat_engine.engine.durations import When
-    from combat_engine.engine.query import in_form, shifted
+    from combat_engine.engine.query import in_form, shaped
     from combat_engine.engine.types import Keyword
 
     world, caster, _ = _board()
 
     # ---- the state half -------------------------------------------------
-    out.that(not shifted(world, caster), "nobody has changed shape yet")
+    out.that(not shaped(world, caster), "nobody has changed shape yet")
     out.that(in_form(world, caster, "beast"),
              "and the gate is permissive about that, as a Requirement must be")
 
     c = Cast(world=world, me=caster, ref="drivers:form")
     held = c.form(until=When.ENCOUNTER, label="drivers:form", name="beast")
-    out.that(shifted(world, caster), "taking the form records it")
+    out.that(shaped(world, caster), "taking the form records it")
     out.that(in_form(world, caster, "beast"), "and the word is readable")
     out.that(not in_form(world, caster, "guardian"),
              "a DIFFERENT form's word is not -- this is the negative control,"
              " and without it `in_form`'s permissive answer passes everything")
 
     world.effects.end(held, "driver")
-    out.that(not shifted(world, caster), "ending it takes the shape away")
+    out.that(not shaped(world, caster), "ending it takes the shape away")
 
     # ---- the keyword half, which is a different question ----------------
     bf = [r for r in ("p5036", "p16537", "p16539")
@@ -9591,6 +10140,11 @@ def boost_roll(out: Result) -> None:
     class _Rolled:
         def __init__(self, result: AttackResult) -> None:
             self.result = result
+            # Declared rather than assigned onto the instance, which is the
+            # difference `types` can see: three `c.trigger.ctx = ...` lines
+            # below set the attacker so `_mods` can find a `crit_range`
+            # bonus, and each was an `unresolved-attribute` on this stub.
+            self.ctx: dict[str, Any] = {}
 
     # A miss by 3, boosted by 4, becomes a hit. `natural` must not move.
     res = AttackResult(natural=14, total=15, target_defence=18, hit=False)
@@ -9619,11 +10173,26 @@ def boost_roll(out: Result) -> None:
     out.that(res.critical is True and res.hit is True,
              "a critical is not undone by boosting it")
 
-    # **The crit floor is read off the context, not assumed to be 20.**
-    # `resolve` judges a hit as `natural >= 20 - crit_range`, so a verb
-    # hard-coding 20 judges a boosted roll by a different rule than the one
-    # that settled it -- and is wrong only for builds that widen the range,
-    # which is the kind of wrong nothing notices.
+    # **A widened crit range is the critical's door and not the hit's**, so
+    # the automatic hit stays tied to the bare 20 here as it is in
+    # `resolve.attack`.
+    #
+    # This pair used to assert the opposite -- that a boosted natural 19 hits
+    # a defence of 30 when the build widens the range -- on the stated reason
+    # that `resolve` judged it that way and a verb must not judge a boosted
+    # roll by a different rule. The reason was sound and the thing it matched
+    # was wrong: `resolve.attack` read `natural >= floor` for the hit, which
+    # is what #868 fixed, so this rule was pinning the bug in place from the
+    # instrument side.
+    #
+    # **Its own control had stopped being one**, which is the part worth
+    # keeping. "The same 19 with the range back to normal misses" tells a
+    # correct implementation from one that always hits -- it cannot tell a
+    # correct one from one that reads the floor, because under the corrected
+    # rule both halves are a miss and the rule would read green either way.
+    # So the control is now the **20**, which the two implementations
+    # disagree about in the opposite direction: read the floor and the 19
+    # below hits, drop the automatic hit entirely and the 20 does not.
     from combat_engine.engine.components import Mod, Mods
 
     mods = world.get(caster, Mods) or world.add(caster, Mods())
@@ -9632,18 +10201,43 @@ def boost_roll(out: Result) -> None:
     c.trigger = _Rolled(res)
     c.trigger.ctx = {"attacker": caster}
     c.boost_roll(1)
-    out.that(res.hit is True,
-             "a 19 hits a defence of 30 when the build's crit range reaches"
-             " 19 -- the floor is read, not assumed")
-    mods.items[:] = [m for m in mods.items if m.label != "drivers:boost"]
-    res = AttackResult(natural=19, total=5, target_defence=30, hit=False)
+    out.that(res.hit is False,
+             "a boosted natural 19 does NOT hit a defence of 30 it falls 24"
+             " short of, even with the build's crit range reaching 19 (#868)")
+    res = AttackResult(natural=20, total=5, target_defence=30, hit=False)
     c.trigger = _Rolled(res)
     c.trigger.ctx = {"attacker": caster}
     c.boost_roll(1)
-    out.that(res.hit is False,
-             "and with the range back to normal the same 19 misses -- the"
-             " control, without which the assertion above passes on a verb"
-             " that always hits")
+    out.that(res.hit is True,
+             "while a natural 20 hits the same hopeless defence -- the"
+             " control, and the difference the widener does not reach")
+    mods.items[:] = [m for m in mods.items if m.label != "drivers:boost"]
+
+    # **This was the open half of #868 and it is closed.** A natural 20
+    # whose total was two short and is boosted over the defence becomes a
+    # critical: the die opened the door and the total now walks through it.
+    # It did not, because this block hard-coded the hit and left `critical`
+    # alone entirely, and nothing downstream reconsidered it either.
+    #
+    # Posed so the boost is what crosses the defence (17 -> 19 against 18),
+    # since a total already over, or still short after, is judged the same
+    # way by both readings and would read green on a verb that did nothing.
+    #
+    # This assertion was first written the other way round -- asserting the
+    # gap, with a note saying it would go red and name itself the day the
+    # verb recomputed. It did, in the commit that routed this through
+    # `resolve.settle`, which is the whole value of writing a known gap down
+    # as an assertion rather than a comment.
+    res = AttackResult(natural=20, total=17, target_defence=18,
+                       hit=False, critical=False)
+    c.trigger = _Rolled(res)
+    c.trigger.ctx = {"attacker": caster}
+    c.boost_roll(2)
+    out.that(res.hit is True and res.critical is True,
+             "a boosted natural 20 carried over the defence hits AND is"
+             " recorded as a critical -- the half of #868 that was open"
+             " until the rule had one home",
+             f"hit={res.hit} critical={res.critical} total={res.total}")
 
     # `kind=` refuses the wrong sort of roll.
     res = AttackResult(natural=14, total=15, target_defence=18)
@@ -9960,13 +10554,13 @@ def keyword_ban(out: Result) -> None:
     if plain not in known.known:
         known.known.append(plain)
 
-    ok, why = usable(world, me, get(plain))
+    ok, why = usable(world, me, must(get(plain), "the row under test"))
     out.that(ok, f"before any ban the row is usable ({why})")
 
     # ---- `lacking=`: only keyworded powers allowed --------------------
     held = c.forbid(lacking=Keyword.BEAST_FORM, on=me, until=When.ENCOUNTER)
     out.that(held is not None, "the restriction is laid as an effect")
-    ok, why = usable(world, me, get(plain))
+    ok, why = usable(world, me, must(get(plain), "the row under test"))
     out.that(not ok, f"a row LACKING the keyword is refused ({why})")
     out.that("beast form" in (why or ""),
              "and the reason names the keyword, not a generic refusal")
@@ -9981,7 +10575,7 @@ def keyword_ban(out: Result) -> None:
                  " control, and without it a blanket refusal passes above")
 
     world.effects.end(held, "driver")
-    ok, _ = usable(world, me, get(plain))
+    ok, _ = usable(world, me, must(get(plain), "the row under test"))
     out.that(ok, "ending the restriction gives the plain row back")
 
     # ---- the sustain exception --------------------------------------
@@ -9993,7 +10587,7 @@ def keyword_ban(out: Result) -> None:
     # something of that row is already standing when the shape is taken
     world.effects.apply(me, me, When.ENCOUNTER, label=f"{plain} zone")
     c.forbid(lacking=Keyword.BEAST_FORM, on=me, until=When.ENCOUNTER)
-    ok, why = usable(world, me, get(plain))
+    ok, why = usable(world, me, must(get(plain), "the row under test"))
     out.that(ok,
              "a row already standing when the shape was taken may still be"
              " sustained -- the printed exception, and the half whose absence"
@@ -10019,7 +10613,7 @@ def keyword_ban(out: Result) -> None:
     c.forbid(keyword=Keyword.BEAST_FORM, on=me, until=When.SAVE_ENDS)
     ok, why = usable(world, me, banned)
     out.that(not ok, f"barred once the keyword is forbidden ({why})")
-    ok, _ = usable(world, me, get(plain))
+    ok, _ = usable(world, me, must(get(plain), "the row under test"))
     out.that(ok, "while a row carrying NO keywords is untouched -- the"
                  " negative control for this direction")
 
@@ -10408,7 +11002,7 @@ def compelled_walk(out: Result) -> None:
         asked.append(what)
         return max(options, key=lambda sq: distance(sq, (12, 2)))
 
-    world2.decide = contrary          # type: ignore[assignment]
+    world2.decide = contrary
     c2 = Cast(world=world2, me=me2, ref="drivers:compelled-rigged")
     c2.walk_toward(foe2, on=me2)
     rigged = distance(world2.get(me2, Position).square, (12, 2))
@@ -11027,6 +11621,694 @@ def unpreventable(out: Result) -> None:
              f" the pair ({walled} then {blown})")
 
 
+def a_darkness_a_light_cannot_lift(out: Result) -> None:
+    """One card prints a zone that is heavily obscured and "cannot be
+    illuminated", and both halves had been marked as engine gaps that were
+    not.
+
+    **The sight half wanted no new parameter.** The marker asked for
+    `c.zone(exempt_if=)` -- a predicate -- on the reasoning that the card
+    exempts whoever has a *sense* rather than a named creature, and a set
+    frozen when the zone is laid cannot say that. The reasoning was right
+    and the conclusion was wrong: `obscured=` is a **grade**, not a flag,
+    and `light_concealment` resolves it with the attacker in hand --
+    `if sees_in(world, attacker, Light.DARK, far): return Cover.NONE`. So
+    the exemption is already per-looker and already decided at the moment
+    somebody looks. `blocks_sight=True`, which the row had, is the binary
+    symmetric one and blinds the creature that laid it.
+
+    **The illumination half was a real gap, and for the opposite reason.**
+    Its marker said "light is not a thing the board holds", which has been
+    false since the light model landed -- #686 closed on 24 rows inert on
+    that same premise. Light *is* held, and that is what made the clause
+    live rather than empty: `light_level` gives a carried `c.light` radius
+    an absolute override, "anything within that radius is bright however
+    dark the square itself is", so a torch cancelled the darkness the card
+    says cannot be cancelled. `Zone.no_light` is the seal.
+
+    Four cells, and the third is the one that is new:
+
+    * a dark zone conceals totally from an ordinary looker;
+    * **and not from one that sees in darkness** -- the clause the predicate
+      was wanted for, working with no predicate;
+    * **a carried light does not lift a sealed zone**;
+    * **and does lift an unsealed one**, which is the control that makes the
+      cell above mean something. Without it, a sealed zone reading
+      `SUPERIOR` proves only that the zone is dark.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies, light_concealment
+    from combat_engine.engine.types import Cover, Light
+
+    def look(*, sealed: bool, torch: bool, sees_dark: bool) -> Cover:
+        world, me, _ = _board(seed=1)
+        foe = sorted(enemies(world, me))[0]
+        c = Cast(world=world, me=me, ref="drivers:sealed-dark")
+        # The zone is laid over the **target**, which is whose squares
+        # `light_concealment` reads.
+        from combat_engine.engine.query import squares
+        c.zone(
+            frozenset(squares(world, foe)), label="drivers:dark",
+            until=When.ENCOUNTER, obscured=Light.DARK, no_light=sealed,
+        )
+        if torch:
+            # Wide enough to cover the foe from where the caster stands --
+            # the board deals them adjacent, so 2 is already plenty, and a
+            # radius that failed to reach would read exactly like the seal
+            # working.
+            c.light(6, on=me, until=When.ENCOUNTER)
+        if sees_dark:
+            c.darkvision(on=me, until=When.ENCOUNTER)
+        return light_concealment(world, me, foe)
+
+    plain = look(sealed=False, torch=False, sees_dark=False)
+    out.that(plain == Cover.SUPERIOR,
+             f"a zone of darkness conceals totally ({plain!r})")
+
+    seen = look(sealed=False, torch=False, sees_dark=True)
+    out.that(seen == Cover.NONE,
+             "and not from a looker that sees in darkness -- the clause the"
+             f" `exempt_if=` marker was asking for ({seen!r})")
+
+    lifted = look(sealed=False, torch=True, sees_dark=False)
+    out.that(lifted == Cover.NONE,
+             "a carried light lifts an ordinary darkness, which is why"
+             f" 'cannot be illuminated' was a real gap ({lifted!r})")
+
+    held = look(sealed=True, torch=True, sees_dark=False)
+    out.that(held == Cover.SUPERIOR,
+             "and a sealed zone is not lifted by the same light"
+             f" ({held!r})")
+
+
+def a_reshaped_row_is_still_usable(out: Result) -> None:
+    """A reshape changes the `kind`, and five readers were reading the print.
+
+    `dsl.reach_of`'s docstring states the rule this module is organised
+    around -- *every reader that has a world and an actor must come through
+    here* -- and names the ones that cannot. **Five sites in `dsl.py` did
+    not come through it and were named nowhere.** Three wrapped the print in
+    `switched(...)`, which is only *half* the resolution: it applies the
+    state-switch and not the reshape. Two read the `kind` straight off the
+    header.
+
+    That matters because a replacing reshape can change the `kind` itself --
+    `i2467p1` prints "its area changed to 1 square" -- so the print says
+    `area_burst` while the creature is holding a `close_burst`:
+
+        p.reach_of(0)                 Area burst 1 within 10
+        switched(p.reach_of(0))       Area burst 1 within 10
+        reach_of(world, actor, ...)   Close burst 1
+
+    **And the consequence was a row that could not be used at all.**
+    `_can_land` asked the header whether the row needs an origin, got
+    `area_burst`, and looked for an origin that a close burst does not have
+    -- so it answered **False** and the row left the menu. Which is the
+    exact fault `_can_land`'s own docstring was written against: *"a blast
+    that happens to point away from everybody reported itself unusable while
+    three creatures stood in range."*
+
+    Measured rather than reasoned, on a row printed `Area burst 1 within 10`
+    reshaped to `close_burst`:
+
+        before   _can_land False   <- the row is gone
+        after    _can_land True
+
+    The printed case is the control and is unchanged, which is what says the
+    fix did not simply make `_can_land` answer True for everything. #894.
+    """
+    import dataclasses
+
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import dsl
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+
+    REF = "m4756a3"
+
+    def ask(reshaped: bool) -> tuple[str, bool, object]:
+        world, me, _ = _board(seed=1)
+        # Narrowed: `dsl.get` answers `Power | None`, and `ty` reports an
+        # unnarrowed one as three argument-type diagnostics rather than one.
+        p = must(dsl.get(REF), "the row under test")
+        c = Cast(world=world, me=me, ref="drivers:reshaped-usable")
+        if reshaped:
+            c.reshape_area(
+                lambda r: dataclasses.replace(r, kind="close_burst", size=1),
+                ref=REF, until=When.ENCOUNTER,
+            )
+        shape = dsl.reach_of(world, me, p, 0, 0)
+        _, origin = dsl._auto_targets(world, me, p, None, 0, 0)
+        return shape.kind, dsl._can_land(world, me, p, 0, 0), origin
+
+    kind, lands, origin = ask(reshaped=False)
+    out.that(kind == "area_burst" and lands and origin is not None,
+             "printed, the row is an area burst, lands, and picks an origin"
+             f" ({kind}, can_land={lands}, origin={origin})")
+
+    kind, lands, origin = ask(reshaped=True)
+    out.that(kind == "close_burst",
+             f"a replacing reshape changes the kind itself ({kind})")
+    out.that(lands,
+             "and the reshaped row is still usable -- reading the header here"
+             f" reported it unusable while its targets stood in range"
+             f" (can_land={lands})")
+    out.that(origin is None,
+             "with no origin, because a close burst has none to choose"
+             f" ({origin!r})")
+
+
+def pull_what_you_hold(out: Result) -> None:
+    """Dragging a grabbed creature is a **granted action**, not a flag on
+    the grab.
+
+    `f970b` prints "while you have the target grabbed you can pull it 1
+    square as a minor action", and the marker for it named
+    `c.grab(pull_as_minor=)` -- a parameter on the hold. It cannot be one:
+    the clause is a line in the action menu, so a kwarg would have had to
+    grow its own entry in `actions` anyway and would only have hidden where
+    the work is. #888, split out of #560.
+
+    **The word and its reader land together or not at all**, which is #583:
+    `c.grant_action` lays a bonus under `"<what> as <cost>"`, nothing used
+    to validate the word, and nine rows granted something no reader ever
+    looked for -- costing nothing, doing nothing, and auditing green.
+    `actions.GRANTABLE` is the gate and `drivers.granted_words` greps for
+    the comparison that proves each word is consulted.
+
+    Four things measured, and the third is the one the issue asked for:
+
+    * the grant puts `pull_grabbed` on the menu **while a grab is held**;
+    * it offers **one option per destination square**, because which square
+      the victim is dragged to is the puller's choice and the whole point of
+      the printed line;
+    * **nothing is offered to a creature grabbing nobody**, which is the
+      plant this issue names -- the reader asks `Relation.GRABBED_BY` live
+      rather than trusting the grant;
+    * and taking the option **moves the victim**, through `movement.forced`
+      rather than a `Position` write, so `Grid.occupants` does not go stale.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.actions import GRANTABLE, legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import ActionType
+
+    out.that("pull_grabbed" in GRANTABLE,
+             "`pull_grabbed` is a word `c.grant_action` may hand out")
+
+    def board(grabbing: bool):  # noqa: ANN202
+        world, me, _ = _board(seed=1)
+        enc = world.encounter
+        assert enc is not None
+        foe = sorted(enemies(world, me))[0]
+        c = Cast(world=world, me=me, ref="drivers:pull-held")
+        if grabbing:
+            c.grab(on=foe)
+            # **Two squares away, which is where this card's grab lives.**
+            # The printed line is "you can sustain the grab as long as the
+            # target is within 2 squares of you", and a pull must end
+            # *nearer* -- so against an adjacent victim `forced_squares`
+            # correctly returns nothing and the option has nowhere to go.
+            # That is not a fault in the grant: a grabbed creature ends up
+            # non-adjacent in play whenever anything moves either of them,
+            # and that is exactly when dragging it is worth a minor.
+            #
+            # Lifted and replaced rather than assigned, because writing
+            # `Position.square` alone leaves `Grid.occupants` stale and the
+            # board then reads as though the square were empty.
+            spot = world.need(me, Position).square
+            away = (spot[0] + 2, spot[1])
+            world.grid.lift(foe)
+            world.need(foe, Position).square = away
+            world.grid.place(foe, frozenset({away}))
+            world.zones.refresh()
+        # `on=me` deliberately: the default subject is `c.target`, and a
+        # bare call grants the pull to the creature being dragged.
+        c.grant_action("pull_grabbed", ActionType.MINOR, squares_=1,
+                       on=me, until=When.ENCOUNTER)
+        return world, enc, me, foe
+
+    world, enc, me, foe = board(grabbing=True)
+    pulls = [a for a in legal(world, enc, me) if a.kind == "pull_grabbed"]
+    out.that(bool(pulls),
+             f"holding a grab, the pull is on the menu ({len(pulls)} option(s))")
+    out.that(len({a.dest for a in pulls}) == len(pulls) and len(pulls) > 1,
+             "one option per destination square, so the square stays the"
+             f" puller's choice ({len({a.dest for a in pulls})} squares)")
+
+    # **The plant this issue names**, and it is a control rather than a
+    # break: the same grant on a creature holding nobody must offer nothing.
+    empty, enc2, me2, _ = board(grabbing=False)
+    idle = [a for a in legal(empty, enc2, me2) if a.kind == "pull_grabbed"]
+    out.that(not idle,
+             "and a creature grabbing nobody is offered none of it"
+             f" ({len(idle)} option(s)) -- the reader asks the relation live")
+
+    before = world.need(foe, Position).square
+    perform(world, enc, me, pulls[0])
+    after = world.need(foe, Position).square
+    out.that(after != before and after == pulls[0].dest,
+             f"taking it drags the victim {before} -> {after}, to the square"
+             " the option named")
+
+
+def a_variant_race_inherits_and_is_not_dealt(out: Result) -> None:
+    """Nine races carry no sheet numbers and were skipped outright.
+
+    They are not thin imports: **all 21 of their traits print a "replaces"
+    clause**, so they are variants by construction and the page expects them
+    to inherit a parent's size, speed, vision, skills and surges while
+    swapping named pieces.
+
+    **The parent is derived, not imported.** The clause names its target by
+    **ref** in the stored spec -- *"This benefit replaces rt:r1-t1."* -- and
+    every one of the nine resolves to exactly one parent, which is the only
+    reason this is a derivation rather than a guess:
+
+        r54 r55 -> r2      r56 r57 r64 -> r3
+        r58 r59 -> r4      r67 r68     -> r1
+
+    So no ETL change and no rebuild. `_variant_of` returns no parent at all
+    when the clauses name two, because adopting the lower-numbered one would
+    be a guess dressed as a rule.
+
+    **Selectable and not dealt, which is the half that keeps this cheap.** A
+    variant's own traits are undeclared (#813), so a *dealt* one would wear
+    its parent's traits under another name -- wrong in a way no instrument
+    reports, because the row that should have replaced them does not exist
+    to be missing. Keeping them out of the deal is also right on the merits:
+    a race whose every trait is unwritten is not one a dealer should hand
+    out.
+
+    And it is what makes this landable without a fixture re-record.
+    `DEAL_RACES`' own comment is the warning: changing what races are dealt
+    *"moves every number on every sheet and with them every roll in every
+    fight"*, and those fixtures were re-recorded in a commit with nothing
+    else in it. `replay` is green here, which is the measurement that says
+    no draw moved.
+
+    Four things, and the last is the control: filtering both the uniform
+    pool and the **scored** option list, because `winrate` runs both modes
+    in one process and leaving variants in one of them would move the
+    scored sheets while the uniform draw stayed put. #896.
+    """
+    from random import Random
+
+    from combat_engine.chargen import RACES, Character, deal_race
+    from combat_engine.chargen.choices import race_options
+
+    nine = ("r54", "r55", "r56", "r57", "r58", "r59", "r64", "r67", "r68")
+    kin = {"r54": "r2", "r55": "r2", "r56": "r3", "r57": "r3", "r64": "r3",
+           "r58": "r4", "r59": "r4", "r67": "r1", "r68": "r1"}
+
+    here = [r for r in nine if r in RACES]
+    out.that(len(here) == len(nine),
+             f"all nine variant races are in RACES now ({len(here)} of"
+             f" {len(nine)}), where every one used to be skipped for having"
+             " no sheet numbers")
+
+    wrong = {r: RACES[r].parent for r in here if RACES[r].parent != kin[r]}
+    out.that(not wrong,
+             "each one derives the parent its own traits name, by ref"
+             f" ({wrong or 'all nine agree'})")
+
+    thin = [r for r in here
+            if RACES[r].speed != RACES[kin[r]].speed
+            or RACES[r].size is not RACES[kin[r]].size]
+    out.that(not thin,
+             f"and inherits that parent's sheet ({thin or 'speed and size match'})")
+
+    held = Character(cls="fighter", level=1, race="r67")
+    out.that("race:r67" in held.choices,
+             "a character may still **name** one, and carries `race:r67` so"
+             f" a row can gate on it ({sorted(held.choices)[:3]})")
+
+    drawn = {deal_race(Random(s), "fighter") for s in range(200)}
+    out.that(not {r for r in drawn if RACES[r].parent},
+             f"but none is ever **dealt** -- {len(drawn)} distinct races over"
+             " 200 draws and no variant among them")
+
+    scored = {c.ref for c in race_options("fighter")}
+    out.that(not scored & set(nine),
+             "and none is on the **scored** option list either, which is the"
+             " list `winrate`'s other mode samples from")
+
+
+def two_variant_racial_traits(out: Result) -> None:
+    """The two r67/r68 traits that are rows, and each one's gate.
+
+    #813 asked for six rows. **Two is the honest count** -- a fly speed
+    twice, an ability-score pair and a granted power belong on the sheet or
+    in `RaceLine.granted`, which is `features/racial.py`'s charter: "none of
+    it belongs in a row". Both are writable only because `#896` gave the
+    two races a parent and a sheet; before that a character could not hold
+    either.
+
+    **The interesting half is which reader each gate uses, because the
+    obvious one is silently false.** `racial.py` has `_keyword(word)` and
+    `_against(*conditions)` sitting right there, and both read a **save**
+    context -- the keywords and conditions of the effect being saved
+    against. Measured on a real damage context, the keys are
+
+        advantage charge crit dtype dtypes from_attack granted_by
+        granted_via opportunity power ranged source target
+
+    with **no `keywords` and no `conditions`**. So `_keyword(ARCANE)` would
+    have been an empty-set test on every swing: the row fires, lays a
+    bonus, audits green, and the bonus never applies. That is this
+    component's named failure mode and the reason both gates below read
+    something the context actually carries -- the power's ref for one, the
+    target's live state for the other.
+
+    Four assertions, two of them the negatives that make the others mean
+    anything.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.query import enemies, has_combat_advantage
+    from combat_engine.engine.types import Condition, Keyword
+
+    # -- rt:r67-t0: a damage bonus on arcane attacks only ---------------
+    # **Asked of the modifier directly, with a context naming each kind of
+    # power.** That is the gate under test and nothing else: inferring it
+    # from hit points would also be measuring the weapon, the roll and the
+    # target's resistances, and a zero there would not say which.
+    world, me, _ = _board("rt:r67-t0", seed=1)
+    use(world, me, "rt:r67-t0", spend=False)
+    mods = world.get(me, Mods)
+    out.that(mods is not None and bool(mods.items),
+             "the trait lays a damage modifier at all")
+
+    arcane = next(
+        (r for r, p in REGISTRY.items()
+         if p.is_attack and Keyword.ARCANE in p.keywords), "")
+    plain = next(
+        (r for r, p in REGISTRY.items()
+         if p.is_attack and Keyword.ARCANE not in p.keywords
+         and Keyword.WEAPON in p.keywords), "")
+    on_arcane = mods.total("damage", {"power": arcane}) if mods else 0
+    on_plain = mods.total("damage", {"power": plain}) if mods else 0
+    out.that(on_arcane >= 1,
+             f"and it applies to an arcane attack ({arcane}: +{on_arcane})")
+    out.that(on_plain == 0,
+             f"and not to one without the keyword ({plain}: +{on_plain}) --"
+             " the negative that `_keyword` would have failed in both"
+             " directions, by reading a context key that is never there")
+
+    # -- rt:r68-t1: advantage only against the three conditions ---------
+    # **A foe the board is not already giving away**, which is the trap
+    # `zone_exempt` records three of. `sorted(enemies())[0]` is the one the
+    # board arranges the fight around and it answers `True` **before this
+    # trait is used at all** -- flanked, or whatever else it is posed for.
+    # Measured: foe[0] True, foes 3 and 4 False. A negative control on the
+    # first foe therefore reads True whatever the gate does, which is how
+    # this rule failed its own control on the first run.
+    def a_clean_foe(world, me):  # noqa: ANN001, ANN202
+        return next(
+            (f for f in sorted(enemies(world, me))
+             if not has_combat_advantage(world, me, f)),
+            None,
+        )
+
+    def advantage(afflicted: bool) -> bool | None:
+        world, me, _ = _board("rt:r68-t1", seed=1)
+        foe = a_clean_foe(world, me)
+        if foe is None:
+            return None
+        c = Cast(world=world, me=me, ref="drivers:r68")
+        use(world, me, "rt:r68-t1", spend=False)
+        if afflicted:
+            c.condition(Condition.SLOWED, on=foe)
+        return has_combat_advantage(world, me, foe)
+
+    slowed, hale = advantage(True), advantage(False)
+    out.that(slowed is not None,
+             "the board has a foe it is not already granting advantage"
+             " against, to ask the question of")
+    out.that(slowed,
+             f"a slowed enemy grants this character combat advantage ({slowed})")
+    out.that(not hale,
+             "and an enemy under none of the three does not -- the negative"
+             f" that says the gate is read rather than ignored ({hale})")
+
+
+def a_reentrant_repeat_passes_a_spent_grant(out: Result) -> None:
+    """`grant_attack(reentrant=True)` stood aside for one of the two things
+    its docstring promised.
+
+    Its own words: *"the swing being granted is the very row and the very
+    use this one is answering, so the in-flight guard **and the usage
+    limit** both have to stand aside for it."* `use()` passes
+    `spent_ok=reentrant` into `usable`, which covers the row's **printed**
+    usage -- an encounter or daily already spent. It did not cover a limit
+    from `c.grant_row(uses=N)`, which counts the holder's own `PowerUsed`
+    and then calls `c.forbid(ref)` -- and `usable` refused anything in
+    `Powers.forbidden` **unconditionally, two gates earlier**.
+
+    So a repeat of a granted, use-limited row was refused while the
+    docstring said it was not. `i2002p1` fired on 4 of 8 audit attempts and
+    did nothing on every one; its `KNOWN_SILENT` excuse is removed in the
+    same change and the audit's own "an excuse outlived the thing it
+    excused" line is what demanded that.
+
+    **Why a second set and not a flag.** `forbidden` holds two different
+    facts: a grant whose allowance ran out, and a prohibition -- *"loses the
+    ability to use that power"*. An at-will has no printed allowance to
+    exhaust, so the exhaustion had nowhere to go but `forbidden`, and
+    nothing recorded which kind it was. `Powers.spent_out` is the subset
+    that ran out, written only by `grant_row`'s counter and cleared by the
+    same `undo` the forbid carries, so it cannot outlive the limit.
+
+    Four cells, and the second is the one that keeps this narrow:
+
+    * an exhausted grant is repeatable under `reentrant`;
+    * **a real prohibition is not**, which is the whole reason the waiver
+      reads `spent_out` rather than `forbidden`;
+    * without `reentrant` an exhausted grant is still refused, so the
+      ordinary path is unchanged;
+    * and the reason does not outlive the restriction. #820.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import get, usable
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+
+    REF = "p10069"          # a wizard arcane at-will
+
+    def board(prohibited: bool):  # noqa: ANN202
+        world, me, _ = _board(seed=1)
+        known = world.get(me, Powers) or world.add(me, Powers())
+        c = Cast(world=world, me=me, ref="drivers:reentrant")
+        if prohibited:
+            # Known outright here, because `grant_row` below refuses to
+            # grant a row the creature already has -- it is "let a creature
+            # use a row it does not know" and answers `None` otherwise.
+            # Handing it the row *and* asking for the grant is a
+            # self-contradicting setup, which is what the first version of
+            # this rule did: the grant never armed, so nothing was ever
+            # exhausted and three cells failed for the harness rather than
+            # for the code.
+            known.known = (*tuple(known.known), REF)
+            # A genuine prohibition, the sentence `c.forbid` is for.
+            c.forbid(REF, on=me, until=When.ENCOUNTER)
+        else:
+            # The grant's allowance, exhausted: one use, then spend it.
+            c.grant_row(REF, on=me, uses=1, until=When.ENCOUNTER)
+            foe = sorted(enemies(world, me))[0]
+            from combat_engine.engine.dsl import use
+            use(world, me, REF, targets=[foe], spend=False)
+        return world, me, known
+
+    world, me, known = board(prohibited=False)
+    out.that(REF in known.forbidden,
+             f"the grant's one use is spent and the row is forbidden"
+             f" ({REF in known.forbidden})")
+    out.that(REF in known.spent_out,
+             "and recorded as **ran out** rather than prohibited"
+             f" ({sorted(known.spent_out)})")
+    row = must(get(REF), "the wizard at-will under test")
+    ok, why = usable(world, me, row, spent_ok=True)
+    out.that(ok,
+             f"so a reentrant repeat is let past it ({ok}, {why!r})")
+    plain_ok, plain_why = usable(world, me, row, spent_ok=False)
+    out.that(not plain_ok,
+             "while the ordinary path still refuses -- nothing but a repeat"
+             f" gets this ({plain_ok}, {plain_why!r})")
+
+    # **The negative that makes the waiver narrow.**
+    world, me, known = board(prohibited=True)
+    out.that(REF in known.forbidden and REF not in known.spent_out,
+             "a real prohibition is forbidden and **not** in `spent_out`"
+             f" ({sorted(known.spent_out)})")
+    barred, why = usable(world, me, row, spent_ok=True)
+    out.that(not barred,
+             "so a reentrant repeat is still refused by it -- the cell that"
+             f" fails if the waiver reads `forbidden` ({barred}, {why!r})")
+
+
+def a_trigger_reads_the_attackers_reach(out: Result) -> None:
+    """`by_melee`, `by_melee_only` and `by_ranged` judged an attack by the
+    shape it **used to have**.
+
+    `dsl.reach_of`'s rule is that every reader holding a world and an actor
+    comes through it, because a replacing reshape changes the `kind` itself
+    -- `i2467p1` prints "its area changed to 1 square", so a printed
+    `area_burst` is a `close_burst` in that creature's hands. #894 fixed
+    five such sites in `dsl.py`; these three were a sixth, seventh and
+    eighth in **another module**, so that sweep never reached them and the
+    rule it restored was still not held. 309 rows carry one of the three.
+
+    **The reason this was not a one-liner, and the reason the third cell
+    below exists.** `reach_of` wants the **attacker** -- whoever's reshape
+    applies -- and these helpers are handed `me`, the creature *watching*,
+    which for "a ranged attack damages you" is the **victim**. Passing `me`
+    would have read the wrong creature's reshape and been worse than
+    reading the header. So `_attacker_of(ev)` takes it off the event, which
+    spells it two ways: `attacker` on an attack event and `source` on a
+    damage or drop one -- the same split `_power_of` already documents for
+    the row.
+
+    Three cells, on a row printed `Area burst 1 within 10`:
+
+    * printed, it reads as ranged and not melee;
+    * **reshaped by the attacker**, that flips -- which is the fix;
+    * **reshaped by the watcher**, it does *not* flip, which is what says
+      the attacker is being read and not the subscriber. The one-liner this
+      replaced would pass the first two and fail this one.
+
+    Ongoing damage has no attacker (`source` is `None`) and falls back to
+    the print, which is the honest answer: with nobody to read a reshape
+    off, the card is all there is. #898.
+    """
+    import dataclasses
+
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import triggers
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import enemies
+
+    REF = "m4756a3"
+
+    def ask(on_attacker: bool, on_watcher: bool) -> tuple[bool, bool]:
+        world, me, _ = _board(seed=1)
+        foe = sorted(enemies(world, me))[0]
+
+        def swap(r):  # noqa: ANN001, ANN202
+            return dataclasses.replace(r, kind="close_burst", size=1)
+
+        if on_attacker:
+            Cast(world=world, me=me, ref="drivers:898").reshape_area(
+                swap, ref=REF, until=When.ENCOUNTER)
+        if on_watcher:
+            Cast(world=world, me=foe, ref="drivers:898").reshape_area(
+                swap, ref=REF, on=foe, until=When.ENCOUNTER)
+        ev = Hit(attacker=me, target=foe, power=REF, critical=False)
+        # `foe` is the **watcher** -- the victim, whose trigger this is.
+        return triggers.by_ranged(world, foe, ev), triggers.by_melee(world, foe, ev)
+
+    rng, mel = ask(False, False)
+    out.that(rng and not mel,
+             f"printed, an area burst reads as ranged and not melee"
+             f" (ranged={rng}, melee={mel})")
+
+    rng, mel = ask(True, False)
+    out.that(mel and not rng,
+             "reshaped by the **attacker** it reads as melee instead --"
+             f" the shape the attack was made with (ranged={rng}, melee={mel})")
+
+    rng, mel = ask(False, True)
+    out.that(rng and not mel,
+             "and a reshape on the **watcher** changes nothing, which is"
+             " what says the attacker is read and not the subscriber"
+             f" (ranged={rng}, melee={mel})")
+
+
+def a_choose_one_race_actually_chooses(out: Result) -> None:
+    """A race that prints "choose one of the following" was pinned to the
+    first printed power for every character of it.
+
+    `RaceLine.granted` answered `written[:1]`, so an `r33` always carried
+    the same manifestation of **thirteen** and an `r44` always the same
+    aspect of **three**. Nothing dealt it and nothing recorded it.
+
+    **The count does not change and that is what makes this safe.**
+    `written[:1]` and `[pick.choice(written)]` are both one power, so no
+    character gains or loses a row -- only *which* row it is moves. Whether
+    `one_of` is right about a given race is a separate and pre-existing
+    question this does not touch.
+
+    Seeded and uniform rather than scored: every other build decision goes
+    through `choices.sample` against a scored list, there is no scorer for a
+    racial power yet, and this is the same fallback `deal_race` takes when
+    `SCORED_CHOICES` is off. `pick=None` keeps the old answer exactly, which
+    is what lets `choices.race_options` rank a **race** without a particular
+    pick entering the ranking.
+
+    **Its own seeded stream in `spawn`**, like the loadout's and the feats',
+    so choosing a racial power cannot move the dice the fight is about to
+    roll. The character still changes -- that is the point, and it is what
+    the fixture re-record beside this pays for -- but through the hand
+    rather than the roll order.
+
+    Four things, and the third is the one that bounds the blast radius.
+    #743's second part. #680 is **not** closed by this: its subject is `r6`,
+    whose alternation is between a *trait* and a power rather than among
+    powers, and nothing records which trait alternates.
+    """
+    from random import Random
+
+    from combat_engine.chargen import RACES
+    from combat_engine.content import loader  # noqa: F401
+
+    r33 = RACES["r33"]
+    out.that(len(r33.powers) == 13 and r33.one_of,
+             f"r33 prints {len(r33.powers)} powers and says choose one")
+
+    pinned = r33.granted()
+    out.that(pinned == r33.granted(),
+             "with no pick it answers exactly what it used to -- which is"
+             " what keeps the race scorer's ranking where it was")
+
+    drawn = {
+        tuple(r33.granted(Random(f"s{s}:r33")))[-1] for s in range(40)
+    }
+    out.that(len(drawn) > 1,
+             f"and with one it varies ({len(drawn)} distinct manifestations"
+             f" over 40 seeds), where before it was always {pinned[-1]}")
+
+    # **The blast radius, stated as a measurement rather than a belief.**
+    # The new path is gated on `one_of`, and only a race with more than one
+    # *written* power can actually move -- so a diverging fixture must hold
+    # one of these five and no other race can be involved.
+    movable = [
+        ref for ref, line in sorted(RACES.items())
+        if {tuple(line.granted(Random(f"s{s}:{ref}"))) for s in range(40)}
+        != {tuple(line.granted())}
+    ]
+    out.that(movable == ["r1", "r16", "r33", "r44", "r68"],
+             f"exactly five races can have their hand moved by this"
+             f" ({movable}) -- the other 50 cannot, whatever the seed")
+
+    sizes = {
+        ref: (len(RACES[ref].granted()), len(RACES[ref].granted(Random("x"))))
+        for ref in movable
+    }
+    out.that(all(a == b for a, b in sizes.values()),
+             f"and none of the five changes how many rows it hands over"
+             f" ({sizes}) -- the pick swaps a power, it does not add one")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -11256,6 +12538,110 @@ def boon_traded(out: Result) -> None:
              "and without it the printed clause is untouched -- the charge"
              f" comes back and no point does (charge {left_without},"
              f" points {points_without})")
+
+
+def boon_offered_where_it_is_paid(out: Result) -> None:
+    """A card trading the pact boon away reaches the legs that pay inline.
+
+    Four cards print some form of "instead of your pact boon" and name no
+    pact, so each payout has to offer itself under the shared clause
+    `warlock.BOON` and the card registers against every ref in
+    `warlock.BOONS`. Two of the five payouts did not offer it, and both
+    were outside `features/warlock.py` -- which is exactly why nothing
+    noticed: the registering rows were written, their markers said so in
+    prose, and every row involved audited green.
+
+    **`cf:warlock-f1` is the one worth driving**, because it is three of
+    the seven pacts on its own and because its payout lives inside a
+    watcher it installed itself. That makes `Cast.variant` 0 for ever, so
+    `c.instead_of`'s fast path would return the printed payout **without
+    ever asking** -- a trade that silently never happens. `instead_of_now`
+    is the reader for that shape and the assertion below is what tells the
+    two apart.
+
+    Three things measured, and the second is the one that fails on a
+    plausible wrong implementation:
+
+    * a registered clause is **taken**, and the printed payout does not
+      also happen -- an implementation that pays both is the "free where
+      the card charges" fault these rows were reshaped to fix;
+    * **declining leaves the printed payout alone**, because every one of
+      these cards says "you can" and a compulsory trade is a different
+      card;
+    * with **nothing registered** the payout is untouched, which is the
+      control that a green result is not just the boon failing to pay.
+
+    **`p16254` is not driven here, and that is a real gap in this rule.**
+    It is the other payout opened at the same time, and it takes the
+    *opposite* reader -- plain `c.instead_of`, because it carries a
+    declared trigger and `Triggers._ask` has already offered the
+    substitution. Reaching that path needs the trigger dispatcher rather
+    than a body call, so what covers it is construction: the same two lines
+    as `cf:warlock-f1c10`, which has shipped. Said out loud rather than
+    counted as covered. #641.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.features.warlock import BOON, BOONS
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Health, Powers
+    from combat_engine.engine.events import Dropped
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import arm_traits
+    from combat_engine.engine.types import Relation
+
+    REF = "cf:warlock-f1"
+
+    def play(register: bool, take: bool) -> tuple[int, int]:
+        """(temp hp the printed payout gave, times the substitute ran)."""
+        world, me, _ = _board(seed=1)
+        known = world.get(me, Powers) or world.add(me, Powers())
+        known.known = (*tuple(known.known), REF)
+        held = world.get(me, Build) or world.add(me, Build())
+        # The infernal leg, whose payout is temporary hit points -- the one
+        # of the three with a number to read rather than a position change.
+        held.choices = (*tuple(held.choices), "infernal")
+        arm_traits(world, me)
+
+        ran: list[int] = []
+        c = Cast(world=world, me=me, ref="drivers:boon-inline")
+        if register:
+            c.pre_empt(REF, BOON, lambda using: ran.append(1))
+        # The offer puts the clause first and the decline last, so the end
+        # of the list is the "no, as printed" answer.
+        world.decider = (lambda actor, kind, options, prompt="":
+                         options[0] if take else options[-1])
+
+        foe = sorted(enemies(world, me))[0]
+        world.relations.set(Relation.CURSED_BY, me, foe)
+        # **Measured across the drop, not read afterwards.** The board
+        # hands out temporary hit points of its own before any body runs,
+        # so an absolute reading here would be a number the payout never
+        # produced.
+        before = world.need(me, Health).temp
+        world.bus.emit(Dropped(actor=foe))
+        return world.need(me, Health).temp - before, len(ran)
+
+    out.that(REF in BOONS and "p16254" in BOONS,
+             "`warlock.BOONS` lists both payouts that were opened -- the"
+             " constant and the rows agree about where a boon is paid")
+
+    printed_only, ran_only = play(register=False, take=False)
+    out.that(printed_only > 0 and ran_only == 0,
+             "with nothing registered the printed payout pays in full"
+             f" (+{printed_only} temporary hit points), so a green trade"
+             " below is not the boon quietly failing")
+
+    traded, ran_traded = play(register=True, take=True)
+    out.that(ran_traded == 1 and traded == 0,
+             "a registered clause is taken at the payout and the printed"
+             f" benefit does not also arrive (clause ran {ran_traded}x,"
+             f" temporary hit points +{traded})")
+
+    declined, ran_declined = play(register=True, take=False)
+    out.that(ran_declined == 0 and declined == printed_only,
+             "and declining leaves the card as printed -- every one of"
+             f" these says 'you can' (clause ran {ran_declined}x, temporary"
+             f" hit points +{declined} against +{printed_only})")
 
 
 def lent_augments(out: Result) -> None:
@@ -11817,6 +13203,64 @@ def disease(out: Result) -> None:
     out.that(row is not None and row[4] in
              ("fixed", "source_level", "encounter_level", "band"),
              "and a DC shape, because the pages print four of them")
+
+
+def a_school_decides_which_creature_is_summoned(out: Result) -> None:
+    """`p13984` summons one of two creatures, chosen by the school benefit.
+
+    Camille's ruling, 2026-10-21: `cf:wizard-mage-f4s4` gets `x10_28` and
+    `cf:wizard-mage-f4s3` gets `x10_27`. `x10_29` *"should become available
+    at level 19"*, so it must never arrive from this row.
+
+    **This rule exists because `audit` cannot see the row at all.** It fires
+    48 times and returns on its first gate, because the board's wizard is an
+    arcanist/sha-ir build and holds no `cf:wizard-mage-f4s*` -- so SILENT
+    there is a statement about the board, not the row. Asserted through the
+    body with the feature granted, which is the only way to tell a working
+    branch from a dead one.
+
+    **Both arms, and the negative control is the one that matters.** A rule
+    that granted only one school would pass with the branch collapsed to a
+    single `c.summon`, which is exactly the shape the card does not have.
+    The third assertion -- neither school held, nothing summoned -- is what
+    catches a body that ignores the gate, and the fourth guards the ruling's
+    other half: the level-19 creature is not this row's.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Ident
+    from combat_engine.engine.dsl import REGISTRY
+
+    def summons(feature: str) -> str:
+        """Run the body with that school held; return the summoned ref."""
+        world, me, _ = _board("p13984", 1)
+        if feature:
+            Cast(world=world, me=me, ref="drivers:grant").grant_row(
+                feature, on=me
+            )
+        before = {eid for eid, _ in world.each(Ident)}
+        REGISTRY["p13984"].body(Cast(world=world, me=me, ref="p13984"))
+        fresh = [world.get(eid, Ident).ref
+                 for eid, _ in world.each(Ident) if eid not in before]
+        return next((r for r in fresh if r.startswith("x10_")), "")
+
+    necro = summons("cf:wizard-mage-f4s3")
+    nether = summons("cf:wizard-mage-f4s4")
+    neither = summons("")
+
+    out.that(necro == "x10_27",
+             "the necromancy school summons x10_27", f"{necro!r}")
+    out.that(nether == "x10_28",
+             "and the nethermancy school summons x10_28 -- a different"
+             " creature, which is what makes the branch load-bearing",
+             f"{nether!r}")
+    out.that(neither == "",
+             "and a wizard holding NEITHER school summons nothing, which is"
+             " the printed Prerequisite and the control a one-armed rule"
+             " cannot provide", f"{neither!r}")
+    out.that("x10_29" not in (necro, nether),
+             "and x10_29 never arrives from this row -- it is the level-19"
+             " creature, and reading it off the errata line is the mistake"
+             " this row's two earlier markers were built on")
 
 
 def summoned(out: Result) -> None:
@@ -12692,7 +14136,7 @@ def shield_penalty_waived(out: Result) -> None:
     survive: the card waives the shield and says nothing about plate.
     """
     import combat_engine.content  # noqa: F401  -- fills the registry
-    from combat_engine.chargen import ARMOUR_CHECK, SHIELD_CHECK
+    from combat_engine.armour import ARMOUR_CHECK, SHIELD_CHECK
     from combat_engine.engine import skills
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Gear
@@ -12748,6 +14192,114 @@ def shield_penalty_waived(out: Result) -> None:
              "in plate AND a heavy shield only the shield is given back --"
              " the card waives one of the two and says nothing about armour",
              f"{pl_bare} -> {pl_feat}, plate still costs {plate}")
+
+
+def offered_aiming_is_what_area_answers(out: Result) -> None:
+    """`c.area()` answers for the aiming this use chose, not the print. #884.
+
+    `f2945` offers `p11052` an area burst 1 within 5 beside its printed
+    close burst 1, and the feat's second sentence leashes the teleport to
+    *the area of the burst*. Two faults made that unwritable and both read
+    the header where a creature was available:
+
+    * `Cast.area` called `area_of` with four positional arguments, so
+      `branch` was always 0;
+    * `area_of` resolved the branch through `Power.reach_of`, which
+      **clamps** an index past the printed ones rather than raising -- so an
+      offered aiming silently came back as the printed one.
+
+    **The assertion is that the two aimings cover different squares and that
+    the row's own teleport is confined to the one chosen.** A `reach_of`
+    that answers correctly while `c.area()` reports the print is the shape of
+    failure this engine produces: right by inspection, wrong in play -- which
+    is the same argument `both_printed_shapes_offered` makes one row over,
+    for a *printed* pair rather than an offered one.
+
+    Two negative controls, because "the areas differ" can be true for a
+    reason that has nothing to do with the branch:
+
+    * **without the feat, index 1 is not offered and must clamp** -- the
+      fallback is deliberate, not a bug, and this is what says so;
+    * **the printed aiming stays unleashed.** The reshape is `optional=True`
+      so a holder may still aim the print, and the printed card restricts the
+      teleport not at all. A leash applied to both would be the row gating on
+      `c.feat` instead of on the aiming, which is the mistake its docstring
+      is about.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        area_of,
+        branches_for,
+        get,
+        reach_of,
+    )
+
+    p = REGISTRY["p11052"]
+    out.that(p.branches == (0,),
+             "the row prints one aiming, so any index past 0 can only come"
+             " from a reshape offering one",
+             f"{p.branches}")
+    out.that(not REGISTRY["f2945"].unfinished,
+             "and the feat carries no marker now -- it was waiting on a"
+             " `c.area(branch=)` that does not exist, because the fix reads"
+             " `c.branch`",
+             f"{REGISTRY['f2945'].unfinished}")
+
+    # **The negative control first**, so the positive one cannot be read as
+    # "index 1 always differs". Nothing is offered here, and the clamp is
+    # what a caller that guessed an index gets.
+    bare, who, _ = _board("p11052", 1)
+    out.that(branches_for(bare, who, p) == (0,),
+             "with no feat standing, only the printed aiming is offered",
+             f"{branches_for(bare, who, p)}")
+    out.that(area_of(bare, who, p, None, 0) == area_of(bare, who, p, None, 1),
+             "and index 1 CLAMPS to the print rather than raising -- the"
+             " documented fallback, which `can_branch_for` is the guard for",
+             f"{len(area_of(bare, who, p, None, 1))} squares")
+
+    world, me, _ = _board("p11052", 1)
+    must(get("f2945"), "f2945 is declared").body(
+        Cast(world=world, me=me, ref="f2945"))
+    out.that(branches_for(world, me, p) == (0, 1),
+             "the feat contributes a second aiming past the printed one",
+             f"{branches_for(world, me, p)}")
+
+    kinds = (reach_of(world, me, p, 0).kind, reach_of(world, me, p, 1).kind)
+    out.that(kinds == ("close_burst", "area_burst"),
+             "and it is a different KIND of area, not a bigger one -- which"
+             " is why a `blast_size` stretch could not have said it",
+             f"{kinds}")
+
+    here = next(iter(sorted(must(world.get(me, Position), "the caster has a"
+                                 " Position").squares)))
+    far = (here[0] + 4, here[1])
+    a0 = area_of(world, me, p, far, 0)
+    a1 = area_of(world, me, p, far, 1)
+    out.that(far not in a0 and far in a1,
+             "given a chosen origin four squares off, the printed close"
+             " burst does not reach it and the offered area burst is"
+             " centred on it -- the two answer differently",
+             f"{len(a0)} squares against {len(a1)}")
+
+    # **Through `Cast`, which is what a row actually calls.** `area_of`
+    # answering per branch while `c.area()` dropped it is precisely the bug,
+    # so asserting the free function alone would have stayed green through
+    # the whole of it.
+    seen = {}
+    for b in (0, 1):
+        c = Cast(world=world, me=me, ref="p11052", branch=b, origin=far)
+        seen[b] = c.area()
+    out.that(far not in seen[0] and far in seen[1],
+             "and `c.area()` carries the branch through, which is the half"
+             " that was dropped: four positional arguments to `area_of`",
+             f"{len(seen[0])} against {len(seen[1])}")
+
+    out.that(seen[1] == a1,
+             "`c.area()` and `area_of` agree once the branch is passed",
+             f"{len(seen[1])} against {len(a1)}")
 
 
 def both_printed_shapes_offered(out: Result) -> None:
@@ -12828,8 +14380,8 @@ def both_printed_shapes_offered(out: Result) -> None:
                  f"{ref} -- \"{shape}\", conditional on a state -- is"
                  " written with ONE reach and no `alt`, which is what keeps"
                  " the two mechanisms distinguishable rather than blurred",
-                 f"alt={getattr(row.reach, 'alt', None)}"
-                 f" branches={getattr(row.reach, 'branches', None)}")
+                 f"alt={getattr(must(row, 'Power').reach, 'alt', None)}"
+                 f" branches={getattr(must(row, 'Power').reach, 'branches', None)}")
 
 
 def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
@@ -12955,6 +14507,838 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              " damage, and `f454`'s note is that a barbarian's rage rows are"
              " not all of them",
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
+
+
+def an_aura_strips_invisibility_on_arrival(out: Result) -> None:
+    """`c.no_invisibility_in` catches whoever is in the zone, and lets go.
+
+    `c.no_invisibility` landed with #774 and sits on the creature being
+    looked at, which is the right direction; what `p16019` was missing was
+    the **geometry**. A plain `c.no_invisibility` would strip invisibility
+    from whoever stood there when the aura was laid and keep stripping it
+    wherever they walked -- a stronger rule than standing in the aura.
+
+    **The bounds are what a hand-rolled copy fails, not the arrival** --
+    measured, by planting `for who in self._side(side, self.me):
+    self.no_invisibility(on=who)` in place of the geometry. That reddens
+    the *second* and *fourth* assertions and leaves the third green: a
+    loop at lay time grants to every creature on the board, so one that
+    "walks in" already had it. So the load-bearing pair is **outside
+    keeps it** and **leaving gives it back**.
+
+    Worth recording because the obvious intuition is the other way round.
+    `c.grants_in`'s docstring warns about the arrival case -- *"an ally who
+    walks in later does not pick it up ... a hand-rolled copy is a zone
+    that stops being a zone"* -- and that is the failure of a loop over
+    the zone's *current occupants*. A loop over a **side** fails the
+    opposite way, by over-granting, and an arrival assertion cannot see
+    it.
+
+    `world.zones.refresh()` is what the engine calls and what emits
+    `ZoneEntered`, which is the only thing `_while_inside` listens to.
+    Rewriting the grid alone moves the creature without the engine
+    noticing -- the trap `a_zone_grants_a_die`'s note above records.
+
+    Read through `query.unseen_by`, which is what the clause is about: an
+    invisible creature in the aura is not unseen, so it grants no combat
+    advantage and can be targeted.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When as _When
+    from combat_engine.engine.query import enemies, unseen_by
+
+    world, me, _ = _board()
+    foe = enemies(world, me)[0]
+    here = world.need(me, Position).square
+
+    Cast(world=world, me=foe, ref="drivers:hide").invisible(
+        until=_When.ENCOUNTER, on=foe
+    )
+    out.that(unseen_by(world, me, foe),
+             "an invisible enemy is unseen -- the control, before any aura",
+             f"{unseen_by(world, me, foe)}")
+
+    # Stand it well clear, so arrival is what catches it rather than the
+    # lay. `refresh` first, so the zone's idea of who is inside is current.
+    far = (here[0] + 9, here[1] + 9)
+    world.grid.lift(foe)
+    world.need(foe, Position).square = far
+    world.grid.place(foe, frozenset({far}))
+    c = Cast(world=world, me=me, ref="drivers:noinvis")
+    zid = c.aura(1, label="drivers:noinvis", until=_When.ENCOUNTER, on=me)
+    c.no_invisibility_in(zid, side="any")
+    world.zones.refresh()
+    out.that(unseen_by(world, me, foe),
+             "still unseen while it stands outside the aura, which is the"
+             " bound the card draws",
+             f"{unseen_by(world, me, foe)}")
+
+    step = (here[0] + 1, here[1])
+    world.grid.lift(foe)
+    world.need(foe, Position).square = step
+    world.grid.place(foe, frozenset({step}))
+    world.zones.refresh()
+    out.that(not unseen_by(world, me, foe),
+             "and NOT unseen once it is inside: a creature arriving after"
+             " the aura was laid is caught, which a hand-rolled loop over"
+             " the squares would miss",
+             f"{unseen_by(world, me, foe)}")
+
+    world.grid.lift(foe)
+    world.need(foe, Position).square = far
+    world.grid.place(foe, frozenset({far}))
+    world.zones.refresh()
+    out.that(unseen_by(world, me, foe),
+             "and unseen again once it leaves -- the waiver is given back,"
+             " which is what makes this a zone and not a one-off",
+             f"{unseen_by(world, me, foe)}")
+
+
+def one_sustain_pays_for_the_whole_power(out: Result) -> None:
+    """Two conjurations from one row survive on one minor action.
+
+    Every `c.conjure` makes its own effect carrying `sustain_cost=MINOR`,
+    and the turn-end sweep charged the budget **once per effect**. A
+    creature has one minor a turn, so a row conjuring two kept one and lost
+    the other at that very turn end, and a row conjuring three lost two.
+    The printed rule is one sustain action for the *power*. #819.
+
+    **The control is two effects from DIFFERENT rows**, and it is the half
+    that makes this a rule rather than a licence: those are two powers,
+    there is one minor, and the second must still lapse. `durations`'
+    own docstring says so -- *"Two effects both wanting a minor means the
+    second one lapses, which is right"* -- and a fix that simply stopped
+    charging would turn that sentence false.
+
+    A single conjuration passes under either reading, which is why the
+    issue could not be seen from any one-conjuration row.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget
+    from combat_engine.engine.durations import When as _When
+    from combat_engine.engine.events import TurnEnd
+    from combat_engine.engine.types import ActionType
+
+    def survivors(same_row: bool) -> int:
+        world, me, _ = _board()
+        budget = world.need(me, Budget)
+        budget.minor, budget.standard, budget.move = 1, 0, 0
+        first = Cast(world=world, me=me, ref="drivers:conj")
+        second = Cast(world=world, me=me,
+                      ref="drivers:conj" if same_row else "drivers:other")
+        a = first.effect("drivers one", until=_When.SUSTAIN, on=me,
+                         sustain=ActionType.MINOR)
+        b = second.effect("drivers two", until=_When.SUSTAIN, on=me,
+                          sustain=ActionType.MINOR)
+        if a is None or b is None:
+            return -1
+        # A later round, so the sweep asks rather than skipping.
+        world.round += 1
+        world.effects._on_turn_end(TurnEnd(actor=me, round=world.round))
+        return sum(1 for e in (a, b) if e.id in world.effects.live)
+
+    out.that(survivors(same_row=True) == 2,
+             "two effects laid by ONE row both survive the turn end on a"
+             " single minor -- one sustain for the power",
+             f"{survivors(same_row=True)} of 2")
+    out.that(survivors(same_row=False) == 1,
+             "and two laid by DIFFERENT rows keep only one: that is two"
+             " powers and one minor, which must still cost",
+             f"{survivors(same_row=False)} of 2")
+
+
+def a_retype_reaches_unrolled_damage(out: Result) -> None:
+    """A standing `c.deals` retype recolours a flat rider, not just a swing.
+
+    `c.deals` is an override -- *"all damage dealt by this weapon is fire
+    damage"* beats the type the power printed -- and it is read by
+    `Cast._typed`, which had exactly **two** callers, both in the rolled
+    path. So a card printing a swing *and* a flat rider recoloured the
+    swing and left the rider alone. #795 found it by reflavouring a
+    level-3 board: 50 of 57 blows converted, and the misses were
+    `c.flat` and `c.ongoing`.
+
+    **`c.ongoing` is deliberately still missing and is asserted as such**,
+    which is the honest half of this rule: by the time an ongoing ticks the
+    row that laid it is gone, so its type would have to be settled when it
+    is *laid*. That is a design call, it stays on #795, and a rule that
+    quietly asserted the current behaviour as correct would make the gap
+    invisible.
+
+    The control is the same call with no retype standing -- without it, a
+    method that hard-coded one type would pass.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    def dealt(retype: bool, how: str) -> object:
+        world, me, _ = _board()
+        foe = enemies(world, me)[0]
+        seen: list[object] = []
+        world.bus.on(DamageApplied, lambda ev: seen.append(ev.dtype),
+                     owner=-1)
+        c = Cast(world=world, me=me, ref="drivers:retype")
+        if retype:
+            c.deals(DamageType.NECROTIC, on=me)
+        if how == "flat":
+            c.flat(3, dtype=DamageType.FIRE, on=foe)
+        else:
+            c.damage("1d4", dtype=DamageType.FIRE, on=foe)
+        return seen[-1] if seen else None
+
+    out.that(dealt(False, "flat") is DamageType.FIRE,
+             "with no retype standing, a flat rider deals the type it"
+             " printed -- the control",
+             f"{dealt(False, 'flat')}")
+    out.that(dealt(True, "flat") is DamageType.NECROTIC,
+             "and a standing retype recolours it, which is what two callers"
+             " of `_typed` could not do",
+             f"{dealt(True, 'flat')}")
+    out.that(dealt(True, "rolled") is DamageType.NECROTIC,
+             "the rolled path still converts -- it always did, and is here"
+             " so a regression in it cannot hide behind the new half",
+             f"{dealt(True, 'rolled')}")
+
+
+def a_sustain_cost_is_asked_of_the_encounter(out: Result) -> None:
+    """A `When.SUSTAIN` effect survives on any cost the creature can pay.
+
+    `durations._sustain_by_default` read the slot off `Budget` by name --
+    `getattr(budget, cost.value, 0) <= 0` -- and **five of the eight
+    `ActionType` members name no field**, so each read as a slot already at
+    zero and the effect was dropped at the first turn-end of a later round.
+    One live row prints `sustain=FREE`. #776.
+
+    **`free` and `opportunity` are the two that matter**, because `minor`
+    passed all along: a rule that only drove a minor-cost sustain would have
+    been green through the whole bug. That is why the control here is a cost
+    that *works*, measured beside two that did not.
+
+    The fourth assertion is the half the issue did not mention: a creature
+    with a standard in hand and no minor may pay a minor, which `DOWNGRADES`
+    knows and a single-slot read cannot -- so a sustain could lapse with an
+    action still available.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget
+    from combat_engine.engine.durations import When as _When
+    from combat_engine.engine.types import ActionType
+
+    def kept(cost: ActionType, *, empty_minor: bool = False) -> bool:
+        world, me, _ = _board()
+        c = Cast(world=world, me=me, ref="drivers:sustain")
+        if empty_minor:
+            budget = world.need(me, Budget)
+            budget.minor = 0
+            budget.standard = 1
+        eff = c.effect("drivers grip", until=_When.SUSTAIN, on=me,
+                       sustain=cost)
+        return bool(eff is not None
+                    and world.effects._sustain_by_default(eff))
+
+    out.that(kept(ActionType.MINOR),
+             "a minor-cost sustain is kept -- the control, and the one cost"
+             " that worked before the fix",
+             f"{kept(ActionType.MINOR)}")
+    out.that(kept(ActionType.FREE),
+             "a FREE-cost sustain is kept: free names no `Budget` slot, so"
+             " it used to read as exhausted and the effect was dropped",
+             f"{kept(ActionType.FREE)}")
+    out.that(kept(ActionType.OPPORTUNITY),
+             "and an OPPORTUNITY-cost one is kept -- that cost is held on a"
+             " turn stamp, not a count, so decrementing a field was never"
+             " the right question",
+             f"{kept(ActionType.OPPORTUNITY)}")
+    out.that(kept(ActionType.MINOR, empty_minor=True),
+             "and a creature with a standard but no minor still sustains a"
+             " minor-cost effect -- the downgrade, which a one-slot read"
+             " cannot see",
+             f"{kept(ActionType.MINOR, empty_minor=True)}")
+
+
+def every_granted_word_has_a_reader(out: Result) -> None:
+    """`c.grant_action` may only hand out a word `actions` reads.
+
+    The verb lays a bonus under `"<what> as <cost>"`, so a word no reader
+    looks for is carried, costs nothing and does nothing -- and the row
+    still fires and still audits green. That is #583, worth nine rows, and
+    it was **live on `m3617a3`** when this rule was written: it handed an
+    ally `grant_action("attack", FREE)` and the ally never got an attack.
+
+    **The first assertion is the one that matters**, and it is not the
+    raise. A gate that refuses unknown words is worth nothing if a word is
+    added to `GRANTABLE` without its reader -- that is the same bug with a
+    longer fuse. So this greps `actions.py` for the comparison that proves
+    each word is consulted, and the set and the readers have to agree.
+
+    Matched on the comparison rather than on the bare word, because
+    `"charge"` and `"attack"` both appear in that file for unrelated
+    reasons -- a first count of mentions said `attack` was read 1 time and
+    `charge` 8, and both were wrong.
+    """
+    import re
+
+    from combat_engine.engine.actions import GRANTABLE
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.types import ActionType
+
+    src = (Path(__file__).parent.parent
+           / "src/combat_engine/engine/actions.py").read_text()
+    read = set(re.findall(r'what\s*[=!]=\s*"([a-z_]+)"', src))
+    for group in re.findall(r'what\s+in\s+\(([^)]*)\)', src):
+        read |= set(re.findall(r'"([a-z_]+)"', group))
+
+    missing = sorted(GRANTABLE - read)
+    out.that(not missing,
+             "every word `GRANTABLE` offers is consulted in `actions.py` --"
+             " a word without a reader grants nothing and looks written",
+             f"no reader for {missing}" if missing else f"{len(GRANTABLE)} words")
+
+    spare = sorted(read - GRANTABLE)
+    out.that(not spare,
+             "and `actions.py` reads no granted word the verb refuses to"
+             " hand out, which would be a reader nothing can reach",
+             f"read but not grantable: {spare}" if spare else "none")
+
+    # -- the raise, and a positive control beside it ------------------------
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:granted")
+    try:
+        c.grant_action("attack", ActionType.MINOR, on=me)
+    except ValueError as exc:
+        out.that("no reader" in str(exc),
+                 "an unrecognised word raises, naming the row and the"
+                 " permitted set", f"{str(exc)[:60]}")
+    else:
+        out.that(False, "an unrecognised word raises", "it did not")
+
+    laid = c.grant_action("stand", ActionType.MINOR, on=me)
+    mods = world.get(me, Mods)
+    out.that(laid is not None
+             and mods is not None
+             and mods.total("stand as minor", {}) >= 1,
+             "and a recognised one still lays its bonus -- the control, so"
+             " the gate is not refusing everything",
+             f"{laid is not None}")
+
+
+def a_feat_waives_only_ordinary_concealment(out: Result) -> None:
+    """`f1832` waives the -2 for an ally in the aura, and not the -5.
+
+    The card is *"each ally affected by your `rt:r4-t3` racial trait doesn't
+    take the -2 penalty for attacking an enemy that has concealment"*, so the
+    clause is written into `rt:r4-t3` -- the row it names -- per #550, and
+    this feat carries `implemented_in=`.
+
+    **The third assertion is the one worth having.** `concealment_waived` is
+    a *threshold*: `resolve.attack` does
+    `if from_concealment <= concealment_waived(...)`, so the number is the
+    largest penalty waived. 5 would clear total concealment too, which is a
+    strictly stronger feat than the printed one -- and that is the mistake
+    the row's own old note warned about for cover. With 2, darkness still
+    costs the ally its -5.
+
+    The ally and not the caster, because the grant is `side="ally"`: a rule
+    that measured the caster would pass with the side word wrong.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import allies, enemies, squares
+    from combat_engine.engine.resolve import situational_attack
+    from combat_engine.engine.types import Light
+
+    def penalty(has_feat: bool) -> tuple[int, int, int]:
+        """(bright, dim, dark) attack penalties for an ally in the aura."""
+        world, caster, _ = _board("rt:r4-t3", 1)
+        mate = next((a for a in allies(world, caster) if a != caster), None)
+        foe = enemies(world, caster)[0]
+        if mate is None:
+            return (0, 0, 0)
+        if has_feat:
+            known = world.get(caster, Powers)
+            if known is not None and "f1832" not in known.known:
+                known.known.append("f1832")
+        # Stand the ally next to the caster so it is inside the aura 5.
+        here = world.need(caster, Position).square
+        world.need(mate, Position).square = (here[0] + 1, here[1])
+        REGISTRY["rt:r4-t3"].body(
+            Cast(world=world, me=caster, ref="rt:r4-t3")
+        )
+        square = next(iter(squares(world, foe)))
+
+        def at(level: Light) -> int:
+            world.grid.light[square] = level
+            return situational_attack(world, mate, foe, "drivers:f1832", {})
+
+        return at(Light.BRIGHT), at(Light.DIM), at(Light.DARK)
+
+    bare_bright, bare_dim, _ = penalty(False)
+    feat_bright, feat_dim, feat_dark = penalty(True)
+
+    out.that(bare_dim == bare_bright - 2,
+             "without the feat, an ally takes the printed -2 against a"
+             " concealed enemy -- the control",
+             f"bright {bare_bright:+d}, dim {bare_dim:+d}")
+    out.that(feat_dim == feat_bright,
+             "with the feat, that -2 is gone for the ALLY, which is the side"
+             " word doing its job",
+             f"bright {feat_bright:+d}, dim {feat_dim:+d}")
+    out.that(feat_dark == feat_bright - 5,
+             "and total concealment STILL costs the ally -5: the waiver is a"
+             " threshold and 2 is not 5, so the feat stays as wide as the"
+             " card and no wider",
+             f"bright {feat_bright:+d}, dark {feat_dark:+d}")
+
+
+def a_size_comparison_reads_the_order(out: Result) -> None:
+    """A size comparison must go through `Size.order`, not the enum itself.
+
+    `Size` is a string enum, so a bare `<` / `>` compares the **words
+    alphabetically** -- and the alphabetical order is nearly the exact
+    reverse of the size order, so the comparison is wrong for every pair:
+    `medium < large` is False and `medium < small` is True. #817 measured
+    30 of 30 ordered pairs wrong.
+
+    **Asserted through `f3609`'s body, not through `c.size_of`**, because
+    the verb was never the bug -- it returns the right `Size` and the row
+    compared it the wrong way, which is exactly the shape a rule on the
+    facility cannot see.
+
+    **Larger and smaller on one board, which is the whole design.** #817's
+    own note is that "a single-size board cannot tell the two readings
+    apart". Measured by planting the bare `>` back, with the character
+    Medium:
+
+        large       pays 0, should pay 1
+        gargantuan  pays 0, should pay 1
+        small       pays 1, should pay 0
+        medium      pays 0, correct by accident
+
+    So the broken reading fails **three** of the four and gets the
+    equal-size case right by luck -- and a board with only a large victim
+    would have read it as an under-payment, which is what every other
+    instrument here would have called an unfinished clause.
+
+    The delta between the two reads rather than either total, so a pooled
+    `mods.total("damage", ctx)` that is already non-zero on a posed board
+    cannot be mistaken for the row's own payout -- the trap `paid()` in
+    `a_raging_barbarian_pays_the_named_row` had to be corrected for twice.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Size
+
+    world, me, _ = _board("f3609", 1)
+    foe = enemies(world, me)[0]
+    mine = world.get(me, Position)
+    if mine is not None:
+        mine.size = Size.MEDIUM
+
+    # **The pick has to be drawn, not merely owned.** `c.as_weapon` lays the
+    # profile into `Gear.stowed` -- `a_weapon_profile_is_laid_as_an_effect`
+    # above asserts exactly that -- and the row's gate is `_holding`, which
+    # reads `Gear.held`. Without the `wield` every assertion below read 0
+    # and blamed the row, which is the plant being wrong rather than the
+    # code.
+    arm = Cast(world=world, me=me, ref="drivers:f3609")
+    arm.as_weapon(damage="1d6", group="pick", proficiency=2)
+    gear = world.get(me, Gear)
+    pick = next((w for w in gear.weapons if w.ref == "drivers:f3609"), None)
+    if gear is None or pick is None:
+        out.skip("no pick could be put in hand")
+        return
+    gear.wield(pick)
+
+    REGISTRY["f3609"].body(Cast(world=world, me=me, ref="f3609"))
+    mods = world.get(me, Mods)
+
+    def paid(size: Size) -> int:
+        there = world.need(foe, Position)
+        there.size = size
+        if mods is None:
+            return 0
+        return mods.total("damage", {"power": "", "target": foe})
+
+    base = paid(Size.MEDIUM)
+    big = paid(Size.LARGE)
+    huge = paid(Size.GARGANTUAN)
+    small = paid(Size.SMALL)
+
+    out.that(big - base == 1,
+             "a Medium character with a pick pays +1 damage against a LARGE"
+             " target -- the case the card is printed for, and the one the"
+             " alphabetical comparison refused",
+             f"base {base}, large {big}")
+    out.that(huge - base == 1,
+             "and against a Gargantuan one, two steps up rather than one",
+             f"base {base}, gargantuan {huge}")
+    out.that(small - base == 0,
+             "and NOTHING against a SMALL target. This is the negative"
+             " control that fails under a bare `>`: 'small' > 'medium' is"
+             " True alphabetically, so the broken row paid here",
+             f"base {base}, small {small}")
+    out.that(base - base == 0 and paid(Size.MEDIUM) - base == 0,
+             "and nothing against an equal-sized one -- the card says"
+             " larger, not 'not smaller'",
+             f"medium {paid(Size.MEDIUM)}")
+
+
+def milestones_carry_across_a_day(out: Result) -> None:
+    """Milestones are a fact about the day, and seven rows read them. #666.
+
+    Camille's ruling: *"An adventuring day consists of 4-5 encounters, and a
+    milestone is every two encounters."*
+
+    **The two shapes are the point, and a plant proved they need separate
+    assertions.** Five item rows ask a *binary* question -- "if you've
+    reached at least one milestone today ... instead deal an extra 2" -- and
+    two rows want the *count*. Writing `1 + c.milestone()` in the shared
+    helper satisfies every assertion about the one-milestone case and is
+    wrong at two, which is exactly what the third assertion below catches.
+
+    Asserted **through each row's body**, never through `c.milestone()`
+    alone: the reader returning the right number proves nothing about
+    whether a row calls it. Two of the three families here were already
+    laying a modifier under the wrong key before this rule existed, and a
+    verb-level check would have stayed green for both.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.types import Keyword
+
+    # -- the reader and its default ---------------------------------------
+    world, me, _armed = _posed("i825p1", 6)
+    ask = Cast(world=world, me=me, ref="drivers:milestone")
+    out.that(ask.milestone() == 0,
+             "a fight fielded on its own has reached no milestones -- the"
+             " default, and the state every existing caller is in",
+             f"{ask.milestone()}")
+    world.milestones = 2
+    out.that(ask.milestone() == 2, "and reads back what the day set",
+             f"{ask.milestone()}")
+    world.milestones = -1
+    out.that(ask.milestone() == 0,
+             "a negative never reaches a row: a count below zero is a caller"
+             " bug and paying a negative bonus for it would be worse",
+             f"{ask.milestone()}")
+
+    # -- through i825p1's body: the binary branch --------------------------
+    #
+    # A real fire-keyword power out of the registry rather than a made-up
+    # ref, because `_keyword_gate` reads the keywords off the row the damage
+    # context names -- a ref that resolves to nothing fails the gate and
+    # every figure below would read 0 for the wrong reason.
+    fire = next((r for r, d in REGISTRY.items()
+                 if Keyword.FIRE in (tuple(d.keywords or ()))
+                 and getattr(d, "attack", None) is not None), "")
+    out.that(bool(fire) and get(fire) is not None,
+             "the tree holds a fire attack to pose the gate with", f"{fire!r}")
+
+    def paid(milestones: int, ref: str, ctx: dict) -> int:
+        """Run `ref`'s body on a fresh board and read what *it* laid.
+
+        **Only what *this run* lays**, which took two corrections to get
+        right and both are the same trap from different sides:
+
+        * A pooled `mods.total("damage", ctx)` reads 3 before any of this
+          runs -- the posed figure's own gear and feats. So filtering to the
+          row's own label is necessary.
+        * **It is not sufficient.** `audit.board` *arms* the row, and arming
+          a triggered row runs its body -- so by the time `world.milestones`
+          is set the body has already laid one modifier under this very
+          label, at the old count. Both melee rows then read one too high,
+          and the figure moved by the right amount for the wrong reason.
+
+        So the modifiers standing before the body runs are remembered and
+        excluded by identity. Asserting on a delta would have hidden the
+        same thing: the arming's modifier and this run's are both +1 at zero
+        milestones, so the delta is right while neither figure is.
+        """
+        world, me, _ = _posed(ref, 6)
+        world.milestones = milestones
+        mods = world.get(me, Mods)
+        already = {id(m) for m in mods.items} if mods is not None else set()
+        use = Cast(world=world, me=me, ref=ref)
+        use.target = me
+        REGISTRY[ref].body(use)
+        mods = world.get(me, Mods)
+        if mods is None:
+            return 0
+        return sum(m.amount() for m in mods.items
+                   if id(m) not in already
+                   and m.what == "damage" and m.label == ref
+                   and m.applies(ctx))
+
+    fire_ctx = {"power": fire}
+    at_none = paid(0, "i825p1", fire_ctx)
+    at_one = paid(1, "i825p1", fire_ctx)
+    at_three = paid(3, "i825p1", fire_ctx)
+    out.that(at_none == 1,
+             "with no milestone reached i825p1 pays the printed 1, which is"
+             " the branch it has always taken", f"{at_none}")
+    out.that(at_one == 2,
+             "and 2 once the party has reached one -- the clause that was"
+             " dropped for as long as nothing counted them", f"{at_one}")
+    out.that(at_three == 2,
+             "and still 2 at three milestones, because the card says"
+             " 'instead ... an extra 2' and not one per milestone. This is"
+             " the assertion that fails if the helper is ever simplified to"
+             " `1 + c.milestone()`", f"{at_three}")
+
+    # The gate is a separate lock from the figure, and a plant on one leaves
+    # the other green. Asked with a context the row must refuse.
+    cold = next((r for r, d in REGISTRY.items()
+                 if Keyword.FIRE not in tuple(d.keywords or ())
+                 and getattr(d, "attack", None) is not None), "")
+    out.that(paid(1, "i825p1", {"power": cold}) == 0,
+             "a power without the keyword gets nothing even at a milestone --"
+             " the when= gate, which the figures above cannot see",
+             f"tried {cold}")
+
+    # -- the other four items pay the same pair ----------------------------
+    melee = next((r for r, d in REGISTRY.items()
+                  if getattr(d, "reach", None) is not None
+                  and getattr(d.reach, "kind", "") == "melee"
+                  and getattr(d, "attack", None) is not None), "")
+    # **A ctx per row, because the five gates do not read the same key.**
+    # `i843p1` asks `ctx["ranged"]` directly where the others resolve the
+    # power the context names. One shared ctx read (2, 2) for it -- the gate
+    # refusing both figures, which looks like a row that ignores milestones.
+    for ref, ctx in (("i843p1", {"ranged": True}),
+                     ("i1362p1", {"power": melee}),
+                     ("i2691p1", {"power": melee})):
+        if ctx.get("power") == "":
+            continue
+        low, high = paid(0, ref, ctx), paid(1, ref, ctx)
+        out.that((low, high) == (1, 2),
+                 f"{ref} pays 1 then 2 the same way -- the branch is in the"
+                 " helper the five share, so this is the check that they all"
+                 " actually call it", f"{(low, high)}")
+
+    # -- through cf:artificer-f0: the count --------------------------------
+    from combat_engine.content.features.martial_leaders import EMPOWERMENTS, empowerments
+
+    def allowance(milestones: int) -> int:
+        world, me, _ = _posed("cf:artificer-f0", 6)
+        world.milestones = milestones
+        return empowerments(Cast(world=world, me=me, ref="cf:artificer-f0"))
+
+    out.that(allowance(0) == EMPOWERMENTS,
+             "the artificer's allowance with no milestone is the printed"
+             " number and nothing more", f"{allowance(0)}")
+    out.that(allowance(2) == EMPOWERMENTS + 2,
+             "and one more for each milestone -- a *count*, which is the row"
+             " that made `c.milestone()` return a number rather than a bool",
+             f"{allowance(2)}")
+
+    # -- through f3536: the count again, on three keys ---------------------
+    def f3536_mods(milestones: int) -> dict:
+        world, me, _ = _posed("f3536", 1)
+        world.milestones = milestones
+        use = Cast(world=world, me=me, ref="f3536")
+        use.target = me
+        REGISTRY["f3536"].body(use)
+        mods = world.get(me, Mods)
+        if mods is None:
+            return {}
+        return {m.what: m.amount() for m in mods.items
+                if m.label == "f3536" or m.what in
+                ("save", "skill", "ability_check")}
+
+    out.that(f3536_mods(0) == {},
+             "f3536 lays nothing at all with no milestone reached, rather"
+             " than three +0 modifiers -- a zero reads as a working bonus on"
+             " the audit board and on lint's unread-modifier pass, which is"
+             " how a dead key hides", f"{f3536_mods(0)}")
+    got = f3536_mods(2)
+    out.that(got.get("save") == 2 and got.get("skill") == 2
+             and got.get("ability_check") == 2,
+             "and at two milestones pays +2 to saving throws, skill checks"
+             " and ability checks -- the three keys the engine actually"
+             " reads, which is not the same list as the card's words",
+             f"{got}")
+    out.that("ability" not in got,
+             "and lays no bare 'ability' key, which nothing reads: the wide"
+             " one is 'ability_check', summed by the check's own finish"
+             " beside the rolled skill", f"{sorted(got)}")
+
+    # -- the seam: who sets it ---------------------------------------------
+    #
+    # **The rows above would all pass with nothing ever setting the count.**
+    # Every figure in this rule is posed by assigning `world.milestones`
+    # directly, which is the reader's contract and not the caller's -- so
+    # without this section a day that never set it would leave seventeen
+    # assertions green and seven rows inert in play. #583's shape.
+    from combat_engine.api import day as day_mode
+
+    a_day = day_mode.Day.create(seed=5, level=6, want=[1.0, 1.0, 1.0, 1.0])
+    out.that(a_day.milestones == 0,
+             "a day that has fought nothing has reached no milestones",
+             f"{a_day.milestones}")
+    for leg in a_day.legs[:2]:
+        leg.status = "won"
+    a_day.leg = 2
+    out.that(a_day.milestones == 1,
+             "two legs finished is one milestone -- derived from the legs"
+             " rather than counted as the day goes, so it cannot disagree"
+             " with the thing it counts", f"{a_day.milestones}")
+    built = a_day.build_leg()
+    out.that(built.world.milestones == 1,
+             "and the third leg's board is *built* with it, through"
+             " `Session.create(on_fielded=)` -- the only moment that is both"
+             " after the world exists and before a turn is taken",
+             f"{built.world.milestones}")
+    out.that(Cast(world=built.world, me=next(iter(built.world.entities)),
+                  ref="drivers:seam").milestone() == 1,
+             "so a row on that board reads 1, which is the whole chain: day"
+             " -> world -> `c.milestone()` -> the seven rows")
+
+    # -- the family is clear ----------------------------------------------
+    waiting = [r for r, d in REGISTRY.items()
+               if "c.milestone()" in (tuple(getattr(d, "todo", ()) or ())
+                                      + tuple(getattr(d, "dropped", ()) or ()))]
+    out.that(not waiting, "and no row waits on c.milestone() any more",
+             f"{waiting}")
+
+
+def a_day_of_scaled_budgets(out: Result) -> None:
+    """A day of fights, each built to its own share of the printed budget.
+
+    Camille's arcade mode: a user-chosen number of single combats, each with
+    an XP budget, defaulting to a soft opener and a hard finale around
+    standard middles. #666.
+
+    **Asserted on the XP actually fielded, not on the monster count.** A
+    harder budget often buys one more creature, but not always -- the band
+    and the cost-fit can spend it on a dearer monster instead -- so counting
+    heads would pass on a day whose legs were all the same fight. The
+    currency is what `story.budget` reads out of the database, so the
+    assertion is in the same units the rule is printed in.
+    """
+    from random import Random
+
+    from combat_engine import story
+    from combat_engine.api.day import scales
+    from combat_engine.db import game
+
+    # -- the curve ---------------------------------------------------------
+    out.that(scales(4) == [0.75, 1.0, 1.0, 1.25],
+             "four fights are Camille's default curve", f"{scales(4)}")
+    out.that(scales(6) == [0.75, 1.0, 1.0, 1.0, 1.0, 1.25],
+             "a longer day pads the middle rather than stretching the curve"
+             " -- Camille's call, and the opener and finale stay one each",
+             f"{scales(6)}")
+    out.that(scales(1) == [1.0],
+             "one fight is standard: an opener with no finale after it is not"
+             " an opener")
+    out.that(scales(2) == [0.75, 1.25],
+             "two are the opener and the finale with nothing between")
+    out.that(scales(0) == [],
+             "and a day of no fights asks for no budgets rather than one")
+    out.that(sum(scales(4)) == 4.0,
+             "the default day totals four standard encounters, which is the"
+             " printed shape of a day", f"{sum(scales(4))}")
+
+    # -- the budget scales -------------------------------------------------
+    base = story.budget(5)
+    out.that(base > 0, "a standard level-5 encounter is worth something",
+             f"{base}")
+    out.that(story.budget(5, 1.0) == base,
+             "scale 1.0 is the unchanged printed budget, so every existing"
+             " caller is unaffected")
+    out.that(story.budget(5, 0.75) < base < story.budget(5, 1.25),
+             "and the opener is cheaper than standard, the finale dearer",
+             f"{story.budget(5, 0.75)} < {base} < {story.budget(5, 1.25)}")
+
+    # -- what reaches the board, in XP ------------------------------------
+    db = game()
+
+    def worth(pool: list[str]) -> int:
+        total = 0
+        for ref in pool:
+            row = db.execute(
+                "SELECT xp FROM monster WHERE ref = ?", (ref,)).fetchone()
+            total += int((row[0] if row else 0) or 0)
+        return total
+
+    soft, _at, _s = story.opposition(5, Random(3), "standard", scale=0.75)
+    mid, _at, _s = story.opposition(5, Random(3), "standard", scale=1.0)
+    hard, _at, _s = story.opposition(5, Random(3), "standard", scale=1.25)
+    ws, wm, wh = worth(soft), worth(mid), worth(hard)
+    out.that(ws < wh,
+             "the finale fields more XP than the opener -- the scale reaches"
+             " the board, which is the whole point and is not implied by the"
+             " budget arithmetic above",
+             f"0.75 -> {ws} XP, 1.0 -> {wm}, 1.25 -> {wh}")
+    # **The opener overshoots its own ceiling and that is permitted**, which
+    # this assertion got wrong first by demanding a guarantee `_compose` never
+    # makes: it skips a candidate that would break the ceiling *"unless
+    # nothing has been taken yet"*, so a `COMPOSITION` share too small to
+    # afford one creature takes one anyway. A 0.75 budget makes every share
+    # smaller, so the opener is the leg it happens to.
+    #
+    # Measured at standard, one seed, so the bound is not a guess:
+    #
+    #     level   0.75     1.0     1.25
+    #         1   100%    100%     100%
+    #         3   106%    100%     100%
+    #         5   108%    100%     100%
+    #         8   110%    100%     100%
+    #        10   100%    100%     100%
+    #
+    # So 1.0 and 1.25 land exactly and only the opener runs over, by at most a
+    # tenth. The consequence worth knowing: a 0.75 leg is softer than standard
+    # but **not by the full quarter** -- 1150 against 1400 at level 8 is 82%,
+    # not 75%.
+    for sc, fielded in ((0.75, ws), (1.0, wm), (1.25, wh)):
+        ceiling = story.budget(5, sc)
+        out.that(fielded <= round(ceiling * 1.25),
+                 f"the x{sc} leg stays within a quarter of its ceiling rather"
+                 " than being unbounded -- the share escape hatch can overrun"
+                 " it, and this is what stops that becoming a fight of a"
+                 " different size",
+                 f"{fielded} vs ceiling {ceiling}")
+    out.that(wm <= story.budget(5, 1.0) and wh <= story.budget(5, 1.25),
+             "and the standard and finale legs land on or under their ceiling"
+             " exactly -- only the opener overruns",
+             f"{wm}<={story.budget(5, 1.0)}, {wh}<={story.budget(5, 1.25)}")
+    out.that(ws < wm,
+             "the opener is still cheaper than a standard fight in absolute"
+             " terms, so the curve points the way it says even where the"
+             " ceiling is overrun",
+             f"{ws} < {wm}")
+
+    # -- through `field_encounter`, which is the door a day will use -------
+    easy = story.field_encounter(3, 5, scaling="full", scale=0.75)
+    tough = story.field_encounter(3, 5, scaling="full", scale=1.25)
+    out.that(bool(easy.enemies) and bool(tough.enemies),
+             "both legs field somebody")
+    out.that(worth(list(tough.enemies)) >= worth(list(easy.enemies)),
+             "and `field_encounter(scale=)` carries it the same way, rather"
+             " than the parameter stopping at `opposition`",
+             f"easy {worth(list(easy.enemies))} XP,"
+             f" tough {worth(list(tough.enemies))}")
+
+    # -- a named opposition ignores it, which is documented ----------------
+    named = ["m4801", "m4709"]
+    pinned = story.field_encounter(3, 5, scaling="full", enemies=named,
+                                   scale=1.25)
+    out.that(sorted(pinned.enemies) == sorted(named)
+             or len(pinned.enemies) == len(named),
+             "a caller that named the monsters keeps them whatever the scale"
+             " -- it has already decided what the fight is worth, and the"
+             " fixtures name theirs",
+             f"{sorted(pinned.enemies)}")
 
 
 def a_kind_waived_for_one_attacker(out: Result) -> None:
@@ -13559,16 +15943,22 @@ def a_mark_that_lapses(out: Result) -> None:
 
     MEDIUM = "m3210a0"
 
-    def run(lapses: bool, swing: bool):  # noqa: ANN202
+    def run(lapses: bool, swing: bool, *, or_adjacent: bool = False,  # noqa: ANN202
+            near: bool = True):
         world, me, _armed = _posed(MEDIUM, 1)
         foe = sorted(enemies(world, me))[0]
         here = world.need(me, Position).square
-        dest = (here[0] + 1, here[1])
+        # `near` is the #859 axis: the printed "engage" counts standing next
+        # to the creature as well as swinging at it, so the two have to be
+        # separable. The original setup was adjacent-only, which would make
+        # every `or_adjacent` arm hold and prove nothing.
+        dest = (here[0] + 1, here[1]) if near else (here[0] + 8, here[1])
         world.grid.lift(foe)
         world.need(foe, Position).square = dest
         world.grid.place(foe, frozenset({dest}))
         Cast(world=world, me=me, ref="drivers:lapse").mark(
-            on=foe, until=When.ENCOUNTER, lapses=lapses)
+            on=foe, until=When.ENCOUNTER, lapses=lapses,
+            or_adjacent=or_adjacent)
         before = world.relations.holds(Relation.MARKED_BY, me, foe)
         # a fresh turn of the MARKER's, so the lay-turn guard is past
         world.bus.emit(TurnStart(actor=me, round=world.round + 1))
@@ -13607,13 +15997,74 @@ def a_mark_that_lapses(out: Result) -> None:
             why = (" -- swinging at it keeps the mark, which is what makes"
                    " the lapse a rule rather than a timer")
         elif not lapses:
-            why = (" -- `i2762p1`'s exception is this flag left off, so a"
-                   " lapse that fired regardless would break the item while"
-                   " passing every assertion about `p16374`")
+            why = (" -- the flag off is a mark that never ends early, so a"
+                   " lapse that fired regardless would break every row that"
+                   " leaves it off while passing every assertion about"
+                   " `p16374`. This used to read `i2762p1`'s exception as"
+                   " being this flag left off; #859 showed that was the"
+                   " wrong diagnosis -- `p805` had armed no lapse at all,"
+                   " which is why the item's clause had nothing to prevent")
         out.that(after is want,
                  f"lapses={lapses} swing={swing}: marked afterwards is"
                  f" {want}{why}",
                  f"it was {after}")
+
+    # -- #859: the printed "engage" is wider than the attack test --------
+    #
+    # The card: "the mark also ends at the end of your turn if you didn't
+    # engage the target, meaning you neither attacked it during your turn
+    # nor are adjacent to it at the end of your turn." `p805` prints this
+    # and is the only row in the tree that does.
+    _b, stayed_near, _h, _s = run(True, False, or_adjacent=True, near=True)
+    out.that(stayed_near,
+             "`or_adjacent`: standing next to it **is** engaging it, so a"
+             " turn with no swing keeps the mark -- the half the attack-only"
+             " test gets wrong",
+             f"marked afterwards: {stayed_near}")
+
+    _b, went_far, _h, _s = run(True, False, or_adjacent=True, near=False)
+    out.that(not went_far,
+             "and walking away still drops it -- without this the parameter"
+             " would be a mark that never lapses, which is the bug it was"
+             " added to fix rather than a fix for it",
+             f"marked afterwards: {went_far}")
+
+    # The control that separates the two modes. Adjacent and no swing:
+    # plain `lapses=True` must STILL end the mark, or `or_adjacent` is
+    # indistinguishable from it and every assertion above passes either way.
+    _b, plain_near, _h, _s = run(True, False, or_adjacent=False, near=True)
+    out.that(not plain_near,
+             "**and plain `lapses=True` drops it even while adjacent** --"
+             " the control, since `p16374` prints the attack-only test and"
+             " must not quietly gain the wider one",
+             f"marked afterwards: {plain_near}")
+
+    # -- and the ROW arms it, which is the fault #859 was ----------------
+    #
+    # Everything above runs `c.mark` through a probe ref, which proves the
+    # verb and not the row. `p805` armed no lapse at all and every assertion
+    # above would have passed anyway, so this one goes through its body.
+    from combat_engine.engine.dsl import REGISTRY as _ROWS
+
+    world, me, _armed = _posed(MEDIUM, 1)
+    foe = sorted(enemies(world, me))[0]
+    here = world.need(me, Position).square
+    away = (here[0] + 8, here[1])
+    world.grid.lift(foe)
+    world.need(foe, Position).square = away
+    world.grid.place(foe, frozenset({away}))
+    _ROWS["p805"].body(Cast(world=world, me=me, ref="p805", target=foe))
+    out.that(world.relations.holds(Relation.MARKED_BY, me, foe),
+             "`p805` lays its mark -- the premise",
+             f"{world.relations.holds(Relation.MARKED_BY, me, foe)}")
+    world.bus.emit(TurnStart(actor=me, round=world.round + 1))
+    world.bus.emit(TurnEnd(actor=me, round=world.round + 1))
+    out.that(not world.relations.holds(Relation.MARKED_BY, me, foe),
+             "**and a turn spent neither swinging at it nor standing beside"
+             " it ends the mark** -- the printed sentence the row had never"
+             " armed, so a paladin marked across the room and kept it for"
+             " the encounter",
+             f"still marked: {world.relations.holds(Relation.MARKED_BY, me, foe)}")
 
     # -- and neither row waits on the symbol -----------------------------
     from combat_engine.engine.dsl import REGISTRY
@@ -15780,8 +18231,18 @@ def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
              f"{was}")
     out.that(c.weapon_range(ranged=(10, 20), ref=held.ref, on=me) == 1,
              "one weapon is re-ranged when asked by ref")
-    out.that(held.ranged == (10, 20),
-             f"and the field says so ({was} -> {held.ranged})")
+    # **Re-read from `gear.weapons`, not through the object captured above.**
+    # This line used to assert `held.ranged`, which only ever worked because
+    # the verb mutated the weapon in place -- so the assertion was coupled to
+    # the mechanism rather than to the behaviour, and #842's conversion to
+    # `replace` turned it red while the verb was working correctly. The
+    # stale object is exactly the hazard that issue's comment flags, and the
+    # caller it caught was this driver.
+    now = next((w for w in gear.weapons if w.ref == held.ref), None)
+    out.that(now is not None and now.ranged == (10, 20),
+             f"and the field says so ({was} -> "
+             f"{now.ranged if now else None}), read off the creature's gear"
+             " rather than off the object the verb replaced")
 
     # **No blanket, unlike `gains_property`.** A property only adds; a range
     # replaces, so an `every=` would shorten a bow to make a dagger
@@ -15792,14 +18253,25 @@ def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
              " property only adds")
     out.that(c.weapon_range(ref=held.ref, on=me) == 0,
              "asking for neither field is a no-op rather than an error")
+    out.that(next((w for w in gear.weapons if w.ref == held.ref), None)
+             is now,
+             "and a no-op leaves the weapon object alone rather than"
+             " rebuilding it, so nothing downstream sees a new one for"
+             " nothing",
+             f"{next((w for w in gear.weapons if w.ref == held.ref), None) is now}")
 
     # -- the two rows that are range rows --------------------------------
-    out.that(REGISTRY["f1277"].unfinished == ("c.weapon_group()",),
-             "f1277 is down to its third rewrite, re-filing the group",
+    out.that(REGISTRY["f1277"].unfinished == (),
+             "f1277 waits on nothing: the range, the property and the"
+             " group re-file have all landed, which is what the row's own"
+             " note predicted would be left when a range verb arrived"
+             " (#837)",
              f"{REGISTRY['f1277'].unfinished}")
-    out.that(REGISTRY["f2099"].unfinished == ("Weapon.brutal",),
-             "and f2099 to a property with no reader, which is the gap worth"
-             f" naming rather than the write ({REGISTRY['f2099'].unfinished})")
+    out.that(REGISTRY["f2099"].unfinished == (),
+             "and f2099 waits on nothing: its range landed here and its"
+             " brutal got the **reader** the old marker named, which is"
+             " `Cast._brutal_floor` read inside `_reroll_floor` (#840)."
+             f" ({REGISTRY['f2099'].unfinished})")
 
     world2, me2, _ = _posed("f1277", 1)
     c2 = Cast(world=world2, me=me2, ref="f1277")
@@ -15816,10 +18288,23 @@ def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
              f" reader in `Cast._high_crit` ({sorted(blow.properties)})")
 
     # -- and the three that are not --------------------------------------
-    for ref in ("f1841", "f1843", "f3641"):
+    #
+    # **Two still name the ranged-basic site and one no longer does.** The
+    # gate those two wait on was built and measured and taken back out: it
+    # makes the printed rule true and the AI measurably worse, because a
+    # thrown weapon costs nothing to throw (#520). `f1843` was never waiting
+    # on the gate at all -- it wants an improvised weapon to exist -- and
+    # the shared marker hid that. #838.
+    for ref in ("f1841", "f3641"):
         out.that(REGISTRY[ref].unfinished == ("Gear.ranged(thrown=)",),
-                 f"{ref} names the ranged-basic site, not a weapon field",
+                 f"{ref} names the ranged-basic site, not a weapon field,"
+                 " and is blocked behind #520 giving a throw a cost",
                  f"{REGISTRY[ref].unfinished}")
+    out.that(REGISTRY["f1843"].unfinished == ("chargen.IMPROVISED",),
+             "and f1843 waits on an **improvised weapon existing** instead,"
+             " which is a different gap and was hidden under the shared"
+             " marker -- its card excludes the unarmed one that does exist",
+             f"{REGISTRY['f1843'].unfinished}")
 
 def a_marks_penalty_is_the_markers_to_set(out: Result) -> None:
     """"A -3 penalty instead of the normal -2" -- four feats, one number.
@@ -16024,13 +18509,31 @@ def a_reroll_floor_can_be_narrowed_by_the_victim(out: Result) -> None:
                  f"{ref2} no longer waits on a reroll symbol ({narrows})",
                  f"{REGISTRY[ref2].unfinished}")
 
-    # **`f1969` is the one left, and it is a different shape.** Asserted so
-    # the symbol cannot quietly go back to the one that landed: its card
-    # says "the ally can reroll each die **once**", where the loop rerolls
-    # until the die clears -- stronger than print, which is the direction
-    # that matters.
-    out.that(REGISTRY["f1969"].unfinished == ("c.reroll_ones(tries=)",),
-             "and f1969 waits on reroll-each-die-once, not on the gate",
+    # **`f1969` is the one left, and what it waits on has moved.** This
+    # asserted `c.reroll_ones(tries=)` -- "the ally can reroll each die
+    # **once**", where the loop rerolled until the die cleared. #703 built
+    # exactly that as `pick=EVERY_DIE`: `_rolled_pick` is "reroll at most
+    # `count` of the dice under `floor`, once each", and with the default
+    # `below=2` every die showing a 1 is rerolled once and the second face
+    # stands. So that half closed and this assertion went stale with it.
+    #
+    # **The intent is kept rather than dropped.** The point was that the
+    # symbol must not quietly collapse back onto the one that landed, so the
+    # test is now two-sided: the row must *not* name the parameters that
+    # exist, and must name the behaviour that does not. What refuses it now
+    # is one level down -- `_reroll_pick` reads the floor with `ctx=seen` and
+    # the **count** with two bare `self.total("...#n")` calls, so any gate
+    # reading a key is False and the count comes back 0. Measured:
+    # ungated `(floor 2, count 99)`, gated on the attacker `(floor 2,
+    # count 0)`. #818.
+    waiting = tuple(REGISTRY["f1969"].unfinished or ())
+    out.that(not any("tries=" in w or "pick=" in w for w in waiting),
+             "f1969 no longer waits on a parameter that has landed -- the"
+             " control against the symbol collapsing back onto `tries=`",
+             f"{waiting}")
+    out.that(waiting == ("cast.reroll_pick_honours_when",),
+             "and names the behaviour that is absent rather than the two"
+             " parameters that are present, which `todo.py` would reject",
              f"{REGISTRY['f1969'].unfinished}")
 
 def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:
@@ -16889,7 +19392,11 @@ def feat_clause_exclusivity(out: Result) -> None:
 #: A chain of fewer than two is nothing to assert and is left out.
 MIGRATED = {
     "p704": {"Arena Fighting": ("f972", "f3188", "f3234")},
-    "p1758": {"Arena Fighting": ("f978", "f985")},
+    # `f981` joined the chain in #556. Adding it here is the half that
+    # matters: emptying `STILL_RIDERS` only stops the skip, and a skip
+    # removed without the rule covering the case would be the instrument
+    # loosened to make a number look better.
+    "p1758": {"Arena Fighting": ("f978", "f985", "f981")},
 }
 
 #: Rows migrated under #550 that have **no** chain yet to assert on, with
@@ -16911,19 +19418,28 @@ NO_CHAIN_YET = {
 #: printed rule says they must not.
 #:
 #: **This exists so the gap is in the instrument and not only in a
-#: docstring.** `p1758` is the first row where the convention could not
-#: deliver its own main argument: `f981`'s clause asks whether the target
-#: has hurt the character since the end of their last turn, which is a
-#: *memory* that has to be armed before the blow it remembers. `_riders`
-#: arms it through `setup=` at the start of the fight; a body runs far too
-#: late and would build an empty set, which is exactly how the first
-#: attempt at that memory failed silently.
+#: docstring.** A chain that looks complete and is not is the worst of the
+#: three states, so every entry here is reported as a skip.
 #:
-#: A chain that looks complete and is not is the worst of the three states,
-#: so every entry here is reported as a skip. #556.
-STILL_RIDERS = {
-    "p1758": ("f981",),
-}
+#: **Empty since #556, and `p1758` is why it existed.** That row was the
+#: first place #550's convention could not deliver its own main argument:
+#: `f981`'s clause asks whether the target has hurt the character since the
+#: end of their last turn, and that was a *memory* -- a set filled by
+#: watchers, armed by `_riders` through `setup=` at the start of the fight.
+#: A body runs far too late to build it, so the clause stayed a rider and
+#: stacked with whichever of `f978`/`f985` paid.
+#:
+#: `c.hurt_me_since` answers the same question off `world.bus.log`, through
+#: `query.damaged_since`, with `since_turn_ended` as the boundary. **There
+#: is nothing to arm**, so a body is no longer too late and `f981` moved
+#: into the chain. The whole memory apparatus in `feats/exploits.py` went
+#: with it -- the watchers, the per-creature set, and the `#262` id-reuse
+#: hazard its note was written about.
+#:
+#: Kept rather than deleted: the next migrated row that cannot move a feat
+#: belongs here, and an empty dict says "none known" where a missing one
+#: would say nothing at all.
+STILL_RIDERS: dict[str, tuple[str, ...]] = {}
 
 
 def at_most_one_applies(out: Result) -> None:
@@ -17303,7 +19819,7 @@ def an_effects_keywords_come_from_the_row_that_laid_it(out: Result) -> None:
     out.that(
         prose is not None and Keyword.PSYCHIC in keywords_of(prose),
         "and so does one labelling with prose, which the label never could",
-        f"label={prose.label!r} by={getattr(prose, 'by', None)!r}",
+        f"label={must(prose, 'Effect').label!r} by={getattr(prose, 'by', None)!r}",
     )
 
     # The half that reaches a rule: the save's own context.
@@ -18657,7 +21173,7 @@ def mage_school_riders(out: Result) -> None:
             return script[n] if n < len(script) else 6
 
         c = Cast(world=world, me=caster, ref=EVOCATION_POWER)
-        world.rng.die = scripted  # type: ignore[method-assign]
+        world.rng.die = scripted
         got = c._roll_damage("2d6")
         out.that(got == 2,
                  "2d6 of [1, 1], one die rerolled once into another 1, comes"
@@ -18935,13 +21451,13 @@ def a_feats_clause_in_its_power(out: Result) -> None:
             seen.append(on)
             return real(self, who, on=on, **kw)
 
-        Cast.grant_attack = record  # type: ignore[method-assign]
+        Cast.grant_attack = record
         try:
             c = Cast(world=world, me=caster, ref="p9501",
                      trigger=Miss(attacker=caster, target=missed, power=RANGED))
             REGISTRY["p9501"].body(c)
         finally:
-            Cast.grant_attack = real  # type: ignore[method-assign]
+            Cast.grant_attack = real
         return sum(1 for t in seen if t == candidate)
 
     without, with_it = asked(False), asked(True)
@@ -19068,12 +21584,29 @@ def a_tome_charges_before_it_lends(out: Result) -> None:
 
     world, caster, _ = _board(ref)
     c = Cast(world=world, me=caster, ref=ref)
+    known = world.need(caster, Powers)
+
+    # **The empty hand is arranged here rather than assumed of the board.**
+    # This used to rely on `audit.board` dealing a fighter, so the bearer
+    # held no wizard row and the refusal came for free -- and #705 made the
+    # board lend a few of that class's dailies to the rows that charge in
+    # them, which is the whole point of that change and turned this
+    # assertion red. The rule was right and its control was borrowed.
+    #
+    # Emptying the hand explicitly is strictly better: the negative control
+    # now holds whatever the board does, and a future axis that deals the
+    # bearer a wizard outright cannot quietly satisfy it either.
+    lent = [r for r in list(known.known)
+            if REGISTRY.get(r) is not None and REGISTRY[r].cls == "wizard"]
+    for other in lent:
+        known.known.remove(other)
     out.that(_spend_unused(c, cls="wizard", level=5, attacks=True) is False,
              f"{ref} refuses when the bearer holds no unused wizard attack"
-             f" power -- the printed cost is a Requirement",
+             f" power -- the printed cost is a Requirement"
+             + (f" (took {len(lent)} lent wizard row(s) out of its hand"
+                f" first)" if lent else ""),
              "it charged something it should not have")
 
-    known = world.need(caster, Powers)
     known.known.append(card)
     before = dict(known.used)
     paid = _spend_unused(c, cls="wizard", level=5, attacks=True)
@@ -21976,6 +24509,1189 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def run_only_bar(out: Result) -> None:
+    """`c.no_run` stops the run and leaves the walk, which `c.no_walk` could
+    not (#670).
+
+    `c.no_walk` is documented as *"it cannot use move actions to walk **or**
+    run"*, and `actions._movement` gated the run on `query.can_walk` -- so
+    the only prohibition this engine had took both. `m5452a2`'s whole card
+    is a move action spelled out, it walks its speed and cannot run, and
+    `c.no_walk` would have deleted the row's own content.
+
+    `query.can_walk`'s docstring already names the cost of a missing half:
+    the pair with `c.cannot_shift` exists *"because a row printing only one
+    half was being written as the stronger card or dropped"*. This was that
+    half, with no mirror.
+
+    **The middle assertion is the one that matters.** Barring the run is
+    easy; barring it *without* taking the walk is the whole card, and a
+    verb that reached for `no_walk` internally would pass the first and
+    third assertions and fail only this one.
+
+    **The one row cannot be fielded**, and that is said here as well as in
+    the row: `m5452` is one of three entries in `content.loader.UNUSABLE`
+    -- a stat line parsed to all zeroes -- so nothing stands it up on a
+    board. The verb is proved here instead.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.actions import legal
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import can_run, can_walk
+
+    def kinds(lay: str = "") -> tuple:
+        world, me, _ = audit_board("m145a0", 1)
+        c = Cast(world=world, me=me, ref="drivers:norun")
+        if lay == "run":
+            c.no_run(on=me, until=When.ENCOUNTER)
+        elif lay == "walk":
+            c.no_walk(on=me, until=When.ENCOUNTER)
+        enc = world.encounter
+        offered = ({a.kind for a in legal(world, enc, me)}
+                   if enc is not None else set())
+        return offered, can_walk(world, me), can_run(world, me)
+
+    plain, w0, r0 = kinds()
+    out.that("run" in plain and w0 and r0,
+             "a creature with nothing laid on it is offered the run -- the"
+             " control, without which the next two prove nothing",
+             f"can_walk={w0} can_run={r0} offered={'run' in plain}")
+
+    barred, w1, r1 = kinds("run")
+    out.that("run" not in barred and not r1,
+             "`c.no_run` takes the run off the menu, so a policy cannot"
+             " pick one either",
+             f"can_run={r1}, run offered={'run' in barred}")
+    # `kind="move"` is the walk -- `actions._movement` names it that, and
+    # "walk" is only the word the cards use. A first pass asserted on
+    # `"walk"`, which is in no menu, and read as the walk having been taken
+    # away by a verb that had not touched it.
+    out.that(w1 and "move" in barred,
+             "**and leaves the walk**, which is the whole of the card and"
+             " the half `c.no_walk` could not give. A verb reaching for"
+             " `no_walk` internally would pass the assertion above and"
+             " fail this one",
+             f"can_walk={w1}, move offered={'move' in barred}")
+
+    both, w2, r2 = kinds("walk")
+    out.that(not w2 and not r2 and "run" not in both,
+             "and `c.no_walk` still takes both, which is what its own"
+             " docstring promises -- the new verb narrows nothing that was"
+             " already there",
+             f"can_walk={w2} can_run={r2}")
+
+
+def was_an_attack_behind_it(out: Result) -> None:
+    """`c.by_attack` is "an attack's damage line", which `from_attack` is not
+    and could never have been (#731).
+
+    `from_attack` means *"offered damage modifiers"*: it is `True` by
+    default and only `Cast.absorb` and `falling` pass `False`, so a trait's
+    flat payout and an ongoing tick both arrive with it set. Widening the
+    event with it would have exposed a field true for almost every blow in
+    the game, and none of the three rows waiting could have used it. Two
+    content rows (`f3166`, `f2589`) also depend on that reading and say so,
+    so narrowing it is not a correction either -- it would silently drop
+    five feature cards' riders.
+
+    **The load-bearing choice is that `c.flat` does NOT claim its cast's
+    attack**, even inside an attack body. `p1458` deals its hit with
+    `c.damage` and its rebound with `c.flat` **on the same `Cast`** -- the
+    rebound runs from a `c.watch` closure that captured it, so
+    `self.result` is still the landed attack's. A rule reading
+    `self.result` in `c.flat` answers True for both blows, which is exactly
+    the pair `f2195` and `i1826x1` exist to tell apart: *"identical on
+    every field the event carries"*. The first draft did that and the probe
+    caught it.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import DamageApplied, DamageRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    world, me, _ = audit_board("p15844", 1)
+    foes = enemies(world, me)
+    if not foes:
+        out.skip("an enemy to deal damage to")
+        return
+    foe = foes[0]
+    seen: list[tuple[str, bool]] = []
+
+    def note(ev: DamageRolled) -> None:
+        seen.append((ev.detail, bool(getattr(ev, "by_attack", False))))
+
+    world.bus.on(DamageRolled, note)
+
+    Cast(world=world, me=me, ref="trait:flat").flat(5, on=foe)
+    world.rng.loaded = 19
+    hit = Cast(world=world, me=me, ref="p1000")
+    hit.target = foe
+    hit.bonus("attack", 40, on=me, kind="drivers")
+    landed = hit.strike(on=foe)
+    if landed:
+        hit.damage("1d6", on=foe)
+        hit.flat(2, on=foe)
+    world.damage(me, foe, 3, DamageType.UNTYPED, detail="ongoing:drivers")
+
+    got = dict()
+    for detail, flag in seen:
+        got.setdefault(detail, []).append(flag)
+
+    out.that(got.get("trait:flat") == [False],
+             "a trait's flat payout, with no attack rolled at all, is not"
+             " from an attack -- and `from_attack` is True for it, which is"
+             " why that flag could not be the field",
+             f"{got.get('trait:flat')}")
+    if not landed:
+        out.skip("a landed attack, for the damage-line half")
+    else:
+        out.that(got.get("p1000", [None])[0] is True,
+                 "an attack's **damage line** is from an attack",
+                 f"{got.get('p1000')}")
+        out.that(got.get("p1000", [None, None])[1:] == [False],
+                 "**and a `c.flat` splash in the same body is not**, which"
+                 " is the assertion the whole design turns on: `p1458`"
+                 " rebounds through `c.flat` on the same `Cast`, so reading"
+                 " `self.result` there would answer True for both of its"
+                 " blows and `f2195`/`i1826x1` could not be written",
+                 f"{got.get('p1000')}")
+    out.that(got.get("ongoing:drivers") == [False],
+             "and an ongoing tick is not, which is the case `p15844`'s card"
+             " excludes -- 'takes damage from an attack that hits it'",
+             f"{got.get('ongoing:drivers')}")
+
+    # -- and the applied event carries it too, which is what rows watch ---
+    # **Asserted on a blow that is True**, and the first version used a
+    # flat payout -- which is False either way, so a missing attribute read
+    # the same as a present one through `getattr(..., False)` and the plant
+    # that removed it walked straight through.
+    world2, me2, _ = audit_board("p15844", 1)
+    foe2 = enemies(world2, me2)[0]
+    applied: list[bool] = []
+    world2.bus.on(DamageApplied,
+                  lambda ev: applied.append(bool(getattr(ev, "by_attack", False))))
+    world2.rng.loaded = 19
+    swing = Cast(world=world2, me=me2, ref="p1000")
+    swing.target = foe2
+    swing.bonus("attack", 40, on=me2, kind="drivers")
+    if not swing.strike(on=foe2):
+        out.skip("a landed attack, for the applied-event half")
+    else:
+        swing.damage("1d6", on=foe2)
+        out.that(applied and applied[0] is True,
+                 "`DamageApplied` carries it as well as `DamageRolled` --"
+                 " all three rows watch the **applied** event, because the"
+                 " printed trigger is damage that *landed*, so attaching it"
+                 " to one event only would have left every one of them"
+                 " unable to read it",
+                 f"{applied}")
+
+
+def a_prohibition_the_actor_consults(out: Result) -> None:
+    """Two refusals recorded on the creature they protect, because the verb
+    that would act has nowhere else to ask (#764, #740).
+
+    Both rows are standing traits and neither makes the call it wants to
+    change -- `c.coup_de_grace` is invoked by somebody else's body, and a
+    second wind is taken by the action menu. So neither could be written as
+    a parameter the row passes, and `c.pre_empt` does not reach either: it
+    keys on a **row ref** and the row being changed has to read it, and
+    second wind is not a row at all.
+
+    `c.no_provoke` is the precedent both follow -- the immunity lives on
+    the creature it protects and the actor's verb consults it -- with one
+    difference worth writing down: that verb hangs on the opportunity
+    *window* and vetoes an event. Neither of these has a window. Finishing
+    a helpless creature goes straight from a body, and the second wind's
+    heal is a line inside the one implementation, so in both cases the only
+    place to consult is the verb and the only thing to consult is a hold.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition
+
+    # -- #764: a helpless creature that may not be finished ---------------
+    def finish(protect: bool) -> bool | None:
+        world, me, _ = audit_board("i2163x1", 1)
+        foes = enemies(world, me)
+        if not foes:
+            return None
+        victim = foes[0]
+        Cast(world=world, me=me, ref="drivers:cdg").condition(
+            Condition.HELPLESS, on=victim, until=When.ENCOUNTER)
+        if protect:
+            use = Cast(world=world, me=victim, ref="i2163x1")
+            use.target = victim
+            REGISTRY["i2163x1"].body(use)
+        world.rng.loaded = 15
+        killer = Cast(world=world, me=me, ref="p1000")
+        killer.target = victim
+        return killer.coup_de_grace(on=victim)
+
+    plain = finish(protect=False)
+    if plain is None:
+        out.skip("an enemy to make helpless, for the coup de grace")
+    else:
+        out.that(plain is True,
+                 "a helpless creature with nothing protecting it can be"
+                 " finished -- the control, and the half that makes the"
+                 " next assertion mean something",
+                 f"coup_de_grace returned {plain}")
+        guarded = finish(protect=True)
+        out.that(guarded is False,
+                 "and i2163x1's body stops it, through a hold on the"
+                 " victim that `c.coup_de_grace` asks about. There is no"
+                 " event to veto here, which is why `c.no_provoke`'s"
+                 " interrupt shape could not be copied",
+                 f"coup_de_grace returned {guarded}")
+
+    # -- #740: a second wind that restores nothing ------------------------
+    def wind(forgo: bool) -> tuple[int, int] | None:
+        # **A board posed for somebody else**, and the first version used
+        # `f2868`'s own. That character *holds* the feat, so emitting
+        # `SecondWind` fires it, it lays the refusal, and the heal is
+        # skipped -- the row working exactly as designed, and a "control"
+        # that was never one. The same trap `f2162` set two rules ago.
+        world, me, _ = audit_board("i2163x1", 1)
+        health = world.get(me, Health)
+        if health is None:
+            return None
+        health.hp = max(1, health.max_hp // 3)
+        before = health.hp
+        c = Cast(world=world, me=me, ref="drivers:wind")
+        if forgo:
+            c.forgo_second_wind_heal(on=me)
+        c.second_wind(on=me)
+        return before, world.need(me, Health).hp
+
+    got = wind(forgo=False)
+    if got is None:
+        out.skip("a creature with Health, for the second wind")
+    else:
+        before, after = got
+        out.that(after > before,
+                 "a second wind restores hit points -- the control",
+                 f"{before} -> {after}")
+        b2, a2 = wind(forgo=True)
+        out.that(a2 == b2,
+                 "and `c.forgo_second_wind_heal` leaves them exactly where"
+                 " they were, which is the refusal the printed trade needs"
+                 " before it can pay an ally instead",
+                 f"{b2} -> {a2}")
+
+        # -- and f2868 end to end, through its own declared trigger ------
+        world, me, _ = audit_board("f2868", 1)
+        health = world.get(me, Health)
+        if health is None:
+            out.skip("f2868's own board, for the trade end to end")
+        else:
+            health.hp = max(1, health.max_hp // 3)
+            was = health.hp
+            Cast(world=world, me=me, ref="drivers:wind").second_wind(on=me)
+            out.that(world.need(me, Health).hp == was,
+                     "**and on f2868's own board the holder keeps none of"
+                     " it**, fired by the row's own `SecondWind` trigger"
+                     " rather than by anything this rule lays. That is the"
+                     " trade working end to end -- and it is why the"
+                     " control above had to be posed somewhere else",
+                     f"{was} -> {world.need(me, Health).hp}")
+
+
+def a_riders_own_amount(out: Result) -> None:
+    """`c.part_of` answers how much of a blow is one damage type, which is a
+    component of somebody else's roll (#619's densest successor).
+
+    Four feats print "the extra **necrotic** damage" from a racial power
+    that makes no attack -- it lays a typed rider on the next blow the
+    character lands. `DamageRolled` carried one total, so as `f1640`'s note
+    put it the clause wanted *"a component of a roll rather than the
+    roll"*.
+
+    `resolve.deal_damage` has split the blow by type all along: `parts[0]`
+    is what the power rolled and every part after it is a rider that named
+    a type of its own, because those points meet resistance whether or not
+    the sword does. That split now rides on the event as a plain attribute
+    -- #703's arrangement, so no field, no wire, no fixture.
+
+    **Typed, not attributed, and that is the correction.** The old symbol
+    `c.rider_from(ref)` asked for the amount a *named row* contributed.
+    `Mods.split` keys its result by `tuple[DamageType, ...]` with no ref in
+    it, so attribution is a larger change -- and no card asks for it. The
+    cost is stated in all three rows: any necrotic the character deals
+    answers, not only that power's rider.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    kept: dict = {}
+
+    def blow(rider: int, run_row: str = "") -> tuple:
+        """Land a 2d6 blow with an optional typed necrotic rider."""
+        world, me, _ = audit_board("f1640", 1)
+        kept["world"] = world
+        foe = enemies(world, me)[0]
+        if run_row:
+            use = Cast(world=world, me=me, ref=run_row)
+            use.target = me
+            REGISTRY[run_row].body(use)
+        if rider:
+            lay = Cast(world=world, me=me, ref="p8278")
+            lay.bonus("damage", rider, on=me, until=When.EONT, once=True,
+                      dtype=DamageType.NECROTIC)
+        seen: list[DamageRolled] = []
+        world.bus.on(DamageRolled, lambda ev: seen.append(ev))
+        before = world.need(me, Health).temp
+        Cast(world=world, me=me, ref="p1000").damage("2d6", on=foe)
+        after = world.need(me, Health).temp
+        return (seen[0] if seen else None), me, before, after
+
+    ev, me, _, _ = blow(rider=7)
+    if ev is None:
+        out.skip("a blow to read a typed split off")
+        return
+    reader = Cast(world=kept["world"], me=me, ref="f1640")
+    reader.trigger = ev
+    out.that(reader.part_of(DamageType.NECROTIC) == 7,
+             "the rider's **own** amount comes back, not the whole blow --"
+             " which is the component four cards read and `DamageRolled`"
+             " could not give",
+             f"blow {ev.amount}, necrotic part"
+             f" {reader.part_of(DamageType.NECROTIC)}, rider was 7")
+    out.that(reader.part_of(DamageType.FIRE) == 0,
+             "and a type the blow is not comes back 0 rather than the"
+             " total, which is the half a reader returning `ev.amount` on"
+             " a miss would get wrong",
+             f"fire part {reader.part_of(DamageType.FIRE)}")
+
+    # -- f1640's body: temp hit points equal to that component -----------
+    _, _, before, after = blow(rider=7, run_row="f1640")
+    out.that(after - before == 7,
+             "f1640 pays temporary hit points equal to the necrotic"
+             " component, through its own body",
+             f"temp {before} -> {after}, rider was 7")
+    _, _, b2, a2 = blow(rider=0, run_row="f1640")
+    out.that(a2 == b2,
+             "and pays nothing when the blow carries no necrotic rider --"
+             " the control, and the half a body reading `ev.amount` would"
+             " pay out on every hit",
+             f"temp {b2} -> {a2}")
+
+    # -- the two sibling sets are not the same set -----------------------
+    import inspect
+    cursed = inspect.getsource(REGISTRY["f1641"].body)
+    marked = inspect.getsource(REGISTRY["f1662"].body)
+    out.that("c.cursed(" in cursed and "c.marked(" not in cursed,
+             "f1641 reads the **cursed** set, which is what its card names",
+             "c.cursed present, c.marked absent")
+    out.that("c.marked(" in marked and "c.cursed(" not in marked,
+             "and f1662 reads the **marked** set -- two cards one word"
+             " apart, and reading the same set for both would be wrong for"
+             " one of them in every fight",
+             "c.marked present, c.cursed absent")
+
+
+def a_swing_is_passed_on(out: Result) -> None:
+    """`c.pass_on(attack=True)` re-aims the triggering power's later attack
+    rolls, through the verb and not through a hand-rolled listener.
+
+    Two monster rows printed "or secondary attacks" and both carried the
+    premise *"nothing re-aims an attack roll a resolving body is about to
+    make"*. It is false, and what makes it false has been written down in
+    `resolve.roll` for longer than the marker existed -- it reads its
+    target back off the `AttackDeclared` it is handed, because *"the
+    closure captured the parameters instead, so assigning `ev.target` did
+    nothing at all and failed silently"*.
+
+    **The window is the trap.** `resolve.attack` hands its `roll` to `emit`
+    as the callback, so a watch in the default AFTER window fires once the
+    attack has already been rolled and changes nothing, silently.
+
+    **A first version of this rule registered its own `bus.on` listener and
+    proved the engine rather than the verb.** Both plants walked through
+    it: dropping `window=Window.BEFORE` from `c.pass_on` left every
+    assertion green, because nothing here called `c.pass_on`. It goes
+    through the verb now, which is the only version that can fail when the
+    verb is wrong.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    AC = Defense.AC
+
+    class _Blow:
+        """The least a `pass_on` trigger has to be: it reads `.attacker`."""
+
+        def __init__(self, attacker: int) -> None:
+            self.attacker = attacker
+
+    def swing(pass_it: bool, same_swinger: bool = True) -> tuple:
+        """Arm `pass_on` if asked, then have somebody swing at the caster."""
+        world, me, _ = audit_board("m82a5", 1)
+        foes = enemies(world, me)
+        if len(foes) < 3:
+            return None, None, None
+        swinger, dup, other = foes[0], foes[1], foes[2]
+        if pass_it:
+            arm = Cast(world=world, me=me, ref="drivers:passon")
+            arm.pass_on(_Blow(swinger), to=dup, attack=True)
+        hit: list[int] = []
+        world.bus.on(AttackRolled, lambda ev: hit.append(ev.target))
+        world.rng.loaded = 10
+        # **`c.attack`, not `c.basic`, and the reason is the verb's own
+        # bound.** `pass_on` stands the deflection down as soon as another
+        # `PowerUsed` goes by, which is right -- "applied by the triggering
+        # attack" is one power's resolution. `c.basic` *starts a power*, so
+        # posing the secondary swing that way trips the guard and the verb
+        # correctly does nothing. In play the second attack line happens
+        # while the triggering power is still resolving, with no new
+        # `PowerUsed` between. The raw roll is how that is posed.
+        who = swinger if same_swinger else other
+        use = Cast(world=world, me=who, ref="drivers:passon")
+        use.target = me
+        use.attack(5, AC, on=me)
+        return (hit[0] if hit else None), me, dup
+
+    plain, me, dup = swing(pass_it=False)
+    if plain is None:
+        out.skip("three enemies, for a swing and somewhere to pass it")
+        return
+    out.that(plain == me,
+             "with nothing armed the swing lands on the creature it was"
+             " declared against -- the control",
+             f"declared at {me}, rolled against {plain}")
+
+    passed, _, _ = swing(pass_it=True)
+    out.that(passed == dup,
+             "**and `c.pass_on(attack=True)` moves it**, which the two rows"
+             " printing 'or secondary attacks' were told was impossible."
+             " Removing `window=Window.BEFORE` from the verb reddens this"
+             " and nothing else, which is the point: an AFTER watch fires"
+             " after `resolve.attack` has already rolled",
+             f"moved from {me} to {passed}")
+
+    elsewhere, _, _ = swing(pass_it=True, same_swinger=False)
+    out.that(elsewhere == me,
+             "and a swing from somebody other than the creature that"
+             " triggered it is left alone -- the bound `pass_on` keeps on"
+             " both halves, so a deflection does not catch the whole"
+             " table's attacks",
+             f"the other attacker's swing landed on {elsewhere}")
+
+
+def a_damage_die_is_pinned(out: Result) -> None:
+    """A floor on a damage die's face is not a reroll of it, and a set is
+    not a floor (#742).
+
+    Three operations on the same dice and the cards are different
+    sentences, half a point a die apart on a d6:
+
+        plain          3.50
+        floor at 3     4.00     "treat a 1 or 2 as a 3"
+        loop above 3   4.50     "reroll until it is not low"
+
+    So `f2162` written as `c.reroll_ones(below=3)` would be a feat better
+    than its card, which is why it waited for its own verb rather than
+    being spelled with the nearest one.
+
+    **The fourth hold's position in `_roll_damage_dice` is measured, not
+    argued.** On 3d6: plain 10.48, floored 11.998, one pick 12.055, the
+    loop 13.50. The floor is weakest, so it is read last and a creature
+    holding any pair gets the better card -- the same principle the
+    existing loop-before-pick order was built on.
+
+    **And `p10044` is written, which #742 said might be impossible.** That
+    issue asked whether an immediate interrupt on "you take damage" runs
+    *before* the dice are rolled, as the only way the card could work. It
+    does not have to: `DamageRolled` carries its live `Roll` since #703, so
+    the dice are still there afterwards and a set is a plain write.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.query import enemies
+
+    # A board posed for somebody else, so `turns.arm_traits` has not already
+    # laid f2162's hold -- on its own board it has, and a first pass measured
+    # 12.10 both with and without the row because of it.
+    NEUTRAL = "p1000"
+
+    def mean(lay, ref: str = "drivers:floor",  # noqa: ANN001
+             tries: int = 800) -> float:
+        world, me, _ = audit_board(NEUTRAL, 1)
+        world.rng.loaded = None
+        if lay is not None:
+            lay(Cast(world=world, me=me, ref="drivers:lay"), me)
+        roller = Cast(world=world, me=me, ref=ref)
+        roller.target = me
+        return sum(roller._roll_damage("3d6") for _ in range(tries)) / tries
+
+    plain = mean(None)
+    floored = mean(lambda c, me: c.floor_damage_dice(3, on=me))
+    looped = mean(lambda c, me: c.reroll_ones(below=3, on=me))
+    out.that(10.0 < plain < 11.0,
+             "3d6 unmodified averages about 10.5 -- the baseline the two"
+             " figures below are read against",
+             f"{plain:.2f}")
+    out.that(floored - plain > 1.0,
+             "a floor at 3 is worth better than a point on 3d6, so the"
+             " clause is not inert",
+             f"{plain:.2f} -> {floored:.2f}, predicted ~12.0")
+    out.that(looped - floored > 1.0,
+             "**and rerolling is worth more again**, which is the whole"
+             " reason this is its own verb: writing the floor as"
+             " `c.reroll_ones(below=3)` would be the feat better than its"
+             " card, by about a point and a half on 3d6",
+             f"floored {floored:.2f}, rerolled {looped:.2f}")
+
+    both = mean(lambda c, me: (c.floor_damage_dice(3, on=me),
+                               c.reroll_ones(below=3, on=me)))
+    out.that(abs(both - looped) < 0.6,
+             "a creature holding both cards gets the **reroll**, not the"
+             " floor and not some average of the two -- the floor is read"
+             " last because it is measured weakest, and `total()` taking a"
+             " `max` over one shared key would have come out weaker than"
+             " either card alone",
+             f"both {both:.2f}, reroll alone {looped:.2f},"
+             f" floor alone {floored:.2f}")
+
+    # -- f2162's own body, and its keyword gate ---------------------------
+    def row_mean(ref: str, tries: int = 800) -> float:
+        world, me, _ = audit_board(NEUTRAL, 1)
+        world.rng.loaded = None
+        c = Cast(world=world, me=me, ref="f2162")
+        c.target = me
+        REGISTRY["f2162"].body(c)
+        roller = Cast(world=world, me=me, ref=ref)
+        roller.target = me
+        return sum(roller._roll_damage("3d6") for _ in range(tries)) / tries
+
+    on_weapon = row_mean(NEUTRAL)
+    on_arcane = row_mean("p10069")
+    out.that(on_weapon - plain > 1.0,
+             "f2162's own body floors the dice of a **weapon** attack",
+             f"{plain:.2f} -> {on_weapon:.2f}")
+    out.that(abs(on_arcane - plain) < 0.6,
+             "and leaves a power without the keyword alone, which is the"
+             " `keyword=` half of the printed sentence",
+             f"arcane {on_arcane:.2f} against a plain {plain:.2f}")
+
+    # -- p10044: a set, downward, on a roll already announced -------------
+    world, me, _ = audit_board("p10044", 1)
+    world.rng.loaded = None
+    foe = enemies(world, me)[0]
+    mine: list[tuple[list[int], int]] = []
+    theirs: list[list[int]] = []
+
+    def watch(ev: DamageRolled) -> None:
+        roll = getattr(ev, "roll", None)
+        if roll is None:
+            return
+        if ev.target == me:
+            mine.append((list(roll.dice), ev.amount))
+        else:
+            theirs.append(list(roll.dice))
+
+    world.bus.on(DamageRolled, watch)
+    Cast(world=world, me=foe, ref="drivers:blow").damage("4d8", on=me)
+    Cast(world=world, me=me, ref="drivers:blow").damage("4d8", on=foe)
+    if not mine or not theirs:
+        out.skip("a blow at the caster and one away from it, for p10044")
+    else:
+        dice, amount = mine[0]
+        out.that(dice == [1, 1, 1, 1],
+                 "p10044 sets every die of an incoming blow to 1, fired by"
+                 " its own declared trigger on `DamageRolled` -- the row's"
+                 " note said the dice were gone by then and #703 made that"
+                 " false",
+                 f"dice {dice}, amount {amount}")
+        out.that(theirs[0] != [1, 1, 1, 1],
+                 "and does nothing to a blow the caster is **dealing**,"
+                 " which `targets_me` is what narrows -- the half a row"
+                 " reading the event without a gate would get wrong",
+                 f"the outgoing blow rolled {theirs[0]}")
+
+
+def a_weapon_is_re_filed(out: Result) -> None:
+    """`c.weapon_group` makes a weapon count as another group without ceasing
+    to be its own, and `c.weapon_proficiency` sets a figure the swing reads
+    (#837, #839).
+
+    The last two of the four per-character weapon writers. `Weapon.group`
+    had no writer at all, and it is the field with teeth:
+    `Weapon.is_light_blade` is literally `self.group == "light blade"` and
+    `Cast.wielding` reads it to enforce a printed Requirement, so a card
+    saying "use this with any power that takes a light blade" can be said
+    no other way.
+
+    **Asserted through `f1277` and `f1288`'s bodies**, not through the
+    verbs, and the interesting half is the *negative* one: a re-file that
+    threw the old group away would pass every "the new word answers"
+    assertion while quietly stopping the weapon being what it is.
+
+    `c.weapon_proficiency` gets a measurement rather than a field read,
+    because the point of it being a **set** and not a bonus is that the
+    figure is already in the swing -- so the assertion that matters is how
+    much the attack total moves.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies, holding
+
+    def wielding(ref: str, weapon: str):  # noqa: ANN202
+        """A board for `ref` with `weapon` in hand **and back to print**.
+
+        Two board facts had to be handled and each one broke a first pass:
+
+        * `Gear.held` is `weapons` minus `stowed`, so a *carried* weapon is
+          not a held one and `query.holding` -- which filters to held first
+          -- answers nothing about it. `gear.wield` is the door, and without
+          it the rule read as "the verb does nothing".
+        * **`turns.arm_traits` arms the row at the start of the fight**, so
+          by the time a rule looks, the clause under test has already run
+          and the "before" is really an "after". Both control assertions
+          failed that way, reporting the *fixed* state as the starting one.
+
+        So the weapon is restored to the printed row from `chargen.PRINTED`
+        before anything is asserted. That makes the control state its own
+        premise instead of inheriting whatever the harness did, which is
+        the only version of this that cannot quietly pass.
+        """
+        from dataclasses import replace as _replace
+
+        from combat_engine.chargen import PRINTED
+
+        world, me, _ = audit_board(ref, 1)
+        gear = world.get(me, Gear)
+        if gear is None or weapon not in PRINTED:
+            return None, None, None
+        if not any(w.ref == weapon for w in gear.weapons):
+            return None, None, None
+        fresh = _replace(PRINTED[weapon])
+        gear.weapons = [fresh if w.ref == weapon else w for w in gear.weapons]
+        gear.wield(fresh)
+        return world, me, fresh
+
+    # -- f1277: a blowgun that answers to a crossbow, and still to itself --
+    world, me, arm = wielding("f1277", "w3662")
+    if world is None:
+        out.skip("a board carrying w3662, for f1277's re-file")
+    else:
+        before_new = [w.ref for w in holding(world, me, "crossbow")]
+        before_own = [w.ref for w in holding(world, me, "blowgun")]
+        out.that(before_new == [] and before_own == ["w3662"],
+                 "before the row runs, the weapon answers to its own group"
+                 " and not to the one the card borrows -- the control, and"
+                 " the half that makes the next assertion mean something",
+                 f"crossbow {before_new}, blowgun {before_own}")
+        REGISTRY["f1277"].body(Cast(world=world, me=me, ref="f1277"))
+        after_new = [w.ref for w in holding(world, me, "crossbow")]
+        after_own = [w.ref for w in holding(world, me, "blowgun")]
+        out.that(after_new == ["w3662"],
+                 "and afterwards a crossbow-gated row takes it, which is"
+                 " what `Weapon.group` is read for",
+                 f"crossbow {after_new}")
+        kept = next(w for w in world.get(me, Gear).weapons
+                    if w.ref == "w3662")
+        out.that("blowgun" in kept.properties,
+                 "**and the old group is carried across as a property**,"
+                 " because every printed line here adds an identity rather"
+                 " than trading one. Asserted on the field and *not*"
+                 " through `query.holding`: that reader also matches"
+                 " `w.slug`, so it answers to the old word whatever the"
+                 " group says -- planting the carry-across away left a"
+                 " `holding` assertion green, which is the whole reason"
+                 " this one reads the weapon instead",
+                 f"properties {sorted(kept.properties)}")
+        out.that(after_own == ["w3662"],
+                 "and a row asking for the weapon by its own name still"
+                 " finds it, which is the behaviour a player would notice",
+                 f"blowgun {after_own}")
+        others = [w.group for w in world.get(me, Gear).weapons
+                  if w.ref != "w3662"]
+        out.that("crossbow" not in others,
+                 "and no other weapon the character carries was touched,"
+                 " since the row names one ref",
+                 f"the rest are {others}")
+
+    # -- f1288: the reader with teeth --------------------------------------
+    world, me, arm = wielding("f1288", "w3663")
+    if world is None:
+        out.skip("a board carrying w3663, for f1288's light-blade clause")
+    else:
+        out.that(not arm.is_light_blade,
+                 "f1288's weapon is not a light blade to begin with --"
+                 " `Weapon.is_light_blade` is `group == 'light blade'`, so"
+                 " this is the field the card has to move",
+                 f"group {arm.group!r}")
+        REGISTRY["f1288"].body(Cast(world=world, me=me, ref="f1288"))
+        now = next(w for w in world.get(me, Gear).weapons
+                   if w.ref == "w3663")
+        out.that(now.is_light_blade,
+                 "and it is afterwards, which is what `Cast.wielding` reads"
+                 " to let a light-blade-gated row be used at all",
+                 f"group {now.group!r}, properties keep {sorted(now.properties)[:3]}")
+
+    # -- the proficiency set, measured through a swing ---------------------
+    def total_with(prof: int) -> int | None:
+        world, me, _ = audit_board("f1277", 1)
+        gear = world.get(me, Gear)
+        arm = must(gear, 'Gear').main
+        if arm is None:
+            return None
+        Cast(world=world, me=me, ref="drivers:prof").weapon_proficiency(
+            prof, ref=arm.ref, on=me)
+        foe = enemies(world, me)[0]
+        seen: list[Any] = []
+        world.bus.on(AttackRolled, lambda ev: seen.append(ev))
+        world.rng.loaded = 10
+        use = Cast(world=world, me=me, ref="drivers:prof")
+        use.target = foe
+        use.basic(on=foe)
+        got = getattr(seen[0], "result", None) if seen else None
+        return got.total if got is not None else None
+
+    # -- held=True selects what is in hand, and only that (#841) ----------
+    world, me, _ = audit_board("f1277", 1)
+    gear = world.get(me, Gear)
+    if gear is None or len(gear.weapons) < 2 or not gear.held:
+        out.skip("a character carrying more than it holds, for held=")
+    else:
+        in_hand = {w.ref for w in gear.held}
+        on_belt = set(gear.stowed)
+        n = Cast(world=world, me=me, ref="drivers:held").gains_property(
+            "silvered", held=True, on=me)
+        after = world.get(me, Gear)
+        got = {w.ref for w in must(after, 'Gear').weapons if "silvered" in w.properties}
+        out.that(n == len(in_hand) and got == in_hand,
+                 "`held=True` lays the property on exactly what is in hand"
+                 " -- the selector `ref=` and `group=` could not spell,"
+                 " since a hands-slot block has no weapon ref of its own",
+                 f"held {sorted(in_hand)}, laid on {sorted(got)}")
+        out.that(not (got & on_belt),
+                 "and on nothing that is on the belt, which is the half a"
+                 " selector reaching every carried weapon would get wrong",
+                 f"stowed {sorted(on_belt)}, laid on {sorted(got)}")
+
+    two, three = total_with(2), total_with(3)
+    if two is None or three is None:
+        out.skip("a held weapon to measure a proficiency set through")
+    else:
+        out.that(three - two == 1,
+                 "raising the printed proficiency by one is worth exactly"
+                 " one point of attack, measured through a swing on a"
+                 " forced natural 10 -- which is why the verb **sets** the"
+                 " figure instead of adding a bonus beside it",
+                 f"proficiency 2 -> total {two}, proficiency 3 -> {three}")
+
+
+def every_swing_is_recorded(out: Result) -> None:
+    """`PowerResolved.rolls` carries one entry per **swing**, not per target,
+    and a RELIABLE daily that hit is not refunded (#810).
+
+    `dsl.use` cleared `cast.result` per target, ran the body, and sampled the
+    field afterwards. `cast.result` is written in `Cast.attack` -- the single
+    funnel every attack roll passes through -- so a body with two roll sites
+    overwrote the first and one entry was recorded for two swings.
+
+    **The half that reached a player is `landed`**, which came off the same
+    sampled field. A RELIABLE power is refunded when nothing landed, so a
+    daily whose primary *hit* and whose later swing missed was handed back
+    free.
+
+    Four cells, and the one that always passed is why a single happy-path
+    assertion would not have found this: when the **off-hand** is the hit, it
+    is also the last roll, so it survives the clobbering. Only the
+    primary-hits-and-the-rest-miss cell is wrong, which is a quarter of the
+    table and invisible in aggregate.
+
+    Posed by moving the two defences apart with `c.bonus` and loading a
+    middling face -- board setup, not a patched method, so the row's own body
+    decides both outcomes.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import enemies
+
+    RELIABLE_TWO_ARMS = "p10478"
+    TWO_SWINGS = "p87"
+
+    def reliable(primary_hits: bool, offhand_hits: bool) -> int | None:
+        """Spend `p10478` with each arm's outcome forced. Uses spent, or None
+        if the board cannot stand two enemies next to the caster."""
+        world, me, _ = audit_board(RELIABLE_TWO_ARMS, 1)
+        foes = sorted(e for e in enemies(world, me) if world.get(e, Health))
+        if len(foes) < 2:
+            return None
+        primary, second = foes[0], foes[1]
+        here = world.need(me, Position).square
+        for foe, dest in ((primary, (here[0] + 1, here[1])),
+                          (second, (here[0] + 1, here[1] + 1))):
+            world.grid.lift(foe)
+            world.need(foe, Position).square = dest
+            world.grid.place(foe, frozenset({dest}))
+        rig = Cast(world=world, me=me, ref="drivers:swings")
+        rig.bonus("ac", -40 if primary_hits else 40, kind="probe", on=primary)
+        rig.bonus("ac", -40 if offhand_hits else 40, kind="probe", on=second)
+        world.rng.loaded = 10
+        powers = world.need(me, Powers)
+        use(world, me, RELIABLE_TWO_ARMS, targets=[primary], spend=True)
+        return powers.times(RELIABLE_TWO_ARMS)
+
+    both = reliable(True, True)
+    if both is None:
+        out.skip("two enemies standing beside the caster, for p10478's arms")
+    else:
+        primary_only = reliable(True, False)
+        offhand_only = reliable(False, True)
+        neither = reliable(False, False)
+        out.that(both == 1,
+                 "a RELIABLE daily is spent when both its arms hit -- the"
+                 " control, and the cell that was always right",
+                 f"uses spent {both}")
+        out.that(primary_only == 1,
+                 "and spent when the **primary** hits and the off-hand"
+                 " misses. This is the bug: the off-hand miss was the last"
+                 " roll, so `landed` read False and the daily was refunded"
+                 " after landing a hit",
+                 f"uses spent {primary_only}, expected 1")
+        out.that(offhand_only == 1,
+                 "and spent when only the off-hand hits -- which passed"
+                 " before the fix too, because there the hit is the last"
+                 " roll and survives. Kept so the pair above cannot be"
+                 " satisfied by a change that just always spends",
+                 f"uses spent {offhand_only}")
+        out.that(neither == 0,
+                 "and **not** spent when nothing landed, which is the whole"
+                 " point of the word and must still hold",
+                 f"uses spent {neither}, expected 0")
+
+    # -- one entry per swing, and still one per swing when there is one ----
+    def rolls_and_swings(ref: str, targets: int) -> tuple[int, int] | None:
+        world, me, _ = audit_board(ref, 1)
+        foes = [e for e in enemies(world, me) if world.get(e, Health)]
+        if len(foes) < targets:
+            return None
+        before = len(world.bus.log)
+        use(world, me, ref, targets=foes[:targets], spend=True)
+        fresh = world.bus.log[before:]
+        rolled = len([e for e in fresh if e.kind == "AttackRolled"
+                      and getattr(e, "attacker", None) == me])
+        got = [e for e in fresh if e.kind == "PowerResolved"
+               and getattr(e, "power", "") == ref]
+        return rolled, (len(got[0].rolls) if got else -1)
+
+    pair = rolls_and_swings(TWO_SWINGS, 1)
+    if pair is None:
+        out.skip("a reachable enemy for a two-swing power")
+    else:
+        rolled, recorded = pair
+        out.that(rolled == 2 and recorded == rolled,
+                 "a power that swings twice at **one** target records both"
+                 " rolls -- the event promises every AttackResult the use"
+                 " produced, and it said one",
+                 f"{rolled} rolls on the bus, {recorded} on the event")
+
+    solo = rolls_and_swings(TWO_SWINGS, 2)
+    if solo is None:
+        out.skip("two reachable enemies, for the per-target control")
+    else:
+        rolled, recorded = solo
+        out.that(recorded == rolled,
+                 "and the count still tracks the swings when the targets"
+                 " outnumber the roll sites -- the negative control against"
+                 " a fix that simply appends twice",
+                 f"{rolled} rolls on the bus, {recorded} on the event")
+
+
+def reroll_after_the_roll(out: Result) -> None:
+    """`c.reroll_faces` rerolls a damage die after the roll, and the two rows
+    that print it gate on the blow rather than on themselves (#703).
+
+    The other half of #703. Its first half landed `c.reroll_ones(below=,
+    pick=)`, a **hold** read while the dice are being rolled, and four rows
+    could not use it because their clause answers a roll that has already
+    happened -- a no-action daily spent *because* you disliked the number,
+    which is a decision nobody can make before seeing it.
+
+    What was missing was not a verb but the dice: `DamageRolled` carried a
+    total with nothing behind it. `rng.Roll` had held the faces all along --
+    `_rolled_pick` writes into `roll.dice` in place -- so they were never
+    discarded, only summed one call too early. The roll now rides on the
+    event as a **plain attribute**, which is the arrangement `AttackResult`
+    already has on `Hit` and for the identical reason: a field would reach
+    the wire and move all 290 `DamageRolled` lines in the seven fixtures.
+
+    **Asserted through the two rows' bodies, not through the verb.** Calling
+    `c.reroll_faces` here would prove the mechanism and say nothing about
+    either row -- the failure this suite has been bitten by repeatedly. Both
+    cards gate on a property of *the blow* ("damage for an arcane attack
+    power", "a melee weapon attack"), read off the damage context, so each
+    row gets a positive and a negative control and the negative ones are
+    where a too-generous gate shows up.
+
+    **The means, not a face.** A reroll changes a distribution, not a
+    number, so one roll of 3d6 proves nothing either way.
+
+    **The last two assertions are the subtle ones and they are why
+    `reprice` exists.** The dice and the amount are not the same quantity:
+    `c.half_damage` halves the dice before anything is announced. So a row
+    reading "+4 on a die means +4 damage" over-pays by exactly double on
+    every miss-half blow, and the event carries a recipe from the place that
+    did the arithmetic rather than a raw delta.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.query import deals_half, enemies
+
+    # Chosen by asking `resolve._is_ranged` and the keyword set, which are
+    # the two things the rows' gates actually read -- not by eye.
+    ARCANE, PLAIN = "p10069", "p10"
+    WEAPON_MELEE, WEAPON_RANGED = "p1000", "p10190"
+
+    def react(blow: str, row: str, dice: str = "3d6", seed: int = 11,
+              half: bool = False) -> list[tuple[int, int]]:
+        """Deal one blow attributed to `blow`, run `row` against it, and
+        report every (before, after) the row produced."""
+        world, me, _ = audit_board("f1378b", seed)
+        foe = enemies(world, me)[0]
+        moved: list[tuple[int, int]] = []
+
+        def fire(ev: DamageRolled) -> None:
+            before = ev.amount
+            use = Cast(world=world, me=me, ref=row)
+            use.trigger = ev
+            use.target = me
+            REGISTRY[row].body(use)
+            moved.append((before, ev.amount))
+
+        world.bus.on(DamageRolled, fire)
+        hit = Cast(world=world, me=me, ref=blow)
+        if half:
+            hit.half_damage(dice, on=foe)
+        else:
+            hit.damage(dice, on=foe)
+        return moved
+
+    def gain(blow: str, row: str, tries: int = 250) -> float:
+        """The mean points the row adds over `tries` separate boards."""
+        deltas = [a - b
+                  for k in range(tries)
+                  for b, a in react(blow, row, seed=600 + k)]
+        return sum(deltas) / len(deltas) if deltas else 0.0
+
+    def ever_moved(blow: str, row: str, tries: int = 250) -> int:
+        """How many of `tries` boards the row changed the amount on.
+
+        **Over many boards, for the same reason `gain` is a mean**, and this
+        half was a single roll first. Deleting the gate out of either row
+        left both negative controls green, because one roll of 3d6 often
+        has no die below par and a row rerolling nothing looks identical to
+        a row refusing to act. The plants are what said so.
+        """
+        return sum(1
+                   for k in range(tries)
+                   for b, a in react(blow, row, seed=600 + k)
+                   if a != b)
+
+    # -- p16373: as many dice as you like, for an arcane attack power -------
+    arcane = gain(ARCANE, "p16373")
+    out.that(arcane > 0.8,
+             "p16373 rerolls the poor dice of an **arcane** blow and is"
+             " worth better than a point on 3d6 -- the whole row was inert"
+             " while the event carried no dice",
+             f"{arcane:+.2f} points on average")
+    plain = ever_moved(PLAIN, "p16373")
+    out.that(plain == 0,
+             "and over 250 boards touches a blow from a power **without**"
+             " the keyword not once -- the half that a gate read off the row"
+             " instead of off the blow would get wrong",
+             f"it moved {plain} of 250")
+
+    # -- i1756p1: one die, after a melee weapon attack ---------------------
+    melee = gain(WEAPON_MELEE, "i1756p1")
+    out.that(melee > 0.3,
+             "i1756p1 rerolls **one** die of a melee weapon blow, so it is"
+             " worth less than p16373 and more than nothing",
+             f"{melee:+.2f} points on average")
+    out.that(melee < arcane,
+             "and strictly less than rerolling as many as you like, which is"
+             " the ordering the two cards print",
+             f"one die {melee:+.2f} against every die {arcane:+.2f}")
+    ranged = ever_moved(WEAPON_RANGED, "i1756p1")
+    out.that(ranged == 0,
+             "and over 250 boards does nothing after a **ranged** weapon"
+             " attack, which the card excludes and `ctx['ranged']` answers",
+             f"it moved {ranged} of 250")
+    # **A melee blow that is not a weapon attack**, which is the only shape
+    # that isolates the keyword half. Planting the keyword gate away left
+    # the assertion above green, because the ranged control is caught by
+    # the melee gate first and never reaches the keyword test at all.
+    unarmed = ever_moved(PLAIN, "i1756p1")
+    out.that(unarmed == 0,
+             "and nothing after a **melee** blow that is not a weapon"
+             " attack -- the keyword half of the same sentence, which the"
+             " ranged control cannot reach",
+             f"it moved {unarmed} of 250")
+
+    # -- the recipe, which is the part a raw delta gets wrong ---------------
+    world, me, _ = audit_board("f1378b", 3)
+    foe = enemies(world, me)[0]
+    seen: list[DamageRolled] = []
+    world.bus.on(DamageRolled, lambda ev: seen.append(ev))
+    Cast(world=world, me=me, ref=WEAPON_MELEE).half_damage("4d8", on=foe)
+    ev = seen[0] if seen else None
+    roll = getattr(ev, "roll", None)
+    price = getattr(ev, "reprice", None)
+    if ev is None or roll is None or price is None or not roll.dice:
+        out.skip("a half-damage blow carrying its dice and its recipe")
+        return
+    out.that(price(roll.total) == ev.amount,
+             "the recipe on a half-damage blow reproduces the amount that"
+             " was announced, which is the invariant that makes it usable"
+             " at all",
+             f"reprice says {price(roll.total)}, the event says {ev.amount}")
+    raw = ev.amount
+    roll.dice[0] += 4
+    out.that(price(roll.total) - raw == 2,
+             "and a face four higher is worth **two** more on a halved"
+             " blow, not four -- a row applying the dice delta straight to"
+             " `ev.amount` would pay double on every miss",
+             f"the recipe says {price(roll.total) - raw:+d}, a raw delta"
+             " would say +4")
+
+    # -- the OTHER halving, which is resolve's own and was dead here --------
+    #
+    # Found by a plant that refused to go red. Removing the `halved` branch
+    # from `deal_damage`'s composed recipe left every assertion above green,
+    # and the reason is that it was never reached: `deals_half` is a
+    # property of the *dealer*, and nobody on this board is weakened. So the
+    # assertions above exercise `c.half_damage`'s halving, inside `Cast`,
+    # and say nothing about the one in `resolve`.
+    #
+    # A weakened attacker is what poses it. Both halvings have to be in the
+    # recipe or a reroll pays double on exactly one of the two cases, which
+    # is the sort of thing no row's author would ever see.
+    world, me, _ = audit_board("f1378b", 9)
+    foe = enemies(world, me)[0]
+    Cast(world=world, me=me, ref="drivers:reroll").weakened(on=me)
+    if not deals_half(world, me):
+        out.skip("a weakened dealer, for resolve's own halving")
+    else:
+        weak: list[DamageRolled] = []
+        world.bus.on(DamageRolled, lambda ev: weak.append(ev))
+        Cast(world=world, me=me, ref=WEAPON_MELEE).damage("4d8", on=foe)
+        wev = weak[0] if weak else None
+        wroll = getattr(wev, "roll", None)
+        wprice = getattr(wev, "reprice", None)
+        if wev is None or wroll is None or wprice is None or not wroll.dice:
+            out.skip("a weakened dealer's blow carrying its dice")
+        else:
+            out.that(wprice(wroll.total) == wev.amount,
+                     "a weakened dealer's blow is halved by `resolve` rather"
+                     " than by `Cast`, and the recipe reproduces that amount"
+                     " too -- a second halving in a different place",
+                     f"reprice says {wprice(wroll.total)}, the event says"
+                     f" {wev.amount}")
+            was_w = wev.amount
+            wroll.dice[0] += 4
+            out.that(wprice(wroll.total) - was_w == 2,
+                     "and a face four higher is worth two more there as"
+                     " well, which is the assertion a plant on the `halved`"
+                     " branch now reddens",
+                     f"{wprice(wroll.total) - was_w:+d}, not +4")
+
+    # -- and the reroll must not eat an earlier listener's work -------------
+    #
+    # `ev.amount` is a `Decision` field that damage reduction subtracts
+    # from, so a reroll assigning `reprice(...)` outright would silently
+    # undo whoever ran first. The verb adds the recipe's *difference* for
+    # this reason and nothing else asserts it.
+    world, me, _ = audit_board("f1378b", 5)
+    foe = enemies(world, me)[0]
+    trail: list[int] = []
+    last_roll: list[object] = []
+    prices: list[object] = []
+
+    def note_announced(ev: DamageRolled) -> None:
+        trail.append(ev.amount)
+        got = getattr(ev, "roll", None)
+        fn = getattr(ev, "reprice", None)
+        if got is not None and fn is not None:
+            last_roll.append(got)
+            prices.append(fn)
+
+    def price_of(got: object) -> int | None:
+        if not prices:
+            return None
+        return prices[0](got.total)  # ty: ignore[call-non-callable, unresolved-attribute]
+
+    world.bus.on(DamageRolled, note_announced)
+
+    def reduce_then_reroll(ev: DamageRolled) -> None:
+        ev.amount -= 5
+        trail.append(ev.amount)
+        Cast(world=world, me=me, ref="drivers:reroll").reroll_faces(
+            ev=ev, pick=1, below=99)
+        trail.append(ev.amount)
+
+    world.bus.on(DamageRolled, reduce_then_reroll)
+    Cast(world=world, me=me, ref=WEAPON_MELEE).damage("4d8", on=foe)
+    if len(trail) < 3:
+        out.skip("a blow with two listeners on it")
+        return
+    announced, reduced, after = trail[0], trail[1], trail[2]
+    # **Exact, not a bound.** `after <= reduced + 7` was the first spelling
+    # and the plant walked straight through it: assigning the recipe's
+    # answer instead of its difference hands the 5 back, and on 4d8 the
+    # reroll's own gain is often small enough that the sum still fits under
+    # a loose ceiling. The discriminating question is what the amount is
+    # *relative to the recipe* -- one reading sits 5 below it, the other
+    # sits exactly on it.
+    now = price_of(last_roll[0]) if last_roll else None
+    out.that(reduced == announced - 5,
+             "an earlier listener takes 5 off the announced amount, which is"
+             " the setup the next assertion needs",
+             f"announced {announced}, reduced to {reduced}")
+    out.that(now is not None and after == now - 5,
+             "and after the reroll the amount is still exactly 5 under what"
+             " the recipe prices the new dice at -- it added the recipe's"
+             " *difference*. Assigning the answer would land on the recipe"
+             " exactly and hand the 5 back",
+             f"after {after}, the recipe prices the new dice at {now}")
+
+
 def dice_rerolled_where_the_card_prints_no_threshold(out: Result) -> None:
     """Eight rows, five symbols, one mechanism -- and one copied line.
 
@@ -22040,6 +25756,113 @@ def dice_rerolled_where_the_card_prints_no_threshold(out: Result) -> None:
              "and `pick=EVERY_DIE` is worth more again, which is the"
              " ordering two cards of the family depend on",
              f"one die {worst:.2f}, every die {every:.2f}")
+
+    # -- a weapon's printed "brutal N", which had the operation and no
+    # -- reader at all (#840) --------------------------------------------
+    def brutal(lay: bool, ref: str = "p1000", tries: int = 800) -> tuple:
+        from combat_engine.engine.components import Gear
+
+        world, me, _ = audit_board("f2099", 1)
+        world.rng.loaded = None
+        gear = world.get(me, Gear)
+        arm = gear.main if gear else None
+        if arm is None:
+            return None, None
+        if lay:
+            Cast(world=world, me=me, ref="drivers:brutal").gains_property(
+                "brutal 2", ref=arm.ref, on=me)
+        roller = Cast(world=world, me=me, ref=ref)
+        roller.target = me
+        got = sum(roller._roll_damage("3d6") for _ in range(tries)) / tries
+        return roller._reroll_floor(), got
+
+    off, plain_mean = brutal(lay=False)
+    if off is None:
+        out.skip("a weapon in hand, for a brutal property")
+    else:
+        on, raised = brutal(lay=True)
+        out.that(off == 0 and on == 3,
+                 "`\"brutal 2\"` on the held weapon reads as a floor of"
+                 " **3** -- the threshold is exclusive, so \"2 or less\" is"
+                 " \"below 3\", the same reading `c.reroll_ones(below=3)`"
+                 " has for \"a 1 or a 2\"",
+                 f"floor {off} -> {on}")
+        out.that(raised - plain_mean > 2.0,
+                 "and it reaches the dice: the operation was never missing"
+                 " -- `_rolled_above` already replaces each low die -- only"
+                 " a reader for the printed word",
+                 f"3d6 mean {plain_mean:.2f} -> {raised:.2f}")
+        no_kw, _ = brutal(lay=True, ref="p10069")
+        out.that(no_kw == 0,
+                 "and a row **without** the weapon keyword is left alone,"
+                 " which the card requires: those dice are not the"
+                 " weapon's",
+                 f"floor on a non-weapon power {no_kw}")
+
+        # **On a weapon that is carried but not in hand**, which the first
+        # pass did not cover: planting the loop to read `gear.weapons`
+        # instead of `gear.held` left every assertion green, because the
+        # only weapon carrying the property on that board was the held one.
+        from combat_engine.engine.components import Gear as _Gear
+
+        world, me, _ = audit_board("f2099", 1)
+        world.rng.loaded = None
+        g = world.get(me, _Gear)
+        # Posed rather than hoped for: this board holds everything it
+        # carries, so a first pass skipped here and left the held/carried
+        # distinction unasserted -- and planting the loop to read
+        # `gear.weapons` walked through it.
+        stowed = g.main if g is not None else None
+        if g is None or stowed is None:
+            out.skip("a weapon to put on the belt, for the held-only half")
+        else:
+            g.stowed = set(g.stowed) | {stowed.ref}
+            Cast(world=world, me=me, ref="drivers:brutal").gains_property(
+                "brutal 2", ref=stowed.ref, on=me)
+            belt = Cast(world=world, me=me, ref="p1000")
+            belt.target = me
+            out.that(belt._reroll_floor() == 0,
+                     "and brutal on a weapon **on the belt** sets no floor"
+                     " -- it is a property of the thing in your hand, and"
+                     " reading every carried weapon would hand a character"
+                     " its whole pack's properties at once",
+                     f"stowed {stowed.ref}, floor {belt._reroll_floor()}")
+
+    # **`pick=` and a context-reading `when=` TOGETHER**, which this rule
+    # covered one at a time and never together -- and that is exactly how
+    # the combination came to be silently inert. `_reroll_pick` asked the
+    # floor with `_reroll_ctx()` and the three count keys with **no**
+    # context, so any gate reading the context answered False for the
+    # count, the count came back 0, and `_roll_damage` skipped the clause.
+    # The hold was laid, the row looked written, and the dice were
+    # untouched. #818.
+    #
+    # Asserted on the *count* rather than on an average, because that is
+    # where the two reads diverge: a mean would also move for a dozen
+    # unrelated reasons and would need thousands of rolls to separate
+    # "inert" from "slightly weaker".
+    def picked(gate: object) -> tuple[int, int]:
+        world, me, _ = _board()
+        c = Cast(world=world, me=me, ref="drivers:reroll")
+        c.reroll_ones(below=2, pick=1, on=me, when=gate)
+        return c._reroll_pick()
+
+    gated = picked(lambda ctx: ctx.get("attacker") is not None)
+    out.that(gated == (2, 1),
+             "a `pick=` hold with a gate that reads the damage context"
+             " answers BOTH its floor and its count -- the count used to"
+             " come back 0 and the clause was skipped entirely",
+             f"floor/count {gated}")
+    ungated = picked(None)
+    out.that(ungated == (2, 1),
+             "and an ungated one still does, which is the half that always"
+             " worked and is here so the fix cannot have broken it",
+             f"floor/count {ungated}")
+    shut = picked(lambda ctx: False)
+    out.that(shut == (0, 0),
+             "and a gate that refuses answers neither, so the context is"
+             " really being consulted rather than ignored on both keys",
+             f"floor/count {shut}")
 
     # **The control that says `ANY_FACE` is read as a break-even and not as
     # "all of them".** Rerolling every die blind is worth nothing; if this
@@ -22454,7 +26277,7 @@ def a_charge_banked_in_somebody_elses_weapon(out: Result) -> None:
     world, me, mate = rested(())
     boosts: list[tuple[str, int, int, str]] = []
     world.bus.on(Boosted, lambda ev: boosts.append(
-        (ev.by, ev.actor, ev.rolled_by, ev.kind)))
+        (ev.by, ev.actor, ev.rolled_by, ev.roll_kind)))
     foe = next((f for f in enemies(world, me) if adjacent(world, mate, f)), None)
     out.that(foe is not None, "and an enemy standing next to that ally",
              f"{sorted(enemies(world, me))}")
@@ -23225,17 +27048,74 @@ def which_weapon_the_blow_came_through(out: Result) -> None:
                  f"{ref} carries no marker for it any more",
                  f"todo={row.todo} dropped={row.dropped}")
 
-    # -- and the one it cannot, with the reason named ----------------------
+    # -- and the third, which the board can pose now -----------------------
+    #
+    # **This assertion used to pin the bug.** It read `mine is None` and
+    # said so: *"i1688p1's board puts a DIFFERENT item on the weapon, so
+    # `c.my_weapon()` answers None and its gate cannot pass -- the reason it
+    # is excused rather than written wider (#699)."* True when written, and
+    # a control that documents a limitation goes red the day the limitation
+    # is lifted rather than quietly passing -- which is what it did, and why
+    # it is turned round here instead of deleted.
+    #
+    # #699: `board` lays the item under test on the weapon even when chargen
+    # already dealt a magic one, so `c.my_weapon()` answers it and the row's
+    # gate reads the right ref. Asserting the **positive** is strictly
+    # stronger: `None` was satisfied by any of a dozen failures, and this is
+    # satisfied by one thing.
     world, me, _ = audit_board("i1688p1", 1)
     gear = world.get(me, Gear)
     mine = Cast(world=world, me=me, ref="i1688p1").my_weapon()
-    out.that(mine is None,
-             "i1688p1's board puts a DIFFERENT item on the weapon, so"
-             " `c.my_weapon()` answers None and its gate cannot pass -- the"
-             " reason it is excused rather than written wider (#699)",
+    out.that(mine is not None and mine.item == "i1688",
+             "i1688p1's board lays the item under test on the weapon, so"
+             " `c.my_weapon()` answers it and the row's gate reads its own"
+             " ref (#699)",
              f"{[(w.ref, w.item) for w in gear.weapons] if gear else None}")
     health = world.get(me, Health)
     out.that(health is not None, "and the board is otherwise intact")
+
+    # -- a rider inside the attack inherits the weapon of record ----------
+    # **#698's half.** `_swung_weapon` can only answer for a row carrying
+    # the weapon keyword, and a rider is a row of its own without one -- so
+    # the blow that bloodied on `i1688p1`'s board reported
+    # `Bloodied(power='f274', weapon='')` while the swing really did come
+    # through the weapon. Asserted through the mechanism rather than a row
+    # because the three rows that want it are still unwritten
+    # (`Dropped.weapon`), and said so here rather than left to look like a
+    # choice.
+    world, me, _ = audit_board("mba", 1)
+    gear = world.get(me, Gear)
+    foe = next(iter(enemies(world, me)), None)
+    if gear is None or not gear.weapons or foe is None:
+        return
+    swung = gear.weapons[0].ref
+    swinger = Cast(world=world, me=me, ref="mba", target=foe)
+    swinger.strike()
+    stamped = getattr(swinger.result, "weapon", "")
+    out.that(stamped == swung,
+             "**an attack stamps its weapon on the result**, which is the"
+             " weapon of record every rider inside it reads",
+             f"{stamped!r} vs the held {swung!r}")
+
+    # A rider: its own `Cast`, no weapon keyword, triggered by that blow.
+    rider: Any = Cast(world=world, me=me, ref="drivers:rider", target=foe)
+    rider.trigger = _rider_blow(me, foe, swinger.result)
+    out.that(rider._swung_weapon() == swung,
+             "and a **rider** -- its own `Cast`, no weapon keyword -- now"
+             " inherits it, where it used to read `''` and a bloodying"
+             " rider looked like a blow through no weapon at all",
+             f"{rider._swung_weapon()!r}")
+
+    # The control, and the one that matters: an attack that stamped nothing
+    # hands a rider nothing, so an implement power's rider cannot claim the
+    # sword in the other hand.
+    bare: Any = Cast(world=world, me=me, ref="drivers:rider", target=foe)
+    bare.trigger = _rider_blow(me, foe, _blank_result())
+    out.that(bare._swung_weapon() == "",
+             "while a rider inside an attack that stamped nothing still"
+             " reads `''` -- the implement control, inherited rather than"
+             " re-tested",
+             f"{bare._swung_weapon()!r}")
 
 def a_tome_lends_a_card_and_charges_for_it(out: Result) -> None:
     """Seven tome rows, one printed sentence, and three faults in the seam.
@@ -24033,14 +27913,22 @@ def a_retype_names_its_keyword_its_sources_and_one_use(out: Result) -> None:
                  f"{ref} carries no marker now",
                  f"{REGISTRY[ref].unfinished}")
 
-    # -- the two rows the symbol was ALSO covering, now pointed elsewhere --
+    # -- the two rows the symbol was ALSO covering, now written ------------
+    #
+    # This pin used to assert they still carried *a* marker and merely not
+    # this one, which was the evidence that #711's symbol had been split
+    # rather than silently widened. #712 then wrote both, so the pin records
+    # the finished state instead: they must still not name the retype
+    # symbol, and they must now name nothing at all.
     for ref in ("i1300p1", "i2878p1"):
-        out.that(bool(REGISTRY[ref].unfinished)
-                 and "c.next_attack_becomes()" not in str(
-                     REGISTRY[ref].unfinished),
-                 f"{ref} no longer shares a symbol with the retype rows --"
-                 " it turns a single-target attack into a burst, which is"
+        out.that("c.next_attack_becomes()" not in str(REGISTRY[ref].unfinished),
+                 f"{ref} does not share a symbol with the retype rows -- it"
+                 " turns a single-target attack into a burst, which was"
                  " #712 and a different mechanism",
+                 f"{REGISTRY[ref].unfinished}")
+        out.that(not REGISTRY[ref].unfinished,
+                 f"and {ref} is written: the split was the right call and"
+                 " both halves have landed",
                  f"{REGISTRY[ref].unfinished}")
 
 
@@ -24181,7 +28069,7 @@ def what_a_creature_is_wearing(out: Result) -> None:
         # `**kw: Any` and not `**kw: object`: the recorder passes the
         # caller's keywords straight through, so narrowing them here only
         # makes `ty` check them against a signature this wrapper does not
-        # have. The old `# type: ignore[arg-type]` was mypy's spelling and
+
         # suppressed nothing -- five errors behind one unread comment. #721.
         def recording(n: int = 1, **kw: Any) -> int:
             asked.append(n)
@@ -24461,7 +28349,13 @@ def a_conjuration_a_creature_can_attack(out: Result) -> None:
              "i2437p1 carries no marker at all now: the card's whole second"
              " paragraph is one parameter",
              f"{REGISTRY['i2437p1'].unfinished}")
-    out.that(REGISTRY["i2208p2"].unfinished == ("c.zone(ends_on=)",),
+    # **The spelling moved to match this assertion's own words.** It read
+    # `c.zone(ends_on=)` and described the gap, correctly, as "a creature
+    # touching it" -- so the prose and the symbol disagreed, and the symbol
+    # was the vaguer of the two: `ends_on=` is a parameter on the zone where
+    # what is missing is the *moment*, which nothing announces. The row now
+    # carries `actions.touch()` and the two agree.
+    out.that(REGISTRY["i2208p2"].unfinished == ("actions.touch()",),
              "and i2208p2 keeps the one marker it still earns -- the other"
              " way its illusion pops, which is a creature touching it",
              f"{REGISTRY['i2208p2'].unfinished}")
@@ -25035,7 +28929,7 @@ def a_weapon_the_build_chose(out: Result) -> None:
     from combat_engine.chargen import IMPLEMENTS, PRINTED
     from combat_engine.engine import DEX, Bus, Keyword, Rng, Trigger, World
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Build, Gear
+    from combat_engine.engine.components import Build, Gear, Powers
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import SecondWind
     from combat_engine.engine.grid import Grid
@@ -25105,21 +28999,69 @@ def a_weapon_the_build_chose(out: Result) -> None:
              "every rogue is dealt the feature, so every rogue is trained"
              " with both -- it carries no leg requirement",
              f"{sorted(trained)}")
-    out.that("w3621" not in trained and len(trained) == 4,
-             "and with those two and its chassis pair and nothing else:"
-             " reading `powers` grants exactly the refs a header names, not"
-             " every weapon any power mentions",
+    out.that("w3621" not in trained,
+             "and not every weapon a power *mentions*: `w3621` is named in a"
+             " row's text and in no row's header, and it is not trained",
              f"{sorted(trained)}")
+
+    # **This was `len(trained) == 4` and that was an expiring absolute.**
+    # It passed while the rogue's draw happened to hold one weapon-granting
+    # row; un-marking `f959` (#780) moved the draw, a different
+    # proficiency-granting feat came in, and the count read 5 on working
+    # code. The same shape as `drivers.charging`'s `speed == plain + 1`,
+    # which ordinary content work expired in exactly this way.
+    #
+    # The claim the prose makes is **"exactly the refs a header names"**, so
+    # that is what is asserted: every trained ref is either declared in the
+    # `proficiency=` header of a row this character holds, or is one of the
+    # two the class line itself carries. Draw-proof, and strictly stronger
+    # than a count -- a count cannot say *which* refs, and this names the
+    # offenders when it fails.
+    from combat_engine import chargen as _chargen
+
+    owned = set(world.need(me, Powers).all)
+    by_header = {
+        ref
+        for held in owned
+        if (row := REGISTRY.get(held)) is not None
+        for ref in (getattr(row, "proficiency", ()) or ())
+    }
+    chassis = {w.ref for w in (_chargen.CLASSES["rogue"].weapons or ())}
+    out.that(trained <= by_header | chassis,
+             "and nothing is trained that neither a header nor the chassis"
+             " names",
+             f"unexplained: {sorted(trained - by_header - chassis)}")
 
     # -- #719: the record ---------------------------------------------------
     world, me, c = built("fighter", "arena")
     gear = world.need(me, Gear)
     chosen = c.chosen_weapons()
-    out.that(chosen == {w.ref for w in gear.held},
-             "the arms held at spawn are exactly what the build chose",
-             f"chosen={sorted(chosen)} held={[w.ref for w in gear.held]}")
-    out.that(chosen.isdisjoint(gear.stowed) or not gear.stowed,
-             "and nothing on the belt is in the set",
+    # **These two used to assert that the held set *equals* the chosen set
+    # and that nothing chosen is stowed, and both are false the moment a
+    # build chooses a two-handed weapon.** Nothing had, until `f1277` came
+    # off its marker: that feat carries `proficiency=("w3662",)` and
+    # `w3662` is two-handed, so the arena fighter now chooses a one-handed
+    # `w3610` *and* a two-handed `w3662` and no creature can hold both.
+    # `Gear.wield` stows the other, correctly.
+    #
+    # So the old pair conflated **owning** with **holding** and passed only
+    # because it had never met the case. Corrected rather than loosened:
+    # the record is that every chosen weapon is carried, and the hands are
+    # the separate invariant -- which is strictly more than the old pair
+    # said, since neither of them checked legality at all.
+    out.that(chosen <= {w.ref for w in gear.weapons},
+             "every weapon the build chose is carried, which is #719's"
+             " record doing its job",
+             f"chosen={sorted(chosen)} carried="
+             f"{sorted(w.ref for w in gear.weapons)}")
+    two_handed = [w.ref for w in gear.held if w.two_handed]
+    out.that(len(gear.held) == 1 if two_handed else True,
+             "and what is in hand is hand-legal: a two-handed weapon is"
+             " held alone, which is why the chosen set and the held set are"
+             " not the same thing and must not be asserted equal",
+             f"held={[w.ref for w in gear.held]} two-handed={two_handed}")
+    out.that(set(gear.stowed) <= {w.ref for w in gear.weapons},
+             "and the belt only holds things the character actually owns",
              f"stowed={sorted(gear.stowed)}")
     out.that(all(f"chose:{ref}" in world.need(me, Build).choices
                  for ref in chosen),
@@ -25246,8 +29188,13 @@ def a_weapon_the_build_chose(out: Result) -> None:
         ("f3181", ()),
         ("f3202", ()),
         ("f3142", ()),
-        ("cf:fighter-weaponmaster-f3s0",
-         ("c.improvised()", "Weapon.proficiency")),
+        # `Weapon.proficiency` left this tuple when `c.weapon_proficiency`
+        # landed (#839). The row's own note had said the field was "a
+        # column, not something a feature can raise", which stopped being
+        # true; `c.improvised()` is the one gap that remains, and a row
+        # naming two symbols for one clause cannot go green correctly for
+        # either.
+        ("cf:fighter-weaponmaster-f3s0", ("c.improvised()",)),
     ):
         out.that(REGISTRY[ref].unfinished == want_marks,
                  f"{ref} waits on {want_marks or 'nothing'}",
@@ -26121,6 +30068,25 @@ def a_creature_in_the_middle_of_a_charge(out: Result) -> None:
     out.that(in_beast_form(world, me),
              "the druid is in beast form, which this row gates on",
              f"{in_beast_form(world, me)}")
+
+    # **The row's own contribution, not the board's total**, and the three
+    # assertions below read `premium()` for that reason. They used to compare
+    # against `plain + 1` outright, and that was only ever true while this
+    # board's druid happened to hold no other charge feat -- a chargen draw
+    # this rule does not control and must not depend on. Un-marking rows in
+    # a content wave made more feats drawable (#783), the draw moved, the
+    # druid came up holding `f6` -- "+2 speed while charging", laid as
+    # `f6 speed+2` and perfectly correct -- and all three went red on
+    # working code, reading 8 where they wanted 6.
+    #
+    # So: measure how much running the body *changes* the charge premium.
+    # That is the row's own +1 whatever else the board is carrying, and it
+    # still catches both of the old faults below.
+    def premium() -> int:
+        """How much more the creature moves on a charge than off one."""
+        return speed(world, me, {"charge": True}) - speed(world, me)
+
+    before = premium()
     REGISTRY["i726x1"].body(Cast(world=world, me=me, ref="i726x1"))
     plain = speed(world, me)
     charged = speed(world, me, {"charge": True})
@@ -26129,9 +30095,11 @@ def a_creature_in_the_middle_of_a_charge(out: Result) -> None:
              " -- `actions._charges` asks before the charge exists, which is"
              " why this row needs the context key and not the state",
              f"{charging(world, me)}")
-    out.that(charged == plain + 1,
-             "and its speed is one higher for a charge's measurement only",
-             f"{plain} -> {charged}")
+    out.that(premium() == before + 1,
+             "and its speed is one higher for a charge's measurement only"
+             " -- the row's own square, over whatever the board already had",
+             f"premium {before} -> {premium()} (plain {plain}, charged"
+             f" {charged})")
 
     # -- the two faults the old shape of i726x1 had ----------------------
     #
@@ -26145,18 +30113,18 @@ def a_creature_in_the_middle_of_a_charge(out: Result) -> None:
             world.effects.end(eff, "drivers: back to the humanoid")
     out.that(not in_beast_form(world, me),
              "out of beast form again")
-    out.that(speed(world, me, {"charge": True}) == plain,
+    out.that(premium() == before,
              "and the bonus is gone -- the old shape kept paying for the"
              " rest of the fight once the shape had been taken",
-             f"{speed(world, me, {'charge': True})} want {plain}")
+             f"premium {premium()} want {before}")
 
     c.effect(BEAST, on=me, until=When.ENCOUNTER)
     c.effect(BEAST, on=me, until=When.ENCOUNTER)
-    out.that(speed(world, me, {"charge": True}) == plain + 1,
+    out.that(premium() == before + 1,
              "and shaping twice is still worth one square, not two -- two"
              " untyped bonuses stack, so the old shape gave +2 to a druid"
              " that shifted out and back",
-             f"{speed(world, me, {'charge': True})} want {plain + 1}")
+             f"premium {premium()} want {before + 1}")
 
     for ref in ("m5084a0", "i1515x1", "i726x1"):
         out.that("charging" not in str(REGISTRY[ref].unfinished),
@@ -26537,12 +30505,26 @@ def a_range_that_is_longer_than_printed(out: Result) -> None:
     `action=NONE` row the creature holds, so a board built for `f1995` has
     `f1995` already standing -- the first run of this measured a doubled
     stretch and read it as the right answer at the wrong distance.
+
+    **The area half is the second half of the rule, #738**, and it is a
+    different number: the `within` an area line may be *placed* at, not the
+    radius. Both cards extend their range clause to area powers in as many
+    words and one works the example -- "an area burst 1 within 10 becomes an
+    area burst 1 within 12". The load-bearing assertion there is the one
+    that says the **radius did not move**, since `"blast_size"` was the
+    tempting place to lay the plus and would have taken a burst from 9
+    squares to 49.
     """
     import combat_engine.content  # noqa: F401
     from audit import board as _posed
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Position
-    from combat_engine.engine.dsl import REGISTRY, _within_reach
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        _within_reach,
+        aim_points,
+        area_of,
+    )
     from combat_engine.engine.query import distance_between, enemies
     from combat_engine.engine.types import Keyword
 
@@ -26680,21 +30662,162 @@ def a_range_that_is_longer_than_printed(out: Result) -> None:
              " a modifier has to be standing before the area is taken",
              f"size {Cast(world=world, me=me, ref='x').size_of(me)}")
 
-    for ref, want in (("f1995", "within"), ("i2771x1", "within"),
-                      ("i2962x1", ""), ("m6579a1", "")):
+    # -- the area half: the `within` a line may be placed at. #738 -------
+    #
+    # **On a widened grid, and the reason is a measurement.** The audit
+    # board is 24x16 with the caster at (6, 8), so the furthest in-grid
+    # square is 17 away and every `within` of 17 or more reads 17 -- which
+    # made the 20 band's two edges indistinguishable from each other and
+    # from the 10 band's. Widening to 80x80 is what lets both bands be
+    # asserted through `aim_points`, the reader, instead of one level down
+    # at `within_of`, the helper.
+    def areas(on_row: str, row: str, arm: str):  # noqa: ANN202
+        """`row`'s placement reach and area, before and after arming `arm`.
+
+        The pair is `(furthest placement, len(area_of))`, and the second
+        number means two different things by kind on purpose: for a burst it
+        is the **radius**, which must not move, and for a wall it is the
+        placement set itself, which must.
+        """
+        world, me, _foe = posed(on_row, 1)
+        world.grid.width = world.grid.height = 80
+        here = world.need(me, Position).square
+        p = REGISTRY[row]
+
+        def shape() -> tuple[int | None, int]:
+            pts = aim_points(world, me, p)
+            far = max((max(abs(x - here[0]), abs(y - here[1]))
+                       for x, y in pts), default=None)
+            return far, len(area_of(world, me, p))
+
+        was = shape()
+        c = Cast(world=world, me=me, ref=arm)
+        REGISTRY[arm].body(c)
+        return was, shape(), c
+
+    def burst(cls: str, within: int) -> str:
+        """A row of this class printing an area burst at this `within`."""
+        return next(
+            d.ref for d in REGISTRY.values()
+            if d.cls == cls
+            and d.reach_of().kind == "area_burst"
+            and d.reach_of().within == within
+        )
+
+    # The two rows are each other's negative control: the wizard burst is
+    # arcane, the cleric burst is divine, and each feat moves one of them.
+    arcane10, arcane20 = burst("wizard", 10), burst("wizard", 20)
+    divine10 = burst("cleric", 10)
+
+    for row, printed, grant in ((arcane10, 10, 2), (arcane20, 20, 5)):
+        was, now, _ = areas(board_row, row, "f1995")
+        wrong = printed + (5 if grant == 2 else 2)
+        out.that(was[0] == printed,
+                 f"a wizard area burst printing within {printed} may be put"
+                 f" {printed} squares off unaided -- the control for the"
+                 " line below",
+                 f"{was[0]}")
+        out.that(now[0] == printed + grant,
+                 f"and {printed + grant} with f1995 standing, not {wrong}:"
+                 " the band is read off the printed `within`, which is what"
+                 ' the card\'s word "range" means for an area line, and the'
+                 " card works that example itself",
+                 f"{was[0]} -> {now[0]}")
+        out.that(now[1] == was[1],
+                 "**and the burst's own radius does not move.** This is the"
+                 " assertion the symbol exists for: the same plus laid on"
+                 " `blast_size` turns a burst 1 from 9 squares into 49,"
+                 " which is a different and much stronger card",
+                 f"{was[1]} -> {now[1]}")
+
+    was, now, _ = areas(board_row, divine10, "f1995")
+    out.that(was == now,
+             "a burst of another class is not lengthened at all -- the gate"
+             " is read off the row being measured, not off the creature",
+             f"{divine10}: {was} -> {now}")
+
+    close = next(d.ref for d in REGISTRY.values() if d.cls == "wizard"
+                 and d.reach_of().kind == "close_burst")
+    was, now, _ = areas(board_row, close, "f1995")
+    out.that(was == now and was[0] is None,
+             "and a close burst takes nothing from it: a close line is"
+             " measured from the body and has no `within` to lengthen, so"
+             " the modifier has no site on it",
+             f"{close}: {was} -> {now}")
+
+    was, now, c = areas(board_row, divine10, "i2771x1")
+    plus = c.enhancement
+    out.that(plus >= 1, "the symbol answers a plus at all", f"{plus}")
+    out.that(now[0] == was[0] + plus and now[1] == was[1],
+             "a divine area burst is placed the symbol's own plus further,"
+             " and its radius is untouched -- the item's half of the same"
+             " gap, gated on the keyword rather than the class",
+             f"{divine10}: {was} -> {now}, plus {plus}")
+
+    was, now, _ = areas(board_row, "p2860", "i2771x1")
+    out.that(now[0] == was[0] + plus and now[1] > was[1],
+             'a divine **wall** is lengthened too, because the card says'
+             ' "area" and a wall is the other area kind. Here the second'
+             " number IS the placement set rather than a radius, so it"
+             " grows where the burst's stayed still",
+             f"p2860: {was} -> {now}")
+
+    was, now, _ = areas(board_row, arcane10, "i2771x1")
+    out.that(was == now,
+             "while an arcane burst takes nothing from the symbol -- the"
+             " other direction of the same pair",
+             f"{arcane10}: {was} -> {now}")
+
+    def wall_reach(arm: str) -> int:
+        """The furthest square `c.wall` offers to stand a divine wall at.
+
+        **The third reader, and the one a plant proved uncovered.** Removing
+        the stretch from `Cast.wall` left this rule green when `area_of` and
+        `aim_points` were the only things asserted: it hand-rolled its own
+        `spread` over the raw field, so a row lengthening the placement
+        distance moved what the interface offered and not where the wall
+        could actually go. Captured off `World.decider`, which is what
+        `c.wall` asks.
+
+        A fresh world per measurement rather than arming inside one -- the
+        first wall goes into `Grid.blocking` and would change what the
+        second measurement finds passable.
+        """
+        world, me, _foe = posed(board_row, 1)
+        world.grid.width = world.grid.height = 80
+        here = world.need(me, Position).square
+        if arm:
+            REGISTRY[arm].body(Cast(world=world, me=me, ref=arm))
+        seen: list[tuple[int, int]] = []
+
+        def record(_actor: int, _kind: str, options: list, prompt: str = ""):  # noqa: ANN202
+            if "where the wall stands" in prompt:
+                seen.extend(options)
+            return options[0]
+
+        world.decider = record
+        Cast(world=world, me=me, ref="p2860").wall(size=1)
+        return max(max(abs(x - here[0]), abs(y - here[1])) for x, y in seen)
+
+    bare, armed = wall_reach(""), wall_reach("i2771x1")
+    out.that(bare == 10 and armed == 10 + plus,
+             "and `c.wall` itself offers the further square, not only the"
+             " two readers that light the interface up. It is the third"
+             " reader of the same number and the plant that deleted its"
+             " stretch left every other assertion here green",
+             f"{bare} -> {armed}, plus {plus}")
+
+    for ref in ("f1995", "i2771x1", "i2962x1", "m6579a1"):
         marks = str(REGISTRY[ref].unfinished)
         out.that("range" not in marks and "reach" not in marks,
                  f"{ref} waits on no range or reach symbol",
                  f"{REGISTRY[ref].unfinished}")
-        if want:
-            out.that(want in marks,
-                     f"{ref} still names the area half, which is #738 and is"
-                     " a different number from the one that landed",
-                     f"{REGISTRY[ref].unfinished}")
-        else:
-            out.that(not marks or marks == "()",
-                     f"{ref} carries no marker at all",
-                     f"{REGISTRY[ref].unfinished}")
+        out.that(not marks or marks == "()",
+                 f"{ref} carries no marker at all. f1995 and i2771x1 held a"
+                 " `within` residue until #738 and this loop pinned it;"
+                 " the area half has landed, so the pin now records that"
+                 " instead",
+                 f"{REGISTRY[ref].unfinished}")
 
 
 def resistance_instead_of_the_extra_hit_points(out: Result) -> None:
@@ -31111,6 +35234,5327 @@ def a_model_matches_an_intent_to_the_right_affordance(out: Result) -> None:
     )
 
 
+def a_fired_crossbow_is_empty_until_it_is_reloaded(out: Result) -> None:
+    """A load-minor weapon fires once and then has to be loaded again.
+
+    The weapon `load` property was modelled nowhere: `grep` across
+    `engine/` and `etl/` for a load action, a load property or a
+    loaded state found nothing, so a crossbow fired every round for free
+    and four rows existed only to make that cheaper. #675, #725.
+
+    **The negative control is the whole rule**, and both issues said so:
+    *"a creature with one throwable must get one attack and be refused the
+    second. Asserting the first one works passes today."* So the assertion
+    that matters is the refusal, and the one that keeps it honest is that a
+    longbow -- `load free`, seven weapons like it -- is never refused at
+    all.
+
+    Asserted through `can_branch` and `actions.legal`, the two doors a
+    player and the AI actually come through, rather than at `Gear.unloaded`.
+    """
+    import dataclasses
+
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine import actions
+    from combat_engine.engine.ammunition import spend_load
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+
+    def armed(ref: str):  # noqa: ANN202
+        world, me, _foe = _posed("p997", 1)
+        gear = world.need(me, Gear)
+        gear.weapons = [*gear.weapons, dataclasses.replace(chargen.PRINTED[ref])]
+        gear.wield(gear.weapons[-1])
+        enc = Encounter(world)
+        enc.start()
+        world.turn = me
+        return world, me, gear, enc
+
+    rba = get("rba")
+
+    # -- the crossbow: load minor, so firing empties it -------------------
+    world, me, gear, enc = armed("w3629")
+    out.that(must(rba, 'Power').can_branch(world, me, 0),
+             "a loaded crossbow can be fired",
+             f"unloaded={gear.unloaded or 'nothing'}")
+    out.that(not actions._loading(world, enc, me),
+             "and a loaded one is offered no reload, there being nothing to do",
+             f"{len(actions._loading(world, enc, me))} offered")
+
+    spend_load(world, me, "rba", 0)
+    out.that(not must(rba, 'Power').can_branch(world, me, 0),
+             "**a fired crossbow is refused the next shot**",
+             f"unloaded={sorted(gear.unloaded)}")
+    offers = actions._loading(world, enc, me)
+    out.that([str(a.cost) for a in offers] == ["minor"],
+             "and the reload is offered at the printed minor",
+             f"{[(a.ref, str(a.cost)) for a in offers]}")
+
+    actions.perform(world, enc, me, offers[0])
+    out.that(must(rba, 'Power').can_branch(world, me, 0) and not gear.unloaded,
+             "reloading makes it fireable again",
+             f"unloaded={gear.unloaded or 'nothing'}")
+
+    # -- the longbow: load free, so none of the above applies -------------
+    #
+    # The control. Without it the rule passes on an implementation that
+    # empties every ranged weapon in the game, which would stop seven of
+    # the ten load-property weapons -- and every bow -- from firing twice.
+    world, me, gear, enc = armed("w3631")
+    spend_load(world, me, "rba", 0)
+    out.that(must(rba, 'Power').can_branch(world, me, 0) and not gear.unloaded,
+             "a longbow prints `load free`, so firing it empties nothing",
+             f"unloaded={gear.unloaded or 'nothing'}")
+
+    # -- c.loads_free: once per turn, then back to the printed minor ------
+    world, me, gear, enc = armed("w3629")
+    Cast(world=world, me=me, ref="drivers:loads").loads_free(
+        per_turn=1, only="crossbow")
+    spend_load(world, me, "rba", 0)
+    first = [str(a.cost) for a in actions._loading(world, enc, me)]
+    out.that(first == [ActionType.FREE.value],
+             "`c.loads_free` makes the first reload of the turn free",
+             f"offered at {first}")
+    actions.perform(world, enc, me, actions._loading(world, enc, me)[0])
+    spend_load(world, me, "rba", 0)
+    second = [str(a.cost) for a in actions._loading(world, enc, me)]
+    out.that(second == ["minor"],
+             "and the second this turn costs the printed minor again",
+             f"offered at {second}")
+
+
+def the_caster_is_not_its_own_ally(out: Result) -> None:
+    """"Each ally in the burst" does not mean the creature at the centre.
+
+    `Cast._side` excluded the caster from an ally list; `dsl.candidates`
+    included it. One word, two meanings, and the targeting path -- the one a
+    player sees and the one the AI chooses from -- was the wrong one. So a
+    row printing "each ally in the burst shifts 1" moved the creature that is
+    **not** a target, and because the row fired and emitted events the audit
+    reported it working. 548 rows declared that pool. #364.
+
+    **The recorded fixtures contained the fault**, which is the sharpest
+    evidence that it was not theoretical:
+
+        recorded: PowerUsed(actor=2, power='p7885', targets=[1, 3, 4, 2])
+        now:      PowerUsed(actor=2, power='p7885', targets=[1, 3, 4])
+
+    `p7885`'s printed line is "Each bloodied ally in the burst", and its
+    effect text distinguishes the two in so many words -- "Each target can
+    spend a healing surge. **You** are weakened" -- so the caster was never
+    a target and had been one in every recorded run.
+
+    A card that means you as well says "you and each ally", which is the
+    `team` pool and 185 rows now declare it.
+
+    Asserted through `candidates`, the reader both the page and
+    `policy/` call, on a real row rather than a fake: the first draft of this
+    used a stub Power and died on `reach_of`, which is the kind of thing a
+    stub hides.
+    """
+    import dataclasses
+
+    from audit import board as _posed
+    from combat_engine.engine.dsl import REGISTRY, Target, candidates
+
+    ref = next(r for r, p in sorted(REGISTRY.items())
+               if getattr(getattr(p, "target", None), "side", None) == "ally"
+               and getattr(p.target, "everyone", False))
+    power = REGISTRY[ref]
+    world, me, _foe = _posed(ref, 1)
+
+    def pool(side: str) -> list[int]:
+        variant = dataclasses.replace(
+            power, target=dataclasses.replace(power.target, side=side))
+        return candidates(world, me, variant)
+
+    allies_only, whole_team = pool("ally"), pool("team")
+
+    out.that(len(allies_only) > 0,
+             f"`{ref}` has allies to aim at, so the rest of this means something",
+             f"ally pool {allies_only}, caster {me}")
+    out.that(me not in allies_only,
+             "**the caster is not in its own ally pool**",
+             f"ally pool {allies_only}, caster {me}")
+    out.that(me in whole_team,
+             "and it *is* in the team pool, which is what 'you and each ally' needs",
+             f"team pool {whole_team}")
+    # The negative control: the two pools must actually differ. Before #364
+    # they were the same list, so a rule asserting only the second line above
+    # would have passed on the bug.
+    out.that(set(whole_team) - set(allies_only) == {me},
+             "and team is exactly ally plus the caster, nothing else",
+             f"team-ally = {sorted(set(whole_team) - set(allies_only))}")
+
+    # `other_ally` was a second spelling of `ally`, kept while #364's flip
+    # landed and retired by #858. The guard is the `@power` decorator's
+    # `_SIDES` check, so it is refused when a row *declares* it -- which is
+    # the moment an author would meet it.
+    #
+    # Asserted through `power()` and not through `Target("other_ally", 1)`:
+    # a bare Target constructs happily, and the first draft of this rule
+    # asserted that it raised. It appeared to, because the probe printed the
+    # Target and `__str__` is where the KeyError came from -- the identical
+    # trap #364 hit with `team`, which was known to `_SIDES` and unknown to
+    # `__str__`. A pool is wrong in three places or none.
+    from combat_engine.engine.dsl import power as _declare
+
+    try:
+        _declare("zz_probe", target=Target("other_ally", 1))(lambda c: None)
+    except ValueError as refused:
+        why = str(refused)
+    else:
+        why = ""
+    out.that("other_ally" in why and "not one of" in why,
+             "declaring `other_ally` is refused at import, not silently an alias",
+             f"power() said {why[:70]!r}" if why else "power() accepted it")
+
+    # #858: the other half of the same word. A card naming the creature
+    # *beside* its allies -- "the m115788 and each ally adjacent" -- needs the
+    # pool that includes the caster, and `m115788a3`'s body has a branch for
+    # exactly that case which #364 left unreachable. Run the body with the
+    # caster as the target and require the creature to move: a pool assertion
+    # alone passed while the branch was dead.
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import Moved
+
+    world2, me2, _ = _posed("m115788a3", 1)
+    offered = candidates(world2, me2, REGISTRY["m115788a3"])
+    out.that(me2 in offered,
+             "`m115788a3` offers the creature itself, which its card names first",
+             f"pool {offered}, caster {me2}")
+    seen: list[int] = []
+    world2.bus.on(Moved, lambda ev: seen.append(getattr(ev, "actor", -1)))
+    # Driven from `offered`, **not** from a hardcoded `target=me2`. The first
+    # draft passed the caster in directly, and the plant proved that useless:
+    # reverting the declaration to the casterless pool turned the assertion
+    # above red and left this one green, because handing the body the caster
+    # tests the branch in isolation and never asks whether the row would ever
+    # be *given* that target. Running the pool is what makes it the row's
+    # behaviour rather than the branch's.
+    for whom in offered:
+        REGISTRY["m115788a3"].body(
+            Cast(world=world2, me=me2, ref="m115788a3", target=whom))
+    out.that(me2 in seen,
+             "and firing it on the targets it offers actually shifts the"
+             " creature -- the branch #364 made dead",
+             f"offered {offered}, Moved for {seen}, caster {me2}")
+
+
+def a_missed_attack_is_repeated_against_the_one_you_swapped_with(
+        out: Result) -> None:
+    """"If the attack misses you, you swap places and the enemy repeats it."
+
+    `p16049` carried `dropped=("c.pass_on(after_the_roll=)",)` on the reading
+    that this is a **re-aim of an attack already resolved** and that nothing
+    in the tree does that. The card asks for something else and cheaper: the
+    enemy *repeats* the attack -- a fresh swing at a new creature, not the old
+    swing pointed elsewhere. `c.grant_attack(..., reentrant=True)` is that,
+    and its docstring already called `reentrant` "the target repeats the
+    attack". `p12198` and `p11725` both say the sentence; neither had a rule.
+
+    **The audit cannot see any of this**, which is why the rule exists: the
+    row fires on `AttackDeclared`, so the board credits it with the four
+    defence points and never produces the *miss* the second half hangs on.
+    `ok p16049 ConditionApplied, EffectApplied` is the bonus and nothing else.
+
+    Two negative controls, because a watcher bounded only by `until=` would
+    hand on the next miss of the encounter by anybody against anybody -- and
+    would still have passed the positive case.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackDeclared, Miss
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Defense
+
+    AC = Defense.AC
+
+    chosen: list[int] = []
+
+    def posed() -> tuple[Any, int, int]:
+        """A caster with the row, and the foe. **No board surgery.**
+
+        The first two drafts rearranged the board so the row's choice was
+        forced, and both were wrong in a way worth recording:
+
+        * asserting against `allies(...)[0]` while the row chose for itself
+          through `c.choose`, which reported the mechanism broken when it
+          was working;
+        * then clearing the board down to one candidate, which teleported a
+          creature that turned out to be the **caster's mount** -- and a
+          mount carries its rider, so the caster came along and the board
+          this rule reasoned about was not the board it had built. There is
+          a chain of them here: 8 is ridden by 1 and 1 is ridden by 7.
+
+        So nothing is moved. A recording decider makes the row's own choice
+        deterministic *and* visible, which is what the assertions needed all
+        along -- the question is whether the swap and the repeat agree about
+        **who**, not who it happens to be.
+        """
+        world, me, _started = _posed("p16049", 1)
+        world.decider = (
+            lambda actor, kind, options, prompt="":
+            chosen.append(options[0]) or options[0]
+            if kind == "choose" else options[0])
+        return world, me, enemies(world, me)[0]
+
+    def fire(world: Any, me: int, foe: int,
+             miss_by: int, miss_at: int) -> list[Any]:
+        """Run the row, then post a miss, and collect the swings that follow."""
+        swings: list[Any] = []
+        c = Cast(world=world, me=me, ref="p16049",
+                 target=me, trigger=AttackDeclared(
+                     attacker=foe, target=me, power="", vs=AC))
+        REGISTRY["p16049"].body(c)
+        world.bus.on(AttackDeclared, lambda ev: swings.append(ev))
+        world.bus.emit(Miss(attacker=miss_by, target=miss_at, power=""))
+        return swings
+
+    # -- the positive case ------------------------------------------------
+    world, me, foe = posed()
+    mine = world.need(me, Position).square
+    swings = fire(world, me, foe, miss_by=foe, miss_at=me)
+
+    out.that(len(chosen) == 1,
+             "the row asked who to trade places with and had somebody to"
+             " offer -- the premise, and an empty pool would make the rest"
+             " of this vacuous",
+             f"chosen {chosen}")
+    mate = chosen[0] if chosen else -1
+    out.that(world.need(me, Position).square != mine,
+             "**the caster leaves the square it was attacked in** -- the"
+             " printed shift, which `c.swap` pays",
+             f"{mine} -> {world.need(me, Position).square}")
+    out.that(world.need(mate, Position).square == mine,
+             "and the creature it chose is standing where the caster was --"
+             " a *trade*, not two independent steps",
+             f"ally now {world.need(mate, Position).square}, caster was {mine}")
+    out.that(any(getattr(s, "attacker", None) == foe
+                 and getattr(s, "target", None) == mate for s in swings),
+             "**and the enemy repeats the attack against that same"
+             " creature** -- a fresh declaration by the foe, which is what"
+             " `reentrant=True` is for, and against the one that was"
+             " swapped rather than anybody convenient",
+             f"swings {[(getattr(s, 'attacker', None),
+                          getattr(s, 'target', None)) for s in swings]},"
+             f" chose {mate}")
+
+    # -- control: a miss by somebody else is not this row's moment --------
+    chosen.clear()
+    world, me, foe = posed()
+    mine = world.need(me, Position).square
+    other = next(w for w in enemies(world, me) if w != foe)
+    swings = fire(world, me, foe, miss_by=other, miss_at=me)
+    out.that(world.need(me, Position).square == mine and not chosen,
+             "a miss by a **different attacker** moves nobody and asks"
+             " nothing -- the control a watcher bounded only by `until=`"
+             " would fail",
+             f"caster still {world.need(me, Position).square}, chosen {chosen}")
+
+    # -- control: a miss against somebody else, likewise ------------------
+    chosen.clear()
+    world, me, foe = posed()
+    mine = world.need(me, Position).square
+    bystander = next(iter(allies(world, me)))
+    swings = fire(world, me, foe, miss_by=foe, miss_at=bystander)
+    out.that(world.need(me, Position).square == mine and not chosen,
+             "and a miss against **somebody else** likewise -- the printed"
+             " trigger is an attack that missed *you*",
+             f"caster still {world.need(me, Position).square}, chosen {chosen}")
+
+
+def one_row_answers_either_of_two_printed_occasions(out: Result) -> None:
+    """"An attack roll **or** a damage roll" -- both declared, one use.
+
+    `m6361a4` carried `dropped=("dsl.Trigger(either=)",)` on the premise that
+    **a row carries one declared `Trigger`**. It does not: `on=` takes one or
+    a sequence, and `Power.triggers` normalises both -- its docstring gives
+    this exact motivation ("pushed, pulled, slid, or knocked prone" being two
+    event classes), and `m5536a5` and `m6567a4` already declare a pair. #836.
+
+    **The marker's objection was the real content and it is answered by the
+    usage, not the trigger.** This is a RECHARGE row with a single use, and
+    the card lets the creature choose which moment to spend it on. A second
+    `c.watch(DamageRolled, ...)` would have fired on *both* occasions, since
+    a watcher is not metered by the row's usage -- strictly stronger than
+    print. Two declared triggers are metered, so whichever arrives first
+    spends the use and the other cannot fire. That is what this asserts, and
+    it is the assertion the issue was really about.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import (
+        AttackRolled,
+        DamageRolled,
+        PowerUsed,
+    )
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType, Defense
+
+    ROW = "m6361a4"
+
+    out.that(len(REGISTRY[ROW].triggers) == 2,
+             "the row declares **both** printed occasions -- the premise, and"
+             " one would make every assertion below about half a card",
+             f"{[t.event.__name__ for t in REGISTRY[ROW].triggers]}")
+
+    def fired(world: object) -> int:
+        return sum(1 for e in world.bus.log
+                   if isinstance(e, PowerUsed)
+                   and getattr(e, "power", "") == ROW)
+
+    def attack_roll(world: object, me: int, foe: int) -> None:
+        world.bus.emit(AttackRolled(
+            attacker=me, target=foe, power="mba", vs=Defense.AC,
+            natural=4, bonus=5, total=9, defence=14, advantage=False))
+
+    def damage_roll(world: object, me: int, foe: int) -> None:
+        # `detail` is the roll's printed expression and is required; "2d6"
+        # is a plain one and nothing in this row reads it.
+        world.bus.emit(DamageRolled(
+            source=me, target=foe, amount=7, dtype=DamageType.NECROTIC,
+            detail="2d6"))
+
+    # -- each occasion fires it on its own ---------------------------------
+    world, me, _started = _posed(ROW, 1)
+    foe = enemies(world, me)[0]
+    before = fired(world)
+    attack_roll(world, me, foe)
+    out.that(fired(world) > before,
+             "an **attack** roll of its own fires it -- the half that was"
+             " always declared",
+             f"PowerUsed count {before} -> {fired(world)}")
+
+    world2, me2, _s2 = _posed(ROW, 1)
+    foe2 = enemies(world2, me2)[0]
+    before2 = fired(world2)
+    damage_roll(world2, me2, foe2)
+    out.that(fired(world2) > before2,
+             "and a **damage** roll of its own fires it too -- the half the"
+             " marker said could not be declared",
+             f"PowerUsed count {before2} -> {fired(world2)}")
+
+    # -- but one use, so not both ------------------------------------------
+    world3, me3, _s3 = _posed(ROW, 1)
+    foe3 = enemies(world3, me3)[0]
+    attack_roll(world3, me3, foe3)
+    once = fired(world3)
+    damage_roll(world3, me3, foe3)
+    twice = fired(world3)
+    out.that(once > 0 and twice == once,
+             "**and the second occasion cannot fire, because the first spent"
+             " the single use** -- which is the creature choosing its moment,"
+             " and is exactly what a `c.watch` beside the trigger would have"
+             " got wrong",
+             f"after the attack roll {once}, after the damage roll {twice}")
+
+    out.that(not (tuple(REGISTRY[ROW].todo or ())
+                  + tuple(REGISTRY[ROW].dropped or ())),
+             "and the row carries no marker any more",
+             f"todo={REGISTRY[ROW].todo} dropped={REGISTRY[ROW].dropped}")
+
+
+def concealment_is_modelled_and_ten_rows_said_it_was_not(out: Result) -> None:
+    """Concealment, laid three ways, and read where it is read.
+
+    Ten rows told the player at runtime that a printed concealment clause
+    had nowhere to go -- *"you also have concealment, and there is none
+    here"* -- and two said it in their docstrings as well. It was never
+    true: `c.conceal` writes it, `query.concealment_of` reads it, and
+    `resolve.attack` consults that beside cover and takes the larger. #860,
+    which is #686's shape on a different mechanism.
+
+    **Three shapes, because the ten rows print three different sentences**
+    and a rule on one would have passed while the other two stayed inert:
+
+    * on a creature -- `c.conceal`;
+    * inside a zone -- `c.conceal_in`, taken on entry and given back on
+      leaving, where a plain `c.conceal` would follow the creature out;
+    * denied -- `c.no_cover`, the printed "gains no benefit from".
+
+    Asserted through `query.concealment_of`, which is the reader
+    `resolve.attack` uses, rather than by looking for the modifier -- a
+    write that landed somewhere nothing reads is exactly what these rows
+    claimed was the situation.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import (
+        allies,
+        concealment_of,
+        concealment_waived,
+        enemies,
+    )
+    from combat_engine.engine.types import Cover
+
+    # -- on a creature, through the row ------------------------------------
+    world, me, _s = _posed("p11680", 1)
+    out.that(concealment_of(world, me) is Cover.NONE,
+             "the caster starts with no concealment -- the premise, and"
+             " without it a row that laid none would still read concealed",
+             f"{concealment_of(world, me)}")
+    REGISTRY["p11680"].body(Cast(world=world, me=me, ref="p11680", target=me))
+    out.that(concealment_of(world, me) is not Cover.NONE,
+             "**and `p11680` leaves it concealed** -- the clause it used to"
+             " announce as impossible, read through the same function"
+             " `resolve.attack` calls",
+             f"{concealment_of(world, me)}")
+
+    # -- inside a zone, and only inside it ---------------------------------
+    world2, me2, _s2 = _posed("p16278", 1)
+    c2 = Cast(world=world2, me=me2, ref="p16278")
+    here = world2.need(me2, Position).square
+    REGISTRY["p16278"].body(
+        Cast(world=world2, me=me2, ref="p16278", target=None))
+    inside = concealment_of(world2, me2)
+    out.that(inside is not Cover.NONE,
+             "`p16278`'s glare conceals a creature standing in it",
+             f"at {here}: {inside}")
+    # Walk out. `conceal_in` gives it back on leaving, which a plain
+    # `c.conceal` would not -- that is the whole reason the zone form exists.
+    far = (here[0] + 9, here[1])
+    c2.teleport(99, who=me2, to=far)
+    out.that(concealment_of(world2, me2) is Cover.NONE,
+             "**and loses it on walking out** -- the control that separates"
+             " `c.conceal_in` from a plain `c.conceal`, which would have"
+             " followed the creature anywhere for the zone's whole clock",
+             f"at {far}: {concealment_of(world2, me2)}")
+
+    # -- denied ------------------------------------------------------------
+    #
+    # **The subject is an ally and the attacker is the foe**, which is the
+    # other way round from the obvious arrangement and is deliberate. The
+    # first draft concealed an *enemy* and asked what the caster waived --
+    # and the number was already 5 before anything was laid, because the
+    # board's caster knows `p1831`, which puts `no_cover` 5 on enemies. The
+    # test was measuring somebody else's row. A subject nothing has touched
+    # is what makes the move attributable.
+    world3, me3, _s3 = _posed("p2375", 1)
+    foe3 = enemies(world3, me3)[0]
+    mate3 = allies(world3, me3)[0]
+    c3 = Cast(world=world3, me=me3, ref="drivers:conceal")
+    c3.conceal(on=mate3, until=When.ENCOUNTER)
+    out.that(concealment_of(world3, mate3) is not Cover.NONE,
+             "a creature given concealment has it -- the premise for the"
+             " denial, and denying nothing proves nothing",
+             f"{concealment_of(world3, mate3)}")
+    # **Through `concealment_waived`, not `concealment_of`.** The first
+    # draft asserted that `no_cover` zeroed `concealment_of` and went red at
+    # 2: it does not, and should not. `c.no_cover` lays an offsetting
+    # `"no_cover"` modifier worth 2 (partial) or 5 (total), and
+    # `query.concealment_waived` is where the pair is netted at attack time.
+    # The creature is still concealed; the attacker stops caring. My
+    # assertion was reading the wrong half of a two-sided question.
+    before = concealment_waived(world3, foe3, mate3)
+    c3.no_cover(on=mate3, until=When.SAVE_ENDS, partial=True)
+    after = concealment_waived(world3, foe3, mate3)
+    out.that(after >= int(concealment_of(world3, mate3)) and after > before,
+             "**and `c.no_cover` waives it** -- `p2375`'s printed 'gains no"
+             " benefit from concealment', netted against the concealment"
+             " itself so the attack sees none of it",
+             f"waived {before} -> {after}, concealment"
+             f" {int(concealment_of(world3, mate3))}")
+
+    # -- and none of the ten still announces the absence -------------------
+    import inspect as _inspect
+    import re as _re
+
+    TEN = ("p11679", "p11680", "p13983", "p14501", "p16119", "p16278",
+           "p16280", "p2375", "p6995", "p7393")
+    lying = []
+    for ref in TEN:
+        src = _inspect.getsource(REGISTRY[ref].body)
+        notes = " ".join(_re.findall(r"c\.note\((.*?)\)\n", src, _re.S))
+        if "there is none here" in notes:
+            marked = (tuple(REGISTRY[ref].todo or ())
+                      + tuple(REGISTRY[ref].dropped or ()))
+            if not marked:
+                lying.append(ref)
+    out.that(not lying,
+             "and no row still tells the player concealment is absent"
+             " without carrying a marker that says what it is waiting for",
+             f"{lying}")
+
+
+def f981s_branch_on_p1758_pays_when_the_target_hurt_you(out: Result) -> None:
+    """The branch #556 moved, proven through `p1758`'s body.
+
+    `at_most_one_applies` proves the *exclusivity* over all three Arena
+    Fighting feats now, but it cannot **pose** `f981`'s branch: that one
+    asks whether the target has damaged the character since their last turn
+    ended, which is board history rather than a Cast reader, so the generic
+    rule reports "2 of 3 branches posed" and says so. This poses it.
+
+    Why the branch could not live in the body at all before #556: the clause
+    was answered from a per-creature *set*, filled by watchers and armed by
+    `_riders` through `setup=` at the start of the fight. A body runs long
+    after the damage it asks about, so a set built there is empty by
+    construction -- which is how the first attempt failed silently.
+    `c.hurt_me_since` reads `world.bus.log` through `query.damaged_since`,
+    bounded by `since_turn_ended`, so **there is nothing to arm**.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied, TurnEnd
+    from combat_engine.engine.query import damaged_since, enemies
+
+    world, me, _started = _posed("p1758", 1)
+    foe = enemies(world, me)[0]
+    known = world.get(me, Powers)
+    if known is not None:
+        known.known[:] = [*known.known, "f981"]
+    world.decider = (
+        lambda actor, kind, options, prompt="":
+        "f981" if "f981" in options else options[0])
+
+    out.that(not damaged_since(world, me, foe),
+             "the foe has not hurt the character yet -- the premise, and"
+             " without it the branch would pay for the wrong reason",
+             f"{damaged_since(world, me, foe)}")
+
+    # The history the clause asks about: a blow, then the character's turn
+    # ending, so the window the card names ("since the end of your last
+    # turn") is open and the blow is inside it.
+    world.bus.emit(TurnEnd(actor=me, round=world.round))
+    from combat_engine.engine.types import DamageType
+
+    world.bus.emit(DamageApplied(
+        source=foe, target=me, amount=5, dtype=DamageType.UNTYPED,
+        absorbed=0, hp=20))
+    out.that(damaged_since(world, me, foe),
+             "and after a blow from it, the reader says so -- read off the"
+             " bus log, with nothing armed beforehand",
+             f"{damaged_since(world, me, foe)}")
+
+    paid: list[int] = []
+    world.bus.on(DamageApplied, lambda ev: paid.append(
+        getattr(ev, "amount", 0)) if getattr(ev, "target", None) == foe
+        else None)
+    world.rng.loaded = 20
+    REGISTRY["p1758"].body(
+        Cast(world=world, me=me, ref="p1758", target=foe))
+    out.that(len(paid) >= 2,
+             "**and firing the row pays a second helping of damage** -- the"
+             " weapon damage and `f981`'s Wisdom modifier on top, which is"
+             " the clause that used to stack from a rider instead",
+             f"damage applied to the foe: {paid}")
+
+
+def the_dc_table_matches_what_the_compendium_prints(out: Result) -> None:
+    """The Skill Check DC table, against the page it was read from.
+
+    4e prints many checks as a band -- "Athletics check (hard DC)" -- and
+    `terrain.check_band` holds that word on 15 rows with the DC left null,
+    `disease.dc_shape = 'band'` on 8 more. `engine/difficulty.py` is the
+    table and `query.difficulty` the reader. #491.
+
+    **The load-bearing assertion compares the module against the
+    compendium**, because this table's failure mode is not a crash but a
+    wrong number, and it has been got wrong here from memory before. Nothing
+    else in the suite would notice: a DC that is two low makes every such
+    check easier and no row raises.
+
+    The compendium is git-ignored, so that half **skips** when it is absent
+    rather than passing -- `scripts/CLAUDE.md`'s rule that an instrument
+    must not skip itself quietly. The invariants below hold either way.
+    """
+    import re as _re
+    import sqlite3 as _sql
+    from pathlib import Path as _Path
+
+    from combat_engine.engine.difficulty import BANDS, DCS
+    from combat_engine.engine.query import difficulty
+
+    # -- the invariants, which hold with or without the compendium ---------
+    out.that(sorted(DCS) == list(range(1, 31)),
+             "the table covers levels 1-30 and no others -- the printed"
+             " range, and a hole would make `difficulty` clamp into the"
+             " wrong row rather than refuse",
+             f"{len(DCS)} levels, {min(DCS)}-{max(DCS)}")
+    out.that(all(e < m < h for e, m, h in DCS.values()),
+             "and easy < moderate < hard at every level, which is the one"
+             " ordering a transposed column would break",
+             "all 30 ordered")
+    rising = all(
+        DCS[n][i] <= DCS[n + 1][i] for n in range(1, 30) for i in range(3))
+    out.that(rising,
+             "and no band ever falls as the level rises",
+             f"{rising}")
+
+    # -- the reader's refusals ---------------------------------------------
+    out.that(difficulty(3, "hard") == 21 and difficulty(30, "moderate") == 32,
+             "`query.difficulty` reads the printed cell",
+             f"(3, hard)={difficulty(3, 'hard')},"
+             f" (30, moderate)={difficulty(30, 'moderate')}")
+    out.that(difficulty(12, "Moderate") == difficulty(12, "moderate"),
+             "and is case- and space-insensitive, since the word comes off"
+             " a card",
+             f"{difficulty(12, 'Moderate')}")
+    out.that(difficulty(5, "trivial") is None and difficulty(None, "easy") is None,  # ty: ignore[invalid-argument-type]
+             "**and refuses rather than guessing** -- an unknown band is a"
+             " parse fault upstream, and a null level is what the 8"
+             " band-shaped diseases have, so a number there would be"
+             " invented",
+             f"band={difficulty(5, 'trivial')}, level={difficulty(None, 'easy')}")  # ty: ignore[invalid-argument-type]
+
+    # -- against the page --------------------------------------------------
+    book = _Path("compendium.sqlite")
+    if not book.exists():
+        out.skip("the compendium is git-ignored and absent here, so the"
+                 " table cannot be checked against the page it came from")
+        return
+    txt = _sql.connect(str(book)).execute(
+        "SELECT PlainTxt FROM Glossary WHERE ID='384'").fetchone()
+    printed = {}
+    for line in (txt[0] if txt else "").splitlines():
+        m = _re.fullmatch(r"\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*", line)
+        if m:
+            lvl, *cells = (int(x) for x in m.groups())
+            printed[lvl] = tuple(cells)
+    out.that(len(printed) == 30,
+             "the glossary's rules table parsed into 30 rows -- the floor,"
+             " and parsing nothing would make the comparison vacuous",
+             f"{len(printed)} rows parsed")
+    wrong = {k: (printed[k], DCS.get(k)) for k in printed
+             if DCS.get(k) != printed[k]}
+    out.that(not wrong,
+             "**and every cell matches what the compendium prints** -- the"
+             " assertion this rule exists for, since a wrong DC is silent",
+             f"{len(wrong)} disagreements: {list(wrong.items())[:3]}")
+    out.that(len(BANDS) == 3 and BANDS[0] == "easy",
+             "and the band order matches the table's columns, which is what"
+             " the reader indexes by",
+             f"{BANDS}")
+
+
+def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
+    """"As if the weapon had the heavy thrown property" -- for that attack.
+
+    `i1151p1` throws a melee weapon, and its card lends the weapon a property
+    for the one swing. It sat `dropped=("c.gains_property(until=)",)` because
+    `gains_property` writes `Weapon.properties` and leaves it written, and
+    **the over-grant is not harmless**: two sibling rows consume the word.
+    `i1151x1`'s `_throwing` gate and `i1756p1`'s `_is_thrown` would both
+    believe a sword was heavy thrown for the rest of the encounter.
+
+    #844 proposed a duration. The row wanted a **bracket**: it rolls its own
+    attack, so "this attack" is the span between two of its own statements,
+    and `c.loses_property` closes it. No clock, and no new `When` rung -- of
+    the eleven, none means "this attack".
+
+    **Three assertions and the middle one is the point.** A pair that laid and
+    removed the property without the attack seeing it would satisfy the first
+    and third and be useless, so this reads the weapon *from inside the
+    damage event* -- the moment `i1151x1`'s own `when=` gate is evaluated.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+
+    # `board`'s third value is the set of events the encounter emitted while
+    # starting, **not** a foe -- a trap I walked into: passing it as a target
+    # reaches `world.get(eid, Health)` and dies on `unhashable type: 'set'`.
+    world, me, _started = _posed("i1151p1", 1)
+    foe = enemies(world, me)[0]
+    gear = world.get(me, Gear)
+    worn = must(gear, "Gear")
+    held = [w for w in worn.weapons if w.ref not in worn.stowed]
+
+    out.that(bool(held),
+             "the thrower has a weapon in hand -- the premise, and with none"
+             " every assertion below would pass vacuously",
+             f"held {[w.ref for w in held]}")
+    out.that(not any("heavy thrown" in w.properties for w in held),
+             "and it does not already print heavy thrown, so the row is"
+             " lending something rather than agreeing with the table",
+             f"props {[sorted(w.properties) for w in held]}")
+
+    # Read the weapon from inside the blow, which is when the consuming rows
+    # evaluate their `when=` gates.
+    during: list[bool] = []
+
+    def peek(_ev: object) -> None:
+        now = world.get(me, Gear)
+        during.append(any(
+            "heavy thrown" in w.properties
+            for w in must(now, "Gear").weapons
+            if w.ref not in must(now, "Gear").stowed))
+
+    world.bus.on(DamageApplied, peek)
+    REGISTRY["i1151p1"].body(
+        Cast(world=world, me=me, ref="i1151p1", target=foe))
+
+    out.that(during and all(during),
+             "**the weapon reads heavy thrown while the blow is landing** --"
+             " the window the card means, and what a lay-then-remove pair"
+             " would miss if it bracketed the wrong statements",
+             f"seen during {during}")
+
+    after = world.get(me, Gear)
+    out.that(not any("heavy thrown" in w.properties
+                     for w in must(after, "Gear").weapons
+        if w.ref not in must(after, "Gear").stowed),
+             "and it is **not** heavy thrown once the row is done -- the"
+             " over-grant that kept this row marked, which `i1151x1` and"
+             " `i1756p1` would have paid out on for the rest of the fight",
+             f"props {[sorted(w.properties) for w in must(after, 'Gear').weapons
+                  if w.ref not in must(after, 'Gear').stowed]}")
+
+    # The removal must not strip a property the weapon printed for itself.
+    world2, me2, _again = _posed("i1151p1", 1)
+    gear2 = world2.get(me2, Gear)
+    own = sorted(
+        p for w in must(gear2, "Gear").weapons
+        if w.ref not in must(gear2, "Gear").stowed
+        for p in w.properties)
+    Cast(world=world2, me=me2, ref="drivers:lend").loses_property(
+        "heavy thrown", held=True, on=me2)
+    left = sorted(
+        p for w in world2.get(me2, Gear).weapons
+        if w.ref not in world2.get(me2, Gear).stowed
+        for p in w.properties)
+    out.that(left == own,
+             "and taking off a property the weapon never had leaves its own"
+             " printed ones alone -- the control for a remover that rebuilt"
+             " the set instead of subtracting from it",
+             f"{own} -> {left}")
+
+
+def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
+    """A class's second feature ladder belongs to whoever took it, nobody else.
+
+    `loadout` deals every `level == 0` row of a class to every character of
+    it, so a class with two declared chassis dealt **both** -- one character
+    being two sub-classes, with nothing failing to say so. The wizard was
+    live proof: the arcanist's ten features *and* the sha'ir's three. #851,
+    and #319 is the same fault at six rows and one hardcoded keyword.
+
+    `Character.chassis` is the fix and `chassis_of` picks the default. This
+    asserts through `chargen.spawn`, the door every character comes through,
+    rather than at `loadout` -- so it still holds if the filter moves.
+
+    **It also carries the end-to-end familiar evidence that used to be
+    incidental.** `scripts/fight.py` happened to print
+    `cf:wizard-sha-ir-f1:familiar 5/5` only because the default party wizard
+    was dealt the sha'ir's rows by the bug. With the bug fixed the default
+    wizard is an arcanist and that line is gone, so the familiar arriving in
+    a real fight is asserted here deliberately instead of observed by
+    accident.
+
+    The negative control is the half that matters: a default wizard must
+    hold the arcanist's ten and **no** sha'ir row. A rule asserting only
+    that naming a chassis works would pass on the old code, which gave
+    everybody everything.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import Bus
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.rng import Rng
+
+    def features(cls: str, chassis: str = "") -> list[str]:
+        world = World(Grid(24, 16), Rng(1), Bus())
+        who = chargen.Character(cls=cls, level=1, chassis=chassis)
+        eid = chargen.spawn(world, who, (6, 8))
+        held = world.need(eid, Powers).known
+        return sorted(r for r in held if r.startswith("cf:"))
+
+    default = features("wizard")
+    asked = features("wizard", "sha-ir")
+
+    out.that(any("arcanist" in r for r in default),
+             "a wizard naming no chassis gets the class's first one",
+             f"{len(default)} rows, {sum('arcanist' in r for r in default)} arcanist")
+    out.that(not any("sha-ir" in r for r in default),
+             "**and not the other chassis's rows, which is the whole fault**",
+             f"sha-ir rows dealt to a default wizard: "
+             f"{[r for r in default if 'sha-ir' in r] or 'none'}")
+    out.that(any("sha-ir" in r for r in asked) and not any("arcanist" in r for r in asked),
+             "a wizard that names the second chassis gets it, and only it",
+             f"{len(asked)} rows: {asked}")
+
+    # Every class keeps its features. The first draft of `chassis_of` chose
+    # from every chassis the *books* print rather than the ones the tree has
+    # declared, which handed a fighter an undeclared chassis and left it
+    # with no class features at all -- eight classes like it. A wizard-only
+    # assertion could not see that; this is the control that does.
+    empty = [cls for cls in sorted(chargen.CLASSES) if not features(cls)]
+    out.that(not empty,
+             "no class is left with zero class features by the chassis filter",
+             f"classes with none: {empty or 'none'}")
+
+    # And the familiar, which is what a sha'ir chassis is for.
+    world = World(Grid(24, 16), Rng(1), Bus())
+    who = chargen.Character(cls="wizard", level=1, chassis="sha-ir")
+    eid = chargen.spawn(world, who, (6, 8))
+    from combat_engine.engine.query import familiar_of
+    from combat_engine.engine.turns import Encounter
+
+    before = familiar_of(world, eid)
+    Encounter(world).start()
+    after = familiar_of(world, eid)
+    out.that(before is None and after is not None,
+             "arming a sha'ir wizard puts its familiar on the board",
+             f"familiar before the fight {before}, after arming {after}")
+
+
+def a_feint_is_an_action_and_one_feat_rides_it(out: Result) -> None:
+    """"Make a Bluff check to gain combat advantage against an enemy by feinting."
+
+    The printed action, off the Bluff skill entry rather than remembered:
+
+        Action: Standard action. A creature can take this action only once
+                per encounter.
+        Opposed Check: Against an adjacent target's passive Insight.
+        Success: The feinting creature gains combat advantage against the
+                 target until the end of the feinting creature's next turn.
+
+    **Two things #785 had wrong, both caught by reading the card.** It said
+    the check is "opposed by that enemy's **Insight check**" -- the general
+    Bluff entry offers that for a target actively seeing through a
+    deception, and this sub-entry prints **passive** Insight, which is also
+    what `f2092` already rolls. And it put the once-per-encounter limit on
+    the feat; it belongs to the **action**, so `f946` is at-will and
+    `Powers.charges` holds the use.
+
+    **And one thing I had wrong, which the measurement caught.**
+    `c.gains_advantage` was called bare, and `Cast._who(None)` returns
+    `self.target` -- so the modifier landed on the creature that was
+    fooled. `content/CLAUDE.md` calls that "the commonest single mistake
+    here" and it is committed in engine code: the Bluff check succeeded on
+    three of nine seeds and `has_combat_advantage` was False on all nine.
+    `on=actor` is the fix and the third assertion below is its control.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import actions
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.query import has_combat_advantage as _ca
+    from combat_engine.engine.types import ActionType
+
+    def feint(seed: int, *, bloodied: bool = False):  # noqa: ANN202
+        """A board, a clean adjacent victim, and the feint taken at it.
+
+        **"Clean" means a foe the board has not already handed advantage
+        over**, which it does for its own reasons -- a bare before/after
+        reads True either way and would have passed with the modifier
+        landing on the wrong creature.
+        """
+        world, me, _ = _posed("f946", seed)
+        enc = world.encounter
+        if bloodied:
+            health = world.need(me, Health)
+            health.hp = max(1, health.max_hp // 2 - 1)
+        clean = [f for f in enemies(world, me) if not _ca(world, me, f)]
+        offers = [a for a in actions.legal(world, enc, me)
+                  if a.kind == "feint" and a.targets[0] in clean]
+        if not offers:
+            return None
+        seen: list[SkillCheck] = []
+        world.bus.on(SkillCheck, seen.append)
+        pick = offers[0]
+        victim = pick.targets[0]
+        before = world.need(victim, Position).square
+        actions.perform(world, enc, me, pick)
+        rolled = next((e for e in seen if e.skill == "bluff"), None)
+        return (world, me, victim, rolled, before,
+                world.need(victim, Position).square, clean)
+
+    # -- the action exists and is offered per adjacent enemy ---------------
+    world, me, _ = _posed("f946", 1)
+    offers = [a for a in actions.legal(world, world.encounter, me)
+              if a.kind == "feint"]
+    out.that(bool(offers),
+             "**feinting is an action now** -- it was in no menu at all, so"
+             " `f946`'s trigger had no check in the game to answer",
+             f"{len(offers)} entries")
+    out.that(all(len(a.targets) == 1 for a in offers),
+             "one entry per adjacent enemy, so which creature is fooled is a"
+             " menu choice the policy can weigh rather than a prompt buried"
+             " in the execution",
+             f"targets={[a.targets for a in offers]}")
+    out.that(all(a.cost is ActionType.STANDARD for a in offers),
+             "and it costs a standard action, as printed",
+             f"{sorted({a.cost.value for a in offers})}")
+
+    # -- the contest is against PASSIVE Insight ----------------------------
+    posed = feint(6)
+    if posed is None:
+        out.skip("no clean adjacent foe on this board")
+        return
+    world, me, victim, rolled, _was, _now, clean = posed
+    from combat_engine.engine.cast import Cast
+    passive = Cast(world=world, me=me, ref="drivers:feint").passive(
+        "insight", of=victim)
+    out.that(rolled is not None and rolled.dc == passive,
+             "the contest is against the target's **passive** Insight, not"
+             " an opposed Insight check -- the sub-entry prints passive and"
+             " #785 said otherwise",
+             f"dc={rolled.dc} passive={passive}")
+    out.that(getattr(rolled, "purpose", "") == "combat-advantage",
+             "and the check says what it was **for**, which is what keeps"
+             " `f946` off every other Bluff check in the game. An attribute"
+             " rather than a field, so it reaches no fixture",
+             f"purpose={getattr(rolled, 'purpose', '')!r}")
+
+    # -- the advantage lands on the feinter, against that target only ------
+    out.that(rolled.success and _ca(world, me, victim),
+             "**the feinter gains combat advantage** against the creature it"
+             " fooled -- the assertion that was red while the modifier was"
+             " landing on the victim instead",
+             f"success={rolled.success} advantage={_ca(world, me, victim)}")
+    others = [f for f in clean if f != victim]
+    out.that(all(not _ca(world, me, f) for f in others),
+             "and against **nobody else**, which is why this is"
+             " `gains_advantage` with a gate on the target rather than"
+             " `grants_advantage` laid on the one that was fooled",
+             f"{[(f, _ca(world, me, f)) for f in others]}")
+
+    # -- once per encounter, spent whether or not it lands -----------------
+    out.that(world.need(me, Powers).charges.get("feint:used") == 1,
+             "the use is spent, and spent on a **failure** too -- the limit"
+             " is on taking the action, the way a failed hide still costs"
+             " its minor",
+             f"charges={dict(world.need(me, Powers).charges)}")
+    out.that(not [a for a in actions.legal(world, world.encounter, me)
+                  if a.kind == "feint"],
+             "and it is not offered again this encounter",
+             "no second entry")
+
+    # -- f946, through its own trigger -------------------------------------
+    bled = feint(6, bloodied=True)
+    out.that(bled is not None and bled[4] != bled[5],
+             "**`f946` slides the creature it fooled one square** while"
+             " bloodied -- its own trigger, off the check's `purpose`, with"
+             " `ev.target` naming who to push so there is no search",
+             f"{bled[4]} -> {bled[5]}" if bled else "not posed")
+
+    # -- the negative control: not bloodied, no slide ----------------------
+    whole = feint(6)
+    out.that(whole is not None and whole[3].success and whole[4] == whole[5],
+             "and **not** while at full health, which is the clause the card"
+             " prints and the control for a rider that fires on the check"
+             " alone",
+             f"{whole[4]} -> {whole[5]}" if whole else "not posed")
+
+    # -- and a failed feint grants nothing ---------------------------------
+    missed = feint(4)
+    out.that(missed is not None and not missed[3].success
+             and not _ca(missed[0], missed[1], missed[2]),
+             "a failed feint grants no advantage -- the other control, since"
+             " a check whose result nobody reads would pass every assertion"
+             " above",
+             f"success={missed[3].success if missed else '?'}")
+
+
+def a_rest_clause_is_heard_by_a_row_and_not_only_by_the_bus(out: Result) -> None:
+    """A rest has to reach a **row**, which is the half nothing asserted.
+
+    `drivers.short_rest` proves the announcement -- once per creature, after
+    the restore, a daily stays spent -- by listening on the bus directly.
+    That is exactly what #498 warned is **not sufficient**: a trait lays its
+    watcher when an encounter arms it, and a rest happens *between*
+    encounters, so a correct `ShortRested` reaches nobody.
+
+    `turns._rest_window` is the fix, and its docstring records the cost of
+    not having it: *"Three class features and five feats had been written
+    against `events.ShortRested`, all audited green, and every one of them
+    was dead in both of `fight.py`'s paths."*
+
+    **And `audit.py` cannot see this class of row at all** -- its board arms
+    traits and then provokes, which is the one arrangement where a rest never
+    happens. So deleting `_rest_window` leaves the wide sweep green, leaves
+    `drivers.short_rest` green, and silently kills every rest-clocked row.
+    This rule is the only thing standing between those two facts.
+
+    Driven through `cf:artificer-f0s0`, whose rest clause banks a reservoir
+    and labels it, so "the row heard the rest" is read off the creature
+    rather than inferred from the bus.
+    """
+    from combat_engine import chargen
+    from combat_engine.content.features.martial_leaders import BANKED_LABEL
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import Bus, ShortRested
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.rng import Rng
+    from combat_engine.engine.turns import Encounter, arm_traits, short_rest
+
+    # **`fight.py`'s real order**, which is the thing under test: construct
+    # the encounter, rest, *then* start. Poking `world.encounter = None` on
+    # an audit board instead was my first draft and it proved nothing -- the
+    # trait's watcher was already live from arming, so the row banked with
+    # `_rest_window` neutered and the plant stayed green. A plant that will
+    # not go red is the finding, and it is what caught the guard below
+    # having been a no-op since the day it was written.
+    #
+    # **Built by hand rather than from `fight.build`**, because that always
+    # fields cleric/fighter/rogue/wizard whatever the seed -- measured
+    # across five -- and all three rest-clocked features belong to the
+    # artificer and the sorcerer. So `fight.py` could not pose this even
+    # with the guard right, which is worth knowing and is why the blast
+    # radius of the bug is smaller than the row count suggests.
+    world = World(Grid(24, 16), Rng(7), Bus())
+    me = chargen.spawn(world, chargen.Character(cls="artificer", level=5),
+                       (6, 8))
+    encounter = Encounter(world)
+    out.that(world.encounter is not None and not encounter.started,
+             "the premise, and the bug this rule exists for: constructing an"
+             " `Encounter` sets `world.encounter`, while `started` stays"
+             " False. A guard reading the first field fires before any fight"
+             " has begun -- which is `fight.py`'s order exactly",
+             f"encounter set={world.encounter is not None}"
+             f" started={encounter.started}")
+
+    c = Cast(world=world, me=me, ref="drivers:rest")
+    out.that(not c.lingers_label(BANKED_LABEL, on=me),
+             "and nothing is armed yet, so a reservoir appearing below can"
+             " only have come from the rest",
+             f"carrying={c.lingers_label(BANKED_LABEL, on=me)}")
+
+    heard: list[int] = []
+    world.bus.on(ShortRested, lambda ev: heard.append(ev.actor))
+    short_rest(world)
+
+    out.that(me in heard,
+             "the rest announces itself -- repeated from `drivers.short_rest`"
+             " only so that a red below can be told apart from the event not"
+             " firing at all",
+             f"heard={sorted(set(heard))}")
+    out.that(c.lingers_label(BANKED_LABEL, on=me),
+             "**and a row heard it**: `cf:artificer-f0s0` banked its"
+             " reservoir, which it can only do if `_rest_window` re-armed the"
+             " trait *before* the event went out. Deleting that one call"
+             " leaves the assertion above green and this one red, which is"
+             " the whole reason this rule exists",
+             f"carrying={c.lingers_label(BANKED_LABEL, on=me)}")
+
+    # -- the no-op guard, which is a rule and not tidiness -----------------
+    #
+    # **Counting *all* effects was the wrong measure and this rule caught
+    # me.** A rest inside a running encounter does add one, because the
+    # trait's `ShortRested` watcher is still live from arming and the row
+    # banks for real -- which is correct. What `_rest_window` must not do is
+    # **re-arm**, and the tell for that is a *duplicate* of something arming
+    # lays, not a changed total.
+    world2 = World(Grid(24, 16), Rng(7), Bus())
+    me2 = chargen.spawn(world2, chargen.Character(cls="artificer", level=5),
+                        (6, 8))
+    Encounter(world2).start()
+
+    def banked(world, who: int) -> int:  # noqa: ANN001
+        return sum(1 for e in world.effects.of(who) if e.label == BANKED_LABEL)
+
+    short_rest(world2)              # an encounter IS running here
+    out.that(banked(world2, me2) <= 1,
+             "a rest **inside** a running encounter lays no *second* copy of"
+             " what arming already laid -- arming twice duplicates every"
+             " standing modifier, which is `_arm_traits`' seventy-one-watchers"
+             " bug in one step rather than over seven rounds",
+             f"{banked(world2, me2)} copies of the reservoir")
+    out.that(world2.encounter is not None,
+             "and the premise of that guard held: the encounter really was"
+             " still running, so `_rest_window`'s early return is what was"
+             " under test",
+             f"encounter running={world2.encounter is not None}")
+
+    # -- and the control that tells a red apart from a broken row ----------
+    world3 = World(Grid(24, 16), Rng(7), Bus())
+    me3 = chargen.spawn(world3, chargen.Character(cls="artificer", level=5),
+                        (6, 8))
+    for eff in list(world3.effects.of(me3)):
+        if eff.label == BANKED_LABEL:
+            world3.effects.end(eff, "drivers: cleared")
+    arm_traits(world3, me3)
+    world3.bus.emit(ShortRested(actor=me3))
+    out.that(Cast(world=world3, me=me3, ref="drivers:rest")
+             .lingers_label(BANKED_LABEL, on=me3),
+             "arm by hand, emit by hand, and the row still banks -- so a red"
+             " above is `_rest_window` not being called, and not `arm_traits`"
+             " or the row itself being broken",
+             "armed and emitted by hand")
+
+
+def hiding_is_a_check_and_moving_fast_makes_it_harder(out: Result) -> None:
+    """"A Stealth check at the end of a move action: -5 past two squares, -10 if you ran."
+
+    The printed rule, and the engine charged **none** of it -- so four rows
+    whose whole content is *waiving* the penalty had nothing to waive. The
+    gap was two layers deep: nothing counted how far a creature had moved
+    during its action, and the hide rolled against an **invented** DC
+    (`10 + world.round`, in `actions.execute`) rather than against what the
+    watchers passively notice. #784.
+
+    **What is deliberately *not* changed: `c.hide()` itself.** 85 call sites
+    in 60 files say "it becomes hidden" or "it is invisible until the end of
+    its next turn", which are not Stealth checks -- a lurker's printed trait
+    does not fail. Only `check=True` rolls, and the hide **action** is the
+    caller that passes it. A rule that made all 85 roll would be the
+    "weaker than its printed line" fault at the scale of every lurker in the
+    game.
+
+    The waiver rides a **key of its own**, so the two standing rows cannot
+    turn into a bonus on every Stealth check this character ever makes --
+    which is the fault `f3447` refuses to commit, and which the last
+    assertion here is the control for.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.query import (
+        enemies,
+        moved_this_action,
+        ran_this_action,
+    )
+    from combat_engine.engine.skills import modifier as skill_modifier
+
+    def pose(squares: int, kind: str, waiver: int = 0) -> tuple:
+        """A caster that has moved that far this action, about to hide.
+
+        **The movement is driven here rather than by a row's own shift**,
+        because the audit board boxes the caster in -- three of its four
+        neighbours are posed creatures, so `c.shift(speed)` covers 0 squares
+        and every penalty assertion would pass vacuously. Measured: north is
+        the clear direction on this seed.
+        """
+        world, me, _ = _posed("p16545", 1)
+        seen: list[SkillCheck] = []
+        world.bus.on(SkillCheck, seen.append)
+        if squares:
+            sx, sy = world.need(me, Position).square
+            movement.walk(world, me,
+                          [(sx, sy - i - 1) for i in range(squares)], kind=kind)
+        c = Cast(world=world, me=me, ref="drivers:hide")
+        if waiver:
+            c.bonus("stealth:moved", waiver, on=me, until=When.ENCOUNTER)
+        seen.clear()
+        foe = enemies(world, me)[0]
+        eff = c.hide(from_=foe, check=True)
+        rolled = next((e for e in seen if e.skill == "stealth"), None)
+        return world, me, c, foe, rolled, eff
+
+    # -- layer 1: the counter exists and is per action ---------------------
+    world, me, _c, _foe, rolled, _eff = pose(5, "walk")
+    out.that(moved_this_action(world, me) == 5,
+             "**a five-square walk reads as five squares moved**, which is"
+             " the number the printed penalty is about and which nothing"
+             " counted at all",
+             f"went={moved_this_action(world, me)}")
+
+    sx, sy = world.need(me, Position).square
+    movement.walk(world, me, [(sx, sy - 1)], kind="run")
+    out.that(moved_this_action(world, me) == 1 and ran_this_action(world, me),
+             "and a **second** move action starts the count again -- the"
+             " card says 'during that action', so a creature that walks six"
+             " and then takes another move for one is one square from where"
+             " it checks",
+             f"went={moved_this_action(world, me)} ran={ran_this_action(world, me)}")
+
+    # -- the DC is what the watcher notices, not a number somebody invented -
+    _w, _m, c, foe, rolled, _e = pose(0, "walk")
+    out.that(rolled is not None,
+             "the hide **rolls** -- `check=True` makes it a Stealth check"
+             " rather than a grant",
+             f"{rolled}")
+    out.that(rolled is not None and rolled.dc == c.passive("perception", of=foe),
+             "and it is opposed by the watcher's **passive Perception**,"
+             " where `actions.execute` used to invent `10 + world.round` --"
+             " a number no card prints, which drifted upward as the fight"
+             " went on so hiding got harder the longer you waited",
+             f"dc={rolled.dc if rolled else '?'}"
+             f" passive={c.passive('perception', of=foe)}")
+
+    # -- the penalty table, every line of it against the printed rule ------
+    base = pose(0, "walk")[4].bonus
+    table = [
+        (2, "walk", 0, base, "exactly two squares is **not** more than two"),
+        (3, "walk", 0, base - 5, "past two squares costs -5"),
+        (3, "run", 0, base - 10,
+         "running costs -10, and it **replaces** the -5 rather than adding"
+         " to it -- running is moving more than two, and the card prints the"
+         " bigger number instead"),
+        (3, "walk", 5, base, "a waiver nets the -5 to nothing"),
+        (3, "run", 5, base - 5,
+         "and the same waiver halves the -10, which is why the rogue's two"
+         " printed clauses are one +5 between them"),
+    ]
+    for squares, kind, waiver, want, why in table:
+        got = pose(squares, kind, waiver)[4]
+        out.that(got is not None and got.bonus == want, why,
+                 f"moved {squares} by {kind}, waiver {waiver}:"
+                 f" charged {got.bonus if got else '?'}, wanted {want}")
+
+    # -- the two controls --------------------------------------------------
+    out.that(pose(0, "walk", 5)[4].bonus == base,
+             "**a waiver with no penalty is not a bonus** -- the sum is"
+             " clamped at zero, so a standing waiver on a creature that"
+             " stood still does not make it better at hiding than one that"
+             " never had the feature",
+             f"still {pose(0, 'walk', 5)[4].bonus} against a base of {base}")
+
+    w2, me2, c2, _f2, _r2, _e2 = pose(0, "walk")
+    plain = skill_modifier(w2, me2, "stealth")
+    c2.bonus("stealth:moved", 5, on=me2, until=When.ENCOUNTER)
+    out.that(skill_modifier(w2, me2, "stealth") == plain,
+             "and the waiver **cannot reach an ordinary Stealth check** --"
+             " its own key, read by the hide and by nothing else, which is"
+             " what stops a standing waiver becoming a general bonus",
+             f"skills.modifier('stealth') {plain} -> "
+             f"{skill_modifier(w2, me2, 'stealth')}")
+
+
+def _blank_result() -> Any:
+    """An `AttackResult` that no weapon attack stamped."""
+    from combat_engine.engine.resolve import AttackResult
+
+    return AttackResult(hit=True, natural=15, total=25, target_defence=10)
+
+
+def _rider_blow(attacker: int, target: int, result: Any) -> Any:
+    """A `Hit` carrying that result, the way `resolve` hands one over.
+
+    `Any`, because `result` is attached rather than declared -- the
+    `Effect.by` pattern, which keeps it off `Event.wire()`.
+    """
+    from combat_engine.engine.events import Hit
+
+    ev: Any = Hit(attacker=attacker, target=target, power="mba", critical=False)
+    ev.result = result
+    return ev
+
+
+def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
+    """"You score a critical hit on a 19 or 20" does not make 19 hit.
+
+    `resolve.attack` read `natural >= floor` for the **hit** as well as the
+    critical, so any `crit_range` bonus made a natural 19 an automatic hit
+    however far short the total fell. **14 content rows grant one**, two of
+    them monsters, so it was live for anything holding one.
+
+    The rule ties the automatic hit to the number -- a natural 20 hits, a
+    natural 1 misses -- and a widener changes which hits become criticals.
+    The comment above the line said exactly that (*"the hit is a separate
+    question and is unchanged: a 20 hits"*) while the code read `floor`, so
+    the intent was documented and never matched. #868.
+
+    Both directions are asserted, because fixing it the lazy way -- dropping
+    `floor` everywhere -- would silently stop the widener working at all.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import AC, When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import attack
+
+    world, me, _ = _posed("mba", 1)
+    foe = next(iter(enemies(world, me)), None)
+    if foe is None:
+        return
+    c = Cast(world=world, me=me, ref="drivers:crit")
+    c.bonus("crit_range", 1, on=me, until=When.ENCOUNTER)
+
+    def swing(face: int, bonus: int) -> Any:
+        """One attack on a loaded die, through `resolve.attack` itself."""
+        world.rng.loaded = face
+        return attack(world, me, foe, bonus, AC, "mba")
+
+    # A defence far above anything the roll plus a tiny bonus can reach, so
+    # "did the die alone carry it" is the only question being asked.
+    hopeless = -40
+
+    nineteen = swing(19, hopeless)
+    out.that(nineteen.hit is False,
+             "**a natural 19 does not hit** on a hopeless total, even with"
+             " the crit range widened -- the bug was that it did, for every"
+             " build and monster carrying a `crit_range` bonus",
+             f"hit={nineteen.hit} natural={nineteen.natural}"
+             f" total={nineteen.total} vs {nineteen.target_defence}")
+    out.that(nineteen.critical is False,
+             "and it is not a critical either, because the total did not"
+             " reach the defence -- the half the engine already had right",
+             f"critical={nineteen.critical}")
+
+    twenty = swing(20, hopeless)
+    out.that(twenty.hit is True,
+             "**a natural 20 still hits** however hopeless the total, which"
+             " is the rule the bare 20 is there to keep",
+             f"hit={twenty.hit} total={twenty.total}"
+             f" vs {twenty.target_defence}")
+    out.that(twenty.critical is False,
+             "and is a plain hit rather than a critical, since the total"
+             " fell short -- a 20 that misses by fourteen deals normal"
+             " damage",
+             f"critical={twenty.critical}")
+
+    # -- and the widener still does its own job ---------------------------
+    easy = 40
+    crit19 = swing(19, easy)
+    out.that(crit19.hit is True and crit19.critical is True,
+             "**a 19 that reaches the defence IS a critical** with the range"
+             " widened -- the control that stops this being 'fixed' by"
+             " deleting `floor` and quietly turning the widener off",
+             f"hit={crit19.hit} critical={crit19.critical}")
+
+    # The same roll without the bonus is a hit and not a critical, which is
+    # what makes the assertion above about the widener rather than the roll.
+    plain, me2, _ = _posed("mba", 1)
+    foe2 = next(iter(enemies(plain, me2)), None)
+    if foe2 is None:
+        return
+    plain.rng.loaded = 19
+    bare = attack(plain, me2, foe2, easy, AC, "mba")
+    out.that(bare.hit is True and bare.critical is False,
+             "while the same 19 with no widener is a hit and NOT a critical,"
+             " so the assertion above is about the bonus and not the die",
+             f"hit={bare.hit} critical={bare.critical}")
+
+
+def a_trait_given_up_for_a_turn_comes_back(out: Result) -> None:
+    """"It loses insubstantial until the end of its next turn."
+
+    Three monster rows print this as the **price** of a finisher, and all
+    three said the same false thing: *"`Defences` carries no insubstantial
+    flag at all -- the database column does not exist"*. It does now --
+    `half_always`, `half_when`, `half_except`, all read by
+    `query.takes_half` -- so the trait was there to take and the taking was
+    what was missing.
+
+    **The assertion that matters is the third one: it comes back.** Losing
+    it is the easy half and `c.cure` would pass that; what cure cannot do
+    is give it back, because taking the condition off spends the trait's
+    duration -- an encounter-long insubstantial cured once is gone for the
+    fight, where the card lends it for a turn. `c.suspend_when`'s docstring
+    argues the identical point for the triggered case.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import takes_half
+    from combat_engine.engine.types import Condition
+
+    world, me, _ = _posed("mba", 1)
+    c: Any = Cast(world=world, me=me, ref="drivers:suspend")
+    held = c.insubstantial(on=me, until=When.ENCOUNTER)
+    out.that(held is not None and takes_half(world, me),
+             "the creature is insubstantial to begin with, which is the"
+             " setup and not the finding",
+             f"takes_half={takes_half(world, me)}")
+    if held is None:
+        return
+
+    timers = c.suspend_trait(Condition.INSUBSTANTIAL, on=me,
+                             until=When.EONT)
+    out.that(len(timers) == 1,
+             "one timer per suspension, which is what lets a row end the"
+             " arrangement without touching the trait",
+             f"timers={len(timers)}")
+    out.that(not takes_half(world, me),
+             "**and the trait is off** -- the price the card prints",
+             f"takes_half={takes_half(world, me)}")
+    out.that(not held.ended,
+             "while the effect that carried it is NOT ended -- the"
+             " distinction from `c.cure`, and the reason an"
+             " encounter-long trait is not spent by a one-turn loan",
+             f"ended={held.ended} suspended={held.suspended}")
+
+    # -- the half cure cannot do --------------------------------------
+    if timers:
+        world.effects.end(timers[0], "drivers")
+    out.that(takes_half(world, me),
+             "**ending the timer gives the trait back**, which is the"
+             " whole of why this is a suspension and not a removal",
+             f"takes_half={takes_half(world, me)}")
+
+    # -- the control: a second loan is one deadline, not two -----------
+    again = c.suspend_trait(Condition.INSUBSTANTIAL, on=me, until=When.EONT)
+    more = c.suspend_trait(Condition.INSUBSTANTIAL, on=me, until=When.EONT)
+    out.that(len(again) == 1 and more == [],
+             "two rows taking the same trait away lay one timer, not two --"
+             " already-suspended effects are skipped, which is the"
+             " accumulation guard `c.suspend_when` records in the same"
+             " words",
+             f"first={len(again)} second={len(more)}")
+
+    # -- **two effects at once, which is what the `h=held` binding is for**
+    # Added because a plant found it missing: replacing `lambda h=held:` with
+    # a bare closure over the loop variable left every assertion above green,
+    # since all of them suspend exactly one effect. The code comment claimed
+    # a hazard nothing tested.
+    world2, me2, _ = _posed("mba", 1)
+    d: Any = Cast(world=world2, me=me2, ref="drivers:two")
+    first = d.insubstantial(on=me2, until=When.ENCOUNTER)
+    second = Cast(world=world2, me=me2, ref="drivers:two_b").insubstantial(
+        on=me2, until=When.ENCOUNTER)
+    out.that(first is not None and second is not None and first is not second,
+             "two separate effects carry the trait, which is the setup for"
+             " the binding assertion below",
+             f"two={first is not second}")
+    if first is None or second is None or first is second:
+        return
+    pair = d.suspend_trait(Condition.INSUBSTANTIAL, on=me2, until=When.EONT)
+    out.that(len(pair) == 2 and first.suspended and second.suspended,
+             "both are suspended and each gets its own timer",
+             f"timers={len(pair)} a={first.suspended} b={second.suspended}")
+    for timer in pair:
+        world2.effects.end(timer, "drivers")
+    out.that(not first.suspended and not second.suspended,
+             "**and ending both timers resumes BOTH effects** -- a bare"
+             " closure over the loop variable would resume whichever was"
+             " last, twice, and leave the other one off for the rest of the"
+             " fight",
+             f"a={first.suspended} b={second.suspended}")
+
+
+def crossing_a_hazard_can_cost_nothing(out: Result) -> None:
+    """"Ignore difficult terrain, **and** take no damage from the surface."
+
+    Four monster rows print both halves in one sentence and only the first
+    was sayable, so each laid the exemption it could and dropped the other.
+    `c.ignores_hazards` is the twin of `c.ignores_difficult`: that one
+    waives the **cost** of rough ground, this waives the **damage** a
+    hazard laid over it deals.
+
+    **One reader, in `c.burns`**, which is where every hazard's teeth are --
+    so a zone from `c.hazard` and an aura given teeth afterwards both
+    honour it, and a new caller cannot forget to.
+
+    The sharp pair is the labelled form against the blanket one. A token
+    set rather than a bool is what lets `c.ignores_hazards("blood")` ignore
+    a blood hazard and still burn in a fire, which is what the three
+    level-11 rows print -- they are immune to the stuff they live in and to
+    nothing else.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement, Position
+    from combat_engine.engine.events import DamageApplied, TurnStart
+    from combat_engine.engine.query import enemies, squares
+    from combat_engine.engine.types import DamageType
+
+    world, me, _ = _posed("mba", 1)
+    foes = sorted(enemies(world, me))
+    if not foes:
+        return
+    victim = foes[0]
+
+    def hazard_of(kind: str) -> tuple[int, tuple[int, int]]:
+        """Lay a hazard under the victim and report the zone and the square."""
+        spot = sorted(squares(world, victim))[0]
+        c: Any = Cast(world=world, me=me, ref="drivers:hazard")
+        zone = c.hazard([spot], 5, DamageType.FIRE, label="drivers:hazard",
+                        until=When.ENCOUNTER, difficult=kind, sustain=None)
+        return zone, spot
+
+    def bitten() -> int:
+        """Start the victim's turn in the zone and report what **it** dealt.
+
+        **Filtered on the zone's own `detail`, not pooled over the victim.**
+        The first version summed every `DamageApplied` aimed at it and read
+        7 where the hazard deals 5: this board has another 2 landing on the
+        same turn, so the pooled total could not say whether the exemption
+        had worked. `c.burns` stamps `detail=f"{ref} zone"`, which is the
+        label to ask about -- the same discipline as reading an effect's
+        label rather than a creature's hit points.
+        """
+        mark = len(world.bus.log)
+        world.bus.emit(TurnStart(actor=victim, round=world.round, ghost=False))
+        return sum(ev.amount for ev in world.bus.log[mark:]
+                   if isinstance(ev, DamageApplied) and ev.target == victim
+                   and "drivers:hazard" in (ev.detail or ""))
+
+    _, spot = hazard_of("blood")
+    pos = world.get(victim, Position)
+    if pos is None:
+        return
+    # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+    # The pair wrote the square onto `Position` and then handed the
+    # *square* to a method whose parameter is a `frozenset` of them --
+    # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+    # and `7` and left `occupant((5, 7))` as `None`. It also never
+    # lifted the old square, so the creature stayed indexed where it
+    # had been. `place` does all three. #882.
+    from combat_engine.engine.movement import place
+    place(world, victim, spot)
+    world.zones.refresh()
+
+    # **Each reading taken once into a variable.** `bitten()` emits a
+    # `TurnStart`, so calling it again inside the report string would run a
+    # second turn and the once-per-round latch would answer 0 -- a passing
+    # assertion followed by a contradictory note.
+    plain = bitten()
+    out.that(plain == 5,
+             "an ordinary creature standing in the hazard takes its damage,"
+             " which is the setup and not the finding",
+             f"dealt {plain}")
+
+    # -- the labelled exemption ---------------------------------------
+    world.round += 1
+    guard: Any = Cast(world=world, me=victim, ref="drivers:unscathed")
+    guard.ignores_hazards("blood", until=When.ENCOUNTER)
+    moves = world.get(victim, Movement)
+    out.that(moves is not None and "blood" in moves.unharmed,
+             "the exemption is recorded as a token, not a flag -- which is"
+             " what lets two rows grant one without stepping on each"
+             " other's expiry",
+             f"unharmed={sorted(moves.unharmed) if moves else None}")
+    spared = bitten()
+    out.that(spared == 0,
+             "**and the same creature in the same blood hazard now takes"
+             " nothing**",
+             f"dealt {spared}")
+
+    # -- the control: a different sort of going still burns ------------
+    world.round += 1
+    _, spot2 = hazard_of("ice")
+    # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+    # The pair wrote the square onto `Position` and then handed the
+    # *square* to a method whose parameter is a `frozenset` of them --
+    # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+    # and `7` and left `occupant((5, 7))` as `None`. It also never
+    # lifted the old square, so the creature stayed indexed where it
+    # had been. `place` does all three. #882.
+    place(world, victim, spot2)
+    world.zones.refresh()
+    elsewhere = bitten()
+    out.that(elsewhere == 5,
+             "while an **ice** hazard still burns it -- the control, and the"
+             " reason the exemption is a set of tokens rather than a bool:"
+             " these three rows are immune to the stuff they live in and to"
+             " nothing else",
+             f"dealt {elsewhere}")
+
+    # -- **the blanket form, which is the heroic row's shape** ----------
+    # Added because a plant found it missing: disabling the `"*"` branch
+    # left every assertion above green, since all of them pass a label.
+    # `m1184a5` is the bare call -- "take no damage if the surface it moves
+    # across would normally deal damage to it", naming no sort of ground --
+    # so the untested branch was the one row of the four that is heroic.
+    world.round += 1
+    guard.ignores_hazards(until=When.ENCOUNTER)
+    blanket = bitten()
+    out.that(blanket == 0,
+             "**and a bare `c.ignores_hazards()` spares it the ice too**,"
+             " which is the form `m1184a5` prints -- whatever the surface"
+             " is, it does not hurt this creature",
+             f"dealt {blanket}, unharmed="
+             f"{sorted((world.get(victim, Movement) or Movement()).unharmed)}")
+
+
+def a_target_can_be_narrowed_to_whoever_carries_equipment(out: Result) -> None:
+    """"One creature carrying equipment" -- `m6530a5`, and nobody else.
+
+    The row was offered against **anybody**, on a note saying `Gear`
+    "records weapons, a shield, armour, worn magic and ammunition and
+    nothing for ordinary kit". Re-read against the card, that bar is too
+    high: the printed effect is that *the target's equipment animates*, and
+    a sword, a belt-knife and a shield are exactly what `Gear` records.
+    Ordinary kit is a different card's problem and the ETL has never
+    imported any.
+
+    **Both sides are asserted, because the file says to.** `dsl`'s
+    candidate guard is a hand-kept list of "is any relational field set",
+    and its own comment records what happens when a new field is added to
+    `_stands_right` alone: *"the offer path skips it in silence ... which is
+    #381's disagreement arriving one field at a time. `ident` was written
+    that way and the driver caught it on its first run."* So this asks
+    `candidates()` and the predicate separately.
+
+    Armour is deliberately not counted: `Gear.armour` is `"cloth"` for every
+    creature in the game, so a filter honouring it would pass everybody and
+    read exactly like a filter that worked.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.components import Gear, Position
+    from combat_engine.engine.dsl import REGISTRY, candidates
+    from combat_engine.engine.query import enemies, squares
+
+    world, mob, _ = _posed("m6530a5", 1)
+    foes = sorted(enemies(world, mob))
+    if len(foes) < 2:
+        return
+    row = REGISTRY["m6530a5"]
+    out.that(row.target.carrying is True,
+             "m6530a5 declares `carrying=True`, which is the setup and not"
+             " the finding",
+             f"carrying={row.target.carrying}")
+    out.that(not row.dropped and not row.unfinished,
+             "and carries no marker any more",
+             f"todo={row.unfinished} dropped={row.dropped}")
+
+    armed = [f for f in foes if (world.get(f, Gear) or Gear()).weapons]
+    out.that(len(armed) >= 2,
+             "at least two creatures on the board are armed, which is what"
+             " lets one be stripped and the other stay as the control",
+             f"armed={armed}")
+    if len(armed) < 2:
+        return
+    # **Stripped from the armed set, not from `foes[0]`.** The first version
+    # took any enemy and guarded the restore assertion with "or it had
+    # nothing anyway", which is an escape hatch that cannot fail -- and
+    # ruff's RUF021 is what pointed at the precedence of it.
+    bare = armed[0]
+    kit = world.get(bare, Gear)
+    if kit is None:
+        return
+
+    # **Both of them put in reach first.** This is a `Melee(1)` row, so the
+    # first version's control read `offered=[]` and looked like a filter
+    # that rejected everybody -- it was measuring distance. Placed through
+    # `grid.place` as well as `Position`, or the occupants index keeps the
+    # old square and the board answers about an empty one.
+    mine = sorted(squares(world, mob))[0]
+    for who, step in ((bare, (1, 0)), (armed[1], (0, 1))):
+        spot = (mine[0] + step[0], mine[1] + step[1])
+        pos = world.get(who, Position)
+        if pos is None:
+            return
+        # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+        # The pair wrote the square onto `Position` and then handed the
+        # *square* to a method whose parameter is a `frozenset` of them --
+        # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+        # and `7` and left `occupant((5, 7))` as `None`. It also never
+        # lifted the old square, so the creature stayed indexed where it
+        # had been. `place` does all three. #882.
+        from combat_engine.engine.movement import place
+        place(world, who, spot)
+
+    held, stowed, shield = list(kit.weapons), set(kit.stowed), kit.shield
+    kit.weapons, kit.stowed, kit.shield = [], set(), 0
+
+    offered = set(candidates(world, mob, row))
+    out.that(bare not in offered,
+             "**a creature stripped of weapons, belt and shield is not"
+             " offered** -- the row has nothing to animate on it",
+             f"offered={sorted(offered)}")
+    out.that(any(f in offered for f in armed[1:]),
+             "while an armed creature still is -- the control, without"
+             " which this passes on a filter that offered nobody at all",
+             f"armed={armed} offered={sorted(offered)}")
+
+    # Give the kit back and confirm the same creature returns to the menu,
+    # which is the half that says the filter reads the gear rather than the
+    # creature.
+    kit.weapons, kit.stowed, kit.shield = held, stowed, shield
+    again = set(candidates(world, mob, row))
+    out.that(bare in again,
+             "and handing the kit back puts the same creature on the menu"
+             " again, so the filter reads the gear rather than the identity",
+             f"weapons={len(held)} shield={shield} offered={bare in again}")
+
+
+def training_is_asked_and_can_be_lent(out: Result) -> None:
+    """The two halves of `i3225`, which the same stale premise blocked.
+
+    Both notes said there was no training model. #565 built one --
+    `Skills.trained` holds the set, `class_skill` carries 205 rows across
+    25 classes -- and both markers went stale, which `f1455`'s docstring
+    records happening to the same sentence.
+
+    **`i3225x1` was over-granting, not merely unfinished.** "+1 item bonus
+    to *untrained* skill checks" was written as a blanket `skill` bonus,
+    so it paid on every check including trained ones: strictly better than
+    print. The pair of assertions is one check of each kind on the same
+    character, which is the only shape that can tell a gate from no gate.
+
+    **`i3225p1` lends training with a duration**, which `chargen` cannot:
+    the sheet is made once and this lasts until the end of a turn. Asserted
+    by reading `Skills.trained` before, during and after.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import Skills
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.skills import SKILLS
+
+    world, me, _ = _posed("i3225x1", 1)
+    held = world.get(me, Skills)
+    if held is None:
+        return
+    trained = sorted(held.trained)
+    untrained = sorted(set(SKILLS) - set(held.trained))
+    out.that(bool(trained) and bool(untrained),
+             "the character is trained in some skills and not others,"
+             " without which neither assertion below means anything",
+             f"{len(trained)} trained, {len(untrained)} not")
+    if not trained or not untrained:
+        return
+
+    # **Not measured as a before/after around the body.** `audit.board`
+    # arms the creature's rows, and an `action=NONE` item property is one
+    # of them -- so the bonus is already laid before this rule runs, and
+    # running the body again lays a second `kind="item"` entry that does
+    # not stack. The first version of this read `modifier()` either side
+    # and saw 8 -> 8, which looks exactly like a gate answering False.
+    #
+    # So the assertion is on the **keyed read with the gate's own
+    # context**, which is the number `skills.modifier` actually consults
+    # and the only one that can say which skill the bonus applied to.
+    mods = world.get(me, Mods)
+    out.that(mods is not None and any(
+                 m.label == "i3225x1" for m in mods.items),
+             "i3225x1 is armed and its modifier is on the sheet, which is"
+             " the setup and not the finding",
+             f"labels={[m.label for m in (mods.items if mods else [])][-3:]}")
+    if mods is None:
+        return
+
+    def skill_bonus(skill: str) -> int:
+        return mods.total("skill", {"actor": me, "skill": skill,
+                                    "target": None})
+
+    on_un = skill_bonus(untrained[0])
+    on_tr = skill_bonus(trained[0])
+    out.that(on_un == 1,
+             "**the +1 lands on an untrained skill**, which is what the"
+             " card prints",
+             f"{untrained[0]}: blanket skill bonus = {on_un}")
+    out.that(on_tr == 0,
+             "and NOT on a trained one -- the control, and the half the"
+             " row was getting wrong in the player's favour, since it was"
+             " written as a blanket bonus with no gate at all",
+             f"{trained[0]}: blanket skill bonus = {on_tr}")
+
+    # -- the lent training ---------------------------------------------
+    world2, me2, _ = _posed("i3225p1", 1)
+    held2 = world2.get(me2, Skills)
+    if held2 is None:
+        return
+    was = frozenset(held2.trained)
+    d: Any = Cast(world=world2, me=me2, ref="i3225p1")
+    REGISTRY["i3225p1"].body(d)
+    now = frozenset(held2.trained)
+    gained = now - was
+    out.that(len(gained) == 1,
+             "**i3225p1 lends training in exactly one skill**, chosen from"
+             " the ones not already held",
+             f"gained {sorted(gained)}")
+    if len(gained) != 1:
+        return
+    lent = next(iter(gained))
+    out.that(lent not in was,
+             "and it is one the character did not already have -- the"
+             " control, since training a skill twice spends the day's use"
+             " on nothing")
+
+    # Ending the hold gives it back, which is the clause `chargen` cannot
+    # express and the reason this is a board-side grant at all.
+    holds = [e for e in world2.effects.of(me2) if e.label == "i3225p1"]
+    out.that(bool(holds),
+             "the grant is held by an effect, which is what carries the"
+             " duration",
+             f"{[e.label for e in world2.effects.of(me2)][:4]}")
+    if not holds:
+        return
+    world2.effects.end(holds[0], "drivers")
+    out.that(lent not in world2.get(me2, Skills).trained,
+             "**and ending the hold takes the training back**, by"
+             " subtracting rather than restoring a snapshot, so another"
+             " grant laid in between would survive it",
+             f"trained now holds {lent}:"
+             f" {lent in world2.get(me2, Skills).trained}")
+
+
+def an_aura_deals_more_to_the_creature_its_owner_is_grabbing(out: Result) -> None:
+    """"6 damage, instead of 2, from the grabbing creature's aura."
+
+    Two rows and two files. `m3519a0` lays the raise on the **victim** with
+    `c.change_amount("m305a0", 6, on=victim)`; `m305a0`'s aura watcher asks
+    `c.amount_for("m305a0", 2, who=ev.actor)` instead of handing out a bare
+    2. Both halves had to land together -- laying the raise while the aura
+    still printed its own number is a finished-looking no-op, which is what
+    `m3519a0`'s marker refused to write for three revisions.
+
+    **The control is the ungrabbed neighbour**, standing in the same aura
+    on the same turn. Without it an assertion that the grabbed creature
+    takes 6 passes equally on an aura that deals 6 to everybody, which is
+    the shape of over-grant this card is one sentence away from.
+
+    Read off `DamageApplied` rather than off hit points, because the board
+    pre-sets totals and a pooled number cannot say which creature the 6
+    landed on.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied, TurnEnd
+    from combat_engine.engine.query import enemies, squares
+
+    world, mob, _ = _posed("m3519a0", 1)
+    foes = sorted(enemies(world, mob))
+    if len(foes) < 2:
+        return
+    victim, bystander = foes[0], foes[1]
+
+    # Both adjacent to the aura's owner, which is what the aura reads.
+    mine = sorted(squares(world, mob))[0]
+    for who, step in ((victim, (1, 0)), (bystander, (0, 1))):
+        spot = (mine[0] + step[0], mine[1] + step[1])
+        pos = world.get(who, Position)
+        if pos is None:
+            return
+        # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+        # The pair wrote the square onto `Position` and then handed the
+        # *square* to a method whose parameter is a `frozenset` of them --
+        # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+        # and `7` and left `occupant((5, 7))` as `None`. It also never
+        # lifted the old square, so the creature stayed indexed where it
+        # had been. `place` does all three. #882.
+        from combat_engine.engine.movement import place
+        place(world, who, spot)
+
+    # The aura, then the grab.
+    a: Any = Cast(world=world, me=mob, ref="m305a0")
+    REGISTRY["m305a0"].body(a)
+    # **Through `m3519a0`'s own body**, on a loaded 20 so the claw lands:
+    # the row has to be what grabs and what lays the raise, or this proves
+    # `c.change_amount` works and says nothing about the card.
+    world.rng.loaded = 20
+    g: Any = Cast(world=world, me=mob, ref="m3519a0", target=victim)
+    REGISTRY["m3519a0"].body(g)
+    out.that(victim in g.grabbing(),
+             "the victim is grabbed and the bystander is not, which is the"
+             " setup and not the finding",
+             f"grabbed={sorted(g.grabbing())} bystander={bystander}")
+    if victim not in g.grabbing():
+        return
+
+    def bite(who: int) -> int:
+        """End `who`'s turn inside the aura and report what it dealt."""
+        mark = len(world.bus.log)
+        world.bus.emit(TurnEnd(actor=who, round=1, ghost=False))
+        return sum(
+            ev.amount for ev in world.bus.log[mark:]
+            if isinstance(ev, DamageApplied) and ev.target == who
+        )
+
+    took = bite(victim)
+    out.that(took == 6,
+             "**the grabbed creature takes 6 from the aura**, which is the"
+             " clause the raise and the read together carry",
+             f"dealt {took}")
+    other = bite(bystander)
+    out.that(other == 2,
+             "while the ungrabbed creature standing in the same aura on the"
+             " same turn takes 2 -- the control, without which this passes"
+             " on an aura that simply deals 6",
+             f"dealt {other}")
+
+
+def a_kept_d20_is_used_instead_of_rolling_one(out: Result) -> None:
+    """`c.replace_roll` puts a number you already have on the die.
+
+    The third thing you can do to a die already down. `c.boost_roll` adds
+    to the roll and leaves the die; the `c.reroll_*` family throws a fresh
+    one; neither takes a **number**. `p15889`'s own note said so: *"nothing
+    can substitute a stored face"*.
+
+    **The sharpest assertion is that the die really moves.** A replaced 20
+    is a genuine 20 -- automatic hit and, over the defence, a critical --
+    which is exactly what `c.boost_roll` must never do, and the pair is
+    asserted side by side so a future change cannot quietly make one behave
+    like the other.
+
+    The arithmetic is driven through the verb; the **once** and the banking
+    are driven through `p15889`'s body, because a charge spent twice is a
+    row fault rather than a verb fault.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import AC
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled, SavingThrow
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    world, me, _ = _posed("p15889", 1)
+    c: Any = Cast(world=world, me=me, ref="drivers:replace")
+
+    class _Swung:
+        """A roll already announced, which is what the verb is handed.
+
+        **Third local class in this file for the same stub, and the third
+        distinct name.** `lint.py`'s duplicate-`def` walk is per *file* and
+        cannot see function scope (#872), so `boost_roll` has `_Rolled` and
+        `reroll_judged` has `_Announced`. I named this one `_Rolled` too and
+        the walk went red -- in the same session that had already renamed
+        once for the same reason, which is the cost of a check whose message
+        is wrong about the cause.
+        """
+
+        def __init__(self, result: AttackResult) -> None:
+            self.result = result
+            self.attacker = me
+            self.ctx: dict[str, Any] = {"attacker": me}
+
+    def swung(natural: int, total: int, against: int) -> AttackResult:
+        return AttackResult(natural=natural, total=total,
+                            target_defence=against, hit=False,
+                            critical=False)
+
+    # -- the die moves, and the total moves with it --------------------
+    res = swung(3, 10, 18)
+    out.that(c.replace_roll(19, ev=_Swung(res)) is True,
+             "it replaces an announced attack roll")
+    out.that(res.natural == 19,
+             "**the die itself moves** -- 3 becomes 19, which is the whole"
+             " difference from `c.boost_roll`",
+             f"natural={res.natural}")
+    out.that(res.total == 26,
+             "and the total moves by the difference, not by the face --"
+             " 10 + (19 - 3)",
+             f"total={res.total}")
+    out.that(res.hit is True, "so a 10 against 18 becomes a hit")
+
+    # -- a replaced 20 is a real 20 ------------------------------------
+    res = swung(2, 4, 12)
+    c.replace_roll(20, ev=_Swung(res))
+    out.that(res.hit is True and res.critical is True,
+             "**a replaced 20 over the defence is a critical**, because the"
+             " recorded result *is* the roll -- the half `c.boost_roll` is"
+             " forbidden from doing",
+             f"natural={res.natural} total={res.total} crit={res.critical}")
+
+    # -- and a replaced 1 is a real 1 ----------------------------------
+    res = swung(20, 38, 12)
+    c.replace_roll(1, ev=_Swung(res))
+    out.that(res.hit is False,
+             "while a replaced 1 misses however high the total had been --"
+             " the control, and the reason this cannot be written as a"
+             " bonus",
+             f"natural={res.natural} total={res.total} hit={res.hit}")
+
+    # -- the boost, beside it, must NOT move the die -------------------
+    res = swung(3, 10, 18)
+    c.trigger = _Swung(res)
+    c.boost_roll(16)
+    out.that(res.natural == 3 and res.total == 26,
+             "`c.boost_roll` on the same numbers leaves the die at 3 and"
+             " still reaches 26 -- the two verbs are kept apart on purpose",
+             f"natural={res.natural} total={res.total}")
+
+    # -- kind= refuses the wrong sort ----------------------------------
+    res = swung(3, 10, 18)
+    out.that(c.replace_roll(19, kind="save", ev=_Swung(res)) is False,
+             "kind='save' declines an attack roll, so a row cannot replace"
+             " a roll its card never mentions")
+    out.that(res.natural == 3,
+             "and declining changes nothing -- the control, without which a"
+             " refusal that half-applied would read as a refusal")
+
+    # -- a saving throw -----------------------------------------------
+    save = SavingThrow(actor=me, against="drivers:replace", natural=4,
+                       bonus=0, saved=False)
+    out.that(c.replace_roll(15, ev=save) is True
+             and save.natural == 15 and save.saved is True,
+             "a kept face put on a saving throw re-decides it against the"
+             " 10 the rule prints",
+             f"natural={save.natural} saved={save.saved}")
+
+    # -- the row: banked once, spent once -----------------------------
+    world2, me2, _ = _posed("p15889", 1)
+    d: Any = Cast(world=world2, me=me2, ref="p15889")
+    REGISTRY["p15889"].body(d)
+    foes = sorted(enemies(world2, me2))
+    if not foes:
+        return
+    seen: list[int] = []
+    for _ in range(2):
+        res = swung(5, 12, 18)
+        ev = AttackRolled(attacker=me2, target=foes[0], power="drivers:x",
+                          vs=AC, natural=5, bonus=7, total=12, defence=18,
+                          advantage=False)
+        ev.result = res
+        world2.bus.emit(ev)
+        seen.append(res.natural)
+    out.that(seen[0] != 5,
+             "**p15889 spends its kept face on the first roll it sees** --"
+             " the row banks at arming and the watch is live",
+             f"first attack natural={seen[0]}")
+    out.that(seen[1] == 5,
+             "and the second roll is untouched, because the charge is"
+             " once -- the control that separates a kept d20 from a"
+             " standing rewrite of every die",
+             f"second attack natural={seen[1]}")
+
+
+def a_feat_can_thin_the_cloud_its_racial_power_lays(out: Result) -> None:
+    """`f765` chooses the grade `p2473` lays, and drops the blinding with it.
+
+    Written into `p2473` under `implemented_in=`, because a feat that
+    changes one named power is a choice made where that power acts. The
+    marker said *"nothing reaches into a standing zone and changes how
+    thick it is"* -- true, and the wrong thing to want: the card does not
+    thin a zone already laid, it decides what to lay.
+
+    Three outcomes, all asserted, because the middle one is the printed
+    default:
+
+    * no feat -> totally obscuring, `blocks_sight`, occupants blinded;
+    * feat, choosing total -> **identical**, since the card says "you *can*
+      choose" and total is offered first, so the engine's own pick leaves
+      the power alone;
+    * feat, choosing lightly -> a dim zone, no `blocks_sight`, and
+      **nobody blinded**, which is the second half of the printed sentence.
+
+    **The decider is installed deliberately.** `drivers.instead_of_now`
+    records the reason in this same file: with none, `c.choose` takes the
+    head of the list, so an assertion about the softer cloud would pass on
+    a row that never offered a choice at all.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies, is_, squares
+    from combat_engine.engine.types import Condition
+
+    def cast_it(*, feat: bool, prefer: str | None) -> tuple[Any, Any, list[int]]:
+        """Fire p2473, optionally holding f765 and answering its choice.
+
+        `prefer` names a grade rather than an index, so the decider asks
+        for the *answer* it wants and falls back to the head of the list
+        for any other decision the row makes. An index would couple this
+        to the order of an unrelated menu.
+        """
+        world, me, _ = _posed("p2473", 1)
+        if feat:
+            known = world.get(me, Powers)
+            if known is not None and "f765" not in known.known:
+                known.known.append("f765")
+        if prefer is not None:
+            world.decider = (
+                lambda actor, kind, options, prompt="":
+                prefer if prefer in options else options[0]
+            )
+        c: Any = Cast(world=world, me=me, ref="p2473")
+        REGISTRY["p2473"].body(c)
+        laid = [z for _, z in world.zones.all() if z.label == "p2473"]
+        zone = laid[0] if laid else None
+        inside = [] if zone is None else [
+            f for f in sorted(enemies(world, me))
+            if frozenset(squares(world, f)) & zone.squares
+        ]
+        return world, zone, inside
+
+    # -- the printed power, with no feat -------------------------------
+    world, zone, inside = cast_it(feat=False, prefer=None)
+    out.that(zone is not None and zone.blocks_sight and not zone.obscured,
+             "with no feat the cloud totally obscures -- `blocks_sight` and"
+             " no grade, which is the printed power",
+             f"blocks_sight={zone and zone.blocks_sight}"
+             f" obscured={zone and zone.obscured!r}")
+    out.that(bool(inside),
+             "and an enemy is standing in it, without which every blinding"
+             " assertion below would pass on an empty cloud",
+             f"inside={inside}")
+    if zone is None or not inside:
+        return
+    out.that(all(is_(world, f, Condition.BLINDED) for f in inside),
+             "every creature in the cloud is blinded, which is the clause"
+             " the softer choice is printed to switch off",
+             f"blinded={[is_(world, f, Condition.BLINDED) for f in inside]}")
+
+    # -- **the gate**: no feat, and a decider that would take the dim ---
+    # Without this the rule passes on a row that offers the choice to
+    # everybody, feat or not -- proven by planting exactly that, which
+    # left every other assertion green. The first assertion above cannot
+    # see it, because with no decider `c.choose` takes the head of the
+    # list and the head is total.
+    _, zone_nf, _ = cast_it(feat=False, prefer="dim")
+    out.that(zone_nf is not None and zone_nf.blocks_sight
+             and not zone_nf.obscured,
+             "**without the feat no choice is offered at all** -- a"
+             " decider asking for the dim cloud still gets the total one,"
+             " which is what makes this clause the feat's and not the"
+             " power's",
+             f"blocks_sight={zone_nf and zone_nf.blocks_sight}"
+             f" obscured={zone_nf and zone_nf.obscured!r}")
+
+    # -- the feat, taking the first offer ------------------------------
+    _, zone0, _ = cast_it(feat=True, prefer="")
+    out.that(zone0 is not None and zone0.blocks_sight and not zone0.obscured,
+             "holding the feat and taking the first offer leaves the power"
+             " **unchanged** -- 'you can choose' means total is still the"
+             " default, which is why it is offered first",
+             f"blocks_sight={zone0 and zone0.blocks_sight}"
+             f" obscured={zone0 and zone0.obscured!r}")
+
+    # -- the feat, choosing the lightest -------------------------------
+    world2, zone2, inside2 = cast_it(feat=True, prefer="dim")
+    out.that(zone2 is not None and zone2.obscured == "dim",
+             "**choosing 'lightly obscured' lays a dim zone**, which is"
+             " partial concealment rather than a wall of sight",
+             f"obscured={zone2 and zone2.obscured!r}")
+    out.that(zone2 is not None and not zone2.blocks_sight,
+             "and it stops blocking line of sight -- the softer grades are"
+             " the light model and not terrain")
+    out.that(bool(inside2) and not any(
+                 is_(world2, f, Condition.BLINDED) for f in inside2),
+             "**and nobody in it is blinded**, which is the half of the"
+             " printed sentence a grade alone does not carry: 'if you"
+             " reduce the darkness in this way, creatures inside the cloud"
+             " are not blinded'",
+             f"inside={inside2} blinded="
+             f"{[is_(world2, f, Condition.BLINDED) for f in inside2]}")
+
+
+def a_zone_can_hold_a_condition_and_takes_it_back(out: Result) -> None:
+    """"Any enemy within the zone is slowed" -- and un-slowed on leaving.
+
+    The fourth of the `_while_inside` family. A zone could already hold a
+    modifier (`c.grants_in`), a resistance (`c.resist_in`) and a
+    vulnerability (`c.vulnerable_in`) on its occupants, and could not hold
+    a **condition** -- so `m4734a3` laid its defence penalty and dropped
+    its slow.
+
+    **The assertion that matters is the second one.** Landing the condition
+    is easy and a plain `c.slowed(until=SAVE_ENDS)` would pass it; what
+    that cannot do is take the slow back when the creature walks out, which
+    is the row's own stated reason for the marker -- *"a save-ends slow
+    laid once would outlive leaving it"*. So this walks a victim out of the
+    zone and asks again.
+
+    Asserted through `m4734a3`'s body, and the side is checked both ways:
+    the card reads "any **enemy** within the zone", so the caster standing
+    in its own zone of horrors must not be slowed by it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.types import Condition
+
+    world, mob, _ = _posed("m4734a3", 1)
+    foes = sorted(enemies(world, mob))
+    if not foes:
+        return
+    c: Any = Cast(world=world, me=mob, ref="m4734a3")
+    REGISTRY["m4734a3"].body(c)
+    zones = [(eid, z) for eid, z in world.zones.all() if z.label == "m4734a3"]
+    out.that(len(zones) == 1,
+             "m4734a3 lays its zone, which is the setup and not the finding",
+             f"zones={len(zones)}")
+    if not zones:
+        return
+    eid, zone = zones[0]
+
+    inside = [f for f in foes if f in world.zones.occupants(eid)]
+    out.that(bool(inside),
+             "and at least one enemy is standing in it -- without this the"
+             " assertions below would pass on a zone that conditions"
+             " nobody",
+             f"occupants={sorted(world.zones.occupants(eid))}")
+    if not inside:
+        return
+    victim = inside[0]
+
+    out.that(is_(world, victim, Condition.SLOWED),
+             "**an enemy standing in the zone is slowed**, which is the"
+             " clause `m4734a3` dropped")
+    out.that(not is_(world, mob, Condition.SLOWED),
+             "and the zone's owner standing in its own horrors is NOT --"
+             " the card says 'any enemy within', and a default of 'team'"
+             " would slow the caster")
+
+    # -- walk out, which is the half a duration cannot do ---------------
+    far = (zone.squares and max(sorted(zone.squares))[0] + 3, 0)
+    spot = (far[0], 0)
+    pos = world.get(victim, Position)
+    if pos is None:
+        return
+    # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+    # The pair wrote the square onto `Position` and then handed the
+    # *square* to a method whose parameter is a `frozenset` of them --
+    # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+    # and `7` and left `occupant((5, 7))` as `None`. It also never
+    # lifted the old square, so the creature stayed indexed where it
+    # had been. `place` does all three. #882.
+    from combat_engine.engine.movement import place
+    place(world, victim, spot)
+    world.zones.refresh()
+    out.that(victim not in world.zones.occupants(eid),
+             "the victim is walked clear of the zone, which is the setup"
+             " for the finding below",
+             f"at {spot}, occupants={sorted(world.zones.occupants(eid))}")
+    out.that(not is_(world, victim, Condition.SLOWED),
+             "**and the slow is gone, because it ran on the geometry and"
+             " not on a clock** -- a `c.slowed(until=SAVE_ENDS)` would"
+             " still be standing here, which is the row's stated reason"
+             " for carrying a marker")
+
+
+def an_obscuring_zone_can_have_a_side(out: Result) -> None:
+    """"Lightly obscured **for your enemies only**", and the four rows of it.
+
+    #424 built the light model and closed, naming these rows as the case a
+    plain grade cannot say: the obscurity has a **direction**. Setting
+    `obscured=` unconditionally conceals the zone's owner and its allies
+    from each other inside their own fog, which is wrong, and wrong in the
+    monster's favour on three of the four.
+
+    Two directions cover all four cards:
+
+    * `obscured_for="enemies"` -- `p14501` (dim), `m6276a2` and `m6587a2`
+      (dark).
+    * `obscured_for="outside"` -- `m6233a3` (dim).
+
+    Asserted through `p14501`'s own body rather than by laying a zone here,
+    so what is proven is the row and not the kwarg. The pair that matters is
+    an **enemy** and an **ally** looking at the same target in the same
+    zone: the grade is the same, the answer differs, and a non-directional
+    implementation gets both the same.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import (
+        allies,
+        enemies,
+        light_concealment,
+        squares,
+    )
+    from combat_engine.engine.types import Cover
+
+    world, me, _ = _posed("p14501", 1)
+    mates = [a for a in sorted(allies(world, me)) if a != me]
+    foes = sorted(enemies(world, me))
+    if not mates or not foes:
+        return
+
+    # The row lays the zone on its own burst, so a victim has to be standing
+    # in it for the obscurity to be about anybody.
+    c: Any = Cast(world=world, me=me, ref="p14501", target=foes[0])
+    REGISTRY["p14501"].body(c)
+    laid = [z for _, z in world.zones.all() if z.label == "p14501"]
+    out.that(len(laid) == 1,
+             "p14501 lays its zone, which is the setup and not the finding",
+             f"zones={len(laid)}")
+    if not laid:
+        return
+    zone = laid[0]
+    out.that(zone.obscured == "dim" and zone.obscured_for == "enemies",
+             "and it is dim, for enemies only -- read back off the live"
+             " zone rather than from the call",
+             f"obscured={zone.obscured!r} for={zone.obscured_for!r}")
+
+    # Put somebody in the fog and ask two lookers about them.
+    victim = foes[0]
+    from combat_engine.engine.components import Position
+    spot = sorted(zone.squares)[0]
+    pos = world.get(victim, Position)
+    if pos is None:
+        return
+    # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+    # The pair wrote the square onto `Position` and then handed the
+    # *square* to a method whose parameter is a `frozenset` of them --
+    # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+    # and `7` and left `occupant((5, 7))` as `None`. It also never
+    # lifted the old square, so the creature stayed indexed where it
+    # had been. `place` does all three. #882.
+    from combat_engine.engine.movement import place
+    place(world, victim, spot)
+    world.zones.refresh()
+
+    other_foe = next((f for f in foes if f != victim), None)
+    if other_foe is None:
+        return
+    out.that(light_concealment(world, other_foe, victim) is Cover.PARTIAL,
+             "**an enemy of the zone's owner sees the target as concealed**"
+             " -- dim light is partial concealment, which is the -2 the card"
+             " is for",
+             f"{light_concealment(world, other_foe, victim)}")
+    out.that(light_concealment(world, me, victim) is Cover.NONE,
+             "while the owner looking at the same target in the same zone"
+             " sees NO concealment -- the control, and the half a plain"
+             " grade gets wrong",
+             f"{light_concealment(world, me, victim)}")
+    out.that(light_concealment(world, mates[0], victim) is Cover.NONE,
+             "and so does the owner's ally, because the side is the team"
+             " and not the caster alone",
+             f"{light_concealment(world, mates[0], victim)}")
+
+    # -- the other direction, on m6233a3's own numbers -----------------
+    world2, mob, _ = _posed("m6233a3", 1)
+    prey = sorted(enemies(world2, mob))
+    if not prey:
+        return
+    d: Any = Cast(world=world2, me=mob, ref="m6233a3", target=prey[0])
+    REGISTRY["m6233a3"].body(d)
+    ring = [z for _, z in world2.zones.all() if z.label == "m6233a3"]
+    if not ring:
+        return
+    out.that(ring[0].obscured_for == "outside",
+             "m6233a3's storm is obscured to creatures OUTSIDE it, which is"
+             " the second direction and the one a frozen set of ids could"
+             " not express",
+             f"for={ring[0].obscured_for!r}")
+    inside = sorted(ring[0].squares)
+    if len(inside) < 2:
+        return
+    watcher = prey[0]
+    target = prey[1] if len(prey) > 1 else None
+    if target is None:
+        return
+    for who, sq in ((watcher, inside[0]), (target, inside[1])):
+        pos = world2.get(who, Position)
+        if pos is None:
+            return
+        # **`movement.place`, not a bare `Position` write plus `grid.place`.**
+        # The pair wrote the square onto `Position` and then handed the
+        # *square* to a method whose parameter is a `frozenset` of them --
+        # which iterates it, so `place(eid, (5, 7))` indexed occupants `5`
+        # and `7` and left `occupant((5, 7))` as `None`. It also never
+        # lifted the old square, so the creature stayed indexed where it
+        # had been. `place` does all three. #882.
+        place(world2, who, sq)
+    world2.zones.refresh()
+    out.that(light_concealment(world2, watcher, target) is Cover.NONE,
+             "**two creatures both standing in it see each other plainly**,"
+             " because each is inside -- the clause reads 'to creatures"
+             " outside it' and this is the half that is about position",
+             f"{light_concealment(world2, watcher, target)}")
+    # **Picked by position, not by elimination.** The first version took
+    # "any other enemy, else the owner" and measured 0 -- because this is
+    # an `AreaBurst(2, 10)` of 25 squares and the creature that laid it is
+    # standing *in* its own storm, so the fallback was an insider. Which is
+    # the card working: "obscured to creatures outside it" conceals the
+    # zone's occupants from the owner too, when the owner has walked in.
+    outsider = next(
+        (e for e in [*sorted(enemies(world2, mob)), mob]
+         if not (ring[0].squares & frozenset(squares(world2, e)))), None)
+    if outsider is None:
+        return
+    out.that(light_concealment(world2, outsider, target) is Cover.PARTIAL,
+             "while somebody outside looking in sees concealment -- the"
+             " control for the assertion above, which would otherwise pass"
+             " on a zone that obscured nobody at all",
+             f"{light_concealment(world2, outsider, target)}")
+
+
+def raising_a_defence_withdraws_the_critical_it_no_longer_reaches(out: Result) -> None:
+    """`p12245` raises an ally's defence against the blow already measured.
+
+    Asserted **through the row's body**, not by calling `c.settle_attack`:
+    the verb working is one question and the row using it correctly is the
+    one that matters.
+
+    The clause is "+2 to the defence against the triggering attack", laid on
+    the comparison rather than as a modifier -- a `c.bonus` cannot do it,
+    because the sum was taken when the die landed. An `IMMEDIATE_INTERRUPT`
+    answers in `Window.BEFORE`, which on a `Hit` is before `resolve`'s
+    `confirm` callback, so raising the defence and asking again turns a hit
+    that cleared by one into a `Miss`, announced as one, with every rider on
+    `Hit` skipped.
+
+    **What it could not do was withdraw a critical.** The row re-settled by
+    hand with a formula that wrote `hit` and never touched `critical`, so a
+    critical the +2 had pushed below the defence stayed a critical and dealt
+    maximum damage -- which is the more expensive half, since a critical is
+    maximum damage rather than one hit's worth. #868.
+
+    The natural 20 case is the sharp one: the blow still **hits**, because a
+    20 hits however the defence moves, and is no longer a **critical**,
+    because the total no longer reaches. Any formula that conflates the two
+    gets one of those wrong.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    world = me = None
+    mates: list[int] = []
+    foes: list[int] = []
+    for seed in range(1, 30):
+        world, me, _ = _posed("p12245", seed)
+        mates = [a for a in sorted(allies(world, me)) if a != me]
+        foes = sorted(enemies(world, me))
+        if mates and foes:
+            break
+    if world is None or me is None or not mates or not foes:
+        return
+
+    def interrupt(natural: int, total: int, against: int) -> AttackResult:
+        """Pose the blow, then run `p12245` over it as the interrupt."""
+        res = AttackResult(natural=natural, total=total,
+                           target_defence=against, hit=True,
+                           critical=natural >= 20 and total >= against)
+        ev = Hit(attacker=foes[0], target=me, power="drivers:settle",
+                 critical=res.critical)
+        ev.result = res
+        ev.ctx = {"attacker": foes[0]}
+        c: Any = Cast(world=world, me=me, ref="p12245", target=mates[0])
+        c.trigger = ev
+        REGISTRY["p12245"].body(c)
+        return res
+
+    # -- a critical that cleared by one --------------------------------
+    crit = interrupt(20, 21, 20)
+    out.that(crit.target_defence == 22,
+             "the +2 lands on the defence the blow was measured against,"
+             " which is the setup and not the finding",
+             f"defence={crit.target_defence}")
+    out.that(crit.critical is False,
+             "**the critical is withdrawn**, because a total of 21 no longer"
+             " reaches a defence of 22 -- the row could not do this at all,"
+             " and a critical is maximum damage rather than one hit's worth",
+             f"critical={crit.critical} total={crit.total}"
+             f" vs {crit.target_defence}")
+    out.that(crit.hit is True,
+             "while the blow still HITS, because a natural 20 hits however"
+             " the defence moves -- the control, and the pair any formula"
+             " conflating hit with critical gets one half of wrong")
+
+    # -- an ordinary hit that cleared by one ---------------------------
+    near = interrupt(14, 21, 20)
+    out.that(near.hit is False and near.critical is False,
+             "a 14 that cleared the old defence by one now misses, which is"
+             " the clause's whole purpose",
+             f"hit={near.hit} total={near.total} vs {near.target_defence}")
+
+    # -- the control: +2 does not save you from a comfortable hit ------
+    wide = interrupt(14, 25, 20)
+    out.that(wide.hit is True,
+             "and a blow that cleared by five still lands -- the control,"
+             " without which the assertion above passes on a row that"
+             " turned every triggering attack into a miss",
+             f"hit={wide.hit} total={wide.total} vs {wide.target_defence}")
+
+
+def a_rerolled_die_is_judged_by_the_same_rule_as_the_first(out: Result) -> None:
+    """A reroll settles the outcome itself, and settled it three ways wrong.
+
+    `c.reroll_attack` is the **live** copy of the hit-and-critical rule.
+    Driven from an `AttackRolled` listener its writes are overwritten by
+    `resolve.attack`'s recompute -- that is why four content copies of the
+    same formula turned out to be dead code -- but a *banked* reroll ("when
+    you dislike the result, you can reroll") fires in the `Hit`/`Miss`
+    window, after the recompute, so what it writes is the answer. 18 rows
+    reroll an attack.
+
+    What it wrote:
+
+    ```python
+    result.critical = face == 20
+    result.hit = face == 20 or (face != 1 and result.total >= ...)
+    ```
+
+    Three faults, each asserted here against a control that fails if the fix
+    is made by deleting the term rather than correcting it:
+
+    1. **The critical never asked whether the total reached the defence.** A
+       rerolled 20 fourteen short of an AC was a critical and dealt maximum
+       damage -- the bug #868's body opens with, surviving in the one copy
+       that is live. `resolve.attack` carries three comments about this half.
+    2. **It read 20 rather than the widened floor**, so a build scoring a
+       critical on 19 or 20 lost the widener as soon as anything rerolled its
+       die. The exact mirror of the fault in `resolve.attack`, which had the
+       floor on the *hit* and not the critical: the two sites were each wrong
+       about a different half of the same rule.
+    3. **Neither line honoured `turned`.** A blow a row turned aside came
+       back as a hit when something rerolled it.
+
+    The window itself is covered by `a_banked_reroll_turns_a_miss_into_a_hit`
+    -- that rule proves the `Miss, Rerolled, Hit` sequence on the bus. This
+    one is about the arithmetic, so it poses the rolls directly rather than
+    hunting a seed that produces each of six shapes.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mod, Mods
+    from combat_engine.engine.resolve import AttackResult
+
+    world, me, _ = _posed("mba", 1)
+    c = Cast(world=world, me=me, ref="drivers:reroll868")
+
+    class _Announced:
+        """A roll already announced, which is what a banked reroll is handed.
+
+        Not `_Rolled`: the `boost_roll` rule has a local class of that name
+        and `lint.py`'s duplicate-`def` walk is per *file*, so two
+        function-local classes sharing a name read to it as one class with
+        two `__init__`s. Its message ("Python binds the later") is wrong
+        about this case -- these are separate scopes and both bind -- but
+        two same-named local classes in one file is the ambiguity, so the
+        answer is a different name rather than a looser walk.
+        """
+
+        def __init__(self, result: AttackResult) -> None:
+            self.result = result
+            self.attacker = me
+            self.ctx = {"attacker": me}
+
+    def again(face: int, *, total: int, against: int,
+              turned: bool = False) -> AttackResult:
+        """Reroll a d20 that landed on 10 into `face`, and report the result."""
+        res = AttackResult(natural=10, total=total, target_defence=against,
+                           hit=False, critical=False)
+        res.turned = turned
+        world.rng.loaded = face
+        c.reroll_attack(ev=_Announced(res))
+        return res
+
+    # -- 1. a 20 is not a critical on a hopeless total --------------------
+    # 10 -> 20 carries the total to -10, which no defence of 30 is reached by.
+    hopeless = again(20, total=-20, against=30)
+    out.that(hopeless.critical is False,
+             "**a rerolled 20 is NOT a critical when the total falls short**"
+             " -- the die opens the door and the total still has to walk"
+             " through it (#868)",
+             f"critical={hopeless.critical} total={hopeless.total}"
+             f" vs {hopeless.target_defence}")
+    out.that(hopeless.hit is True,
+             "though it still hits, because a natural 20 hits however"
+             " hopeless the total -- the control, without which the"
+             " assertion above passes on a verb that stopped crediting 20s")
+
+    # -- 2. a 20 that does reach the defence IS a critical ----------------
+    reached = again(20, total=10, against=20)
+    out.that(reached.critical is True and reached.hit is True,
+             "while a rerolled 20 that DOES reach the defence is a critical"
+             " -- the control that stops this being 'fixed' by never"
+             " recomputing a critical at all",
+             f"critical={reached.critical} total={reached.total}"
+             f" vs {reached.target_defence}")
+
+    # -- 3. the widened floor is read ------------------------------------
+    mods = world.get(me, Mods) or world.add(me, Mods())
+    mods.items.append(Mod(what="crit_range", value=1, label="drivers:868"))
+    widened = again(19, total=11, against=20)
+    out.that(widened.critical is True,
+             "**a rerolled 19 that reaches the defence is a critical** when"
+             " the build widens the range -- it read a bare 20, so the"
+             " widener was lost the moment anything rerolled the die",
+             f"critical={widened.critical} total={widened.total}"
+             f" vs {widened.target_defence}")
+    short = again(19, total=-20, against=30)
+    out.that(short.hit is False,
+             "and that same widened 19 does NOT hit on a hopeless total --"
+             " the widener is the critical's door and not the hit's, which"
+             " is the half `resolve.attack` had backwards",
+             f"hit={short.hit} total={short.total}")
+
+    # -- 4. the control for the widener ----------------------------------
+    mods.items[:] = [m for m in mods.items if m.label != "drivers:868"]
+    bare = again(19, total=11, against=20)
+    out.that(bare.critical is False and bare.hit is True,
+             "with the range back to normal the same 19 is a hit and not a"
+             " critical -- the control, and the reason assertion 3 is about"
+             " the bonus rather than the die",
+             f"critical={bare.critical} hit={bare.hit}")
+
+    # -- 5. a turned blow stays turned -----------------------------------
+    aside = again(20, total=10, against=20, turned=True)
+    out.that(aside.hit is False and aside.critical is False,
+             "a blow a row turned aside is still turned after a reroll"
+             " lands a 20 on the defence -- it neither hits nor crits,"
+             " whatever the new die showed",
+             f"hit={aside.hit} critical={aside.critical}")
+
+
+def a_banked_reroll_turns_a_miss_into_a_hit(out: Result) -> None:
+    """"The next ally to miss can reroll" -- and the reroll has to pay.
+
+    `p12934:augment2` was blocked on `c.reroll_attack(ev=)`: the reroll is
+    handed to the next ally who misses, which is a **watcher**, and a
+    watcher has no `c.trigger`, so the roll had to be named rather than
+    inferred.
+
+    **The window is the whole of why this one works and #775's three do
+    not.** A reroll after the power has resolved rewrites a number nobody
+    reads again. This answers the `Miss`, which `resolve.attack` emits
+    inside a loop that re-announces as a `Hit` when `result.hit` changes --
+    so the sequence on the bus is `Miss, Rerolled, Hit, DamageRolled,
+    DamageApplied`, and the riders hung on the hit pay out.
+
+    Swept rather than pinned: the row needs an ally adjacent to a foe and
+    then needs that ally to miss, and which seed does both is not worth
+    freezing. The counts are reported so a future change that quietly stops
+    producing misses cannot read as a pass.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Miss, Rerolled
+    from combat_engine.engine.query import allies, enemies
+
+    row = REGISTRY["p12934"]
+    out.that(not row.unfinished and not row.dropped,
+             "p12934 carries no marker",
+             f"todo={row.unfinished} dropped={row.dropped}")
+
+    def sweep(augment_to: int) -> tuple[int, int, int]:
+        """(misses, rerolls, hits-after-a-reroll) over a fixed seed range."""
+        misses = rerolls = turned = 0
+        for seed in range(1, 30):
+            world, me, _ = _posed("p12934", seed)
+            mates, foes = sorted(allies(world, me)), sorted(enemies(world, me))
+            for ally in mates:
+                probe = Cast(world=world, me=ally, ref="drivers:reach")
+                near = [f for f in foes if probe.distance(f) <= 1]
+                if not near:
+                    continue
+                victim = near[0]
+                c: Any = Cast(world=world, me=me, ref="p12934", target=victim)
+                # **`augment_spend`, not `augment`.** `augment()` reads
+                # `c.augment` only when the header declares `augments=` --
+                # this row does not, because neither augment rewrites its
+                # target line -- so the knob on this path is the held
+                # spend. Setting the wrong one left the control reading
+                # identically to the positive (10 rerolls of 12 misses
+                # either way), which looked like the row ignoring its
+                # augment and was the probe driving nothing.
+                c.augment_spend = augment_to
+                REGISTRY["p12934"].body(c)
+                mark = len(world.bus.log)
+                Cast(world=world, me=ally, ref="dummy:mba",
+                     target=victim).basic()
+                tail = world.bus.log[mark:]
+                if any(isinstance(e, Miss) for e in tail):
+                    misses += 1
+                got = [e for e in tail if isinstance(e, Rerolled)]
+                if got:
+                    rerolls += 1
+                    # The announcement order is the assertion: the Hit has
+                    # to come *after* the Rerolled, or the reroll bought
+                    # nothing.
+                    kinds = [type(e).__name__ for e in tail]
+                    if "Hit" in kinds and kinds.index("Rerolled") < kinds.index("Hit"):
+                        turned += 1
+        return misses, rerolls, turned
+
+    misses, rerolls, turned = sweep(2)
+    out.that(misses > 0,
+             "the sweep produced ally misses to reroll -- without this the"
+             " assertions below would pass on an empty sample",
+             f"{misses} misses across 29 seeds")
+    out.that(rerolls > 0,
+             "**and augment 2 rerolls them**, from inside a watcher, with"
+             " the roll named by `ev=` because a watcher has no trigger",
+             f"{rerolls} rerolls of {misses} misses")
+    out.that(turned > 0,
+             "and at least one reroll is followed by a **`Hit`** -- the"
+             " engine re-announces when `result.hit` flips, so the reroll"
+             " buys the damage and the riders, which is what a reroll after"
+             " `PowerResolved` cannot do (#775)",
+             f"{turned} of {rerolls} rerolls turned the miss into a hit")
+
+    # -- the control: the un-augmented form rerolls nothing ---------------
+    bare_misses, bare_rerolls, _ = sweep(0)
+    out.that(bare_misses > 0 and bare_rerolls == 0,
+             "the **un-augmented** form rerolls nothing on the same seeds --"
+             " augment 2 replaces the ally's +2 rather than adding to it,"
+             " and a rule that only watched for a reroll would pass with the"
+             " augment gate deleted",
+             f"{bare_rerolls} rerolls of {bare_misses} misses")
+
+
+def a_kill_names_the_weapon_that_made_it(out: Result) -> None:
+    """"You drop an enemy with a heavy blade" -- which weapon, not which hand.
+
+    `f3606` read **the weapon in hand** because `Dropped` carried no weapon,
+    and its own docstring said why that is a different question: a character
+    may hold two. Its audit board is the proof -- it deals an **axe and a
+    heavy blade at once** -- so every kill with the axe paid out as a heavy
+    blade. `Dropped.weapon` landed with #698 and the row asks the right
+    question now.
+
+    Both halves are driven through the row's own body with a posed
+    `Dropped`, which is what `resolve._check_down` now emits: the weapon as
+    an attached attribute, so it stays off `Event.wire()`.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackDeclared, Dropped
+    from combat_engine.engine.query import enemies
+
+    row = REGISTRY["f3606"]
+    out.that(not row.unfinished and not row.dropped,
+             "f3606 carries no marker and no dropped clause any more",
+             f"todo={row.unfinished} dropped={row.dropped}")
+
+    world, me, _ = _posed("f3606", 1)
+    gear = world.get(me, Gear)
+    if gear is None:
+        return
+    held = {w.group: w.ref for w in gear.weapons}
+    out.that("heavy blade" in held and len(held) > 1,
+             "**the board deals this character two weapons at once**, which"
+             " is what makes the old reading able to fail: a heavy blade and"
+             f" something else ({sorted(held)})",
+             f"{held}")
+    foes = sorted(enemies(world, me))
+    if len(foes) < 2 or "heavy blade" not in held:
+        return
+
+    def kill_with(ref: str) -> list[str]:
+        """Pose the kill `resolve._check_down` would emit, and run the body."""
+        w2, me2, _ = _posed("f3606", 1)
+        swung: list[str] = []
+        w2.bus.on(AttackDeclared, lambda ev: swung.append(getattr(ev, "power", "")))
+        victim = sorted(enemies(w2, me2))[0]
+        ev: Any = Dropped(actor=victim, dead=True, source=me2,
+                          power="mba", critical=False)
+        ev.weapon = ref
+        REGISTRY["f3606"].body(
+            Cast(world=w2, me=me2, ref="f3606", trigger=ev))
+        return swung
+
+    with_blade = kill_with(held["heavy blade"])
+    other = next(r for g, r in held.items() if g != "heavy blade")
+    with_other = kill_with(other)
+
+    out.that(bool(with_blade),
+             "a kill **with the heavy blade** pays out -- the free basic"
+             " attack the card grants",
+             f"{with_blade}")
+    out.that(not with_other,
+             f"and a kill with the other weapon ({other}) pays out"
+             " **nothing**, where reading the hand paid out on both because"
+             " the blade was also being carried",
+             f"{with_other}")
+    out.that(bool(with_blade) and not with_other,
+             "so the row asks which weapon struck, not which it happens to"
+             " be holding",
+             f"blade={with_blade} other={with_other}")
+
+
+def an_object_holds_a_row_and_hands_it_back(out: Result) -> None:
+    """"Store one power in your armor", and spend it later.
+
+    Three cards print a row held by an **object** and none could be
+    written. `c.grant_row` is the near miss and is the wrong shape, as
+    `i540p1`'s own note said: it hands the row to a *creature*, so the
+    power becomes the wielder's for the encounter -- where the print has
+    the armour hold it and charge a standard action, plus an action point
+    if what it holds is an encounter power. #720.
+
+    Driven through both halves of the card rather than through the verbs:
+    `i540x1` is the Property that stores and `i540p1` is the power that
+    spends, so a rule calling `c.store_row` itself would prove the slot and
+    say nothing about whether either row reaches it.
+
+    **The filter is the half that went wrong and is asserted hardest.**
+    `Powers.known` holds class features and racial traits beside powers,
+    and the first thing this stored was a passive class feature -- encounter
+    usage, the martial keyword, `action=NONE`, no attack. `c.use_power` had
+    nothing to run, so `i540p1` spent an action point on nothing and the
+    audit called it `ok` on the strength of the `ActionGranted` that spend
+    emitted. A row green on the wrong clause.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import AT_WILL, ENCOUNTER, ActionType, Keyword
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.events import RowStored
+
+    for ref in ("i540x1", "i540p1"):
+        row = REGISTRY[ref]
+        out.that(not row.unfinished, f"{ref} carries no marker",
+                 f"{row.unfinished}")
+
+    world, me, _ = _posed("i540p1", 1)
+    held = world.need(me, Powers).stored
+
+    # -- the Property armed and put something in the armour --------------
+    out.that(bool(held.get("i540x1", "")),
+             "**the armour arrives holding a power**: `i540x1` is an"
+             " `action=NONE` Property, so the board arms it and the store is"
+             " settled when the fight opens -- the model `c.borrow_row`"
+             " argues for, there being no persistence between encounters",
+             f"stored={dict(held)}")
+
+    stored = held.get("i540x1", "")
+    row = get(stored) if stored else None
+    out.that(row is not None,
+             "and what it holds is a row the registry knows",
+             f"{stored!r}")
+    if row is not None:
+        out.that(row.usage in (AT_WILL, ENCOUNTER),
+                 "at-will or encounter, which is what the card allows",
+                 f"{row.usage}")
+        out.that(Keyword.MARTIAL in (row.keywords or ()),
+                 "and martial, which is the other thing it allows",
+                 f"{row.keywords}")
+        out.that((row.level or 0) <= 3,
+                 "and of the armour's level or lower -- *\"cannot store a"
+                 " power of higher level than the armor\"*",
+                 f"level {row.level} vs the armour's 3")
+        # **The assertion the bug would have passed.** A passive feature
+        # satisfies every line above and is still not a power.
+        out.that(row.action is not ActionType.NONE,
+                 "and it is a **power and not a passive feature** -- the one"
+                 " assertion the first version of this failed: a class"
+                 " feature with encounter usage and the martial keyword"
+                 " stored fine and gave `c.use_power` nothing to run",
+                 f"action={row.action}")
+
+    # -- the slot is keyed, overwrites, and no-ops ------------------------
+    c = Cast(world=world, me=me, ref="drivers:stored")
+    said: list[RowStored] = []
+    world.bus.on(RowStored, said.append)
+    out.that(c.store_row("p10469", by="drivers:one") is True,
+             "storing into a fresh holder moves something",
+             "")
+    out.that(c.store_row("p10469", by="drivers:one") is False and len(said) == 1,
+             "storing the **same** row again moves nothing and announces"
+             " nothing, so a Property that re-arms is not an event",
+             f"{len(said)} announced")
+    out.that(c.store_row("p10470", by="drivers:one") is True,
+             "a different row **overwrites** -- every card that prints this"
+             " also prints \"only one at a time\", so the row does not have"
+             " to police it",
+             "")
+    out.that(c.stored_row(of="drivers:one") == "p10470",
+             "and the reader hands back the last one stored",
+             f"{c.stored_row(of='drivers:one')}")
+    out.that(c.stored_row(of="drivers:two") == "",
+             "a holder nothing stored into reads empty, not the other"
+             " holder's row -- which is why the slot is keyed at all",
+             f"{c.stored_row(of='drivers:two')!r}")
+    out.that(c.stored_row(of="i540x1") == stored,
+             "and the armour's own holder is untouched by either of those",
+             f"{c.stored_row(of='i540x1')}")
+
+
+def a_turned_blow_says_so_and_stays_turned(out: Result) -> None:
+    """"The attack misses" has to be announced, and it has to *stick*.
+
+    Five rows rewrote `AttackResult.hit` by hand and nothing said a landed
+    blow had been turned aside, so `m6283a4` -- whose whole printed effect is
+    that -- fired, was correct, and reported SILENT for as long as it
+    existed. The other four turn a blow aside as a clause of something else
+    and looked credited while this clause of them was invisible. #862.
+
+    **Two windows, and the second is why the engine had to change.** A row
+    answering the `Hit` interrupt can clear `result.hit` and `resolve`'s
+    `confirm` callback turns the announcement into a real `Miss`. A row
+    answering `AttackRolled` is *earlier* than the recompute, so the same
+    write is discarded -- and `m6283a4` used to get around that by setting
+    `natural = 1`, faking the die, which is what `AttackResult.forced` and
+    `.treated` both have docstrings warning against. `turned` is the
+    declarative flag they describe, and the last block here is the one
+    assertion that could not have been written before it: the blow is a
+    `Miss` **even though the roll qualified**.
+
+    Driven through the rows' own bodies, not by calling the verb, for the
+    standing reason: calling `c.hit_becomes` proves the mechanism and says
+    nothing about whether a row reaches it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import BlowTurned, Hit, Miss
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    TURNS = ("m115673a0", "m147a0", "m148a3", "m5565a0", "m6283a4")
+    for ref in TURNS:
+        row = REGISTRY[ref]
+        out.that(not row.unfinished, f"{ref} carries no marker",
+                 f"{row.unfinished}")
+
+    # -- the `Hit` window: an odd die goes through the image ---------------
+    world, me, _ = _posed("m147a0", 1)
+    foe = enemies(world, me)[0]
+    said: list[BlowTurned] = []
+    world.bus.on(BlowTurned, said.append)
+
+    def blow(natural: int) -> Any:
+        """A landed attack, shaped the way `resolve.attack` hands one over.
+
+        `Hit` declares no `result` field -- `resolve` attaches it -- so a
+        rule that forgot to attach one here would be testing the
+        `result is None` branch and nothing else.
+        """
+        # **`Any`, because `result` is attached by `resolve` rather than
+        # declared on `Hit`** -- the `Effect.by` pattern, which is what
+        # keeps it off `Event.wire()` and so out of the fixtures. Typing the
+        # local as the event's own class makes both the write here and every
+        # read below an error, and `setattr`/`getattr` trade that for a
+        # ruff objection instead. One annotation satisfies both.
+        ev: Any = Hit(attacker=foe, target=me, power="mba", critical=False)
+        ev.result = AttackResult(hit=True, natural=natural, total=25,
+                                 target_defence=10)
+        return ev
+
+    REGISTRY["m147a0"].body(Cast(world=world, me=me, ref="m147a0"))
+    odd = blow(7)
+    world.bus.emit(odd)
+    out.that(len(said) == 1,
+             "**turning a landed blow aside announces `BlowTurned`** -- the"
+             " event this family had none of, and the whole of why the row"
+             " whose only printed effect is this reported SILENT while"
+             " working",
+             f"{len(said)} announcement(s)")
+    out.that(bool(said) and said[0].hit is False and said[0].by == "m147a0",
+             "and it names the new state and the row that turned it, so a"
+             " rider on `your` trait cannot pay out on another veil",
+             f"{said[0] if said else None}")
+    out.that(odd.result.hit is False,
+             "the write is still there as well as the announcement",
+             f"hit={odd.result.hit}")
+
+    # -- the same row, the other branch: an even die is left alone --------
+    said.clear()
+    even = blow(8)
+    world.bus.emit(even)
+    out.that(not said and even.result.hit is True,
+             "an even die is NOT turned aside and announces nothing -- the"
+             " control that a rule asserting only the event would miss",
+             f"{len(said)} said, hit={even.result.hit}")
+
+    # -- a blow that already missed is a no-op, not an announcement -------
+    said.clear()
+    already: Any = Hit(attacker=foe, target=me, power="mba", critical=False)
+    already.result = AttackResult(hit=False, natural=3, total=4,
+                                  target_defence=25)
+    moved = Cast(world=world, me=me, ref="drivers:turned").hit_becomes(
+        False, ev=already)
+    out.that(moved is False and not said,
+             "turning aside a blow that already missed moves nothing and"
+             " announces nothing, which is the guard `m6283a4` used to"
+             " spell out by hand",
+             f"moved={moved}, {len(said)} said")
+
+    # -- the `AttackRolled` window, on the real path ----------------------
+    # Swept rather than pinned to one seed: the row needs an attack that
+    # *would* land and then has to win a skill check against its total, and
+    # which seed does that is not a fact worth freezing.
+    found = None
+    for seed in range(1, 25):
+        w, mine, _ = _posed("m6283a4", seed)
+        REGISTRY["m6283a3"].body(Cast(world=w, me=mine, ref="m6283a3"))
+        heard: list[BlowTurned] = []
+        w.bus.on(BlowTurned, heard.append)
+        for attacker in sorted(enemies(w, mine))[:3]:
+            mark = len(w.bus.log)
+            swing = Cast(world=w, me=attacker, ref="dummy:mba")
+            swing.target = mine
+            swing.basic()
+            tail = w.bus.log[mark:]
+            if heard:
+                found = (seed, attacker, heard[0], tail)
+                break
+        if found:
+            break
+
+    out.that(found is not None,
+             "`m6283a4` turns a blow aside through the **engine's own**"
+             " trigger machinery -- its stance raised, a real attack rolled,"
+             " no synthetic event anywhere",
+             f"swept 24 seeds, found={found[0] if found else None}")
+    if found is not None:
+        _seed, _atk, heard0, tail = found
+        settled = [e for e in tail if isinstance(e, (Hit, Miss))]
+        res = getattr(settled[-1], "result", None) if settled else None
+        out.that(heard0.by == "m6283a4" and heard0.hit is False,
+                 "and announces it in its own name",
+                 f"{heard0}")
+        out.that(bool(settled) and isinstance(settled[-1], Miss),
+                 "the blow settles as a **`Miss`**, so every rider hung on"
+                 " the hit goes with it",
+                 f"{[type(e).__name__ for e in settled]}")
+        # **The assertion that could not exist before `turned`.** The roll
+        # qualified -- it is not a 1 and it reached the defence -- so the
+        # recompute in `resolve.attack` would have re-derived a hit from the
+        # die. It does not, and the die was not touched to achieve it.
+        out.that(res is not None and res.turned is True and res.hit is False
+                 and res.natural != 1
+                 and res.total >= res.target_defence,
+                 "and it stays a miss **through the recompute, with the die"
+                 " left alone**: the roll qualified on its own numbers and"
+                 " the flag outranks it, where the row used to have to write"
+                 " `natural = 1` and lie to every later reader",
+                 f"turned={getattr(res, 'turned', None)}"
+                 f" hit={getattr(res, 'hit', None)}"
+                 f" natural={getattr(res, 'natural', None)}"
+                 f" total={getattr(res, 'total', None)}"
+                 f" vs defence={getattr(res, 'target_defence', None)}")
+        out.that(res is not None and res.critical is False,
+                 "and it is not a critical either, which the stale flag"
+                 " would otherwise have left standing for a rider to read",
+                 f"critical={getattr(res, 'critical', None)}")
+
+
+def a_demoted_critical_says_so_out_loud(out: Result) -> None:
+    """"The attack becomes a normal hit" has to be *announced*, not only done.
+
+    Nineteen rows rewrote an attack's criticality by hand at 38 sites and
+    nothing said a crit had stopped being one, so `f281b` and `i3101p1` --
+    whose whole printed effect is the demotion -- fired, were correct, and
+    reported SILENT for their entire lives. `f281b`'s docstring recorded the
+    half-truth that caused it: marked `c.uncrit()`, un-marked with *"nothing
+    was missing"*. The writes were there. #861.
+
+    **Every assertion here is about the announcement**, because the writes
+    were never the bug: a rule reading `result.critical is False` would pass
+    with `CritChanged` deleted, which is exactly the state this fixes.
+    Proven by planting that deletion -- see the commit.
+
+    Driven through `f281b`'s own body rather than by calling the verb, for
+    the standing reason: calling `c.crit_becomes` proves the mechanism and
+    says nothing about whether the row reaches it.
+    """
+    from types import SimpleNamespace
+
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import CritChanged, Hit
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    world, me, _started = _posed("f281b", 1)
+    foe = enemies(world, me)[0]
+    said: list[CritChanged] = []
+    world.bus.on(CritChanged, said.append)
+
+    def blow(critical: bool) -> Hit:
+        """A landed attack, shaped the way `resolve.attack` hands one over.
+
+        `Hit` declares no `result` field -- `resolve` attaches it, the way
+        `Effect.by` is an attribute -- so posing one means attaching it here
+        too, and a rule that forgot would be testing the `result is None`
+        branch and nothing else.
+        """
+        ev = Hit(attacker=foe, target=me, power="mba", critical=critical)
+        ev.result = AttackResult(hit=True, critical=critical, natural=20)
+        return ev
+
+    # -- the positive: a crit goes in, an announcement comes out ------------
+    crit = blow(True)
+    REGISTRY["f281b"].body(
+        Cast(world=world, me=me, ref="f281b", target=foe, trigger=crit))
+
+    out.that(len(said) == 1,
+             "**demoting a critical announces `CritChanged`** -- the event"
+             " this family had none of, and the whole of why two rows whose"
+             " only printed effect is this reported SILENT while working",
+             f"{len(said)} announcement(s)")
+    out.that(bool(said) and said[0].critical is False,
+             "and it carries the value **after** the change, so a listener"
+             " reads the new state instead of inferring it from a direction",
+             f"critical={said[0].critical if said else '<none>'}")
+    out.that(bool(said) and said[0].by == "f281b",
+             "and `by` is the row that changed it, not the attacker -- what"
+             " a rider narrowing on *your* shield would read, the same"
+             " argument `Rerolled.by` makes",
+             f"by={said[0].by if said else '<none>'!r}")
+    out.that(bool(said) and said[0].attacker == foe and said[0].target == me,
+             "and it names both ends of the blow it is about",
+             f"attacker={said[0].attacker if said else '?'}"
+             f" target={said[0].target if said else '?'}")
+
+    # The writes, which were never missing -- asserted so that a later
+    # change cannot trade the effect away for the announcement.
+    out.that(crit.critical is False and crit.result.critical is False,
+             "and **both** copies are cleared -- the riders read the event,"
+             " the dice read the result, and a row clearing one was half"
+             " right",
+             f"ev={crit.critical} result={crit.result.critical}")
+
+    # -- the negative: nothing to demote, nothing announced -----------------
+    said.clear()
+    plain = blow(False)
+    REGISTRY["f281b"].body(
+        Cast(world=world, me=me, ref="f281b", target=foe, trigger=plain))
+    out.that(not said,
+             "an ordinary hit announces **nothing** -- the control, and the"
+             " reason the verb returns whether anything moved: a row credited"
+             " for demoting a crit that was never one is the audit believing"
+             " a no-op",
+             f"{len(said)} announcement(s) on a non-critical blow")
+
+    # -- the other direction, through a promoting row's own body -----------
+    said.clear()
+    up = blow(False)
+    rising = Cast(world=world, me=me, ref="drivers:promote", trigger=up)
+    rising.crit_becomes(True)
+    out.that(len(said) == 1 and said[0].critical is True,
+             "and a promotion announces the same event pointing the other"
+             " way, so one reader serves both printed sentences",
+             f"{[(e.by, e.critical) for e in said]}")
+
+    # -- the shape that made the no-op test subtle -------------------------
+    # `i1375p1` promotes from the `AttackRolled` window, where the event
+    # carries a `result` and no `critical` of its own. Reading the missing
+    # attribute as False would make every promotion from there look like a
+    # change even when the blow was already critical.
+    said.clear()
+    # A `SimpleNamespace` rather than a local class: `boost_roll`'s rule
+    # already defines a `_Rolled` for the same purpose, and `lint.py`'s
+    # duplicate-`def` walk does not scope by enclosing function, so a second
+    # one reads as a redefinition of the first.
+    already = SimpleNamespace(
+        result=AttackResult(hit=True, critical=True, natural=20))
+    Cast(world=world, me=me, ref="drivers:rolled").crit_becomes(
+        True, ev=already)
+    out.that(not said,
+             "and an event with a `result` but no `critical` of its own --"
+             " `AttackRolled`, which `i1375p1` promotes from -- is judged on"
+             " the copy that exists, so a blow already critical announces"
+             " nothing rather than a change that did not happen",
+             f"{len(said)} announcement(s)")
+
+
+def a_redirected_blow_says_so_and_the_damage_follows(out: Result) -> None:
+    """Moving a blow to somebody else has to be announced, like turning one
+    aside.
+
+    `BlowTurned`'s sibling, and the omission was exact: #861 gave an event to
+    the row that stops a blow and none to the row that *moves* one.
+    `c.redirect` rewrote `ev.target` and `result.target` in place and said
+    nothing, so 26 of the 69 rows calling it read SILENT.
+
+    **The 43 that looked credited are what this rule is really for.** They
+    were credited with the redirected attack's own `DamageApplied` -- another
+    power's damage, landing inside the row's slice *because the row moved it
+    there*. `m115864a5` is the worked example and it sat on neither list:
+    #680's racial pick changed which power the audit board provokes with, the
+    borrowed damage stopped falling in the window, and the row went silent
+    while firing 21 times instead of 8. Every one of the 21 does the whole
+    job.
+
+    So the assertions below are about the **announcement** and about the
+    damage *following* the move. A rule reading only `ev.target` would pass
+    with the emit deleted, which is the state this fixes. #900.
+
+    Driven through `m115864a5`'s own body rather than by calling the verb,
+    for the standing reason: calling `c.redirect` proves the mechanism and
+    says nothing about whether a row reaches it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import BlowRedirected, Hit
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    REF = "m115864a5"
+    row = REGISTRY[REF]
+    out.that(not row.unfinished, f"{REF} carries no marker",
+             f"{row.unfinished}")
+
+    # `pose=True`, because the grab is part of the pose rather than part of
+    # the bare board: an unposed board grabs nobody and `c.grabbing()` comes
+    # back empty, which would make every assertion below vacuous. The check
+    # immediately underneath is what says so out loud rather than leaving it
+    # to be rediscovered.
+    world, me, _started = _posed(REF, 1, pose=True)
+    foe = enemies(world, me)[0]
+    captives = Cast(world=world, me=me, ref="drivers:redirect").grabbing()
+    out.that(bool(captives),
+             "the posed board really has this creature holding somebody --"
+             " the row's whole premise, and a board that grabbed nobody"
+             " would make every assertion below vacuous",
+             f"grabbing={sorted(captives)}")
+    shield = sorted(captives)[0] if captives else -1
+
+    said: list[BlowRedirected] = []
+    world.bus.on(BlowRedirected, said.append)
+
+    def blow(target: int) -> Any:
+        """A landed attack, shaped the way `resolve.attack` hands one over.
+
+        `Any` for `a_turned_blow_says_so_and_stays_turned`'s reason: `result`
+        is attached by `resolve` rather than declared on `Hit`, so typing the
+        local as the event's class makes the write and every read an error.
+        """
+        ev: Any = Hit(attacker=foe, target=target, power="mba",
+                      critical=False)
+        ev.result = AttackResult(hit=True, natural=14, total=25,
+                                 target_defence=10, target=target)
+        return ev
+
+    # -- the row moves the blow onto the captive --------------------------
+    # Swept rather than pinned to one seed. The row redirects only when its
+    # **own** attack against the captive's Fortitude lands, so a single seed
+    # is a coin flip on the die and not a fact about the row -- seed 1 misses
+    # and reported five FAILs that were nothing to do with the announcement.
+    # Same reasoning as the `AttackRolled` sweep in
+    # `a_turned_blow_says_so_and_stays_turned`.
+    hit = blow(me)
+    for seed in range(1, 25):
+        said.clear()
+        world, me, _started = _posed(REF, seed, pose=True)
+        world.bus.on(BlowRedirected, said.append)
+        foe = enemies(world, me)[0]
+        grabbed = sorted(Cast(world=world, me=me,
+                              ref="drivers:redirect").grabbing())
+        if not grabbed:
+            continue
+        shield = grabbed[0]
+        hit = blow(me)
+        c = Cast(world=world, me=me, ref=REF)
+        c.trigger = hit
+        row.body(c)
+        if said:
+            break
+
+    out.that(len(said) == 1,
+             "**moving a blow announces `BlowRedirected`** -- the event this"
+             " family had none of, and the whole of why 26 rows read SILENT"
+             " while working",
+             f"{len(said)} announcement(s)")
+    out.that(bool(said) and said[0].by == REF,
+             "and it names the row that moved it, so a rider on \"when an"
+             " attack is redirected away from you\" cannot pay out on"
+             " somebody else's interrupt",
+             f"by={said[0].by if said else None!r}")
+    out.that(bool(said) and said[0].was_target == me
+             and said[0].target == shield,
+             "and it names **both ends** -- away from whom and onto whom --"
+             " because \"redirected away from you\" and \"redirected onto"
+             " you\" are different riders and neither can be inferred from"
+             " the event's name",
+             f"{said[0].was_target if said else None} ->"
+             f" {said[0].target if said else None}, shield={shield}")
+    out.that(bool(said) and said[0].was_attacker == said[0].attacker == foe,
+             "the attacker did not move, because this row passed only `to=`"
+             " -- so a reader compares the two rather than assuming the end"
+             " it cares about changed",
+             f"{said[0].was_attacker if said else None} ->"
+             f" {said[0].attacker if said else None}")
+
+    out.that(hit.target == shield and hit.result.target == shield,
+             "the writes are still there as well as the announcement, on"
+             " **both** the event and the live result -- moving the event"
+             " alone moved the announcement and left the damage on the"
+             " creature that was spared",
+             f"ev.target={hit.target}, result.target={hit.result.target}")
+
+    # -- the control the emit is gated on: a move that moves nothing ------
+    said.clear()
+    standing: Any = blow(shield)
+    nothing = Cast(world=world, me=me, ref="drivers:noop")
+    nothing.trigger = standing
+    moved = nothing.redirect(to=shield)
+    out.that(moved is True and not said,
+             "pointing a blow at the creature it was **already** aimed at"
+             " returns True and announces nothing -- the return value is"
+             " unchanged because rows read it, and the announcement is gated"
+             " on something having actually moved",
+             f"moved={moved}, {len(said)} said")
+
+    # -- and the other end: `by=` moves the attacker, not the target ------
+    said.clear()
+    lent: Any = blow(me)
+    mover = Cast(world=world, me=me, ref="drivers:lent")
+    mover.trigger = lent
+    mover.redirect(by=shield)
+    out.that(len(said) == 1 and said[0].was_attacker == foe
+             and said[0].attacker == shield
+             and said[0].was_target == said[0].target == me,
+             "making a blow come from somebody else is the same kind of"
+             " rewrite and is announced the same way, with the target end"
+             " standing still",
+             f"{said[0] if said else None}")
+
+    # -- the negative control: nothing to move ----------------------------
+    said.clear()
+    empty = Cast(world=world, me=me, ref="drivers:empty")
+    empty.trigger = None
+    out.that(empty.redirect(to=shield) is False and not said,
+             "with no event to move, the verb refuses and announces nothing",
+             f"{len(said)} said")
+
+
+def what_provoked_the_opening_reaches_the_attack(out: Result) -> None:
+    """"An opportunity attack **you provoked with a ranged power**" is not
+    the same gate as "one provoked by **this movement**", and until #880 the
+    attack context could not tell them apart.
+
+    It carried `opportunity` -- the attack *is* one -- and nothing about why
+    the window opened, so five rows narrowing on the provocation each paid
+    out for the other case. Both docstrings said so: `f2565`'s clause was
+    dropped because it "cannot be told from any other", and `f1302`'s
+    because gating on `opportunity` alone "would also pay for the openings a
+    ranged attack gives, which is more often than printed".
+
+    **Driven through the engine's own emitters**, not a synthetic event:
+    `dsl._survive_provoking` is what opens a window for a ranged power and
+    `movement.step` is what opens one for a move, and the whole mechanism is
+    that each parks the window on `world.provocation` for the duration of
+    its emit so `resolve.attack` can read it. A rule that built its own
+    `OpportunityWindow` would test none of that.
+
+    **The observable is the defence actually rolled against**
+    (`AttackResult.target_defence`), so this asserts through `f2565`'s own
+    body rather than by reading a ctx key back. A rule that inspected the
+    key would pass with the row still gated on bare `opportunity`, which is
+    exactly the state this fixes.
+
+    **On the stale-provocation risk #880 deferred itself over, two guards
+    and the plants say which does what.** The first draft of this rule
+    asserted that an ordinary attack taken *after* a window carries no
+    provocation, and credited the `opportunity` gate in `resolve.attack` for
+    it. **The plant refuted that**: removing the gate entirely left all 15
+    assertions green, because by then `world.provocation` is already None --
+    so the *clearing* was what that assertion tested and the gate was
+    covered by nothing.
+
+    They protect different moments, and both are now driven:
+
+    * **the clearing** stops a swing *after* the window inheriting one, and
+      a plant that stops parking the window reddens 2 assertions;
+    * **the `opportunity` gate** stops a swing *inside* the window -- a
+      listener on the open window that attacks for some other reason -- and
+      is only testable there, which is where the ordinary swing below is
+      taken from.
+
+    The `finally` specifically is the narrower of the two: it matters for a
+    listener that raises mid-emit, which neither plant reproduces.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import movement, resolve
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, _survive_provoking
+    from combat_engine.engine.events import Hit, Miss, OpportunityWindow
+    from combat_engine.engine.grid import footprint
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    for ref in ("f2565", "f3540", "f1302"):
+        row = REGISTRY[ref]
+        out.that(not row.unfinished, f"{ref} carries no marker now",
+                 f"{row.unfinished}")
+    for ref in ("i2060x1", "i3085p1"):
+        row = REGISTRY[ref]
+        out.that(row.dropped == ("resolve.ctx.provoked_weapon",),
+                 f"{ref} keeps a marker, re-pointed at the half that is"
+                 " genuinely unreachable -- the weapon of record does not"
+                 " exist until the attack rolls",
+                 f"{row.unfinished}")
+
+    # -- what the context carries, per emitter -------------------------
+    seen: list[dict[str, Any]] = []
+
+    def swing(world: Any, foe: int, victim: int, *, chance: bool) -> Any:
+        """One attack, through `resolve` rather than through a verb."""
+        return resolve.attack(world, foe, victim, 0, Defense.AC,
+                              power="mba", opportunity=chance)
+
+    world, me, _started = _posed("f2565", 1)
+    foe = sorted(enemies(world, me))[0]
+    # Stand the foe next to the caster, so a ranged use provokes and a step
+    # away provokes. Moving a creature needs the grid, not just `Position`.
+    spot = must(world.get(me, Position), "the caster has a Position")
+    mine = sorted(spot.squares)[0]
+    beside = (mine[0] + 1, mine[1])
+    world.grid.lift(foe)
+    fpos = must(world.get(foe, Position), "the foe has a Position")
+    fpos.square = beside
+    # **`footprint`, not the bare square.** `Grid.place` indexes a set of
+    # squares, and `movement.place` passes `footprint(square, size)` for
+    # exactly this reason -- a bare tuple leaves the occupancy index
+    # disagreeing with `Position`, which is the trap behind "moving a
+    # creature needs the grid". `ty` named it; the rule was green either way.
+    world.grid.place(foe, footprint(beside, fpos.size))
+
+    # What the **attack events** were told, which is step 5 of the design
+    # and what `i3085p1`'s trigger reads.
+    told: list[tuple[bool, str]] = []
+
+    def note(ev: Any) -> None:
+        told.append((bool(getattr(ev, "opportunity", False)),
+                     str(getattr(ev, "provoked_by", "") or "")))
+
+    world.bus.on(Hit, note)
+    world.bus.on(Miss, note)
+
+    def take_the_swing(ev: Any) -> None:
+        got: dict[str, Any] = {
+            "by": str(getattr(world.provocation, "by", "") or ""),
+            "kind": str(getattr(world.provocation, "kind_", "") or ""),
+        }
+        del told[:]
+        got["defence"] = swing(world, ev.actor, ev.provoker,
+                               chance=True).target_defence
+        got["chance"] = list(told)
+        # **An ordinary swing taken while the window is still open.** This is
+        # the only moment the `opportunity` gate is testable at all: after
+        # the emit returns the window is cleared, so an assertion out there
+        # tests the clearing instead and passes with the gate deleted. The
+        # plant proved that about this rule's own first draft.
+        del told[:]
+        swing(world, ev.actor, ev.provoker, chance=False)
+        got["ordinary"] = list(told)
+        seen.append(got)
+
+    world.bus.on(OpportunityWindow, take_the_swing)
+
+    # **`f2565`'s body is deliberately not called here, and calling it was a
+    # bug.** `audit.board` starts the encounter and `turns.arm_traits` runs a
+    # standing trait's body as part of that, so the rider is already laid.
+    # Calling it again laid a second +4 and the assertion below read +8 --
+    # which looks like the engine double-counting and was the rule
+    # double-arming. So this still drives the row's own body; the engine runs
+    # it, which is stronger evidence than calling it by hand.
+    #
+    # The evidence that it really was armed is the **exactly +4** below: a
+    # row that never armed gives +0 and a double-armed one gives +8, so that
+    # one number distinguishes all three cases and no separate assertion
+    # about `Effects` is needed.
+    base = swing(world, foe, me, chance=False).target_defence
+    out.that(base > 0,
+             "the caster has an AC to be rolled against at all, which every"
+             " comparison below is a difference from",
+             f"AC {base}")
+
+    # -- a ranged power's use: the row-provoked opening -----------------
+    seen.clear()
+    ranged = "i1043p1"   # the ref `winrate` already reports provoking with
+    _survive_provoking(world, me, ranged)
+    # One window per adjacent enemy, and the board stands four of them in
+    # reach -- so this asserts over **every** window rather than over the
+    # first. "Exactly one" was a claim about the board, not the engine, and
+    # it was wrong; reading only `seen[0]` would have passed either way.
+    out.that(len(seen) >= 1,
+             "using a ranged power beside an enemy opens a window through"
+             " `dsl._survive_provoking`, the engine's own emitter",
+             f"{len(seen)} window(s)")
+    if seen:
+        out.that(all(g["by"] == ranged and g["kind"] == "" for g in seen),
+                 "**and every window names the provoking row** -- `by` is"
+                 " the ranged power and `kind_` is empty, because a row"
+                 " opened this and not a move",
+                 f"{[(g['by'], g['kind']) for g in seen]}")
+        out.that(all(g["defence"] == base + 4 for g in seen),
+                 "so `f2565` pays on each: the opportunity attack is rolled"
+                 " against an AC 4 higher, which is the clause its"
+                 " docstring said could not be written",
+                 f"{base} -> {[g['defence'] for g in seen]}")
+    # Snapshot before the move case reuses `seen`. The first draft asserted
+    # the event half *after* that reuse and read the move windows' empty
+    # refs -- a real FAIL, of the rule rather than of the engine.
+    by_a_row = list(seen)
+
+    # -- the negative control: a move-provoked opening -----------------
+    # The exact over-payment `f2565`'s old gate made, and the one `f1302`
+    # wants instead. If this came out +4 the narrowing would be measuring
+    # nothing.
+    seen.clear()
+    away = (mine[0] - 3, mine[1])
+    movement.step(world, me, away, kind="walk", mode="walk")
+    out.that(len(seen) >= 1,
+             "walking out of the enemy's reach opens a window through"
+             " `movement.step`",
+             f"{len(seen)} window(s)")
+    if seen:
+        out.that(all(g["by"] == "" and g["kind"] == "walk" for g in seen),
+                 "**named the other way round** -- no provoking row, and the"
+                 " move kind `movement.step` was given. The absence of `by`"
+                 " is the signal `f1302` reads",
+                 f"{[(g['by'], g['kind']) for g in seen]}")
+        out.that(all(g["defence"] == base for g in seen),
+                 "and `f2565` does **not** pay for it, which is the"
+                 " over-payment its old `opportunity`-only gate made and the"
+                 " control that a rule asserting only the ranged case would"
+                 " miss",
+                 f"{base} vs {[g['defence'] for g in seen]}")
+
+    # -- an ordinary attack inherits nothing, in both moments ----------
+    # The risk #880 deferred itself over. Two guards, and the plants say
+    # which covers which -- see the docstring.
+    out.that(world.provocation is None,
+             "the window is closed once its emit returns, so nothing is"
+             " parked on the world between swings -- this is what stops a"
+             " swing *after* the window inheriting a provocation",
+             f"{world.provocation}")
+    del told[:]
+    after = swing(world, foe, me, chance=False).target_defence
+    out.that(after == base and all(not p[1] for p in told),
+             "and an ordinary attack taken straight after a window carries"
+             " no provocation on its events either",
+             f"{base} vs {after}, {told}")
+
+    # And the half the first draft of this rule could not see: inside the
+    # window, where `world.provocation` really is set, the `opportunity`
+    # gate is the only thing keeping an ordinary swing clean.
+    # **From the ranged snapshot, not from `seen`.** A move window carries
+    # no `by` at all, so an ordinary swing inside one reads empty whether
+    # the gate exists or not -- the second draft of this rule asserted
+    # exactly that and the plant stayed green again. The provocation has to
+    # be a *non-empty ref* for its absence to mean anything.
+    ordinary = [p for g in by_a_row for p in g.get("ordinary", [])]
+    out.that(bool(ordinary),
+             "an ordinary attack really was taken **inside** an open"
+             " row-provoked window, so the assertion below is about the gate"
+             " rather than about the clearing -- and about a window whose"
+             " provocation is a real ref, so an empty answer is evidence",
+             f"{len(ordinary)} ordinary swing(s) inside a window")
+    out.that(all(not opp and not by for opp, by in ordinary),
+             "**and it carries no provocation**, though one is parked on the"
+             " world at that moment: `resolve.attack` reads the window only"
+             " when the swing is an opportunity attack",
+             f"{ordinary[:4]}")
+
+    # -- and the events carry it, which is what i3085p1's trigger reads --
+    on_events = [p for g in by_a_row for p in g.get("chance", [])]
+    out.that(bool(on_events)
+             and all(opp and by == ranged for opp, by in on_events),
+             "the provoking ref reaches the attack **events** and not only"
+             " the context, which is what a trigger answering a `Hit` can"
+             " read -- `i3085p1` narrows there",
+             f"{on_events[:4]}")
+
+
+def opening_a_lock_is_a_standard_action_beside_it(out: Result) -> None:
+    """Open Lock is a standard action adjacent to the lock, and half of
+    `f3447` is a `+4` to exactly that check.
+
+    The engine offered no such action, so the bonus had nothing to be a
+    bonus *to*. `f3447` was re-aimed three times and twice at the wrong
+    gap -- filed as a check that cannot be told what it is for, where the
+    printed rules say these are named **actions**, not purposes. #786, on
+    Camille's #735 call; the sleight-of-hand half is deferred (#787).
+
+    **This rule fills `Grid.locked` itself, because no board carries a lock
+    and that is the point.** The map lands with the action on the same
+    bargain `porous` and `light` already struck -- absent means unlocked,
+    which is every square on every board -- so the action is legal nowhere
+    until terrain grows one. That is a stated limit, not a working feature,
+    and it is the one thing #786 asks be said out loud rather than read off
+    a green check.
+
+    The `+4` is driven through `f3447`'s own body, and the control that
+    matters is the **adjacency**: a lock two squares away is offered
+    nothing, which is what makes this an action with a reach rather than a
+    button.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.types import ActionType
+
+    row = REGISTRY["f3447"]
+    out.that(row.dropped == ("story.skill_use()",),
+             "`f3447` keeps one marker, for the sleight-of-hand half that"
+             " went to the story engine -- the lock half is no longer"
+             " among them",
+             f"{row.unfinished}")
+
+    world, me, _started = _posed("f3447", 1)
+    enc = world.encounter
+    world.turn = me
+    spot = must(world.get(me, Position), "the caster has a Position")
+    here = sorted(spot.squares)[0]
+    beside = (here[0] + 1, here[1])
+    far = (here[0] + 4, here[1])
+
+    out.that(not world.grid.locked,
+             "no board carries a lock, which is why this rule lays one --"
+             " and why the action is legal nowhere in play until terrain"
+             " grows one. A stated limit, not a passing check",
+             f"{world.grid.locked}")
+
+    # -- nothing to pick, nothing offered ---------------------------------
+    out.that(not [a for a in legal(world, enc, me) if a.kind == "open_lock"],
+             "with no lock on the board the action is not offered at all",
+             "none")
+
+    # -- a lock out of reach is still not offered -------------------------
+    world.grid.locked[far] = 20
+    out.that(not [a for a in legal(world, enc, me) if a.kind == "open_lock"],
+             "**and a lock four squares away is not offered either** -- the"
+             " printed rule is adjacency, so this is an action with a reach"
+             " rather than a button. The control a rule asserting only the"
+             " happy case would miss",
+             f"{sorted(world.grid.locked)}")
+
+    # -- beside it, it is -------------------------------------------------
+    world.grid.locked[beside] = 20
+    offers = [a for a in legal(world, enc, me) if a.kind == "open_lock"]
+    out.that(len(offers) == 1 and offers[0].dest == beside,
+             "standing beside a lock, it is offered -- and names **that**"
+             " lock, not the one out of reach",
+             f"{[a.dest for a in offers]}")
+    out.that(all(a.cost is ActionType.STANDARD for a in offers),
+             "as a standard action, which is the printed cost",
+             f"{sorted({a.cost for a in offers})}")
+
+    # -- and the row's own +4 is read, per check --------------------------
+    REGISTRY["f3447"].body(Cast(world=world, me=me, ref="f3447"))
+    mods = must(world.get(me, Mods), "the caster has Mods")
+    out.that(mods.total("open_lock", {}) == 4,
+             "`f3447`'s body lays a `+4` on a key of its **own**, read only"
+             " by this check -- not a blanket Thievery bonus, which would"
+             " raise every other use of the skill and is the fault that"
+             " row's note has warned about since its first version",
+             f"{mods.total('open_lock', {})}")
+    out.that(mods.total("thievery", {}) == 0,
+             "and the skill itself is untouched, which is that distinction"
+             " asserted rather than described",
+             f"{mods.total('thievery', {})}")
+
+    # -- taking it rolls the check against the lock's DC ------------------
+    rolled: list[Any] = []
+    world.bus.on(SkillCheck, rolled.append)
+    out.that(perform(world, enc, me, offers[0]) if offers else False,
+             "taking the action succeeds",
+             f"{offers[0] if offers else None}")
+    out.that(len(rolled) == 1 and rolled[0].skill == "thievery",
+             "**and it rolls a Thievery check**, which is the observable --"
+             " a `SkillCheck` the harness can see, rather than a quiet grid"
+             " write",
+             f"{[(e.skill, getattr(e, 'dc', None)) for e in rolled]}")
+
+    # **The lock has to actually open, or the control below is vacuous.**
+    # A DC of 1 rather than 20, so this does not ride on the die: without
+    # this assertion a failed DC-20 roll would leave the lock shut and the
+    # "unbeatable DC" check below would pass for the wrong reason.
+    world.grid.locked[beside] = 1
+    # **The budget has to be refreshed between attempts, and not doing so is
+    # what made the first draft of the control vacuous.** `perform` spends
+    # the standard action, so the second and third attempts found
+    # `can_spend` False, were offered nothing, and did nothing -- the
+    # "unbeatable DC leaves it shut" assertion was green because *no roll
+    # happened*, not because the roll failed.
+    must(world.get(me, Budget), "the caster has a Budget").refresh()
+    easy = [a for a in legal(world, enc, me) if a.kind == "open_lock"]
+    out.that(len(easy) == 1,
+             "with the turn's standard action back, the lock beside it is"
+             " offered again",
+             f"{[a.dest for a in easy]}")
+    if easy:
+        perform(world, enc, me, easy[0])
+    out.that(beside not in world.grid.locked,
+             "**a lock it can beat really opens** -- the success half,"
+             " without which the failure half below would be green whatever"
+             " the verb did",
+             f"{sorted(world.grid.locked)}")
+
+    # -- a DC nothing can beat leaves the lock shut -----------------------
+    world.grid.locked[beside] = 99
+    must(world.get(me, Budget), "the caster has a Budget").refresh()
+    shut = [a for a in legal(world, enc, me) if a.kind == "open_lock"]
+    out.that(len(shut) == 1,
+             "and a re-locked square is offered once more, so the attempt"
+             " below really is made",
+             f"{[a.dest for a in shut]}")
+    if shut:
+        perform(world, enc, me, shut[0])
+    out.that(beside in world.grid.locked,
+             "a DC nothing can beat leaves the lock shut, so the action is"
+             " a check rather than a door-opener -- the negative control"
+             " that a rule only ever picking a DC 20 lock would miss",
+             f"{sorted(world.grid.locked)}")
+    out.that(far in world.grid.locked,
+             "and the far lock is untouched throughout, so picking one lock"
+             " does not clear the map",
+             f"{sorted(world.grid.locked)}")
+
+
+def mounting_is_an_action_and_a_size_rule_with_an_exception(
+    out: Result,
+) -> None:
+    """Getting on and getting off are printed move actions, and three rows
+    had no moment at which they could become true.
+
+    `c.ride` set the relation and nothing offered the action, so two monster
+    rows whose whole line is *"a creature of that size may ride it"* were
+    **refused in play** rather than merely incomplete. #749.
+
+    **The two gaps that issue proposed are one facility, and the rules are
+    what showed it.** The general rule demands a mount *larger than* its
+    rider; both mounts here are Medium, so a Medium rider is barred
+    outright -- which makes those lines real **exceptions** rather than
+    restatements. `f2726` is the same exception from the rider's end ("your
+    size or larger"). So there is one permission, `c.rideable`, read by one
+    legality test, `query.may_ride`, and a card writes it from whichever
+    side it happens to phrase it.
+
+    Driven through `m3227a2`'s own body and the real `actions.legal` menu,
+    not by calling `c.ride` -- the row's whole content *is* the permission,
+    so a rule that set the relation itself would assert nothing about it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.grid import footprint
+    from combat_engine.engine.query import enemies, may_ride, rideable_by
+    from combat_engine.engine.types import ActionType, Relation, Size
+
+    for ref in ("m3227a2", "m3230a2", "f2726"):
+        row = REGISTRY[ref]
+        out.that(not row.unfinished, f"{ref} carries no marker now",
+                 f"{row.unfinished}")
+
+    # **Two things about the posed board, both load-bearing and neither
+    # guessed.** It starts the encounter, so `arm_traits` has already run
+    # this row's body -- a "without the permission" arrangement had the
+    # permission anyway, which is the same double-arming trap
+    # `drivers.provoked_by` hit an hour earlier. And it spawns somebody
+    # **already astride** the mount, so `may_ride` rightly refused a second
+    # rider and the first draft of this rule read that as a broken reader.
+    #
+    # So the control is a second Medium creature on the same board, and the
+    # pre-existing pairing is used rather than fought: dismounting it is
+    # what makes room, and exercises the new verb on the engine's own
+    # arrangement instead of on one this rule built.
+    world, mount, _started = _posed("m3227a2", 1)
+    foes = sorted(enemies(world, mount))
+    rider, other = foes[0], foes[1]
+    seat = must(world.get(mount, Position), "the mount has a Position")
+    here = sorted(seat.squares)[0]
+
+    def stand(who: int, square: tuple[int, int]) -> None:
+        """Put a creature down **through the grid**, at Medium."""
+        world.grid.lift(who)
+        legs = must(world.get(who, Position), f"{who} has a Position")
+        legs.square = square
+        legs.size = Size.MEDIUM
+        world.grid.place(who, footprint(square, legs.size))
+
+    seat.size = Size.MEDIUM
+    world.grid.lift(mount)
+    world.grid.place(mount, footprint(here, seat.size))
+    stand(rider, (here[0] + 1, here[1]))
+    stand(other, (here[0] + 1, here[1] + 1))
+    enc = world.encounter
+
+    out.that(rideable_by(world, mount) == frozenset({"medium"}),
+             "the row's body records which rider sizes this mount accepts,"
+             " on the **mount** -- `on=c.me`, which a `NO_TARGET` row has to"
+             " say or the permission lands on nobody, and `lint.py` named"
+             " exactly that here",
+             f"{sorted(rideable_by(world, mount))}")
+
+    # -- the board's own rider gets off, which is the new verb ------------
+    seated = world.relations.targets(Relation.RIDDEN_BY, mount)
+    out.that(bool(seated),
+             "the posed board really does spawn somebody astride this"
+             " creature, which is the premise the one-rider rule below"
+             " turns on",
+             f"{seated}")
+    first = seated[0]
+    world.turn = first
+    offs = [a for a in legal(world, enc, first) if a.kind == "dismount"]
+    out.that(bool(offs) and all(a.cost is ActionType.MOVE for a in offs),
+             "**dismounting is offered while mounted**, as a move action --"
+             " a peer of mounting rather than an afterthought, and it had no"
+             " verb at all before this",
+             f"{len(offs)} offer(s), {sorted({a.cost for a in offs})}")
+    was = sorted(must(world.get(first, Position), "the rider").squares)[0]
+    out.that(bool(offs) and perform(world, enc, first, offs[0]),
+             "taking it succeeds",
+             f"{offs[0] if offs else None}")
+    now = sorted(must(world.get(first, Position), "the rider").squares)[0]
+    out.that(not world.relations.sources(Relation.RIDDEN_BY, first),
+             "the relation is cleared",
+             f"{world.relations.sources(Relation.RIDDEN_BY, first)}")
+    out.that(now != was and world.grid.occupant(now) == first,
+             "**and the rider really moved, into a square the grid knows**"
+             " -- the printed line is \"moving to a square adjacent to it\","
+             " and a carried rider is deliberately absent from the occupancy"
+             " index, so clearing the relation without a step would leave it"
+             " nowhere the board can see",
+             f"{was} -> {now}, occupant={world.grid.occupant(now)}")
+
+    # -- now the seat is free, the permission is what makes it legal ------
+    out.that(may_ride(world, rider, mount),
+             "with the seat free, a Medium rider may ride a Medium mount --"
+             " which the general rule, demanding a mount *larger than* its"
+             " rider, forbids outright",
+             f"may_ride={may_ride(world, rider, mount)}")
+    out.that(not rideable_by(world, other)
+             and not may_ride(world, rider, other),
+             "**and the same rider may not ride the creature beside it** --"
+             " same size, same board, same adjacency, no permission. The"
+             " size rule standing on its own, which is the control that says"
+             " the exception is doing the work",
+             f"{sorted(rideable_by(world, other))},"
+             f" may_ride={may_ride(world, rider, other)}")
+
+    # -- it reaches the menu, which is the half that did not exist --------
+    world.turn = rider
+    offers = [a for a in legal(world, enc, rider) if a.kind == "mount"]
+    named = {who for a in offers for who in a.targets}
+    out.that(mount in named,
+             "**mounting is on the menu now**, naming the mount -- the"
+             " moment these rows had none of, and the reason two of them"
+             " were refused in play rather than incomplete",
+             f"{sorted(named)}")
+    # **Not the only entry, and the reason is the board rather than a
+    # leak.** The first draft asserted the mount was the *sole* option and
+    # read two as a failure; the second assumed the other one must be
+    # genuinely larger and read Medium as a failure. Both were wrong about
+    # the same thing: the posed board spawns a **copy of the caster**, which
+    # `arm_traits` arms too, so two creatures legitimately hold this row's
+    # permission.
+    #
+    # Asserted through `rideable_by` rather than `may_ride`, which would be
+    # circular -- `may_ride` *is* "larger or permitted", so asking it here
+    # would restate the implementation. The load-bearing control is the one
+    # below: `other`, the same size and adjacent, carries no permission and
+    # is not offered.
+    holders = sorted(who for who in named if rideable_by(world, who))
+    out.that(holders == sorted(named),
+             "and every creature offered holds the permission in its own"
+             " right -- the board spawns a copy of the caster, so two of"
+             " them carry this row rather than one",
+             f"offered {sorted(named)}, holders {holders}")
+    out.that(bool(offers) and all(a.cost is ActionType.MOVE for a in offers),
+             "as a move action, which is the general printed rule rather"
+             " than a gift any card confers -- so `c.grant_action(\"mount\")`"
+             " is only for a card that changes the cost, and that is why"
+             " `f2726`'s grant would have been a no-op",
+             f"{sorted({a.cost for a in offers})}")
+    out.that(all(other not in a.targets for a in offers),
+             "and the unpermitted neighbour is **not** among the options --"
+             " the reader asks the permission live, per candidate",
+             f"{[sorted(a.targets) for a in offers]}")
+
+    out.that(bool(offers) and perform(world, enc, rider, offers[0]),
+             "taking the action succeeds",
+             f"{offers[0] if offers else None}")
+    out.that(world.relations.sources(Relation.RIDDEN_BY, rider) == [mount],
+             "and the rider is astride the mount it chose, by the relation"
+             " `c.ride` sets -- not a second write that could disagree"
+             " with it",
+             f"{world.relations.sources(Relation.RIDDEN_BY, rider)}")
+    out.that(not may_ride(world, rider, mount)
+             and not may_ride(world, other, mount),
+             "a second mount is refused while astride, and so is a second"
+             " **rider** on a mount already carrying one -- the printed"
+             " one-rider rule, and the pair of negative controls a legality"
+             " test reading only size would fail",
+             f"{may_ride(world, rider, mount)},"
+             f" {may_ride(world, other, mount)}")
+
+
+def a_restored_or_expended_use_says_so(out: Result) -> None:
+    """Handing a use back, and spending one without running the row, are each
+    announced in their own right.
+
+    Both ended in a `Note`, which `audit.DID_SOMETHING` refuses on purpose --
+    a `Note` carries no `by`, so it cannot be attributed to the row that
+    paid. A row whose entire Effect is one of these two lines was therefore
+    **silent by construction**, and `i3271p1`, whose whole body is one
+    `c.restore_use`, hid that for its entire life in the **`UNUSED`** bucket
+    rather than the silent one -- "could not be used on the test board at
+    all". #680's racial pick made its trigger reachable and it went straight
+    to silent. #899.
+
+    Two events rather than one, for the reason `RelationCleared` had to be
+    added beside `RelationSet`: admitting a direction and not its mirror is
+    how a row whose whole effect is the inverse stays invisible.
+
+    Driven through two rows' own bodies -- `i3271p1` for the restore and
+    `f2843` for the expenditure -- rather than by calling either verb.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import (
+        PowerResolved,
+        UseRestored,
+        UseSpent,
+    )
+
+    # -- the restore, through i3271p1's body ------------------------------
+    REF = "i3271p1"
+    row = REGISTRY[REF]
+    out.that(not row.unfinished, f"{REF} carries no marker",
+             f"{row.unfinished}")
+
+    world, me, _started = _posed(REF, 1)
+    powers = must(world.get(me, Powers), "the caster has a Powers component")
+    spendable = sorted(
+        r for r in powers.all
+        if (p := REGISTRY.get(r)) is not None and p.uses >= 1
+        and powers.times(r) == 0
+    )
+    out.that(bool(spendable),
+             "the posed character owns a row with a use to spend, so the"
+             " restore below has something real to hand back",
+             f"{len(spendable)} candidate(s)")
+    spent = spendable[0] if spendable else ""
+    if spent:
+        powers.note_use(spent, world.round)
+    out.that(bool(spent) and powers.times(spent) == 1,
+             "and it is spent before the row runs -- the Requirement these"
+             " cards print, and the branch `c.restore_use` returns False on",
+             f"{spent}: times={powers.times(spent) if spent else None}")
+
+    heard: list[UseRestored] = []
+    world.bus.on(UseRestored, heard.append)
+
+    c = Cast(world=world, me=me, ref=REF)
+    c.trigger = PowerResolved(actor=me, power=spent, targets=[me])
+    row.body(c)
+
+    out.that(len(heard) == 1,
+             "**handing a use back announces `UseRestored`** -- it was a"
+             " `Note`, which this harness refuses because a `Note` carries no"
+             " `by`, so this row was silent by construction",
+             f"{len(heard)} announcement(s)")
+    out.that(bool(heard) and heard[0].by == REF
+             and heard[0].who == me and heard[0].power == spent,
+             "and it names the row that paid, the creature, and which row"
+             " came back -- all three, because a rider on \"when you regain"
+             " the use of\" needs to know which",
+             f"{heard[0] if heard else None}")
+    out.that(bool(spent) and powers.times(spent) == 0,
+             "the use really is back, as well as announced",
+             f"times={powers.times(spent) if spent else None}")
+
+    # -- the negative control: nothing to hand back ----------------------
+    heard.clear()
+    again = Cast(world=world, me=me, ref="drivers:restore")
+    out.that(again.restore_use(spent, on=me) is False and not heard,
+             "restoring a row that was not used returns False and announces"
+             " nothing -- and that False **is** the printed Requirement",
+             f"{len(heard)} said")
+
+    # -- the expenditure, through f2843's body ---------------------------
+    EXP = "f2843"
+    priced = REGISTRY[EXP]
+    out.that(not priced.unfinished, f"{EXP} carries no marker",
+             f"{priced.unfinished}")
+
+    w2, mine, _begun = _posed(EXP, 1)
+    own = must(w2.get(mine, Powers), "the feat's holder has a Powers")
+    took: list[UseSpent] = []
+    w2.bus.on(UseSpent, took.append)
+
+    PRICE = "p6186"
+    if PRICE not in own.all:
+        own.all.append(PRICE)
+    before = own.times(PRICE)
+    paid = Cast(world=w2, me=mine, ref=EXP)
+    paid.expend_row(PRICE)
+
+    out.that(len(took) == 1 and took[0].power == PRICE
+             and took[0].who == mine and took[0].by == EXP,
+             "**spending a use without running the row announces"
+             " `UseSpent`**, naming the same three things -- the mirror,"
+             " admitted beside the restore rather than after somebody finds"
+             " the inverse row on the silent list",
+             f"{took[0] if took else None}")
+    out.that(own.times(PRICE) == before + 1,
+             "and the use really is gone",
+             f"{before} -> {own.times(PRICE)}")
+
+    # -- the negative control: a row this creature does not own -----------
+    took.clear()
+    stranger = Cast(world=w2, me=mine, ref="drivers:expend")
+    out.that(stranger.expend_row("p999999") is False and not took,
+             "a row the creature does not own is refused rather than lent,"
+             " and announces nothing -- lending one in order to spend it"
+             " would charge nobody",
+             f"{len(took)} said")
+
+
+def an_area_stops_being_aimable_when_a_wall_arrives(out: Result) -> None:
+    """Where an area may be centred must follow the walls, not a stale answer.
+
+    `dsl.aim_points` remembers its square enumeration on `Grid.aims`,
+    because six area rows made **1,615 calls with 11 distinct answers** and
+    each call drives about 200 `line_of_effect` calls -- 331,927 across the
+    six, 99% of them repeats. Caching it took those to 2,125.
+
+    **This rule exists because the failure mode is silent and serious.**
+    `Grid.blocking` is a bare `set` that `c.wall` and the zone writers
+    mutate in place, so a cache keyed on anything but the set's own contents
+    can answer from before the wall -- and a row would then be offered a
+    placement *through* a wall while every timing and every row count still
+    looked green. No other instrument asks this question: the audit fires
+    rows on a board that mostly has no walls on it.
+
+    Asserted through `aim_points`, the reader a row actually reaches, rather
+    than at `Grid.line_of_effect` one level down -- so the rule still holds
+    if the cache moves or is taken out again.
+
+    Proven by planting: dropping `frozenset(grid.blocking)` from the key
+    leaves a boxed-in caster reporting **121 aimable squares instead of 9**,
+    and this rule goes red on it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, aim_points
+
+    ref = "p10188"
+    p = REGISTRY[ref]
+    # The premise, stated so a row that stops being an area burst turns this
+    # red instead of quietly making every assertion below vacuous.
+    kind = p.reach.kind if p.reach else None
+    out.that(kind == "area_burst",
+             f"`{ref}` is still an area burst, so it has placements to cache",
+             f"reach kind is {kind!r}")
+    if kind != "area_burst":
+        out.skip(f"{ref} is no longer an area burst; nothing to assert")
+        return
+
+    world, me, _foe = _posed(ref, 1)
+    here = world.need(me, Position).square
+
+    clear = aim_points(world, me, p)
+    # Positive control: the reader answers at all. A rule whose later halves
+    # compare two empty lists would pass on a function that returned nothing.
+    out.that(len(clear) > 0,
+             "an area burst has somewhere to be centred on an open board",
+             f"{len(clear)} squares from {here}")
+
+    again = aim_points(world, me, p)
+    out.that(again == clear and len(world.grid.aims) >= 1,
+             "asking twice with nothing moved gives the same answer, from the memo",
+             f"{len(clear)} then {len(again)}, {len(world.grid.aims)} memo entry")
+
+    # Box the caster in. Every neighbour solid, so only its own square and
+    # what it can still see past the corners survive.
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if (dx, dy) != (0, 0):
+                world.grid.blocking.add((here[0] + dx, here[1] + dy))
+    walled = aim_points(world, me, p)
+    out.that(len(walled) < len(clear),
+             "**a wall laid after the first answer narrows the next one**",
+             f"{len(clear)} aimable before, {len(walled)} after being boxed in")
+
+    # Negative control, and the one an additive-only key would fail: taking
+    # the walls away must give back *exactly* the original set, not merely a
+    # different one. A key that only ever grew would pass the assertion
+    # above and fail this.
+    world.grid.blocking.difference_update(
+        {(here[0] + dx, here[1] + dy)
+         for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx, dy) != (0, 0)})
+    back = aim_points(world, me, p)
+    out.that(back == clear,
+             "and taking the wall away gives back the first answer exactly",
+             f"{len(clear)} -> {len(walled)} -> {len(back)}")
+
+    # The list/tuple boundary: callers get a mutable list and `actions.aimed`
+    # sorts and slices it, so handing out the stored tuple would make one
+    # caller's edit the next caller's answer.
+    borrowed = aim_points(world, me, p)
+    borrowed.clear()
+    out.that(len(aim_points(world, me, p)) == len(clear),
+             "a caller emptying the list it was handed cannot empty the memo",
+             f"{len(aim_points(world, me, p))} still offered")
+
+
+def deals_damage_gate(out: Result) -> None:
+    """"If the power doesn\'t normally deal damage, no extra damage is dealt."
+
+    `i1560p1` pays an extra 1d6 radiant on the next blow its bearer lands
+    after a divine power. The card\'s last sentence excludes a power that
+    deals no damage, and nothing asked -- so a damageless divine power that
+    hit was paid the 1d6 anyway, a row stronger than its card.
+
+    **The header alone could not answer it, and the row\'s own docstring said
+    so before the fix existed.** `get(ref).damage is None` looks like the
+    question; **3,518** declared rows carry `damage=None` and deal damage in
+    the body, `p992` among them, so a header gate would have suppressed the
+    rider on most of the rows that deserve it. `query.deals_damage` reads the
+    declared expression *or* a damage call in the body.
+
+    Both arms on one board, because the failure to guard against is a gate
+    that answers the same way whatever it is asked: a rider that never pays
+    looks exactly like one that pays correctly if only the excluded case is
+    tried. #782.
+    """
+    # **The registry has to be populated before the first assertion.** The
+    # three reads below do not touch a board, so without this they ran
+    # against an empty `REGISTRY`, `get(ref)` answered None, and
+    # `deals_damage` answered False for everything -- three failures that
+    # looked like the reader being wrong rather than the probe being early.
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied, Hit
+    from combat_engine.engine.query import deals_damage
+
+    deals_damage.cache_clear()
+
+    out.that(not deals_damage("p5331"),
+             "p5331 is a divine power that normally deals no damage")
+    out.that(deals_damage("p5330"),
+             "p5330 is a divine power that does")
+    out.that(deals_damage("p992"),
+             "and p992 counts, though its header says damage=None"
+             " -- the body is the other place damage comes from")
+
+    def radiant_after(power: str) -> int:
+        world, me, _rest = _board()
+        foe = next(e for e in world.entities if e != me)
+        c = Cast(world=world, me=me, ref="i1560p1")
+        row = REGISTRY["i1560p1"]
+        body = next(getattr(row, a) for a in ("body", "fn", "func")
+                    if callable(getattr(row, a, None)))
+        body(c)
+        cursor = len(world.bus.log)
+        world.bus.emit(Hit(attacker=me, target=foe, power=power, critical=False))
+        return sum(
+            1 for e in world.bus.log[cursor:]
+            if isinstance(e, DamageApplied)
+            and "radiant" in str(getattr(e, "dtype", "")).lower()
+        )
+
+    out.that(radiant_after("p5331") == 0,
+             "so the rider pays nothing after a damageless divine power",
+             f"paid {radiant_after('p5331')} time(s)")
+    out.that(radiant_after("p5330") == 1,
+             "and still pays once after one that deals damage",
+             f"paid {radiant_after('p5330')} time(s)")
+
+
+
+def weapon_is_mine(out: Result) -> None:
+    """"This weapon can be used as a heavy thrown weapon, range 6/12."
+
+    Four weapon blocks hand-rolled that write before `c.gains_property` and
+    `c.weapon_range` existed, and nothing re-pointed them once the verbs
+    landed. #843 called the re-point free. It was not: both verbs offered
+    `held=`, which is *every* weapon in hand, and these cards are about the
+    weapon the block is printed on. A character holding two magic weapons
+    would have had one item's printed line laid on the other's weapon.
+
+    So the re-point needed a selector first -- `mine=`, matching
+    `Weapon.item` the way `c.my_weapon` does -- and this rule is what says
+    the selector is **narrower** than the one #843 proposed, not merely
+    different. Reverting `mine=` to `held=` in either verb turns the second
+    assertion red; that is the plant, and it was run.
+
+    The third assertion is the thing the hand-roll could never do. It
+    mutated `properties` in place and announced nothing, so three of these
+    four rows sat on `audited.json`'s silent list and every reader of
+    `WeaponChanged` was blind to them. They now fire.
+    """
+    import dataclasses
+
+    import audit as A
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import WeaponChanged
+
+    REF, ITEM = "i1150x1", "i1150"
+
+    def gear_of(world: Any, who: int) -> Any:
+        """`Gear`, or a loud failure.
+
+        `World.get` answers `Gear | None` and every read below would have
+        silently skipped on the None -- a board dealt no gear reads exactly
+        like a selector that matched nothing, which is the one thing this
+        rule exists to tell apart.
+        """
+        gear = world.get(who, Gear)
+        if gear is None:
+            raise AssertionError("the audit board dealt this caster no Gear")
+        return gear
+
+    def two_in_hand() -> tuple[Any, int, Any]:
+        """The audit board, plus a second weapon carrying another item.
+
+        `audit.board` lays the item under test on the one weapon it deals
+        (#699), and arms the trait during `Encounter.start` -- so the clause
+        is already on by the time a rule looks. Both are stripped here, so
+        what the body writes is observable rather than assumed.
+        """
+        world, me, _start = A.board(REF, 1)
+        gear = gear_of(world, me)
+        mine = gear.weapons[0]
+        other = dataclasses.replace(
+            mine, ref="w9999", slug="other", item="i2882", group="hammer",
+            properties=frozenset({"two-handed"}), thrown=None)
+        gear.weapons = [
+            dataclasses.replace(
+                w, thrown=None,
+                properties=frozenset(p for p in w.properties
+                                     if p != "heavy thrown"))
+            for w in (*gear.weapons, other)
+        ]
+        return world, me, gear
+
+    def thrown_now(gear: Any) -> dict[str, tuple[bool, Any]]:
+        return {w.ref: ("heavy thrown" in w.properties, w.thrown)
+                for w in gear.weapons}
+
+    # The row's own body, not the verbs -- a rule that called
+    # `c.gains_property(mine=True)` itself would stay green with the content
+    # re-point reverted, which is half of what this is here to hold.
+    world, me, gear = two_in_hand()
+    cursor = len(world.bus.log)
+    REGISTRY[REF].body(Cast(world=world, me=me, ref=REF, target=me))
+    after = thrown_now(gear_of(world, me))
+
+    out.that(after["w3612"] == (True, (6, 12)),
+             "the block's own weapon gets the printed property and range",
+             f"w3612 (item={ITEM}) -> {after['w3612']}")
+    # The negative control, and the plant: `held=` would hit this one too.
+    out.that(after["w9999"] == (False, None),
+             "and the other item's weapon in the same hands gets neither",
+             f"w9999 (item=i2882) -> {after['w9999']}")
+
+    told = [e for e in world.bus.log[cursor:] if isinstance(e, WeaponChanged)]
+    out.that(len(told) == 2 and {e.field for e in told} == {"properties", "thrown"},
+             "both writes are announced, which the hand-rolled version never was",
+             f"{len(told)} WeaponChanged: {sorted(e.field for e in told)}")
+    out.that(all(e.weapon == "w3612" for e in told),
+             "and every announcement names the block's own weapon",
+             f"{sorted({e.weapon for e in told})}")
+
+    # Positive control on the width of `held=`, on the same board, so the
+    # assertion above cannot pass because nothing would have matched anyway
+    # -- a selector matching nothing looks exactly like a narrow one.
+    world, me, gear = two_in_hand()
+    c = Cast(world=world, me=me, ref=REF, target=me)
+    wide = c.gains_property("heavy thrown", held=True)
+    out.that(wide == 2,
+             "held= on the same board reaches both -- the selector is doing work",
+             f"held={wide} weapons, mine=1")
+
+    # `i968x1` is the fourth site and was inline rather than on the shared
+    # helper, so it is asserted separately: one row's re-point proves one
+    # row.
+    world, me, _ = A.board("i968x1", 1)
+    gear = gear_of(world, me)
+    gear.weapons = [dataclasses.replace(
+        w, thrown=None,
+        properties=frozenset(p for p in w.properties if p != "heavy thrown"))
+        for w in gear.weapons]
+    REGISTRY["i968x1"].body(Cast(world=world, me=me, ref="i968x1", target=me))
+    landed = thrown_now(gear_of(world, me))
+    out.that(any(v == (True, (5, 10)) for v in landed.values()),
+             "i968x1's inline write re-points too, with its own 5/10 range",
+             f"{landed}")
+
+
+def mark_knows_its_row(out: Result) -> None:
+    """"A creature you have marked with your p3323 power targets you."
+
+    A mark recorded **who** marked whom and never **which row** did it, so
+    `i531p1` -- which reduces damage from a creature marked by the
+    swordmage's aegis -- paid on any mark that swordmage happened to be
+    holding, a fighter's combat challenge included. #875.
+
+    `Relations` keeps the laying ref in the value slot of its `_live` dict,
+    which was `None` for the life of the store. The write cost nothing:
+    `durations._install_state` already had `eff.by` -- the ref every `Cast`
+    verb stamps -- so no content site moved and the `relations=[(kind,
+    source, target)]` tuple on `Effect` stayed three wide.
+
+    Asserted through `i531p1`'s body rather than through `c.marked`, which
+    is what makes the row's own re-point load-bearing: a rule calling
+    `c.marked(via=)` itself would stay green with the content change
+    reverted.
+
+    The negative control is the whole point and is the plant: a mark laid
+    by a *different* row must buy this row nothing. Dropping the `via=`
+    filter from either `c.marked` or the row turns it red.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.types import DamageType, Relation
+
+    def struck_after_a_mark_by(ref: str) -> tuple[int, str]:
+        """Run `i531p1` against a blow from a creature marked via `ref`.
+
+        Returns what the 20-point blow was reduced to, and the `via` the
+        store ended up holding.
+        """
+        world, me, _start = A.board("i531p1", 1)
+        foe = next(e for e in world.entities if e != me)
+        Cast(world=world, me=me, ref=ref, target=foe).mark()
+        via = world.relations.via(Relation.MARKED_BY, me, foe)
+        ev = DamageRolled(source=foe, target=me, amount=20,
+                          dtype=DamageType.UNTYPED, detail="")
+        c = Cast(world=world, me=me, ref="i531p1", target=me, trigger=ev)
+        REGISTRY["i531p1"].body(c)
+        return ev.amount, via
+
+    paid, via_aegis = struck_after_a_mark_by("p3323")
+    out.that(via_aegis == "p3323",
+             "a mark records the ref of the row that laid it",
+             f"via={via_aegis!r}")
+    out.that(paid < 20,
+             "i531p1 reduces a blow from a creature marked by its own power",
+             f"20 -> {paid}")
+
+    # The plant: the same swordmage, the same marked foe, a mark from
+    # another card. The reduction must not apply.
+    spared, via_other = struck_after_a_mark_by("p9999")
+    out.that(via_other == "p9999",
+             "and a mark laid by another row records that row instead",
+             f"via={via_other!r}")
+    out.that(spared == 20,
+             "so the blow is NOT reduced -- the row no longer pays on any mark",
+             f"20 -> {spared}")
+
+    # A mark with no provenance at all answers False rather than matching
+    # everything, which is the direction a bare `==` on an empty string
+    # would have got wrong.
+    #
+    # **`audit.board` has already marked this foe**, via `audit:setup`, to
+    # give defender follow-up rows something to aim at. The first draft of
+    # this control laid a bare mark on top of that and asserted an empty
+    # `via` -- which passed, on a mark attributed to `audit:setup`, so it
+    # was green for a reason it did not state. The plant is what exposed
+    # it. Cleared first, so "unattributed" is the fact and not the hope.
+    world, me, _ = A.board("i531p1", 1)
+    foe = next(e for e in world.entities if e != me)
+    world.relations.clear(Relation.MARKED_BY, me, foe, "cleared for the control")
+    world.relations.set(Relation.MARKED_BY, me, foe)
+    unattributed = world.relations.via(Relation.MARKED_BY, me, foe)
+    bare = Cast(world=world, me=me, ref="i531p1", target=me)
+    out.that(unattributed == "",
+             "a mark laid straight through the store names no row",
+             f"via={unattributed!r}")
+    out.that(bare.marked(on=foe) and not bare.marked(on=foe, via="p3323"),
+             "and it is still a mark, while matching no particular via",
+             f"marked={bare.marked(on=foe)} via-filtered="
+             f"{bare.marked(on=foe, via='p3323')}")
+
+
+def save_ends_for_somebody_else(out: Result) -> None:
+    """"Reduce the resistance the target has against your attack (save ends)."
+
+    `durations.save` read `eff.owner` for **three** separate questions --
+    who rolls, whose save bonus applies, and who the `SavingThrow` is
+    announced for -- so an effect that benefits one creature and is ended by
+    another's save could not be written. `i806p1` is that shape: the `Mod`
+    must sit on the **attacker**, because that is what narrows the five
+    points to *your* attack, while the printed clock is a throw made by the
+    **target**. A `SAVE_ENDS` duration there had the attacker rolling to end
+    its own benefit, which is why the row ran to the end of the turn
+    instead. #874.
+
+    `Effect.saver` carries it and `rolls_the_save` resolves it, defaulting
+    to `owner` -- so every other save-ends effect in the tree is untouched,
+    which the last assertion here is the control for.
+
+    **All three questions are asserted, not just the announcement**, and the
+    bonus one is the sharpest: a fix that moved only the `SavingThrow.actor`
+    would still read the attacker's save modifiers, and would pass an
+    announcement-only check. Dropping `saver` from `rolls_the_save` turns
+    three of these red.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit, SavingThrow
+
+    def laid() -> tuple[Any, int, int, Any]:
+        world, me, _start = A.board("i806p1", 1)
+        foe = next(e for e in world.entities if e != me)
+        c = Cast(world=world, me=me, ref="i806p1", target=foe,
+                 trigger=Hit(attacker=me, target=foe, power="i806p1",
+                             critical=False))
+        REGISTRY["i806p1"].body(c)
+        held = next(e for e in world.effects.live.values()
+                    if "i806p1" in (e.label or ""))
+        return world, me, foe, held
+
+    world, me, foe, held = laid()
+
+    out.that(held.owner == me,
+             "the ignore sits on the attacker, which is what narrows it",
+             f"owner={held.owner} me={me}")
+    out.that(held.when is When.SAVE_ENDS,
+             "and the printed clock is a saving throw, not the end of a turn",
+             f"when={held.when.value}")
+    out.that(held.rolls_the_save == foe,
+             "but the creature that rolls it is the target",
+             f"saver={held.saver} owner={held.owner} foe={foe}")
+    out.that(held.clock == foe,
+             "and the throw is taken at the target's turn end, not the"
+             " attacker's",
+             f"clock={held.clock}")
+
+    # Announced for the target.
+    cursor = len(world.bus.log)
+    world.effects.save(held)
+    throws = [e for e in world.bus.log[cursor:] if isinstance(e, SavingThrow)]
+    out.that(len(throws) == 1 and throws[0].actor == foe,
+             "the SavingThrow is announced for the target",
+             f"actor(s)={[t.actor for t in throws]} foe={foe}")
+
+    # **Whose bonus**, which is the question an announcement-only fix misses.
+    world, me, foe, held = laid()
+    Cast(world=world, me=me, ref="drivers:probe", target=foe).bonus(
+        "save", 7, on=foe, until=When.ENCOUNTER)
+    cursor = len(world.bus.log)
+    world.effects.save(held)
+    rolled = next(e for e in world.bus.log[cursor:]
+                  if isinstance(e, SavingThrow))
+    out.that(rolled.bonus >= 7,
+             "and the target's own save bonus is the one that applies",
+             f"bonus={rolled.bonus} (a +7 laid on the target)")
+
+    # The control: an ordinary save-ends hold is unmoved. `saver` is 0 for
+    # every other effect in the tree, so this is what says the field is
+    # inert until a row asks for it.
+    world, me, _ = A.board("i806p1", 1)
+    foe = next(e for e in world.entities if e != me)
+    plain = Cast(world=world, me=me, ref="drivers:probe", target=foe).dazed(
+        until=When.SAVE_ENDS, on=foe)
+    out.that(plain is not None and plain.saver == 0
+             and plain.rolls_the_save == plain.owner == foe,
+             "an ordinary save-ends hold still rolls for its own owner",
+             f"saver={getattr(plain, 'saver', None)}"
+             f" owner={getattr(plain, 'owner', None)} foe={foe}")
+
+
+def immune_to_a_keyword(out: Result) -> None:
+    """"An enemy not immune to fear", "creatures immune to fear".
+
+    Immunity in this engine was to **conditions**. Two feats printed a gate
+    on a keyword immunity and both were marked `dropped=`, each docstring
+    recording that a creature does not carry such a thing. It does, and the
+    facts were already in `game.db`: `monster.immune` holds the printed
+    token and `loader._stat_block` filtered the column to `DamageType`
+    members, so **disease on 488 monsters, fear on 61, gaze on 36, sleep on
+    31 and charm on 27** were read out of the database and dropped on the
+    floor. #560.
+
+    `query.immune_to` answers a `Keyword` beside a `Condition` -- one
+    function, because the printed word is the same word and both are
+    `StrEnum`, so the modifier label needed no change at all.
+
+    Asserted through `f2107b`'s body both ways on the same board, which is
+    the shape a gate needs: a rule that only tried the immune enemy would
+    pass just as well against a row that never pays anybody.
+    """
+    import audit as A
+    from combat_engine.content import loader
+    from combat_engine.db import game
+    from combat_engine.engine import Defences
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import immune_to
+    from combat_engine.engine.types import Condition, Keyword
+
+    db = game()
+    fearless = db.execute(
+        "SELECT ref FROM monster WHERE immune LIKE '%fear%' AND level <= 10"
+        " LIMIT 1").fetchone()
+    ordinary = db.execute(
+        "SELECT ref FROM monster WHERE (immune IS NULL OR immune = '[]')"
+        " AND level <= 10 LIMIT 1").fetchone()
+    out.that(fearless is not None and ordinary is not None,
+             "the corpus has a fear-immune monster and a plain one to compare",
+             f"{fearless and fearless[0]} vs {ordinary and ordinary[0]}")
+    if not (fearless and ordinary):
+        return
+
+    def advantage_against(ref: str) -> tuple[bool, bool, Any]:
+        """Run `f2107b` with `ref` as the attacker. Did it grant anything?"""
+        world, me, _start = A.board("f2107b", 1)
+        foe = loader.spawn(world, ref, (12, 12))
+        shields = world.get(foe, Defences)
+        c = Cast(world=world, me=me, ref="f2107b", target=me,
+                 trigger=Hit(attacker=foe, target=me, power="probe",
+                             critical=False))
+        before = len(world.effects.live)
+        REGISTRY["f2107b"].body(c)
+        granted = len(world.effects.live) > before
+        return granted, immune_to(world, foe, Keyword.FEAR), shields
+
+    gave, immune, shields = advantage_against(fearless[0])
+    out.that(immune,
+             "a monster printing Immune fear reads as immune to the keyword",
+             f"{fearless[0]} immune_keywords="
+             f"{sorted(k.value for k in shields.immune_keywords)}")
+    out.that(not gave,
+             "and f2107b withholds its combat advantage against it",
+             f"an effect was laid: {gave}")
+
+    gave, immune, shields = advantage_against(ordinary[0])
+    out.that(not immune,
+             "a monster printing no immunity does not read as immune",
+             f"{ordinary[0]} immune_keywords="
+             f"{sorted(k.value for k in shields.immune_keywords)}")
+    out.that(gave,
+             "and f2107b does grant its combat advantage against that one",
+             f"an effect was laid: {gave}")
+
+    # The condition reading is a separate question and must not have moved:
+    # `Defences.immune` is damage and is read in `resolve.deal_damage`, not
+    # here, so a fear-immune creature is not thereby immune to being dazed.
+    world, _me, _start = A.board("f2107b", 1)
+    foe = loader.spawn(world, ref=fearless[0], square=(12, 12))
+    out.that(not immune_to(world, foe, Condition.DAZED),
+             "and keyword immunity is not condition immunity -- still dazeable",
+             f"{fearless[0]}")
+
+def a_mundane_shot_comes_out_of_a_finite_quiver(out: Result) -> None:
+    """A character carries 50 ordinary pieces and a shot spends one.
+
+    Camille's ruling on `#520`, 2026-10-28, quoted verbatim because the
+    previous "ruling" recorded against this issue was my own paraphrase and
+    said the opposite:
+
+        Typical play doesn't even track arrows, but since bookkeeping here
+        is easy, I think we can. For now, treat characters with mundane
+        ammunition as having 50, and throwing weapons as having 5.
+
+    So 50 is a **supplied** number, not a printed one. `Ammo.count`'s
+    docstring had already reserved the decision for whoever hands the
+    ammunition out, and `chargen._stock_quiver` is now that.
+
+    **The preference is the part that could have gone silently wrong.**
+    `ammunition`'s own rule is that a wielder with magic ammunition uses
+    it. Until now the quiver held nothing else, so `loaded` taking the first
+    fitting entry satisfied that by accident. With 50 ordinary arrows beside
+    one magic arrow, first-fitting spends the arrow and leaves the magic
+    piece forever unused -- which is the single thing the module exists to
+    do. Asserted both ways round.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Grid, World
+    from combat_engine.engine.ammunition import FIRES, MUNDANE, loaded
+    from combat_engine.engine.components import Ammo, Gear
+    from combat_engine.engine.rng import Rng
+
+    def built(cls: str, seed: int = 1):  # noqa: ANN202
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = True
+        try:
+            world = World(Grid(24, 16), Rng(seed), Bus())
+            me = chargen.spawn(world, chargen.Character(
+                cls=cls, level=1, build="", feats=[], powers=[]), (5, 5))
+            return world, me
+        finally:
+            chargen.SCORED_CHOICES = was
+
+    # A class the chassis gives a launcher to. Found rather than named, so a
+    # chassis change retitles the rule instead of silently skipping it.
+    found = None
+    for cls in sorted(chargen.CLASSES):
+        world, me = built(cls)
+        gear = world.need(me, Gear)
+        if any(w.group in FIRES for w in gear.weapons):
+            found = (cls, world, me, gear)
+            break
+    out.that(found is not None,
+             "some class is dealt a launcher, so there is a quiver to ask "
+             "about",
+             f"searched {len(chargen.CLASSES)} classes")
+    if found is None:
+        return
+    cls, world, me, gear = found
+
+    groups = sorted({w.group for w in gear.weapons if w.group in FIRES})
+    out.that(len(gear.quiver) == len(groups),
+             "one quiver entry per kind of launcher owned, not per weapon",
+             f"{cls}: launchers={groups} quiver={[a.kind for a in gear.quiver]}")
+    out.that(all(a.count == MUNDANE for a in gear.quiver),
+             f"each holding {MUNDANE} pieces, which is the supplied number",
+             f"{[(a.kind, a.count) for a in gear.quiver]}")
+    out.that(all(not a.ref for a in gear.quiver),
+             "and carrying no item ref -- which is what makes a piece "
+             "mundane, and what keeps `ev.ammo` empty so `fired_with` goes "
+             "on answering False for an ordinary shot",
+             f"{[a.ref for a in gear.quiver]}")
+
+    # -- a shot spends one, which is the whole of #520 --------------------
+    group = groups[0]
+    piece = loaded(world, me, group)
+    out.that(piece is not None and piece.count == MUNDANE,
+             "the launcher draws from that entry",
+             f"{piece and (piece.kind, piece.count)}")
+    before = piece.count
+    piece.count -= 1
+    out.that(loaded(world, me, group).count == before - 1,
+             "and spending one is visible in the quiver -- a mundane shot is "
+             "finite, where before #520 it was not",
+             f"{before} -> {loaded(world, me, group).count}")
+
+    # -- magic first: the assertion the ordering could have broken --------
+    world2, me2 = built(cls)
+    gear2 = world2.need(me2, Gear)
+    kind = FIRES[group]
+    gear2.quiver.append(Ammo(ref="i:driver-arrow", kind=kind, plus=1, count=2))
+    drawn = loaded(world2, me2, group)
+    out.that(drawn is not None and drawn.ref == "i:driver-arrow",
+             "with a magic piece in the quiver beside the 50, the magic one "
+             "is what the launcher draws",
+             f"drew {drawn and drawn.ref!r}")
+
+    gone = next(a for a in gear2.quiver if not a.ref)
+    out.that(gone.count == MUNDANE,
+             "and the ordinary pieces are untouched while it lasts",
+             f"mundane count={gone.count}")
+
+    # And once the magic runs out, the ordinary pieces are reached.
+    drawn.count = 0
+    after = loaded(world2, me2, group)
+    out.that(after is not None and not after.ref,
+             "when the magic piece is spent the launcher falls back to the "
+             "ordinary ones rather than to nothing",
+             f"drew {after and (after.kind, after.count)}")
+
+
+def a_borrowed_row_records_which_one_was_taken(out: Result) -> None:
+    """"The power you chose for your <trait>" has to be answerable.
+
+    `c.borrow_row` reads a *set* off the registry, asks `world.decide` for
+    one of it, and hands it over. Until now the pick existed on the board in
+    exactly one place -- the label on `grant_row`'s effect, `"<ref> grants
+    <taken>"` -- so a row wanting to know which power its neighbour took had
+    to parse a label. #743 asked for a reader and argued a field would be
+    cleaner; #720 then built the field (`Powers.stored`, `c.store_row` /
+    `c.stored_row`) for a different card, so the whole of it is one line in
+    `borrow_row`.
+
+    **In `borrow_row` and not in `grant_row`**, which is the narrower place
+    and the right one: `grant_row` is handed a ref its caller already knows,
+    so there is nothing to record. A *choice* is the only thing worth
+    storing.
+
+    Measured across the tree: 15 rows call `c.borrow_row`, and **10 of 15**
+    record a pick on the audit board -- the other five are rows whose own
+    gate returns before they borrow. Every one of the ten stores a ref that
+    is genuinely in `Powers.known` afterwards, which is the property worth
+    asserting: the record and the grant cannot disagree.
+
+    **The two rows #743 was filed for are still blocked**, and not on this.
+    They read `rt:r6-t3`'s pick, and that trait never borrows: `r6.powers`
+    holds exactly one written power, so `granted`'s choice has one option.
+    The other leg of its printed fork is a *trait*, which `RaceLine` cannot
+    put in the same list. That is a separate gap and it is filed.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import use
+
+    def borrow(ref: str) -> tuple[Any, int, str, list[str]]:
+        """Run `ref` on its own board. Returns the pick and the grant labels."""
+        world, me, _start = A.board(ref, 1)
+        world.turn = me
+        use(world, me, ref, spend=False)
+        c = Cast(world=world, me=me, ref="drivers:borrowed")
+        labels = [str(e.label) for e in world.effects.of(me)
+                  if str(e.label).startswith(f"{ref} grants ")]
+        return world, me, c.stored_row(of=ref), labels
+
+    # Two different borrowers, so the per-row keying is exercised rather
+    # than assumed.
+    FIRST, SECOND = "f666", "f667"
+
+    world, me, pick, labels = borrow(FIRST)
+    out.that(bool(pick),
+             "a row that borrows records which row it took",
+             f"{FIRST} stored {pick!r}")
+    if not pick:
+        return
+
+    known = world.need(me, Powers)
+    out.that(pick in known.all,
+             "and the row it recorded is the row it actually granted",
+             f"{pick} in Powers.known: {pick in known.all}")
+
+    # **The old route and the new one must agree, and here is why the old
+    # one was not enough.** `f666` grants a *named* row and then borrows a
+    # chosen one, so it lays **two** labels of the identical shape -- and a
+    # reader parsing labels cannot tell which was the choice. The store
+    # holds only the borrow, which is the whole point of it.
+    out.that(any(lab.endswith(f" {pick}") for lab in labels),
+             "the pick the store holds is one the effect labels name",
+             f"{len(labels)} label(s), store={pick!r}")
+    out.that(len(labels) > 1,
+             "and this row lays more than one label of that shape, so the "
+             "label route could not have answered the question",
+             f"{len(labels)} labels")
+    named = [lab for lab in labels if not lab.endswith(f" {pick}")]
+    out.that(named and all(not lab.endswith(f" {pick}") for lab in named),
+             "the named grant is not what got stored -- a grant is not a "
+             "choice",
+             f"{len(named)} named grant(s), none of them the stored pick")
+
+    c = Cast(world=world, me=me, ref="drivers:borrowed")
+    out.that(c.stored_row(of=SECOND) == "",
+             "and a different row's slot is empty on this board, so the "
+             "store is keyed per borrowing row",
+             f"stored_row(of={SECOND}) = {c.stored_row(of=SECOND)!r}")
+    out.that(c.stored_row() == "",
+             "as is the reader's own slot, which it never wrote",
+             f"stored_row() = {c.stored_row()!r}")
+
+    # The second borrower, on its own board, records under its own ref.
+    world2, me2, pick2, _labels2 = borrow(SECOND)
+    out.that(bool(pick2),
+             "the second borrower records under its own ref too",
+             f"{SECOND} stored {pick2!r}")
+    c2 = Cast(world=world2, me=me2, ref="drivers:borrowed")
+    out.that(c2.stored_row(of=FIRST) == "",
+             "and not under the first one's",
+             f"stored_row(of={FIRST}) = {c2.stored_row(of=FIRST)!r}")
+
+    # -- the negative control: a row that does not borrow records nothing --
+    # Same shape of board, a row that grants a *named* row rather than
+    # choosing one. `grant_row` deliberately does not write here.
+    world3, me3, _s3 = A.board("f1512", 1)
+    world3.turn = me3
+    use(world3, me3, "f1512", spend=False)
+    c3 = Cast(world=world3, me=me3, ref="drivers:borrowed")
+    out.that(c3.stored_row(of="f1512") == "",
+             "a row that grants a named row records no pick -- there was no "
+             "choice to record",
+             f"stored_row(of=f1512) = {c3.stored_row(of='f1512')!r}")
+
+    # And the trait the two rows of #743 actually read still does not
+    # borrow, which is why they stay blocked. Asserted so the day it starts
+    # borrowing, this goes red and somebody goes and writes them.
+    _w4, _me4, pick4, _l4 = borrow("rt:r6-t3")
+    out.that(pick4 == "",
+             "rt:r6-t3 still borrows nothing, so #743's two rows stay "
+             "blocked on the race fork rather than on this reader",
+             f"stored_row(of=rt:r6-t3) = {pick4!r}")
+
+
+def an_enchanted_item_is_named_after_the_base_it_is_on(out: Result) -> None:
+    """A magic item's row says what *kind* of weapon it is laid on.
+
+    Camille's rule on #346, in their words: *"I'm mostly seeing <weapon name>
+    of <enchantment> or <enchantment> <weapon>. The <weapon> should be pretty
+    easy to always sub out for the correct kind."* Two shapes, and only the
+    **leading** one was built -- on a census that counted 15 items of 403 and
+    filed every other name under "not this shape". Re-measured over all 1,016
+    items in the four categories:
+
+        leading     39    Weapon 15   Armor 16   Arms 8
+        trailing   397    Weapon 203  Armor 155  Arms 37  Implement 2
+
+    So the shape that was missing is 13x the one that was built, and the
+    consequence was visible on a dealt character: **15 of 15** item rows
+    reaching a level-5 party's power list still ended in the generic word.
+
+    **Asserted without a printed name anywhere in this file.** The refs of
+    each shape are discovered from the localisation at run time and the
+    assertions are *relational* -- the substituted name differs from the
+    plain one in exactly one word, at the expected end, and that word is the
+    base weapon's own. Nothing here prints a name, and the evidence strings
+    report positions and word counts rather than text.
+
+    Skips, and says so, when `localization/` is absent: with names off there
+    is no printed name to substitute and `wire.item` correctly serves the
+    ref.
+    """
+    from combat_engine.api import render
+    from combat_engine.api import session as S
+    from combat_engine.api.render import _item_categories
+    from combat_engine.api.wire import (
+        _GENERIC_WEAPON_WORDS,
+        _TRAILING_PUNCTUATION,
+        Wire,
+        item_of,
+    )
+    from combat_engine.db import game, localisation
+    from combat_engine.engine.components import Gear, Powers
+    from combat_engine.engine.query import team
+    from combat_engine.engine.types import Team
+
+    wire = Wire(show_names=True)
+    names = localisation()
+    if not names:
+        out.that(False, "SKIPPED: localization/ is absent, so there is no "
+                        "printed name to substitute", "names table empty")
+        return
+
+    def shape(ref: str) -> str:
+        """`leading`, `trailing` or `neither`, off the printed name."""
+        entry = names.get(ref) or {}
+        nm = (entry.get("name") if isinstance(entry, dict) else str(entry)) or ""
+        words = [w.strip(_TRAILING_PUNCTUATION).lower() for w in nm.split()]
+        if len(words) < 2:
+            return "neither"
+        if words[0] in _GENERIC_WEAPON_WORDS:
+            return "leading"
+        if words[-1] in _GENERIC_WEAPON_WORDS:
+            return "trailing"
+        return "neither"
+
+    # Item **blocks**, which is what a power list shows, grouped by the shape
+    # of the item's own name.
+    blocks: dict[str, list[str]] = {"leading": [], "trailing": [], "neither": []}
+    rows = game().execute(
+        "SELECT ref FROM item WHERE category = 'Weapon'").fetchall()
+    owned = {r[0] for r in rows}
+    for ref in names:
+        if not isinstance(ref, str):
+            continue
+        # `item_of` rather than a second copy of the block pattern -- its
+        # docstring is public for exactly this reason.
+        whole = item_of(ref)
+        if not whole or whole not in owned:
+            continue
+        blocks[shape(whole)].append(ref)
+
+    out.that(all(blocks[k] for k in ("leading", "trailing", "neither")),
+             "the catalogue offers an item block of each of the three name "
+             "shapes to compare",
+             f"leading={len(blocks['leading'])} "
+             f"trailing={len(blocks['trailing'])} "
+             f"neither={len(blocks['neither'])}")
+    if not all(blocks[k] for k in ("leading", "trailing", "neither")):
+        return
+
+    def words(text: str) -> list[str]:
+        return text.split()
+
+    # -- the leading shape, which already worked --------------------------
+    ref = sorted(blocks["leading"])[0]
+    plain, subbed = wire.item(ref, slug=""), wire.item(ref, slug="longsword")
+    out.that(words(subbed)[0] == "Longsword",
+             "a name that LEADS with a generic word takes the base weapon's "
+             "word in front",
+             f"{ref}: first word became {words(subbed)[0]!r}")
+    out.that(words(subbed)[1:] == words(plain)[1:],
+             "and every later word is untouched",
+             f"{len(words(plain))} words in, {len(words(subbed))} out")
+
+    # -- the trailing shape, which is this change -------------------------
+    ref = sorted(blocks["trailing"])[0]
+    plain, subbed = wire.item(ref, slug=""), wire.item(ref, slug="greataxe")
+    out.that(words(subbed)[-1] == "Greataxe",
+             "a name that ENDS with a generic word takes it at the end",
+             f"{ref}: last word became {words(subbed)[-1]!r}")
+    out.that(words(subbed)[:-1] == words(plain)[:-1],
+             "and every earlier word is untouched",
+             f"{len(words(plain))} words in, {len(words(subbed))} out")
+    out.that(len(words(subbed)) == len(words(plain)),
+             "so the name keeps its length -- one word swapped, not appended",
+             f"{len(words(plain))} -> {len(words(subbed))}")
+
+    # -- a two-word slug is title-cased throughout ------------------------
+    # `holy-symbol` read `Holy symbol` before this change, and 40 holy
+    # symbols plus the hand crossbows are dealt as base weapons.
+    subbed = wire.item(ref, slug="hand-crossbow")
+    out.that(words(subbed)[-2:] == ["Hand", "Crossbow"],
+             "a two-word slug is capitalised on both words and loses its "
+             "hyphen",
+             f"tail reads {words(subbed)[-2:]}")
+
+    # -- the negative control, and its population must be independent -----
+    #
+    # **The first version of this was self-referential and a plant proved
+    # it.** It drew the control from `blocks["neither"]`, which `shape()`
+    # computes with `_GENERIC_WEAPON_WORDS` -- so widening that set to
+    # include four ordinary nouns moved exactly the items that would now be
+    # renamed *out* of the control population, and all ten assertions stayed
+    # green while the feature renamed things it must not. A control that
+    # classifies with the set it is policing cannot see the set change.
+    #
+    # So: fixed refs, chosen once by reading their printed names, and refs
+    # are not names so they may be written here. Each ends in an ordinary
+    # noun that no base weapon should ever displace.
+    FIXED = ("i601x1", "i1446x1", "i1318p1", "i3422p1")
+    live = [r for r in FIXED if (names.get(item_of(r) or r) or {})]
+    out.that(len(live) == len(FIXED),
+             "the four fixed control items are all in the catalogue",
+             f"{len(live)} of {len(FIXED)}: {live}")
+    unchanged = [r for r in live
+                 if wire.item(r, slug="greataxe") == wire.item(r, slug="")]
+    out.that(len(unchanged) == len(live),
+             "a name ending in an ordinary noun is left alone, whatever base "
+             "is offered",
+             f"{len(unchanged)} of {len(live)} unchanged")
+
+    # And the set itself, which is what the plant above actually attacked.
+    # Two words, because the census found only two trailing generic words in
+    # the weapon categories -- `weapon` 186 and `blade` 17. A third would
+    # need the same measurement behind it.
+    out.that(set(_GENERIC_WEAPON_WORDS) == {"weapon", "blade"},
+             "and only those two words count as a placeholder, which is what "
+             "bounds the whole rule",
+             f"{sorted(_GENERIC_WEAPON_WORDS)}")
+
+    # -- and no base means no substitution --------------------------------
+    ref = sorted(blocks["trailing"])[0]
+    out.that(wire.item(ref, slug="") == wire.item(ref),
+             "with no base weapon known the printed name is served as-is",
+             f"{ref}: slug='' and no slug agree")
+
+    # -- names off still serves the ref, which #346 must not break --------
+    dark = Wire(show_names=False)
+    out.that(dark.item(ref, slug="greataxe") == ref,
+             "and with names off the substitution serves the ref, not a name",
+             f"{ref} -> {dark.item(ref, slug='greataxe')!r}")
+
+    # -- the armour and shield thirds, which are the same rule -----------
+    #
+    # **No pairing, and that is the difference.** A weapon enchantment needs
+    # `Weapon.item` to say which of several weapons it went onto. A
+    # character wears **one** suit and carries **one** shield, so
+    # `Gear.armour` and `Gear.shield` already name the base. Measured over
+    # four dealt parties: every one of 16 characters holding an `Armor` item
+    # held exactly one, so there is no second claimant.
+    from combat_engine.armour import ARMOUR_WORD, SHIELD_WORD
+
+    out.that(ARMOUR_WORD.get("chain") == "Chainmail",
+             "the display word comes off the table, not off `Gear.armour` -- "
+             "every reader says `chain` and the page prints `Chainmail`",
+             f"ARMOUR_WORD['chain'] = {ARMOUR_WORD.get('chain')!r}")
+    out.that(SHIELD_WORD.get(1) == "Light Shield"
+             and SHIELD_WORD.get(2) == "Heavy Shield",
+             "and a shield's weight is printed rather than inferred, "
+             "singular because a character carries one",
+             f"{SHIELD_WORD}")
+
+    # **The cross-category guard**, which is what makes one union of generic
+    # words safe instead of one set per category.
+    weapon_words = {"weapon", "weapons", "blade", "blades"}
+    armour_words = {"armor", "armour", "shield", "shields"}
+    crossed = []
+    for whole, category in _item_categories().items():
+        if category not in ("Weapon", "Armor", "Arms", "Implement"):
+            continue
+        entry = names.get(whole) or {}
+        nm = (entry.get("name") if isinstance(entry, dict) else str(entry)) or ""
+        w = [x.strip(_TRAILING_PUNCTUATION).lower() for x in nm.split()]
+        if len(w) < 2:
+            continue
+        ends = {w[0], w[-1]}
+        if category == "Weapon" and ends & armour_words:
+            crossed.append((whole, category))
+        if category in ("Armor", "Arms") and ends & weapon_words:
+            crossed.append((whole, category))
+    out.that(not crossed,
+             "no weapon-category item's name uses an armour word at either "
+             "end, and none in an armour category uses a weapon word -- so "
+             "one union of generic words cannot rename across categories",
+             f"{len(crossed)} crossed of {len(_item_categories())} items")
+
+    # And through the real renderer, on a dealt character.
+    subbed, total, worn = 0, 0, set()
+    for seed in (1, 2, 3):
+        sess = S.Session.create(seed=seed, level=5)
+        for eid in list(getattr(sess.world, "_alive", [])):
+            if team(sess.world, eid) is not Team.PC:
+                continue
+            gear = sess.world.get(eid, Gear)
+            known = sess.world.get(eid, Powers)
+            if gear is None or known is None:
+                continue
+            for row in known.all:
+                whole = item_of(row)
+                if not whole or _item_categories().get(whole) != "Armor":
+                    continue
+                total += 1
+                label = render._row_label(sess, eid, row)
+                if label != sess.wire.item(row, slug=""):
+                    subbed += 1
+                    worn.add(gear.armour)
+    out.that(total > 0,
+             "a dealt party holds armour item rows to render at all",
+             f"{total} Armor block(s) across three parties")
+    out.that(total and subbed >= total - 2,
+             "and nearly all of them name the suit the character is wearing "
+             "-- the exceptions being names like a robe, which is what the "
+             "thing is rather than a placeholder",
+             f"{subbed} of {total} substituted, bases seen: {sorted(worn)}")
+
+    # The shield half has no dealt example -- three characters carried a
+    # shield across those parties and none was dealt an `Arms` item -- so it
+    # is driven through `_worn_base` directly, and this says so rather than
+    # reporting a pass it did not earn.
+    class _Gear:
+        armour, shield = "plate", 2
+
+    arms = [w for w, c in _item_categories().items() if c == "Arms"]
+    out.that(bool(arms) and render._worn_base(arms[0], _Gear()) == "Heavy Shield",
+             "an Arms item reads the shield's weight (driven directly: no "
+             "dealt party in three held one)",
+             f"{len(arms)} Arms items, _worn_base -> "
+             f"{render._worn_base(arms[0], _Gear()) if arms else None!r}")
+    out.that(render._worn_base(sorted(blocks['trailing'])[0], _Gear()) == "",
+             "and a weapon-category item takes no armour word, whatever is "
+             "worn",
+             f"_worn_base on a Weapon item = "
+             f"{render._worn_base(sorted(blocks['trailing'])[0], _Gear())!r}")
+
+
+def an_element_sworn_leg_draws_its_own_element(out: Result) -> None:
+    """A leg sworn to an element must draw powers of that element.
+
+    `#464`: four sorcerer legs differ **only** in `Build.element`, that field
+    was read in play and never in the draw, and all four therefore drew a
+    byte-identical loadout. Two scoring terms fixed it and this is the gate
+    those terms never got.
+
+    **Why they never got one, which is the whole of `#906`.** The rule was
+    written, passed alone, and failed inside the suite -- and `#906`
+    bisected the suite to `drivers.reload` and recorded it as "reload leaves
+    state behind". That diagnosis is wrong. `reload` leaves nothing: it is
+    simply the first rule in those subsets whose body runs `import audit`,
+    and `scripts/audit.py` sets **`chargen.SCORED_CHOICES = False` at import
+    time**, deliberately and with its reasons measured (scored dealing put
+    80 rows out of reach). So the bisection found the first *importer*, not
+    a polluter, and the flag stays off for every rule after it.
+
+    The element terms are **scoring** terms, so with scoring off they are
+    inert by construction. The rule was asking a question the process had
+    switched off.
+
+    `drivers:chose` already wrote this down -- *"a process-wide flag that
+    `audit.py` sets to `False` at import time ... so this rule passed alone
+    and failed inside the suite"* -- and the honest fix it names is the one
+    taken here: **say which configuration each assertion is about** rather
+    than inherit whichever rule ran first.
+
+    **The comparison is own-element against the mean of the other three
+    legs**, not against their sum, and that is not a detail: a sum over
+    three legs is three times the sample, so `air` reads 75 against 100 and
+    looks like a *failure* while leaning on its element nearly twice as
+    hard as its neighbours do. A raw cross-leg total cannot be read.
+
+    What makes it a measurement of the scorer rather than of the corpus is
+    the unscored arm. With `SCORED_CHOICES = False` all four legs draw the
+    same loadout, so each leg's count of an element and the mean of the
+    other three's count of it are **exactly equal** -- 47 vs 47, 7 vs 7,
+    82 vs 82, 46 vs 46. A corpus-frequency effect would show in both arms;
+    this shows in one.
+
+    **What the plants found, and it is a property of `#464` rather than a
+    weakness here.** `#906` specified three: the positive term zeroed, the
+    mirror zeroed, and the `sworn is None` guard removed. Zeroing
+    **either** term alone leaves all ten assertions green --
+    `leans_on_element` rewards an on-element row and `offelement_build`
+    penalises an off-element one, so against a leg that *has* an element
+    the two are redundant and either separates the four legs on its own.
+    Zeroing **both** turns the five scored assertions red and leaves the
+    five configuration ones green, which is the attribution this rule can
+    honestly make: the element mechanism is live, not which half carries
+    it.
+
+    The guard plant is not run, deliberately. It changes what a leg with
+    **no** element scores, and all four legs measured here have one; that
+    case belongs with the other 86 legs and is a different measurement.
+    """
+    from random import Random
+    from statistics import mean
+
+    from combat_engine import chargen
+    from combat_engine.chargen import choices
+    from combat_engine.engine.dsl import get
+
+    SEEDS = 30
+    # **Whatever this process happens to be set to**, which is the one thing
+    # this rule must not assert a value for: `True` running alone, `False`
+    # inside the suite once any rule has imported `audit`. The property is
+    # that the rule hands it back unchanged, not what it was.
+    ambient = chargen.SCORED_CHOICES
+    legs = [b for b in chargen.BUILDS.get("sorcerer", [])
+            if getattr(b, "element", None) is not None]
+    out.that(len(legs) == 4,
+             "the sorcerer has four element-sworn legs to compare",
+             f"{[(b.name, str(b.element)) for b in legs]}")
+    if len(legs) != 4:
+        return
+
+    def draw(scored: bool) -> tuple[int, dict[str, dict[str, int]]]:
+        """`(seeds where all four legs drew the same, element counts per leg)`.
+
+        Pins the flag and puts it back. Inheriting it is the bug above.
+        """
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = scored
+        try:
+            counts: dict[str, dict[str, int]] = {b.name: {} for b in legs}
+            identical = 0
+            for seed in range(1, SEEDS + 1):
+                drawn = {}
+                for b in legs:
+                    rows = chargen.loadout("sorcerer", 1, build=b,
+                                           rng=Random(seed))
+                    drawn[b.name] = tuple(sorted(map(str, rows)))
+                    for ref in rows:
+                        p = get(str(ref))
+                        if p is None:
+                            continue
+                        for el in choices._elements_of(p):
+                            counts[b.name][el] = counts[b.name].get(el, 0) + 1
+                if len(set(drawn.values())) == 1:
+                    identical += 1
+            return identical, counts
+        finally:
+            chargen.SCORED_CHOICES = was
+
+    out.that("leans_on_element" in choices.WEIGHTS
+             and "offelement_build" in choices.WEIGHTS,
+             "both element terms are priced in WEIGHTS",
+             f"leans_on_element={choices.WEIGHTS.get('leans_on_element')} "
+             f"offelement_build={choices.WEIGHTS.get('offelement_build')}")
+
+    def lean(counts: dict[str, dict[str, int]]) -> dict[str, tuple[int, float]]:
+        """Per leg: its own element's count, and the mean of the other three's."""
+        got = {}
+        for b in legs:
+            own = str(b.element)
+            got[b.name] = (
+                counts[b.name].get(own, 0),
+                mean(counts[o.name].get(own, 0) for o in legs if o.name != b.name),
+            )
+        return got
+
+    # -- scored: the configuration `replay` and `fight` play with ------------
+    same, counts = draw(scored=True)
+    out.that(same == 0,
+             f"scored, none of {SEEDS} seeds draws one loadout for all four legs",
+             f"{same} of {SEEDS} seeds drew all four identical")
+
+    scored_lean = lean(counts)
+    for b in legs:
+        mine, theirs = scored_lean[b.name]
+        out.that(mine > theirs,
+                 f"scored, the {b.element!s}-sworn leg draws more of its own "
+                 "element than its neighbours do",
+                 f"itself {mine}, mean of the other three {theirs:.1f}")
+
+    # -- unscored: the control, and the same sample size --------------------
+    # A negative control on one seed would prove nothing; this is the same 30.
+    same_off, counts_off = draw(scored=False)
+    out.that(same_off == SEEDS,
+             "unscored, all four legs draw the identical loadout every seed -- "
+             "which is the state #464 found and #906 mistook for pollution",
+             f"{same_off} of {SEEDS}")
+
+    off_lean = lean(counts_off)
+    flat = [f"{b.name}: {off_lean[b.name][0]} vs {off_lean[b.name][1]:.1f}"
+            for b in legs]
+    out.that(all(off_lean[b.name][0] == off_lean[b.name][1] for b in legs),
+             "and unscored each leg's own-element count equals the mean of the "
+             "other three exactly, so the scored lean is the scorer and not "
+             "the corpus",
+             "; ".join(flat))
+
+    out.that(chargen.SCORED_CHOICES is ambient,
+             "and the flag is handed back as this process set it, so the rule "
+             "after this one inherits nothing from it",
+             f"found {ambient}, left {chargen.SCORED_CHOICES} "
+             "(True alone, False once any rule has imported audit)")
+
+
+def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
+    """A once-per-board latch must not outlive the board it describes.
+
+    Ten content rows kept this in a **module-level dict keyed on
+    `id(c.world)`** -- "keyed on the world so a second encounter arms its
+    own watch", which is what the author intended and not what the code
+    did. CPython hands a collected object's address to the next allocation
+    and nothing ever removed an entry, so a latch survived its world and
+    the next `World` at that address read it as its own.
+
+    It was not a theory. Instrumenting one `audit.audit("f1788")` call:
+    **48 boards, 45 distinct `id(world)` values, and 3 boards landing on an
+    id already in the store.** The visible symptom was an audit verdict
+    that moved on every call in one process -- `fired` 24, 13, 23, 10, 1 --
+    because a stale latch suppressed `p9400`'s watch and left an unspent
+    shroud lying on the board for the next row to find. #907.
+
+    `p9400` is the row this is asserted through, for two reasons: it is
+    where the bug was found, and it is `action=FREE` rather than a trait,
+    so `Encounter.start` does **not** pre-arm it and a fresh board is
+    genuinely fresh. Every surge row that wants the same latch is
+    `action=NONE`, and `arm_traits` has already run those by the time a
+    rule can look -- see the standing note about `audit.board` arriving
+    with its work done.
+
+    The load-bearing assertion is the fourth: a second board starts with an
+    **empty** `world.latches`. That is deterministic, where waiting for an
+    address collision is not, and it is the one a module-level store of any
+    kind fails however it is keyed.
+    """
+    import audit as A
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import enemies
+
+    def watches(world: Any, me: int) -> list[str]:
+        """The watches `p9400` installs, by their own label."""
+        return sorted(str(e.label) for e in world.effects.of(me)
+                      if str(e.label).startswith("p9400"))
+
+    def arm(seed: int) -> tuple[Any, int, list[str], list[str], int]:
+        world, me, _start = A.board("p9400", seed)
+        world.turn = me
+        started_with = len(world.latches)
+        foe = sorted(enemies(world, me))[0]
+        use(world, me, "p9400", targets=[foe], spend=False)
+        once = watches(world, me)
+        use(world, me, "p9400", targets=[foe], spend=False)
+        return world, me, once, watches(world, me), started_with
+
+    first, _me, after_one, after_two, began = arm(1)
+
+    out.that(began == 0,
+             "a board arrives with no p9400 latch on it",
+             f"world.latches held {began} entries before the row ran")
+    out.that(len(after_one) == 2,
+             "one use arms p9400's two shroud watches",
+             f"labels={after_one}")
+    out.that(len(after_two) == 2,
+             "and a second use arms no further watch -- the latch held",
+             f"after one use {len(after_one)}, after two {len(after_two)}")
+    out.that(len(first.latches) == 1,
+             "the latch is recorded on the World, exactly once",
+             f"world.latches={sorted(str(k) for k in first.latches)}")
+    out.that(any("p9400" in str(k) for k in first.latches),
+             "and the key names the row, so two rows cannot collide in it",
+             f"world.latches={sorted(str(k) for k in first.latches)}")
+
+    # The whole of #907, and the half no timing or row count can see.
+    second, _me2, fresh_one, fresh_two, began_again = arm(2)
+    out.that(began_again == 0,
+             "a second board inherits none of the first board's latches",
+             f"board 1 left {len(first.latches)}, board 2 began with "
+             f"{began_again}")
+    out.that(len(fresh_one) == 2,
+             "so the new fight arms its own watches rather than being "
+             "suppressed by the old fight's latch",
+             f"labels={fresh_one}")
+    out.that(len(fresh_two) == 2,
+             "and latches them on the new board too",
+             f"after one use {len(fresh_one)}, after two {len(fresh_two)}")
+    out.that(first.latches == second.latches
+             and first.latches is not second.latches,
+             "two boards hold equal latch sets in separate objects, not one "
+             "shared store",
+             f"equal={first.latches == second.latches} "
+             f"same object={first.latches is second.latches}")
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -31211,6 +40655,166 @@ DRIVERS = {
     "challenge_costs_nothing": (
         a_non_combat_scene_does_not_spend_the_party_s_powers,
         "a conversation does not spend the party's encounter powers (#792)",
+    ),
+    "mundane_quiver": (
+        a_mundane_shot_comes_out_of_a_finite_quiver,
+        "a mundane shot comes out of a finite quiver, magic first (#520)",
+    ),
+    "borrowed_pick": (
+        a_borrowed_row_records_which_one_was_taken,
+        "a borrowed row records which one was taken (#743)",
+    ),
+    "item_base_name": (
+        an_enchanted_item_is_named_after_the_base_it_is_on,
+        "an enchanted item's row names the base it is laid on (#346)",
+    ),
+    "elemental_leg": (
+        an_element_sworn_leg_draws_its_own_element,
+        "a leg sworn to an element draws its own element (#464, #906)",
+    ),
+    "board_latch": (
+        a_once_per_board_latch_dies_with_the_board,
+        "a once-per-board latch dies with the board it describes (#907)",
+    ),
+    "reload": (
+        a_fired_crossbow_is_empty_until_it_is_reloaded,
+        "a load-minor weapon fires once, then must be reloaded (#675, #725)",
+    ),
+    "own_ally": (
+        the_caster_is_not_its_own_ally,
+        "a caster is not in its own ally pool, and is in its team pool (#364)",
+    ),
+    "repeat_on_miss": (
+        a_missed_attack_is_repeated_against_the_one_you_swapped_with,
+        "a missed attack is repeated against the one you swapped with (#845)",
+    ),
+    "either_occasion": (
+        one_row_answers_either_of_two_printed_occasions,
+        "one row answers either of two printed occasions, once (#836)",
+    ),
+    "concealment": (
+        concealment_is_modelled_and_ten_rows_said_it_was_not,
+        "concealment laid on a creature, in a zone, and denied (#860)",
+    ),
+    "f981_branch": (
+        f981s_branch_on_p1758_pays_when_the_target_hurt_you,
+        "f981's branch on p1758 pays when the target hurt you (#556)",
+    ),
+    "dc_table": (
+        the_dc_table_matches_what_the_compendium_prints,
+        "the Skill Check DC table matches the page it came from (#491)",
+    ),
+    "lent_property": (
+        a_lent_property_lasts_exactly_one_attack,
+        "a property lent for one attack is gone after it (#844)",
+    ),
+    "chassis": (
+        a_character_has_one_feature_chassis_and_not_two,
+        "a class's second feature ladder goes to whoever took it (#851)",
+    ),
+    "aim_cache": (
+        an_area_stops_being_aimable_when_a_wall_arrives,
+        "where an area may be centred follows the walls, not a stale memo",
+    ),
+    "crit_range": (
+        a_widened_crit_range_widens_crits_and_not_hits,
+        "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "suspend_trait": (
+        a_trait_given_up_for_a_turn_comes_back,
+        "a trait given up for a turn comes back (#468)",
+    ),
+    "ignores_hazards": (
+        crossing_a_hazard_can_cost_nothing,
+        "crossing a hazard can cost nothing, by label (#468)",
+    ),
+    "carrying": (
+        a_target_can_be_narrowed_to_whoever_carries_equipment,
+        "a target can be narrowed to whoever carries equipment (#468)",
+    ),
+    "training": (
+        training_is_asked_and_can_be_lent,
+        "an untrained-only bonus asks, and training can be lent (#468)",
+    ),
+    "grabbed_aura": (
+        an_aura_deals_more_to_the_creature_its_owner_is_grabbing,
+        "an aura deals more to the creature its owner grabs (#468)",
+    ),
+    "replace_roll": (
+        a_kept_d20_is_used_instead_of_rolling_one,
+        "a kept d20 is used instead of rolling one (#468)",
+    ),
+    "thinner_cloud": (
+        a_feat_can_thin_the_cloud_its_racial_power_lays,
+        "a feat chooses the grade its racial power's cloud lays (#468)",
+    ),
+    "zone_condition": (
+        a_zone_can_hold_a_condition_and_takes_it_back,
+        "a zone holds a condition while you stand in it (#468)",
+    ),
+    "obscured_side": (
+        an_obscuring_zone_can_have_a_side,
+        "an obscuring zone can obscure one side and not the other (#424)",
+    ),
+    "settle_attack": (
+        raising_a_defence_withdraws_the_critical_it_no_longer_reaches,
+        "raising a defence withdraws the critical it no longer reaches (#868)",
+    ),
+    "reroll_judged": (
+        a_rerolled_die_is_judged_by_the_same_rule_as_the_first,
+        "a rerolled die is judged by the same rule as the first (#868)",
+    ),
+    "banked_reroll": (
+        a_banked_reroll_turns_a_miss_into_a_hit,
+        "a reroll handed to an ally turns their miss into a hit (#775's line)",
+    ),
+    "kill_weapon": (
+        a_kill_names_the_weapon_that_made_it,
+        "a kill names the weapon that made it, not the one in hand (#698)",
+    ),
+    "stored_row": (
+        an_object_holds_a_row_and_hands_it_back,
+        "an object holds a row and hands it back, keyed per holder (#720)",
+    ),
+    "blow_turned": (
+        a_turned_blow_says_so_and_stays_turned,
+        "a landed blow turned aside is announced, and stays turned (#862)",
+    ),
+    "crit_announced": (
+        a_demoted_critical_says_so_out_loud,
+        "demoting or promoting a critical hit is announced, not silent (#861)",
+    ),
+    "blow_redirected": (
+        a_redirected_blow_says_so_and_the_damage_follows,
+        "moving a blow onto somebody else is announced at both ends (#900)",
+    ),
+    "open_lock": (
+        opening_a_lock_is_a_standard_action_beside_it,
+        "opening a lock is a standard action adjacent to it (#786)",
+    ),
+    "mounting": (
+        mounting_is_an_action_and_a_size_rule_with_an_exception,
+        "mounting and dismounting are actions, and one size exception (#749)",
+    ),
+    "use_restored": (
+        a_restored_or_expended_use_says_so,
+        "a use handed back, or spent without running the row, is said (#899)",
+    ),
+    "provoked_by": (
+        what_provoked_the_opening_reaches_the_attack,
+        "what provoked an opportunity attack reaches its context (#880)",
+    ),
+    "feint": (
+        a_feint_is_an_action_and_one_feat_rides_it,
+        "feinting is an action, and f946 rides its check (#785)",
+    ),
+    "rest_reaches_a_row": (
+        a_rest_clause_is_heard_by_a_row_and_not_only_by_the_bus,
+        "a rest reaches a row, not only the bus -- the half audit cannot see (#498)",
+    ),
+    "stealth_moved": (
+        hiding_is_a_check_and_moving_fast_makes_it_harder,
+        "hiding is a check, and moving fast makes it harder (#784)",
     ),
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -31363,6 +40967,49 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "run_only": (
+        run_only_bar,
+        "a run barred with the walk left alone (#670)",
+    ),
+    "was_an_attack": (
+        was_an_attack_behind_it,
+        "an attack's damage line told from a trait payout and an ongoing"
+        " tick (#731)",
+    ),
+    "actor_asks": (
+        a_prohibition_the_actor_consults,
+        "a refusal recorded on the protected creature, asked by the acting"
+        " verb (#764, #740)",
+    ),
+    "rider_amount": (
+        a_riders_own_amount,
+        "a typed rider's own amount, read off the blow it rides (#619)",
+    ),
+    "passed_swing": (
+        a_swing_is_passed_on,
+        "a triggering power's later swing re-aimed, and the window that"
+        " made it look impossible",
+    ),
+    "pinned_die": (
+        a_damage_die_is_pinned,
+        "a damage die floored, and one set downward on a roll already"
+        " announced (#742)",
+    ),
+    "weapon_refiled": (
+        a_weapon_is_re_filed,
+        "a weapon re-filed under another group, and a proficiency set"
+        " (#837, #839)",
+    ),
+    "every_swing": (
+        every_swing_is_recorded,
+        "every swing is on PowerResolved.rolls, and a RELIABLE daily that"
+        " hit is not refunded (#810)",
+    ),
+    "reroll_after": (
+        reroll_after_the_roll,
+        "a damage die rerolled after the roll, by the two rows that print"
+        " it (#703)",
     ),
     "lent_reroll": (
         a_reroll_handed_to_somebody_else,
@@ -31574,10 +41221,53 @@ DRIVERS = {
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "forms": (forms, "which shape a creature is in, and two at once"),
+    "school_summon": (
+        a_school_decides_which_creature_is_summoned,
+        "which creature a wizard's school benefit summons (#826)",
+    ),
     "summoned": (summoned,
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "no_invis_aura": (
+        an_aura_strips_invisibility_on_arrival,
+        "c.no_invisibility_in catches a creature that walks in (#774)",
+    ),
+    "one_sustain": (
+        one_sustain_pays_for_the_whole_power,
+        "one sustain action pays for every effect a power laid (#819)",
+    ),
+    "retype_unrolled": (
+        a_retype_reaches_unrolled_damage,
+        "a standing c.deals retype reaches c.flat too (#795)",
+    ),
+    "sustain_cost": (
+        a_sustain_cost_is_asked_of_the_encounter,
+        "a sustain survives on any cost the creature can pay (#776)",
+    ),
+    "granted_words": (
+        every_granted_word_has_a_reader,
+        "c.grant_action hands out only words actions.py reads (#762)",
+    ),
+    "concealment_feat": (
+        a_feat_waives_only_ordinary_concealment,
+        "f1832 waives ordinary concealment for an ally and not total",
+    ),
+    "size_order": (
+        a_size_comparison_reads_the_order,
+        "a size comparison goes through Size.order, not the string enum"
+        " (#817)",
+    ),
+    "milestones": (
+        milestones_carry_across_a_day,
+        "a milestone counted across a day, and the seven rows that read it"
+        " (#666)",
+    ),
+    "day_budgets": (
+        a_day_of_scaled_budgets,
+        "an adventuring day's legs, each built to its share of the printed XP"
+        " budget (#666)",
+    ),
     "kind_waived": (
         a_kind_waived_for_one_attacker,
         "a creature's type widened for one attacker's divine powers (#770)",
@@ -31748,6 +41438,10 @@ DRIVERS = {
                                      "a zone or aura confers a"
                                      " vulnerability on whoever stands in"
                                      " it"),
+    "offered_aiming_is_what_area_answers": (
+        offered_aiming_is_what_area_answers,
+        "c.area() answers for the aiming this use chose, and an offered"
+        " index resolves rather than clamping"),
     "both_printed_shapes_offered": (both_printed_shapes_offered,
                                     "a printed \"or\" between two shapes"
                                     " offers both, and the conditional pair"
@@ -31765,6 +41459,15 @@ DRIVERS = {
                    "bull rush, grab and aid another, electable by anybody"),
     "difficult_aura": (difficult_aura,
                        "an aura can be difficult ground, waived for a side"),
+    "weapon_rebuilt": (a_weapon_write_rebuilds_the_weapon,
+                       "a weapon write rebuilds the weapon so its post-init"
+                       " runs, and the change is visible after (#842)"),
+    "becomes_burst": (a_basic_attack_that_becomes_a_burst,
+                      "a basic attack rewritten into a burst: shape,"
+                      " defence and damage together (#712)"),
+    "harder_for_one": (ground_made_harder_for_one_creature,
+                       "rough ground imposed on one creature, and it"
+                       " follows the creature it is measured from (#831)"),
     "compelled_walk": (compelled_walk,
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
@@ -31781,12 +41484,39 @@ DRIVERS = {
                        "a raw ability check, which is not a skill check"),
     "unpreventable": (unpreventable,
                       "damage that resistance and immunity do not touch"),
+    "a_darkness_a_light_cannot_lift": (
+        a_darkness_a_light_cannot_lift,
+        "a zone that cannot be illuminated, and who still sees through it"),
+    "a_reshaped_row_is_still_usable": (
+        a_reshaped_row_is_still_usable,
+        "a reshape changes the kind, and the readers must follow it"),
+    "pull_what_you_hold": (
+        pull_what_you_hold,
+        "dragging a grabbed creature is a granted action, offered live"),
+    "a_variant_race_inherits_and_is_not_dealt": (
+        a_variant_race_inherits_and_is_not_dealt,
+        "nine variant races inherit a parent and stay out of the deal"),
+    "two_variant_racial_traits": (
+        two_variant_racial_traits,
+        "the two r67/r68 traits that are rows, and each one's gate"),
+    "a_reentrant_repeat_passes_a_spent_grant": (
+        a_reentrant_repeat_passes_a_spent_grant,
+        "a repeat passes an exhausted grant and not a prohibition"),
+    "a_trigger_reads_the_attackers_reach": (
+        a_trigger_reads_the_attackers_reach,
+        "a reshaped attack is judged by the shape it was made with"),
+    "a_choose_one_race_actually_chooses": (
+        a_choose_one_race_actually_chooses,
+        "a choose-one race picks, and only five races can move"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,
                         "a power point put back, and the cap that refuses one"),
     "boon_traded": (boon_traded,
                     "a feat takes a power point instead of the boon's regain"),
+    "boon_offered_where_it_is_paid": (
+        boon_offered_where_it_is_paid,
+        "every pact boon payout offers itself to a card that trades it"),
     "lent_augments": (lent_augments,
                       "a feat lends a power an augment its card omits"),
     "counts_as_basic": (counts_as_basic,
@@ -31906,6 +41636,16 @@ DRIVERS = {
     "scoped_vulnerable": (scoped_vulnerable,
                           "vulnerable to some of what reaches you"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
+    "deals_damage_gate": (deals_damage_gate,
+                          "a rider excluded on a damageless power"),
+    "weapon_is_mine": (weapon_is_mine,
+                       "a weapon block's clause lands on its own weapon"),
+    "mark_knows_its_row": (mark_knows_its_row,
+                           "a mark records which row laid it"),
+    "save_ends_for_somebody_else": (save_ends_for_somebody_else,
+                                    "one creature's hold, another's save"),
+    "immune_to_a_keyword": (immune_to_a_keyword,
+                            "immunity to a class of effect, not a condition"),
 }
 
 

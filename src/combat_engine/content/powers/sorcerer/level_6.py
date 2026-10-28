@@ -19,7 +19,6 @@ from combat_engine.engine import (
     AC,
     AREA_OR_CLOSE,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
@@ -32,6 +31,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     AreaBurst,
     AttackDeclared,
     Cast,
@@ -163,7 +163,7 @@ def p16243(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
 )
 def p3056(c: Cast) -> None:

@@ -15,12 +15,12 @@ from __future__ import annotations
 from combat_engine.engine import (
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     MINOR,
     NO_TARGET,
-    ONE_ALLY,
     STANDARD,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBurst,
     Keyword,
@@ -42,7 +42,7 @@ DIVINE_HEALING = [Keyword.DIVINE, Keyword.HEALING]
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=DIVINE_HEALING,
 )
 def p1410(c: Cast) -> None:
@@ -75,7 +75,7 @@ def p652(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=DIVINE,
 )
 def p949(c: Cast) -> None:

@@ -8,7 +8,7 @@ from __future__ import annotations
 from combat_engine.engine import (
     ENCOUNTER,
     INTERRUPT,
-    ONE_ALLY,
+    YOU_OR_ONE_ALLY,
     Cast,
     DamageRolled,
     Keyword,
@@ -47,7 +47,7 @@ def _me_or_beside_me(world: World, me: int, ev: DamageRolled) -> bool:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.MARTIAL],
     requires=has_shield,
     requires_text="must be used with a shield",

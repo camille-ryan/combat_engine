@@ -30,12 +30,17 @@ from .events import (
     ZoneExited,
 )
 from .grid import Square, spread
-from .query import creatures, squares
+from .query import creatures, squares, team
 from .types import ActionType, Light
 
 if TYPE_CHECKING:
     from .durations import Effect
     from .ecs import World
+
+
+#: The directions `Zone.obscured_for` may take -- see the field's own note
+#: for why this is two words rather than a predicate or a set of ids.
+OBSCURED_FOR = frozenset({"enemies", "outside"})
 
 
 @dataclass
@@ -61,6 +66,52 @@ class Zone:
     #: Read by `query.light_level`, which the attack path consults through
     #: `query.light_concealment`.
     obscured: str = ""
+    #: **Who the obscurity applies to**, when the card gives it a side.
+    #: `""` is everybody, which is the ordinary case. Two words otherwise:
+    #:
+    #: * `"enemies"` -- obscured to creatures not on the owner's team. Three
+    #:   rows: *"lightly obscured for your enemies only"*, *"heavily
+    #:   obscured to enemies"* twice.
+    #: * `"outside"` -- obscured to creatures not standing in it. One row:
+    #:   *"lightly obscured to creatures outside it"*.
+    #:
+    #: **A named direction and not a set of ids, which is the opposite call
+    #: from `exempt` below, deliberately.** `exempt` can be a set because
+    #: its membership is decided when the zone is laid and does not move. A
+    #: direction's membership moves constantly: `"outside"` changes every
+    #: time anybody steps in or out, and a set frozen at lay time would be
+    #: wrong by the next turn. So it is resolved at the moment somebody
+    #: looks.
+    #:
+    #: **And not a predicate either**, for the reason `exempt` is not one:
+    #: two words cover all four rows that print this, a predicate is
+    #: unserialisable and unreadable by the page, and a third direction is
+    #: cheaper to add than a callable is to live with. #424's closing
+    #: comment named these rows as the directional case the plain grade
+    #: cannot say.
+    #:
+    #: Read by `query.obscures_for`, which `light_concealment` consults with
+    #: the attacker in hand. `light_level` does **not** filter on it -- see
+    #: the note there.
+    obscured_for: str = ""
+    #: **A darkness a light cannot lift.** One card prints a zone that is
+    #: heavily obscured and "cannot be illuminated", and the second half had
+    #: nothing to refuse: `query.light_level` gives a carried `c.light`
+    #: radius an absolute override -- "anything within that radius is bright
+    #: however dark the square itself is" -- so a torch cancelled the very
+    #: darkness the card says it cannot.
+    #:
+    #: **A flag on the zone and not a waiver on the carrier**, because the
+    #: printed sentence is about the darkness rather than about who walks
+    #: into it. Taking the radius away from whoever steps inside would also
+    #: put their light out *outside* the zone, which is a bigger rule than
+    #: the card -- the same objection `m5426a0` records against reading one
+    #: number for cover and concealment together.
+    #:
+    #: Only meaningful beside `obscured=`: a zone that darkens nothing has
+    #: nothing for a light to lift. Read in `light_level`, which skips the
+    #: carrier walk entirely for a sealed square. #535.
+    no_light: bool = False
     #: Creatures this zone's sight-blocking does not apply to.
     #:
     #: Eight monster cards print a cloud or a darkness that blinds everybody
@@ -80,6 +131,34 @@ class Zone:
     #:
     #: Read by `query._blinding_squares`, which already knows the looker.
     exempt: frozenset[int] = frozenset()
+    #: Creatures these squares are difficult terrain **for, and for nobody
+    #: else** -- the narrowing `difficult` above cannot express, since that
+    #: flag is terrain and roughs the ground for everyone standing on it.
+    #:
+    #: Two heroic cards need exactly this and neither can be said any other
+    #: way: "whenever an enemy in the aura is hit, squares in the aura are
+    #: difficult terrain **for that enemy**" must leave the other enemies in
+    #: its own aura on ordinary ground, and "that enemy treats all squares
+    #: adjacent to you as difficult terrain" names one creature where the
+    #: existing waiver is per *side* -- so laying the area flat and exempting
+    #: the caster's team is wider than the card by the whole opposing side.
+    #:
+    #: **On the zone rather than on the creature, because the area follows.**
+    #: Both cards describe their squares relative to a creature -- an aura,
+    #: and "adjacent to you" -- and `Zones.refresh` already re-centres an
+    #: aura's squares every round. A set of squares copied onto the burdened
+    #: creature would have been a snapshot, exact for the turn after the hit
+    #: and stale afterwards. `Movement.harder_everywhere` is the sibling for
+    #: the one card with no geometry to follow.
+    #:
+    #: **Mutable, unlike `exempt`, and that is what carries the durations.**
+    #: One aura serves every enemy in it, but each enemy's burden runs on its
+    #: own clock -- "until the end of **its** next turn" -- so an id goes in
+    #: with an `Effect` whose `on_suspend` takes that id back out. The zone
+    #: outlives all of them.
+    #:
+    #: Written by `c.difficult_for`, read in `World.difficult`. #831.
+    difficult_for: set[int] = field(default_factory=set)
     #: The effect whose duration this zone lives on.
     effect: Effect | None = field(default=None, repr=False)
 
@@ -119,6 +198,8 @@ class Zones:
         difficult: bool | str = False,
         blocks_sight: bool = False,
         obscured: str = "",
+        obscured_for: str = "",
+        no_light: bool = False,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
     ) -> int:
@@ -134,6 +215,27 @@ class Zones:
             # content files can pass the printed word without importing an
             # enum into forty monster modules.
             obscured = Light(obscured)
+        # **The same check, for the same reason, one argument over.** The
+        # directions are a closed set of two and a misspelling is a zone
+        # that obscures *everybody* -- which reads exactly like a correct
+        # non-directional zone and is wrong in the owner's favour on three
+        # of the four rows. A uniformly-dead gate is this component's named
+        # failure mode: when every instance answers the same way, a wrong
+        # key looks like a right one.
+        if obscured_for and obscured_for not in OBSCURED_FOR:
+            raise ValueError(
+                f"obscured_for={obscured_for!r} is not one of "
+                f"{sorted(OBSCURED_FOR)}"
+            )
+        # A direction with no grade obscures nothing, and says it does. The
+        # row that writes one without the other has almost certainly left
+        # the grade off by accident -- there is no card that gives a side to
+        # an obscurity it never lays.
+        if obscured_for and not obscured:
+            raise ValueError(
+                "obscured_for= needs obscured= as well: a direction with no "
+                "grade darkens nothing"
+            )
         zone = Zone(
             owner=owner,
             label=label,
@@ -141,6 +243,8 @@ class Zones:
             difficult=difficult,
             blocks_sight=blocks_sight,
             obscured=obscured,
+            obscured_for=obscured_for,
+            no_light=no_light,
             exempt=frozenset(exempt or ()),
         )
         return self._spawn(zone, when, sustain)
@@ -221,6 +325,51 @@ class Zones:
             zone = self.world.get(eid, Zone)
             if zone is not None and zone.obscured:
                 out.append(zone)
+        return out
+
+    def obscuring_for(self, looker: int) -> list[Zone]:
+        """The darkening zones whose obscurity applies to this creature.
+
+        `dark()` answers "which zones darken squares"; this answers "which
+        of them darken squares **for you**". Four rows print an obscurity
+        with a side and `Zone.obscured_for` carries which:
+
+        * `"enemies"` -- it obscures the owner's enemies and not its own
+          side. *"Lightly obscured for your enemies only"*: the caster
+          standing in her own fog is not concealed from her allies by it.
+        * `"outside"` -- it obscures whoever is not standing in it.
+          *"Lightly obscured to creatures outside it"*: the cloud hides what
+          is inside from anybody looking in, and a creature inside sees out
+          normally.
+
+        **The looker is the attacker in both cases**, which is why one
+        filter serves two directions that read as though they were about
+        different things. Neither is a fact about the *target* -- which is
+        exactly what made them unsayable as a plain grade, since setting the
+        grade unconditionally conceals the zone's owner from itself, wrong
+        in the monster's favour on three of the four rows.
+
+        Lives here rather than in `query.py` because this module already
+        imports that one and the reverse edge would be a cycle. Reached as
+        `world.zones.obscuring_for(...)`, so the attack path needs no new
+        import in either direction. #424.
+        """
+        out = []
+        for zone in self.dark():
+            which = zone.obscured_for
+            if not which:
+                out.append(zone)
+            elif which == "outside":
+                if not (zone.squares & frozenset(squares(self.world, looker))):
+                    out.append(zone)
+            elif which == "enemies":
+                # **A zone whose owner has left the board still obscures.**
+                # The squares are still full of fog, and answering otherwise
+                # would clear the obscurity the moment the caster dropped --
+                # which is the turn it matters most.
+                mine = team(self.world, zone.owner)
+                if mine is None or team(self.world, looker) is not mine:
+                    out.append(zone)
         return out
 
     def refresh(self) -> None:

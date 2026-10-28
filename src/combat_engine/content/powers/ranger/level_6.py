@@ -127,12 +127,13 @@ def p925(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(5),
-    target=Target("ally", 2, label="You and one ally in the burst"),
+    target=Target("team", 2, label="You and one ally in the burst"),
     keywords=MARTIAL,
 )
 def p10621(c: Cast) -> None:
-    """The "ally" pool includes the caster, which is what "you and one ally"
-    means. The Beast line adds squares for the companion; it is not
+    """`"team"` is the side including the caster, which is what "you and one
+    ally" means -- the `"ally"` pool has not held the caster since #364. The
+    Beast line adds squares for the companion; it is not
     modelled, so that clause is dropped."""
     c.shift(1, who=c.target)
 
@@ -206,7 +207,7 @@ def p10624(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("ally", 1, label="You or one ally in the burst"),
+    target=Target("team", 1, label="You or one ally in the burst"),
     keywords=[Keyword.PRIMAL, Keyword.HEALING],
 )
 def p13607(c: Cast) -> None:

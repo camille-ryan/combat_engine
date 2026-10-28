@@ -883,12 +883,30 @@ def warlock_pact(c: Cast) -> None:
             return
         if not c.cursed(on=ev.actor):
             return
-        if infernal:
-            c.temp_hp(c.level, on=me)
-        elif dark:
-            raise_tally(c)
-        else:
-            c.teleport(3, who=me)
+
+        def payout() -> None:
+            if infernal:
+                c.temp_hp(c.level, on=me)
+            elif dark:
+                raise_tally(c)
+            else:
+                c.teleport(3, who=me)
+
+        # **The whole payout is offered under `BOON`**, because four cards
+        # trade the boon away and name no pact -- so the offer belongs to
+        # the payout rather than to any one leg, and one call covers all
+        # three legs here.
+        #
+        # `instead_of_now` and **not** `instead_of`: this fires inside the
+        # watcher this row installed, so there was never a menu entry and
+        # `Cast.variant` is 0 for ever -- `instead_of`'s fast path returns
+        # the default on a falsy variant without ever asking. That is the
+        # distinction `instead_of_now`'s docstring draws, and the opposite
+        # of `cf:warlock-f1c10`, which carries a declared trigger and so
+        # uses the plain reader. #641.
+        from combat_engine.content.features.warlock import BOON
+
+        c.instead_of_now(BOON, payout, on=me)
 
     c.watch(Dropped, on_drop, until=When.ENCOUNTER, on=me, label="cf:warlock-f1")
 

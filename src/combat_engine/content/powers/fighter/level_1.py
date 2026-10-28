@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -86,35 +88,71 @@ def p997(c: Cast) -> None:
     rule is one `[Arena Fighting]`, one `[Lesser Style]`, any number of
     unbracketed.
 
-    `f994` is Arena Fighting and is read off `c.declare`, which is called
-    before the attack. `f1300` carries no bracket and is a plain `c.feat`
-    test that stacks with it. **The first version chained the two**, on a
-    family split inferred from the books instead of read from the bracket.
+    `f994` and `f972` are Arena Fighting and are read off `c.declare`,
+    which is called before the attack, so only one of them pays.
+    `f1300` carries no bracket and is a plain `c.feat` test that stacks
+    with either. **The first version chained the two**, on a family split
+    inferred from the books instead of read from the bracket.
 
-    `c.declare` is called here even though only one Arena Fighting clause
-    is written: it is the slot the other four go into, and a body that
-    asks `c.feat` today is a body somebody has to remember to convert.
-
-    Both hang on the miss and not the hit, which is unusual and is why
-    they sit after the early return: one pays "damage equal to your
+    All three hang on the miss and not the hit, which is unusual and is
+    why they sit after the early return: one pays "damage equal to your
     Strength modifier **+2**" where the printed row already pays the
-    modifier, and the other pays against a held target whether the blow
-    landed or not. Six of this row's eight printed feat clauses are
-    miss-clauses, which is unusual enough to be worth saying.
+    modifier, one pays against a held target whether the blow landed or
+    not, and `f972` trades the miss away entirely. Six of this row's
+    eight printed feat clauses are miss-clauses, which is unusual enough
+    to be worth saying.
 
-    **Five more Arena Fighting feats and three Lesser Style feats name
-    this row and are not written yet**, so `f994` sits alone in a chain
-    that will grow and the Lesser Style chain does not exist. `f3230` is
-    Arena Fighting and is one of the five; its clause is once per
-    encounter, which a body has no latch for, so it cannot come here at
-    all.
+    **`f972` is "in lieu of dealing damage on a miss", so it returns and
+    pays nothing else.** The plainer reading -- skip only the printed
+    line and let `f1300` still pay -- leaves the character dealing damage
+    on a miss, which is the thing the card traded away. The declaration
+    already keeps `f994` out of the same use; `f1300` is unbracketed and
+    would otherwise stack.
+
+    **Four more Arena Fighting feats and three Lesser Style feats name
+    this row and are not written yet**, and the Lesser Style chain does
+    not exist. `f3230` is Arena Fighting and is one of the four; its
+    clause is once per encounter, which a body has no latch for, so it
+    cannot come here at all.
     """
-    arena = c.declare("Arena Fighting", "f994")
+    arena = c.declare("Arena Fighting", "f994", "f972", "f971")
     if c.strike():
         c.damage(c.w(1), c.str_mod)
         return
+    # **`on=c.me`.** `c.race_of` falls through to `c.target`, which here is
+    # the enemy -- a bare call asks the victim's race and is False for every
+    # character in the game.
+    #
+    # `c.use_power` returns False when the row is spent, which is the card's
+    # "if it is available" read from the other side: the trade is only taken
+    # when the free action can really be had, so a spent racial power leaves
+    # the printed miss damage standing.
+    if (arena == "f972" and c.race_of(on=c.me) == "r1"
+            and c.may("use the racial power instead of the miss damage",
+                      who=c.me, default=False)
+            and c.use_power("p1448")):
+        return
     # A miss still does something, and a two-handed weapon does more.
-    c.flat(c.str_mod if c.wielding("two-handed") else c.str_mod // 2)
+    figure = c.str_mod if c.wielding("two-handed") else c.str_mod // 2
+    if arena == "f971" and c.target is not None:
+        # f971: "deal damage to the target **or** one enemy adjacent to the
+        # target". An *or*, so the figure is paid once and the only question
+        # is where -- written as a rider it would pay both, which is a row
+        # stronger than its card. It is this row's own printed miss damage
+        # being redirected, so it has to be decided here and not registered
+        # from outside, which is what the feat's old marker was asking for.
+        #
+        # `side="enemy"` is read from the caster, so this is "an enemy of
+        # mine standing next to my target" and not the target's own side.
+        beside = [
+            foe for foe in c.within(1, of=c.target, side="enemy")
+            if foe != c.target
+        ]
+        picked = c.choose([c.target, *beside],
+                          "f971: who takes the miss damage")
+        c.flat(figure, on=picked if picked is not None else c.target)
+    else:
+        c.flat(figure)
     # **Two, not Strength modifier + 2.** The line above already pays the
     # modifier on a two-handed miss, so the full printed figure would pay
     # it twice. #299's trap, and the reason this row was read before the
@@ -126,6 +164,71 @@ def p997(c: Cast) -> None:
     if (c.feat("f1300") and c.con_mod > 0
             and any(c.is_(hold, on=c.target) for hold in _HELD_FAST)):
         c.flat(c.con_mod, on=c.target)
+
+
+def _a_ranged_row(ctx: dict[str, Any]) -> bool:
+    """Any opportunity window a ranged power opened.
+
+    `ctx["why"]` reads `"<ref> is a ranged power"`. The shape needs no
+    second test: `Power.provokes_on` opens this window for `ranged`,
+    `area_burst` and `wall` and nothing else, so re-checking it here
+    would be a second copy of that rule.
+    """
+    return str(ctx.get("why", "")).endswith("is a ranged power")
+
+
+def _thrown_instead_of_the_splash(c: Cast, arena: str) -> bool:
+    """`f977`'s clause on `p992`. True when the splash was traded away.
+
+    The caller reads the return rather than this laying the damage
+    itself, because what the card forgoes is a line in `p992`'s body and
+    the body is the only thing that can decline to run it.
+
+    The swing is the character's own ranged basic attack, which rolls
+    `Pick.BY_WEAPON` -- Strength for a heavy thrown weapon, Dexterity for
+    a bow -- so the weapon the card names is tested in the gate and not
+    forced at the swing.
+
+    **"Does not provoke opportunity attacks" is held for the one throw
+    and ended straight after.** Left standing it would exempt every
+    ranged power for the rest of the turn, which is a different and much
+    stronger card.
+
+    The reach is `c.within(10)` because that is the printed range of the
+    ranged basic attack: a creature further off is not a legal target for
+    the swing, so offering it would be a menu entry that cannot be taken.
+
+    **The throw happens before the trade is counted, and the return is the
+    swing's own**, which is `f977`'s `dropped=("c.basic(with_=)",)` showing
+    up in the code. `engine/basic.py`'s `rba` declares `reach=Ranged(10)`
+    and no `thrown_by_hand=True`, so `Power.can_branch` asks for
+    `gear.ranged` and refuses the swing to a character carrying only a
+    thrown melee weapon -- which is every character this clause is printed
+    for. Measured on `audit.board('p992', 1, arm=<a heavy thrown weapon>)`:
+    `c.basic(ranged=True)` returns False and emits nothing. Written the
+    obvious way round -- forgo, then throw -- that would cost the splash
+    and give nothing back, and a row that takes a price for no benefit is
+    worse than one that does not fire. This way the printed splash lands
+    whenever the throw could not be made, and the clause goes live the day
+    the swing can name its weapon.
+    """
+    if arena != "f977" or not c.wielding("heavy thrown"):
+        return False
+    far = [e for e in c.within(10, side="enemy") if e != c.target]
+    if not far:
+        return False
+    if not c.may("forgo the splash to throw at another creature",
+                 who=c.me, default=False):
+        return False
+    who = c.choose(far, f"{c.ref}: who to throw at")
+    if who is None:
+        return False
+    quiet = c.no_provoke(on=c.me, until=When.EOT, when=_a_ranged_row)
+    try:
+        return c.basic(ranged=True, on=who)
+    finally:
+        if quiet is not None:
+            c.end_effect(quiet, why="the throw is over")
 
 
 @power(
@@ -153,9 +256,18 @@ def p992(c: Cast) -> None:
     given one clause of the three it is entitled to.
 
     `f3188`, `f977`, `f987` and `f993` are Arena Fighting and `f2356` and
-    `f2714` are Lesser Style. **`f993` is written now (#780)** and is the
-    whole of the Arena Fighting chain; the other three and both Lesser
-    Styles still want theirs.
+    `f2714` are Lesser Style. **`f993` (#780) and `f977` are written** and
+    are the whole of the Arena Fighting chain; the other two and both
+    Lesser Styles still want theirs.
+
+    **`f977` forgoes the *splash*, not the attack's own damage, and that
+    is the one reading in this body that differs from `f993`'s.** Its card
+    says "forgo dealing damage to the adjacent enemy" and then names "one
+    creature other than the target" as what it throws at -- so the
+    sentence distinguishes the two creatures itself, and the one it calls
+    adjacent is the second enemy this row catches. `f993`'s card says
+    "an adjacent enemy" with no such second half, which is why that one
+    reads the other way.
 
     **`f993` trades this row's damage for temporary hit points, and the
     trade needed no new verb.** Its marker said a row cannot decline its
@@ -180,7 +292,7 @@ def p992(c: Cast) -> None:
     audit exercises the ordinary path and `drivers.damage_forgone_for_a_rider`
     is what exercises the trade.
     """
-    arena = c.declare("Arena Fighting", "f993")
+    arena = c.declare("Arena Fighting", "f993", "f977")
     if not c.strike():
         return
     traded = (arena == "f993" and c.adjacent()
@@ -193,7 +305,9 @@ def p992(c: Cast) -> None:
     # And a second enemy beside you takes the modifier on its own.
     others = [e for e in c.within(1, side="enemy") if e != c.target]
     if others:
-        c.flat(c.str_mod, on=c.choose(others, "who else does it catch"))
+        beside = c.choose(others, "who else does it catch")
+        if not _thrown_instead_of_the_splash(c, arena):
+            c.flat(c.str_mod, on=beside)
 
     foe = c.target
     if foe is None:
@@ -277,7 +391,7 @@ def p1758(c: Cast) -> None:
     `f1102` and six others also name this row in other categories and
     stack legitimately.
     """
-    arena = c.declare("Arena Fighting", "f978", "f985")
+    arena = c.declare("Arena Fighting", "f978", "f985", "f981")
     if not c.strike():
         return
     c.damage(c.w(2 if c.level >= 21 else 1))
@@ -302,12 +416,18 @@ def p1758(c: Cast) -> None:
             c.flat(weapon.proficiency, on=c.target)
     elif arena == "f985" and c.wielding("shield"):
         c.bonus(AC, 1, on=c.me, until=When.EONT, kind="feat")
+    elif arena == "f981" and c.hurt_me_since():
+        # "If the target dealt you damage since the end of your last turn."
+        # `c.hurt_me_since` with no argument asks about `c.target`, and reads
+        # the bus log rather than a remembered set -- which is why this
+        # branch can live here at all. See the docstring.
+        c.flat(c.wis_mod, on=c.target)
 
 
 def _has_shield(world: object, eid: int) -> bool:
     from combat_engine.engine import Gear
 
-    gear = world.get(eid, Gear)  # type: ignore[attr-defined]
+    gear = world.get(eid, Gear)
     return bool(gear and gear.shield)
 
 

@@ -13,7 +13,10 @@
   },
   "cf:barbarian-might-rest": {
     "wants": "the cf:barbarian-f1s0 row, which is the one option of the four nobody has declared",
-    "why": "filed when the compendium carried only the first option's text and the class had two derived legs. Both are fixed: class_feature carries cf:barbarian-f1s0 .. f1s3 and chargen.BUILDS[\"barbarian\"] has five named legs that 23 riders ask about. Three of the four sub-option rows are written in features/primal_shadow.py; the fourth is named by a feat as todo=(\"cf:barbarian-f1s0\",) and has no declaration"
+    "why": "filed when the compendium carried only the first option's text and the class had two derived legs. Both are fixed: class_feature carries cf:barbarian-f1s0 .. f1s3 and chargen.BUILDS[\"barbarian\"] has five named legs that 23 riders ask about. Three of the four sub-option rows are written in features/primal_shadow.py; the fourth is named by a feat as todo=(\"cf:barbarian-f1s0\",) and has no declaration",
+    "covered_by": [
+      "cf:barbarian-f1s0"
+    ]
   },
   "cf:druid-at-wills": {
     "wants": "a per-class at-will count in chargen.SLOTS, and a composition rule chargen.loadout can honour",
@@ -50,10 +53,6 @@
   "cf:seeker-bond-rest": {
     "wants": "the second bond's text on the imported class page",
     "why": "the page prints one of the two bonds in full and cf:seeker-f1 writes all of it -- the granted row, the exclusivity, and the standing minor-action shift. The other bond is not in the imported text at all. Its granted row is identifiable without it, p11462 being the only other level-0 seeker row and the one that spends the Strength modifier its riders spend, so the exclusivity is written both ways; whatever else that bond gives is not on the page and is not guessed at"
-  },
-  "cf:shaman-spirit": {
-    "wants": "a ref for the fifth companion spirit, whose block the importer glued onto the end of cf:shaman-f0c0 instead of giving it a cf:shaman-f0sN of its own",
-    "why": "four of the five spirits now have a sub-option ref with their boon printed on it, and chargen.BUILDS[\"shaman\"] now carries a leg per spirit, so cf:shaman-f0s0 to cf:shaman-f0s3 are written and each takes the other spirits' two rows away from a shaman that did not choose it. The fifth has no ref, so its boon -- a saving-throw bonus beside the spirit, and a free-action call once a turn -- has nothing to decorate, and its two rows, p12865 and p12866, are the only ones loadout still leaves on every shaman whatever leg it is on"
   },
   "cf:sorcerer-soul-nat20": {
     "wants": "an event announcing a power use's finished effects (the p10354 gap), carrying the natural roll",
@@ -107,10 +106,6 @@
     "wants": "c.revealed(on=) -- clearing Relation.HIDDEN_FROM from the creature being looked at",
     "why": "the clause strips concealment and invisibility; c.no_cover says the first and only c.see_invisible answers the second, and that sits on whoever is looking rather than on the target"
   },
-  "p12934:augment2": {
-    "wants": "c.reroll_attack(ev=) -- rerolling an attack read off a passed event rather than off c.trigger",
-    "why": "the reroll is handed to the next ally who misses, which is a watcher, and a watcher has no c.trigger"
-  },
   "p12947:augment2": {
     "wants": "c.deals_half(when=) -- half damage narrowed to some of a creature's attacks",
     "why": "'deals half damage with any attack that is not a basic attack' is Condition.WEAKENED, which query.deals_half reads off the creature rather than off the attack"
@@ -143,10 +138,6 @@
     "wants": "a compendium ref for the class-feature step power, as dsl.REGISTRY has none for it",
     "why": "Augment 2's teleport is that same rider; its 2[W] is not written alone because half a clause is worse than none"
   },
-  "p13303:augment2": {
-    "wants": "augment.augment called on p13303b, the minor-action attack printed under this id",
-    "why": "Augment 2 is that second card's dice, so it belongs to the row that now has its own ref"
-  },
   "p13311:augment1": {
     "wants": "a third command on dsl.Summon, beyond its standard and opportunity attacks",
     "why": "Augment 1 gives the servant an opportunity action that makes a Heal check on a dying ally, and Summon declares two attack lines and nothing else"
@@ -155,17 +146,9 @@
     "wants": "c.penalty_in(zone, what, value) -- a modifier scoped to a zone or an aura, as c.resist_in and c.cover_in already are",
     "why": "enemies take -2 to attack rolls while adjacent to the target, and nothing scopes an attack modifier to a footprint"
   },
-  "p13320:augment2": {
-    "wants": "augment.augment called on p13320b, the opportunity attack printed under this id",
-    "why": "Augment 2 is that second card's hit line"
-  },
   "p13325:augment1": {
     "wants": "a rider on dsl.Summon's attack line, so a summoned creature's grab can be applied",
     "why": "the penalty is to escaping a grab the summon never applies, so the clause could never come up"
-  },
-  "p13331:augment2": {
-    "wants": "augment.augment called on p13331b, the minor-action burst printed under this id",
-    "why": "Augment 2 is that second card's dice"
   },
   "p13783:augment1": {
     "wants": "SkillCheck.purpose, so a bonus can be gated to checks made to find hidden creatures",
@@ -178,10 +161,6 @@
   "p2622:augment1": {
     "wants": "a compendium ref for the class-feature attack, as dsl.REGISTRY has none for it",
     "why": "Augment 1 pays extra damage on a later use of the battlemind's own feature attack, which the spec names in prose with no id beside it"
-  },
-  "p4807": {
-    "wants": "Keyword.RAGE declared on the 41 rage rows (the compendium prints it in their type line), plus c.expend(ref)",
-    "why": "nothing at runtime tells a rage daily from any other barbarian daily; group= is the wrong field, the engine reads it as one-per-encounter"
   },
   "p8240:augment1": {
     "wants": "c.strip_resistance(dtype, on=) -- taking a standing resistance away, which c.resist only adds",

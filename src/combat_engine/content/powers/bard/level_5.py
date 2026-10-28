@@ -257,10 +257,7 @@ def p5685(c: Cast) -> None:
         if c.roll("1d20") < 15:
             return
         spent.append(1)
-        ev.critical = True
-        res = getattr(ev, "result", None)
-        if res is not None:
-            res.critical = True
+        c.crit_becomes(True, ev=ev)
 
     c.watch(Hit, sharpen, until=When.ENCOUNTER, on=c.me, label="p5685")
 

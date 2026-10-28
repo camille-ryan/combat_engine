@@ -1022,7 +1022,6 @@ def m2545a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_hazards()",),
 )
 def m2545a3(c: Cast) -> None:
     """Crossing the stuff it lives in costs it nothing, which is a label the
@@ -1034,6 +1033,7 @@ def m2545a3(c: Cast) -> None:
     creature from one.
     """
     c.ignores_difficult("blood", until=When.ENCOUNTER)
+    c.ignores_hazards("blood", until=When.ENCOUNTER)
 
 
 # ==========================================================================
@@ -1934,9 +1934,14 @@ def m6283a4(c: Cast) -> None:
     can turn a landed blow aside. `would_hit_me` is "an attack hits it" asked
     one event early.
 
-    A natural 1 is an automatic miss, so that is what the result is set to
-    rather than arithmetic against the defence -- the card says the attack
-    misses, and a 20 that crits would otherwise survive the recompute.
+    `c.hit_becomes(False)` rather than the arithmetic: the card says the
+    attack misses, and this window is *before* `resolve.attack` recomputes
+    the outcome, so the write has to survive that recompute. This row used
+    to achieve it by setting `natural = 1` -- an automatic miss, which made
+    all three disjuncts false -- and that is the faking `AttackResult.forced`
+    and `.treated` both have docstrings warning against: the die then lied to
+    every later reader. `AttackResult.turned` is the declarative flag those
+    two describe, pointed at the hit, and the verb sets it. #862.
 
     The stance is the printed Requirement and is asked here, where it is
     re-read every time the trigger fires.
@@ -1950,8 +1955,6 @@ def m6283a4(c: Cast) -> None:
     rolled = c.check("acrobatics")
     if int(getattr(rolled, "total", 0)) <= result.total:
         return
-    result.natural = 1
-    result.critical = False
-    result.hit = False
+    c.hit_becomes(False)
     c.shift(2)
     c.note(f"{c.ref}: the swing is turned aside")

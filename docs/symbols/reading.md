@@ -76,12 +76,16 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Where this creature is tethered and how far it may stray, or None.
 - `query.line_of_effect(world: 'World', a: 'int', b: 'int') -> 'bool'`
   - (no docstring)
+- `query.moved_this_action(world: 'World', eid: 'int') -> 'int'`
+  - How many squares this creature entered during its current move action.
 - `query.moving_as(world: 'World', eid: 'int', mode: 'str') -> 'bool'`
   - Is this creature moving that way right now?
 - `query.on_the_ground(world: 'World', eid: 'int') -> 'bool'`
   - Is this creature in contact with the floor?
 - `query.prefers_range(world: 'World', eid: 'int') -> 'bool'`
   - Does this creature want to be *out* of melee?
+- `query.ran_this_action(world: 'World', eid: 'int') -> 'bool'`
+  - Was this creature's current move action a **run**?
 - `query.range_profile(world: 'World', eid: 'int') -> 'str'`
   - What this creature can reach with: melee, ranged, hybrid, or none.
 - `query.sealed(world: 'World', eid: 'int') -> 'bool'`
@@ -136,10 +140,14 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - What the attacker's own conditions cost it, before modifiers.
 - `query.can_flank(world: 'World', eid: 'int') -> 'bool'`
   - May this companion stand in the far square and count?
+- `query.deals_damage(ref: 'str') -> 'bool'`
+  - Does this power *normally* deal damage -- from either of the two
 - `query.deals_half(world: 'World', eid: 'int') -> 'bool'`
   - (no docstring)
 - `query.defence(world: 'World', eid: 'int', d: 'Defense', ctx: 'dict | None' = None) -> 'int'`
   - A defence as the attacker sees it: base, level, modifiers, conditions.
+- `query.difficulty(level: 'int', band: 'str') -> 'int | None'`
+  - The printed DC for a named difficulty at a level. `None` if unknown.
 - `query.flanked_by(world: 'World', target: 'int', attacker: 'int') -> 'bool'`
   - Is `target` flanked by `attacker` and one of its allies?
 - `query.flankers(world: 'World', eid: 'int') -> 'list[int]'`
@@ -161,6 +169,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.can_react(world: 'World', eid: 'int', *, ignoring: 'Condition | None' = None) -> 'bool'`
   - Can this creature spend an immediate action?
+- `query.can_run(world: 'World', eid: 'int') -> 'bool'`
+  - "It cannot run", with the walk left alone.
 - `query.can_shift(world: 'World', eid: 'int') -> 'bool'`
   - A shift is barred separately from a walk, and by different powers.
 - `query.can_walk(world: 'World', eid: 'int') -> 'bool'`
@@ -173,8 +183,16 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - What this creature has in hand, filtered by a printed word.
 - `query.holds_somebody(world: 'World', eid: 'int') -> 'bool'`
   - Is this creature holding anyone in a grab? "Requirement: you must
-- `query.immune_to(world: 'World', eid: 'int', cond: 'Condition', source: 'int | None' = None, power: 'str' = '') -> 'bool'`
+- `query.immune_to(world: 'World', eid: 'int', cond: 'Condition | Keyword', source: 'int | None' = None, power: 'str' = '') -> 'bool'`
   - Can this condition not be laid on this creature at all?
+- `query.may_ride(world: 'World', rider: 'int', mount: 'int') -> 'bool'`
+  - Is this pairing a legal mount, by size and by exception?
+- `query.needs_loading(weapon: 'Any') -> 'bool'`
+  - Does firing this weapon leave it empty until somebody reloads it?
+- `query.ready_to_fire(world: 'World', eid: 'int', weapon: 'Any') -> 'bool'`
+  - Is this weapon loaded, for a creature that has to load it?
+- `query.rideable_by(world: 'World', mount: 'int') -> 'frozenset[str]'`
+  - Which rider sizes this creature may carry **despite the size rule**.
 
 ## what has already happened
 
@@ -198,7 +216,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Every blow this creature has landed since its own turn began.
 - `query.my_misses_this_turn(world: 'World', eid: 'int') -> 'list[Any]'`
   - Every swing this creature has **missed** with since its turn began.
-- `query.shifted(world: 'World', eid: 'int') -> 'bool'`
+- `query.shaped(world: 'World', eid: 'int') -> 'bool'`
   - Has this creature taken a shape that is not its own?
 - `query.since_turn_began(world: 'World', eid: 'int') -> 'list[Any]'`
   - Everything that has happened since this creature's own turn began.

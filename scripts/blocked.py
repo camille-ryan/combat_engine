@@ -35,6 +35,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -50,6 +51,8 @@ def main() -> int:
                     help="wanted symbols, ranked by how many rows asked")
     ap.add_argument("--refs", metavar="SYMBOL",
                     help="the refs waiting on this one, space separated, for spec.py")
+    ap.add_argument("--prose", action="store_true",
+                    help="rows admitting a dropped clause while declaring no marker")
     args = ap.parse_args()
 
     rows = _declared()
@@ -59,6 +62,9 @@ def main() -> int:
         if p.unfinished
     ]
     entries = json.loads(BLOCKED.read_text()) if BLOCKED.exists() else {}
+
+    if args.prose:
+        return _drops_report()
 
     if args.group or args.refs:
         return _queue(marked, entries, set(rows), args)
@@ -217,10 +223,19 @@ def _report(
 
     jready, jwaiting, stale, unchecked = [], [], [], []
     jsourced: list[tuple[str, str]] = []
+    covered: list[tuple[str, tuple[str, ...]]] = []
     for ref, entry in sorted(entries.items()):
         wants = entry.get("wants", "")
         if ref in declared:
             stale.append((ref, wants))
+            continue
+        arrived = _covered(entry)
+        if arrived:
+            # **Stale, and invisible to the test above.** A descriptive key
+            # is in `declared` for nothing, so the only staleness test this
+            # report had could never fire for the entries it most needed to
+            # fire for. #559.
+            covered.append((ref, arrived))
             continue
         if wants.startswith(SOURCE_GAP):
             # **The same separation the tree half makes, and this half did
@@ -244,7 +259,7 @@ def _report(
         else:
             jwaiting.append((ref, wants, entry.get("why", "")))
 
-    if jready or (not only_ready and (jwaiting or stale)):
+    if jready or (not only_ready and (jwaiting or stale or covered)):
         print(f"\n  in {BLOCKED.relative_to(ROOT)}, no row to decorate")
     for ref, wants, why in jready:
         print(f"  READY   {ref:<10} {wants} exists now — {why}")
@@ -253,6 +268,9 @@ def _report(
             print(f"  blocked {ref:<10} {wants or '(no method named)'} — {why}")
         for ref, wants in stale:
             print(f"  written {ref:<10} was waiting on {wants}; drop it from the list")
+        for ref, by in covered:
+            print(f"  covered {ref:<10} {' '.join(by)} declared and finished; "
+                  f"drop it from the list")
         for ref, wants in jsourced:
             print(f"  source  {ref:<10} {wants} — the page does not print "
                   f"it; nothing to build")
@@ -292,12 +310,36 @@ def _report(
             print(f"      {phrase!r:28} {len(refs):>3}  "
                   f"{' '.join(sorted(refs)[:6])}"
                   f"{' …' if len(refs) > 6 else ''}")
+    # **The fourth bucket, and the one nothing surfaced at all.** A row may
+    # admit its missing clause in prose and declare no marker, which makes it
+    # invisible to `todo.py` and to every count above -- #729 measured 369 and
+    # found 14 of 14 sampled genuine. One line here rather than the whole list,
+    # because `--prose` is where the list belongs and this report is already
+    # long; the point of the line is that the number cannot be zero unnoticed.
+    drops = _undeclared_drops()
+    if drops:
+        print(f"\n  and {len(drops)} row(s) admit a dropped clause in prose "
+              f"while declaring NO marker -- `--prose` for the list, grouped "
+              f"by phrase and by family. #729")
+
     if capped:
         print(f"  of the {waiting} blocked, {capped} also want something the "
               f"page does not print, so they cannot fully clear")
     print(f"  {BLOCKED.relative_to(ROOT)}: {len(jready)} ready, "
           f"{len(jwaiting)} still blocked, {len(jsourced)} waiting on the "
-          f"compendium, {len(stale)} to remove")
+          f"compendium, {len(stale) + len(covered)} to remove")
+    # **Absence of a `covered_by` is not a claim that nothing covers the
+    # entry**, and saying so is the whole point of printing this. The field
+    # only answers for an entry waiting on a **ref**; most are waiting on a
+    # symbol, where `wants` is already the right question and this would add
+    # nothing. Printed so a reader can tell "checked and not covered" from
+    # "never asked" -- the two were indistinguishable before #559, and
+    # three entries sat stale in the gap.
+    blind = [r for r in entries if not entries[r].get("covered_by")]
+    if blind:
+        print(f"  {len(blind)} of {len(entries)} entr(ies) name no "
+              f"`covered_by`, so staleness is unchecked for them -- a ref to "
+              f"name, not a symbol, is what the field is for")
     if unchecked:
         # Loud, and a non-zero exit. Printing a line and carrying on was
         # the whole failure: the summary read "0 ready" and nobody
@@ -346,11 +388,202 @@ _REJECTED_PHRASE = "there is no"
 #: screen reported. So a correction marker anywhere in the docstring takes
 #: the row out: the claim has been looked at, which is all this queue is
 #: for.
+#: **`"the old note"` is the one this tree actually writes**, and it was
+#: missing. Measured 2026-10-26 under #625: the phrase occurs **102 times
+#: across 68 content files** -- it is the established way an author
+#: announces that the reason a row used to carry has been retracted
+#: ("the old note said gear handling costs no action", "the old note was
+#: right that the sense is granted per watcher and wrong that this cannot
+#: be said"). Without it, four rows in `--prose` were honest retractions
+#: counted as open admissions.
+#:
+#: Nine other candidates were tried the same day and waived **nothing**:
+#: `re-pointed`, `repointed`, `re-aimed`, `reaimed`, `was stale`,
+#: `is now false`, `is fixed`, `no longer it`, `already fixed`. Recorded so
+#: they are not re-added on the reasonable-sounding grounds that they
+#: ought to match something -- every one of them does, in prose that
+#: already contains `"the old note"` too.
 CORRECTED = (
     "stopped being true", "was the reason", "is false", "was false",
     "no longer true", "had stopped", "correction", "corrected",
-    "and that is false", "turned out",
+    "and that is false", "turned out", "the old note",
 )
+
+
+#: What a docstring says when it admits a clause is unwritten. Sixteen
+#: phrases, taken from #729's hand reading of the shape rather than guessed:
+#: the signal is **a prose claim that something is absent**, which is why
+#: none of these is a symbol name.
+#:
+#: `"there is no"` is deliberately absent, for the reason `PREMISE`'s note
+#: gives at length -- it matched 52 rows at roughly one-in-ten precision,
+#: because most were correct claims about the *card* or the *circumstance*.
+ADMITS = (
+    "has no method", "is dropped", "are dropped", "is left out",
+    "nothing forbids", "no primitive", "cannot be written",
+    "has nowhere", "nothing expresses", "is not written",
+    "are not written", "no way to say", "nothing to hang",
+    "cannot be said", "no facility", "is unwritten",
+)
+
+#: Added to `CORRECTED` for this walk only. **This tree's style is to keep
+#: the history beside the fix**, so a docstring that says "X was dropped;
+#: written now" is a finished row describing its own past -- and counting it
+#: is how a report like this becomes a list nobody reads. #729 measured
+#: 536 admissions down to 369 by subtracting exactly these.
+MENDED = (
+    "written now", "is written now", "landed", "re-pointed", "repointed",
+    "was wrong", "stale", "closed by", "now writable", "paid",
+    "re-aimed", "reaimed", "fixed",
+)
+
+#: The six markers a row may carry. A row with any of them is already
+#: visible to `todo.py` and to the queue above, so it is not what #729 is
+#: about.
+MARKERS = ("todo", "dropped", "narrative", "obsolete", "defect", "declined")
+
+
+def _drops_report() -> int:
+    """Print the bucket `_undeclared_drops` finds, grouped three ways.
+
+    **The deliverable of #729**, whose last comment said the report did not
+    exist: *"Nothing yet surfaces the 369 except the probe quoted in the
+    body."* Three groupings because the bucket is read for three different
+    questions -- by phrase to judge the precision of the walk, by family to
+    hand a wave to one agent, and the ref list because `spec.py` takes refs.
+
+    **Exit 0 always.** It is a queue and not a gate: this count falls as
+    rows are written and rises as rows are written *honestly*, so reddening
+    on it would punish the second. `todo.py` is where a marker becoming
+    false is a failure.
+    """
+    rows = _undeclared_drops()
+    if not rows:
+        print("no row admits a dropped clause while declaring no marker")
+        return 0
+
+    print(f"{len(rows)} row(s) admit a dropped clause in prose and declare "
+          f"no marker.")
+    print("  Neither `todo.py` nor the queue above can see these: a marker "
+          "is what both read.")
+
+    by_phrase: dict[str, list[str]] = defaultdict(list)
+    for ref, phrase in rows:
+        by_phrase[phrase].append(ref)
+    print("\n  by what the docstring says:")
+    for phrase, refs in sorted(by_phrase.items(),
+                               key=lambda kv: (-len(kv[1]), kv[0])):
+        print(f"      {phrase!r:22} {len(refs):>4}  "
+              f"{' '.join(sorted(refs)[:5])}"
+              f"{' …' if len(refs) > 5 else ''}")
+
+    # By family rather than by file: a wave is handed out per directory
+    # (`delegating-rows-to-agents` -- partition by file, one agent per), and
+    # 355 rows across ~200 files is not a partition anybody can act on.
+    where = _families(r for r, _p in rows)
+    print("\n  by family:")
+    for family, refs in sorted(where.items(),
+                               key=lambda kv: (-len(kv[1]), kv[0])):
+        print(f"      {family:28} {len(refs):>4}")
+
+    print("\n  every ref, for spec.py:")
+    for line in _in_columns(sorted(r for r, _p in rows)):
+        print(f"      {line}")
+    return 0
+
+
+def _families(refs: Iterable[str]) -> dict[str, list[str]]:
+    """Group refs by the content subdirectory each is declared in.
+
+    One `rglob` rather than a lookup per ref: the registry knows a row's
+    module, but this walk has already parsed every file and asking the
+    registry would import all 677 of them for a report.
+    """
+    import ast
+
+    want = set(refs)
+    out: dict[str, list[str]] = defaultdict(list)
+    root = ROOT / "src" / "combat_engine" / "content"
+    for path in sorted(root.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        here = path.relative_to(root).parent
+        family = str(here) if str(here) != "." else "(top level)"
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for deco in node.decorator_list:
+                if not isinstance(deco, ast.Call):
+                    continue
+                for word in deco.args:
+                    # `isinstance(word.value, str)` rather than leaning on
+                    # `in want`: a `Constant` can hold a number, and a set of
+                    # refs would simply not contain it -- so the test is
+                    # already sound and this is what makes it *provably* so.
+                    if (isinstance(word, ast.Constant)
+                            and isinstance(word.value, str)
+                            and word.value in want):
+                        out[family].append(word.value)
+    return out
+
+
+def _undeclared_drops() -> list[tuple[str, str]]:
+    """Rows admitting a dropped clause in prose while declaring no marker.
+
+    **The bucket both trackers are blind to.** A marker is what `todo.py`
+    reports ready and what `blocked.py --group` counts; a row that describes
+    its missing clause in the docstring and declares nothing is invisible to
+    each. #729 measured 369 of them and read a random 14 by hand: **14 of
+    14 were genuine, live, undeclared dropped clauses**, no false positives.
+
+    Returned as `(ref, the phrase that admits it)`, the same shape as
+    `_premise_rows`, and for the same reason an `ast` walk rather than a
+    grep over the registry: the thing being read is the *source* docstring
+    beside the *source* header.
+
+    **A reading queue, not a ready list**, which is the warning
+    `_premise_rows` earns the hard way and this inherits. An admission is
+    evidence that a clause is missing; whether it is *writable* depends on
+    the facility, and of the 14 read by hand only three were writable that
+    day.
+    """
+    import ast
+
+    out: list[tuple[str, str]] = []
+    root = ROOT / "src" / "combat_engine" / "content"
+    for path in sorted(root.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            ref = ""
+            marked = False
+            decorated = False
+            for deco in node.decorator_list:
+                if not isinstance(deco, ast.Call):
+                    continue
+                decorated = True
+                for word in deco.args:
+                    if isinstance(word, ast.Constant) and isinstance(
+                            word.value, str):
+                        ref = ref or word.value
+                for kw in deco.keywords:
+                    if kw.arg in MARKERS:
+                        marked = True
+            if not (decorated and ref) or marked:
+                continue
+            said = (ast.get_docstring(node) or "").lower()
+            if not said or any(w in said for w in (*CORRECTED, *MENDED)):
+                continue
+            hit = next((w for w in ADMITS if w in said), "")
+            if hit:
+                out.append((ref, hit))
+    return out
 
 
 def _premise_rows() -> list[tuple[str, str]]:
@@ -519,6 +752,7 @@ def _surface() -> dict[str, object]:
     # because the owner it was asked about genuinely does not have that
     # attribute. Silence there is the failure this file exists to break.
     import importlib
+    import inspect
     import pkgutil
 
     import combat_engine.engine as engine_pkg
@@ -582,6 +816,45 @@ def _surface() -> dict[str, object]:
         for n in dir(spec_mod):
             if not n.startswith("_"):
                 have.setdefault(f"spec.{n}", getattr(spec_mod, n))
+
+    # **A class, by its bare name, because that is how the markers spell it.**
+    # A header-field want is written `Target.kind_or_ident`, and nothing in
+    # the index above is keyed that way: the walks key a class as
+    # `dsl.Target`, so `'Target' in have` is False and `_one` could not
+    # answer at all. The resolver already walks two dots --
+    # `dsl.Target.kind_or_ident` resolves -- so the blind spot was purely the
+    # spelling, which is a smaller thing than #570's comment assumed.
+    #
+    # The queue is full of header-field wants (`Target.*`, `Gear.*`,
+    # `Usage.RECHARGE(when=)`, `Scenery.kind`, `Damage(...)`) and the guard's
+    # whole job is this case: `Target.kind_or_ident` landed in `14711d5` and
+    # four rows waiting on `Target.any_of` stayed green for two commits,
+    # because a field arriving under a name four rows wanted satisfied none
+    # of them. It had to be found by reading. #849.
+    #
+    # The resolver changes rather than the markers, deliberately. Making 10
+    # row-slots carry the module would tie a marker to where a class happens
+    # to live -- and `_weapon_reach.Damage` shows that is sometimes a private
+    # implementation detail, which is not a thing a content row should be
+    # naming.
+    #
+    # **Refused when ambiguous, never resolved to whichever came first.** A
+    # bare name meaning two different classes cannot answer, and `setdefault`
+    # would have picked by module iteration order and said nothing. 166
+    # visible today, 0 ambiguous -- so this costs nothing now and stays sound
+    # as the tree grows.
+    seen: dict[str, object] = {}
+    clash: set[str] = set()
+    for key, thing in list(have.items()):
+        if "." not in key or not inspect.isclass(thing):
+            continue
+        bare = key.rpartition(".")[2]
+        if bare in seen and seen[bare] is not thing:
+            clash.add(bare)
+        seen.setdefault(bare, thing)
+    for bare, thing in seen.items():
+        if bare not in clash:
+            have.setdefault(bare, thing)
     return have
 
 
@@ -590,6 +863,49 @@ def _declared() -> dict:
     from combat_engine.content import declared
 
     return declared()
+
+
+def _covered(entry: dict) -> tuple[str, ...]:
+    """The entry's `covered_by` refs, if **every** one has arrived.
+
+    `blocked.json` is for rows that are *genuinely absent*, so its keys
+    cannot be positional -- there is no ref to key on until the row exists.
+    That is the convention Camille settled on #559: the tree stays
+    positional and this file stays descriptive, with a gate rather than a
+    migration. The cost of it is that an entry goes stale **silently** the
+    day its rows land, because the only staleness test available was
+    `ref in declared` and a descriptive key is in `declared` for nothing.
+
+    So an entry may name the refs whose arrival would make it moot, and this
+    asks whether they are **declared and not themselves unfinished** -- the
+    same question `_one` asks of a ref in a `wants`, and for the same
+    reason: a declared row carrying markers of its own has not arrived.
+
+    **Every one, not any.** An entry about a feature with four sub-options
+    is not moot when the first lands, and `any` would have called it stale
+    there.
+
+    **Hand-written, never inferred from the prose.** An entry's prose names
+    the half that already exists at least as often as the half that is
+    missing -- `cf:assassin-training-guild` names the granted row it is
+    *not* waiting on -- so deriving coverage from it would rebuild the
+    false-READY fault this field exists to fix. That fault is what #559
+    measured: 1 of 3 READY verdicts real, and reading one of the stale
+    entries cost a duplicated 90-line row.
+    """
+    want = entry.get("covered_by") or ()
+    if isinstance(want, str):
+        want = [want]
+    if not want:
+        return ()
+    from combat_engine.content import declared
+
+    rows = declared()
+    arrived = tuple(
+        r for r in want
+        if (got := rows.get(r)) is not None and not got.unfinished
+    )
+    return arrived if len(arrived) == len(want) else ()
 
 
 def _symbols(wants: str) -> list[str]:
@@ -665,13 +981,31 @@ def _one(token: str, have: dict[str, object]) -> bool:
     registry rather than on the `Cast` surface. A row waiting on another
     row is the same kind of wait as a row waiting on a method, and the
     instrument should go red on the day either arrives.
+
+    **But a declared row is not a written one, and that distinction is the
+    whole of this wait.** `declared()` holds every row that has a header,
+    including rows with an empty body carrying markers of their own -- so
+    `token in declared()` reported *arrived* for a sibling that has not been
+    written. `f2429` is the case: it shortens a distance that is a literal
+    inside `cf:rogue-scoundrel-f1s2`'s printed text, and that feature has an
+    empty body and waits on two symbols of its own. Its own note says why
+    pointing this marker at those symbols instead would be wrong -- it would
+    "report this feat ready the day a symbol lands, which is one step early".
+    There is nothing to take a chunk out of until the sibling is written.
+    So a ref has arrived when it is declared **and not itself unfinished**.
+
+    This narrows a false arrival rather than widening an excuse: a sibling
+    that is finished still counts, which is the case the docstring above is
+    about.
     """
     import re as _re
 
     if _re.fullmatch(r"[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+", token):
         from combat_engine.content import declared
 
-        return token in declared()
+        rows = declared()
+        got = rows.get(token)
+        return got is not None and not got.unfinished
     head, _, rest = token.partition("(")
     head = head.strip()
     if head in have:
@@ -806,9 +1140,9 @@ def _params_ok(head: str, rest: str, have: dict[str, object]) -> bool:
     if not wanted:
         return True
     try:
-        params = inspect.signature(have[head]).parameters  # type: ignore[arg-type]
+        params = inspect.signature(have[head]).parameters  # ty: ignore[invalid-argument-type]
     except (TypeError, ValueError):
-        return True          # not callable: a field on an event, name is all we have
+        return False         # no signature, so it cannot take one -- see `_params_ok_on`
     return all(p in params for p in wanted)
 
 
@@ -830,9 +1164,26 @@ def _params_ok_on(thing: object, rest: str) -> bool:
     if thing is None:
         return False
     try:
-        params = inspect.signature(thing).parameters  # type: ignore[arg-type]
+        params = inspect.signature(thing).parameters  # ty: ignore[invalid-argument-type]
     except (TypeError, ValueError):
-        return True          # not callable: a field, where the name is all there is
+        # **A thing with no signature cannot take an argument, so the honest
+        # answer is no.** This used to read `return True`, waived as "a
+        # field, where the name is all there is" -- and the waiver is
+        # unreachable for the case it names: a want with no parameter clause
+        # returns True at the top of this function, so the only way here is
+        # a want that *asks* for a keyword, which a field can never grow.
+        #
+        # #849 predicted the consequence and `Gear.ranged(thrown=)` is it:
+        # `Gear.ranged` is a `property`, `inspect.signature` raises on one,
+        # and the want reported **arrived** -- against #838, a real open gap
+        # with 86 callers on the melee/ranged pair. The bare-name index
+        # above is what would have made that reachable, so the two changes
+        # belong in one commit.
+        #
+        # Measured before tightening: **0** markers resolve True through
+        # this branch today, so nothing green goes red and no row's wait is
+        # hidden. #838 is the control and stays unresolved.
+        return False
     return all(p in params for p in wanted)
 
 

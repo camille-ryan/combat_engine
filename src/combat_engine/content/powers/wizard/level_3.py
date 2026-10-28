@@ -379,8 +379,12 @@ def p13982(c: Cast) -> None:
     attack=Attack(INT, vs=WILL),
 )
 def p13983(c: Cast) -> None:
-    """The concealment half has no expression -- the engine keeps no state for
-    it -- so the row is the damage and the thorns."""
+    """The damage, the thorns, and the concealment.
+
+    This said *"the concealment half has no expression -- the engine keeps
+    no state for it"*, which was never true: `c.conceal` lays it and
+    `resolve.attack` reads it beside cover. #860.
+    """
     if c.strike():
         c.damage("2d8", c.int_mod, dtype=DamageType.PSYCHIC)
     if not c.first:
@@ -392,7 +396,7 @@ def p13983(c: Cast) -> None:
             c.flat(5, dtype=DamageType.PSYCHIC, on=ev.attacker)
 
     c.watch(Hit, thorns, until=When.EONT, on=me, label=c.ref)
-    c.note(f"{c.ref}: you also gain partial concealment, and there is none here")
+    c.conceal(on=me, until=When.EONT)
 
 
 @power(

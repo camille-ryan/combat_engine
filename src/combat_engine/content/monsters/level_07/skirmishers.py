@@ -650,8 +650,8 @@ def m2973a2(c: Cast) -> None:
 def m2973a3(c: Cast) -> None:
     """Every friend in earshot swings at once.
 
-    `EACH_ALLY` includes the caster -- `candidates` puts the actor in its own
-    ally pool -- and "allies in the burst" does not, so it is left out here.
+    `EACH_ALLY` leaves the caster out, which is what "allies in the burst"
+    means, so this creature does not swing on its own shout.
     `c.grant_attack` with no `ref` rolls whatever that creature's own basic
     attack is, which for a monster is one of its own abilities.
     """

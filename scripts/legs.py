@@ -174,6 +174,91 @@ def against_the_book(only: str = "") -> tuple[list[str], int]:
     return wrong, mapped
 
 
+#: **This was a gate for about an hour and is now a census, deliberately.**
+#:
+#: It was added in `8761879` to catch the moment a class gained a second
+#: declared feature chassis, because `loadout` then dealt *both* to every
+#: character of the class -- one character being two sub-classes, with
+#: nothing failing to say so. The wizard was live proof.
+#:
+#: `chargen.chassis_of` fixed that in the commit after, so declaring a
+#: second chassis is now safe and #642 is about to do it seventeen more
+#: times. A gate that reddens on the intended future state is one people
+#: route around, which `scripts/CLAUDE.md` is explicit about -- so what is
+#: left is the number, printed, with the invariant asserted where it can
+#: actually be asserted: `drivers.chassis` spawns characters and checks that
+#: each gets one ladder and not two.
+#:
+#: Kept rather than deleted because the count is worth watching as #642
+#: lands: it should climb from 2 towards 25.
+
+
+def _slug(name: str) -> str:
+    """The ref spelling of a printed build name.
+
+    Mirrors `etl/build._slug`, which is the function that minted these refs
+    in the first place -- `cf:{class}-{slug}` at `etl/build.py:1781`. Copied
+    rather than imported because importing it drags the whole ETL in for one
+    regex, and because `scripts/` reaching into `etl/` for a helper is a seam
+    the `.importlinter` contracts would rather not have to waive.
+    """
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def chassis_census() -> tuple[list[str], dict[str, int]]:
+    """How many feature chassis each class declares. A number, not a verdict.
+
+    `class_feature.build` separates a chassis from the class-wide rows:
+    blank means every character of the class has it, a name means it belongs
+    to one sub-class. The Essentials line gave most classes a second ladder,
+    which is what #642's 529 rows are.
+
+    This counted as a **gate** for one commit, because `loadout` dealt every
+    level-0 row of a class to every character of it -- so a class with two
+    declared chassis dealt both, and one character was two sub-classes with
+    nothing failing to say so. `chargen.chassis_of` fixed that, and the
+    invariant now lives in `drivers.chassis`, which spawns characters and
+    checks each gets one ladder. See this module's note above `_slug`.
+
+    What is left is worth printing as #642 lands: the count should climb from
+    2 towards 25, and a class dropping *back* to one would mean a declared
+    chassis had been lost.
+
+    A ref the `class_feature` table does not list is a **hand-coined** one
+    (`cf:barbarian-aura`, `cf:rogue-tactic-club`, and two more), described
+    only in the class's own page as `content/features/__init__.py` says. It
+    belongs to no chassis and is counted against none.
+    """
+    import combat_engine.content  # noqa: F401  registers the rows
+    from combat_engine.db import game
+    from combat_engine.engine.dsl import REGISTRY
+
+    chassis = {r["ref"]: r["build"]
+               for r in game().execute("SELECT ref, build FROM class_feature")}
+    named: dict[str, set[str]] = collections.defaultdict(set)
+    for ref, power in REGISTRY.items():
+        if not ref.startswith("cf:") or power.level != 0:
+            continue
+        # Absent from the table, or blank: class-wide, not a chassis.
+        if chassis.get(ref):
+            named[power.cls].add(chassis[ref])
+
+    counts = {cls: len(names) for cls, names in named.items() if len(names) > 1}
+    out: list[str] = []
+    for cls, how_many in sorted(counts.items()):
+        # **The ref's spelling, not the column's.** `class_feature.build`
+        # holds the printed sub-class name with printed punctuation -- the
+        # typographic apostrophe in one of the wizard's two is the giveaway
+        # -- and this line goes to a terminal on every `check.py`. The ref
+        # stem is the sanitised form of the same thing and is already in
+        # tracked files, so it is what gets printed.
+        names = ", ".join(_slug(n) for n in sorted(named[cls]))
+        out.append(f"  {cls:12} declares {how_many} chassis: {names}")
+    return out, counts
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--class", dest="cls", help="only this class")
@@ -217,6 +302,14 @@ def main() -> int:
     print(f"{len(wrong)} mapped legs disagree with the page they came off; "
           f"{mapped} legs carry a printed entry"
           + (f"   <-- WAS {MAPPED}. A leg stopped being joinable." if shrunk else ""))
+
+    census, counts = chassis_census()
+    if census:
+        print()
+        for line in census:
+            print(line)
+    print(f"{len(counts)} class(es) declare more than one feature chassis; "
+          f"`drivers.chassis` is what asserts a character gets only one")
     return 1 if dead or wrong or shrunk else 0
 
 

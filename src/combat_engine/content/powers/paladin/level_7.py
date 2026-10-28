@@ -28,8 +28,8 @@ from combat_engine.engine import (
     ENCOUNTER,
     FORT,
     INTERRUPT,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     REF,
     STANDARD,
     STR,
@@ -103,7 +103,7 @@ def p12305(c: Cast) -> None:
 
     **Marked rather than argued, which is the fix.** The reasoning here was
     right and that was the problem: a docstring explaining a dropped clause is
-    not queryable, so `blocked.py` could not see this and `coverage.py` counted
+    not queryable, so `blocked.py` could not see this and `written.py` counted
     the row done. `docs/AUTHORING.md` says exactly that -- "do not drop a clause
     silently in a docstring" -- and this row was the example. #236.
 
@@ -145,7 +145,7 @@ def p1244(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[*DIVINE_WEAPON, Keyword.TELEPORTATION],
     attack=Attack(CHA, vs=AC),
 )

@@ -6,7 +6,6 @@ from typing import Any
 
 from combat_engine.engine import (
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     INTERRUPT,
     MINOR,
@@ -17,6 +16,8 @@ from combat_engine.engine import (
     REACTION,
     SELF,
     STANDARD,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AdjacencyLost,
     AreaBurst,
@@ -151,7 +152,7 @@ def p5394(c: Cast) -> None:
     usage=DAILY,
     action=ActionType.NONE,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PRIMAL,
     trigger="you roll initiative at the beginning of an encounter",
     on=Trigger(
@@ -176,11 +177,21 @@ def p9748(c: Cast) -> None:
     reach=CloseBurst(20),
     target=ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    dropped=("c.object_target()",),
 )
 def p11358(c: Cast) -> None:
     """The printed target is an ally *or a liftable object* standing by the
-    spirit; objects are not creatures here, so the ally is all of it. The
-    adjacency is a targeting restriction the header cannot state."""
+    spirit, and the ally is all that is written. The adjacency is a
+    targeting restriction the header cannot state.
+
+    **Marked rather than argued.** "Objects are not creatures here" was
+    this note's whole account of the second half, which is true and is not
+    a reason the clause can never be written: `c.object_target()` is the
+    gap, `i1145p1` and three others wait on it, and a slide needs no
+    defences -- so of the rows on that symbol this is among the easiest to
+    pay once an object can be aimed at. Surfaced by
+    `scripts/targets.py`. #855.
+    """
     mate = c.target
     if mate is None or not beside_spirit(c, mate):
         return
@@ -195,7 +206,7 @@ def p11358(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5, from_="companion"),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p12527(c: Cast) -> None:
@@ -273,7 +284,7 @@ def p9744(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(1, from_="companion"),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p9745(c: Cast) -> None:

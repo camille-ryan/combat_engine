@@ -49,7 +49,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REF,
@@ -58,6 +57,7 @@ from combat_engine.engine import (
     STR,
     WILL,
     WIS,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -487,10 +487,11 @@ def p16033(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
 )
 def p2474(c: Cast) -> None:
-    """"You or one ally" is the ally pool, which includes the caster."""
+    """"You or one ally" is `YOU_OR_ONE_ALLY` -- one target out of the
+    caster and the allies together."""
     c.mode("fly", 5, on=c.target, until=When.EOT)
     c.move(5, who=c.target)
 
@@ -502,7 +503,7 @@ def p2474(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=Target("other_ally", 99, everyone=True),
+    target=Target("ally", 99, everyone=True),
 )
 def p15839(c: Cast) -> None:
     c.mode("fly", 6, on=c.target, until=When.EOTNT)
@@ -542,22 +543,34 @@ def p16467(c: Cast) -> None:
     keywords=SHADOW,
     requires=_beside_ally,
     requires_text="must be adjacent to an ally",
-    dropped=("c.stealth_speed()",),
 )
 def p16545(c: Cast) -> None:
     """Hiding is only offered if the shift ended beside an ally, which is
     the printed condition rather than the entry requirement.
 
-    **The marker is about the card's last line, which this note used to
-    leave out**: "for this check you ignore the -5 penalty for moving more
-    than 2 squares". That penalty is a real 4e rule -- checked at the end of
-    a move action, -5 past two squares and -10 if you ran -- and the engine
-    charges none of it, so there is nothing here to waive. #784, and the
-    gap runs deeper than a missing term: `c.hide` grants the hidden state
-    outright and rolls no check at all."""
+    **The card's last line now has something to waive**: "for this check you
+    ignore the -5 penalty for moving more than 2 squares". The hide here is
+    a real Stealth check against passive Perception, and the shift above is
+    what earns the penalty -- so on any board where it covers more than two
+    squares the waiver is the difference between -5 and nothing.
+
+    **Not "always", which is what I first wrote here.** The shift can cover
+    **0** squares when the creature is boxed in -- measured on the audit
+    board, where four posed creatures leave it nowhere to go, and the
+    waiver is then worth nothing because there is no penalty to waive. That
+    is correct behaviour and worth recording, because a rule asserting the
+    waiver pays out would fail on exactly that board for a reason that has
+    nothing to do with this row.
+
+    **Per use, not standing**, which is what "for this check" means: the
+    waiver is laid `until=When.INSTANT` so it is spent by the one roll
+    below and cannot reach a later hide. The two standing waivers in this
+    family are an item property and a class feature and are right to be
+    standing; this one is not. #784."""
     c.shift(c.speed_of())
     if _beside(c) is not None:
-        c.hide()
+        c.bonus("stealth:moved", 5, on=c.me, until=When.INSTANT)
+        c.hide(check=True)
 
 
 # -- answering an attack ------------------------------------------------------
@@ -677,7 +690,7 @@ def p7442(c: Cast) -> None:
     usage=ENCOUNTER,
     action=ActionType.IMMEDIATE_INTERRUPT,
     reach=CloseBurst(5),
-    target=Target("ally", 99, everyone=True),
+    target=Target("team", 99, everyone=True),
     trigger="an enemy hits or misses you with an attack against your Will",
     on=(
         Trigger(Hit, targets_me, "an enemy hits you"),
@@ -1127,24 +1140,30 @@ def p16658(c: Cast) -> None:
         Trigger(Healed, _subject_within(10), "a creature nearby is healed"),
         Trigger(DamageApplied, _subject_within(10), "a creature nearby is damaged"),
     ),
-    dropped=("DamageApplied.from_attack",),
 )
 def p15844(c: Cast) -> None:
     """Which half pays out is decided by which event was answered, so the
     body reads the trigger rather than asking the board anything.
 
     `DamageApplied`, not `DamageRolled`: the printed trigger is damage that
-    landed, and a blow a resistance ate whole is not it. Neither event
-    records whether an attack was behind the blow -- `from_attack` is an
-    argument to `resolve.deal_damage` and reaches nothing -- so the
-    ongoing-damage case fires this too."""
+    landed, and a blow a resistance ate whole is not it.
+
+    **`c.by_attack()` is the fact, and it is not `from_attack`.** That flag
+    means "offered damage modifiers": it is `True` by default and only
+    `Cast.absorb` and `falling` pass `False`, so a trait's payout and an
+    ongoing tick both arrive with it set. Widening the event with it would
+    have exposed a field true for almost every blow in the game. #731.
+
+    The card says "takes damage **from an attack that hits it**", so an
+    ongoing tick must not fire this -- and it did, because nothing on the
+    event said which was which."""
     ev = c.trigger
     who = ev.target if ev is not None else c.target
     if who is None:
         return
     if isinstance(ev, Healed):
         c.heal(c.roll("2d6"), on=who)
-    else:
+    elif c.by_attack(ev=ev):
         c.damage("2d6", on=who)
 
 

@@ -32,7 +32,6 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
@@ -52,6 +51,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -140,7 +140,7 @@ DEFENCES = (AC, FORT, REF, WILL)
 #: "Each ally in the burst", which leaves the caster out. `EACH_ALLY` is
 #: `side="ally"`, and a `Target`'s "ally" pool puts the actor back in -- the
 #: word does not mean here what it means on `c.within`.
-EACH_OTHER_ALLY = Target(side="other_ally", count=99, everyone=True)
+EACH_ALLY = Target(side="ally", count=99, everyone=True)
 
 
 # -- the vocabulary this file needs ------------------------------------------
@@ -578,7 +578,7 @@ def p12322(c: Cast) -> None:
 
 @power(
     "p12323", level=10, cls=X7_664, usage=DAILY, action=MINOR,
-    reach=CloseBurst(5), target=EACH_OTHER_ALLY,
+    reach=CloseBurst(5), target=EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
 )
 def p12323(c: Cast) -> None:
@@ -614,13 +614,49 @@ def p12323(c: Cast) -> None:
 @power(
     "p15889", level=2, cls=X7_917, usage=ENCOUNTER, action=ActionType.NONE,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-    todo=("c.replace_roll()",),
 )
 def p15889(c: Cast) -> None:
-    """A d20 rolled at the start of the fight and kept, to be put in place of
-    a later one. Nothing can substitute a stored face: `c.reroll_attack`,
-    `c.reroll_check` and `c.reroll_save` all roll again, and none of them
-    takes a number to use instead."""
+    """A d20 rolled at the start of the fight and kept for a later one.
+
+    `c.replace_roll` is the verb the old marker asked for and did not
+    exist: the three reroll verbs all throw a fresh die and none takes a
+    *number* to use instead. The die really moves, so a kept 20 put on an
+    attack is a genuine 20 -- automatic hit and critical included -- which
+    is the printed reading, because the result *is* the recorded roll.
+
+    **The face lives in this closure and the "once" lives in a charge.**
+    `Powers.charges` counts, and what has to be remembered here is a value;
+    the row is `action=NONE` so `turns.arm_traits` runs it once at the start
+    of the encounter, which is exactly where the card says to roll. So the
+    closure keeps the number and `c.spend_charge` keeps the allowance, which
+    needs no new storage on either side.
+
+    All three kinds of d20 are watched, because the card says "instead of
+    rolling a d20" and names none. `c.may` asks before spending: it is a
+    printed *can*, and whether a kept 11 is worth using on this roll is the
+    policy's judgement and not this row's."""
+    kept = c.roll("1d20")
+
+    def spend(ev: Any, kind: str, *, mine: int) -> None:
+        if mine != c.me or not c.charge_left(f"{c.ref}:kept"):
+            return
+        if not c.may("use the kept d20"):
+            return
+        if c.spend_charge(f"{c.ref}:kept"):
+            c.replace_roll(kept, kind=kind, ev=ev)
+
+    def on_attack(ev: AttackRolled) -> None:
+        spend(ev, "attack", mine=ev.attacker)
+
+    def on_save(ev: SavingThrow) -> None:
+        spend(ev, "save", mine=ev.actor)
+
+    def on_check(ev: SkillCheck) -> None:
+        spend(ev, "check", mine=getattr(ev, "actor", c.me))
+
+    c.watch(AttackRolled, on_attack, until=When.ENCOUNTER, on=c.me)
+    c.watch(SavingThrow, on_save, until=When.ENCOUNTER, on=c.me)
+    c.watch(SkillCheck, on_check, until=When.ENCOUNTER, on=c.me)
 
 
 @power(
@@ -919,7 +955,7 @@ def p14138(c: Cast) -> None:
 
 @power(
     "p14139", level=6, cls=X7_854, usage=ENCOUNTER, action=MINOR,
-    reach=CloseBurst(1), target=EACH_ALLY, keywords=[Keyword.ARCANE],
+    reach=CloseBurst(1), target=YOU_AND_EACH_ALLY, keywords=[Keyword.ARCANE],
 )
 def p14139(c: Cast) -> None:
     """One choice for the whole use, so it is made on the first target and
@@ -1438,7 +1474,7 @@ def p16367(c: Cast) -> None:
 
 @power(
     "p16368", level=6, cls=X7_973, usage=ENCOUNTER, action=MOVE,
-    reach=CloseBurst(5), target=EACH_OTHER_ALLY, keywords=[Keyword.MARTIAL],
+    reach=CloseBurst(5), target=EACH_ALLY, keywords=[Keyword.MARTIAL],
 )
 def p16368(c: Cast) -> None:
     """Your move happens once and before any of the shifts, which is what
@@ -1963,14 +1999,50 @@ def p16046(c: Cast) -> None:
     "p16026", level=2, cls=X7_939, usage=DAILY, action=MINOR,
     reach=Ranged(5), target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.PRIMAL, Keyword.SUMMONING],
-    todo=("spec.summon_block()",),
 )
 def p16026(c: Cast) -> None:
-    """The spec carries the summon's behaviour and none of its numbers: no
-    defences, no hit points, no size, no speed. `c.summon` wants a ref and
-    `c.summon_inline` wants a `Summon` built from a block, and there is
-    neither -- so nothing can be put on the board, and the clause that costs
-    you a surge when it falls has nothing to fall."""
+    """**The block exists and the old note was looking in the wrong
+    table.** It said the spec carries the summon's behaviour and none of
+    its numbers. #459 built `associate`, and `x10_60` is the full line:
+    tiny fey, level 2, hit points equal to the summoner's healing surge
+    value, defences the summoner's, speed 4. `c.summon` routes an `x10_`
+    ref to `loader.spawn_associate`, which is handed the summoner the
+    block derives from. `p16476` had the same `defect=` for the same
+    reason and it came off at #766 with the same evidence.
+
+    Why the note was believable: the extractor substituted **this row's
+    own ref** into the summon sentence, because the creature is named
+    after the power -- so the spec reads as though the card named nothing
+    at all. `p16476`'s spec had the `x10_` ref in it; this one does not,
+    and the block is in the table either way.
+
+    Placed with no square, so `_free_square_near` picks one that is
+    passable and empty -- the printed "an unoccupied square" -- rather
+    than `at=c.origin`, which is a point the caster aimed at and may hold
+    somebody.
+
+    "It lacks actions of its own" is what a summon already is. The surge
+    the drop costs and the minor action to dismiss are `p16031`'s
+    arrangement, which prints the same two sentences: one watch, with
+    `c.endable` hanging the dismissal on the same hold, so dismissing it
+    also retires the clause about it falling.
+
+    **Not `c.dismiss_companion`, and that would have been a live bug.**
+    `spawn_associate` gives the creature no `Companion`, so `c.companion()`
+    answers with whatever companion the character already had -- measured:
+    it returned a different entity on a board where this row's summon was
+    standing. The despawn names the entity this row made.
+    """
+    made = c.summon("x10_60")
+    if not made:
+        return
+
+    def fell(ev: Dropped) -> None:
+        if ev.actor == made and not c.spend_surge(on=c.me):
+            c.flat(c.surge_value(of=c.me), on=c.me)
+
+    watching = c.watch(Dropped, fell, until=When.ENCOUNTER)
+    c.endable(watching, MINOR, then=lambda: c.world.despawn(made))
 
 
 @power(

@@ -48,7 +48,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
@@ -56,6 +55,8 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Attack,
     AttackDeclared,
@@ -78,11 +79,13 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     RelationSet,
+    SavingThrow,
     Size,
     Trigger,
     TurnEnd,
     TurnStart,
     When,
+    Window,
     about_me,
     both,
     by_charge,
@@ -95,7 +98,7 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
-from combat_engine.engine.query import bloodied
+from combat_engine.engine.query import bloodied, enemies
 
 if TYPE_CHECKING:
     from combat_engine.engine import Square, World
@@ -387,11 +390,16 @@ def p14393(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
-    dropped=("c.bonus('skill:any')",),
+    target=YOU_OR_ONE_ALLY,
 )
 def p13689(c: Cast) -> None:
-    """Four printed choices; the skill-check one has no key to be read off."""
+    """All four printed choices. The skill one does have a key: `skills.py`
+    reads a blanket `skill` modifier beside `skill:<name>` and applies it to
+    every check, which is what a choice the card declines to pin to one
+    skill wants. Its bonus is **+4** where the attack one is +2.
+
+    Each branch defaults to `c.target`, which is the ally this was aimed at
+    -- the card gives every benefit to that one creature."""
     pick = c.choose(["save", "shift", "attack", "skill"], "which benefit")
     if pick == "save":
         c.save()
@@ -399,6 +407,8 @@ def p13689(c: Cast) -> None:
         c.shift(2, who=c.target)
     elif pick == "attack":
         c.bonus("attack", 2, kind="power", until=When.EOTNT, once=True)
+    elif pick == "skill":
+        c.bonus("skill", 4, kind="power", until=When.EOTNT, once=True)
 
 
 @power(
@@ -408,7 +418,7 @@ def p13689(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
 )
 def p14389(c: Cast) -> None:
     """"Must end adjacent to each other" is each of the two stepping
@@ -684,7 +694,7 @@ def p16636(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(2),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
 )
 def p2479(c: Cast) -> None:
     """`c.squares_for` rather than a bare 1, for `p1489`'s reason: a feat
@@ -813,11 +823,27 @@ def p2485(c: Cast) -> None:
     target=NO_TARGET,
     trigger="you take damage",
     on=Trigger(DamageRolled, targets_me, "you take damage"),
-    todo=("c.floor_damage_dice()",),
 )
 def p10044(c: Cast) -> None:
-    """The blow has been rolled to a single number by the time it is
-    announced; the dice that made it are gone, so there is nothing to floor."""
+    """"All damage dice rolled for the triggering attack are considered to
+    have a result of 1."
+
+    **The old note's premise expired.** It said *"the blow has been rolled
+    to a single number by the time it is announced; the dice that made it
+    are gone"*, which was true until `DamageRolled` started carrying its
+    live `Roll` (#703). This row is declared on exactly that event, so the
+    dice are in hand after all.
+
+    A **set**, not a floor, and the only clause of this family that makes a
+    blow smaller -- which is why it is `c.set_damage_faces` and not
+    `c.floor_damage_dice`. The amount is repriced through the recipe the
+    event carries, so a miss-half blow is reduced by the right amount
+    rather than by twice it.
+
+    #742 asked whether an immediate interrupt on "you take damage" runs
+    *before* the dice are rolled, as the only way this card could work. It
+    does not have to."""
+    c.set_damage_faces(1)
 
 
 @power(
@@ -1144,9 +1170,27 @@ def p8278(c: Cast) -> None:
     keywords=[Keyword.TELEPORTATION],
 )
 def p11052(c: Cast) -> None:
+    """`f2945` offers an area burst 1 within 5 beside the printed close burst
+    1, and leashes the teleport to whichever area was aimed: "the square you
+    teleport into as part of this power must be within the area of the
+    burst".
+
+    **Gated on the aiming, not on holding the feat.** The reshape is
+    `optional=True`, so a character who has it may still aim the printed
+    burst -- and the printed card restricts the teleport not at all. A
+    `c.feat("f2945")` gate would leash the printed aiming too, which is the
+    half of this the feat's own note says cannot be written that way.
+
+    This row prints one range, so `c.branch` is 0 for the print and any
+    non-zero index is an offered one. A row with two printed branches would
+    have to ask `dsl.branches_for`; this one does not need to and the
+    distinction is `_aimed_shape`'s. #884.
+    """
     c.grants_advantage(until=When.EONT)
     if c.last:
-        c.teleport(max(1, c.speed_of() // 2))
+        aimed = c.area() if c.branch else None
+        c.teleport(max(1, c.speed_of() // 2),
+                   into=None if aimed is None else aimed.__contains__)
 
 
 # -- r51 --------------------------------------------------------------------
@@ -1366,12 +1410,67 @@ def p15842(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CHARM],
-    todo=("Effect.keywords", "c.save_disadvantage()"),
+    dropped=("Gear.carried",),
 )
 def p15845(c: Cast) -> None:
-    """The aura's whole content is a penalty on saves against charm effects.
-    An effect carries no keywords, so which save is a charm save cannot be
-    asked, and there is no way to make one roll twice and keep the lower."""
+    """Both premises of the old note are false, and the card is roll-twice,
+    not the numeric penalty that note described.
+
+    **The marker moves off the import, which landed under #876.** It read
+    `etl.item.adventuring_gear`, and `Category = 'Equipment'` is now
+    imported -- 233 rows, `item` 1,877 -> 2,110 -- so the instrument this
+    card requires has a ref. What is still missing is the list a row would
+    read it from, and an empty `Gear.carried` would refuse the Requirement
+    for every character and stop this row being offered at all, which is
+    worse than playing with the clause dropped. The dealing half is #877.
+
+    *Which save is a charm save* **is** askable. `durations.keywords_of`
+    puts the effect's keywords in the save context and on the
+    `SavingThrow` event itself, which is what #580 was for -- `f3451` reads
+    exactly this key for "a +2 bonus to saving throws against charm
+    effects".
+
+    *Roll twice and keep the lower* is `c.reroll_save(keep="worst")`: it
+    rolls a fresh d20, takes `min` with the printed natural, and recomputes
+    `saved` inline. `Window.BEFORE` because `durations.save` announces the
+    throw and then reads `rolled.saved` back off the event -- a listener
+    heard in that window changes the outcome, which is the whole reason the
+    event is announced before it is acted on.
+
+    Asked live rather than laid on whoever is standing there when the aura
+    goes up: an aura's members change every time anybody walks, and
+    `Zones.refresh` is wired to the movement events, so `zones.occupants`
+    is current at the moment of the throw. `f3291` reads a zone's
+    membership the same way and for the same reason.
+
+    "Any enemy", so the caster's own saves are untouched -- the aura is not
+    a general charm-dampener and a bard standing in it keeps its dice.
+
+    Still dropped: the Requirement and the clause that deactivates the aura
+    both turn on *playing a musical instrument*, which is ordinary kit --
+    `Gear` records weapons, a shield, armour, worn magic and ammunition and
+    has no slot for the rest, so there is no ref to ask for. Same gap and
+    same symbol as `p16442`, whose note sets it out. The consequence is
+    that the aura, once up, is never deactivated.
+    """
+    me = c.me
+    ring = c.aura(5, until=When.ENCOUNTER, on=me)
+    if not ring:
+        return
+
+    def worse(ev: SavingThrow) -> None:
+        if Keyword.CHARM not in ev.keywords:
+            return
+        if ev.actor not in enemies(c.world, me):
+            return
+        if ev.actor not in c.world.zones.occupants(ring):
+            return
+        c.reroll_save(ev=ev, keep="worst")
+
+    c.watch(
+        SavingThrow, worse, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=f"{c.ref} refrain",
+    )
 
 
 # -- r66 --------------------------------------------------------------------

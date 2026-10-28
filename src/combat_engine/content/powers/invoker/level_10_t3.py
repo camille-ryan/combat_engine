@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     DAILY,
-    ONE_ALLY,
     STANDARD,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Cast,
     Condition,
@@ -34,14 +34,15 @@ ROLLED = "you roll initiative"
     usage=DAILY,
     action=ActionType.NONE,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.DIVINE],
     trigger=ROLLED,
     on=Trigger(InitiativeRolled, about_me, ROLLED),
 )
 def p7191(c: Cast) -> None:
-    """"You and one ally" -- `ONE_ALLY`'s pool includes the caster, so the
-    invoker's own half is written explicitly on the first (and only) target.
+    """"You and one ally" -- `"team"` is the side including the caster, so
+    the invoker's own half is written explicitly on the first (and only)
+    target.
 
     "Neither target is surprised" is both halves of the sentence: the
     condition is taken off whoever already has it and refused for the rest

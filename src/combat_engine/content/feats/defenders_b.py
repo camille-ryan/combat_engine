@@ -57,8 +57,6 @@ from combat_engine.engine.dsl import get
 from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.types import Usage
 
-FEATURE = ("c.class_feature()",)
-
 #: The five the swordmage's own damage feat names. `Keyword.FORCE` is not
 #: among them, which is the one worth saying out loud: the class's signature
 #: damage type is not on the printed list.
@@ -554,11 +552,32 @@ def f3319(c: Cast) -> None:
 
 
 @power("f3320", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.shift(through=)",))
+       reach=PERSONAL, target=SELF, todo=("c.phasing(when=)",))
 def f3320(c: Cast) -> None:
-    """A long shift passes through occupied squares. `share=True` puts a
-    creature *into* one square rather than letting a path cross several,
-    which is the same absence f3116 names."""
+    """Lets a long shift taken by one class's power pass through enemies'
+    squares.
+
+    **Re-aimed, the same way f3116 was and for the same reason.**
+    `c.shift(through=)` named an argument to a call this row does not
+    make: the row is bodiless with `action=NONE`, and the shift belongs to
+    whichever monk power is being used -- `c362` is the class, so the set
+    is every monk and monk paragon power and there is no finite list of
+    bodies to edit either. The old note's other premise is also spent:
+    #684 made `movement.shift` walk a route, so a path crossing several
+    squares is no longer the thing missing.
+
+    What is missing is the **gate**. Moving through an occupied square is
+    `c.may_enter`, which takes `sizes`, `side` and a `when=` -- and the
+    context that gate is handed carries `mover` and `occupant` and nothing
+    about the move: not its kind, not the row that called for it, not how
+    far it is going. This card narrows on all three ("a `c362` power", "to
+    shift", "3 or more squares").
+
+    So this is **not** written as `c.may_enter(side="enemy", on=c.me)`
+    with the narrowing dropped. That is the standing permission to walk
+    through every enemy all fight, on any move, which is strictly better
+    than the card -- the trade `Moved.stretched_` refused for `f2459`, and
+    the reason this stays `todo=` rather than taking `dropped=`."""
 
 
 @power("f3326", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -628,10 +647,36 @@ def f3327(c: Cast) -> None:
 @power("f3401", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f3401(c: Cast) -> None:
-    """Trades the feature's normal effect for a penalty. The feature is
-    `FLURRY` and the penalty is one line; what has no verb is the trade
-    -- nothing suppresses the effect of a row that is being used, so
-    writing the penalty alone would hand out both halves."""
+    """Trades the feature's normal effect for a penalty on the target.
+
+    **`spec.power_ref()` is stale on both of its claims and the row is
+    writable.** The ref was never missing: the feature is the five rows
+    `monk.level_0.FLURRIES` names, which is the canonical list. And
+    "nothing suppresses the effect of a row that is being used" stopped
+    being true with #780 -- `monk.level_0._forgo_for_necrotic` is `f3171`'s
+    trade, written into all five flurry bodies behind `c.feat` and driven
+    by `drivers.a_flurry_traded_for_a_resistance`.
+
+    **What it wants is a sibling of that helper, and it is not written
+    here.** Five is a finite list, so `content/CLAUDE.md`'s rule puts the
+    clause in each of the five bodies rather than on `c.pre_empt` -- and
+    `c.pre_empt` could not reach them anyway, since it only fires for a row
+    whose own body calls `c.instead_of`, which none of the five does. So
+    the edit is in `powers/monk/level_0.py`, which this wave did not own.
+
+    Two things for whoever writes it, both learned the expensive way by the
+    helper next door:
+
+    * **The whole effect goes, not the damage line.** `f3171` gives up
+      "dealing damage" and `_forgo_for_necrotic` is therefore a gate on one
+      `c.flat`; this card gives up "the normal effect", so it is an early
+      return and three of the five lose their shift, pull or slow with it.
+    * **It collides with `f3171` and nothing stops that.** This row carries
+      a bracketed `feat.category` -- the one `f3396` heads -- and `f3171`
+      carries none, so by the one-per-category rule a character may hold
+      both and be offered both trades on one flurry, and the effect can
+      only be given up once. The two choices have to be one question, and
+      neither `c.choose` call knows about the other."""
 
 
 # -- seeker -----------------------------------------------------------------

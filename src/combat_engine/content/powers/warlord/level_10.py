@@ -82,7 +82,7 @@ def _ally_about_to_be_hit(radius: int) -> Callable[[World, int, Event], bool]:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True, label="Each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="Each ally in the burst"),
     keywords=[Keyword.HEALING, Keyword.MARTIAL],
 )
 def p1112(c: Cast) -> None:

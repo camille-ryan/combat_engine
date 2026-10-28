@@ -75,6 +75,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionPointSpent,
     ActionSpent,
     ActionType,
@@ -186,14 +187,6 @@ def _the_mount(c: Cast) -> int | None:
     if ridden is not None:
         return ridden
     return c.me if c.rider() is not None else None
-
-
-#: Characters whose surge pool a property has already raised, keyed
-#: `(world, eid)`. A trait arms at the start of every fight and "your number
-#: of healing surges increases by one" is a fact about the sheet, so the
-#: write has to happen once however often the row is armed.
-#: `feats/paladin.py` holds the same latch for the same reason.
-_SURGES_RAISED: dict[tuple[int, int], bool] = {}
 
 
 def _keep_better_initiative(c: Cast) -> int:
@@ -669,7 +662,7 @@ def i1330p1(c: Cast) -> None:
 
 
 @power("i1713p1", level=2, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBurst(5), target=EACH_ALLY)
+       reach=CloseBurst(5), target=YOU_AND_EACH_ALLY)
 def i1713p1(c: Cast) -> None:
     """"You and each ally": the caster is not in an ally burst, so the
     once-per-power line pays the caster separately."""
@@ -764,7 +757,13 @@ def i3380p1(c: Cast) -> None:
 
 
 @power("i580x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_defiling()",))
+       reach=PERSONAL, target=SELF,
+       defect=(
+           "the player's arcane defiling power is not in the"
+           " compendium: 0 Power or ClassFeature rows name it,"
+           " and the 2 Power rows whose names mention defiling"
+           " are paragon powers that consume it (#878)"
+       ))
 def i580x1(c: Cast) -> None:
     """Re-aimed at the symbol `weapon.py` already uses for this feature:
     the whole property is a rider on a use of arcane defiling, which is
@@ -1896,11 +1895,9 @@ def i3454x1(c: Cast) -> None:
     sheet, so an unlatched `+= 1` would raise the ceiling once per
     encounter. The extra surge is handed over as well, or raising the
     ceiling does nothing in the fight the property armed in."""
-    key = (id(c.world), c.me)
     health = c.world.get(c.me, Health)
-    if health is None or _SURGES_RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _SURGES_RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 
@@ -2046,11 +2043,14 @@ def i972x1(c: Cast) -> None:
 
 
 @power("i1701x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus('save:death')",))
+       reach=PERSONAL, target=SELF)
 def i1701x1(c: Cast) -> None:
-    """A death saving throw is not a separate key, so the first half goes
-    unwritten rather than becoming a bonus to every save; the second wind
-    half is exact."""
+    """A death save *is* reachable: `turns._death_saves` reads the `save`
+    modifier with `label="death"` in the context, which is the gate that
+    keeps the first half off every other saving throw. `i2079p1` is the
+    sibling writing the same line. The second wind half is exact."""
+    c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: ctx.get("label") == "death")
 
     def paid() -> None:
         c.bonus("damage", 2, on=c.me, until=When.EONT, once=True,
@@ -2443,15 +2443,41 @@ def i1805p1(c: Cast) -> None:
                getattr(ev, "actor", None) == me
                and getattr(ev, "natural", 0) == 1),
                "you roll a natural 1 on a saving throw"),
-       ),
-       dropped=("c.reroll_attacks_against()",))
+       ))
 def i1805p2(c: Cast) -> None:
     """Both printed rolls are declared, which is what a sequence of
-    triggers is for. Forcing an *enemy* to reroll has no method."""
+    triggers is for.
+
+    The second sentence is a banked reroll aimed at somebody else, and
+    `c.reroll_attack(ev=)` is how that is written: it recomputes the
+    outcome itself and re-totals the modifiers for `ctx["attacker"]`
+    rather than for the caster, so the roll it mends or spoils is the
+    enemy's. `keep="new"` is the printed *"use the second result"* and not
+    `"worst"` -- the holder gets whatever comes up.
+
+    "You **can** use a free action" is a choice, and a watch has no way to
+    pass on one, so the hold is spent on the first landing blow from a foe
+    in range and in sight. `result.hit` in the `AttackRolled` window is
+    the engine's own provisional verdict -- `triggers.would_hit_me` reads
+    it the same way -- and gating on it is what keeps the one use off a
+    swing that was already missing."""
     if isinstance(c.trigger, SavingThrow):
         c.reroll_save(keep="new")
     else:
         c.reroll_attack(keep="new")
+
+    def again(ev: AttackRolled) -> None:
+        foe = getattr(ev, "attacker", None)
+        result = getattr(ev, "result", None)
+        if foe is None or foe not in c.enemies():
+            return
+        if c.distance(to=foe) > 10 or not c.can_see(foe):
+            return
+        if result is None or not result.hit:
+            return
+        c.reroll_attack(ev=ev, keep="new")
+
+    c.watch(AttackRolled, again, until=When.ENCOUNTER, once=True)
 
 
 @power("i1809x1", level=6, cls=ITEM, action=ActionType.NONE,

@@ -37,6 +37,7 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from random import Random
 from typing import TYPE_CHECKING
 
@@ -114,6 +115,27 @@ WEIGHTS: dict[str, float] = {
     "has_a_rider": 1.5,
     # Not expended on a miss, which is most of a second use.
     "reliable": 1.5,
+    # **The leg is sworn to a damage type and the draw never read it.** Four
+    # sorcerer legs and one warlock leg name an element, `c.element()` reads
+    # it in play, and `power_options` priced nothing off it -- so all four
+    # sorcerer legs drew a **byte-identical** loadout on 30 of 30 seeds, and
+    # the share of elemental rows matching the leg was just the corpus
+    # frequency (fire 112, cold 67, lightning 54, acid 21 of the same 404).
+    #
+    # `leans_on_companion`'s weight, because it is the same shape: does this
+    # option's payoff go through the thing the leg is built around. #464.
+    "leans_on_element": 4.0,
+    # The mirror, and the half that does the work -- as it was for the
+    # companion. A cold power on an acid-sworn build is not a weaker choice,
+    # it is **another leg's** choice, so it takes
+    # `implement_only_build`/`companionless_build`'s weight: a chassis the
+    # row's whole payoff cannot reach.
+    #
+    # Priced and never filtered, and the reason is sharper here than for
+    # feats: a sorcerer's at-will pool is only a few rows deep, so a filter
+    # on element could leave a leg unable to fill its slots at all. The
+    # weight has to lose to availability.
+    "offelement_build": -9.0,
     # -- a feat -----------------------------------------------------------
     # `_leans_on` reads the row's own source for `c.<ability>_mod`, so this is
     # "does the feat pay out through the ability this build is good at". It
@@ -401,6 +423,18 @@ def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[C
         return list(_RACES[key])
     out: list[Choice] = []
     for ref, race in sorted(RACES.items()):
+        # **A variant is selectable and not dealt**, so it is not an option
+        # the scorer ranks either -- `deal_race` filters the same way and
+        # for the same reason: its own 21 traits are undeclared (`#813`), so
+        # a dealt variant would wear its parent's traits under another name.
+        #
+        # Filtered here as well as there because this list is what the
+        # *scored* draw samples from, and `winrate` runs both modes in one
+        # process. Leaving it in here would move every scored sheet while
+        # the uniform draw stayed put -- a divergence in one mode only,
+        # which is the hardest kind to read. #896.
+        if race.parent:
+            continue
         raised = race.taken(leg)
         rows = [r for r in race.granted() if r in REGISTRY]
         score, terms = _priced(
@@ -536,19 +570,66 @@ def legal_feats(
     fix, which is how the shape rule got measured: every ref in the `feat`
     table is either `f<digits>` or `f<digits><letters>`, and nothing that is
     really a feat carries a suffix.
+    **Memoised on `(cls, level, leg.name, race, taken)`, and the key is
+    complete rather than approximate.** The only thing this reads off `build`
+    is `leg.name` -- it is handed straight to `Character(build=...)` below --
+    so two `Build` objects with the same name are the same question here, and
+    an ad-hoc one cannot collide with a different answer. That matters because
+    `Build` is **unhashable**: it carries `Weapon`, which is a mutable
+    dataclass, so the object could not be a key even if the identity were
+    wanted.
+
+    Worth memoising because `audit.board` reaches it once per feat slot per
+    board, and a row that never fires pays 48 boards -- `_attempts` only stops
+    when something fires. Measured over three silent rows: **672 calls, 4.30s,
+    26% of their cost.** The 48 boards are 8 seeds x 3 die faces x 2 poses,
+    and chargen sees neither the face nor the pose, so six of every six calls
+    repeat a key.
+
+    The cache holds a **tuple** and the caller gets a fresh `list`: the
+    returned pool is handed to `_one_feat`, which samples it, and a shared
+    mutable list behind a cache is the kind of aliasing that would show up as
+    an unreproducible draw rather than as an error.
+    """
+    return list(_legal_feats(cls, level, (build or _build_of(cls)).name,
+                             race, tuple(taken)))
+
+
+def _build_of(cls: str):  # noqa: ANN202
+    from . import build_of
+
+    return build_of(cls)
+
+
+@lru_cache(maxsize=8192)
+def _legal_feats(
+    cls: str, level: int, leg_name: str, race: str, taken: tuple[str, ...]
+) -> tuple[str, ...]:
+    """The cached body of `legal_feats`. See its docstring for the key.
+
+    **Bounded, and the bound is insurance rather than a fix.** I expected the
+    key space to be a problem and measured it instead: over 12 silent rows it
+    is **10.6 distinct keys a row** at a **93% hit rate** (1,776 hits, 127
+    misses), projecting ~24,000 entries and **50 MB** per worker across a
+    whole sweep. That is affordable unbounded.
+
+    It is capped anyway because the projection scales with the corpus and two
+    more tiers of content are coming. 8,192 entries is ~770 rows' worth at
+    the measured rate — far more than the within-row repetition the cache
+    exists for — and ~16 MB a worker. Eviction cannot change an answer, only
+    recompute one.
     """
     import re
 
     from combat_engine.engine.dsl import REGISTRY, entry_defect
 
-    from . import Character, build_of, meets
+    from . import Character, meets
 
     second_block = re.compile(r"f\d+[a-z]+").fullmatch
-    leg = build or build_of(cls)
     gates = feat_gates()
-    who = Character(cls=cls, level=level, build=leg.name, race=race)
+    who = Character(cls=cls, level=level, build=leg_name, race=race)
     held = list(taken)
-    return [
+    return tuple(
         ref
         for ref in sorted(gates)
         if ref in REGISTRY
@@ -570,7 +651,7 @@ def legal_feats(
         and not second_block(ref)
         and ref not in held
         and meets(gates[ref], who, held)
-    ]
+    )
 
 
 def feat_options(
@@ -655,6 +736,13 @@ def power_options(
     from . import build_of
 
     leg = build or build_of(cls)
+    # The leg's sworn element, as the string the keywords are spelled in.
+    # `None` for every leg that names none, which is all but five.
+    sworn = (
+        str(leg.element)
+        if leg is not None and getattr(leg, "element", None) is not None
+        else None
+    )
     out: list[Choice] = []
     for ref in candidates:
         declared = REGISTRY.get(ref)
@@ -668,6 +756,14 @@ def power_options(
                 "hits_several": float(several),
                 "has_a_rider": float(_does_more_than_damage(declared)),
                 "reliable": float(Keyword.RELIABLE in (declared.keywords or ())),
+                "leans_on_element": float(
+                    sworn is not None and sworn in _elements_of(declared)
+                ),
+                "offelement_build": float(
+                    sworn is not None
+                    and bool(_elements_of(declared))
+                    and sworn not in _elements_of(declared)
+                ),
                 "carries_a_marker": float(bool(getattr(declared, "dropped", ()) or ())),
                 "refused_in_play": float(bool(getattr(declared, "todo", ()) or ())),
                 "out_of_combat": float(getattr(declared, "out_of_combat", False)),
@@ -676,6 +772,40 @@ def power_options(
         )
         out.append(Choice(ref=ref, score=score, terms=terms))
     return _ranked(out)
+
+
+#: The damage types a build leg can be sworn to, as the strings both enums
+#: use. `DamageType` and `Keyword` share these ten names **and their values**
+#: -- checked, all ten agree -- which is why a row's element can be read off
+#: its printed keywords with no mapping table and no source reading.
+#:
+#: That is the whole reason this detector is cheaper than
+#: `_leans_on_companion`, which had to read bodies because no header field
+#: said so. Here the header carries it as data. #464.
+@lru_cache(maxsize=1)
+def _elements() -> frozenset[str]:
+    """The ten shared names, computed once.
+
+    Function-local import and cached, which is this file's convention for
+    reaching `engine.types` -- `power_options` takes `Keyword` the same way.
+    A module-level import here would widen what `chargen` pulls in for a
+    constant that is wanted in one place.
+    """
+    from combat_engine.engine.types import DamageType
+
+    return frozenset(str(d) for d in DamageType)
+
+
+def _elements_of(declared) -> frozenset[str]:  # noqa: ANN001
+    """Which damage types this row is sworn to, off its printed keywords.
+
+    Empty for the great majority: a row with no elemental keyword is neither
+    on-element nor off it, and must score 0 on both terms rather than being
+    treated as a mismatch.
+    """
+    return frozenset(
+        str(k) for k in (declared.keywords or ()) if str(k) in _elements()
+    )
 
 
 def _does_more_than_damage(declared) -> bool:  # noqa: ANN001

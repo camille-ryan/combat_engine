@@ -78,8 +78,13 @@ from combat_engine.engine import (
     power,
     spread,
 )
-from combat_engine.engine.components import Conjuration
-from combat_engine.engine.events import OpportunityWindow, RelationSet, ZoneEntered
+from combat_engine.engine.components import Conjuration, Powers
+from combat_engine.engine.events import (
+    Dropped,
+    OpportunityWindow,
+    RelationSet,
+    ZoneEntered,
+)
 from combat_engine.engine.zones import Zone
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -433,13 +438,15 @@ def p16280(c: Cast) -> None:
     for. Its bite is entering or **ending** a turn there, which is not the
     sentence `c.burns` carries, so the once-per-turn latch is written out.
 
-    "Until the target dismisses it as a minor action" and the partial
-    concealment are the two clauses with nowhere to go.
+    The partial concealment is laid on the target beside the fire resist.
+    "Until the target dismisses it as a minor action" is the clause left
+    with nowhere to go. #860.
     """
     who = c.target
     if who is None:
         return
     ring = c.aura(1, label=c.ref, until=When.ENCOUNTER, on=who)
+    c.conceal(on=who, until=When.ENCOUNTER)
     c.resist(10, DamageType.FIRE, until=When.ENCOUNTER, on=who)
     struck: dict[int, int] = {}
 
@@ -465,7 +472,6 @@ def p16280(c: Cast) -> None:
                 c.world.bus.on(TurnEnd, dusk),
             ]
         )
-    c.note(f"{c.ref}: the target also has partial concealment, and there is none here")
 
 
 @power(
@@ -548,8 +554,12 @@ def p192(c: Cast) -> None:
 def p2375(c: Cast) -> None:
     """"Gains no benefit from invisibility, nor can it become hidden" is the
     `HIDDEN_FROM` relations it is the hidden end of: cleared, and then kept
-    clear -- a fresh one is undone as it is set. Concealment proper has no
-    state in this engine, so that third of the sentence is only a note.
+    clear -- a fresh one is undone as it is set.
+
+    **And the concealment third is `c.no_cover(partial=True)`**, which this
+    row said had no state in the engine. It does: `c.conceal` writes it,
+    `query.concealment_of` reads it, and `c.no_cover` is the printed
+    "gains no benefit from". #860.
     """
     victim = c.target
     if victim is None:
@@ -557,6 +567,7 @@ def p2375(c: Cast) -> None:
     if c.strike():
         c.damage("1d10", c.int_mod, dtype=DamageType.RADIANT)
         c.blinded(until=When.EONT)
+    c.no_cover(on=victim, until=When.SAVE_ENDS, partial=True)
     held = c.effect(f"{c.ref} exposed", until=When.SAVE_ENDS)
     if held is None:
         return
@@ -567,8 +578,6 @@ def p2375(c: Cast) -> None:
             c.world.relations.clear(Relation.HIDDEN_FROM, victim, ev.target, c.ref)
 
     held.subs.append(c.world.bus.on(RelationSet, spotted, owner=c.me))
-    if c.first:
-        c.note(f"{c.ref}: concealment is also denied, and there is none here")
 
 
 @power(
@@ -788,11 +797,65 @@ def p4078(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.SUMMONING],
-    todo=("cf:wizard-expert-mage",),
 )
 def p13984(c: Cast) -> None:
-    """Which creature is summoned is read off the caster's Expert Mage
-    benefit, and that class feature is not in the tree -- so there is no
-    block for `summon=` to declare and nothing for `c.summon_inline` to
-    place. Everything else on the card is the standard summoning rules the
-    engine already applies to a `summon=` line."""
+    """Summons one of two creatures, decided by which school benefit the
+    character took.
+
+    **Camille's ruling, 2026-10-21, and it is the whole of what was
+    blocked**: `cf:wizard-mage-f4s4` summons `x10_28` and
+    `cf:wizard-mage-f4s3` summons `x10_27`. `x10_29` *"should become
+    available at level 19"*, so it is not this row's and not this tier's.
+
+    **Two earlier markers on this row were both wrong, and the second was
+    mine.** The first said the feature the summon reads off is not in the
+    tree -- all seven `cf:wizard-mage-f4*` rows are declared (#581, #584,
+    #585). The second said the source prints no stat block and named
+    `spec.summon_block()`; the blocks are in the `associate` table and in
+    `game.db`, which is the blind spot that kept `p16476`'s marker alive
+    through #459.
+
+    **What was genuinely missing was the association, and reading the
+    errata line is what got it wrong.** The card names no creature; its
+    update note names two, and I took those for "the two it can summon".
+    They are the two that *changed in that update* -- one of which belongs
+    to a level-19 power. So the errata line is not a cast list, and the
+    only association anywhere was the ruling above.
+
+    `Powers.all` on the caster rather than `c.knows`, which is the near
+    miss and is wrong here: it scans every creature on the board and
+    returns whoever holds the row, so on a board with a second wizard it
+    answers about them. `i3036p1` reads its own gate the same way.
+
+    **Only the `f4` tier is asked, and that is not an omission.** The
+    second school's Expert tier carries `f5s0`-`f5s2` and no more, so
+    there is no necromancy or nethermancy secondary to hold -- the
+    compendium prints three, which `features/arcanist.py` records as the
+    page's own pattern rather than a truncation.
+
+    The surge the drop costs and the minor action to dismiss are
+    `p16026`'s arrangement, which prints the same two sentences: one
+    watch, with `c.endable` hanging the dismissal on the same hold so
+    dismissing it also retires the clause about it falling. Placed with no
+    square, so a passable empty one is picked -- the printed "an
+    unoccupied space".
+    """
+    me = c.me
+    known = c.world.get(me, Powers)
+    held = set(known.all) if known is not None else set()
+    if "cf:wizard-mage-f4s3" in held:
+        which = "x10_27"
+    elif "cf:wizard-mage-f4s4" in held:
+        which = "x10_28"
+    else:
+        return
+    made = c.summon(which, after=me)
+    if not made:
+        return
+
+    def fell(ev: Dropped) -> None:
+        if ev.actor == made and not c.spend_surge(on=me):
+            c.flat(c.surge_value(of=me), on=me)
+
+    watching = c.watch(Dropped, fell, until=When.ENCOUNTER)
+    c.endable(watching, MINOR, then=lambda: c.world.despawn(made))

@@ -139,22 +139,42 @@ def _adjacent_empty_square(c: Cast, who: int) -> Square | None:
 
 def _revive_as_undead(c: Cast, label: str) -> None:
     """"Remains standing, gains the undead keyword, continues to fight
-    until the end of its next turn." Stood back up inside the `Dropped`
-    window at 1 hit point, same shape as a troll's own rise, with the
-    keyword granted through `c.set_origin` rather than invented. Guarded
-    by a label so a second `Dropped` -- the one that finishes it for
-    real -- finds the guard already spent and does nothing."""
+    until the end of its next turn."
+
+    **Held at 1 hit point inline, not from a watch.** This armed
+    `c.watch(Dropped, rise, ...)` from inside the dispatch of the very
+    `Dropped` that offered the row, so the handler was never called for
+    that event: the row fired, laid its subscription, and the creature died
+    anyway. It audited green because laying the effect counts as doing
+    something.
+
+    `resolve._check_down` reads the hit points **again** after the emit, and
+    its comment says it does so for exactly this shape -- "a row that
+    answers its own `Dropped` by healing itself" -- so the body only has to
+    set them. This is `m2066a3`'s shape, which was working all along.
+
+    The label guard stays and is load-bearing here in a way it is not for
+    `m2066a3`: both callers are `AT_WILL`, so without it the creature would
+    prop itself up again every time it dropped. #815.
+    """
+    from combat_engine.engine import Health
+
     me = c.me
     if any(e.label == label for e in c.world.effects.of(me)):
         return
     c.effect(label, until=When.ENCOUNTER, on=me)
 
-    def rise(ev: Dropped) -> None:
-        if ev.actor == me:
-            c.reanimate(on=me, hp=1)
-            c.set_origin("undead", on=me, until=When.EONT)
+    health = c.world.get(me, Health)
+    if health is not None:
+        health.hp = 1
+    c.set_origin("undead", on=me, until=When.EONT)
 
-    c.watch(Dropped, rise, until=When.ENCOUNTER, on=me, label=f"{label} rise")
+    def expire(ev: TurnEnd) -> None:
+        if ev.actor == me and not ev.ghost:
+            c.flat(999, on=me)
+
+    c.watch(TurnEnd, expire, until=When.EONT, on=me, once=True,
+            label=f"{label} expiry")
 
 
 # ==========================================================================
@@ -1341,15 +1361,42 @@ def m4381a3(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.ignores_difficult(hazardous=)",),
+    dropped=("c.ignore_hazards()",),
 )
 def m4381a4(c: Cast) -> None:
-    """The shift through enemies' spaces plays, ignoring difficult terrain
-    for its duration. Waiving hazardous terrain and the squeezing penalty
-    specifically has nowhere further to attach -- neither is its own
-    knob apart from the terrain word itself."""
-    c.shift(6, share=True)
+    """Shift 6, through enemies and over liquid, ignoring rough ground and
+    taking no squeezing penalty.
+
+    **The exemption was laid after the shift, so it never reached it.**
+    `c.shift` builds its destinations from `world.reachable_paths`, which
+    charges for rough going, and nothing re-runs that afterwards: on a
+    board of rubble the caster was offered 35 destinations where the
+    waiver gives 155. Both calls go before the move now, which is the
+    order `m4382a3` -- this identical card one tier down -- already had.
+
+    **The squeezing half was never a gap and the old note was stale.**
+    "Neither is its own knob" is exactly what `c.waive` (#508) exists to
+    contradict: `conditions.RULES[Condition.SQUEEZING]` is three knobs and
+    all three are waivable, so "takes no penalties for squeezing" is
+    `attack`, `halve_speed` and `grants_ca` together. Twelve rows in the
+    tree already say it that way.
+
+    **The marker is re-pointed, not cleared.** What is still missing is the
+    hazardous-terrain half, and it is `c.ignore_hazards()` -- the symbol
+    `m6073a0` already carries for the same sentence -- rather than a
+    synonym of its own. `Grid` has no hazardous category to be exempt from
+    (`difficult` holds a terrain *word* out of `DIFFICULT_LABELS`, and
+    `ignores_difficult("hazardous")` would be a label nothing writes), and
+    `c.ignores_difficult` is a movement-**cost** waiver, which cannot stop
+    damage. `m2960a5` is the same printed card at level 8 and claims the
+    opposite in a docstring with no marker; that reading is wrong and the
+    row over-claims."""
     c.ignores_difficult(on=c.me, until=When.EOT)
+    c.waive(
+        Condition.SQUEEZING, "attack", "halve_speed", "grants_ca",
+        on=c.me, until=When.EOT,
+    )
+    c.shift(6, share=True)
 
 
 # ==========================================================================

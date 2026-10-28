@@ -39,13 +39,23 @@ PSIONIC = [Keyword.PSIONIC]
     reach=Ranged(10),
     target=ONE_ALLY,
     keywords=PSIONIC,
+    dropped=("c.object_target()",),
 )
 def p11273(c: Cast) -> None:
     """Held aloft: the immobilisation is refreshed each time the hold is
-    sustained, which is what the printed Sustain Minor line does. Objects and
-    helpless enemies are also legal targets in print; the header can only say
-    one side, so it says ally. The free-action and minor-action ways of
-    letting go are dropped -- ending an effect early is not in `Cast`."""
+    sustained, which is what the printed Sustain Minor line does. The
+    free-action and minor-action ways of letting go are dropped -- ending an
+    effect early is not in `Cast`.
+
+    **"One ally, helpless enemy, or object", declared as the ally half.**
+    A `Target` carries one `side` and `candidates` builds the pool from it
+    before any filter runs, so the other two cannot be alternatives today.
+    The helpless-enemy half is reachable -- `"any"` plus a conditions filter
+    -- and the object half is not, for the reason `c.object_target()` names,
+    so that is the symbol this waits on rather than a second one for the
+    pool. Marked rather than left admitting it in prose, which is what it
+    did: `scripts/targets.py` is what surfaced the declaration. #855.
+    """
     victim = c.target
     if victim is None:
         return

@@ -32,6 +32,7 @@ static walks and cost a fraction of a second between them.
 from __future__ import annotations
 
 import ast
+import json
 import re
 import subprocess
 import sys
@@ -68,8 +69,57 @@ def _asked_for() -> tuple[Path, ...]:
     return tuple(out)
 
 
+def _asked_for_package() -> tuple[Path, ...]:
+    """Like `_asked_for`, but the whole package when nothing is named.
+
+    **For the checks whose subject is not content.** `_asked_for` returns
+    `content/` only, and that is correct for the reason in its docstring --
+    a parallel agent must lint its own file and nothing else (#388). But a
+    sibling check inheriting that default silently stops covering its own
+    subject, which is #546: the unknown-context-key walk is the one check
+    for *the engine's* signature failure mode -- "a gate on a context key
+    that does not exist", named as such in `engine/CLAUDE.md` -- and it
+    never ran over `engine/` at all. `lint.py` with no arguments printed
+    `All checks passed!` while `lint.py src/combat_engine/engine/cast.py`
+    reported a structural fault in that same file.
+
+    `scripts/CLAUDE.md` already has the rule this breaks, written about
+    `leaks.py`: *"A check that passes over its own subject matter is the one
+    to distrust."*
+
+    **Named paths still win**, so the agent-scoping rule is untouched: this
+    differs from `_asked_for` only in what it does when asked for nothing.
+    """
+    if not _ONLY:
+        return tuple(sorted((ROOT / "src/combat_engine").rglob("*.py")))
+    return _asked_for()
+
+
 def main() -> int:
     global _ONLY
+    # **An explicit record, never a side effect of checking.** The fixture is
+    # tracked, so writing it during an ordinary run dirties the tree and the
+    # nightly then refuses to sweep. Downward only, which is the same
+    # contract `audited.json` and `types.json` carry: a file with fewer dead
+    # suppressions is progress and gets recorded; one with more is the fault
+    # above and is never absorbed here.
+    if "--record-suppressions" in sys.argv:
+        live = _dead_suppressions()
+        recorded = (json.loads(DEAD_SUPPRESSIONS.read_text())
+                    if DEAD_SUPPRESSIONS.exists() else {})
+        risen = {f: n for f, n in live.items() if n > recorded.get(f, 0)}
+        if risen:
+            for f, n in sorted(risen.items()):
+                print(f"  REFUSED {f}: {recorded.get(f, 0)} -> {n} is worse;"
+                      f" convert it to `# ty: ignore[<rule>]`, do not record it")
+            return 1
+        DEAD_SUPPRESSIONS.parent.mkdir(parents=True, exist_ok=True)
+        DEAD_SUPPRESSIONS.write_text(
+            json.dumps(live, indent=2, sort_keys=True) + "\n")
+        print(f"recorded {len(live)} file(s), {sum(live.values())} dead"
+              f" suppression(s)")
+        return 0
+
     _ONLY = tuple(Path(a).resolve() for a in sys.argv[1:] if not a.startswith("-"))
     targets = [str(p) for p in _ONLY] or ["."]
     done = subprocess.run(["uv", "run", "ruff", "check", *targets], cwd=ROOT)
@@ -164,6 +214,35 @@ def main() -> int:
         )
         faults += 1
 
+    # **Only ever downward.** A file over its recorded count means a new
+    # inert suppression arrived; a file under it is progress and the record
+    # is tightened in place rather than waiting for a bless, because there
+    # is no judgement in "this file now has fewer dead comments".
+    if DEAD_SUPPRESSIONS.exists():
+        recorded = json.loads(DEAD_SUPPRESSIONS.read_text())
+        live = _dead_suppressions()
+        risen = {f: (recorded.get(f, 0), n) for f, n in live.items()
+                 if n > recorded.get(f, 0)}
+        for f, (was, now) in sorted(risen.items()):
+            print(f"{f}: {now} `# type: ignore` comment(s), recorded {was}."
+                  f" mypy is not configured here and `ty` does not honour"
+                  f" that syntax, so it suppresses nothing -- use"
+                  f" `# ty: ignore[<rule>]`. #883")
+            faults += 1
+        # **Reported, never written here.** The first version rewrote the
+        # baseline whenever a file improved, on the ground that there is no
+        # judgement in "this file has fewer dead comments". True, and still
+        # wrong: this fixture is **tracked**, so an auto-write leaves the
+        # tree dirty after an ordinary `check.py` -- and `nightly.sh`
+        # refuses a dirty tree, which is how one uncommitted line already
+        # cost the net two consecutive nights. An instrument must not make
+        # the tree dirty as a side effect of reporting.
+        tightened = {f: (recorded[f], live.get(f, 0)) for f in recorded
+                     if live.get(f, 0) < recorded[f]}
+        for f, (was, now) in sorted(tightened.items()):
+            print(f"  {f}: {was} -> {now} dead suppression(s) -- record it"
+                  f" with `lint.py --record-suppressions`")
+
     for where, name, scope, first in _duplicate_defs():
         print(
             f"{where}: `{name}` is defined twice in {scope} (first at line"
@@ -250,6 +329,10 @@ def main() -> int:
         )
         faults += 1
 
+    for where, why in _caster_is_a_printed_target():
+        print(f"{where}: {why}")
+        faults += 1
+
     for where, why in _bloodied_about_itself():
         print(
             f"{where}: {why}. Pass `on=c.me`. #621, where eight rows had"
@@ -271,6 +354,29 @@ def main() -> int:
         # exists must not read its absence as a pass.
         print("  (the DIFFICULT_LABELS census needs the whole tree and was"
               " not asked on a narrow run)")
+        print("  (so does the pre_empt/instead_of pairing: a word is"
+              " registered in one file and read in another)")
+    else:
+        _WHY = {
+            0: "nothing anywhere reads that word back",
+            1: "that ref declares no row, so nothing can read the word",
+            2: "no function of that name reads the word",
+            3: "neither that row's body nor anything it calls reads the word",
+        }
+        pairs, asked, unreadable = _clause_words()
+        for ref, what, where, why in pairs:
+            print(
+                f"{where}: c.pre_empt({ref!r}, {what!r}) -- {_WHY[why]}."
+                f" The effect lands and the action menu offers the choice,"
+                f" and picking it runs nothing. Both halves spell the word"
+                f" by hand, so a typo is invisible to the audit: the feat"
+                f" has a body, it fires, and an effect is laid. #741."
+            )
+            faults += 1
+        print(f"  pre_empt/instead_of: {asked} registration(s) paired"
+              + (f", {unreadable} not statically readable (the ref or the"
+                 f" word is an expression, so this says nothing about them)"
+                 if unreadable else ""))
     # **The advice is per fault, not one line for both.** The census answers
     # two opposite questions and the fixes are opposite too: an unused entry
     # should be dropped, and a label a zone really lays must **not** be --
@@ -711,7 +817,7 @@ def _unknown_context_keys() -> list[tuple[str, str, str]]:
     wide = _context_keys()
     narrow = {k: _context_keys(v) for k, v in _CONTEXT_OF.items()}
     out = []
-    for path in _asked_for():
+    for path in _asked_for_package():
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:
@@ -1069,6 +1175,109 @@ def _every_py() -> tuple[Path, ...]:
     return tuple(out)
 
 
+
+#: checker this repo actually runs does not honour. A baseline that may
+#: shrink and must not grow, the contract `fixtures/audited.json` and
+#: `fixtures/types.json` already use.
+DEAD_SUPPRESSIONS = ROOT / "scripts" / "fixtures" / "suppressions.json"
+
+#: What `ty` honours. Anything else in a `# <tool>: ignore` position is
+#: decoration.
+LIVE_SUPPRESSION = "# ty: ignore"
+
+
+def _dead_suppressions() -> dict[str, int]:
+    """Files carrying a suppression that suppresses nothing, and how many.
+
+    **`mypy` is not configured in this repo** -- nothing in `pyproject.toml`
+    or `setup.cfg` mentions it, and `types.py` runs `uvx ty check`. So a
+    `# type: ignore[...]` comment is inert, and 57 of them were sitting in
+    the tree claiming otherwise.
+
+    Proved rather than assumed: `engine/skills.py:316` writes an attached
+    attribute and I marked it `# type: ignore[attr-defined]`, copying
+    `content/powers/druid/forms.py:89`'s identical `check.beast_form = True`.
+    The diagnostic did not move. `# ty: ignore[unresolved-attribute]` on the
+    same line reports clean.
+
+    **The cost is not the count, it is that the site reads as handled.** The
+    next author to hit an attached attribute copies the nearest precedent
+    and gets a comment documenting an intention while the error stays in the
+    file's total -- which is how `drivers.py` reached 34 above its baseline
+    with nobody deciding to let it. #882, #883.
+
+    A baseline rather than a flat refusal, because 57 standing sites would
+    make this a check that cannot pass, and `scripts/CLAUDE.md` records what
+    that costs. It may shrink and must not grow, so the 57 get converted
+    when their files are next read and no new one can arrive.
+
+    **Real comment tokens, not matching lines.** A line scan counted this
+    file at **9**, every one of them a mention of the string inside the
+    docstring you are reading and in the constant that detects it -- a check
+    reporting its own documentation as the fault it looks for. `tokenize`
+    distinguishes a comment from a string; nothing cheaper does.
+    """
+    import io
+    import tokenize
+
+    out: dict[str, int] = {}
+    for path in _every_py():
+        n = 0
+        try:
+            src = path.read_text(errors="ignore")
+            for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+                if (tok.type == tokenize.COMMENT
+                        and "# type: ignore" in tok.string
+                        and LIVE_SUPPRESSION not in tok.string):
+                    n += 1
+        except (tokenize.TokenError, SyntaxError, IndentationError):
+            continue
+        if n:
+            out[str(path.relative_to(ROOT))] = n
+    return out
+
+
+def _collect_scopes(node: ast.AST, prefix: str, path: Path,
+                    scopes: dict[tuple[Path, str], dict[str, list[int]]],
+                    ) -> None:
+    """Record every `def` under `node`, keyed by its **qualified** scope.
+
+    **A bare class name is not a scope**, and treating it as one produced a
+    false fault that cost real time to disbelieve. The collection this
+    replaces used `ast.walk` to find class bodies and keyed each by
+    `node.name` -- and `ast.walk` reaches a class defined *inside a
+    function*, so two function-local classes sharing a name, in different
+    functions, pooled their methods and read as one class with two
+    `__init__`s. `drivers.py` had precisely that: two rules each defining a
+    local helper for "a roll already announced". Both classes are bound,
+    neither shadows the other, and the message's claim that "Python binds
+    the later one" was simply false for the case. #872.
+
+    So the key carries the path down: `outer._Rolled` and `other._Rolled`
+    are two scopes, and `_Rolled` nested in a class is distinct from one
+    nested in a function of the same name.
+
+    **Function bodies are scopes too, which they were not before.** The old
+    collection took the module body and class bodies only, so two `def`s
+    binding one name *inside one function* -- the same hazard as at module
+    scope, and the one `ruff`'s F811 goes quiet about when a call sits
+    between them -- were invisible. Now they are a scope like any other.
+
+    The module scope stays exactly `""`: `_unreferenced_defs` keys on
+    `(path, "")` and means module level by it.
+    """
+    seen = scopes.setdefault((path, prefix), {})
+    body = getattr(node, "body", ())
+    for child in body:
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            seen.setdefault(child.name, []).append(child.lineno)
+    for child in body:
+        if isinstance(child, ast.ClassDef | ast.FunctionDef
+                      | ast.AsyncFunctionDef):
+            _collect_scopes(child, f"{prefix}.{child.name}" if prefix
+                            else child.name, path, scopes)
+
+
 @cache
 def _scan() -> dict[str, object]:
     """One parse of the whole tree, for the two walks below.
@@ -1092,15 +1301,21 @@ def _scan() -> dict[str, object]:
                 used[node.attr] += 1
             elif isinstance(node, ast.alias):
                 used[node.name.split(".")[-1]] += 1
-        bodies = [("", tree.body)]
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                bodies.append((node.name, node.body))
-        for scope, body in bodies:
-            seen = scopes.setdefault((path, scope), {})
-            for node in body:
-                if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                    seen.setdefault(node.name, []).append(node.lineno)
+        # **Scopes are qualified, because a bare class name is not a scope.**
+        # This collected class bodies with `ast.walk` and keyed each by
+        # `node.name`, and `ast.walk` reaches a class defined *inside a
+        # function* -- so two function-local classes sharing a name, in
+        # different functions, pooled their methods and read as one class
+        # with two `__init__`s. `drivers.py` had exactly that and the
+        # reported fault was not a fault: both classes are bound, neither
+        # shadows the other, and the message's claim that "Python binds the
+        # later one" was false for the case. It cost ten minutes to
+        # establish that the instrument was the thing that was wrong, which
+        # is the cost #872 was filed to stop the next reader paying.
+        #
+        # The module scope stays exactly `""` -- `_unreferenced_defs` keys
+        # on `(path, "")` and means module level by it.
+        _collect_scopes(tree, "", path, scopes)
     return {"used": used, "scopes": scopes}
 
 
@@ -1204,7 +1419,7 @@ def _duplicate_defs() -> list[tuple[str, str, str, int]]:
     """
     out: list[tuple[str, str, str, int]] = []
     narrowed = {p.resolve() for p in _ONLY} if _ONLY else None
-    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # type: ignore[assignment]
+    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # ty: ignore[invalid-assignment]
     for (path, scope), names in sorted(scopes.items()):
         if narrowed is not None and not any(
             path.resolve() == q or q in path.resolve().parents for q in narrowed
@@ -1234,8 +1449,8 @@ def _unreferenced_defs() -> list[tuple[str, str]]:
     Private names only. A public one may be part of a surface something outside
     this scan reads. #410.
     """
-    used: Counter[str] = _scan()["used"]  # type: ignore[assignment]
-    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # type: ignore[assignment]
+    used: Counter[str] = _scan()["used"]  # ty: ignore[invalid-assignment]
+    scopes: dict[tuple[Path, str], dict[str, list[int]]] = _scan()["scopes"]  # ty: ignore[invalid-assignment]
     out: list[tuple[str, str]] = []
     for path in _asked_for():
         names = scopes.get((path, ""), {})
@@ -1861,6 +2076,163 @@ def _bloodied_about_itself() -> list[tuple[str, str]]:
     return out
 
 
+#: Pools that are the side **without** the caster. `"team"` is the one that
+#: includes it, and `"self"` is the caster alone.
+_CASTERLESS = ("ally", "other_ally")
+
+
+def _caster_is_a_printed_target() -> list[tuple[str, str]]:
+    """A row whose card names the creature beside its allies, declaring `ally`.
+
+    `#364` flipped `candidates` so the `"ally"` pool no longer holds the
+    caster, which was right -- the two pools had been the same list and one of
+    them was a lie. What it could not do in the same pass was find every row
+    that had been *relying* on the old meaning, and its own closing comment
+    says why the obvious signal failed:
+
+        "114 bodies guard `c.target == c.me`." Measured: 16. That signal is
+        not the classifier the thread treated it as.
+
+    The classifier is the **card**, not the body. A targeting clause that
+    names the creature itself beside its allies -- "m6064 or one ally in the
+    burst", "You and one ally" -- cannot be a pool that excludes the creature.
+    So this asks the printed text and the declared side, and reports where
+    they disagree.
+
+    Two things keep it honest, both learned by getting them wrong first:
+
+    * **The *Trigger* line is not targeting.** "Trigger: You or an ally within
+      5 squares uses second wind" sits above "Target: One ally", and the row is
+      correct -- the trigger says who can set it off, the target says who it
+      lands on. Taking the whole card flagged 29 rows of which only 11 were
+      real; cutting the trigger clause out is what separates them.
+    * **"X *and* one ally" is usually already right**, because the verb
+      carries the caster. `c.swap(c.target)` is both of them by definition,
+      and the rest hand the caster its share under `c.first`. Nine sound rows
+      do this, so a body that names `c.me` or calls a reciprocal verb is not
+      reported -- flagging them would have condemned more correct rows than
+      the check caught broken ones.
+
+    What is left is the shape that cannot be written around: **"X *or* one
+    ally"**, one target chosen from the creature and its allies together. If
+    the pool excludes the creature, the first half of the printed "or" is
+    unreachable and nothing at runtime says so -- the row fires, hits an ally,
+    and `audit` is satisfied. All 11 are fixed, so a green result here is a
+    regression guard. #858, #364, #219.
+    """
+    import ast as _ast
+    import re as _re
+    import sys as _sys
+
+    _sys.argv = _sys.argv[:1]
+    from combat_engine.db import game
+
+    cards: dict[str, str] = {}
+    for table in ("monster_power", "power", "feat", "item", "class_feature"):
+        try:
+            rows = game().execute(f"select ref, spec from {table}")
+        except Exception:
+            continue
+        for ref, spec in rows:
+            if spec and ref not in cards:
+                cards[ref] = " ".join(str(spec).split())
+
+    #: Everything from a Trigger up to the next labelled line. A trigger names
+    #: who may set the row off, which is a different question from who it
+    #: lands on, and five correct rows say "you or an ally" there.
+    trigger = _re.compile(
+        r"\btrigger\s*:.*?(?=\b(?:target|effect|attack|hit|miss)\s*:|$)",
+        _re.I | _re.S)
+
+    #: "<the creature> **or** ... ally" -- one target drawn from the caster and
+    #: the allies together. `or`, not `and`: see the docstring.
+    #:
+    #: Compiled per row, because a player card says "You or one ally" and a
+    #: monster card says its **own ref** -- "m6064 or one ally in the burst".
+    #: A fixed pattern matching only "you" sees none of the monster rows,
+    #: which is where 9 of the 11 faults were.
+    either_or = (r"\b(?:%s)\b[^.;:]{0,40}?\bor\b"
+                 r"[^.;:]{0,30}?\ball(?:y|ies)\b")
+
+    #: A pool that leaves the caster out, however it is spelled. **Word
+    #: boundaries matter more than they look**: `YOU_OR_ONE_ALLY` contains the
+    #: substring `ONE_ALLY`, so a plain `in` test flagged 60-odd rows that had
+    #: just been corrected *to* the right pool and reported them as the bug.
+    #: `_` is a word character, so `\bONE_ALLY\b` does not match inside
+    #: `YOU_OR_ONE_ALLY` and the two spellings stay distinguishable.
+    named = "|".join(p.upper() for p in _CASTERLESS)
+    quoted = "|".join(_CASTERLESS)
+    casterless = _re.compile(
+        rf"""\b(?:ONE|EACH)_(?:{named})\b|["'](?:{quoted})["']""")
+
+    out = []
+    for path in _asked_for():
+        if "/content/" not in str(path):
+            continue
+        try:
+            tree = _ast.parse(path.read_text())
+        except (SyntaxError, OSError):
+            continue
+        source = path.read_text()
+        for fn in _ast.walk(tree):
+            if not isinstance(fn, _ast.FunctionDef):
+                continue
+            ref, side = "", ""
+            for dec in fn.decorator_list:
+                if not (isinstance(dec, _ast.Call) and dec.args
+                        and isinstance(dec.args[0], _ast.Constant)):
+                    continue
+                ref = str(dec.args[0].value)
+                for kw in dec.keywords:
+                    if kw.arg != "target":
+                        continue
+                    # `ONE_ALLY`, `EACH_ALLY`, `Target("ally", ...)`,
+                    # `UpTo(2, side="ally")` -- the spelling varies, the pool
+                    # is what matters, so read the text of the expression.
+                    try:
+                        shown = _ast.get_source_segment(source, kw.value) or ""
+                    except Exception:
+                        shown = ""
+                    if casterless.search(shown):
+                        side = shown
+            if not ref or not side:
+                continue
+            card = cards.get(ref, "")
+            if not card:
+                continue
+            targeting = trigger.sub(" ", card)
+            # A monster card names its own **stat block**, not the ability:
+            # `m6064a3` is printed as "m6064". Everything else says "you".
+            #
+            # Strip only the `aN` ability suffix, and only from an `m` ref.
+            # The first version stripped `pN` too, which for a player power
+            # *is the whole ref* -- so `base` came out empty, the alternation
+            # became `\b(?:you|)\b`, and an empty branch matches at every word
+            # boundary. It reported 10 rows whose cards say "One **or** two
+            # allies" -- an "or" between counts, not between the caster and an
+            # ally -- and every one was sound.
+            who = [r"you"]
+            if _re.fullmatch(r"m\d+a\d+", ref):
+                who.append(_re.escape(_re.sub(r"a\d+$", "", ref)))
+            mine = either_or % "|".join(who)
+            if not _re.search(mine, targeting, _re.I):
+                continue
+            # The body may name the caster itself, which is how the "and"
+            # family is legitimately written. Reciprocal verbs imply it.
+            body = _ast.get_source_segment(source, fn) or ""
+            if "c.me" in body or "c.swap(" in body or "c.first" in body:
+                continue
+            out.append((
+                f"{ref} ({path}:{fn.lineno})",
+                f"its card offers the creature **or** an ally as the one"
+                f" target -- {' '.join(targeting.split())[:90]!r} -- but"
+                f" `target={' '.join(side.split())}` is the side *without*"
+                f" the creature, so the printed first half can never be"
+                f" chosen. `\"team\"` is the pool that includes the caster",
+            ))
+    return out
+
+
 def _reinvented_area_tuple() -> list[tuple[str, str]]:
     """A file spelling `AREA_OR_CLOSE` out instead of importing it.
 
@@ -2025,6 +2397,122 @@ def _dead_terrain_labels() -> list[tuple[str, str]]:
         for label in sorted(written)
         if not _is_terrain_label(label)
     ]
+
+
+#: A `pre_empt` target that is not a `@power` row. The word is read by a
+#: **function of that name** instead -- `manoeuvre:bull_rush` is answered by
+#: `Cast.bull_rush`, which does `self.instead_of("push", ...)`. Checked
+#: rather than waived: the pairing still has to be found, just one hop
+#: further out.
+_MANOEUVRE = re.compile(r"^manoeuvre:(\w+)$")
+
+
+def _clause_words() -> tuple[list[tuple[str, str, str, int]], int, int]:
+    """Every `c.pre_empt(ref, what, ...)` whose `what` nobody reads back.
+
+    `c.pre_empt(ref, what, clause)` is the write half and
+    `c.instead_of(what, default)` inside `ref`'s own body is the read half,
+    and **the word is free text on both sides**. So registering `"extra_hp"`
+    against a row whose body asks for `"extra_hitpoints"` lands the effect,
+    puts the entry on the action menu so a player sees the choice, and then
+    runs nothing when it is picked.
+
+    That is the `drawable-and-inert` fault the tree has been bitten by
+    before, caused by a typo, and the audit cannot see it: the feat has a
+    body, it fires, and an effect is laid. `c.bonus(once=)` got a refusal
+    gate for the same risk after five keys were silently mis-spent. #741,
+    #544.
+
+    **A check rather than a registry of valid words**, deliberately: a
+    hand-kept list would be wrong by the second week, which is the lesson
+    `vocab.py` was built from. The vocabulary here is whatever the rows
+    actually read.
+
+    Three ways a registration is satisfied, in order:
+
+    * the row's **own** body reads the word;
+    * a function the row's body **calls** reads it, because a row may hand
+      the clause off to a helper;
+    * the ref is `manoeuvre:<name>` and a function named `<name>` reads it.
+      Not a waiver -- the pairing is still found, one hop out, and
+      `Cast.bull_rush` really does `instead_of("push", ...)`.
+
+    Returns the faults, the number of sites checked, and the number it could
+    **not** read statically -- a registration whose ref or word is an
+    expression rather than a literal. Those are reported rather than passed
+    over, which is `types.py`'s rule about the files it swept past: a reader
+    who knows this check exists must not read its absence as a pass.
+    """
+    import ast
+    from collections import defaultdict
+
+    def literal(node: ast.expr | None) -> str | None:
+        """The string a node is, or None. `ast.Constant.value` is a union of
+        every literal type, so narrowing it here keeps every caller honest
+        rather than asserting `str` at eight sites."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
+
+    reads: dict[str, set[str]] = defaultdict(set)   # word -> function names
+    declares: dict[str, str] = {}                   # ref -> function name
+    calls: dict[str, set[str]] = defaultdict(set)   # function -> names called
+    regs: list[tuple[str, str, str, int]] = []
+    unreadable = 0
+
+    for path in sorted((ROOT / "src" / "combat_engine").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                for dec in node.decorator_list:
+                    if not isinstance(dec, ast.Call) or not dec.args:
+                        continue
+                    named = literal(dec.args[0])
+                    if named is not None:
+                        declares[named] = node.name
+                for inner in ast.walk(node):
+                    if not isinstance(inner, ast.Call):
+                        continue
+                    if isinstance(inner.func, ast.Name):
+                        calls[node.name].add(inner.func.id)
+                    elif isinstance(inner.func, ast.Attribute):
+                        calls[node.name].add(inner.func.attr)
+                        if inner.func.attr not in ("instead_of", "instead_of_now"):
+                            continue
+                        word = literal(inner.args[0]) if inner.args else None
+                        if word is not None:
+                            reads[word].add(node.name)
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "pre_empt"):
+                ref = literal(node.args[0]) if node.args else None
+                what = literal(node.args[1]) if len(node.args) > 1 else None
+                if ref is not None and what is not None:
+                    regs.append((ref, what, str(path), node.lineno))
+                else:
+                    unreadable += 1
+
+    faults: list[tuple[str, str, str, int]] = []
+    for ref, what, where, line in regs:
+        at = f"{where}:{line}"
+        readers = reads.get(what, set())
+        if not readers:
+            faults.append((ref, what, at, 0))
+            continue
+        found = _MANOEUVRE.match(ref)
+        if found:
+            if found.group(1) not in readers:
+                faults.append((ref, what, at, 2))
+            continue
+        owner = declares.get(ref)
+        if owner is None:
+            faults.append((ref, what, at, 1))
+        elif owner not in readers and not readers & calls.get(owner, set()):
+            faults.append((ref, what, at, 3))
+    return faults, len(regs), unreadable
 
 
 def _lends_nobody_asks_for() -> list[tuple[str, str, str]]:
@@ -2289,7 +2777,7 @@ def _event_attrs() -> list[tuple[str, str, str]]:
     def body_of(fn: ast.AST) -> list[ast.AST]:
         """This handler's own nodes, stopping at any nested callable."""
         out: list[ast.AST] = []
-        stack = list(fn.body)  # type: ignore[attr-defined]
+        stack = list(fn.body)  # ty: ignore[unresolved-attribute]
         while stack:
             node = stack.pop()
             if isinstance(

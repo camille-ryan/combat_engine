@@ -14,8 +14,10 @@ import re
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from functools import cache
 from random import Random
 
+from combat_engine.armour import ARMOUR, ARMOUR_SPEED
 from combat_engine.engine import (
     AC,
     CHA,
@@ -56,50 +58,10 @@ from combat_engine.engine.equipment import equip
 from combat_engine.engine.movement import place
 from combat_engine.engine.types import Usage
 
-
-#: Armour, by the bonus it gives. Light armour also takes a modifier.
-#: The basic armours, **read off the `armour` table** rather than remembered.
-#: #452 built that table and nothing outside `etl/` ever queried it, so these
-#: six numbers and the two penalties below were carried as constants here.
-#:
-#: Keyed on `armour.type`, and restricted to **ids 1-8**, which is the care
-#: this needs: the table holds 15 `kind='base'` rows because later books
-#: print variant materials under the same type names, so `chainmail` appears
-#: at +3 and at +6 and `leather` at +2 and +3. Reading by type alone would
-#: pick whichever row came back first and move a character's AC by three.
-#: Ids 1-8 are the PHB set -- cloth, leather, hide, chainmail, scale, plate,
-#: light shield, heavy shield -- and the constants that used to live here
-#: agreed with them exactly, which is what makes this a reader rather than a
-#: correction.
-def _basics() -> tuple[dict[str, int], ...]:
-    from combat_engine.db import game
-
-    ac: dict[str, int] = {}
-    check: dict[str, int] = {}
-    speed: dict[str, int] = {}
-    shield: dict[str, int] = {}
-    for row in game().execute(
-        "SELECT type, ac_bonus, check_penalty, speed_penalty FROM armour"
-        " WHERE kind = 'base' AND id BETWEEN 1 AND 8"
-    ):
-        kind = row["type"]
-        if kind.endswith("shields"):
-            # `light shields` / `heavy shields` on the page; one shield in
-            # hand, so the key is singular and `Gear.shield`'s 1 and 2 index
-            # straight into it.
-            shield[kind.split()[0]] = row["check_penalty"] or 0
-            continue
-        # `chain` is what every reader in the tree calls it, and the page
-        # prints `chainmail`. The content rows asking `gear.armour in
-        # ("scale", "plate")` would all go quiet on a rename.
-        kind = "chain" if kind == "chainmail" else kind
-        ac[kind] = row["ac_bonus"] or 0
-        check[kind] = row["check_penalty"] or 0
-        speed[kind] = row["speed_penalty"] or 0
-    return ac, check, speed, shield
-
-
-ARMOUR, ARMOUR_CHECK, ARMOUR_SPEED, SHIELD_CHECK = _basics()
+#: The printed armour table lives **below** chargen now, in
+#: `combat_engine/armour.py`. Five other readers wanted it and one was the
+#: kernel, which made `engine -> chargen` the only edge of its kind in the
+#: tree and a documented seam claim false transitively. #852.
 
 #: Armour that lets you add a modifier to AC. Heavy armour does not.
 LIGHT = {"cloth", "leather", "hide"}
@@ -1304,6 +1266,102 @@ def build_of(cls: str, name: str = "") -> Build:
     return options[0]
 
 
+@cache
+def _chassis_map() -> dict[str, str]:
+    """Every class-feature ref, beside the chassis it belongs to.
+
+    Read off `class_feature.build`, which is the authority: the ETL mints
+    `cf:{class}-{slug}` from exactly this column (`etl/build.py:1781`), so
+    the column and the ref cannot disagree. Slugged here because the column
+    holds the **printed** sub-class name with printed punctuation, and the
+    ref spelling is the one the tree uses everywhere else.
+
+    A blank means class-wide -- every character of the class has it,
+    whatever chassis it took.
+
+    **A ref absent from the table belongs to no chassis**, and that is not a
+    gap. Four declared level-0 rows are hand-coined for features described
+    only in the class's own page -- `cf:avenger-oath`, `cf:barbarian-aura`,
+    `cf:rogue-tactic-club`, `cf:rogue-tactic-stealth` -- as
+    `content/features/__init__.py` says of `cf:rogue-extra-damage` and its
+    like. They are class-wide by the same rule as a blank.
+
+    Cached on the database, which does not change inside a process. A
+    rebuild is a new process.
+    """
+    from combat_engine.db import game
+
+    return {row["ref"]: _slug_chassis(row["build"])
+            for row in game().execute("SELECT ref, build FROM class_feature")}
+
+
+def _slug_chassis(name: str) -> str:
+    """The ref spelling of a printed chassis name. Mirrors `etl/build._slug`."""
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def chassis_of(cls: str, named: str = "") -> str:
+    """The chassis a character of this class has, defaulting to its first.
+
+    **Only chassis the tree has actually declared are candidates, and
+    getting that wrong broke eight classes in the first draft.** The
+    database lists every chassis the books print, including the 17 nobody
+    has written (#642). Choosing the first of *those* gave a fighter
+    `knight`, which has no declared row at all, so the filter in `loadout`
+    excluded the eight `weaponmaster` features it does have and the fighter
+    came out with no class features whatsoever. Same for the assassin,
+    barbarian, bard, druid, paladin, ranger and warlock. A wizard-only test
+    could not see it; only the whole-corpus control could.
+
+    So the candidates are chassis with a declared level-0 row, which also
+    makes this self-correcting as #642 lands: a chassis becomes choosable
+    exactly when it becomes real.
+
+    **First in ref order, deliberate rather than arbitrary.** 23 of the 25
+    classes declare exactly one chassis, so "first" and "only" are the same
+    string and nothing is being chosen. The sorcerer declares one name plus
+    class-wide rows, which is also unambiguous.
+
+    The wizard is the single class where this is a real choice -- it declares
+    `arcanist` (ten rows) and `sha-ir` (three) and has been dealt **both**,
+    so every wizard carried two sub-classes' features. Ref order picks
+    `arcanist`, which is right on the merits too: the class's main chassis
+    and the larger ladder. `sha-ir` stays reachable by naming it, and
+    `scripts/fight.py` does.
+
+    An unknown name is returned as given rather than corrected. A caller
+    asking for a chassis this class has not got gets a character with no
+    chassis rows, which is louder than silently substituting the default.
+    """
+    if named:
+        return named
+    return _declared_chassis().get(cls, "")
+
+
+@cache
+def _declared_chassis() -> dict[str, str]:
+    """Each class's default chassis: the first it has a declared row for.
+
+    Keyed on the registry rather than the database, for the reason
+    `chassis_of` gives at length. Cached on both, neither of which changes
+    inside a process.
+    """
+    import combat_engine.content
+    from combat_engine.engine.dsl import REGISTRY
+
+    belongs = _chassis_map()
+    found: dict[str, set[str]] = {}
+    for ref, power in REGISTRY.items():
+        if not ref.startswith("cf:") or power.level != 0:
+            continue
+        chassis = belongs.get(ref, "")
+        if chassis:
+            found.setdefault(power.cls, set()).add(chassis)
+    return {cls: sorted(names)[0] for cls, names in found.items()}
+
+
 def scores_for(line: ClassLine, build: Build) -> dict[Ability, int]:
     """The class's own numbers, rearranged so the build's leg is the good one.
 
@@ -1396,6 +1454,34 @@ class RaceLine:
     #: those say "choose one of the following" -- and the difference
     #: matters: one race gets two powers and one gets one of thirteen.
     one_of: bool
+    #: The race this one is a **variant of**, or `""` for a race of its own.
+    #:
+    #: Nine of the 55 imported races carry no sheet numbers at all --
+    #: `size=''` and `scores='{}'` -- and were skipped outright, so none of
+    #: them could be named or dealt. They are not thin imports: **all 21 of
+    #: their traits print a "replaces" clause**, so they are variants by
+    #: construction and the page expects them to inherit.
+    #:
+    #: Derived rather than imported, because the clause names its target by
+    #: **ref** in the stored spec and every one of the nine resolves to
+    #: exactly one parent:
+    #:
+    #:     r54 r55 -> r2      r56 r57 r64 -> r3
+    #:     r58 r59 -> r4      r67 r68     -> r1
+    #:
+    #: so no ETL change and no rebuild was needed for it. #896.
+    parent: str = ""
+    #: What this variant's traits say they **replace**, by ref, in three
+    #: forms the pages actually use: a trait (`rt:r1-t0`), the ability-score
+    #: pair (a bare `r1` -- "replaces the normal racial ability score
+    #: bonuses for r1"), and a granted power (`p1448`).
+    #:
+    #: **Carried, not applied.** Nothing drops the named piece yet, which is
+    #: why a variant is kept out of the *deal* below: with its own 21 traits
+    #: undeclared, a dealt variant would wear its parent's traits under
+    #: another name. `#813` is the issue that writes them, and this field is
+    #: what it reads. #896.
+    replaces: tuple[str, ...] = ()
 
     @property
     def traits(self) -> list[str]:
@@ -1440,7 +1526,7 @@ class RaceLine:
             key=_sub_option_order,
         )
 
-    def granted(self) -> list[str]:
+    def granted(self, pick: Random | None = None) -> list[str]:
         """The rows a character of this race carries into a fight.
 
         Its traits, and its racial powers -- or **one** of them where the
@@ -1461,7 +1547,28 @@ class RaceLine:
         written = [p for p in self.powers if p in REGISTRY]
         if not self.one_of:
             return [*self.traits, *written]
-        chosen = written[:1]
+        # **`pick` makes the choice a choice.** Without one this answered
+        # `written[:1]` for every character of the race, so a half-elf
+        # always borrowed the same power of two, an `r33` always the same
+        # manifestation of thirteen, and an `r44` always the same aspect of
+        # three. Nothing dealt it and nothing recorded it, which is what
+        # left nine feats keyed to the borrowed row unreachable: the row
+        # they key on was never the one dealt.
+        #
+        # Seeded and uniform rather than scored. Every other build decision
+        # goes through `choices.sample` against a scored option list, and
+        # there is no scorer for a racial power yet -- so this is the same
+        # fallback `deal_race` takes when `SCORED_CHOICES` is off, which is
+        # honest about being a draw rather than a judgement. A scorer is
+        # `race_options`-shaped work and can replace this without moving
+        # the signature.
+        #
+        # `pick=None` keeps the old answer exactly, which is what lets
+        # `choices.race_options` go on ranking a **race** without a
+        # particular pick entering the ranking. #680.
+        chosen = written[:1] if pick is None or not written else [
+            pick.choice(written)
+        ]
         return [*self.traits, *self._manifestation_for(chosen), *chosen]
 
     def _manifestation_for(self, chosen: list[str]) -> list[str]:
@@ -1613,7 +1720,75 @@ def _races_from_the_book() -> dict[str, RaceLine]:
             ),
             one_of=any(word in spec.lower() for word in _ONE_OF),
         )
+
+    # **The nine variants, inheriting the parent their own traits name.**
+    # They carry no sheet numbers, so the loop above skipped them and none
+    # could be named or dealt. All 21 of their traits print a "replaces"
+    # clause naming a ref, which is what makes the parent derivable here
+    # instead of needing a column: every one resolves to exactly one.
+    #
+    # Second pass rather than inline, because a variant needs its parent
+    # already built and `ORDER BY id` is not a promise about that. #896.
+    for row in rows:
+        if row["size"] or row["ref"] in out:
+            continue
+        kin, swapped = _variant_of(row["ref"])
+        stock = out.get(kin)
+        if stock is None:
+            continue
+        out[row["ref"]] = replace(
+            stock, ref=row["ref"], parent=kin, replaces=swapped,
+            # **Its own racial powers, not the parent's.** The power table
+            # keys on the race, so a variant that prints one has it; one
+            # that prints none inherits nothing here on purpose -- the
+            # clause that would hand it the parent's is a `replaces` entry
+            # and belongs to the reader #813 writes.
+            powers=tuple(cards.get(row["ref"], ())) or stock.powers,
+        )
     return out
+
+
+#: Which ref a `replaces` clause points at: a trait, a race, or a power.
+_REPLACED = re.compile(
+    r"replaces?\s+(?:the\s+)?(?:normal\s+)?[^.]*?\b((?:rt:)?r\d+(?:-t\d+)?|p\d+)\b",
+    re.I,
+)
+
+
+def _variant_of(ref: str) -> tuple[str, tuple[str, ...]]:
+    """The race this one varies, and every ref its traits say it replaces.
+
+    Read off `racial_trait.spec`, because that is where the compendium puts
+    it: *"This benefit replaces rt:r1-t1."* The parent is whichever `rN` the
+    clauses name, and all nine variants name exactly one -- checked, which
+    is the only reason this is a derivation rather than a guess.
+
+    Returns `("", ())` for anything that names none, so a genuinely thin
+    import stays skipped rather than being adopted by the first race it
+    happens to mention.
+    """
+    from combat_engine.db import game
+
+    swapped: list[str] = []
+    try:
+        rows = game().execute(
+            "SELECT spec FROM racial_trait WHERE ref LIKE ? ORDER BY ref",
+            (f"rt:{ref}-%",),
+        )
+    except Exception:            # no database yet
+        return "", ()
+    for row in rows:
+        swapped += _REPLACED.findall(row["spec"] or "")
+    kin = {
+        m.group(1)
+        for named in swapped
+        if (m := re.match(r"(?:rt:)?(r\d+)$|(?:rt:)?(r\d+)-t\d+$", named))
+        and (m := re.match(r"(?:rt:)?(r\d+)", named))
+    }
+    # **One parent or none.** Two would mean the derivation is reading
+    # something it should not, and adopting the lower-numbered one would be
+    # a guess dressed as a rule.
+    return (next(iter(kin)) if len(kin) == 1 else ""), tuple(dict.fromkeys(swapped))
 
 
 #: The 46 races a character can be, by ref.
@@ -1700,7 +1875,20 @@ def deal_race(rng: Random, cls: str = "", build: Build | None = None) -> str:
     `cls` is optional so the old one-argument call still answers; without it
     there is no build to score against and the draw stays uniform.
     """
-    pool = sorted(RACES)
+    # **Variants are selectable and not dealt**, which is what keeps this
+    # change from moving every sheet in the game. A variant's own 21 traits
+    # are undeclared (`#813`), so a dealt one would wear its **parent's**
+    # traits under another name -- wrong in a way no instrument would
+    # report, because the row that should have replaced them does not
+    # exist to be missing.
+    #
+    # Right on the merits rather than convenient: a race whose every trait
+    # is unwritten is not a race a dealer should hand out. When `#813`
+    # writes them and something reads `RaceLine.replaces`, dropping this
+    # filter is a one-line change -- and it belongs in a commit with
+    # nothing else in it, for the reason `DEAL_RACES` records below: it
+    # moves every number on every sheet and all seven fixtures with them.
+    pool = sorted(r for r, line in RACES.items() if not line.parent)
     if not pool:
         return ""
     if not SCORED_CHOICES or not cls:
@@ -1741,6 +1929,25 @@ class Character:
     #: used `race=""` as its raceless control and the control had a race.
     #: #688.
     race: str = ""
+    #: Which **feature chassis** this character has, as the ref spells it --
+    #: `arcanist`, `templar`, `warpriest`. Empty takes the class's first,
+    #: which is `chassis_of`'s business and is the only chassis for 23 of
+    #: the 25 classes.
+    #:
+    #: **A different question from `build` above, and conflating them cost a
+    #: wrong issue.** A build is the ability-score leg a class's own page
+    #: prints -- `two-blade`, `archer` -- and it decides which powers get
+    #: drawn. A chassis is a whole second feature ladder for the same class,
+    #: which is what the Essentials line added. `class_feature.build` is
+    #: where the database keeps it, and the two namespaces share words
+    #: without sharing meaning: a ranger can take the `hunter` *build* and
+    #: the `hunter` *chassis* is a different thing it has never had.
+    #:
+    #: Needed because `loadout` deals every level-0 row of a class to every
+    #: character of it, so a class with two declared chassis deals both at
+    #: once -- one character being two sub-classes. #851, and #319 is the
+    #: same fault at six rows. `legs.chassis_clash` is the gate.
+    chassis: str = ""
 
     @property
     def chosen(self) -> Build:
@@ -1820,7 +2027,8 @@ def second_card(ref: str) -> str:
 
 
 def loadout(
-    cls: str, level: int = 1, build: Build | None = None, rng: Random | None = None
+    cls: str, level: int = 1, build: Build | None = None, rng: Random | None = None,
+    who_chassis: str = "",
 ) -> list[str]:
     """What one character knows, drawn from the leg of the fork it took.
 
@@ -1863,10 +2071,29 @@ def loadout(
     # belong to has no leg to gate on: `BUILDS["wizard"]` holds two, and neither is
     # it. When one is added this becomes "unless the build is that one", and the
     # keyword is what it will ask.
+    # **And the general form of the same fault, which the keyword test above
+    # is one hand-cut instance of.** A class's level-0 rows are its *feature
+    # chassis*, and the Essentials line gave most classes a second one --
+    # 529 rows of it, #642. Dealing every level-0 row deals every chassis, so
+    # a cleric would hold the templar's four features and the warpriest's
+    # 101 at once, being two sub-classes. Harmless-looking: nothing fails, the
+    # character simply has twice what it should.
+    #
+    # It was already live for the wizard, which held the arcanist's ten *and*
+    # the sha'ir's three. `legs.chassis_clash` is the gate that catches the
+    # next one; this is the fix. #851.
+    #
+    # A blank chassis, or a ref the `class_feature` table does not list, is
+    # class-wide and belongs to every character of the class -- see
+    # `_chassis_map`.
     from combat_engine.engine.types import Keyword as _Kw
 
+    chassis = chassis_of(cls, who_chassis)
+    belongs = _chassis_map()
     out = sorted(p.ref for p in mine
-                 if p.level == 0 and _Kw.BLADESPELL not in (p.keywords or ()))
+                 if p.level == 0
+                 and _Kw.BLADESPELL not in (p.keywords or ())
+                 and belongs.get(p.ref, "") in ("", chassis))
     # Not already dealt: a class whose heal is itself a level-0 row was
     # handed it twice, so `Powers.known` carried the ref twice over. The
     # bard and the ardent are the two.
@@ -1903,7 +2130,7 @@ def loadout(
 
 
 def dealt_hand(seed: int | str, cls: str, level: int,
-               build: Build) -> list[str]:
+               build: Build, who_chassis: str = "") -> list[str]:
     """The hand a seed deals this class, **before** `power_swap` takes its
     card back. One derivation, for everybody who needs to predict it.
 
@@ -1925,7 +2152,8 @@ def dealt_hand(seed: int | str, cls: str, level: int,
     every time. Pinning the pre-swap hand lets the single swap in `spawn` run
     exactly as it always has, which is what makes the pin behaviour-neutral.
     """
-    return loadout(cls, level, build, Random(f"{seed}:{cls}:{build.name}"))
+    return loadout(cls, level, build, Random(f"{seed}:{cls}:{build.name}"),
+                   who_chassis=who_chassis)
 
 
 def _best_of(
@@ -2228,6 +2456,38 @@ def outfit(
     in_hand = {w.ref for w in held}
     carried[:] = held
     return [w for w in belt if w.ref not in in_hand]
+
+
+def _stock_quiver(gear: Gear | None) -> None:
+    """Put ordinary ammunition in the quiver for each launcher owned.
+
+    Camille's ruling on `#520`, 2026-10-28: a character with mundane
+    ammunition has **50** of it. The number is supplied rather than printed
+    and `ammunition.MUNDANE` carries the quote.
+
+    **One entry per *kind*, not per weapon.** A character holding two bows
+    does not carry two separate bundles of arrows, and `loaded` walks the
+    quiver looking for something that `fits` the launcher's group -- so a
+    second entry of the same kind would simply never be reached. Keyed off
+    `FIRES`, the printed launcher-to-ammunition table.
+
+    **Weapons, not `held`.** A stowed crossbow still has bolts; what decides
+    whether ammunition is carried is owning the launcher, not having it in
+    hand this second.
+
+    Does nothing for a character that fires nothing, which is most of them:
+    `FIRES` has three entries and every melee weapon and implement is absent
+    from it.
+    """
+    from combat_engine.engine.ammunition import FIRES, MUNDANE
+    from combat_engine.engine.components import Ammo
+
+    if gear is None:
+        return
+    kinds = {FIRES[w.group] for w in gear.weapons if w.group in FIRES}
+    have = {a.kind for a in gear.quiver}
+    for kind in sorted(kinds - have):
+        gear.quiver.append(Ammo(ref="", kind=kind, count=MUNDANE))
 
 
 def power_swap(powers: list[str], feats: list[str]) -> list[str]:
@@ -2566,6 +2826,7 @@ def launcher_for(kind: str) -> Weapon | None:
     return pool[0] if pool else None
 
 
+@cache
 def build_for(cls: str, ref: str) -> str:
     """The build whose gear can actually hold this row.
 
@@ -2574,6 +2835,24 @@ def build_for(cls: str, ref: str) -> str:
     reason that has nothing to do with the row. Lives here rather than in a
     script because choosing a build is character creation, and two scripts
     were about to want it.
+
+    **Cached, and it is the cheapest 13% in the sweep.** This probes each of
+    the class's builds by spawning a throwaway character into a throwaway
+    `World`, so one call is ~15ms, and `audit.board` calls it **once per
+    board**. A row that never fires pays 48 boards -- `_attempts` only stops
+    when something fires -- with the *same* `(cls, ref)` every time, so the
+    answer was recomputed 48 times for one row. Measured: 144 calls and 2.23s
+    over three silent rows, 13% of their total.
+
+    Safe to memoise because it is a pure function of two strings:
+    `BUILDS` is a module constant, `REGISTRY` is fixed once content has
+    imported, the probe `World` is built with a fixed `Rng(1)` and discarded,
+    and the return is a `str`. Verified over 60 `(cls, ref)` pairs: 0
+    disagreements between two calls.
+
+    **Never cache a board or a `World`** -- `audit._run_all` requires each row
+    to share nothing with any other, and a shared mutable world is the sweep
+    flake that is hardest to find. This caches the *answer*, not the probe.
     """
     from combat_engine.engine import Bus, Grid, Rng, World, usable
     from combat_engine.engine.dsl import get, unmet_requirement
@@ -2894,7 +3173,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # same seed deals the same character, and off a stream of its own, so
     # dealing one does not move the dice the fight is about to roll.
     powers = who.powers or dealt_hand(
-        world.rng.seed, who.cls, who.level, build
+        world.rng.seed, who.cls, who.level, build, who_chassis=who.chassis
     )
     # Its own stream, like the loadout's and for the same reason: dealing
     # a character's feats must not move the dice the fight is about to
@@ -2910,7 +3189,15 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # A race's traits and its one racial power are known rows like any
     # other: a trait arms itself at the top of the fight and a racial
     # power goes on the action menu, with no machinery of their own.
-    racial = race.granted() if race is not None else []
+    # **Its own stream**, like the loadout's and the feats' above and for
+    # the same reason: choosing which racial power a character carries must
+    # not move the dice the fight is about to roll. The character still
+    # changes -- that is the point, and #680 accepts the fixture re-record
+    # it costs -- but it changes through the hand rather than through the
+    # roll order. #680.
+    racial = race.granted(
+        Random(f"{world.rng.seed}:{who.race}:racial")
+    ) if race is not None else []
     # Proficiency is the same kind of sentence, and it has to be settled
     # before the shield is, because what is in the other hand decides
     # whether there is room for one. A race trains a character in weapons
@@ -3045,6 +3332,22 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         gear = world.get(eid, Gear)
         gear.weapons += [replace(w) for w in belt]
         gear.stowed |= {w.ref for w in belt}
+    # **Ordinary ammunition for whatever launcher it owns.** Camille's
+    # ruling on #520, 2026-10-28 -- 50 pieces, a supplied number because the
+    # page prints none for a character. `ammunition.MUNDANE` carries the
+    # quote and the reasoning.
+    #
+    # **Owned, not held**, and after the belt for the same reason the belt
+    # is: a crossbow a feat bought and stowed still has bolts for it, and a
+    # character that fires nothing gets nothing. Keyed off the launcher's
+    # own group through `FIRES`, which is the printed table -- a bow takes
+    # arrows and a crossbow does not -- so no vocabulary is invented here.
+    #
+    # `ref=""` is what makes a mundane piece mundane: `nock` returns the
+    # drawn piece's ref onto `ev.ammo`, and an empty one is the honest
+    # answer that no *item* rode the shot, which is what `fired_with`
+    # already reads. The count still comes down, which is the whole of #520.
+    _stock_quiver(world.get(eid, Gear))
     # A racial skill bonus is a sheet number and not a thing that happens
     # in a fight, so it is laid straight into `Mods` where the armour
     # penalty and the enhancement bonus already live -- `engine/skills.py`

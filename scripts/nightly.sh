@@ -69,6 +69,53 @@ LOG="logs/nightly-${STAMP}.log"
 # way out. A stale file -- a sweep that was killed -- reads as not running,
 # which is the safe direction: the worst case is two sweeps contending,
 # which is loud, against a skip that looks like a clean night.
+# **Is a sweep due?** The schedule fires hourly now, because a calendar time
+# does not survive a closed lid: `StartCalendarInterval` is deferred to the
+# next wake and dropped if there is none, which cost three of seventeen
+# nights outright. #871.
+#
+# So the hour is decided here instead, where it can be reasoned about:
+#
+#   * nothing to do unless the last real sweep is more than 20 hours old;
+#   * normally only between 01:00 and 07:00, so a 110-minute job never starts
+#     in the middle of somebody's working day;
+#   * **unless it is more than 48 hours stale**, which means the overnight
+#     window has already been missed twice and catching up matters more than
+#     the inconvenience.
+#
+# "The last real sweep" is the newest dated log whose first word is not
+# SKIPPED -- a skip is not a verdict, so a run of skips must not read as
+# recency. A `--fast` smoke test passes this gate unconditionally.
+#
+# **A not-due exit writes no dated log**, because 23 of them a day is the
+# noise `--history` exists to avoid -- but it does touch a heartbeat, so
+# "the agent is alive and not due" stays distinguishable from "the agent is
+# not running at all", which is the hole #871 is about.
+if [ "${1:-}" != "--fast" ]; then
+    LAST=0
+    for f in $(ls -t logs/nightly-2*.log 2>/dev/null); do
+        case "$(head -1 "$f" | awk '{print $1}')" in
+            SKIPPED|MOVED) continue ;;
+            *) LAST=$(stat -f %m "$f" 2>/dev/null || echo 0); break ;;
+        esac
+    done
+    NOW=$(date +%s)
+    AGE=$(( (NOW - LAST) / 3600 ))
+    HOUR=$(date +%H)
+    DUE=no
+    if [ "$AGE" -ge 48 ]; then
+        DUE="overdue by ${AGE}h"
+    elif [ "$AGE" -ge 20 ] && [ "$HOUR" -ge 1 ] && [ "$HOUR" -le 7 ]; then
+        DUE="due, ${AGE}h since the last sweep"
+    fi
+    if [ "$DUE" = "no" ]; then
+        printf 'not due %s -- last sweep %sh ago, hour %s\n' \
+               "$(date '+%F %T')" "$AGE" "$HOUR" > logs/nightly-heartbeat
+        exit 0
+    fi
+    echo "${DUE}"
+fi
+
 LOCKFILE="logs/check.pid"
 if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; then
     echo "SKIPPED $(date '+%F %T') -- a check.py is already running (pid $(cat "$LOCKFILE"))" | tee "$LOG"
@@ -106,15 +153,39 @@ fi
 # recording the run. The flag below leaves it exactly where it is: its `sha`
 # is bookkeeping `audit.py` reads for "owed since", never part of the per-ref
 # baseline, so the sweep behaves identically either way.
+# **The tolerance was "the sha alone moved" and it was too narrow to work.**
+# It held only on a night when no row had been declared since the previous
+# committed sweep -- the opposite of the normal case here. The 2026-10-23
+# sweep moved three fields:
+#
+#     sha    81f5229 -> 402e66d
+#     refs    21,405 -> 21,407      two rows declared in between
+#     fired   19,672 -> 19,675
+#
+# so the guard read it as a real edit and 10-24 refused. Over seventeen
+# nights that is **8 of the 11 failures**; the other three never fired at
+# all (#871).
+#
+# **What it is really protecting against is a hand-tuned baseline**, which
+# `nightly.sh` has always said: "a human-edited baseline, or one whose
+# `silent_refs` differ, is a real edit and still blocks". So the test is now
+# that question directly -- the two **per-ref lists** must not have moved --
+# rather than a line count that stands in for it. `sha`, `refs`, `fired`,
+# `never` and `known_quiet` are counts a sweep legitimately rewrites.
+#
+# The sweep still reports what moved in its `-- baseline --` section, so a
+# row changing sides is read by a human either way; this only stops the
+# bookkeeping from gating the next night. #867, #469.
 LEDGER=scripts/fixtures/audited.json
 DIRTY=$(git status --porcelain)
 if [ -n "$DIRTY" ] \
    && [ -z "$(git status --porcelain -- . ":(exclude)$LEDGER")" ] \
-   && [ "$(git diff -U0 -- "$LEDGER" | grep -c '^[-+][^-+]')" = "2" ] \
-   && [ "$(git diff -U0 -- "$LEDGER" | grep -c '^[-+][^-+].*\"sha\"')" = "2" ]; then
-    echo "note: $LEDGER differs from HEAD by its sha alone -- the previous"
-    echo "      sweep's own bookkeeping, not an edit. Sweeping anyway; see"
-    echo "      the comment above this check."
+   && [ -z "$(git diff -U0 -- "$LEDGER" \
+              | grep '^[-+][^-+]' \
+              | grep -E '"(silent_refs|refused_refs)"|^[-+] +"[a-z]+:?[a-z0-9:_-]+",?$')" ]; then
+    echo "note: $LEDGER differs from HEAD only in counts the sweep rewrites"
+    echo "      -- its own bookkeeping, not an edit. The per-ref baseline"
+    echo "      (silent_refs, refused_refs) is unchanged. Sweeping anyway."
     DIRTY=""
 fi
 if [ -n "$DIRTY" ]; then
@@ -182,9 +253,47 @@ refused = set(after.get("refused_refs", []))
 left = was - now
 withdrawn, healed = sorted(left & refused), sorted(left - refused)
 fresh = sorted(now - was)
-if not left and not fresh:
+
+# **The refused set was read only to classify a silent departure, so a
+# change to it was invisible.** On 2026-10-18 at `3fba7f0` this printed
+# "only the sha moved -- bookkeeping, nothing to read" while two rows
+# (`f2470`, `f3317`) had stopped carrying `todo=` and become usable in play.
+#
+# That is the change with the widest blast radius in this repo: un-refusing
+# a feat makes it drawable, which re-rolls every chargen draw and moves
+# every audit board, and it has cost a bisect-by-file before. A row
+# *arriving* in the set is worse news -- something that used to play is now
+# refused, either a new marker or a defective entry swallowing a sibling --
+# and the sweep said nothing about either direction. #681.
+was_ref = set(before.get("refused_refs", []))
+now_ref = set(after.get("refused_refs", []))
+un_refused, newly_refused = sorted(was_ref - now_ref), sorted(now_ref - was_ref)
+
+# The counters, printed only when one of them moves, so a bookkeeping run
+# stays quiet. `refs` moving at all means the corpus changed under the
+# sweep, which is worth seeing beside a verdict about it.
+counters = [
+    (k, before.get(k), after.get(k))
+    for k in ("refs", "fired", "never", "silent", "raises")
+    if before.get(k) != after.get(k)
+]
+
+if not left and not fresh and not un_refused and not newly_refused \
+        and not counters:
     print("   only the sha moved -- bookkeeping, nothing to read")
 else:
+    if un_refused:
+        print(f"   {len(un_refused)} row(s) are NO LONGER REFUSED and so are"
+              f" drawable now -- this re-rolls every chargen draw:")
+        print(f"      {' '.join(un_refused)}")
+    if newly_refused:
+        print(f"   {len(newly_refused)} row(s) became REFUSED in play --"
+              f" a new marker, or a defective sibling taking the block:")
+        print(f"      {' '.join(newly_refused)}")
+    if counters:
+        print("   counters that moved:")
+        for k, a, b in counters:
+            print(f"      {k}: {a} -> {b}")
     if healed:
         print(f"   {len(healed)} row(s) DO SOMETHING now, and left the list:")
         print(f"      {' '.join(healed)}")
@@ -250,4 +359,65 @@ else
     echo "RED at ${AT}; wrote logs/NIGHTLY-FAILED" | tee -a "$LOG"
 fi
 cp "$LOG" logs/nightly-latest.log
+
+# ----------------------------------------------------------------------------
+# Re-record the impact map, which is what lets a session's per-commit run
+# narrow instead of sweeping 23,062 rows. #853, #865.
+#
+# **After the verdict, always.** The marker and the exit code above are the
+# night's product and must not wait 83 minutes behind an artifact, nor be
+# affected if the recording dies. Everything below is additive.
+#
+# **#853 proposed folding this into the sweep itself "for the overhead rather
+# than a second sweep". That premise is false and the measurement is why this
+# is a separate run:** recording is ~4.3x (4.6 rows/s against 19.8), so there
+# is no version of this that rides along free -- it is a second 83-minute job
+# either way, and switching the gate's own sweep into a recording run would
+# slow the gate and move every timing it reports.
+#
+# Three preconditions, each of which would otherwise produce a map that
+# narrows *wrongly* rather than one that is merely stale:
+#
+#   * a clean sweep. A red one means rows are raising, and a row that raises
+#     records only the lines it reached before raising -- so its ref lists
+#     come out short, in the direction that omits rows from a later selection.
+#   * HEAD where the sweep started. `_build_map` parses every engine file from
+#     disk at the end to turn lines into functions, so a tree that moved
+#     attributes this run's coverage to the *new* file's line numbers. Same
+#     fault the MOVED check above exists for, one artifact further on.
+#   * a clean tree, for the reason the dirty-tree refusal at the top gives:
+#     a map attributable to no commit cannot be checked against one.
+#
+# And the same question is asked again afterwards, because 83 minutes is a
+# long window: if the tree moved under the recording, the map is **deleted**
+# rather than left in place. `impact._load` fails open with no map, so
+# deleting costs a night of wide sweeps and keeping a misattributed one costs
+# a silently wrong selection. Not a close call.
+if [ "${1:-}" = "--fast" ]; then
+    echo "map: not recorded -- --fast is the smoke test" | tee -a "$LOG"
+elif [ "$VERDICT" -ne 0 ]; then
+    echo "map: not recorded -- the sweep was red, and rows that raise record" \
+         "short ref lists" | tee -a "$LOG"
+elif [ -n "$(git status --porcelain -- . ":(exclude)$LEDGER")" ]; then
+    echo "map: not recorded -- the tree is dirty beyond the ledger" | tee -a "$LOG"
+else
+    {
+        echo
+        echo "-- impact map --"
+        echo "recording at ${AT} -- about 87 minutes"
+        PYTHONUNBUFFERED=1 uv run scripts/impact.py --record 2>&1 \
+            | grep -Ev '^#   [0-9]+/' || true
+        ENDED=$(git rev-parse --short HEAD)
+        if [ "$ENDED" != "$AT" ]; then
+            rm -f logs/impact.json
+            echo "   DISCARDED -- the tree moved from ${AT} to ${ENDED} during"
+            echo "   the recording, so the line-to-function attribution is"
+            echo "   against files the coverage was not taken from. No map"
+            echo "   means every engine change audits every row, which is the"
+            echo "   safe direction."
+        fi
+    } 2>&1 | tee -a "$LOG"
+    cp "$LOG" logs/nightly-latest.log
+fi
+
 exit "$VERDICT"
