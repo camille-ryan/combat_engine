@@ -436,6 +436,29 @@ And one about repetition, which is the signal that looks cleanest and is
 wrong: three read-aloud blocks repeat across pages and **one of them is a
 real item description**, printed twice because the item appears twice.
 
+### A third kind: a span on an adventure page that claims nothing
+
+Separate from both of the above, because it fires on pages that are
+unambiguously the adventure. **18 of the chapter-1 graph's 188 facts were
+page furniture** -- six treasure-table rows, two section headings, nine
+map-key legends, and an artist's credit held as a `person`. `_a_claim`,
+three exact shapes, 126 entities to 115 and 188 facts to 170. #916.
+
+**An exact shape beat a verb test, and the reasoning generalises.** "A
+fact is a claim and a claim has a verb" sounds righter and measured worse
+on both counts: less complete, because a map key and a table row usually
+end in a plural noun so `[a-z]+s` saved seven of them, and it had a false
+positive on real prose -- a five-word sentence whose only verb was a bare
+infinitive. 14 with one wrong against 18 with none. When a pattern is
+exact on the page, prefer it to a rule about language.
+
+What it drops that is a real loss: seven creature entities whose only
+fact was a map key. That is **encounter composition** -- which tokens
+start on which map -- and it belongs to the module's fight definition
+rather than to a record of what the pages say. `MECHANICAL` argues the
+other way for a creature and is a different case: there the creature has
+a sentence and only its *name* looks mechanical.
+
 ## Seams
 
 * **`story/__init__.py` is not edited by this work.** Arcade mode is being
@@ -457,7 +480,7 @@ uv run scripts/play.py --play <module> --god-mode  the story half, no fights
 uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     challenge_refusal training_bonus challenge_costs_nothing \
     beat_loop scene_audience module_refusals affordance_match \
-    summary_scenes boxed_text
+    summary_scenes boxed_text graph_furniture
 uv run scripts/check.py --only play,drivers
 ```
 
