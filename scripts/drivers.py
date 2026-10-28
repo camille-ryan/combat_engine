@@ -30223,7 +30223,8 @@ def a_graph_fact_is_a_claim_and_not_page_furniture(out: Result) -> None:
         (folder / "pages").mkdir()
         (folder / "pages" / "0000.txt").write_text(page)
         graph, tally = ingest.harvest(
-            folder, [0], ingest.llm.Role(), say=False, ask=_canned)
+            folder, [0], ingest.llm.Role(), say=False, sort=False,
+            ask=_canned)
 
     out.that(
         tally["furniture"] == 3 and tally["kept"] == 1,
@@ -30251,6 +30252,181 @@ def a_graph_fact_is_a_claim_and_not_page_furniture(out: Result) -> None:
         "furniture" in tally,
         "and the count is in the tally the CLI prints",
         f"{sorted(tally)}",
+    )
+
+
+def a_rule_for_running_the_session_is_not_a_fact_about_the_world(
+    out: Result,
+) -> None:
+    """#915. The book's front matter was stored as canon.
+
+    `harvest` ingested the organized-play administration at the front of
+    the book tagged `page` -- the provenance that means *canon, do not
+    contradict* -- and `beat.standing` hands those to the DM under
+    "already true". The words that reached it were not obscure: **"the
+    characters" resolved to a sentence about which character sheets to
+    bring to the table**.
+
+    Two gates, and they are deliberately different in kind. A table of
+    contents is an **exact shape** and costs nothing; the rest needs the
+    model, because the two measured cheap signals both failed -- page
+    ranges (the publisher nested administration inside the chapter) and
+    second-person register (44% against 22%, false positives on plain
+    prose).
+
+    Driven with both calls canned, so this runs with no server.
+    """
+    import importlib
+    import json as _json
+    import tempfile
+    from pathlib import Path as _Path
+
+    ingest = importlib.import_module("ingest")
+
+    # Invented, every word. Shapes and register copied from the real page,
+    # text not -- `leaks.py --modules` watches this file.
+    #
+    # **It has to end past the encounter number.** A first version stopped
+    # at "Encounter 4-1", which `TABLE_ROW` already catches, so deleting
+    # `CONTENTS` changed nothing and the break stayed green -- the fixture
+    # was testing a gate other than the one it was written for. The real
+    # lines carry a colon and a title after the number, which `TABLE_ROW`
+    # cannot match.
+    toc = ("Session 4: The Long Climb starts on page 22, and "
+           "Encounter 4-1: The Ledge begins there.")
+    admin = ("At the end of each session, award every player who attended "
+             "one renown point.")
+    world = ("The gate sergeant keeps a ledger of everyone who has passed "
+             "through since the spring.")
+    page = f"{toc}\n{admin}\n{world}\n" + "The rain has not stopped. " * 6
+
+    canned: dict = {"entities": [
+        {"name": "The Long Climb", "kind": "place", "quote": toc},
+        {"name": "renown", "kind": "idea", "quote": admin},
+        {"name": "gate sergeant", "kind": "person", "quote": world},
+    ]}
+
+    # One stub for both calls, told apart by the schema it is handed --
+    # which is also the assertion that `harvest` asks the right question of
+    # the right span.
+    asked: list[str] = []
+
+    def _canned(_role: object, messages: list[dict], schema: dict) -> dict:
+        if schema is ingest.SORT_SCHEMA:
+            span = messages[-1]["content"]
+            asked.append(span)
+            rule = "renown point" in span
+            return {"verdict": ingest.SESSION_RULE if rule
+                    else ingest.WORLDLY}
+        return canned
+
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = _Path(tmp)
+        (folder / "pages").mkdir()
+        (folder / "pages" / "0000.txt").write_text(page)
+        graph, tally = ingest.harvest(
+            folder, [0], ingest.llm.Role(), say=False, ask=_canned)
+
+    out.that(
+        tally["administration"] == 1 and tally["kept"] == 1,
+        "a session rule is dropped and the sentence about the world is kept",
+        f"administration={tally['administration']} kept={tally['kept']} "
+        f"furniture={tally['furniture']} offered={tally['offered']}",
+    )
+    out.that(
+        graph.find("renown") is None
+        and graph.find("gate sergeant") is not None,
+        "so the renown rule never reaches the graph and the sergeant does",
+        f"renown={graph.find('renown')} "
+        f"sergeant={bool(graph.find('gate sergeant'))}",
+    )
+    # **The exact gate runs first, so the model is never asked about it.**
+    # That is the ordering, not an optimisation: a table of contents is
+    # free to recognise and a model call is not.
+    out.that(
+        tally["furniture"] == 1
+        and not any("starts on page" in span for span in asked),
+        "a table of contents is dropped by shape, without a model call",
+        f"furniture={tally['furniture']} asked about {len(asked)} span(s)",
+    )
+    # And it is `CONTENTS` doing it, not one of #916's three shapes --
+    # otherwise the assertion above passes with `CONTENTS` deleted.
+    out.that(
+        ingest._a_claim(toc) and bool(ingest.CONTENTS.search(toc)),
+        "and it is the contents pattern that catches it, not a #916 shape",
+        f"claim={ingest._a_claim(toc)} "
+        f"contents={bool(ingest.CONTENTS.search(toc))}",
+    )
+    out.that(
+        graph.find("The Long Climb") is None,
+        "and the place it names gets no fact saying where to find it",
+        f"{graph.find('The Long Climb')}",
+    )
+
+    # **`--no-sort` must really skip it**, because that flag is what a
+    # session reaches for when the extractor is the thing under test.
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = _Path(tmp)
+        (folder / "pages").mkdir()
+        (folder / "pages" / "0000.txt").write_text(page)
+        _, off = ingest.harvest(
+            folder, [0], ingest.llm.Role(), say=False, sort=False,
+            ask=_canned)
+    out.that(
+        off["administration"] == 0 and off["kept"] == 2,
+        "with sort off the rule is kept, so the flag is not decorative",
+        f"administration={off['administration']} kept={off['kept']}",
+    )
+
+    # **Defaults to keeping on a bad turn.** `llm.structured` returns `{}`
+    # rather than raising, and dropping a real fact because the model had
+    # one empty turn is the worse failure.
+    def _mute(_role: object, messages: list[dict], schema: dict) -> dict:
+        return {} if schema is ingest.SORT_SCHEMA else canned
+
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = _Path(tmp)
+        (folder / "pages").mkdir()
+        (folder / "pages" / "0000.txt").write_text(page)
+        _, mute = ingest.harvest(
+            folder, [0], ingest.llm.Role(), say=False, ask=_mute)
+    out.that(
+        mute["administration"] == 0 and mute["kept"] == 2,
+        "an empty answer from the classifier keeps the fact, never drops it",
+        f"administration={mute['administration']} kept={mute['kept']}",
+    )
+
+    # And the two enum options are **both named things of the same kind**,
+    # which is load-bearing: an enum whose options differ in kind biases
+    # the answer, 3/5 against 6/6. `story/CLAUDE.md`.
+    options = [ingest.SESSION_RULE, ingest.WORLDLY]
+    out.that(
+        all(len(o.split()) >= 5 for o in options),
+        "both enum options are phrases of the same kind, not a name "
+        "against a description",
+        f"{options}",
+    )
+    # Reached through `json.dumps` rather than by indexing the nested
+    # schema, which `types` rightly refuses -- a schema's values are not
+    # all the same shape.
+    schema = _json.dumps(ingest.SORT_SCHEMA)
+    out.that(
+        all(f'"{o}"' in schema for o in options),
+        "and the schema offers exactly those two, so the model cannot "
+        "answer anything else",
+        f"{[o for o in options if f'\"{o}\"' not in schema]} missing",
+    )
+    # **The prompt must still name both of them.** It is written as a
+    # literal rather than assembled, because interpolating the two values
+    # reflowed the paragraphs and flipped a real verdict -- identical words,
+    # 5/5 each way, opposite answers. That makes the prompt and the enum two
+    # places saying the same thing, so renaming an option has to be caught
+    # here or the model is offered a word the instructions never explain.
+    missing = [o for o in options if o.upper() not in ingest.SORT_SYSTEM]
+    out.that(
+        not missing,
+        "and the prompt spells out both of them, so neither can drift",
+        f"not named in SORT_SYSTEM: {missing}",
     )
 
 
@@ -30347,7 +30523,10 @@ def the_importer_keeps_boxed_text_and_drops_the_books_own_voice(
     # paragraphs on it explain what an ability score is.
     handout = importer.read_aloud(_Italics([
         *prose,
-        (120.0, "Permission is granted to photocopy this page for personal use."),
+        # Shortened past eight words on purpose: the real line is the
+        # book's and a tracked file must not carry a run of it. It still
+        # matches `HANDOUT`, which is five words long.
+        (120.0, "Permission is granted to photocopy for home play only."),
     ]))
     out.that(
         handout == [],
@@ -30810,6 +30989,10 @@ DRIVERS = {
     "graph_furniture": (
         a_graph_fact_is_a_claim_and_not_page_furniture,
         "a heading, a map key and a table row are not facts (#916)",
+    ),
+    "graph_administration": (
+        a_rule_for_running_the_session_is_not_a_fact_about_the_world,
+        "how to run a session is not canon about the world (#915)",
     ),
     "invent_not_contradict": (
         the_dm_may_invent_but_not_contradict,

@@ -203,6 +203,36 @@ And a third, about fixing a model rather than measuring it: **a prompt
 addition is not free.** The clause that recovered two dropped facts relapsed
 the echo five-fold. Start from a reproduction, not from a paragraph.
 
+### A prompt *reflow* is not free either, and it is invisible
+
+Worse than the rule above, because an addition shows up in a diff and this
+does not. Measured on `qwen2.5:7b`, temperature 0, the same classifier:
+
+```
+probe wrapping     5/5   "a rule for running the game session"
+f-string wrapping  5/5   "something true in the world of the story"
+```
+
+The two prompts are **word for word identical** --
+`" ".join(a.split()) == " ".join(b.split())` is `True` -- and differ only
+in where the lines wrap. Each is **perfectly stable**, so this reads as two
+different correct answers rather than noise from either side.
+
+It happened innocently: the classifier in `scripts/ingest.py` was measured
+with its prompt written as a literal, then shipped as an f-string
+interpolating the two enum values, which reflowed the paragraphs. The
+shipped version was **unmeasured**, and 2 of the 8 facts the measurement
+was about flipped back to canon -- a graph built with it kept a sentence
+about bringing a character sheet as a fact about the game world.
+
+So: **keep a measured prompt a verbatim literal.** Never assemble one by
+interpolation, `textwrap` or `dedent` over a reflowed source. When a
+constant has to appear in both the prompt and a schema, write it in both
+and have a driver assert the prompt still names it -- `drivers.py
+graph_administration` does. And when two runs of "the same" prompt
+disagree, diff the **raw** strings before concluding the model is
+unstable; stable-but-opposite is this bug's signature.
+
 ### A bigger model is not the fix either, and reasoning models cost twice
 
 Measured over Tailscale against a 14B reasoning model on another host, same
@@ -413,10 +443,23 @@ Both stages were taking all three, and each needed its own fix because
   photocopying yields nothing). 80 blocks to 71, and the #902 baseline in
   `leaks.py` went from three waivers to **none**. #909.
 * `scripts/ingest.py` reads `pages/*.txt`, **not** `read-aloud.json`, so
-  the fix above does nothing for it. 44 of the graph's 126 entities and 70
-  of its 188 facts are administration tagged `page` -- which is the
-  provenance that means *canon, do not contradict* -- so the DM is holding
-  a store play program's scoring rules as established fiction. #915, open.
+  the fix above does nothing for it. Administration was ingested tagged
+  `page` -- the provenance that means *canon, do not contradict* -- and
+  `beat.standing` hands those to the DM under "already true". The words
+  that reached it were not obscure: **"the characters" resolved to a
+  sentence about which character sheets to bring to the table**. Now an
+  exact `CONTENTS` test plus a closed-list classifier, `_about_the_world`.
+  #915.
+
+  **The issue's own census was a 3x over-count, and the proxy is why.** It
+  said "44 of 126 entities", measured as *entities sourced only from pages
+  0-9*. Pages 6-7 are the **Adventure Synopsis** and pages 8-9 the session
+  overviews -- the keep's legends, its cast, the cult, the villain's plan --
+  which is story. Acting on the page range would have deleted about 35 real
+  facts to remove 16. The real figure is ~10% of facts, and the exposure the
+  issue reported is real and is caught. A page range was wrong twice here:
+  once because the publisher nested administration inside the chapter, and
+  once because the synopsis sits in the same pages.
 
 Three things learnt that are worth not re-deriving:
 
@@ -480,15 +523,22 @@ uv run scripts/play.py --play <module> --god-mode  the story half, no fights
 uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     challenge_refusal training_bonus challenge_costs_nothing \
     beat_loop scene_audience module_refusals affordance_match \
-    summary_scenes boxed_text graph_furniture
+    summary_scenes boxed_text graph_furniture graph_administration
 uv run scripts/check.py --only play,drivers
 ```
 
-Ten drivers cover this component and **each was proven by breaking what it
-watches** — the retype, the word grant, the three-failure cap, the refusal of
-an unlisted skill, the read of `Skills.trained`, the arming-is-not-spending
-rule, the `once` rule, the scene ending, whose text becomes a fact, and both
-halves of the brief/sets split. All went red.
+**21 drivers and 184 assertions** cover this component, and **each was
+proven by breaking what it watches** — the retype, the word grant, the
+three-failure cap, the refusal of an unlisted skill, the read of
+`Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
+scene ending, whose text becomes a fact, both halves of the brief/sets
+split, each of the three furniture shapes, the contents pattern, the
+classifier's call site, its `sort` flag and its keep-on-an-empty-answer
+default. All went red.
+
+Measured, because this sentence said "ten" for three commits after it
+stopped being ten. `uv run scripts/drivers.py <the list above>` prints the
+total; read it off rather than counting the names.
 
 `affordance_match` is the one that needs a model and **skips** when none is
 serving; the rest run offline.

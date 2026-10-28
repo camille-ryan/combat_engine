@@ -194,8 +194,8 @@ def _furniture(name: str) -> bool:
 #:   real living person was held in the graph as a `person` whose only fact
 #:   was their own name in capitals.
 #: * **a map key** -- the bracketed letter is the token on the tactical
-#:   map. `Kobold dragonshield (D)` is a real creature and that is still not
-#:   a fact about it.
+#:   map, shaped `Marsh lurker (M)`. The creature named is often a real
+#:   opponent and that is still not a fact about it.
 #: * **a treasure-table row** -- the trailing `Encounter 1-1` is the column
 #:   the cell sat in.
 #:
@@ -243,6 +243,125 @@ def _a_claim(span: str) -> bool:
     span = span.strip()
     return not (SHOUTED.match(span) or MAP_KEY.search(span)
                 or TABLE_ROW.search(span))
+
+
+#: A table of contents, which the front of a book prints as prose.
+#:
+#: Shaped `Session 4: <a title> starts on page 22, and Encounter 4-1: <a
+#: title>`. Three of these were stored as facts about the places they name,
+#: so an entity's one fact was where to find it in the book. Exact, so it
+#: runs before the model is asked anything.
+#:
+#: **The shape is written out and the real line is not**, because a
+#: docstring is a tracked file: quoting one here leaked a scene title and
+#: `leaks.py --modules` caught it on the first run after this landed. #915.
+CONTENTS = re.compile(r"\bstarts on page \d+", re.I)
+
+
+#: What the page is *about*: the fiction, or the business of playing.
+#:
+#: **The second half of #915, and the half that needs a model.** The front
+#: of this book is organized-play administration -- awarding renown, what
+#: to do when a character dies, dividing treasure between players -- and
+#: `harvest` stored all of it tagged `page`, which is the provenance that
+#: means *canon, do not contradict*. `beat.standing` then hands it to the
+#: DM under "already true", and the words that reach it are not obscure:
+#: **"the characters" resolved to a sentence about which character sheets
+#: to bring to the table**, and "the players" to one about whose
+#: responsibility that is.
+#:
+#: Paraphrased, not quoted. A docstring is a tracked file and the book's
+#: page text is 44,079 eight-word runs that `leaks.py --modules` cannot
+#: see, because it reads `module.json` and `read-aloud.json` only.
+#:
+#: **Both options are named things of the same kind**, deliberately. An
+#: enum whose options differ in kind -- a name against a description --
+#: biases the answer here: 3/5 on a 14B, 6/6 when both sides are named.
+#: `story/CLAUDE.md`.
+WORLDLY = "something true in the world of the story"
+SESSION_RULE = "a rule for running the game session"
+
+SORT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": [SESSION_RULE, WORLDLY]},
+    },
+    "required": ["verdict"],
+}
+
+#: Naming the register rather than the words, because the words do not
+#: separate: administration addresses the reader, so a second-person test
+#: looks promising and measures **44% against 22%** with false positives on
+#: plain prose -- "you arrive at the keep". The last paragraph is carrying
+#: that failure.
+#:
+#: ## Written out verbatim, and **the line breaks are part of it**
+#:
+#: This was first built as an f-string interpolating the two enum values,
+#: which reflowed the paragraphs. The result was word-for-word identical --
+#: `" ".join(a.split()) == " ".join(b.split())` is `True` -- and **gave the
+#: opposite answer**, perfectly stably, on a real fact:
+#:
+#:     probe wrapping     5/5  a rule for running the game session
+#:     f-string wrapping  5/5  something true in the world of the story
+#:
+#: Same words, different wrap, and 2 of the 8 facts behind the reported
+#: exposure flipped back to canon on a graph built with the second one.
+#: `story/CLAUDE.md` says a prompt *addition* is not free; a prompt
+#: **reflow** is not free either, and it is far harder to notice because a
+#: diff of the collapsed text shows nothing.
+#:
+#: So the text below is the one the measurements in `_about_the_world` were
+#: taken with, written as a literal and not assembled. `drivers.py
+#: graph_administration` asserts both enum values still appear in it, which
+#: is what keeps renaming an option from silently desyncing the two.
+SORT_SYSTEM = """You sort sentences from a tabletop adventure book into two kinds.
+
+A RULE FOR RUNNING THE GAME SESSION is about the people at the table and
+the business of playing: awarding experience or points, what to do when a
+player is absent or a character dies, dividing treasure between players,
+bringing a character sheet, how long a session lasts, photocopying a page.
+
+SOMETHING TRUE IN THE WORLD OF THE STORY is about the places, people,
+creatures and events of the fiction: who lives where, who wants what, what
+a room contains, what happened before the adventure began.
+
+A sentence can mention players or characters and still be about the world
+-- "you arrive at the keep" and "the characters can now connect the banker
+to the cult" are both the world. The test is what the sentence is ABOUT,
+not which words it uses."""
+
+
+def _about_the_world(span: str, role: llm.Role, ask: Callable[..., dict]) -> bool:
+    """Is this sentence the fiction, or the business of playing it?
+
+    **Measured on the 170 facts of the graph in hand**, against hand-reading:
+
+        19 of 170 called a session rule                         11%
+        1 false positive in 107 adventure facts                 0.9%
+        8 of 8 of the facts behind the reported exposure        caught
+
+    The one false positive is *"the characters can now tie the banker to
+    the cult and complete a minor quest"*, which names a session construct
+    and is defensible either way. So the cost of running this over
+    everything is about **1% of real facts**, against removing 11% of
+    administration, and that is the trade.
+
+    Recall is the weaker half -- roughly 70%. It keeps *"when the
+    characters find a nonconsumable magic item"* and *"characters can buy
+    equipment before beginning play"*, both of which are administration.
+    Those are the ones to look at if this is tightened, and tightening is
+    what risks the 1% becoming worse.
+
+    **Defaults to keeping.** An empty or unreadable answer means the fact
+    is stored, because dropping a real fact on a model's bad turn is the
+    worse failure and `llm.structured` returns `{}` rather than raising.
+    """
+    got = ask(role, [
+        {"role": "system", "content": SORT_SYSTEM},
+        {"role": "user", "content": f"SENTENCE:\n{span}"},
+    ], SORT_SCHEMA)
+    return str(got.get("verdict", "")).strip() != SESSION_RULE
 
 
 #: Kinds that can be rules vocabulary rather than something in the world.
@@ -296,7 +415,7 @@ def read_page(folder: Path, n: int) -> str:
 
 
 def harvest(folder: Path, pages: list[int], role: llm.Role,
-            *, say: bool = True,
+            *, say: bool = True, sort: bool = True,
             ask: Callable[..., dict] = llm.structured
             ) -> tuple[gr.Graph, dict]:
     """Every page through the extractor, every quote checked, into a graph.
@@ -311,7 +430,8 @@ def harvest(folder: Path, pages: list[int], role: llm.Role,
     graph = gr.Graph()
     vocabulary = _rules_vocabulary()
     tally = {"pages": 0, "offered": 0, "kept": 0, "unquotable": 0,
-             "mended": 0, "mechanical": 0, "furniture": 0, "seconds": 0.0}
+             "mended": 0, "mechanical": 0, "furniture": 0,
+             "administration": 0, "seconds": 0.0}
     for n in pages:
         text = read_page(folder, n)
         if len(text.strip()) < 200:
@@ -345,8 +465,14 @@ def harvest(folder: Path, pages: list[int], role: llm.Role,
             # **Tested on the grounded span, not the model's quote.** The
             # span is what gets stored and what a prompt will carry, and
             # `ground` may have widened the quote to the page's own wording.
-            if not _a_claim(span):
+            if not _a_claim(span) or CONTENTS.search(span):
                 tally["furniture"] += 1
+                continue
+            # **Last, because it costs a model call.** Every exact test
+            # above runs first so the classifier is only asked about spans
+            # that survived them.
+            if sort and not _about_the_world(span, role, ask):
+                tally["administration"] += 1
                 continue
             tally["mended"] += bool(edits)
             tally["kept"] += 1
@@ -382,6 +508,13 @@ def main() -> int:
     ap.add_argument("--host", default="")
     ap.add_argument("--dry", action="store_true",
                     help="extract and report, write nothing")
+    # **One extra model call per surviving fact**, which roughly doubles
+    # this stage. Worth it by default -- it is the only thing that keeps
+    # the book's organized-play administration out of the DM's canon -- and
+    # off when the question is the extractor rather than the sorting. #915.
+    ap.add_argument("--no-sort", action="store_true",
+                    help="skip the session-rule classifier (faster, and "
+                         "lets the front matter in)")
     args = ap.parse_args()
 
     folder = MODULES / args.module
@@ -411,7 +544,7 @@ def main() -> int:
     print(f"{args.module}: {len(pages)} of {total} pages, {role.model} "
           f"at {role.base_url.split('//')[-1]}\n")
 
-    graph, tally = harvest(folder, pages, role)
+    graph, tally = harvest(folder, pages, role, sort=not args.no_sort)
 
     print(f"\n{tally['pages']} pages with text")
     print(f"  {tally['offered']:5} entities offered")
@@ -422,6 +555,8 @@ def main() -> int:
           f"adventure's")
     print(f"  {tally['furniture']:5} dropped: a heading, a map key or a "
           f"table row, which claim nothing")
+    print(f"  {tally['administration']:5} dropped: how to run a session, not "
+          f"what is true in the world")
     folded = gr.reconcile(graph)
     for short, long in folded:
         print(f"      folded {short!r} into {long!r}")
