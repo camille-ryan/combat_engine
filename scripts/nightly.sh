@@ -199,6 +199,15 @@ if [ -n "$DIRTY" ]; then
 fi
 
 AT=$(git rev-parse --short HEAD)
+# **The comparisons below use the FULL sha and the messages use the short
+# one, and that is not tidiness.** `git rev-parse --short` returns the
+# shortest *unambiguous* prefix, and that length grows as the repository
+# gains objects -- so the same commit abbreviates to 7 characters at the
+# start of a 110-minute sweep and 8 at the end. A string compare of the two
+# then reports the tree as having moved while `git rev-list --count` of the
+# same pair says **0 commits landed**, which is exactly what the 2026-10-28
+# 01:18 sweep logged before throwing away a 22-of-23-clean result.
+AT_FULL=$(git rev-parse HEAD)
 BEFORE=$(git show "HEAD:scripts/fixtures/audited.json" 2>/dev/null)
 
 {
@@ -331,9 +340,10 @@ cp "$LOG" logs/nightly-latest.log
 # exactly as it was and the exit is 0. "Nothing to certify" is the honest
 # answer either way -- the difference is only whether the obstacle arrived
 # before the run or during it.
+AFTER_FULL=$(git rev-parse HEAD)
 AFTER=$(git rev-parse --short HEAD)
-if [ "$AFTER" != "$AT" ]; then
-    MOVED=$(git rev-list --count "${AT}..${AFTER}" 2>/dev/null || echo "?")
+if [ "$AFTER_FULL" != "$AT_FULL" ]; then
+    MOVED=$(git rev-list --count "${AT_FULL}..${AFTER_FULL}" 2>/dev/null || echo "?")
     {
         echo
         echo "MOVED $(date '+%F %T') -- the tree moved under this sweep:"
@@ -408,7 +418,9 @@ else
         PYTHONUNBUFFERED=1 uv run scripts/impact.py --record 2>&1 \
             | grep -Ev '^#   [0-9]+/' || true
         ENDED=$(git rev-parse --short HEAD)
-        if [ "$ENDED" != "$AT" ]; then
+        # Full shas, for the reason given beside `AT_FULL`: an abbreviation
+        # that grew during the recording is not the tree moving.
+        if [ "$(git rev-parse HEAD)" != "$AT_FULL" ]; then
             rm -f logs/impact.json
             echo "   DISCARDED -- the tree moved from ${AT} to ${ENDED} during"
             echo "   the recording, so the line-to-function attribution is"
