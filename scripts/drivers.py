@@ -14947,9 +14947,9 @@ def once_spent(out: Result) -> None:
     the original fault the enumeration was introduced to cure.
     """
 
+    from combat_engine.engine import World
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.durations import When
-    from combat_engine.engine.ecs import World
     from combat_engine.engine.events import DamageRolled, Window
     from combat_engine.engine.types import DamageType
 
@@ -29729,6 +29729,74 @@ def the_graph_answers_no_and_says_where_a_fact_came_from(out: Result) -> None:
         )
 
 
+def harvest_reads_the_characters_and_not_their_summons(out: Result) -> None:
+    """#797. A familiar is a `Team.PC` creature with `Health`.
+
+    `harvest` matched sheets to the PC side by position, over a list that
+    grows during a fight. On the board it was measured on that is harmless
+    -- the familiar sorts last and `strict=False` drops it -- which is
+    luck, not design. **Anything PC-side appearing before one of the
+    characters shifts every sheet after it**: a character's hit points
+    written from a summon's, and the summon's written nowhere.
+
+    The control is the one that matters, and it is the case luck was
+    hiding: a PC-side creature with a *lower* entity id than the party.
+    """
+    from combat_engine.engine import Bus, Grid, Rng, Team, World
+    from combat_engine.engine.components import Health, Ident, Side
+    from combat_engine.story import Party, harvest
+
+    # **Built by hand, with the summon spawned FIRST.** `each` yields in
+    # spawn order, and `field_encounter` spawns the party before anything
+    # can be summoned -- so a familiar always sorts last there and
+    # `strict=False` quietly drops it. That is the arrangement luck was
+    # hiding, and a test of it stays green with the filter removed, which
+    # is what the first version of this driver did.
+    world = World(Grid(12, 12), Rng(7), Bus())
+    summon = world.spawn()
+    world.add(summon, Side(team=Team.PC))
+    world.add(summon, Ident(ref="m9999"))
+    world.add(summon, Health(max_hp=99, hp=1, surges=0))
+
+    party = Party.of(["fighter", "cleric", "rogue", "wizard"],
+                     level=3, seed=7)
+    want: list[tuple[str, int]] = []
+    for n, sheet in enumerate(party.sheets):
+        eid = world.spawn()
+        world.add(eid, Side(team=Team.PC))
+        world.add(eid, Ident(ref=f"c:{sheet.cls}"))
+        hurt = 30 - (n + 1) * 3
+        world.add(eid, Health(max_hp=30, hp=hurt, surges=5 + n))
+        want.append((sheet.cls, hurt))
+
+    out.that(
+        next(e for e, _ in world.each(Side)) == summon,
+        "the summon is first in spawn order, which is the harmful case",
+        f"{[e for e, _ in world.each(Side)]}",
+    )
+
+    harvest(world, party)
+    wrote = [(s.cls, s.hp) for s in party.sheets]
+    out.that(
+        wrote == want,
+        "and each sheet is still written from its own character",
+        f"{wrote} against {want}",
+    )
+    out.that(
+        all(s.max_hp != 99 for s in party.sheets),
+        "so no sheet takes the summon's numbers",
+        f"{[s.max_hp for s in party.sheets]}",
+    )
+    # An aggregate cannot see this, which is why the rows are compared in
+    # order: the totals agree while every one is attributed to the wrong
+    # character.
+    out.that(
+        sum(s.hp or 0 for s in party.sheets) == sum(h for _, h in want),
+        "while the total agrees either way, which is why order is asserted",
+        f"{sum(s.hp or 0 for s in party.sheets)}",
+    )
+
+
 def a_scene_says_what_sort_of_place_the_fight_is_in(out: Result) -> None:
     """#539, from the story side: `World.terrain` was never written to.
 
@@ -30431,6 +30499,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "harvest_filter": (
+        harvest_reads_the_characters_and_not_their_summons,
+        "harvest writes each sheet from its own character (#797)",
     ),
     "scene_terrain": (
         a_scene_says_what_sort_of_place_the_fight_is_in,

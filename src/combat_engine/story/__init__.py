@@ -359,9 +359,35 @@ def harvest(world: World, party: Party) -> None:
     book, which is what does not survive. Said out loud because a party walking
     out of a fight still dazed is a thing somebody will expect.
     """
-    from combat_engine.engine.components import ActionPoints, Health, Powers, Side
+    from combat_engine.engine.components import (
+        ActionPoints,
+        Health,
+        Ident,
+        Powers,
+        Side,
+    )
 
-    on_board = [eid for eid, side in world.each(Side) if side.team == Team.PC]
+    # **Only the characters, not everything on their side.** A familiar is
+    # a `Team.PC` creature with `Health`, so the side holds five entities
+    # for a party of four, and this zip matched sheets to whatever came out
+    # of `each(Side)` in order. On the board it was measured on it happens
+    # to be harmless -- the familiar sorts last and `strict=False` drops it
+    # -- which is luck. Anything PC-side appearing *before* one of the
+    # characters shifts every sheet after it: a character's hit points and
+    # surges written from a summon's, and the summon's written nowhere.
+    #
+    # A filter rather than a different matching scheme. Positional
+    # matching is right for the reason the docstring gives -- a `Sheet`
+    # carries no entity id and matching by class breaks on two of one --
+    # so what it needs is to walk only the creatures the sheets are
+    # *about*. `chargen.spawn` gives every character `c:<class>`; a
+    # summon, a companion or a conjuration never does. #797.
+    on_board = [
+        eid for eid, side in world.each(Side)
+        if side.team == Team.PC
+        and (ident := world.get(eid, Ident)) is not None
+        and ident.ref.startswith("c:")
+    ]
     for sheet, eid in zip(party.sheets, on_board, strict=False):
         health = world.get(eid, Health)
         if health is not None:
