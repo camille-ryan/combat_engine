@@ -140,6 +140,32 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **This row's premise is two things at once and the board poses one.**
+    # It triggers on the caster becoming bloodied, and pays only if an enemy
+    # is carrying a shroud *at that instant*. A shroud exists only after
+    # `p9400` has been used, `p9400` is not one of this row's `_siblings`,
+    # and nothing on the board uses it before `_provoke` wounds the caster.
+    #
+    # **It was green until #907, and that is the whole reason it is here.**
+    # A module dict keyed on `id(c.world)` outlived its board, so a recycled
+    # address made `p9400` return before installing its spend-watch and left
+    # an unspent shroud lying about for this row to find. So its green
+    # verdicts were bought by a bug -- `fired` read 24, 13, 23, 10, 1 across
+    # ten calls in one process -- and fixing the bug made the row honestly
+    # silent rather than newly broken. Nothing about the row changed.
+    #
+    # Proven by posing the premise by hand, on the board the audit builds:
+    #
+    #     no shroud, body run   nothing laid        (what the board poses)
+    #     shroud laid on a foe  'f1788 damage+4'    the printed bonus
+    #
+    # So SILENT is a statement about the board. Posing it properly is board
+    # work -- a pass that uses a class at-will *before* provoking, which is
+    # #816's neighbourhood -- and not a fault in this row.
+    "f1788": ("pays only while an enemy carries a shroud and the caster is "
+              "bloodied in the same instant; the board never uses p9400 "
+              "before it wounds the caster. Proven to lay damage+4 when a "
+              "shroud is posed by hand"),
     # **Both of these were green for the wrong reason until #364**, which is
     # the only interesting thing about them. Each prints a condition on the
     # *ally* it heals or helps, and `candidates` used to put the caster in
