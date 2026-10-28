@@ -598,13 +598,6 @@ def f2466(c: Cast) -> None:
 # -- the rest, each gap named -----------------------------------------------
 
 
-#: Raised once per character, not once per fight. The sentence is about
-#: the character sheet and a trait is armed at the start of every
-#: encounter, so a bare `+= 1` in the body would climb all day.
-#: `feats/paladin.py` keeps the same latch for the same reason.
-_RAISED: dict[tuple[int, int], bool] = {}
-
-
 @power("f2396", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        dropped=("chargen.armor_proficiency()",))
@@ -622,11 +615,11 @@ def f2396(c: Cast) -> None:
 
     Dropped: armour proficiency is a chargen column and nothing writes
     to one from a row."""
+    # Raised once per character, not once per fight: a trait is armed at the
+    # start of every encounter, so a bare `+= 1` would climb all day.
     health = c.world.get(c.me, Health)
-    key = (id(c.world), c.me)
-    if health is None or _RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 

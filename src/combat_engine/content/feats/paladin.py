@@ -71,12 +71,6 @@ def _tier(level: int) -> int:
     return 1 if level < 11 else (2 if level < 21 else 3)
 
 
-#: Which characters have already had their surge pool raised. A trait is
-#: armed once per encounter and the raise is once per *character*, so
-#: without this a paladin gains a surge every fight of the day.
-_RAISED: dict[tuple[int, int], bool] = {}
-
-
 @power("f290", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1566",
@@ -101,11 +95,11 @@ def f1512(c: Cast) -> None:
     character sheet and a trait is armed at the start of every fight.
     """
     c.grant_row("f290", on=c.me, until=When.ENCOUNTER)
-    key = (id(c.world), c.me)
+    # A trait is armed once per encounter and the raise is once per
+    # *character*, so without the latch a paladin gains a surge every fight.
     health = c.world.get(c.me, Health)
-    if health is None or _RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 

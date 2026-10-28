@@ -349,11 +349,6 @@ def f127(c: Cast) -> None:
     c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER, when=_opportunity)
 
 
-#: Characters whose surge ceiling this file has already lifted, by world and
-#: creature. A trait arms at the start of every fight; the sentence is about
-#: the character sheet, so it must not climb once an encounter.
-_RAISED: dict[tuple[int, int], bool] = {}
-
 
 @power("f131", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
@@ -363,11 +358,9 @@ def f131(c: Cast) -> None:
     raised and the two surges handed over in the same breath -- `story`
     clamps `surges` to the sheet's number before the fight, so lifting the
     ceiling alone would give the character nothing to spend."""
-    key = (id(c.world), c.me)
     health = c.world.get(c.me, Health)
-    if health is None or _RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _RAISED[key] = True
     health.max_surges += 2
     c.regain_surge(2, on=c.me)
 

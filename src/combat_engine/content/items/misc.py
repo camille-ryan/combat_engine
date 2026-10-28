@@ -189,14 +189,6 @@ def _the_mount(c: Cast) -> int | None:
     return c.me if c.rider() is not None else None
 
 
-#: Characters whose surge pool a property has already raised, keyed
-#: `(world, eid)`. A trait arms at the start of every fight and "your number
-#: of healing surges increases by one" is a fact about the sheet, so the
-#: write has to happen once however often the row is armed.
-#: `feats/paladin.py` holds the same latch for the same reason.
-_SURGES_RAISED: dict[tuple[int, int], bool] = {}
-
-
 def _keep_better_initiative(c: Cast) -> int:
     """"Roll twice and use the higher result", for want of `keep=`.
 
@@ -1903,11 +1895,9 @@ def i3454x1(c: Cast) -> None:
     sheet, so an unlatched `+= 1` would raise the ceiling once per
     encounter. The extra surge is handed over as well, or raising the
     ceiling does nothing in the fight the property armed in."""
-    key = (id(c.world), c.me)
     health = c.world.get(c.me, Health)
-    if health is None or _SURGES_RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _SURGES_RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 

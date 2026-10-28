@@ -442,10 +442,19 @@ CATEGORIES: dict[str, dict] = {
                 "per_day_left", "restore_charge",
                 "restore_use", "spend_charge", "spend_per_day",
             ]),
+            # `c.once_per_board` is here beside `payment_window` because it
+            # answers the same kind of question -- how often may this pay --
+            # over the one window that is not a turn or a round. The near
+            # misses are worth naming: `c.latch`/`c.latched` are the
+            # *payout* pair and are filed under conditions, and `c.first`
+            # guards a line within a single use and is under "who and
+            # where". Three verbs with "once" in their meaning on three
+            # different shelves is exactly what this file exists to answer.
             ("actions and turns", [
                 "action_point", "action_points", "end_turn", "extra_action",
                 "extra_turn", "grant_action", "grant_action_point",
-                "initiative", "payment_window", "swap_initiative",
+                "initiative", "once_per_board", "payment_window",
+                "swap_initiative",
             ]),
             # `c.recall_weapon` sits with `draw` and `stow` rather than
             # under movement, which is the other plausible shelf: it is

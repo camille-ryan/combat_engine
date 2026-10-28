@@ -488,12 +488,6 @@ def f1127(c: Cast) -> None:
 # -- initiative, which is a component rather than a modifier ----------------
 
 
-#: Whose surge pool has already been raised, by world and creature. The
-#: sentence is about the character sheet and a trait re-arms every fight,
-#: so the ceiling has to move exactly once.
-_RAISED: dict[tuple[int, int], bool] = {}
-
-
 @power("f1031", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f1031(c: Cast) -> None:
@@ -508,11 +502,11 @@ def f1031(c: Cast) -> None:
     Latched per character, and the surge itself is handed over because a
     character arriving at the old ceiling is otherwise one short."""
     c.initiative(3, on=c.me)
-    key = (id(c.world), c.me)
+    # The sentence is about the character sheet and a trait re-arms every
+    # fight, so the ceiling has to move exactly once.
     health = c.world.get(c.me, Health)
-    if health is None or _RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 

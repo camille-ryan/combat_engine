@@ -1011,14 +1011,6 @@ def i643p1(c: Cast) -> None:
     c.vulnerable(c.level // 2, on=c.me, until=When.EONT)
 
 
-#: Characters whose surge ceiling `i648x1` has already lifted, keyed by
-#: `(world, entity)`. A property is armed at the start of every fight and the
-#: sentence is about the character sheet, so without the latch the pool would
-#: climb once an encounter. `feats/paladin.py` keeps the same flag for the
-#: same printed line.
-_SURGE_RAISED: dict[tuple[int, int], bool] = {}
-
-
 @power("i648x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def i648x1(c: Cast) -> None:
@@ -1027,11 +1019,9 @@ def i648x1(c: Cast) -> None:
     sentence. The idempotence this row named as the gap is the latch above
     and not a verb: `c.regain_surge` then hands the extra surge over, which
     is the half that lifting the ceiling alone does not do."""
-    key = (id(c.world), c.me)
     health = c.world.get(c.me, Health)
-    if health is None or _SURGE_RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _SURGE_RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 

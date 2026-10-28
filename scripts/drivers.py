@@ -36427,7 +36427,99 @@ def immune_to_a_keyword(out: Result) -> None:
              "and keyword immunity is not condition immunity -- still dazeable",
              f"{fearless[0]}")
 
+def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
+    """A once-per-board latch must not outlive the board it describes.
+
+    Ten content rows kept this in a **module-level dict keyed on
+    `id(c.world)`** -- "keyed on the world so a second encounter arms its
+    own watch", which is what the author intended and not what the code
+    did. CPython hands a collected object's address to the next allocation
+    and nothing ever removed an entry, so a latch survived its world and
+    the next `World` at that address read it as its own.
+
+    It was not a theory. Instrumenting one `audit.audit("f1788")` call:
+    **48 boards, 45 distinct `id(world)` values, and 3 boards landing on an
+    id already in the store.** The visible symptom was an audit verdict
+    that moved on every call in one process -- `fired` 24, 13, 23, 10, 1 --
+    because a stale latch suppressed `p9400`'s watch and left an unspent
+    shroud lying on the board for the next row to find. #907.
+
+    `p9400` is the row this is asserted through, for two reasons: it is
+    where the bug was found, and it is `action=FREE` rather than a trait,
+    so `Encounter.start` does **not** pre-arm it and a fresh board is
+    genuinely fresh. Every surge row that wants the same latch is
+    `action=NONE`, and `arm_traits` has already run those by the time a
+    rule can look -- see the standing note about `audit.board` arriving
+    with its work done.
+
+    The load-bearing assertion is the fourth: a second board starts with an
+    **empty** `world.latches`. That is deterministic, where waiting for an
+    address collision is not, and it is the one a module-level store of any
+    kind fails however it is keyed.
+    """
+    import audit as A
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import enemies
+
+    def watches(world: Any, me: int) -> list[str]:
+        """The watches `p9400` installs, by their own label."""
+        return sorted(str(e.label) for e in world.effects.of(me)
+                      if str(e.label).startswith("p9400"))
+
+    def arm(seed: int) -> tuple[Any, int, list[str], list[str], int]:
+        world, me, _start = A.board("p9400", seed)
+        world.turn = me
+        started_with = len(world.latches)
+        foe = sorted(enemies(world, me))[0]
+        use(world, me, "p9400", targets=[foe], spend=False)
+        once = watches(world, me)
+        use(world, me, "p9400", targets=[foe], spend=False)
+        return world, me, once, watches(world, me), started_with
+
+    first, _me, after_one, after_two, began = arm(1)
+
+    out.that(began == 0,
+             "a board arrives with no p9400 latch on it",
+             f"world.latches held {began} entries before the row ran")
+    out.that(len(after_one) == 2,
+             "one use arms p9400's two shroud watches",
+             f"labels={after_one}")
+    out.that(len(after_two) == 2,
+             "and a second use arms no further watch -- the latch held",
+             f"after one use {len(after_one)}, after two {len(after_two)}")
+    out.that(len(first.latches) == 1,
+             "the latch is recorded on the World, exactly once",
+             f"world.latches={sorted(str(k) for k in first.latches)}")
+    out.that(any("p9400" in str(k) for k in first.latches),
+             "and the key names the row, so two rows cannot collide in it",
+             f"world.latches={sorted(str(k) for k in first.latches)}")
+
+    # The whole of #907, and the half no timing or row count can see.
+    second, _me2, fresh_one, fresh_two, began_again = arm(2)
+    out.that(began_again == 0,
+             "a second board inherits none of the first board's latches",
+             f"board 1 left {len(first.latches)}, board 2 began with "
+             f"{began_again}")
+    out.that(len(fresh_one) == 2,
+             "so the new fight arms its own watches rather than being "
+             "suppressed by the old fight's latch",
+             f"labels={fresh_one}")
+    out.that(len(fresh_two) == 2,
+             "and latches them on the new board too",
+             f"after one use {len(fresh_one)}, after two {len(fresh_two)}")
+    out.that(first.latches == second.latches
+             and first.latches is not second.latches,
+             "two boards hold equal latch sets in separate objects, not one "
+             "shared store",
+             f"equal={first.latches == second.latches} "
+             f"same object={first.latches is second.latches}")
+
+
 DRIVERS = {
+    "board_latch": (
+        a_once_per_board_latch_dies_with_the_board,
+        "a once-per-board latch dies with the board it describes (#907)",
+    ),
     "reload": (
         a_fired_crossbow_is_empty_until_it_is_reloaded,
         "a load-minor weapon fires once, then must be reloaded (#675, #725)",

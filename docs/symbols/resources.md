@@ -76,6 +76,8 @@ Things a creature spends, and the budget it spends them from.
   - "The target gains 1 action point", outside the encounter's limit.
 - `c.initiative(self, amount: 'int', *, on: 'int | None' = None) -> 'int'`
   - "Each target gains a +10 bonus to his or her initiative check."
+- `c.once_per_board(self, *key: 'object') -> 'bool'`
+  - True the first time this row asks on this board, False ever after.
 - `c.payment_window(self, *, per_turn: 'bool' = False) -> 'object'`
   - The window a "once per round" or "once per turn" payout sits in.
 - `c.swap_initiative(self, other: 'int') -> 'bool'`

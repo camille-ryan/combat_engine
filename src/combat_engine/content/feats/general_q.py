@@ -248,14 +248,6 @@ def _wielding(what: str):  # noqa: ANN202
     return gate
 
 
-#: Raised once per fight per feat. A trait is armed at the start of every
-#: fight and the sentence is about the character sheet, so the pool must go
-#: up once however many fights it sees -- `feats/paladin.py` holds the same
-#: latch for the same reason.
-_SURGES_RAISED: dict[tuple[int, str, int], bool] = {}
-#: The same latch for the point `f3389` hands over.
-_POINT_GRANTED: dict[tuple[int, str, int], bool] = {}
-
 
 def _one_more_surge(c: Cast) -> None:
     """"Your number of healing surges increases by one."
@@ -265,11 +257,11 @@ def _one_more_surge(c: Cast) -> None:
     surge itself is handed over beside it: raising the ceiling alone leaves
     the character with no more to spend than it had.
     """
-    key = (id(c.world), c.ref, c.me)
+    # Raised once per board per feat, because a trait is armed at the start
+    # of every fight and the sentence is about the character sheet.
     health = c.world.get(c.me, Health)
-    if health is None or _SURGES_RAISED.get(key):
+    if health is None or not c.once_per_board(c.me):
         return
-    _SURGES_RAISED[key] = True
     health.max_surges += 1
     c.regain_surge(1, on=c.me)
 
@@ -2279,10 +2271,10 @@ def f3389(c: Cast) -> None:
     swapping it for the new verb would hand the character nothing at all.
     """
     c.grant_row("cf:psion-f1", on=c.me, until=When.ENCOUNTER)
-    key = (id(c.world), c.ref, c.me)
-    if _POINT_GRANTED.get(key):
+    # `"point"` in the key because the surge latch above is per `(ref, me)`
+    # too, and a row reaching both clauses must latch them separately.
+    if not c.once_per_board("point", c.me):
         return
-    _POINT_GRANTED[key] = True
     pool = c.world.get(c.me, PowerPoints) or c.world.add(c.me, PowerPoints())
     pool.points += 1
 

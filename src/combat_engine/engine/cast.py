@@ -547,6 +547,45 @@ class Cast:
     def last(self) -> bool:
         return self.index == max(0, len(self.targets) - 1)
 
+    def once_per_board(self, *key: object) -> bool:
+        """True the first time this row asks on this board, False ever after.
+
+        For the clause whose sentence is about the **character sheet** rather
+        than about a fight: "your number of healing surges increases by one"
+        is a trait, a trait arms at the start of every encounter, and an
+        unguarded `max_surges += 1` therefore climbs once per fight. Nine
+        rows print that line and all nine want this.
+
+        **Not `latch`/`latched`, which are a different question and already
+        exist.** Those spend a *payout* and are scoped to
+        `payment_window` -- `world.round`, or the initiative slot with
+        `per_turn=True` -- so they answer "has this creature already taken
+        its once-a-round helping". A board lasts many rounds, so a payout
+        latch cannot say this, and a row wanting the per-round question
+        should use those rather than passing the round in here.
+
+        Also distinct from `first`, which guards a once-per-power line
+        **within one use** by asking whether this is the first target. This
+        latches across uses, for the whole board.
+
+        `key` is whatever else the latch is per -- the creature, usually,
+        since a trait is about one character and the board holds several.
+        The row's own `ref` is always part of the key, so two rows can pass
+        the same `key` and never collide.
+
+        **Where it stores is the whole point of it.** Ten rows did this with
+        a module-level dict keyed on `id(c.world)`, which is unsound: see
+        `World.latches`, where the measurement is. A row must not grow its
+        own store for this -- `grep 'id(c.world)'` is how the ten were found
+        and the next one would be found the same way.
+        """
+        held = self.world.latches
+        full = (self.ref, *key)
+        if full in held:
+            return False
+        held.add(full)
+        return True
+
     @property
     def here(self) -> Square:
         pos = self.world.get(self.me, Position)

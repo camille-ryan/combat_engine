@@ -84,6 +84,31 @@ class World:
         #:
         #: Read through the attack context, never directly from a row.
         self.provocation: Any = None
+        #: What each row has already done once on this board. Read and
+        #: written only through `Cast.latch`.
+        #:
+        #: **It is here because the obvious home is unsound.** Ten content
+        #: rows kept this in a module-level dict keyed on `id(world)` --
+        #: "keyed on the world so a second encounter arms its own watch",
+        #: as `powers/assassin/level_0.py` put it. CPython hands a
+        #: collected object's address to the next one allocated, and
+        #: nothing ever removed an entry, so a latch outlived its board and
+        #: the next `World` at that address read it as its own. Measured:
+        #: 48 audit boards produced **45 distinct ids**, and 3 of them
+        #: landed on an id already in the store.
+        #:
+        #: A set on the world cannot go stale, because it dies with the
+        #: board it describes -- the same argument `items/weapon.py` makes
+        #: for its `_range_pushed` latch, and the same one `#262` reached
+        #: for `policy.threat`, which needs a `clear()` called by hand
+        #: precisely because its caches are not here.
+        #:
+        #: A **balanced** guard -- added and discarded in a `finally`, as
+        #: `falling._FALLING` and `monsters/level_13/misc_sa._ECHOING` are
+        #: -- is sound on `id(world)` and deliberately left alone: its
+        #: entry exists only while that world is live, and a live object's
+        #: address is not reused.
+        self.latches: set[Any] = set()
         self._stores: dict[type, dict[int, Any]] = {}
         self._alive: list[int] = []
         self._next = 0
