@@ -1409,6 +1409,34 @@ class Power:
     #: the corpus rate of 0.86% in Dragon and Dungeon magazine imports, so the
     #: defect is concentrated in the periodicals rather than scattered. #360.
     defect: str = ""
+    #: **What the missing thing has to do**, in one line of prose, beside the
+    #: marker that names it.
+    #:
+    #: A marker stores a *name* and nothing else, deliberately -- prose is
+    #: refused at import, which is what makes `blocked.py --group` rankable
+    #: and `--refs` able to regenerate a brief. The cost is that ~1,500
+    #: blocked rows carry a symbol and no description, so the tail cannot be
+    #: analysed mechanically: clustering 949 symbols by name captured 471 of
+    #: 1,185 verb-wants and no more. #549.
+    #:
+    #: **The two misreadings that prove names are not enough**, both caught
+    #: in one hour: `c.race_option()` clustered as one symbol and was *six*
+    #: unrelated gaps; `c.manifestation()` clustered as an engine facility
+    #: and was an ETL extraction gap (#548). Both were plainly stated in the
+    #: rows' own docstrings, so the information existed and nothing could
+    #: read it.
+    #:
+    #: The symbol says what to **call** it; this says what it has to **do**.
+    #: Same field `docs/blocked.json` already carries for its 50 entries, so
+    #: the schema is settled rather than invented.
+    #:
+    #: **Filled going forward, not backfilled.** Camille's call on #549: a
+    #: backfill of ~1,500 rows is a full fan-out wave and does not earn it --
+    #: the two dense wins were identifiable from names alone, and building
+    #: them reshapes the tail anyway. Required whenever a marker is created
+    #: or re-pointed; `lint.py` refuses one set on a row with no marker, so
+    #: the field cannot drift into meaning something else.
+    wants: str = ""
     #: **This row's clause is written into another row's body**, naming that
     #: row. The convention is #550: a feat that names one power has its
     #: clause written into that power, gated on `c.feat("<this ref>")`.
@@ -1661,8 +1689,16 @@ class Power:
         if kind == "ranged":
             # Unless it is thrown by hand, in which case a melee weapon is
             # exactly what it wants.
+            # **And there has to be one left**, which is the same half the
+            # load gate below carries and for the same reason: a thrown
+            # weapon is spent when it is thrown, so the sixth throw of five
+            # has nothing in the hand to throw. `ready_to_throw` answers
+            # True for anything untracked, so this only ever refuses a
+            # creature `chargen` stocked and that has thrown them all. #520.
             if self.thrown_by_hand:
-                return bool(gear.melee)
+                from .query import ready_to_throw
+
+                return bool(gear.melee) and ready_to_throw(world, actor)
             if gear.ranged is None:
                 return False
             # **And it has to be loaded**, which is the half that makes the
@@ -1842,6 +1878,7 @@ def power(
     obsolete: str = "",
     declined: str = "",
     defect: str = "",
+    wants: str = "",
     implemented_in: Iterable[str] = (),
     proficiency: Iterable[str] = (),
     swap: Swap | None = None,
@@ -1894,6 +1931,21 @@ def power(
         raise ValueError(
             f"{ref}: defect cannot be combined with todo, dropped, obsolete, declined "
             f"or out_of_combat -- it means no symbol can finish this row"
+        )
+    if wants and not (todo or dropped):
+        # **`wants=` describes a *gap*, so it needs a gap to describe.** The
+        # field is a sentence beside the symbol -- what the missing thing has
+        # to do -- and the symbol lives in `todo=`/`dropped=`. On a finished
+        # row there is nothing outstanding for it to be about, and a stray
+        # one would be read by `blocked.py --group` as demand that does not
+        # exist.
+        #
+        # Refused at import rather than linted, which is where every other
+        # marker rule here lives and for the same reason: an invalid header
+        # must not reach the registry at all. #549.
+        raise ValueError(
+            f"{ref}: wants= describes what a marker's symbol has to do, so it "
+            f"needs todo= or dropped= to describe -- this row has neither"
         )
     implemented_in = tuple(implemented_in)
     if implemented_in:
@@ -2016,6 +2068,7 @@ def power(
             obsolete=obsolete,
             declined=declined,
             defect=defect,
+            wants=wants,
             implemented_in=implemented_in,
             proficiency=tuple(proficiency),
             swap=swap,

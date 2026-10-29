@@ -89,6 +89,17 @@ class _Decline:
 #: feats grant it and `Cast._manoeuvrable` is the one reader.
 _ANY_SIZE = "manoeuvre:any-size"
 
+#: Prefix for a `Powers.pre_empts` key that names a **weapon** rather than a
+#: row, so a clause can apply to every attack made with it. The weapon's ref
+#: follows, never its slug -- a slug is its printed name.
+#:
+#: A prefixed key rather than a second table, because all three readers of
+#: `pre_empts` already walk it by key, and a parallel store would have to be
+#: suspended, resumed and menu-listed in step with the first. The prefix
+#: cannot collide with a row ref: no ref contains a colon except `cf:` and
+#: `rt:`, and neither spells this word. #928.
+WEAPON_CLAUSE = "weapon:"
+
 #: The ref a bull rush is keyed on -- what `perform` builds its `Cast` with,
 #: what `c.extend_move` lengthens and what `c.pre_empt` replaces a clause of.
 #: A manoeuvre is an action kind and not a row, so it has no declared ref and
@@ -988,8 +999,17 @@ class Cast:
 
         A creature with no stat block -- a character, a companion, a
         summon -- is never a minion, which is the printed rule.
+
+        **Delegates to `query.is_minion`.** `resolve.deal_damage` needs the
+        same answer with no `Cast` in hand (the miss waiver, #950), and one
+        reader is what keeps the two from drifting.
         """
-        return bool(self._stat_block(self._who(on)).get("minion"))
+        who = self._who(on)
+        if who is None:
+            return False
+        from .query import is_minion
+
+        return is_minion(self.world, who)
 
     def set_origin(
         self,
@@ -3206,13 +3226,24 @@ class Cast:
         then called for -- attack roll, damage and all. Refused where nothing
         is running underneath, because there is then no power to be a target
         of, and refused for a creature already in the list.
+
+        **It announces `TargetAdded`.** It used to announce nothing and
+        return a bool, so a row whose entire printed Effect is this one line
+        emitted no event the audit counts and reported silent while being
+        correct. The consequence the append produces is a hit credited to
+        the *outer* power, so there is nothing in the log that points back
+        here. Same shape as `c.restore_use` before `UseRestored`.
         """
         from .dsl import running_below
+        from .events import TargetAdded
 
         outer = running_below(self)
         if outer is None or outer is self or who in outer.targets:
             return False
         outer.targets.append(who)
+        self.world.bus.emit(
+            TargetAdded(who=who, power=getattr(outer, "ref", ""), by=self.ref)
+        )
         return True
 
     def drop_target(self, who: int) -> bool:
@@ -6292,6 +6323,7 @@ class Cast:
         burn: tuple[int, DamageType] | None = None,
         solid: bool = False,
         defences: int = 0,
+        defences_of: int | None = None,
     ) -> int:
         """Put a conjuration on the board and return its entity id.
 
@@ -6355,6 +6387,7 @@ class Cast:
             return 0
         name = label or self.ref
         from .components import Defenses, Health, Side
+        from .query import defence as _defence_of
         from .query import team as _side_of
         from .types import DEFENCES, Team
 
@@ -6364,10 +6397,26 @@ class Cast:
             Movement(speed=speed),
             Conjuration(ref=name, by=self.me),
         ]
-        if defences:
+        # **`defences_of` copies a creature's four, where `defences` is one
+        # number for all of them.** A card reading "its defences are the
+        # same as yours" cannot use the flat form: the four differ, and
+        # `m1659a5` is the row that wanted this.
+        #
+        # **The *effective* totals are copied, not the stored ones**, and
+        # that is the opposite of the obvious worry. `query.defence` is
+        # "the one place a defence gains" its level -- so copying stored
+        # values would hand over numbers with no level in them. The
+        # conjuration carries `scale="none"` precisely so nothing is added
+        # afterwards, which makes the effective total the right thing to
+        # store and the two equal. #846.
+        if defences_of is not None:
+            borrowed = {d: _defence_of(self.world, defences_of, d)
+                        for d in DEFENCES}
+        else:
+            borrowed = dict.fromkeys(DEFENCES, defences)
+        if defences or defences_of is not None:
             parts += [
-                Defenses(values=dict.fromkeys(DEFENCES, defences),
-                         scale="none"),
+                Defenses(values=borrowed, scale="none"),
                 # **`Team.NEUTRAL` and not `Team.ALLY`, which does not
                 # exist.** Four sites spelled `or Team.ALLY` -- three of
                 # them for years -- and `query.team` is `Team | None`, so
@@ -7201,6 +7250,7 @@ class Cast:
         by: int | None = None,
         lapses: bool = False,
         or_adjacent: bool = False,
+        keeps: bool = False,
     ) -> Effect | None:
         """Mark the target -- for you, or for somebody else.
 
@@ -7253,18 +7303,63 @@ class Cast:
         turn unless the row also swung afterwards, which is the opposite of
         what every one of these cards means: `p16374` marks **on a hit**,
         so the attack is already over when the mark arrives.
+
+        **`keeps=True` is the printed exception**, and it is the opposite
+        end of `lapses` rather than its absence: *"the target remains marked
+        even if the mark would normally end"*. `i2762p1` is the one card in
+        the tree that prints it.
+
+        Today that row is approximately right **by omission** -- leaving
+        `lapses` off gives a mark that never ends early, which is what the
+        card wants -- and the difference matters the day anything makes
+        lapsing the default. So this is recorded on the effect and read
+        inside the watcher, not merely a decision not to arm one: a lapse
+        armed by some *other* row or by a later default still has to honour
+        it. An attribute rather than a field, on `eff.by`'s precedent.
+
+        It refuses `lapses=True` beside it, because "ends early if you look
+        away" and "never ends early" cannot both be the card. `c.bonus`
+        refusing an unrecognised key (#544) is the house precedent for
+        raising on a contradiction rather than silently preferring one.
+
+        It is **behind #859** and was filed before it: `p805` armed no lapse
+        at all, so a `keeps=` built first would have suppressed a lapse
+        nobody had armed and read as working. #834.
         """
+        if keeps and lapses:
+            raise ValueError(
+                "c.mark(lapses=True, keeps=True): a mark cannot both end "
+                "early when you look away and never end early -- pass the "
+                "one the card prints"
+            )
         who = self._who(on)
         if who is None:
             return None
         marker = self.me if by is None else by
         if marker == who:
             return None          # nothing is marked by itself
+        # **`keeps=` holds the mark already there rather than laying a
+        # second one**, which is what its card says and is also the only
+        # safe reading. `p805` arms its lapse in a closure over the effect
+        # it laid, so re-marking would leave that watcher holding a
+        # superseded effect and able to end the relation the new one
+        # established -- a mark that silently drops a round later. Adopting
+        # the standing effect keeps one effect, one watcher, one relation.
+        if keeps:
+            standing = self.world.effects.mark_by(who, marker)
+            if standing is not None:
+                from .events import MarkHeld
+
+                standing.keeps_mark = True
+                self.world.bus.emit(MarkHeld(who=who, by=self.ref))
+                return standing
         held = self.world.effects.apply(
             who, marker, until, label=f"{self.ref} mark",
             relations=[(Relation.MARKED_BY, marker, who)],
             by=self.ref,
         )
+        if held is not None and keeps:
+            held.keeps_mark = True
         if held is not None and lapses:
             self._mark_lapses(held, marker, who, or_adjacent=or_adjacent)
         return held
@@ -7289,6 +7384,12 @@ class Cast:
 
         def at_the_end(ev: TurnEnd) -> None:
             if ev.actor != marker:
+                return
+            # **The printed exception wins over the printed rule.** Read
+            # here rather than at the arming site so that a lapse armed by
+            # another row, or by a later default, still honours a mark whose
+            # own card says it is held. #834.
+            if getattr(held, "keeps_mark", False):
                 return
             if (ev.actor, getattr(ev, "round", -1)) == laid_on:
                 return
@@ -10130,6 +10231,7 @@ class Cast:
         forced: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
+        weapon: str = "",
     ) -> Effect | None:
         """"When you use <row>, you can X **instead of** Y."
 
@@ -10153,9 +10255,38 @@ class Cast:
         fires.
 
         Yours by default, like the rest of this family.
-        """
-        from .components import Powers
 
+        **`weapon=` keys the registration on a weapon instead of a row**,
+        which is the "class of powers" case: a card reading *"when you make
+        a weapon attack with your <weapon> and hit, you can forgo the
+        damage to ..."* names no row at all. The set it means is every
+        weapon power the holder knows plus both basic attacks, filtered by
+        what is in hand, so there is no ref to key on and writing the clause
+        into each reachable power would duplicate it unboundedly.
+
+        Takes a weapon **ref**, never a slug: a slug is the weapon's printed
+        name and has no business in a row. `f959` is the one card in the
+        tree that prints this shape. #928.
+
+        It refuses a `ref` beside it -- a registration is keyed on one thing
+        or the other, and accepting both would silently honour one.
+
+        **The ordering caveat, stated because the variant mechanism is an
+        index.** `instead_of` settles on `c.variant`, a 1-based position
+        into the registrations that apply to the running row, and a
+        weapon-keyed one applies only while that weapon is held. So the menu
+        and the body must see the same hand -- true within one use, since
+        `dsl.use` settles the variant before the body runs -- and a row that
+        stowed a weapon mid-body would read a different list. No row does;
+        if one ever does, this is the sentence to come back to.
+        """
+        from .components import Gear, Powers
+
+        if weapon and ref:
+            raise ValueError(
+                f"c.pre_empt(ref={ref!r}, weapon={weapon!r}): keyed on a row "
+                "or on a weapon, not both"
+            )
         # `_who` would resolve to the *target*, and these are armed by a
         # feat on its own character with nothing targeted -- the
         # `as_basic` convention rather than the `forbid` one.
@@ -10163,8 +10294,10 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return None
+        if weapon and self.world.get(who, Gear) is None:
+            return None
         entry = (clause, self.ref)
-        key = (ref, what)
+        key = (WEAPON_CLAUSE + weapon if weapon else ref, what)
         # The effect first, as `forbid` and `rolls_with` do: registering
         # before it exists left a clause substituted with nothing alive to
         # ever put it back.
@@ -10211,13 +10344,42 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return []
-        want = ref or self.ref
+        # An explicit `ref` is a question about that row and nothing else.
+        # With none, the question is "what can speak for the row running
+        # now", which includes a clause keyed on a weapon in hand. #928.
+        wanted = [ref] if ref else self._clause_keys()
         return [
             source
+            for key in wanted
             for (on_ref, _what), entries in sorted(known.pre_empts.items())
-            if on_ref == want
+            if on_ref == key
             for _clause, source in entries
         ]
+
+    def _clause_keys(self) -> list[str]:
+        """The `pre_empts` keys that can speak for the row running now.
+
+        Its own ref first, then one per weapon **in hand** -- so a clause a
+        feat keyed on a weapon reaches every attack made with it without
+        being written into any of them. `#928`.
+
+        Own ref first and weapons in `Gear.held` order, because `instead_of`
+        turns this into a 1-based `c.variant` index and the menu has to
+        agree with the body about what position means what. Stowing a weapon
+        between the two would renumber the list; no row does that, and
+        `pre_empt`'s docstring is where that caveat lives.
+
+        Costs nothing when nobody registered a weapon clause, which is the
+        normal case: these are keys to look up, and a key absent from the
+        table matches nothing.
+        """
+        from .components import Gear
+
+        keys = [self.ref]
+        gear = self.world.get(self.me, Gear)
+        if gear is not None:
+            keys += [WEAPON_CLAUSE + w.ref for w in gear.held]
+        return keys
 
     def instead_of(
         self, what: str, default: Callable[[], Any], *, on: int | None = None
@@ -10271,10 +10433,12 @@ class Cast:
         known = self.world.get(self.me, Powers)
         if known is None:
             return default()
+        keys = self._clause_keys()
         flat = [
             (on_what, clause)
+            for key in keys
             for (on_ref, on_what), entries in sorted(known.pre_empts.items())
-            if on_ref == self.ref
+            if on_ref == key
             for clause, _source in entries
         ]
         if not 0 < self.variant <= len(flat):
@@ -10339,7 +10503,11 @@ class Cast:
         from .components import Powers
 
         known = self.world.get(self.me, Powers)
-        waiting = list(known.pre_empts.get((self.ref, what), ())) if known else []
+        waiting = [
+            entry
+            for key in (self._clause_keys() if known else [])
+            for entry in known.pre_empts.get((key, what), ())
+        ]
         for clause, source in waiting:
             # Offered, never imposed: every card registering one of these
             # says "you can", so a declined offer leaves `default` running.
@@ -12281,6 +12449,8 @@ class Cast:
         no_light: bool = False,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
+        hindering: str = "",
+        hindering_type: DamageType = DamageType.UNTYPED,
     ) -> int:
         """`obscured=Light.DIM` is "lightly obscured", `Light.DARK` is
         "heavily obscured" or a zone of darkness.
@@ -12319,12 +12489,52 @@ class Cast:
         reads exactly like a correct zone. `Zones.obscuring_for` is the
         reader. #424.
         """
-        return self.world.zones.create(
+        made = self.world.zones.create(
             self.me, label or self.ref, frozenset(area), until,
             difficult=difficult, blocks_sight=blocks_sight,
             obscured=obscured, obscured_for=obscured_for,
             no_light=no_light, exempt=exempt, sustain=sustain,
+            hindering=hindering, hindering_type=hindering_type.value,
         )
+        if hindering:
+            self._hinders(made, hindering, hindering_type)
+        return made
+
+    def _hinders(self, zone: int, dice: str, dtype: DamageType) -> None:
+        """Burn whoever is in `zone`, on arriving and again at a turn's end.
+
+        **Both moments, because the printed line names both** -- a creature
+        that walks in takes it, and one that stays takes it again when its
+        turn ends. Watching only the entry lets a creature end its turn
+        standing in fire for nothing; watching only the turn end lets one
+        walk through the whole region untouched.
+
+        Entry is `ZoneEntered`, which `Zones` already emits and which
+        `c.zone_condition` reads for the same reason. The turn's end is read
+        off the zone's own occupant list rather than by tracking arrivals,
+        so a creature pushed in by somebody else is burned too -- the
+        printed line is about being there, not about choosing to be.
+
+        Credited to the row that laid the zone, not to the zone: `by=` is
+        what lets a trigger reading "when you deal fire damage" find the
+        card responsible. #952.
+        """
+        from .events import TurnEnd, ZoneEntered
+
+        def burn(who: int) -> None:
+            self.flat(self.roll(dice), dtype=dtype, on=who)
+
+        def on_enter(ev: ZoneEntered) -> None:
+            if getattr(ev, "zone", None) == zone and alive(self.world, ev.actor):
+                burn(ev.actor)
+
+        def at_turn_end(ev: TurnEnd) -> None:
+            standing = self.world.zones.inside.get(zone) or set()
+            if ev.actor in standing and alive(self.world, ev.actor):
+                burn(ev.actor)
+
+        self.world.bus.on(ZoneEntered, on_enter)
+        self.world.bus.on(TurnEnd, at_turn_end)
 
     def aura(
         self,

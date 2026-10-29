@@ -53,6 +53,25 @@ class Zone:
     #: False, True, or what sort of going it is -- see `Grid.difficult`.
     difficult: bool | str = False
     blocks_sight: bool = False
+    #: Damage a creature takes for being in these squares -- a dice
+    #: expression, or `""` for a zone that does not hurt anybody.
+    #:
+    #: **The book's sixth terrain category, which had no spelling.** Four
+    #: categories were modelled (difficult, cover, blocking, obscured) and
+    #: this one was not, so a region that damages whoever enters it could
+    #: only be written as a watcher inside one row's body, one row at a
+    #: time. The converted adventure's opening fight is built on exactly
+    #: this -- spreading fire that burns whoever steps into it -- and the
+    #: skill challenge's whole outcome is adding or removing it. #952.
+    #:
+    #: Line of sight is deliberately untouched: this category hurts and
+    #: hinders, it does not blind, which is what separates it from
+    #: `blocks_sight` and from `obscured`.
+    hindering: str = ""
+    #: What type the hindering damage is, by `DamageType` value. A string
+    #: rather than the enum for the reason `difficult` is one: this module
+    #: holds geometry and should not import the rules vocabulary.
+    hindering_type: str = ""
     #: How well lit the zone's squares are, when it darkens them -- a
     #: `Light` value, or `""` for a zone that does not touch the light.
     #:
@@ -202,6 +221,8 @@ class Zones:
         no_light: bool = False,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
+        hindering: str = "",
+        hindering_type: str = "",
     ) -> int:
         if obscured:
             # **Checked, because the alternative is silent.** `difficult=`
@@ -246,6 +267,8 @@ class Zones:
             obscured_for=obscured_for,
             no_light=no_light,
             exempt=frozenset(exempt or ()),
+            hindering=hindering,
+            hindering_type=hindering_type,
         )
         return self._spawn(zone, when, sustain)
 

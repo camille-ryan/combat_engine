@@ -355,9 +355,56 @@ def scrub(
             for i in range(len(words))
             for j in range(i + 2, len(words) + 1)
         }
+        # **And the compound exactly as the page hyphenates it.** The runs
+        # above join with a space, and the hyphen is not a word character,
+        # so a hyphenated name came apart into halves that each matched and
+        # each substituted -- leaving `<ref>-<ref>` where the page printed
+        # one compound. 72 occurrences across 55 rows and 23 creatures, every
+        # one of them a hyphenated name. #541.
+        #
+        # **Added rather than substituted for the halves**, which is the
+        # whole care here. Putting the hyphen in the character class above
+        # would make the compound the *only* token, and this file's own
+        # notes record that the expensive mistake in this function is a form
+        # the card uses that the index does not hold -- `m1526`'s name
+        # survived into its brief that way, and the plural case was 59
+        # briefs. A stat block does refer to itself by a fragment, so the
+        # halves must keep matching; longest-first in the pass below is what
+        # makes the compound win when the page printed it whole.
+        # The words again, with each hyphenated compound kept whole, and the
+        # runs over *those*. The bare compound alone is not enough: the
+        # page's short form is `<compound> <Word>`, and with only the
+        # compound as a token that fired and then `<Word>` fired after it, for
+        # `<ref> <ref>` instead of `<ref>-<ref>` -- the same doubling one
+        # space along. Runs over compound-preserving words give the printed
+        # short form itself, which is what the card actually says.
+        joined = re.findall(r"[^\W\d_]+(?:-[^\W\d_]+)*", name)
+        runs |= {w for w in joined if "-" in w}
+        runs |= {
+            " ".join(joined[i:j])
+            for i in range(len(joined))
+            for j in range(i + 2, len(joined) + 1)
+            if any("-" in w for w in joined[i:j])
+        }
         for token in {name, *runs, *words}:
             low = token.lower()
             long_enough = len(token) > 2 or (len(token) == 2 and low not in STOPWORDS)
+            # **A run of nothing but function words is not a name**, and the
+            # length floor above cannot see that: `of the` is six characters,
+            # so it passed, while the `STOPWORDS` test only guards a
+            # *two-letter* token. A creature called "<Word> of the <Word>"
+            # therefore substituted its own ref for the card's own "of the":
+            #
+            #     until the end of the <creature>'s next turn
+            #     until the end <ref> <ref>'s next turn
+            #
+            # which loses the preposition and the article -- meaning, not
+            # cosmetics. `m1114` and `m1792` are the worked examples, and the
+            # note further up this function records that **119 monster names
+            # contain the word `of`**, which is the blast radius of the floor
+            # being length alone. #541.
+            if all(w in STOPWORDS for w in low.split()):
+                continue
             if not long_enough or low in kept:
                 continue
             # **The lone words are still substituted, and #379's second
@@ -393,7 +440,23 @@ def scrub(
     # have to be flexible or the cheap test rejects it before the regex
     # ever runs.
     here = _straight(out.lower())
-    for name in sorted(usable, key=len, reverse=True):
+    # **A hyphenated token first, then longest.** Longest alone is not
+    # enough, and the case that proves it is why #541's fault 1 had a
+    # residual -- `m1819`, whose name is `<Personal>, <A>-<b> <C>`. The
+    # space-joined run `<b> <C>` is 16 characters and the printed compound
+    # `<A>-<b>` is 10 -- and the hyphen is a word boundary, so the run
+    # matches straight across it in the card's own text. It fires first,
+    # leaves the compound's first half orphaned, and the lone word then
+    # takes that:
+    #
+    #     \bkai\ Weaponmaster\b -> m1819
+    #     \bShadar\b            -> m1819      = "m1819-m1819"
+    #
+    # A token holding a hyphen is the page's own spelling of a compound and
+    # is never a coincidence, so it is tried before any run that could break
+    # it. Found by logging the substitutions rather than by reading: three
+    # readings of this loop all concluded that longest-first was sufficient.
+    for name in sorted(usable, key=lambda n: ("-" in n, len(n)), reverse=True):
         if _straight(name.lower()) not in here:
             continue
         out = re.sub(_apostrophes(name), usable[name], out, flags=re.I)

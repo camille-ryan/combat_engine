@@ -1240,7 +1240,8 @@ def _map_state() -> list[str]:
     when = f"{age:.0f}h ago" if age >= 1 else "under an hour ago"
     sha = at[:9] or "an unknown commit"
     corpus = got.get("corpus", 0)
-    tail = " (a SAMPLE, so it narrows nothing)" if got.get("sampled") else ""
+    tail = (" (a SAMPLE -- a deliberate slice was recorded, so it narrows"
+            " nothing)" if got.get("sampled") else "")
     out = [f"impact map: {corpus} rows recorded {when} at {sha}{how}{tail}"]
     # **And the top-ups since, which are the other half of "how fresh".**
     # They are what keeps a new verb out of the fail-closed branch, so a
@@ -1250,6 +1251,28 @@ def _map_state() -> list[str]:
         out.append(f"            plus {len(tops)} top-up(s) since, "
                    f"{sum(len(t.get('rows', ())) for t in tops)} row(s)"
                    f" re-measured")
+    # **The rows the map has never measured, which is the actionable fact
+    # this line did not carry.** `sampled` used to absorb this case and
+    # report "a SAMPLE, so it narrows nothing" -- which was true of the
+    # consequence and wrong about the cause, because it names a decision
+    # nobody had taken. A session read it as a sampling policy and paid a
+    # 1,321s wide audit rather than a 2.8s top-up. The gap is narrowed
+    # around now rather than fatal, so what this line owes the reader is
+    # its size and that it is covered. #925.
+    gap: list[str] = []
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import impact as impact_mod
+        held_seen = set(got.get("seen") or ())
+        if held_seen:
+            gap = sorted(set(impact_mod.declared_refs()) - held_seen)
+    except Exception:
+        gap = []
+    if gap:
+        out.append(f"            {len(gap)} row(s) declared since the"
+                   f" recording are unmeasured, so every narrowed run audits"
+                   f" them unconditionally; a clean commit closes the gap"
+                   f" itself (`impact.py --record --refs`, seconds)")
     # **Whether the engine has moved since**, which is the one fact that
     # decides whether to re-record and the one this line did not carry. Age
     # alone is the wrong question: a week-old map over an untouched engine
@@ -1600,10 +1623,27 @@ def _top_up_map(red: bool) -> list[str]:
     sys.path.insert(0, str(ROOT / "scripts"))
     try:
         import audit as audit_mod
-        rows = audit_mod._changed(widen=False)
+        rows = set(audit_mod._changed(widen=False))
     except Exception as exc:
         return [f"map top-up skipped: {type(exc).__name__} asking which rows"
                 f" changed"]
+    # **The map's own gap, as well as this commit's rows -- #925.** Topping
+    # up from the diff alone could never heal a row declared by an *earlier*
+    # commit, because such a row is in no later diff: two racial traits sat
+    # unmeasured for 36 hours and disabled the selector for the whole corpus
+    # the entire time, and no number of later top-ups would have reached
+    # them. The map knows which rows it has never seen, so it heals from
+    # that too, and the gap is included in the `TOP_UP_CAP` budget below
+    # rather than exempt from it.
+    gap: set[str] = set()
+    try:
+        import impact as impact_mod
+        held_seen = set(held.get("seen") or ())
+        if held_seen:
+            gap = set(impact_mod.declared_refs()) - held_seen - rows
+    except Exception:
+        gap = set()     # the diff's rows alone are still worth recording
+    rows = sorted(rows | gap)
     if not rows:
         return []
     if len(rows) > TOP_UP_CAP:
@@ -1629,7 +1669,13 @@ def _top_up_map(red: bool) -> list[str]:
                     if ln.startswith("#")), "no reason given")
         return [f"map top-up FAILED in {took:.0f}s, so the map still does not"
                 f" hold these {len(rows)} row(s): {why.lstrip('# ')}"]
-    return [f"map topped up with {len(rows)} changed row(s) in {took:.0f}s,"
+    # **The two halves are counted apart**, because they answer different
+    # questions: the changed rows keep a new verb out of the fail-closed
+    # branch, and the gap rows are what stop the whole map reporting itself
+    # unusable. Calling both "changed" hid the second one entirely. #925.
+    what = (f"{len(rows) - len(gap)} changed row(s) and {len(gap)} the map had"
+            f" never measured" if gap else f"{len(rows)} changed row(s)")
+    return [f"map topped up with {what} in {took:.0f}s,"
             f" so an edit to what they call narrows next run"]
 
 

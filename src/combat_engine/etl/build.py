@@ -606,7 +606,14 @@ CREATE INDEX terrain_kind ON terrain(kind);
 -- reading of a block that prints no DC. Not 0, which would mean everybody
 -- notices it.
 CREATE TABLE trap (
-  ref TEXT PRIMARY KEY, id INTEGER, level INTEGER, role TEXT, kind TEXT,
+  -- **`rank` and `role` are two different questions and this table held one
+  -- column for both, under the wrong name.** The compendium's own `Trap.Role`
+  -- column carries standard/elite/solo/minion -- which is `monster.rank`'s
+  -- vocabulary, not `monster.role`'s -- so a reader asking the two tables the
+  -- same question got two kinds of answer. `monster` keeps them apart in two
+  -- columns and now so does this. #957.
+  ref TEXT PRIMARY KEY, id INTEGER, level INTEGER, rank TEXT, role TEXT,
+  kind TEXT,
   perception_dc INTEGER, attack INTEGER, defence TEXT, damage TEXT, spec TEXT,
   -- Which of the two layouts the page used. `monster` has carried this since
   -- it was written and the component rule says to record it for every dialect
@@ -2556,12 +2563,16 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
         dialect = "old" if 'class="flavor"' in (raw or "") else "new"
         prose = classed_prose(page, "flavor") if dialect == "old" else ""
         out.execute(
-            "INSERT OR REPLACE INTO trap VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO trap VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 ref,
                 tid,
                 int(m.group()) if (m := re.search(r'\d+', str(level or ''))) else None,
+                # The compendium's `Role` column, which is the **rank**.
                 (role or "").strip().lower(),
+                # And the role the book actually defines, off the lead line.
+                (found.group(1).lower()
+                 if (found := _TRAP_ROLE.search(spec[:90])) else None),
                 (kind or "").strip().lower(),
                 int(dc.group(1)) if dc else None,
                 int(hit.group(1).replace(" ", "")) if hit else None,
@@ -2576,6 +2587,33 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
         names[ref] = {"name": name, "rules_text": spec, "description": prose}
         written += 1
     return written
+
+
+#: The printed role, off the block's own lead line rather than out of its prose.
+#:
+#: **Anchored, not searched.** Two of the four role words are ordinary English
+#: and one of them is also a *monster* role, so a free search over a spec would
+#: pick up prose. Measured before this was written: every one of the 435 specs
+#: naming a role puts it in the **first 40 characters**, directly after the
+#: lead -- `Trap Level <n>`, with an optional rank word between. So the
+#: position is what identifies it and the word alone is not.
+#:
+#: The lead has four shapes and all four are real: a numeric level, the word
+#: `variable`, a `(Level)` placeholder, and an `Object` lead instead of
+#: `Trap`/`Hazard`. Narrowing to `Trap|Hazard Level <digits>` reaches 430 of
+#: 435 and the five it misses are each one of those variants, so they are
+#: admitted rather than left out.
+#:
+#: The rank word it steps over is the cross-check that settled #957: read out
+#: and compared against the column that was holding the rank, it agreed on
+#: **430 of 430** with no disagreement -- which is what proves `Trap.Role` was
+#: being copied faithfully into the wrong column rather than misparsed.
+_TRAP_ROLE = re.compile(
+    r"\b(?:Trap|Hazard|Object)\s+Level\s*(?:\d+|variable|\(level\))?\s*"
+    r"(?:standard|elite|solo|minion)?\s*"
+    r"\b(blaster|lurker|obstacle|warder)\b",
+    re.I,
+)
 
 
 #: `PlainTxt` is already line-structured as `<label> : <text>`, which is why

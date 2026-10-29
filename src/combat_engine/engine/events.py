@@ -1324,6 +1324,56 @@ class UseSpent(Event):
 
 
 @dataclass
+class MarkHeld(Event):
+    """A standing mark was held against the rule that would have dropped it.
+
+    `c.mark(keeps=True)` on a creature already marked by the same marker
+    **adopts** that effect rather than laying a second one, for the reason
+    its docstring gives. Adopting is a change to an effect that already
+    exists, so there is no `EffectApplied` to see it -- and a row whose
+    entire printed Effect is the exception was therefore silent while being
+    correct. `i2762p1` is the one card in the tree that prints it.
+
+    Announced only on the adoption path. Laying a *fresh* kept mark already
+    emits `EffectApplied`, and announcing both would credit one mark twice.
+
+    `who` is the marked creature and `by` the ref that held the mark. The
+    marker itself is on the effect's relation and is not repeated here.
+    """
+
+    who: int
+    by: str
+
+
+@dataclass
+class TargetAdded(Event):
+    """A creature was appended to the target list of the power running below.
+
+    `c.add_target` did the work and announced **nothing**, so a row whose
+    entire printed Effect is "the ally also becomes a target" was silent by
+    construction -- the same fault `UseRestored` was added for, found the
+    same way. 12 declared rows call the verb; `i2291p1` and `i2614p1` are
+    the two whose whole body is the one line, and both sat in the
+    *never-usable* bucket rather than on the silent list until the board
+    learned to pose their trigger, which is what hid them.
+
+    Worth saying why a state diff would not do instead: the appended
+    creature is then attacked by the outer power, so the observable
+    consequence is a `DamageApplied` **credited to that power**, not to the
+    row that added the target. The row pays for a hit somebody else is
+    credited with, which is exactly the misattribution `#690` bounded and
+    `#697` had to add a term for.
+
+    `who` is the creature added, `power` the row it was added to -- the one
+    running below, not this one -- and `by` the ref that added it.
+    """
+
+    who: int
+    power: str
+    by: str
+
+
+@dataclass
 class RowStored(Event):
     """An object was given a row to hold.
 

@@ -357,6 +357,14 @@ def _traps(db, args: argparse.Namespace) -> list:  # noqa: ANN001
     They were imported because `content/terrain.py` was inventing numbers off
     the monster curve for want of a row to read. Having imported them, the
     work list never learned they existed.
+
+    **The `role` this groups by changed meaning in #957 and the number did
+    not.** The column used to hold the compendium's `Trap.Role`, which is
+    standard/elite/solo/minion -- the *rank*. It now holds the role the book
+    defines, and the rank moved to `trap.rank`. So this report groups by
+    blaster/lurker/obstacle/warder where it used to group by rank: the same
+    631 rows, cut a more useful way for whoever writes them, and the label it
+    already printed is now true.
     """
     sql = "SELECT ref, role, level FROM trap"
     params: list = []

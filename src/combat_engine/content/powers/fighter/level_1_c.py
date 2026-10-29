@@ -23,6 +23,7 @@ from combat_engine.engine import (
     Attack,
     Cast,
     Condition,
+    Health,
     Keyword,
     Melee,
     MoveEnd,
@@ -54,28 +55,50 @@ _NAMED_KINDS = ("demon", "drow", "orc", "spider")
     attack=Attack(STR, vs=AC),
 )
 def p2099(c: Cast) -> None:
-    """Two feats hang a clause on this row's hit, and they stack.
+    """Three Arena Fighting feats hang a clause here, and one applies.
 
-    #550's convention, and `p704` carries the grouping rule. `f992` is
-    `[Arena Fighting]`; `f1298` carries no bracket. **Two plain `if`s, not
-    a chain** -- the first version chained them on a family split I had
-    inferred from the books rather than read from the compendium.
+    #550's convention, and `p704` carries the grouping rule. The chain is
+    `f992`, `f973` and `f3245`; `f1298` carries no bracket and is a plain
+    `if` beside it, which was an `elif` once and was wrong.
 
-    `f992` is read off `c.declare`, called before the attack, so when the
-    other Arena Fighting clauses land the choice between them is already
-    being made at the right moment. `f973` and `f3245` are Arena Fighting
-    and belong in that chain; neither is written yet. `f973`'s clause is a bonus to *this*
-    row's attack roll, and it has to be laid before `c.strike()` rather
-    than after -- a `used=` rider reaches it and a hit clause does not.
+    **The docstring here used to say `f973` and `f3245` were "not written
+    yet" and that was false** -- both were written, as *riders*:
+    `f973` registered `used={"p2099": …}` in `feats/exploits.py` and
+    `f3245` reached it through `_on_hit_with`. So this row's remaining work
+    was never authoring, it was the **migration** #550 is about, and the
+    stale sentence cost a reader the measurement twice over.
+
+    **`f973` is laid before `c.strike()` and the other two after, which is
+    one chain and not two.** Its clause is a bonus to *this* row's attack
+    roll, so a `Hit` rider is announced after the roll is already made --
+    the note its rider helper carried, kept here because the reason
+    outlives the helper. `c.declare` runs first either way, so the choice
+    between the three is made before anything reads it, which is what the
+    card means by declaring before the attack.
+
+    Each feat keeps its other powers as riders and its own standing
+    bonuses: `f3245` prints a Heal bonus that is not about this row, and
+    neither feat is fully migrated, so neither takes `implemented_in=`.
+
     `f1317` and `f2363` are Lesser Style and want a second chain.
     """
-    arena = c.declare("Arena Fighting", "f992")
+    arena = c.declare("Arena Fighting", "f992", "f973", "f3245")
+    if arena == "f973":
+        # "If you have no temporary hit points when you use this exploit."
+        health = c.world.get(c.me, Health)
+        if health is not None and health.temp == 0:
+            c.bonus("attack", 1, on=c.me, until=When.EOT, once=True)
     if not c.strike():
         return
     c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod)
 
     if arena == "f992":
         c.bonus(FORT, 1, on=c.me, until=When.SONT, kind="feat")
+    elif arena == "f3245":
+        # "The next saving throw you make" -- `once=True`, or the bonus is
+        # paid on every save until the duration lapses. The feat's own
+        # docstring records that and it travels with the clause.
+        c.bonus("save", 2, on=c.me, until=When.SONT, once=True)
     # f1298 carries no bracket and stacks with the arena feat above. This
     # was an `elif` and was wrong.
     if (c.feat("f1298") and c.int_mod > 0

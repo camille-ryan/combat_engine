@@ -278,6 +278,30 @@ def ready_to_fire(world: World, eid: int, weapon: Any) -> bool:
     return getattr(weapon, "ref", "") not in gear.unloaded
 
 
+def ready_to_throw(world: World, eid: int) -> bool:
+    """Has this creature a copy of its throwable left to throw?
+
+    The sibling of `ready_to_fire` above and answers True in all the same
+    ways, which is the half a caller must not have to remember: **a weapon
+    nobody stocked is always ready.** `Gear.thrown_left` records a count
+    only for what `chargen` dealt, so a monster -- which carries no `Gear`
+    at all until `#516` -- and any weapon that arrived by some other road
+    are untouched by this, rather than refused.
+
+    False only for a tracked throwable that has been thrown down to zero,
+    which is the whole of "one net is infinite nets". #520.
+    """
+    from .components import Gear
+
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return True
+    arm = gear.thrown
+    if arm is None or arm.ref not in gear.thrown_left:
+        return True
+    return gear.thrown_left[arm.ref] > 0
+
+
 def holding(world: World, eid: int, what: str = "") -> list[Any]:
     """What this creature has in hand, filtered by a printed word.
 
@@ -809,6 +833,51 @@ def stat_block(world: World, eid: int) -> dict[str, Any]:
         return load(ident.ref).row
     except Exception:          # a ref with no row is simply typeless
         return {}
+
+
+def hindering_at(world: World, square: Square) -> bool:
+    """Does any live zone make this square hindering terrain?
+
+    The readable half of `c.zone(hindering=)`. Four content rows already
+    print a constraint about this category and none could ask -- "but not
+    into hindering terrain" is a limit on where a push or a teleport may
+    put somebody, and with no reader each of them dropped the clause.
+
+    A property of the **square**, not of a creature, because that is what
+    the printed constraints are about: a destination is or is not hindering
+    before anybody stands in it.
+
+    Hurting is deliberately the test and sight is not. The category hinders
+    and damages while leaving line of sight alone, which is what separates
+    it from `blocks_sight` and from `obscured`. #952.
+    """
+    return any(
+        zone.hindering and square in zone.squares
+        for _eid, zone in world.zones.all()
+    )
+
+
+def is_minion(world: World, eid: int) -> bool:
+    """Is this creature a minion? Read off its stat block's own column.
+
+    **Here rather than only on `Cast`** because two layers need it and the
+    rule is not a row's to apply. `Cast.is_minion` is what a content row
+    gating on "a nonminion enemy" asks; `resolve.deal_damage` needs the same
+    answer with no `Cast` in hand, and a read hand-written in two places is
+    the bug rather than the convenience. `Cast.is_minion` delegates here.
+
+    **The column, never a hit point count.** They agree on almost every row
+    -- a minion is printed with one -- but the corpus says not always:
+    **384** rows carry the column and all 384 have 1 hp, while **2** rows
+    have 1 hp and are *not* minions. So `max_hp <= 1` is wrong for those two
+    and wrong for anything ground down to one, a `Summon(hp=1)`, or a
+    conjuration standing in for a creature.
+
+    A creature with no stat block -- a character, a companion, a summon --
+    is never a minion, which is the printed rule and falls out of
+    `stat_block` returning `{}`.
+    """
+    return bool(stat_block(world, eid).get("minion"))
 
 
 def race_of(world: World, eid: int) -> str:

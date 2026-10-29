@@ -1487,7 +1487,21 @@ def f3230(c: Cast) -> None:
     The printed limit is the `once=` on the watch and not a `usage`: a
     triggered trait declared ENCOUNTER spends a use on every firing
     (#210), and `c.watch(once=True)` spends the hold only when the
-    handler actually did something."""
+    handler actually did something.
+
+    **Do not migrate this under #550, and the reason is the limit rather
+    than the effect.** "Once per encounter" is **one** hold across all four
+    powers on the Associated Powers line. Put the clause in each body and
+    each body takes its own hold, so the character gets the advantage once
+    per *power* where the card gives it once per encounter -- stronger than
+    print, and nothing reports it because both halves are individually
+    correct. `c.once_per_board` cannot rescue it either: it keys on
+    `(self.ref, *key)`, the calling row's own ref, so four bodies are four
+    keys by construction.
+
+    The watch above is therefore the right implementation and not a
+    leftover. #924, and `content/CLAUDE.md` carries it as the second stated
+    exception to the migration convention."""
     c.bonus("skill:endurance", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
     def opening(ev: Any) -> None:
@@ -1716,7 +1730,11 @@ def f3244(c: Cast) -> None:
     same prerequisite term, and it is not a class feature."""
 
 
-_F3245 = ("p2099", "p2248", "p10592", "p4542")
+#: **`p2099` is absent on purpose** -- its share of this clause moved
+#: into that row's body under #550, where it is one branch of an
+#: Arena Fighting chain rather than a rider that stacks. The other
+#: three are not migrated and stay here.
+_F3245 = ("p2248", "p10592", "p4542")
 
 
 @power("f3245", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -247,6 +247,29 @@ KNOWN_SILENT = {
     # plant-tested in both directions over 250 boards each.
     "p16373": "answers a DamageRolled the board never poses, and gates on"
               " the blow being arcane -- proved in drivers.reroll_after",
+    # **The third of the family, and its cause is one step along from the
+    # two above.** Those answer a `DamageRolled` the auditor never poses at
+    # all. This one is posed -- `reroll_faces` is reached **66 times** on
+    # one audit -- and still pays nothing, because of what the roll
+    # carries:
+    #
+    #     roll is None   62 of 66      rerolled a die   2 of 66
+    #
+    # `audit.LOADED` pins the die at 20, so nearly every hit is a critical,
+    # and a critical **maximises every face instead of rolling one** --
+    # `_roll_damage_dice` returns `None` and `reroll_faces` returns 0 by
+    # its own documented contract. The two rolls that did carry dice were
+    # rerolled, so the verb works and the board is what cannot show it.
+    #
+    # Not fixed with an event, deliberately. `Rerolled` is scoped to the
+    # d20 on purpose -- its docstring says the damage rerolls "are not
+    # among them on purpose" -- so announcing one here would widen an
+    # event against its own stated design to move one row off this list.
+    # The family's evidence is `drivers.reroll_after`, which is where the
+    # weapon-dice assertion for this row went. #835.
+    "i1761p1": "answers a DamageRolled the board poses only as a critical,"
+               " which maximises the faces and leaves no roll to redo"
+               " (62 of 66) -- proved in drivers.reroll_after",
     "i1756p1": "answers a DamageRolled the board never poses, and gates on"
                " a melee weapon attack -- proved in drivers.reroll_after",
     # `p10044` was excused here -- "an interrupt on taking damage, and the
@@ -268,42 +291,23 @@ KNOWN_SILENT = {
     # actually see it. Losing the excuse loses nothing.
     "i3036p1": "returns early unless the wearer knows f650b, and the draw"
                " stopped dealing it between 81f5229a1 and 00429a9e4 -- #783",
-    # **Became usable and is still quiet, which is two different facts.** At
-    # `81f5229a1` the auditor reported this UNUSED -- it could not be used on
-    # the board at all -- so it was never on the silent list.
+    # `i1676p1` and `i3271p1` were excused here and are **not any more**: the
+    # board spends for real while provoking them, so both emit `UseRestored`
+    # and fire. #901, closed with the measurement. The history is worth the
+    # four lines, because the excuse was wrong once before it was right:
     #
-    # **The reason recorded here was wrong, and #899 measured the real one.**
-    # It said the board "poses no all-missed `PowerResolved`". It poses one:
-    # instrumenting `c.restore_use` shows this row reaching it **four**
-    # times, with a real ref off `c.trigger.power` rather than the `""` the
-    # old note describes.
+    # * it first said the board "poses no all-missed `PowerResolved`". It
+    #   poses one -- instrumenting `c.restore_use` showed four reaches with a
+    #   real ref off `c.trigger.power`. #899 measured that;
+    # * the real cause was one line further in. `dsl.use` calls
+    #   `powers.note_use` only inside its `if spend:` branch, so with the
+    #   board's deliberate `spend=False` the use was never recorded,
+    #   `powers.times(ref)` was 0, and `c.restore_use` returned False on
+    #   exactly the branch that **is** the printed Requirement. Both rows were
+    #   correct and had nothing to hand back.
     #
-    # What stops it is one line further in. The board provokes every power
-    # use with `use(..., spend=False)` -- six sites in this file -- and
-    # `dsl.use` calls `powers.note_use` only inside its `if spend:` branch.
-    # So the use is never recorded as spent, `powers.times(ref)` is 0, and
-    # `c.restore_use` returns False on exactly the branch that **is** the
-    # printed Requirement. The row is correct; there is nothing to hand back.
-    #
-    # `spend=False` is deliberate -- it is what lets the board provoke the
-    # same power repeatedly without exhausting it -- so this wants a pose
-    # that spends and then lets the row restore, which is a separate board
-    # rather than a flag. Filed as #901.
-    "i1676p1": "restores a use, and the board provokes with spend=False so"
-               " powers.times() is 0 and there is nothing to hand back"
-               " -- UNUSED at 81f5229a1, reachable and quiet now; #901",
-    # The same row one item over, and found by the same route: #680's racial
-    # pick made its trigger reachable, so it left the `UNUSED` bucket and
-    # went straight onto the silent list. Measured identically -- two
-    # firings, a real ref (`p1767`), `times` 0 both times.
-    #
-    # **Worth keeping as a pair.** `UseRestored` (#899) took 28 rows off the
-    # silent list and these two are the residue, which is the evidence that
-    # the remaining cause is the board and not the missing event: the event
-    # lands, the restore never happens.
-    "i3271p1": "restores a use, and the board provokes with spend=False so"
-               " powers.times() is 0 and there is nothing to hand back"
-               " -- UNUSED until #680's racial pick reached it; #901",
+    # `_restores_the_resolved` is the gate that lifts the spend for these two
+    # and nothing else; `_use` holds why that is a wrapper and not a flip.
     # "You bloody an enemy with an attack that uses **the augmented
     # weapon**", and the gate is written now that `Bloodied.weapon` exists
     # (#653). Two separate board facts keep it quiet, both measured:
@@ -610,6 +614,26 @@ KNOWN_SILENT = {
     "i2318p1": "gives back a sibling's use the caster does not own, so the"
                " verb refuses before the spend question; the board deals no"
                " warlock on that pact leg",
+    # **Reachable since the board learned to read a printed trigger, and
+    # quiet for a reason one line into the body.** It left the never-usable
+    # bucket when `_triggered_by` started reading the `trigger=` text (#908),
+    # which is how it became visible at all.
+    #
+    # Its first line is `getattr(c.trigger, "targets", None) or []` and
+    # returns when that is empty. Measured by wrapping the body: **empty on
+    # 48 of 48 attempts**, so nothing below it ever runs -- the two adjacency
+    # reads and `c.grants_advantage` are never reached, and that last would
+    # emit `EffectApplied` and settle the row if it were.
+    #
+    # The cause is the row it watches, not the board: `p8278` is
+    # `is_attack=False` with `target=None`, so a use of it genuinely picks
+    # nobody and there are no targets for this row to read. Whether that is
+    # the card (a free-action power that really does target nothing, and this
+    # row misreads it) or the import (a Target line that did not parse) is a
+    # compendium question, filed rather than guessed at -- #941.
+    "i847p1": "reads the triggering power's targets and p8278 has"
+              " target=None, so the list is empty on 48 of 48 attempts and"
+              " the body returns at its first line; #941",
     # The initiative order is not one of the five observables.
     "m4448a4": "adds initiative slots; the order is not an observable",
     # Deliberately empty, and its docstring predicts this exact line:
@@ -1300,6 +1324,7 @@ DID_SOMETHING = {
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
+    "TargetAdded", "MarkHeld",
 }  # fmt: skip
 # `BlowRedirected`, `UseRestored` and `UseSpent` are the **ninth and tenth**
 # classes, and the first of them is the one that says something new about this
@@ -1592,6 +1617,20 @@ def _associated() -> dict[str, list[str]]:
 _TRIGGER_REF = re.compile(
     r'ev\.power\s*==\s*["\']([pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)["\']')
 
+#: A ref written in a row's **printed** trigger, which the ETL resolved there.
+#: The same alternation as `_TRIGGER_REF`'s capture, so the two sources agree
+#: on what a ref looks like and neither invents a shape the other refuses.
+_PRINTED_REF = re.compile(r'\b([pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)\b')
+
+#: Does the printed trigger say the **owner** is the one using the named row?
+#: "you use <ref>" and a monster's "it uses <ref>", against "when an enemy
+#: uses <ref>" -- firing somebody else's power as the caster poses a moment
+#: that cannot happen, which is the illegal-swing fault one level up.
+_TRIGGER_IS_MINE = re.compile(
+    r"\b(?:you|it)\s+(?:use|uses|augment|augments|expend|expends|spend|spends)\b",
+    re.I,
+)
+
 
 #: `cls="wizard"` in a row's source, or in a helper it calls.
 _WANTS_CLASS = re.compile(r'cls\s*=\s*["\'](\w+)["\']')
@@ -1694,9 +1733,34 @@ def _triggered_by(ref: str) -> list[str]:
     `keyword` inside a decorator `Call` to find the same comparison. The
     docstring risk `_label_gated` guards against does not arise either --
     no docstring writes `ev.power ==`.
+
+    **And the declared `trigger=` text is a second source, which this read
+    for a long time and did not.** The pattern above is a *body* search, so
+    it finds a row whose predicate happens to be written as a literal
+    comparison and misses every row that asks the same question through a
+    helper, an `in` against a tuple, or a gate of its own. The printed
+    trigger says the same thing in the author's own words and the ETL has
+    already resolved the cross-reference in it, so the ref is sitting there
+    as a ref.
+
+    Measured: 46 rows on the silent list watch a power being used, and for
+    **20 of them the power their own trigger names is not offered by any
+    sibling pass**. `f1794` is the clearest -- its trigger names one power
+    and `_siblings` was offering a different one.
+
+    **Only when the trigger says the caster is the one using it.** A printed
+    trigger is as often about an enemy's power as the owner's, and firing an
+    enemy's power on the caster's behalf would pose a moment that cannot
+    happen -- the fault `_swing_from_reach`'s docstring records for an
+    illegal swing. 322 rows name another ref in their trigger and **217**
+    read as the caster doing it, so the reading is what bounds this.
     """
     row = REGISTRY.get(ref)
-    return _TRIGGER_REF.findall(_source_of(getattr(row, "body", None), ref))
+    out = _TRIGGER_REF.findall(_source_of(getattr(row, "body", None), ref))
+    printed = getattr(row, "trigger", "") or ""
+    if _TRIGGER_IS_MINE.search(printed):
+        out += _PRINTED_REF.findall(printed)
+    return out
 
 
 def _label_gated(ref: str) -> list[str]:
@@ -3092,12 +3156,12 @@ def _swing_from_reach(
     p = get(ref)
     here = world.get(attacker, Position)
     if p is None or here is None or p.reach.kind != "melee":
-        use(world, attacker, ref, targets=[target], spend=False, **kw)
+        _use(world, attacker, ref, targets=[target], spend=False, **kw)
         return
 
     far = _reach_of(world, attacker, p.reach, ref)
     if any(distance_between(world, o, target) <= far for o in origins(world, attacker, p.reach)):
-        use(world, attacker, ref, targets=[target], spend=False, **kw)
+        _use(world, attacker, ref, targets=[target], spend=False, **kw)
         return
 
     was = here.square
@@ -3110,7 +3174,7 @@ def _swing_from_reach(
         return
     place(world, attacker, beside[0])
     try:
-        use(world, attacker, ref, targets=[target], spend=False, **kw)
+        _use(world, attacker, ref, targets=[target], spend=False, **kw)
     finally:
         place(world, attacker, was)
 
@@ -3273,7 +3337,27 @@ def _a_class_at_will(row: object) -> bool:
     )
 
 
-def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+def _provoke(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
+             shot: bool = False) -> bool:
+    """Provoke `ref`, with the board spending for real if the row needs it.
+
+    A wrapper rather than a flag threaded through `_provoke`'s passes, because
+    the passes do not choose: **the row does**, once, and every `_use` beneath
+    this call should behave the same way. Restored in a `finally` so a raising
+    row cannot leave the next one spending -- which, with `--sample` and
+    `--changed` running many rows in one worker, would be a board that changes
+    depending on what preceded it.
+    """
+    global _SPEND_FOR_REAL
+    was, _SPEND_FOR_REAL = _SPEND_FOR_REAL, _restores_the_resolved(ref)
+    try:
+        return _provoke_passes(world, caster, ref, cursor, shot)
+    finally:
+        _SPEND_FOR_REAL = was
+
+
+def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
+                    shot: bool = False) -> bool:
     """Make the thing happen that this row triggers off, and see if it fires.
 
     Three situations between them cover nearly every printed trigger at this
@@ -3396,6 +3480,45 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
 
     foes = [f for f in enemies(world, caster) if alive(world, f)]
     if not foes:
+        return False
+
+    if shot:
+        # **Somebody shoots the caster, and this is the only pass that runs.**
+        # `_provoke`'s area arm cannot fire in the foe->caster direction
+        # because `_area_rows` reads a creature's **own** powers and the foe
+        # on this board knows only `mba`; and there is no ranged arm at all.
+        # Measured 0 in both directions on all six boards #816 sampled.
+        #
+        # **Alone on its own attempt, which is what makes it safe.** An
+        # attack cannot be unwound -- the caster can end up bloodied,
+        # conditioned or dead, and removing the lent row from
+        # `Powers.known` does not take its consequences back. #816 measured
+        # that as a pass inside a shared board three ways: beside the area
+        # loops and before the death pass it reached 50 rows and silenced
+        # 10 then 21 others, and at the very end it gained nothing at all,
+        # because the death pass above had already killed `foes[0]`.
+        #
+        # So it is an axis rather than a pass: `_attempts` hands it a fresh
+        # board, it is reached only by a row that has shown nothing through
+        # every arrangement before it, and nothing else runs here -- which
+        # is the collateral argument the weapon and element axes make. The
+        # other passes were already tried on earlier attempts.
+        known = world.get(foes[0], Powers)
+        if known is None:
+            return False
+        for other in _range_lenders():
+            if other == ref:
+                continue
+            lent = other not in known.all
+            if lent:
+                known.known.append(other)
+            _swing_from_reach(world, foes[0], caster, other)
+            hit = probe()
+            if lent:
+                with contextlib.suppress(ValueError):
+                    known.known.remove(other)
+            if hit:
+                return True
         return False
 
     _grip_for(world, caster, ref)
@@ -3622,11 +3745,11 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     # "when an enemy hits you with a close or area attack" is a printed
     # trigger too, and the caster's own bursts can never satisfy it.
     for other in _area_rows(world, caster, ref):
-        use(world, caster, other, spend=False)
+        _use(world, caster, other, spend=False)
         if probe():
             return True
     for other in _area_rows(world, foes[0], ref):
-        use(world, foes[0], other, spend=False)
+        _use(world, foes[0], other, spend=False)
         if probe():
             return True
     for foe in foes[:2]:
@@ -3687,12 +3810,109 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
 
 
 def _wants_expended(ref: str) -> bool:
-    """Does this row read what the caster has already used up?"""
+    """Does this row read what the caster has already used up?
+
+    **A wide question, and worth saying so here because it has been mistaken
+    for a narrow one.** It is a substring test over a body, so it is true of
+    **213 of 23,061** rows -- every row that so much as mentions the expended
+    list. `#901`'s third attempt described itself as "gated on the existing
+    `_wants_expended(ref)` so only these rows see it", and that premise is
+    false by a factor of a hundred.
+
+    **It would not have cost anything, though, and the first version of this
+    note said it would.** Flipping the spend for all 213 and re-auditing them
+    moves **0 of 213** verdicts, so gate *width* is not what made that attempt
+    fail -- the pass choice was, which is the ordering constraint the issue
+    recorded. Said plainly because the wrong reason is worse than no reason:
+    the next reader would have widened the gate, found nothing, and distrusted
+    the note.
+
+    Use `_restores_the_resolved` when the question is about the *two* rows that
+    hand back the use of whatever just resolved.
+    """
     declared = REGISTRY.get(ref)
     if declared is None:
         return False
     body = _source_of(declared.body, ref)
     return "expended" in body or "restore_use" in body
+
+
+def _restores_the_resolved(ref: str) -> bool:
+    """Does this row hand back the use of the power whose resolution fired it?
+
+    Two questions, both answered off the declaration rather than by matching
+    prose, and together they name exactly **2 of 23,061** rows -- `i1676p1`
+    and `i3271p1`:
+
+    * the trigger is a `PowerResolved`, so **the board's own provocation is
+      what produces the event**. That is what makes the spend the board's
+      business rather than the row's;
+    * the body restores `c.trigger.power` -- the ref the event carries --
+      rather than a ref of its own, so the use that has to exist is the use
+      of whatever the board just put through.
+
+    Eight rows restore a use named by their own trigger; the other six answer
+    `Bloodied`, `Dropped`, `PowerUsed`, `DamageApplied` and `Hit`, which the
+    board reaches by other means and which already fire. Narrowing to the
+    event class is what keeps this from becoming `_wants_expended` again.
+    """
+    declared = REGISTRY.get(ref)
+    if declared is None:
+        return False
+    if not any(
+        getattr(t.event, "__name__", "") == "PowerResolved"
+        for t in (getattr(declared, "triggers", None) or ())
+    ):
+        return False
+    body = _source_of(declared.body, ref)
+    return bool(re.search(r"restore_use\(\s*ref\b", body)) and "trigger" in body
+
+
+#: Set while provoking a row that hands back the use of whatever resolved.
+#: Read by `_use`, which lifts the board's deliberate `spend=False` so that
+#: there is a spent use for the row to give back.
+#:
+#: **The gate is confinement, not a measured necessity, and that is worth
+#: being straight about.** Lifting the spend for *every* row moves 0 verdicts
+#: on a 400-row sample -- and not vacuously: the provocation puts a non-at-will
+#: power through `spend=False` on **113 of those 400**, so the change was
+#: genuinely exercised 113 times and cost nothing. On the other 287 it is a
+#: no-op by construction, because an at-will has no use to spend.
+#:
+#: It stays gated anyway, for one reason: 113 of 23,061 is 0.5% of the corpus,
+#: and this file's own history is pose changes moving rows nobody was looking
+#: at -- `#668`/`#663` are the precedent, and `#816` was reverted for costing
+#: 13 newly-silent rows. A gate of 2 rows means the owed wide sweep can only
+#: move 2 rows, which is checkable by reading them. An ungated flip would put
+#: 0.5% of the corpus on a board nothing had swept.
+#:
+#: A module flag rather than a parameter threaded through six call sites
+#: because `_provoke` sets it once around its own passes and the workers are
+#: **processes** -- `_run_all` pools with `ProcessPoolExecutor`, so there is no
+#: second row in this interpreter to see it.
+_SPEND_FOR_REAL = False
+
+
+def _use(world, who: int, ref: str, **kw: object) -> object:  # noqa: ANN001
+    """`dsl.use`, with the board's `spend=False` lifted for the rows that need
+    a real spend to have happened.
+
+    The board provokes with `spend=False` everywhere on purpose -- it is what
+    lets a power be put through repeatedly without exhausting it. For
+    `i1676p1` and `i3271p1` that deliberate choice is the thing under test:
+    both read `c.trigger.power` and call `c.restore_use` on it, so with no use
+    noted `powers.times(ref)` is 0, the verb returns False on exactly the
+    branch that is the printed Requirement, and a correct row reports silent.
+
+    The ordering `#901` identified is why nothing cheaper works: the clause
+    needs the power **used and then spent, in that order**, and `dsl.use` is
+    the only thing that does both -- `powers.note_use` lands before the
+    `PowerResolved` emit. Marking it spent beforehand instead trips `use`'s
+    own `usable()` gate and stops the resolution happening at all.
+    """
+    if _SPEND_FOR_REAL and kw.get("spend") is False:
+        kw["spend"] = True
+    return use(world, who, ref, **kw)
 
 
 #: The damage keyword a printed trigger names, by the word the author wrote.
@@ -3744,6 +3964,82 @@ def _keyword_rows(world, caster: int, exclude: str, kw: Keyword) -> list[str]:  
         if kw in p.keywords:
             out.append(other)
     return out[:2]
+
+
+@cache
+def _wants_a_shot(ref: str) -> bool:
+    """Does this row's trigger ask whether a **ranged or area** attack hit it?
+
+    `triggers.by_ranged` is the one helper for both printed clauses -- it
+    answers `kind in ("ranged", "area_burst")` -- so this gate covers the
+    whole family rather than half of it.
+
+    **Read off the trigger's predicate source, because a predicate is a
+    closure and there is nothing else to read.** The same technique
+    `_wanted_by_word` uses on a body. All 4,034 declared trigger predicates
+    are source-readable, measured, so this is a count rather than a floor.
+
+    **29 rows, which is not what either prior estimate said.** `by_ranged`'s
+    own docstring claims 56 and `#816`'s body estimated 72 from a per-file
+    grep that it correctly flagged as an upper bound. Measured per row,
+    through the predicate: 29, and `by_ranged` appears in **no** row body,
+    so there is no second population. 23 of the 29 already fire; the six
+    that do not are what this axis is for. #816.
+    """
+    row = get(ref)
+    if row is None or not row.triggers:
+        return False
+    for trig in row.triggers:
+        when = getattr(trig, "when", None)
+        if when is None:
+            continue
+        try:
+            src = inspect.getsource(when)
+        except (OSError, TypeError):
+            continue
+        if "by_ranged" in src:
+            return True
+    return False
+
+
+@cache
+def _range_lenders() -> tuple[str, ...]:
+    """Declared at-will ranged or area attacks, one per class.
+
+    `_typed_lenders`' argument applies unchanged: *"neither the caster nor
+    its enemy knew a single row of the wanted keyword, so an owned-only pass
+    fires none of them"*. The foe on an audit board knows `mba` and nothing
+    else, so it can never make a ranged attack of its own -- which is why
+    `_provoke`'s area arm measured **0** in both directions on all six
+    boards #816 sampled.
+
+    One per class for `_typed_lenders`' reason: a trigger may narrow further
+    than the reach and a closure cannot be inspected to see how far.
+
+    At-will and untriggered, also for its reasons: a daily would spend a
+    resource the audit is measuring, and a triggered row cannot be used to
+    order. Built once for the whole run, which matters because this is
+    reached once per attempt by each row that gets this far.
+    """
+    found: list[tuple[int, str, str]] = []
+    for ref, row in REGISTRY.items():
+        if row.attack is None or row.triggers:
+            continue
+        if row.usage is not Usage.AT_WILL:
+            continue
+        reach = getattr(row, "reach", None)
+        if getattr(reach, "kind", "") not in ("ranged", "area_burst"):
+            continue
+        found.append((row.level, row.cls, ref))
+    found.sort()
+    seen: set[str] = set()
+    picked: list[str] = []
+    for _, cls, ref in found:
+        if cls in seen:
+            continue
+        seen.add(cls)
+        picked.append(ref)
+    return tuple(picked)
 
 
 @cache
@@ -5217,7 +5513,7 @@ def _use_rows(world, caster: int, refs: list[str], foe: int | None, skip: str = 
             if p.is_attack and foe is not None:
                 _swing_from_reach(world, caster, foe, other)
             else:
-                use(world, caster, other, spend=False)
+                _use(world, caster, other, spend=False)
         # **And undo it if it took the caster off the board.** `p10046`
         # is a level-0 minor action that removes its owner until the
         # start of its next turn; fired during setup it left a character
@@ -5700,14 +5996,14 @@ def _attempts(out: Result):  # noqa: ANN202
     # global would not travel. The header is data and every worker reads it.
     claimed = get(out.ref)
     if claimed is not None and claimed.out_of_combat:
-        yield 1, None, False, "", False
+        yield 1, None, False, "", False, False
         return
     for posed in (False, True):
         for face in LOADED:
             for seed in range(1, TRIES + 1):
                 if out.fired and (out.events & DID_SOMETHING):
                     return
-                yield seed, face, posed, "", False
+                yield seed, face, posed, "", False, False
     # **A third axis, on the same principle as the posed one.** A row naming
     # a weapon its board does not hold can show nothing however it is posed,
     # because the reader walks `Gear.weapons` and finds no match. Paid only
@@ -5740,7 +6036,7 @@ def _attempts(out: Result):  # noqa: ANN202
                 for seed in range(1, TRIES + 1):
                     if out.fired and (out.events & DID_SOMETHING):
                         return
-                    yield seed, face, posed, held, False
+                    yield seed, face, posed, held, False, False
     # **Sixth: an element on the bearer's own build.** `c.element()` reads
     # `element:<type>` out of `Build.choices` and only five legs in the game
     # set one, so for a carried implement the draw never produces a bearer
@@ -5764,7 +6060,23 @@ def _attempts(out: Result):  # noqa: ANN202
                 for seed in range(1, TRIES + 1):
                     if out.fired and (out.events & DID_SOMETHING):
                         return
-                    yield seed, face, posed, "", True
+                    yield seed, face, posed, "", True, False
+    # **Seventh: somebody shoots the caster.** A row triggered on "a ranged
+    # or area attack damages you" has nothing to answer on a board where no
+    # creature can make one -- the foe knows `mba` and `_area_rows` reads
+    # owned powers only. See `_provoke`'s `shot` arm for why this is an axis
+    # and not another pass in there: an attack is the one provocation that
+    # cannot be taken back, so it needs a board of its own.
+    #
+    # Last, for the reason every axis above it is last, and gated on the
+    # trigger's own predicate so the other 23,034 rows never pay it. #816.
+    if _wants_a_shot(out.ref):
+        for posed in (False, True):
+            for face in LOADED:
+                for seed in range(1, TRIES + 1):
+                    if out.fired and (out.events & DID_SOMETHING):
+                        return
+                    yield seed, face, posed, "", False, True
 
 
 @contextlib.contextmanager
@@ -6089,7 +6401,7 @@ def audit(ref: str) -> Result:
     # something on this face, the rest re-prove the same thing. Eight of them
     # meant twenty-four boards for every row, and the audit builds a hundred
     # thousand boards.
-    for seed, face, posed, held, element in _attempts(out):
+    for seed, face, posed, held, element, shot in _attempts(out):
         try:
             world, caster, _armed = board(ref, seed, pose=posed, arm=held,
                                           element=element)
@@ -6160,7 +6472,7 @@ def audit(ref: str) -> Result:
                 # `InitiativeRolled` is announced there, so a row that
                 # answers one has already fired by the time this line runs.
                 cursor = world.fight_cursor
-                if not _provoke(world, caster, ref, cursor):
+                if not _provoke(world, caster, ref, cursor, shot=shot):
                     continue
                 out.fired += 1
                 # Only what happened *after* the row itself went off. The
@@ -6323,6 +6635,69 @@ def _why_never(never: list[Result]) -> None:
         print(f"      every ref: {out}")
     except OSError:
         pass
+
+
+
+#: An event class as a reason would spell one: a capitalised word ending in
+#: one of the suffixes this engine's events use. Narrow on purpose -- a bare
+#: capitalised word in prose is not a claim about an event.
+_EVENTISH = re.compile(
+    r"\b([A-Z][A-Za-z]*(?:Applied|Rolled|Used|Resolved|Expired|Spent"
+    r"|Changed|Resized))\b"
+)
+
+
+def _dead_premises() -> list[str]:
+    """An excuse whose reason names a symbol the tree no longer has.
+
+    **The conclusion is checked and the premise is not, which is #545's
+    sharper finding.** `audit.py` already refuses an excuse naming an
+    undeclared row, and already reports an excuse whose row has started
+    firing -- both tests of the *verdict*. Neither reads the sentence. So an
+    entry can stop being true while staying green: `i2318p1`'s reason said
+    the verb *"announces only a Note"*, the verb was given two events, and
+    the row stayed silent for an entirely different cause. Three stale
+    reasons were found by hand in one day and none by a gate.
+
+    This is the half of that which is mechanical: a reason naming `c.foo`,
+    `query.foo` or an event class that does not exist cannot be true,
+    whatever the row is doing.
+
+    **Deliberately narrow, and the measurement says why.** Across 193
+    entries the reasons name a symbol **4 times, in 3 of them** -- they are
+    prose, not references -- so this gate is nearly vacuous today and will
+    not catch the `i2318p1` shape, where every symbol named still existed. It
+    earns its microseconds as a rename guard: one rename wave already
+    produced a stale excuse (`cf:wizard-implement`), and the same wave
+    hitting a verb named in a reason goes red here instead of silently
+    describing something gone.
+
+    The richer check #545 asks for -- *"a `KNOWN_SILENT` entry naming a verb
+    or an event that no longer behaves as the text says"* -- is **not
+    buildable against prose**, and that is the finding rather than a
+    shortfall: making it checkable means the entries carrying a structured
+    premise, which is an authoring convention for 193 of them and a call
+    rather than a patch. Recorded on the issue.
+    """
+    from combat_engine.engine import query as _query
+    from combat_engine.engine.cast import Cast as _Cast
+
+    verbs = {n for n in dir(_Cast) if not n.startswith("__")}
+    readers = {n for n in dir(_query) if not n.startswith("_")}
+    events = _event_names()
+    out: list[str] = []
+    for ref, reason in sorted(KNOWN_SILENT.items()):
+        text = reason if isinstance(reason, str) else str(reason)
+        for name in re.findall(r"\bc\.([a-z_][a-z_0-9]*)", text):
+            if name not in verbs:
+                out.append(f"{ref}'s reason names c.{name}, which Cast has not")
+        for name in re.findall(r"\bquery\.([a-z_][a-z_0-9]*)", text):
+            if name not in readers:
+                out.append(f"{ref}'s reason names query.{name}, which does not exist")
+        for name in _EVENTISH.findall(text):
+            if name not in events:
+                out.append(f"{ref}'s reason names {name}, which is not an event class")
+    return out
 
 
 def main() -> int:
@@ -6670,6 +7045,7 @@ def main() -> int:
         f"DID_SOMETHING names {k}, which is not an event class"
         for k in sorted(DID_SOMETHING - _event_names())
     ]
+    refused += _dead_premises()
     for line in refused:
         print(f"  IGNORED {line}")
 

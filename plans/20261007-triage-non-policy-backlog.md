@@ -235,10 +235,10 @@ id 8  Warlord (<build>)     Player's Handbook, Class Compendium
 id 9  Wizard (<build>)      Player's Handbook, Class Compendium
 ```
 
-The genuine Essentials reimaginings are **eight other pages**, all sourced
-*Heroes of the Fallen Lands* / *Heroes of the Forgotten Kingdoms* — two fighter
-variants, a cleric, a rogue, a wizard, two rangers, a druid. **We import none of
-them.** All 25 rows in our `class` table are base classes.
+The genuine Essentials reimaginings are **eight other pages**, all sourced to
+the two Essentials player books — two fighter variants, a cleric, a rogue, a
+wizard, two rangers, a druid. **We import none of them.** All 25 rows in our
+`class` table are base classes.
 
 So the invented sixth warlord leg is **not** explained by an Essentials page. It
 is what the comment in `BUILDS` already says: the printed name of a *swordmage*

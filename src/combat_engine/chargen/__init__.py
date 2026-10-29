@@ -2490,6 +2490,35 @@ def _stock_quiver(gear: Gear | None) -> None:
         gear.quiver.append(Ammo(ref="", kind=kind, count=MUNDANE))
 
 
+def _stock_thrown(gear: Gear | None) -> None:
+    """Record how many copies of each throwable weapon the character has.
+
+    Camille's ruling on `#520`, 2026-10-28: **5**, where mundane ammunition
+    is 50. `ammunition.THROWN` carries the quote and the reason the two
+    numbers differ.
+
+    **Keyed by weapon ref, one entry per throwable owned** -- unlike the
+    quiver, which is one entry per *kind*, because two bows draw on one
+    bundle of arrows and two throwables are two different weapons with two
+    separate counts.
+
+    `Weapon.thrown` is the test and it is the printed field: 17 weapons
+    carry a thrown range and the rest carry `None`, so no vocabulary is
+    invented here either. `weapons` rather than `held` for the same reason
+    as the quiver -- a stowed javelin is still carried.
+
+    Never overwrites a count that is already there, so a character rebuilt
+    mid-fight does not get a refilled set of spares.
+    """
+    from combat_engine.engine.ammunition import THROWN
+
+    if gear is None:
+        return
+    for arm in gear.weapons:
+        if arm.thrown is not None:
+            gear.thrown_left.setdefault(arm.ref, THROWN)
+
+
 def power_swap(powers: list[str], feats: list[str]) -> list[str]:
     """The hand that is left after the feats that trade a card for one.
 
@@ -3348,6 +3377,11 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # answer that no *item* rode the shot, which is what `fired_with`
     # already reads. The count still comes down, which is the whole of #520.
     _stock_quiver(world.get(eid, Gear))
+    # The thrown half of the same ruling, 5 rather than 50. Not folded into
+    # the call above: the quiver is one entry per kind of ammunition and
+    # this is one count per weapon, which are different keys for the reason
+    # `_stock_thrown` gives.
+    _stock_thrown(world.get(eid, Gear))
     # A racial skill bonus is a sheet number and not a thing that happens
     # in a fight, so it is laid straight into `Mods` where the armour
     # penalty and the enhancement bonus already live -- `engine/skills.py`

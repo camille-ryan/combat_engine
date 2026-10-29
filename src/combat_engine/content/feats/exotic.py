@@ -99,13 +99,60 @@ def _swap(ref: str, card: str):  # noqa: ANN202
 
 
 @power("f959", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.pre_empt(damage_of=)",),
+       reach=PERSONAL, target=SELF,
+       dropped=("dsl.weapon_damage_through_instead_of",),
        proficiency=("w3661",))
 def f959(c: Cast) -> None:
-    """The weapon exists now and `chargen` deals it. What is left is the
+    """The trade is registered on the **weapon**, which is what #928 built.
+
+    `c.pre_empt(weapon="w3661", ...)` keys the clause on the weapon in hand
+    rather than on a named row, so it reaches every attack made with it
+    without being written into any of them. Both halves ride inside the one
+    registration -- the immobilise and the critical's knockdown are the same
+    clause -- which is what the paragraph below says they have to be.
+
+    **It plays on a basic attack and nowhere else yet, and that is the
+    `dropped=`.** `instead_of` only speaks where the row being changed calls
+    it, and measured across the tree: 34 `instead_of` call sites, of which
+    **2** are `instead_of("damage")` -- one of them `basic.py:87`, the basic
+    attack. Every other weapon power calls `c.damage` directly, so the
+    registration is consulted for a basic and skipped for the rest.
+
+    So #928's premise that *"the reader is already there ... this is a key
+    shape rather than a new mechanism"* is **half true**: the key shape is
+    built and sound, and the missing half is a read at a central damage
+    site rather than in each row -- filed as **#954**. That is the real
+    remaining cost and it is an engine change of a different size, so the
+    row carries `dropped=`
+    rather than being un-marked: it plays, with one clause short, which is
+    exactly what that marker means. Un-marking it would make it drawable
+    and inert on every weapon power, which is a fault rather than progress.
+
+    What follows is why the trade cannot be split, which still holds.
+
+    The weapon exists now and `chargen` deals it. What is left is the
     shape of the rider: the immobilise is bought by giving the damage up,
     and the critical's knockdown rides inside that same choice, so
-    neither half can be laid without the trade."""
+    neither half can be laid without the trade.
+
+    **Re-pointed to #928, off #780, because the premise differs.** #780 was
+    *"a row cannot decline its own damage"*, and that is false -- two of its
+    three rows are written and they decline it by simply not calling
+    `c.damage`, which `c.strike()` never charged for. This row is the third
+    and its gap is elsewhere: the clause applies to **any** weapon attack
+    made with this weapon, so there is no ref to key on, while
+    `c.pre_empt` is keyed `(ref, what)` for one named row. Writing it into
+    each reachable power is no answer either -- the set is every weapon
+    power in the tree.
+
+    The symbol stays as it is: what is wanted really is a `pre_empt` that
+    can be keyed on the weapon in hand rather than on a row."""
+    def instead(using: Cast) -> None:
+        using.condition(Condition.IMMOBILIZED, until=When.EONT)
+        if using.crit:
+            using.prone()
+
+    c.pre_empt("", "damage", instead, weapon="w3661")
 
 
 _swap("f960", "f960b")

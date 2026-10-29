@@ -581,7 +581,9 @@ def rt_r8_t1(c: Cast) -> None:
 
 @power("rt:r10-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.oversized()",))
+       todo=("c.oversized()",),
+       wants="a size on Weapon, and a refusal to wield one above the "
+             "wielder's, for this permission to have anything to permit")
 def rt_r10_t0(c: Cast) -> None:
     """Wielding a weapon a size up. `Weapon` carries no size and nothing
     refuses one for being too big, so the permission has nothing to
@@ -1348,7 +1350,9 @@ def rt_r51_t0(c: Cast) -> None:
 
 @power("rt:r51-t1", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.running_start()",))
+       todo=("c.running_start()",),
+       wants="a run-up c.jump can read, so a standing jump and a "
+             "running one differ")
 def rt_r51_t1(c: Cast) -> None:
     """`c.jump` takes a number of squares and knows nothing about a
     run-up, so "always considered to have a running start" has nothing to
@@ -1512,7 +1516,9 @@ _inert("rt:r69-t1",
 
 @power("rt:r69-t2", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.improvised()",))
+       todo=("c.improvised()",),
+       wants="an improvised weapon in the weapon table, so the "
+             "proficiency header has a ref to name")
 def rt_r69_t2(c: Cast) -> None:
     """Proficiency with improvised weapons. There is no improvised weapon
     in the `weapon` table to be proficient with, so the header field has

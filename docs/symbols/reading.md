@@ -31,6 +31,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.is_conjuration(world: 'World', eid: 'int') -> 'bool'`
   - (no docstring)
+- `query.is_minion(world: 'World', eid: 'int') -> 'bool'`
+  - Is this creature a minion? Read off its stat block's own column.
 - `query.is_trap(world: 'World', eid: 'int') -> 'bool'`
   - (no docstring)
 - `query.kind_waived(world: 'World', asker: 'int', target: 'int', word: 'str', ref: 'str' = '') -> 'bool'`
@@ -70,6 +72,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Is this creature in the middle of a charge?
 - `query.distance_between(world: 'World', a: 'int', b: 'int') -> 'int'`
   - (no docstring)
+- `query.hindering_at(world: 'World', square: 'Square') -> 'bool'`
+  - Does any live zone make this square hindering terrain?
 - `query.kept_away_from(world: 'World', eid: 'int') -> 'tuple[int, int] | None'`
   - The square this creature may not get closer to, and how close it is.
 - `query.leash_of(world: 'World', eid: 'int') -> 'tuple[tuple[int, int], int] | None'`
@@ -191,6 +195,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Does firing this weapon leave it empty until somebody reloads it?
 - `query.ready_to_fire(world: 'World', eid: 'int', weapon: 'Any') -> 'bool'`
   - Is this weapon loaded, for a creature that has to load it?
+- `query.ready_to_throw(world: 'World', eid: 'int') -> 'bool'`
+  - Has this creature a copy of its throwable left to throw?
 - `query.rideable_by(world: 'World', mount: 'int') -> 'frozenset[str]'`
   - Which rider sizes this creature may carry **despite the size rule**.
 

@@ -691,15 +691,16 @@ READERS: dict[str, list[str]] = {
     "who, and whose side": [
         "active", "alive", "allies", "combatants", "conscious", "creatures",
         "enemies", "feat_categories", "feats_of", "is_", "is_conjuration",
-        "is_trap", "kind_waived", "kinds_of", "level_term", "living",
+        "is_minion", "is_trap", "kind_waived", "kinds_of", "level_term",
+        "living",
         "on_build",
         "printed_kinds",
         "race_of", "race_sizes", "race_skills", "races_sized", "scenery",
         "stat_block", "targetable", "team",
     ],
     "where, and how far": [
-        "adjacent", "charging", "distance_between", "kept_away_from",
-        "leash_of", "line_of_effect",
+        "adjacent", "charging", "distance_between", "hindering_at",
+        "kept_away_from", "leash_of", "line_of_effect",
         "moved_this_action", "moving_as", "on_the_ground", "prefers_range",
         "ran_this_action", "range_profile",
         "sealed", "speed", "squares", "telepathy_of",
@@ -726,7 +727,7 @@ READERS: dict[str, list[str]] = {
         "can_act", "can_move", "can_react", "can_shift", "can_run", "can_walk",
         "granted_actions", "held_by", "holding", "holds_somebody",
         "immune_to", "may_ride", "needs_loading", "ready_to_fire",
-        "rideable_by",
+        "ready_to_throw", "rideable_by",
     ],
     "what has already happened": [
         "attacked_since", "bloodied", "damaged_since", "dropped_since",
