@@ -42,6 +42,7 @@ from combat_engine.engine import (
     EACH_ENEMY,
     EACH_OTHER,
     ENCOUNTER,
+    EVERY_DIE,
     FORT,
     FREE,
     MINOR,
@@ -1416,30 +1417,49 @@ def i1761x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you make a damage roll and dislike the result",
-    on=Trigger(Hit, by_me, "you hit with this weapon"),
-    dropped=("events.DamageRolled.weapon_dice",),
+    on=Trigger(DamageRolled, by_me, "you roll damage"),
+    dropped=("events.DamageRolled.crit_rider_dice",),
 )
 def i1761p1(c: Cast) -> None:
-    """`c.reroll_damage` rolls the whole damage twice and keeps the better,
-    which is the printed effect for a weapon whose damage is mostly [W];
-    confining the reroll to the [W] dice and the critical dice is the part
-    that cannot be said. Declared on the hit so the effect is standing when
-    the damage is rolled -- afterwards is too late.
+    """Rerolls the weapon dice of a roll already made, and keeps the second.
 
-    **Re-pointed again, and the previous note contradicted this one.** A
-    #703 sweep appended "what stops this one is **the moment, not the
-    dice**" directly under the paragraph above, which says the moment is
-    fine and the `[W]` narrowing is the hold. The paragraph above was
-    right. The moment is now reachable either way -- `c.reroll_faces`
-    answers a `DamageRolled` and the live `Roll` rides on it -- so nothing
-    is left of the moment argument and the marker names the narrowing that
-    was always the real residue.
+    `c.reroll_faces` is the reactive door and `p16373` is the precedent:
+    the live `Roll` rides on `DamageRolled` as a plain attribute, so a
+    no-action daily spent *because* the number was disliked can answer it.
+    `c.reroll_damage` -- roll the whole expression twice, keep the higher --
+    is a different and strictly better card and was what this row did.
 
-    `roll.dice` is a flat list of faces. It cannot say which of them were
-    the `[W]` dice, which were the critical rider's, and which came from a
-    `dice=` bonus, so "reroll the weapon dice and the critical dice" has no
-    way to pick. That is `events.DamageRolled.weapon_dice`."""
-    c.reroll_damage(on=c.me, until=When.EOT)
+    **The marker's premise was false and that is why this is written now.**
+    It said `roll.dice` "cannot say which of them were the `[W]` dice,
+    which were the critical rider's, and which came from a `dice=` bonus".
+    Measured instead of believed:
+
+        c.w(1) = '1d12'   ->   roll.expr='1d12' dice=[11] bonus=0, amount 16
+
+    The bonus and the enhancement are **not** in `roll.dice`; they are flat
+    terms the reprice closure holds. And the only way a non-weapon die
+    could get in is a row concatenating one into the expression it hands
+    `c.damage`: **0 rows in the tree do that**, against **1,655** that pass
+    a bare `c.w(...)`. So `roll.dice` already *is* the `[W]` dice, and a
+    reroll confined to it is confined to them.
+
+    So no field was needed, which also means no replay re-record: the
+    emit site's own note is explicit that a *field* on `DamageRolled` would
+    reach the page and move all 290 of its lines across seven fixtures,
+    and that is exactly why `#703` made `roll` an attribute.
+
+    **What is still short, and the marker now names it.** The card also
+    rerolls the critical dice. On a critical `_roll_damage_dice` returns
+    `None` -- every face is maximised, so no die was rolled and there is no
+    second result -- and the critical rider's own "+1d6 per plus" is rolled
+    inside the modifier pass, never reaching the event. `c.reroll_faces`
+    returns 0 and changes nothing there, by its own docstring. That half is
+    unreachable and is a narrower residue than the old marker claimed.
+
+    `pick=EVERY_DIE` is "as many as you like", and `_rolled_pick`'s floor
+    means a die already at its break-even is left alone rather than thrown
+    away. #835."""
+    c.reroll_faces(pick=EVERY_DIE)
 
 
 @power(

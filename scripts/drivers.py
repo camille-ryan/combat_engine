@@ -25715,6 +25715,47 @@ def reroll_after_the_roll(out: Result) -> None:
              " ranged control cannot reach",
              f"it moved {unarmed} of 250")
 
+    # -- i1761p1: every weapon die, and only the weapon dice (#835) --------
+    #
+    # Its marker claimed `roll.dice` "cannot say which of them were the
+    # `[W]` dice, which were the critical rider's, and which came from a
+    # `dice=` bonus". The second assertion here is that claim, tested: the
+    # flat terms are not in `roll.dice` at all, so a reroll confined to it
+    # is confined to the weapon dice by construction and no provenance
+    # field was needed.
+    every = gain(WEAPON_MELEE, "i1761p1")
+    out.that(every > melee,
+             "i1761p1 rerolls **every** weapon die where i1756p1 rerolls one,"
+             " so it is worth strictly more -- the ordering the two cards"
+             " print, and the check that it is not quietly doing the same"
+             " thing as its neighbour",
+             f"every die {every:+.2f} against one die {melee:+.2f}")
+
+    world, me, _ = audit_board("f1378b", 7)
+    foe = enemies(world, me)[0]
+    caught: list[DamageRolled] = []
+    world.bus.on(DamageRolled, lambda ev: caught.append(ev))
+    swing = Cast(world=world, me=me, ref=WEAPON_MELEE)
+    expr = swing.w(1)
+    swing.damage(expr, 5, on=foe)
+    ev2 = caught[0] if caught else None
+    roll2 = getattr(ev2, "roll", None)
+    if ev2 is None or roll2 is None:
+        out.skip("a weapon blow carrying its dice, for the provenance test")
+    else:
+        want = int(expr.split("d")[0] or 1)
+        out.that(roll2.expr == expr and len(roll2.dice) == want,
+                 "the roll behind a weapon blow holds exactly the `[W]`"
+                 " expression's dice and no others, which is what makes a"
+                 " reroll of `roll.dice` a reroll of the weapon dice",
+                 f"expr={roll2.expr!r} wanted {want} dice, got {roll2.dice}")
+        out.that(roll2.bonus == 0 and ev2.amount > sum(roll2.dice),
+                 "and the flat terms -- the ability bonus and the"
+                 " enhancement -- are **outside** the dice list while still"
+                 " being in the amount, so rerolling cannot reach them",
+                 f"bonus={roll2.bonus}, dice sum {sum(roll2.dice)},"
+                 f" amount {ev2.amount}")
+
     # -- the recipe, which is the part a raw delta gets wrong ---------------
     world, me, _ = audit_board("f1378b", 3)
     foe = enemies(world, me)[0]

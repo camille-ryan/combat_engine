@@ -247,6 +247,29 @@ KNOWN_SILENT = {
     # plant-tested in both directions over 250 boards each.
     "p16373": "answers a DamageRolled the board never poses, and gates on"
               " the blow being arcane -- proved in drivers.reroll_after",
+    # **The third of the family, and its cause is one step along from the
+    # two above.** Those answer a `DamageRolled` the auditor never poses at
+    # all. This one is posed -- `reroll_faces` is reached **66 times** on
+    # one audit -- and still pays nothing, because of what the roll
+    # carries:
+    #
+    #     roll is None   62 of 66      rerolled a die   2 of 66
+    #
+    # `audit.LOADED` pins the die at 20, so nearly every hit is a critical,
+    # and a critical **maximises every face instead of rolling one** --
+    # `_roll_damage_dice` returns `None` and `reroll_faces` returns 0 by
+    # its own documented contract. The two rolls that did carry dice were
+    # rerolled, so the verb works and the board is what cannot show it.
+    #
+    # Not fixed with an event, deliberately. `Rerolled` is scoped to the
+    # d20 on purpose -- its docstring says the damage rerolls "are not
+    # among them on purpose" -- so announcing one here would widen an
+    # event against its own stated design to move one row off this list.
+    # The family's evidence is `drivers.reroll_after`, which is where the
+    # weapon-dice assertion for this row went. #835.
+    "i1761p1": "answers a DamageRolled the board poses only as a critical,"
+               " which maximises the faces and leaves no roll to redo"
+               " (62 of 66) -- proved in drivers.reroll_after",
     "i1756p1": "answers a DamageRolled the board never poses, and gates on"
                " a melee weapon attack -- proved in drivers.reroll_after",
     # `p10044` was excused here -- "an interrupt on taking damage, and the
