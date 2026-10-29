@@ -1027,7 +1027,7 @@ def cited() -> int:
 _SPEC_TABLES = (
     "power", "monster_power", "class_feature", "companion", "item",
     "item_block", "feat", "race", "racial_trait", "trap", "disease",
-    "associate", "terrain", "build_option",
+    "associate", "terrain", "build_option", "poison",
 )
 
 #: A table with a `spec` column that this walk deliberately does **not**

@@ -653,6 +653,23 @@ CREATE TABLE disease (
   dc_shape TEXT, stages INTEGER, spec TEXT
 );
 CREATE INDEX disease_level ON disease(level);
+
+-- A poison, which 17 of its 19 rows exist nowhere else in the corpus and 11
+-- of which are inside the band this project plays. Unlike most unimported
+-- tables it is **not** a duplicate of `item`: only 2 of the 19 appear there.
+--
+-- `PlainTxt` is not flavour. It prints an attack in the same grammar a
+-- monster card uses -- a bonus against a defence, ongoing damage, a save to
+-- end it -- so these are rows the engine can already execute and only had
+-- nowhere to be read from. #1000.
+--
+-- `cost` is kept as printed text rather than parsed to a number: the column
+-- holds prices in a currency this project models nowhere, and a number would
+-- invite arithmetic on it. Stored so a brief can show it, read by nothing.
+CREATE TABLE poison (
+  ref TEXT PRIMARY KEY, id INTEGER, level INTEGER, cost TEXT, spec TEXT
+);
+CREATE INDEX poison_level ON poison(level);
 """
 
 
@@ -674,6 +691,7 @@ class Report:
     #: `_conjured` with an `m<item id>c<n>` ref. #601.
     conjured: int = 0
     traps: int = 0
+    poisons: int = 0
     diseases: int = 0
     links_found: int = 0
     links_total: int = 0
@@ -732,6 +750,7 @@ class Report:
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
             f"traps         {self.traps:6d}  (with a printed Perception DC where one is given)",
+            f"poisons       {self.poisons:6d}",
             f"diseases      {self.diseases:6d}  (stage track and the DC shape its page prints)",
             f"weapon rows   {self.wields:6d}  (what each power's text says it needs)",
             (f"blank stats   {len(self.unexpected_blank):6d} unexpected  "
@@ -826,6 +845,7 @@ def build() -> Report:
     report.crossed += _cross_reference(out, names, table="class_feature")
     report.companions = _companions(source, out, names)
     report.traps = _traps(source, out, names)
+    report.poisons = _poisons(source, out, names)
     report.diseases = _diseases(source, out, names)
     report.build_powers = _build_powers(source, out, names)
     # Every other name the compendium prints, so the scrubber can see
@@ -2522,6 +2542,67 @@ def _armour(source: sqlite3.Connection, out: sqlite3.Connection,
     return written
 
 
+def _poisons(source: sqlite3.Connection, out: sqlite3.Connection,
+             names: dict[str, dict[str, str]]) -> int:
+    """Every poison block, which had no table at all.
+
+    The same split `_traps` makes: the printed numbers that are worth a
+    column, and the rest kept as a sanitised block. Here that is only the
+    level and the cost -- a poison's attack is a whole line rather than a
+    bonus and a defence, so parsing it into pieces would be guessing at a
+    grammar `monster_power` already handles as text.
+
+    Nothing is derived. A row whose level cannot be read is `NULL`, which is
+    the component rule and the same call `trap.perception_dc` documents.
+    """
+    written = 0
+    for pid, name, level, cost, plain in source.execute(
+        "SELECT ID, Name, Level, Cost, PlainTxt FROM Poison ORDER BY ID"
+    ):
+        spec = " ".join((plain or "").split())
+        # The page opens by repeating its own name, as a trap's does.
+        for _ in range(3):
+            if name and spec.startswith(name):
+                spec = spec[len(name):].lstrip()
+        spec = re.split(r"\s*Published in\b", spec)[0].strip()
+        if len(spec) < 20:
+            continue
+        # **`x4_`, not a new prefix, and this nearly went wrong.**
+        # `_ALIAS_TABLES` already holds "Poison" at index 4, so every one of
+        # these 19 rows is *already* in the name index as `x4_<id>` -- the
+        # count matches exactly. Minting an `x11_` here would have given one
+        # card two refs, which is the duplicate-namespace fault this repo has
+        # paid for before, and `leaks` would not have caught it because both
+        # halves would have been clean.
+        ref = f"x4_{pid}"
+        out.execute(
+            "INSERT OR REPLACE INTO poison VALUES (?,?,?,?,?)",
+            (
+                ref,
+                pid,
+                int(m.group()) if (m := re.search(r"\d+", str(level or ""))) else None,
+                # **Coerced, because `Cost` is an integer here.** It is a
+                # string on other tables and an int on this one, so the
+                # usual `(x or "").strip()` raised and took the whole build
+                # down with it -- and a failed build leaves no database at
+                # all, since `build` deletes its output before writing.
+                (str(cost).strip() or None) if cost is not None else None,
+                sanitise.scrub(spec, {name: ref}),
+            ),
+        )
+        # `spec` here is the text *before* the scrub, which is the printed
+        # rules. One extraction, two destinations -- `_traps`' arrangement.
+        #
+        # **Merged, never assigned.** The alias pass has already put a
+        # `name` on this ref, and `names[ref] = {...}` would drop it for
+        # whichever pass happened to run second -- a name silently lost from
+        # the only file allowed to hold one.
+        names.setdefault(ref, {})["rules_text"] = spec
+        names[ref].setdefault("name", name)
+        written += 1
+    return written
+
+
 def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
            names: dict[str, dict[str, str]]) -> int:
     """Every trap and hazard block, which nothing had ever read.
@@ -3204,7 +3285,7 @@ def _links_resolve(source: sqlite3.Connection, out: sqlite3.Connection) -> tuple
 SPEC_TABLES = (
     "power", "monster_power", "class_feature", "companion", "item",
     "item_block", "feat", "race", "racial_trait", "trap", "disease",
-    "associate", "terrain", "build_option",
+    "associate", "terrain", "build_option", "poison",
 )
 
 
