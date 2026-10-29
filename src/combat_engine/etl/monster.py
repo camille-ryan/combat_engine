@@ -415,12 +415,20 @@ def parse(
     #: vocabulary is 234,577 terms and holds every creature-type word, so it
     #: is a looser sieve than the one already refused -- the same trade at
     #: twice the price, for two cards. So the two cards are named.
-    MECHANICAL_IN_NAME: dict[str, frozenset[str]] = {
-        "m6230": frozenset({"water"}),
+    #: **By position in the printed name, never by the word itself.** The
+    #: first version listed the word, and that put half of a printed name in
+    #: a tracked file directly beside a citation of the ref it belongs to --
+    #: which is the one-word case `leaks.py --cited` cannot catch and so the
+    #: one where care has to come from the author. An index carries no name.
+    MECHANICAL_IN_NAME: dict[str, tuple[int, ...]] = {
+        "m6230": (0,),
     }
 
     keep = {m.role, m.size, m.origin, m.kind, "minion", "elite", "solo", "leader"}
-    keep |= MECHANICAL_IN_NAME.get(m.ref_id, frozenset())
+    _name_words = re.findall(r"[^\W\d_]+", m.name or "")
+    keep |= {_name_words[i].lower()
+             for i in MECHANICAL_IN_NAME.get(m.ref_id, ())
+             if i < len(_name_words)}
     for a in m.abilities:
         # **The printed lines, taken before the scrub.** This is the only place
         # the unscrubbed text exists, and the localisation wants it: `a.spec` is

@@ -372,9 +372,9 @@ def scrub(
         # halves must keep matching; longest-first in the pass below is what
         # makes the compound win when the page printed it whole.
         # The words again, with each hyphenated compound kept whole, and the
-        # runs over *those*. `Shadar-kai` alone is not enough: the page's
-        # short form is `Shadar-kai Weaponmaster`, and with only the compound
-        # as a token that fired and then `Weaponmaster` fired after it, for
+        # runs over *those*. The bare compound alone is not enough: the
+        # page's short form is `<compound> <Word>`, and with only the
+        # compound as a token that fired and then `<Word>` fired after it, for
         # `<ref> <ref>` instead of `<ref>-<ref>` -- the same doubling one
         # space along. Runs over compound-preserving words give the printed
         # short form itself, which is what the card actually says.
@@ -442,11 +442,12 @@ def scrub(
     here = _straight(out.lower())
     # **A hyphenated token first, then longest.** Longest alone is not
     # enough, and the case that proves it is why #541's fault 1 had a
-    # residual. For `Kyrion, Shadar-kai Weaponmaster` the space-joined run
-    # `kai Weaponmaster` is 16 characters and the printed compound
-    # `Shadar-kai` is 10 -- and the hyphen is a word boundary, so the run
-    # matches straight across it in "shadar-kai weaponmaster". It fires
-    # first, leaves `shadar-` orphaned, and the lone word then takes that:
+    # residual -- `m1819`, whose name is `<Personal>, <A>-<b> <C>`. The
+    # space-joined run `<b> <C>` is 16 characters and the printed compound
+    # `<A>-<b>` is 10 -- and the hyphen is a word boundary, so the run
+    # matches straight across it in the card's own text. It fires first,
+    # leaves the compound's first half orphaned, and the lone word then
+    # takes that:
     #
     #     \bkai\ Weaponmaster\b -> m1819
     #     \bShadar\b            -> m1819      = "m1819-m1819"
