@@ -16204,7 +16204,14 @@ def a_minion_missed_takes_nothing(out: Result) -> None:
         health = world.need(mob, Health)
         was = _resolve.is_minion
         if flip:
-            _resolve.is_minion = lambda _w, _e: False
+            # Suppressed rather than typed, and the distinction is the
+            # finding: `ty` declares the attribute as *this* function --
+            # `def is_minion(world: World, eid: int) -> bool` -- so nothing
+            # but `is_minion` itself satisfies it. A stand-in annotated to
+            # the identical signature was tried and refused in the same
+            # words, which is why nobody should spend another pass on a
+            # typed shim. Restored in the `finally` two lines down. #1006.
+            _resolve.is_minion = lambda _w, _e: False  # ty: ignore[invalid-assignment]
         try:
             Cast(world=world, me=foe, ref="drivers:minion").half_damage(
                 "4d8", on=mob)
