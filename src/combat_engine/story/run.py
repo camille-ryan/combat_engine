@@ -795,6 +795,63 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
     step.outcome = "won" if run.won else "lost"
 
 
+def _due(campaign: Campaign, module: Module, made: Step) -> str:
+    """The timeline scene that fires now, or `""`. #965.
+
+    Checked at a scene transition, **ahead of the scene's own exit**: an
+    event on the clock happens *to* the party, so a scene the module would
+    have gone to next waits its turn rather than being skipped. The entry
+    is marked fired either way, so a timed event lands once.
+
+    Three things this gets right and a simpler version would not:
+
+    * **`unless` is read before `when`.** An entry the party has already
+      prevented is retired without ever being due, so cancelling a thing
+      early does not leave it pending for the rest of the campaign.
+    * **A cancelled entry is announced too.** *"The ritual never happens --
+      you saw to that"* is the payoff for having prevented it, and a
+      silent cancellation is indistinguishable from an entry that was
+      never written.
+    * **The earliest due entry wins**, not the first in the file, so a
+      module's timeline can be written in any order.
+    """
+    clock = campaign.clock
+    ready: list[tuple[int, int, object]] = []
+    for i, entry in enumerate(module.timeline):
+        key = f"{entry.when}{entry.unit}:{entry.scene}"
+        if key in campaign.fired:
+            continue
+        # Prevented: a scene the party played, or a flag they moved.
+        stopped = (
+            entry.unless
+            and (entry.unless in campaign.visited
+                 or campaign.flags.get(entry.unless, 0))
+        )
+        if stopped:
+            campaign.fired.append(key)
+            made.say(
+                f"Prevented: {entry.scene} will not happen -- "
+                f"{entry.unless} saw to that.",
+                "note",
+            )
+            continue
+        if clock.get(entry.unit, 0) >= entry.when:
+            ready.append((entry.when, i, entry))
+    if not ready:
+        return ""
+    ready.sort(key=lambda row: (row[0], row[1]))
+    entry = ready[0][2]
+    campaign.fired.append(f"{entry.when}{entry.unit}:{entry.scene}")
+    if entry.says:
+        made.say(entry.says, "note")
+    made.say(
+        f"On the clock: {entry.scene} happens now ({entry.when} "
+        f"{entry.unit}{'' if entry.when == 1 else 's'} in).",
+        "note",
+    )
+    return entry.scene
+
+
 def step(
     campaign: Campaign, module: Module, *,
     choice: str = "", choose: Chooser | None = None, record: bool = True,
@@ -841,6 +898,10 @@ def step(
             # the whole module and every later fight would claim milestones
             # the party had rested away. #968.
             campaign.encounters = 0
+            #: The other unit a timeline entry can be due in. Counted here
+            #: rather than derived from `visited`, because deriving it would
+            #: need the module to ask which of those scenes were extended.
+            campaign.rests += 1
         made.say(
             "Extended rest: everything back."
             if scene.extended
@@ -886,6 +947,20 @@ def step(
         made.next_id = module.next_of(scene, choice)
 
     campaign.visited.append(scene.id)
+    # **The timeline, after the tick and instead of the scene's own exit.**
+    # `visited` is appended first because the scene just played is part of
+    # the count an entry is due against.
+    #
+    # The override **replaces** the exit rather than deferring it, and that
+    # is a real limitation worth stating rather than discovering: a timed
+    # scene has to carry its own `exits`, and a module that wants to return
+    # to the interrupted thread says so by exiting back to it. Remembering
+    # the displaced exit would need another piece of campaign state and a
+    # rule for what happens when the timed scene has exits of its own,
+    # which is more than the first version of this should decide. #965.
+    timed = _due(campaign, module, made)
+    if timed:
+        made.next_id = timed
     campaign.scene = made.next_id
     if record:
         record_scene(campaign, made)

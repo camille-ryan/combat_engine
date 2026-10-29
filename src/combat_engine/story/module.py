@@ -156,6 +156,44 @@ class FoeSpec:
     rank: str = "standard"
 
 
+#: What a timeline entry counts in. Scenes played and extended rests taken
+#: are the two units the book's own examples use -- *"a festival day"*, *"the
+#: night of the full moon"* -- and a tick per scene transition is the coarsest
+#: thing that can express any of them. Deliberately **not** a real clock.
+UNITS = ("scene", "rest")
+
+
+@dataclass(frozen=True)
+class Timed:
+    """One timeline entry: a scene that happens *to* the party, on the clock.
+
+    The DMG's structural tool for an adventure that is not a dungeon --
+    events that fire whether or not the party went looking, and the half
+    that makes it not railroading:
+
+    > *events on the timeline could trigger **unless** the characters
+    > manage to prevent them*
+
+    So an entry carries both halves. `when` and `unit` are when it is due;
+    `unless` is what cancels it, and is either a scene id the party has
+    already played or a module flag that is non-zero. An entry with no
+    `unless` is inevitable, which the book also allows -- a solar eclipse
+    is nobody's fault.
+
+    `says` is told to the players when the entry is announced, because
+    DMG2 is explicit that a deadline is no use as pacing if it is a
+    secret: *"Tell the players up front."*
+    """
+
+    when: int = 0
+    scene: str = ""
+    unit: str = "scene"
+    #: A scene id already played, or a flag that is non-zero. Either
+    #: cancels the entry for good.
+    unless: str = ""
+    says: str = ""
+
+
 @dataclass(frozen=True)
 class Grant:
     """Something the scene hands the party.
@@ -553,6 +591,10 @@ class Module:
     #: a reputation score, a body count, a door left unlocked. The module in
     #: `modules/` counts one of these and spends it on rewards.
     flags: dict[str, int] = field(default_factory=dict)
+    #: Events that fire on the clock rather than on what the party did.
+    #: Empty for every module converted so far, which is why nothing plays
+    #: differently until one states an entry. See `Timed` and `run._due`.
+    timeline: tuple[Timed, ...] = ()
 
     def scene(self, scene_id: str) -> Scene:
         return self.scenes[scene_id]
@@ -653,6 +695,36 @@ def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
     return FoeSpec(
         count=count, name=str(raw.get("name", "")).strip(),
         words=words, role=role, rank=rank,
+    )
+
+
+def _as_timed(raw: Any, where: str, problems: list[str]) -> Timed | None:
+    """One timeline entry. Its `scene` and `unless` are checked in `parse`,
+    which is the only place that knows every scene id and flag."""
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a timeline entry must be an object")
+        return None
+    scene = str(raw.get("scene", "")).strip()
+    if not scene:
+        problems.append(f"{where}: a timeline entry needs a 'scene' to fire")
+        return None
+    when = raw.get("when", 0)
+    if not isinstance(when, int) or isinstance(when, bool) or when < 1:
+        problems.append(
+            f"{where}: when is {when!r}; it is which tick the entry is due "
+            "on and must be a positive integer"
+        )
+        return None
+    unit = str(raw.get("unit", "scene")).strip().lower()
+    if unit not in UNITS:
+        problems.append(
+            f"{where}: unit {unit!r} is not one of {', '.join(UNITS)}"
+        )
+        unit = "scene"
+    return Timed(
+        when=when, scene=scene, unit=unit,
+        unless=str(raw.get("unless", "")).strip(),
+        says=str(raw.get("says", "")).strip(),
     )
 
 
@@ -1012,11 +1084,44 @@ def parse(raw: dict, path: Path) -> Module:
             if exit_id and exit_id not in scenes:
                 problems.append(f"scene {scene.id!r}: exit {exit_id!r} is not a scene")
 
+    flags = {
+        str(k): int(v) for k, v in (raw.get("flags") or {}).items()
+        if isinstance(v, int)
+    }
+
+    timeline = tuple(
+        t for t in (
+            _as_timed(r, f"timeline entry {i + 1}", problems)
+            for i, r in enumerate(raw.get("timeline", ()) or ())
+        ) if t is not None
+    )
+    for i, entry in enumerate(timeline):
+        where = f"timeline entry {i + 1}"
+        if entry.scene not in scenes:
+            problems.append(
+                f"{where}: fires {entry.scene!r}, which is not a scene"
+            )
+        # **`unless` is a scene id or a flag, and a typo in it is the worst
+        # kind of mistake here**: an entry whose cancel condition can never
+        # be true is an inevitable event wearing an escape hatch, and it
+        # would play as though the party simply never managed to stop it.
+        if entry.unless and entry.unless not in scenes and entry.unless not in flags:
+            problems.append(
+                f"{where}: unless {entry.unless!r} is neither a scene nor a "
+                "declared flag, so nothing could ever cancel this entry"
+            )
+
     # Unreachable scenes are reported, not refused: a converter working through
     # a long module has half a graph for a while, and `--validate` is the tool
     # that should tell them which half.
+    #
+    # **A timeline's own scenes are roots.** Nothing exits to them by
+    # construction -- that is what being on the clock means -- so without
+    # this every timed event reported "nothing leads to it" and the one
+    # genuine orphan would be lost among them.
     if start in scenes:
-        seen, stack = {start}, [start]
+        roots = [start, *(t.scene for t in timeline if t.scene in scenes)]
+        seen, stack = set(roots), list(roots)
         while stack:
             here = scenes[stack.pop()]
             onward = [*here.exits, here.on_success, here.on_failure]
@@ -1034,11 +1139,6 @@ def parse(raw: dict, path: Path) -> Module:
         problems.append(f"party_level must be 1-30, got {level!r}")
         level = 1
 
-    flags = {
-        str(k): int(v) for k, v in (raw.get("flags") or {}).items()
-        if isinstance(v, int)
-    }
-
     if problems:
         raise ModuleError(path, problems)
     return Module(
@@ -1047,6 +1147,7 @@ def parse(raw: dict, path: Path) -> Module:
         party_size=int(raw.get("party_size", 4) or 4),
         edition=str(raw.get("edition", "")).strip(),
         flags=flags,
+        timeline=timeline,
     )
 
 

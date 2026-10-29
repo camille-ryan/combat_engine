@@ -139,6 +139,24 @@ class Campaign:
     #: the day and not about any character, and because an extended rest
     #: has to reset it from `run.step`, which is where the rest happens.
     encounters: int = 0
+    #: Extended rests taken. The second of the two units a timeline entry
+    #: can be due in; scenes played is `len(visited)` and needs no field.
+    rests: int = 0
+    #: Timeline entries already fired or cancelled, by `<when><unit>:<scene>`.
+    #: **Without this an entry fires every transition once its tick passes**,
+    #: because "due" is a comparison against a counter that only goes up.
+    fired: list[str] = field(default_factory=list)
+
+    @property
+    def clock(self) -> dict[str, int]:
+        """What a timeline entry is compared against.
+
+        Scenes played and extended rests taken. Deliberately not a real
+        clock -- the book's own units are days and sessions, and a tick per
+        scene transition is the coarsest thing that expresses any of its
+        examples.
+        """
+        return {"scene": len(self.visited), "rest": self.rests}
 
     @property
     def milestones(self) -> int:
@@ -207,6 +225,8 @@ def to_dict(campaign: Campaign) -> dict:
         # driver asked, reading 0 where the campaign held 2. `Sheet` gets
         # this for free through `asdict` and `_sheet`'s tolerant filter.
         "encounters": campaign.encounters,
+        "rests": campaign.rests,
+        "fired": list(campaign.fired),
     }
 
 
@@ -237,6 +257,8 @@ def from_dict(raw: dict) -> Campaign:
         # as "no encounters since the last extended rest" -- which is the
         # safe direction and needs no `VERSION` bump to refuse the file.
         encounters=int(raw.get("encounters", 0) or 0),
+        rests=int(raw.get("rests", 0) or 0),
+        fired=[str(k) for k in raw.get("fired", ())],
     )
 
 

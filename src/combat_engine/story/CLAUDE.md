@@ -815,6 +815,68 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## A scene can happen on the clock, unless the party stopped it
+
+`Scene.exits` could only say "when this scene ends", so nothing could
+happen *to* a party. `Module.timeline` now can — the DMG's structural tool
+for an adventure that is not a dungeon, and the half that keeps it from
+being a railroad is the `unless`:
+
+> *events on the timeline could trigger **unless** the characters manage to
+> prevent them*
+
+An entry is `(when, unit, scene, unless, says)`. Two units — scenes played
+and extended rests taken — because those are the units the book's own
+examples use, and a tick per scene transition is the coarsest thing that
+expresses any of them. **Deliberately not a real clock.**
+
+Five calls worth keeping:
+
+* **`unless` is read before `when`**, so an event the party prevented early
+  is retired rather than sitting pending for the rest of the campaign. It
+  takes a scene id they played *or* a module flag that is non-zero, so a
+  consequence recorded anywhere can stop one.
+* **A cancellation is announced**, not silent. Having prevented the thing is
+  the payoff, and a silent cancel is indistinguishable from an entry nobody
+  wrote.
+* **`says` is told to the players**, because DMG2 is explicit that a
+  deadline is useless as pacing if it is a secret: *"Tell the players up
+  front."*
+* **A timed scene is a reachability root.** Nothing exits to one by
+  construction, so without this every entry reported "nothing leads to it"
+  and the one genuine orphan was lost among them.
+* **The override replaces the scene's exit rather than deferring it.** A
+  timed scene carries its own `exits`; a module that wants to resume the
+  interrupted thread exits back to it. Remembering the displaced exit needs
+  more campaign state and a rule for what happens when the timed scene has
+  exits of its own — more than a first version should decide.
+
+**Not done here: prohibitions.** DMG2's inverse — the extended rest a party
+may *not* benefit from until some condition is met — is #993, where the
+printed 12-hour lockout already lives. A prohibition is a predicate on
+`Party.rest(extended=True)`, and that is the right place for it.
+
+### The probe needed fixing before it could prove anything
+
+Worth reading before writing the next one here, because it cost real time:
+
+* **An unbounded campaign walk hangs instead of failing.** Remove the
+  `fired` guard and `_due` returns the same scene for ever, so
+  `while not campaign.finished` spins — and `check.py` waits on it with
+  nothing to read. The walk is bounded at 40 and reports the overrun.
+* **A plant that crashes the probe proves less than one that reddens an
+  assertion.** Two of twelve did, and both were fixable: the orphan
+  assertion sat *after* probes its own plant makes fail validation, and the
+  control plant returned a scene id the control module never declared. An
+  instrument that dies before reaching the relevant check is evidence that
+  something changed, not that the check works.
+* **And a killed plant run leaves the tree broken in a way grep will not
+  find.** One did, and a search for `if False` and an intact `fired` guard
+  both came back clean while `if not module.timeline: return 's2'` sat in
+  `_due`. The break script writes an `IN_FLIGHT` sentinel naming the
+  applied plant now; the reliable check is whether the driver still passes,
+  not whether a signature is absent.
+
 ## Two encounters are a milestone, and the count is weighted
 
 `world.milestones` existed, `c.milestone()` read it, and arcade mode set it
@@ -943,11 +1005,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     summary_scenes boxed_text graph_furniture graph_administration \
     recall_order borrowed_board party_size_rule challenge_progresses \
     line_kinds objective_verdict objective_budget scene_grant \
-    story_milestones
+    story_milestones timeline
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 23 drivers and prints 214 assertions**, and **each was
+**The command above is 24 drivers and prints 228 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

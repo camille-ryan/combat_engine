@@ -42106,6 +42106,235 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def an_event_on_the_clock_fires_unless_the_party_prevented_it(
+    out: Result,
+) -> None:
+    """The DMG's structural tool for an adventure that is not a dungeon:
+
+    > *events on the timeline could trigger **unless** the characters
+    > manage to prevent them*
+
+    `Scene.exits` could only say "when this scene ends", so nothing could
+    happen *to* a party on the clock. `Module.timeline` now can, in two
+    units -- scenes played and extended rests taken.
+
+    **The control is the first assertion**: a module with no timeline must
+    play exactly the graph it always did. Everything here is new
+    behaviour behind an empty default, so that is the one that says the
+    other 677 modules are untouched.
+
+    The `unless` half is the one that matters and it is asserted in both
+    directions -- the entry fires when the party did not prevent it, and
+    is retired *and announced* when they did. A cancellation that said
+    nothing would be indistinguishable from an entry nobody wrote.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def talk(i: int, nxt: str) -> dict:
+        return {"id": f"s{i}", "kind": "roleplay", "name": f"S{i}",
+                "exits": [nxt] if nxt else []}
+
+    def play(scenes: list[dict], timeline: list[dict],
+             flags: dict | None = None) -> tuple[list[str], list[str],
+                                                 save_mod.Campaign]:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "s1", "scenes": scenes, "timeline": timeline,
+             **({"flags": flags} if flags else {})}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=3)
+        order: list[str] = []
+        said: list[str] = []
+        # **Bounded, and the bound is the point.** A timeline entry that
+        # fails to retire itself sends play back to the same scene for
+        # ever, so the unbounded version of this walk *hung* instead of
+        # going red -- `scripts/CLAUDE.md` is explicit that a plant which
+        # does not redden is a finding, and here the finding was about the
+        # probe. An instrument that hangs is worse than one that fails:
+        # `check.py` waits on it with nothing to read. 40 is far above any
+        # graph here and the overrun is reported rather than swallowed.
+        while not campaign.finished and len(order) < 40:
+            order.append(campaign.scene)
+            made = run_mod.step(campaign, built, record=False)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+        if len(order) >= 40:
+            order.append("(ran away)")
+        return order, said, campaign
+
+    THREE = [talk(1, "s2"), talk(2, "s3"), talk(3, "")]
+    EVENT = {"id": "ev", "kind": "roleplay", "name": "Ev", "exits": ["s3"]}
+
+    # -- the control: no timeline, the graph as it always was --------------
+    plain, _, _ = play(THREE, [])
+    out.that(
+        plain == ["s1", "s2", "s3"],
+        "a module with no timeline plays exactly the graph it declares",
+        f"{plain}",
+    )
+
+    # -- a timed scene is not an orphan ------------------------------------
+    # Nothing exits to a timed scene by construction, so without the
+    # timeline being a reachability root every entry would report
+    # "nothing leads to it" and bury the one real orphan.
+    try:
+        mod.parse({"id": "ok", "party_level": 2, "party_size": 4,
+                   "start": "s1", "scenes": [*THREE, EVENT],
+                   "timeline": [{"when": 2, "scene": "ev"}]},
+                  Path("<driver>"))
+        orphaned = ""
+    except mod.ModuleError as exc:
+        orphaned = str(exc)
+    out.that(
+        not orphaned,
+        "a scene only the timeline reaches is not reported as an orphan",
+        orphaned[:120] or "accepted, as it should be",
+    )
+
+    # -- an inevitable event lands on its tick -----------------------------
+    timed, said, _ = play(
+        [*THREE, EVENT],
+        [{"when": 2, "scene": "ev", "says": "The sky begins to dim."}])
+    out.that(
+        timed == ["s1", "s2", "ev", "s3"],
+        "an event due after two scenes happens after the second one, "
+        "before the exit the scene itself named",
+        f"{timed}",
+    )
+    out.that(
+        any("The sky begins to dim." in n for n in said),
+        "and the module's own words for it are told to the players, which "
+        "DMG2 says a deadline is useless without",
+        f"{[n for n in said if 'dim' in n] or said}",
+    )
+
+    # -- it fires once, not every transition after its tick ----------------
+    out.that(
+        timed.count("ev") == 1,
+        "and it fires once rather than every transition after its tick, "
+        "which a bare comparison against a rising counter would do",
+        f"{timed}",
+    )
+
+    # -- prevented by a scene the party played -----------------------------
+    # Exits to `s2` rather than `s3`: these two probes are two-scene
+    # graphs, and the validator rightly refused the first draft for an
+    # event pointing at a scene the probe did not declare.
+    EV2 = {"id": "ev", "kind": "roleplay", "name": "Ev", "exits": ["s2"]}
+    warned = [talk(1, "warn"),
+              {"id": "warn", "kind": "roleplay", "name": "Warn",
+               "exits": ["s2"]},
+              talk(2, ""), EV2]
+    stopped, notes, _ = play(warned, [{"when": 2, "scene": "ev",
+                                       "unless": "warn"}])
+    out.that(
+        "ev" not in stopped,
+        "an event the party prevented does not happen",
+        f"{stopped}",
+    )
+    out.that(
+        any("Prevented" in n for n in notes),
+        "and the prevention is said out loud, which is the payoff for "
+        "having stopped it",
+        f"{[n for n in notes if 'Prevented' in n] or notes}",
+    )
+
+    # -- and the same entry fires when they did not prevent it -------------
+    # `s1` *offers* the warning as a second exit and the default takes
+    # `s2`, so the chance to prevent existed and the party walked past it.
+    # Declaring `warn` unreachable instead was refused, rightly, by the
+    # orphan check.
+    idle = [{"id": "s1", "kind": "roleplay", "name": "S1",
+             "exits": ["s2", "warn"]},
+            talk(2, ""), EV2,
+            {"id": "warn", "kind": "roleplay", "name": "Warn",
+             "exits": ["s2"]}]
+    ran, _, _ = play(idle, [{"when": 2, "scene": "ev", "unless": "warn"}])
+    out.that(
+        "ev" in ran,
+        "the same entry fires when they did not, which is what makes the "
+        "`unless` half worth having rather than a way to disable an entry",
+        f"{ran}",
+    )
+
+    # -- prevented by a flag the module declares ---------------------------
+    flagged, notes, _ = play(
+        [*THREE, EVENT],
+        [{"when": 2, "scene": "ev", "unless": "warned"}],
+        flags={"warned": 1})
+    out.that(
+        "ev" not in flagged and any("Prevented" in n for n in notes),
+        "a non-zero module flag cancels an entry too, so a consequence "
+        "recorded anywhere in the campaign can stop one",
+        f"{flagged}",
+    )
+
+    # -- the second unit: extended rests -----------------------------------
+    nights = [talk(1, "night"),
+              {"id": "night", "kind": "rest", "name": "Night",
+               "exits": ["s2"], "extended": True},
+              talk(2, ""),
+              {"id": "ev", "kind": "roleplay", "name": "Ev",
+               "exits": ["s2"]}]
+    slept, said, after = play(nights, [{"when": 1, "scene": "ev",
+                                        "unit": "rest"}])
+    out.that(
+        slept == ["s1", "night", "ev", "s2"] and after.rests == 1,
+        "an entry due in rests waits for an extended rest rather than for "
+        "a scene count, which three conversations would have satisfied",
+        f"{slept}, rests={after.rests}",
+    )
+    out.that(
+        any("1 rest in" in n for n in said),
+        "and says so in the singular, because `1 rests in` reads as a bug",
+        f"{[n for n in said if 'rest' in n] or said}",
+    )
+
+    # -- a dangling entry is refused at validation -------------------------
+    try:
+        mod.parse({"id": "bad", "party_level": 2, "party_size": 4,
+                   "start": "s1", "scenes": THREE,
+                   "timeline": [{"when": 1, "scene": "nowhere"}]},
+                  Path("<driver>"))
+        refused = ""
+    except mod.ModuleError as exc:
+        refused = str(exc)
+    out.that(
+        "not a scene" in refused,
+        "an entry firing a scene that does not exist is refused by "
+        "`--validate` rather than at play time, three hours in",
+        refused[:120] or "it was accepted",
+    )
+
+    # -- an `unless` that can never be true is refused ---------------------
+    try:
+        mod.parse({"id": "bad", "party_level": 2, "party_size": 4,
+                   "start": "s1", "scenes": [*THREE, EVENT],
+                   "timeline": [{"when": 1, "scene": "ev",
+                                 "unless": "typo"}]}, Path("<driver>"))
+        caught = ""
+    except mod.ModuleError as exc:
+        caught = str(exc)
+    out.that(
+        "nothing could ever cancel" in caught,
+        "and so is an `unless` naming neither a scene nor a flag -- an "
+        "entry nothing can cancel is inevitable wearing an escape hatch",
+        caught[:120] or "it was accepted",
+    )
+
+    # -- and the clock survives a save -------------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(after))
+    out.that(
+        back.rests == after.rests and back.fired == after.fired,
+        "the clock and what has already fired survive a save and a load, "
+        "so a reloaded campaign does not replay its timeline",
+        f"rests={back.rests} fired={back.fired}",
+    )
+
+
 def two_encounters_make_a_milestone_and_the_board_is_told(out: Result) -> None:
     """Camille's ruling on #666, which is the printed rule word for word:
 
@@ -42529,6 +42758,10 @@ DRIVERS = {
     # silently by the *last* writer -- so the first registration of this ran
     # the other driver and reported 21 green assertions that had nothing to
     # do with it.
+    "timeline": (
+        an_event_on_the_clock_fires_unless_the_party_prevented_it,
+        "an event fires on the clock unless the party prevented it (#965)",
+    ),
     "story_milestones": (
         two_encounters_make_a_milestone_and_the_board_is_told,
         "two encounters are a milestone in a story campaign, weighted, "
