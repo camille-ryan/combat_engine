@@ -389,6 +389,22 @@ def scrub(
         for token in {name, *runs, *words}:
             low = token.lower()
             long_enough = len(token) > 2 or (len(token) == 2 and low not in STOPWORDS)
+            # **A run of nothing but function words is not a name**, and the
+            # length floor above cannot see that: `of the` is six characters,
+            # so it passed, while the `STOPWORDS` test only guards a
+            # *two-letter* token. A creature called "<Word> of the <Word>"
+            # therefore substituted its own ref for the card's own "of the":
+            #
+            #     until the end of the <creature>'s next turn
+            #     until the end <ref> <ref>'s next turn
+            #
+            # which loses the preposition and the article -- meaning, not
+            # cosmetics. `m1114` and `m1792` are the worked examples, and the
+            # note further up this function records that **119 monster names
+            # contain the word `of`**, which is the blast radius of the floor
+            # being length alone. #541.
+            if all(w in STOPWORDS for w in low.split()):
+                continue
             if not long_enough or low in kept:
                 continue
             # **The lone words are still substituted, and #379's second
