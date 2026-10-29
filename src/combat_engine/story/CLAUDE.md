@@ -627,7 +627,7 @@ way:
 
 | | success | failure |
 |---|---|---|
-| chapter 1 | the fires go out, every token removed | the fires burn through the whole fight -- *"The heroes receive experience for this skill challenge even if they fail it."* |
+| chapter 1 | the fires go out, every token removed | the fires burn through the whole fight -- and the module awards the challenge's experience either way, which it says in as many words |
 | chapter 4 | good time, they reach the stones by mid-afternoon | rough going, **each character loses a healing surge**, and they reach the same stones late |
 
 Chapter 4's two outcomes name **the same next encounter**. A challenge is

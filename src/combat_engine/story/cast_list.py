@@ -250,15 +250,19 @@ def _for_party_size(
     **It is a rule, not a table, which is what #798 had wrong.** The issue
     is titled "adjusts each encounter for party size *by name*" and the
     page does nothing of the kind. Every chapter prints the same two
-    paragraphs, and the per-encounter mention is an *example* of applying
-    them -- "you might subtract the guard drake" -- not a specification:
+    paragraphs, and where an encounter does mention a specific creature it
+    is illustrating the rule rather than specifying anything.
 
-        Weak Party: ... only four characters ... remove one of the lowest
-        level or least important non-minion monsters from the encounter.
+    Paraphrased below, deliberately -- those two paragraphs are the
+    adventure's prose and belong in git-ignored `modules/`, and quoting
+    them here is what `leaks.py --modules` caught me doing:
 
-        Strong Party: ... six characters ... add one of the simplest
-        non-minion monsters among those in the encounter whose level most
-        closely matches the encounter level.
+    * **short a character** (four where the module assumes five): take one
+      creature off the field, picked from the weakest or the least
+      consequential, and never a minion.
+    * **one over** (six): add a creature, the least complicated of the
+      kinds already fielded, preferring whichever sits nearest the
+      encounter's own level.
 
     So it needs no authoring at all, which is why it is built now rather
     than waiting for the trigger the issue set: a general rule over the
