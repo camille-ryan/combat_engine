@@ -692,6 +692,7 @@ class Report:
     conjured: int = 0
     traps: int = 0
     poisons: int = 0
+    skill_powers: int = 0
     diseases: int = 0
     links_found: int = 0
     links_total: int = 0
@@ -751,6 +752,7 @@ class Report:
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
             f"traps         {self.traps:6d}  (with a printed Perception DC where one is given)",
             f"poisons       {self.poisons:6d}",
+            f"skill powers  {self.skill_powers:6d}",
             f"diseases      {self.diseases:6d}  (stage track and the DC shape its page prints)",
             f"weapon rows   {self.wields:6d}  (what each power's text says it needs)",
             (f"blank stats   {len(self.unexpected_blank):6d} unexpected  "
@@ -2111,6 +2113,7 @@ def _powers(
             report.seconds += 1
             keep(extra)
     report.racial = _racial_powers(source, out, keep)
+    report.skill_powers = _skill_powers(source, keep)
     report.themed, report.talents = _theme_powers(source, keep)
     report.scores["power"] = sum(scores) / max(1, len(scores))
     report.crossed = _cross_reference(out, names)
@@ -2184,6 +2187,12 @@ def _racial_powers(
 #: eighteen feats that ride on nine of those theme powers read as "named
 #: in prose with no ref anywhere", which sent a sweep looking for the
 #: fault in the spec extractor, where it is not.
+#: The compendium's own category for a skill power. **Not a skill name**, which
+#: is why `power.class` held no skill and the family read as unimported: the
+#: class pass takes `Class IN (CLASSES)`, this value is in neither that list
+#: nor the racial or theme ones, so all of them fell through every pass. The
+#: same shape as the racial drop one comment over, and nothing noticed. #999.
+_SKILL_CLASS = "Skill Power"
 _THEME_CLASS = "Theme Power"
 _TALENT_CLASS = "Wild Talent Power"
 
@@ -2199,6 +2208,84 @@ _TALENT = "wild talent"
 #: **theme's printed name** -- "Minstrel", "Nomad", "Adept" -- and
 #: `scripts/spec.py` prints that column to an author.
 _POWER_KINDS = ("Attack", "Utility", "Feature")
+
+
+def _skill_powers(
+    source: sqlite3.Connection,
+    keep: Callable[[power_parser.Power], None],
+) -> int:
+    """The utility powers a trained skill opens, which no pass was taking.
+
+    `cls` is the **skill's own name**, lowercased to match `skills.SKILLS`'
+    keys, and that is the difference from the theme pass one function down.
+    A theme's printed name in a readable column would be a leak, so that
+    pass stores an alias ref instead. A skill name is not a name in that
+    sense: the seventeen are engine constants, `power.class` already holds
+    class names beside them, and a reader matching this column against
+    `SKILLS` is the whole point -- the printed gate on taking one of these
+    is being trained in that skill, so the skill *is* the "who may take
+    this" that `class` answers for everybody else.
+
+    Read off the card's own opening line, the way `_theme_of` reads a
+    theme's: the `Class` column says only the category, so it cannot say
+    which skill, and the first line can -- it opens with the skill and the
+    word for a utility power. All 144 rows parse.
+
+    **144, not the 102 counted from the printed page range.** The corpus
+    carries later sources than the one book, so the census from the pages
+    is a floor rather than the number -- which is this project's standing
+    experience with a census and the reason to take it from the data.
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    names = sorted(SKILLS, key=len, reverse=True)
+    written = 0
+    rows = source.execute(
+        "SELECT * FROM Power WHERE Level <= ? AND Class = ? ORDER BY ID",
+        (MAX_POWER_LEVEL, _SKILL_CLASS),
+    )
+    for row in rows:
+        p = power_parser.parse(dict(row), row["Txt"])
+        p.cls = _skill_of(row["PlainTxt"], names) or _SKILL_FALLBACK
+        if p.kind not in _POWER_KINDS:
+            p.kind = "Utility"
+        keep(p)
+        # The second card a few of these print, which only the class pass
+        # used to ask for -- the omission the racial and theme passes both
+        # had to fix after the fact.
+        for extra in power_parser.parse_extra(dict(row), row["Txt"]):
+            extra.cls = p.cls
+            if extra.kind not in _POWER_KINDS:
+                extra.kind = p.kind
+            keep(extra)
+        written += 1
+    return written
+
+
+#: Where a skill power whose own line does not name a skill is filed. Kept
+#: distinct from a skill so a reader can tell "this is a skill power and we
+#: could not say which" from a parsed one, rather than having it silently
+#: join one skill's list.
+_SKILL_FALLBACK = "skill"
+
+
+def _skill_of(plain: str, names: list[str]) -> str:
+    """Which skill opens this card, off its own first line.
+
+    Longest first, because one skill's name contains another's and a
+    shortest-first match would file both under the stub -- the same hazard
+    `_theme_of` records for themes that share a first word.
+
+    Matched against the **head** of the line rather than anywhere in the
+    body: every one of these cards opens with its skill, and a body search
+    would catch a skill merely mentioned in the effect, of which there are
+    many.
+    """
+    head = " ".join((plain or "").split())[:80].lower()
+    for name in names:
+        if name in head:
+            return name
+    return ""
 
 
 def _theme_powers(
