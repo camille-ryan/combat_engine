@@ -492,6 +492,30 @@ says three. `challenge.py`'s "three failures, and that number does not
 move with complexity" matches the compendium and the adventure, which is
 the right pair to follow.
 
+## Monster knowledge is deliberately not implemented
+
+Camille's ruling, **2026-10-29**, verbatim, on #987:
+
+> *"For now, I think I want to leave monster knowledge checks unimplemented
+> and have the combat board provide omniscient information."*
+
+The printed rule it declines is in the Player's Handbook's Knowledge Skills
+section: Arcana, Dungeoneering, History, Nature and Religion each identify
+certain kinds of monster, and *"the DM might also use your passive check
+result with skills such as Arcana or Dungeoneering to decide **how much to
+tell you about a monster** at the start of an encounter."*
+
+So the board shows what it shows regardless of who is looking. **Do not
+build a gate in front of it**, and do not file this as a gap -- it is a
+decision, not an omission. Recorded here because nothing else would stop a
+later reader finding the printed rule and "fixing" it; there is no issue
+open against it to carry the note.
+
+What this does **not** rule out, and the distinction matters: `beat._recall`
+already rolls knowledge skills against `Lore` rows to decide what a
+character *remembers about the story*. That is the same five skills doing a
+different job -- facts an adventure wrote down -- and it stays.
+
 ## A fight can be for something other than killing everything
 
 Camille's call, **2026-10-29**, after reading another system's
