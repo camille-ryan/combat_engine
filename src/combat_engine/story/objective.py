@@ -323,8 +323,11 @@ class Watch:
         """Does this fielded creature answer to one of the designated words?
 
         Either the module's own word for it or its database ref, folded for
-        case and surrounding space. A module says "the dragonborn mercenary";
-        a driver building an `Objective` by hand has the ref and nothing else.
+        case and surrounding space. A module says "the hoarder" -- the
+        fixture's own invented word, and the example is invented on purpose,
+        because reaching for a real creature to make this concrete is how
+        a printed name got into this docstring once already; a driver
+        building an `Objective` by hand has the ref and nothing else.
         """
         wanted = {w.strip().lower() for w in self.objective.foes}
         return ref.lower() in wanted or self.named.get(ref, "").lower() in wanted
