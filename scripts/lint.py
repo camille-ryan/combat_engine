@@ -2457,7 +2457,7 @@ def _clause_words() -> tuple[list[tuple[str, str, str, int]], int, int]:
     reads: dict[str, set[str]] = defaultdict(set)   # word -> function names
     declares: dict[str, str] = {}                   # ref -> function name
     calls: dict[str, set[str]] = defaultdict(set)   # function -> names called
-    regs: list[tuple[str, str, str, int]] = []
+    regs: list[tuple[str, str, str, int, bool]] = []
     unreadable = 0
 
     for path in sorted((ROOT / "src" / "combat_engine").rglob("*.py")):
@@ -2490,17 +2490,34 @@ def _clause_words() -> tuple[list[tuple[str, str, str, int]], int, int]:
                     and node.func.attr == "pre_empt"):
                 ref = literal(node.args[0]) if node.args else None
                 what = literal(node.args[1]) if len(node.args) > 1 else None
+                # **Keyed on a weapon rather than a row (#928).** Such a
+                # registration passes `ref=""` on purpose, so the row-owner
+                # lookup below cannot speak for it and reported it as "that
+                # ref declares no row". Recorded here so the pairing can ask
+                # the right question instead of the wrong one.
+                by_weapon = any(
+                    kw.arg == "weapon" and literal(kw.value) is not None
+                    for kw in node.keywords
+                )
                 if ref is not None and what is not None:
-                    regs.append((ref, what, str(path), node.lineno))
+                    regs.append((ref, what, str(path), node.lineno, by_weapon))
                 else:
                     unreadable += 1
 
     faults: list[tuple[str, str, str, int]] = []
-    for ref, what, where, line in regs:
+    for ref, what, where, line, by_weapon in regs:
         at = f"{where}:{line}"
         readers = reads.get(what, set())
         if not readers:
             faults.append((ref, what, at, 0))
+            continue
+        # **A weapon-keyed registration is paired by the word alone**, and
+        # that is the whole of what it claims: it is deliberately *not*
+        # keyed to one row, so there is no owner to look up and no single
+        # body that must read it. The `not readers` test above is still the
+        # one that matters -- it is what catches the typo this check exists
+        # for -- and it has already run. #928.
+        if by_weapon:
             continue
         found = _MANOEUVRE.match(ref)
         if found:
