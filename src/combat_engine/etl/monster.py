@@ -265,6 +265,11 @@ def parse(
         _earlier_stats(m, body)
     _scores(m, body)
     _abilities(m, body)
+    if m.dialect == "earlier":
+        # The aura trait rides in the stat-line paragraph in this dialect, so
+        # it is invisible to `_abilities`. Here rather than inside it because
+        # the paragraph it reads is the one `_earlier_stats` reads. #561.
+        _earlier_auras(m, body)
     # A stat block names itself in its own rules text, so its name and its
     # abilities' names come out of every spec before anyone sees one.
     from .sanitise import scrub
@@ -681,6 +686,94 @@ def _earlier_stats(m: Monster, body: str) -> None:
             _numbers(m, para)
             return
     _numbers(m, body)
+
+
+#: `<b>Some Aura</b> aura 1; enemies that begin their turns adjacent ...` --
+#: the earlier dialect's aura trait, which is **not** an ability paragraph.
+#: Keyed on the `aura <digit>` shape rather than on position, because the same
+#: paragraph carries initiative, senses, HP and bloodied in whatever order the
+#: page used. The name is a bare `<b>`, like every other label in that block.
+#: The parenthesised group between the name and `aura` is the trait's
+#: **keyword**, and omitting it from this pattern cost 78 of the 290: the
+#: first version required `</b>` to be followed directly by `aura`, so every
+#: `<b>Despair</b> (Fear) aura 5` went unmatched. It is matched rather than
+#: skipped over because `_one_ability` harvests keywords out of exactly this
+#: tail, so including it in the segment hands the trait its keyword for free.
+_AURA_LINE = re.compile(
+    r"<b>\s*(?P<name>[^<>]{2,60}?)\s*</b>"
+    r"\s*(?:\([^()<>]{1,60}\))?"
+    r"\s*(?P<body>aura\s+\d[^<]*)", re.I
+)
+
+
+def _earlier_auras(m: Monster, body: str) -> None:
+    """The aura trait, which in this dialect no amount of sectioning can reach.
+
+    **`_abilities` iterates `<p class="flavor alt">`, one paragraph per
+    ability, and an earlier-dialect aura trait is not one of those.** It is a
+    `<br/>`-separated line *inside* the stat-block paragraph, sitting between
+    the senses line and HP:
+
+        <p class="flavor"><b>Initiative</b> +10   <b>Perception</b> +14; ...<br/>
+        <b>Some Aura</b> aura 1; enemies that begin their turns adjacent
+        to the creature take 5 damage.<br/>
+        <b>HP</b> 129; <b>Bloodied</b> 64<br/>
+
+    So the text never enters the loop that makes abilities, and the issue's
+    first guess -- that the trait *section* parse was at fault -- could not
+    have been fixed where it was looking. `m81` is the case: two of its four
+    traits import and the aura one does not. Measured, #561:
+
+        dialect   print an aura   no aura row   miss rate
+        earlier        294            290          98.6%
+        later           21              3            14%
+
+    The later dialect files the aura under a real `Traits` heading as a
+    `flavor alt` paragraph, which is why 18 of its 21 already worked. This
+    reader is therefore scoped to the earlier dialect and the remaining 3
+    later-dialect misses are a different fault, deliberately not folded in.
+
+    **Appended, never inserted, and that is load-bearing.**
+    `build.py` forms the ref from the index -- `f"{m.ref_id}a{a.index}"` --
+    so putting the aura at its printed position (before the actions) would
+    renumber every later ability on all 290 creatures. 1,207 of the 1,212
+    existing refs on those creatures are already named in hand-written
+    `content/` rows, so that would silently repoint 1,207 rows onto
+    different cards with nothing raising. The printed order is lost in the
+    ref instead, which costs nothing: nothing reads order off the index, and
+    `section` already records what the row is.
+
+    Called from `parse` **before** the `rules_text` loop, so the unscrubbed
+    text and the name scrub are inherited rather than reimplemented.
+    """
+    for cls, para in paragraphs(body):
+        if "flavor" not in cls or "alt" in cls:
+            continue
+        if not re.search(r"<b>\s*HP\s*</b>", para, re.I):
+            continue
+        # Only the first such paragraph is the stat block's; `_earlier_stats`
+        # returns on the same test for the same reason.
+        taken = {a.name for a in m.abilities}
+        for segment in re.split(r"<br\s*/?>", para):
+            hit = _AURA_LINE.search(segment)
+            if hit is None:
+                continue
+            spec = text(hit.group("body")).strip()
+            ability = _one_ability(segment, len(m.abilities), "trait")
+            if ability is None or not spec or ability.name in taken:
+                continue
+            # `_one_ability` reads the action and usage words off the tail and
+            # finds none here, so a trait falls to "none"/"none" -- which is
+            # what an always-on aura is. Set explicitly all the same, because
+            # inheriting the right answer by accident is how a reader comes to
+            # believe the wrong thing about it later.
+            ability.section = "trait"
+            ability.action = "none"
+            ability.usage = "none"
+            ability.spec = spec
+            m.abilities.append(ability)
+            taken.add(ability.name)
+        return
 
 
 def _scores(m: Monster, body: str) -> None:
