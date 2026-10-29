@@ -458,6 +458,39 @@ otherwise identical scene: 0 recall lines against 3. It never bit because
 the one converted module puts all 8 of its rows on a scene that has NPCs.
 #918.
 
+## What the DMG has that we do not
+
+Read 2026-10-29. Three gaps found by reading it against what is built,
+each filed rather than fixed:
+
+* **the complexity table has an `Advantages` column** -- 2 at complexity
+  3, 4 at 4, 6 at 6 -- and `module.COMPLEXITY` drops it. Latent: both
+  converted challenges are complexity 1 and 2, which grant none. #939.
+* **quests are a third of a level's XP structure** -- the DMG budgets
+  "six to eight encounters, one major quest, and one minor quest per
+  character" -- and nothing models one. The converted chapter prints two
+  with XP and awards neither, so its stated total is unreachable by
+  construction. #940.
+* **a challenge inside a fight is a printed shape**, not an oddity of the
+  one adventure: *"for challenges that work as part of a combat
+  encounter, set the complexity lower."* On #922, with the action
+  economy answered too -- the adventure's three skills are each a
+  standard action and two require being adjacent to a specific object,
+  neither of which a scratch board can express.
+
+One thing the DMG **confirms rather than contradicts**: Camille's #830
+ruling that the DM may invent and the invention becomes canon is the
+book's advice as well -- *"when you say yes, you open more
+possibilities."* The constraint we add on top, that an invention may not
+contradict the page, is ours and remains right.
+
+And one number worth not re-deriving: the DMG's printed complexity table
+gives complexity 1 **two** failures, while the compendium's errata'd
+version drops the failures column entirely and the converted adventure
+says three. `challenge.py`'s "three failures, and that number does not
+move with complexity" matches the compendium and the adventure, which is
+the right pair to follow.
+
 ## A skill challenge never stops the plot
 
 Camille's ruling, **2026-10-29**, verbatim:
@@ -471,8 +504,17 @@ ordinary exit instead of stranding the party. Nothing asserted that until
 `drivers.py challenge_progresses`, and deleting the fallback ends the
 campaign silently on any failed challenge.
 
-**The adventure agrees, which is why this is the right rule rather than
-our preference.** Both of its challenges continue either way:
+**The book says it too**, which settles that this is the rule rather
+than a house preference. The DMG, on a failed challenge:
+
+> *"at worst, failure at the challenge should send the characters on a
+> long detour, thereby creating a new and interesting part of the
+> adventure."*
+
+A **route** consequence, not a stop: more scenes, not fewer.
+
+**And the adventure agrees.** Both of its challenges continue either
+way:
 
 | | success | failure |
 |---|---|---|
@@ -482,7 +524,8 @@ our preference.** Both of its challenges continue either way:
 Chapter 4's two outcomes name **the same next encounter**. A challenge is
 a toll on the way through, not a gate.
 
-**What a failure costs is a resource or a condition, never the road**, and
+**What a failure costs is a resource, a condition or a longer road, never
+the road itself**, and
 neither of those is modelled: chapter 1's result should add or remove a
 spreading fire hazard *in the fight it runs during*, and chapter 4's
 should take a healing surge from each character. Today a challenge's
