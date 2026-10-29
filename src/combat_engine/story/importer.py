@@ -592,6 +592,18 @@ Add `harder` or `easier` (never both) when the page says the objective makes
 the fight tougher or lets the party off lighter -- it moves the budget one
 band. `says` is the page's own phrasing of the goal, printed to the player.
 
+**`grants`, whenever the page hands the party a thing.** Any kind of scene
+may carry one -- an NPC offering a consumable in conversation, a chapter's
+treasure line after a fight, something found over a night's rest. Each entry
+is `{{"what": ..., "count": N}}`, where `what` is the **page's own name for
+the thing** and `count` defaults to 1.
+
+Write it even when you are unsure the item exists in the database. An entry
+nothing resolves is **reported when the scene plays** rather than refused at
+validation, so a stated grant is always better than a dropped one -- the
+fault this exists to fix is a thing the prose handed over and nothing
+recorded. Nothing can spend an item yet; this makes it visible and durable.
+
 **A skill challenge** -- `complexity` {complexity_lo}-{complexity_hi}, and
 `primary`/`secondary` from the skills the page lists. Only these are skills:
 

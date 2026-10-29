@@ -46,7 +46,7 @@ from combat_engine.engine.turns import Encounter
 from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
 
-from . import PARTY, Party, field_encounter, harvest
+from . import PARTY, Party, field_encounter, harvest, loot
 from . import beat as beat_mod
 from . import table as table_mod
 from .cast_list import resolve
@@ -820,6 +820,14 @@ def step(
             "note",
         )
 
+    # **After the body, so a fight's grant is a reward rather than a loan.**
+    # Unconditional on the outcome, which is the smallest honest version:
+    # the page hands the poultice over in the conversation itself, and
+    # making it depend on winning would be inventing a rule the module does
+    # not print. #935.
+    for note in loot.hand_over(campaign.party.sheets, scene.grants):
+        made.say(note, "note")
+
     # Where next. A challenge routes on its result when the module says so;
     # everything else takes the named exit or the first one.
     if made.next_id:
@@ -850,5 +858,10 @@ def party_line(campaign: Campaign) -> str:
         hp = "full" if sheet.hp is None else str(sheet.hp)
         surges = "full" if sheet.surges is None else str(sheet.surges)
         flag = " DOWN" if sheet.down else ""
-        bits.append(f"{sheet.cls} {hp}hp/{surges}s{flag}")
+        # Carried items, as a count rather than a list of refs: the line is
+        # read between scenes to spot a number that moved when nothing
+        # should have moved it, and four refs in it would bury the hp.
+        held = sum(sheet.carried.values())
+        bag = f"/{held}i" if held else ""
+        bits.append(f"{sheet.cls} {hp}hp/{surges}s{bag}{flag}")
     return "   ".join(bits)

@@ -19,6 +19,7 @@ between all of them. The combat engine is a thing this drives.
 | `table.py` | a board with nobody to fight on it, so a conversation can roll. |
 | `challenge.py` | successes against three failures. |
 | `objective.py` | what a fight is *for*, and what counts as failing it. |
+| `loot.py` | what a scene hands the party, and the item refs they carry away. |
 | `dc.py` | what a check has to beat, by level and band. |
 | `beat.py` | a roleplay scene, one exchange at a time: who speaks, what they try, what they already know, what it changes. |
 | `graph.py` | what a campaign knows: entities, facts, and where each fact came from. `docs/STORY_GRAPH.md` is the design. |
@@ -814,6 +815,39 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## A thing handed over in prose has somewhere to go
+
+Camille, playing 2026-10-29:
+
+> *"It looks like we were given healing poultices. I think this is likely
+> prose only. When something like this happens it should be added to
+> inventory."*
+
+There was nowhere for one to go — `Sheet` had no inventory field — so a
+scene could not grant an item even in principle. `Scene.grants` now lands
+on the sheets through `loot.hand_over` and `Sheet.carried` holds it.
+
+Four calls worth keeping:
+
+* **A grant takes the page's name *or* the ref**, the same dual shape
+  `Objective.foes` has, because a converted module writes what the page
+  printed and the tracked fixture cannot.
+* **An unresolvable word is reported, never dropped.** That is the whole
+  original fault one layer down: swallowing it here would have reproduced
+  the bug inside its own fix.
+* **Round-robin from the first sheet**, printed rather than assumed. One
+  consumable for four characters is one character carrying it; giving
+  everybody a copy would mint three the page never printed.
+* **Nothing spends one, deliberately.** #935 keeps using an item separate,
+  and it is a real design question: the engine has `components.Item` (a
+  held one-shot that dies with the board) and `Magic` (a worn slot), and a
+  story-granted consumable is neither.
+
+**Resolution is not done at validation time.** `--validate` is the one
+command a converter runs before anything is built, so it must work with no
+database; whether a word matches an item is a question for the moment the
+scene plays.
+
 ## The page adjusts for party size by rule, and we had it as a table
 
 #798 was filed as "the module adjusts each encounter by name". It does
@@ -833,9 +867,24 @@ double-count.
 
 ## Seams
 
-* **`story/__init__.py` is not edited by this work.** Arcade mode is being
-  built in parallel and the two are deliberately non-interacting. Import from
-  it; do not change it.
+* **`story/__init__.py` was not edited by this work, until #935 added one
+  field to `Sheet`.** The rule stands and is worth keeping — arcade mode is
+  built in parallel, so import from this file rather than changing it — but
+  it is now a rule with one exception, and pretending otherwise would make
+  the next person distrust the whole paragraph.
+
+  What the exception cost and why there was no alternative: a granted item
+  has to live with the **wear**, because the wear is by definition what
+  survives a scene, and `Sheet` is the only record that does. A new field
+  on `Party` would have needed a save key; a field anywhere else would not
+  have been carried. The edit is one additive field with a default, which
+  is the lowest-conflict shape there is.
+
+  And the premise was **measured before breaching it**, not assumed: the
+  `sequential-encounters` worktree was last committed 2026-10-25 and has
+  touched **nothing** under `story/`, so the collision this rule guards
+  against was not live. Measure it again before the next exception — the
+  answer changes the moment that branch moves.
 * This component reaches into `chargen`, `content.loader`, `engine` and
   `policy`. It is the only one that touches all four, which makes it the
   integration point — the same position `api/` is in. Prefer pushing a rule
@@ -854,11 +903,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     beat_loop scene_audience module_refusals affordance_match \
     summary_scenes boxed_text graph_furniture graph_administration \
     recall_order borrowed_board party_size_rule challenge_progresses \
-    line_kinds objective_verdict objective_budget
+    line_kinds objective_verdict objective_budget scene_grant
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 21 drivers and prints 194 assertions**, and **each was
+**The command above is 22 drivers and prints 203 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

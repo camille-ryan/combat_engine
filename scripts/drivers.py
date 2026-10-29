@@ -42106,6 +42106,156 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_scene_can_hand_the_party_something_that_survives_the_next_scene(
+    out: Result,
+) -> None:
+    """Camille, playing 2026-10-29:
+
+    > *"It looks like we were given healing poultices. I think this is
+    > likely prose only. When something like this happens it should be
+    > added to inventory."*
+
+    There was nowhere for one to go -- `Sheet` carried no inventory field
+    at all -- so a thing the module handed over in its own prose vanished.
+    `Scene.grants` now lands on the sheets through `loot.hand_over`.
+
+    **The control is the first assertion.** A scene stating no grant must
+    leave every sheet exactly as empty as it found it; making `hand_over`
+    add on an empty tuple turns it red. The two that matter after that are
+    the ones a count alone cannot see: that the thing is still there a
+    *fight* later, which is what `harvest` could have quietly clobbered,
+    and that a word nothing resolves is **reported** rather than dropped,
+    which is the original fault one layer down.
+
+    Nothing spends an item yet, deliberately -- #935 keeps that separate --
+    so there is no assertion here about using one.
+    """
+    from pathlib import Path
+
+    from combat_engine.db import localisation
+    from combat_engine.story import loot
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    REF = "i1551"
+
+    def built(grants: list[dict] | None, *,
+              then_fight: bool = False) -> mod.Module:
+        talk: dict = {"id": "talk", "kind": "roleplay", "name": "Talk",
+                      "exits": ["pit"] if then_fight else []}
+        if grants is not None:
+            talk["grants"] = grants
+        scenes = [talk]
+        if then_fight:
+            scenes.append({
+                "id": "pit", "kind": "combat", "name": "Pit", "exits": [],
+                "difficulty": "easy",
+                "foes": [{"count": 2, "role": "soldier", "rank": "standard"}],
+            })
+        return mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "talk", "scenes": scenes}, Path("<driver>"))
+
+    def play(grants: list[dict] | None, *, then_fight: bool = False,
+             seed: int = 5) -> tuple[save_mod.Campaign, run_mod.Step]:
+        module = built(grants, then_fight=then_fight)
+        campaign = run_mod.begin(module, seed=seed)
+        made = run_mod.step(campaign, module, record=False)
+        if then_fight:
+            made = run_mod.step(campaign, module, record=False)
+        return campaign, made
+
+    def held(campaign: save_mod.Campaign) -> list[dict]:
+        return [dict(s.carried) for s in campaign.party.sheets]
+
+    def notes_of(made: run_mod.Step) -> list[str]:
+        return [str(x) for x in made.lines if getattr(x, "kind", "") == "note"]
+
+    if not loot.find(REF):
+        out.skip(f"{REF} is not in this build's item table")
+        return
+
+    # -- the control --------------------------------------------------------
+    bare, _ = play(None)
+    out.that(
+        all(not bag for bag in held(bare)),
+        "a scene that grants nothing leaves every sheet carrying nothing",
+        f"{held(bare)}",
+    )
+
+    # -- a grant written as a ref lands -------------------------------------
+    one, made_one = play([{"what": REF, "count": 1}])
+    out.that(
+        sum(sum(bag.values()) for bag in held(one)) == 1,
+        "a scene granting one thing puts exactly one on the party",
+        f"{held(one)}",
+    )
+    out.that(
+        any(REF in n for n in notes_of(made_one)),
+        "and says what was carried away",
+        f"{notes_of(made_one)}",
+    )
+
+    # -- round-robin rather than hoarding -----------------------------------
+    two, _ = play([{"what": REF, "count": 2}])
+    out.that(
+        sorted(sum(bag.values()) for bag in held(two)) == [0, 0, 1, 1],
+        "two things go to two characters rather than both to one",
+        f"{held(two)}",
+    )
+
+    # -- the module's own word resolves to the same ref ----------------------
+    word = ((localisation().get(REF) or {}).get("name") or "").strip()
+    if not word:
+        out.skip("no localisation, so the name half cannot be asked")
+    else:
+        # The word is read out of the localisation at run time and never
+        # written here: a printed name must not enter a tracked file, and
+        # this file is tracked.
+        named, _ = play([{"what": word, "count": 1}])
+        out.that(
+            held(named) == held(one),
+            "a grant written as the module's own word lands the same ref "
+            "as one written as the ref",
+            f"word={held(named)} vs ref={held(one)}",
+        )
+
+    # -- a word nothing resolves is reported, not dropped -------------------
+    lost, made_lost = play([{"what": "a thing no item is called", "count": 1}])
+    out.that(
+        all(not bag for bag in held(lost))
+        and any("no item ref matches" in n for n in notes_of(made_lost)),
+        "an unresolvable grant carries nothing and says so rather than "
+        "vanishing silently",
+        f"held={held(lost)}, notes={notes_of(made_lost)}",
+    )
+
+    # -- it survives a whole fight ------------------------------------------
+    kept, _ = play([{"what": REF, "count": 1}], then_fight=True)
+    out.that(
+        sum(sum(bag.values()) for bag in held(kept)) == 1,
+        "what the party was handed is still carried after the next fight, "
+        "which `harvest` writes over the sheets it could have cleared",
+        f"{held(kept)}",
+    )
+
+    # -- and survives being written down and read back ----------------------
+    back = save_mod.from_dict(save_mod.to_dict(one))
+    out.that(
+        [dict(s.carried) for s in back.party.sheets] == held(one),
+        "and survives a save and a load",
+        f"{[dict(s.carried) for s in back.party.sheets]} vs {held(one)}",
+    )
+
+    # -- the party line shows it --------------------------------------------
+    out.that(
+        "1i" in run_mod.party_line(one),
+        "and the party line between scenes shows what is carried",
+        run_mod.party_line(one),
+    )
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -42216,6 +42366,11 @@ DRIVERS = {
         an_objective_moves_the_budget_one_band_and_says_so,
         "an objective moves the budget one band and prints that it did "
         "(Camille, 2026-10-29)",
+    ),
+    "scene_grant": (
+        a_scene_can_hand_the_party_something_that_survives_the_next_scene,
+        "a scene hands the party something and it survives the next scene "
+        "(#935)",
     ),
     "challenge_progresses": (
         a_lost_skill_challenge_still_leads_somewhere,

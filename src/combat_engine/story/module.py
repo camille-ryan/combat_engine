@@ -156,6 +156,25 @@ class FoeSpec:
     rank: str = "standard"
 
 
+@dataclass(frozen=True)
+class Grant:
+    """Something the scene hands the party.
+
+    `what` is the module's own word for it **or** the item ref, and
+    `loot.find` takes either -- the same dual shape `Objective.foes` has.
+    A converted module writes what the page printed; the tracked fixture
+    writes the ref, because a name must not enter a tracked file.
+
+    Any kind of scene may carry one. An adventure hands things over in a
+    conversation, at the end of a fight and over a night's rest, so this
+    is in no kind's `unused` list.
+    """
+
+    #: The module's word for the thing, or its item ref.
+    what: str = ""
+    count: int = 1
+
+
 #: How many beats a roleplay scene runs before it gives up and takes its first
 #: exit. A backstop, not a target -- a scene that has not resolved in six
 #: exchanges is a scene the module did not finish writing, and a loop with no
@@ -411,6 +430,9 @@ class Scene:
     #: Scene ids this one may lead to. The first is the default. An empty tuple
     #: ends the module.
     exits: tuple[str, ...] = ()
+    #: What this scene hands the party, applied when it plays. Any kind may
+    #: carry one -- see `Grant` and `loot.hand_over`.
+    grants: tuple[Grant, ...] = ()
 
     # -- roleplay ------------------------------------------------------------
     #: Who is here to be talked to.
@@ -606,6 +628,33 @@ def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
         count=count, name=str(raw.get("name", "")).strip(),
         words=words, role=role, rank=rank,
     )
+
+
+def _as_grant(raw: Any, where: str, problems: list[str]) -> Grant | None:
+    """One `grants` entry.
+
+    Deliberately **not** resolved here. `_as_scene` runs at validation time
+    and must work with no database -- `--validate` is the one command a
+    converter runs before anything is built -- so whether the word matches
+    an item is `loot.find`'s question at grant time, and an unmatched one
+    is reported there rather than refused here.
+    """
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a grant must be an object")
+        return None
+    what = str(raw.get("what", "")).strip()
+    if not what:
+        problems.append(f"{where}: a grant needs a 'what' -- an item ref, or "
+                        "the module's own word for the thing")
+        return None
+    count = raw.get("count", 1)
+    if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+        problems.append(
+            f"{where}: grant {what!r} has count {count!r}; it must be a "
+            "positive integer"
+        )
+        count = 1
+    return Grant(what=what, count=count)
 
 
 def _as_npc(raw: Any, where: str, problems: list[str]) -> Npc | None:
@@ -847,6 +896,12 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         problems.append(f"{where}: max_beats must be a positive integer")
         beats = MAX_BEATS
     objective = _as_objective(raw.get("objective"), where, problems)
+    grants = tuple(
+        g for g in (
+            _as_grant(r, f"{where} grant {i + 1}", problems)
+            for i, r in enumerate(raw.get("grants", ()) or ())
+        ) if g is not None
+    )
     if kind == "combat" and not foes:
         problems.append(f"{where}: a combat scene needs at least one foe line")
 
@@ -873,6 +928,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         sets=str(raw.get("sets", "")),
         chapter=str(raw.get("chapter", "")).strip(),
         exits=tuple(str(e).strip() for e in raw.get("exits", ()) if str(e).strip()),
+        grants=grants,
         npcs=npcs,
         affordances=affordances,
         lore=lore,

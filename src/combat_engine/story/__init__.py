@@ -141,6 +141,21 @@ class Sheet:
     #: counter they wanted; the rows still have to read it.
     per_day: dict[str, int] = field(default_factory=dict)
 
+    #: Items this character is carrying, by item ref -> how many.
+    #:
+    #: Granted by a scene (`Scene.grants`, applied in `loot.hand_over`) and
+    #: **spent by nothing yet**, which is deliberate and is the whole of
+    #: #935: a module hands the party a consumable in its own prose and
+    #: before this there was nowhere for one to go, so it vanished. A
+    #: visible count that cannot be drunk is honest; a silent one was not.
+    #:
+    #: Not what `chargen` deals. Those are `Magic` -- a worn slot with an
+    #: enhancement bonus, rebuilt from `cls`/`level`/`build` every fight
+    #: like the rest of the character. This is the stuff that happened to
+    #: the party, which is why it lives with the wear rather than with the
+    #: request.
+    carried: dict[str, int] = field(default_factory=dict)
+
     def per_day_left(self, ref: str, limit: int) -> int:
         """How many uses of that row are left today."""
         return max(0, limit - self.per_day.get(ref, 0))
