@@ -245,6 +245,18 @@ class Effect:
     #: target, which works because a relation is directional. A `Mod` is
     #: read off the creature it sits on, so it cannot move. #874.
     saver: int = 0
+    #: **This mark survives a lapse somebody else armed.** A card reading
+    #: "the mark lasts until you mark another creature" outlives the
+    #: ordinary end-of-turn lapse, so the lapse checks this before firing
+    #: rather than the arming site deciding -- a lapse armed by a later row,
+    #: or by a default, still has to honour it.
+    #:
+    #: Declared rather than set dynamically, which is what it was: three
+    #: sites in `cast.py` wrote it onto an `Effect` that did not carry it
+    #: and one read it back through `getattr(..., False)`. That works and
+    #: `ty` was right to object -- an optional attribute no class declares
+    #: cannot be checked, renamed or found by a reader. #834, #1007.
+    keeps_mark: bool = False
 
     @property
     def rolls_the_save(self) -> int:

@@ -240,12 +240,45 @@ def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     What did not exist was any way to *choose* it, so the only creatures
     that ever hid were the ones whose own rows hid them.
 
-    You can only hide from somebody who cannot plainly see you, which in
-    4e means cover or concealment against them. Both are already
-    computed: `query.cover_between` traces one and `concealment_of`
-    reads the other off the creature.
+    **Becoming hidden takes superior cover or total concealment**, not any
+    cover at all, and that is the degree this gated on:
+
+    > ✦ **Becoming Hidden:** You can make a Stealth check against an enemy
+    > only if you have **superior cover or total concealment** against the
+    > enemy or if you're outside the enemy's line of sight.
+    >
+    > ✦ **Remaining Hidden:** [...] You don't need superior cover, total
+    > concealment, or to stay outside line of sight to remain hidden.
+
+    Ordinary cover is what keeps you hidden once you are; it is not what
+    lets you become hidden. Reading "any cover" for both made every
+    creature standing behind a low wall able to vanish as a minor action,
+    which is the looser direction.
+
+    Both degrees were already computed and neither was consulted:
+    `query.cover_between` traces cover and returns a `Cover`, and
+    `concealment_of` reads concealment off the creature and returns one
+    too, where `Cover.SUPERIOR` **is** total concealment -- its own
+    docstring says so (*"`SUPERIOR` is total concealment at -5, which is
+    what `c.conceal(total=True)` sets"*). So this is a comparison that was
+    a truthiness test, not a missing mechanism.
+
+    **The third alternative -- "outside the enemy's line of sight" -- is
+    not modelled separately, deliberately.** The engine has no
+    line-of-sight reader distinct from cover: an enemy with no line to the
+    actor is what `cover_between` already reports as superior, so the
+    geometric case arrives through the first clause rather than being
+    missed. `query.unseen_by` is the *invisibility* question and is
+    already handled one line down by `hidden_from`. Said here because the
+    printed clause has three limbs and this code has two.
+
+    The rest of the Stealth update is implemented and faithful --
+    `Cast._hide_checked` cites the printed reasoning for the passive
+    opposition and the two movement penalties -- so this is a narrow gap in
+    an updated subsystem, not a stale one. #997.
     """
     from .query import concealment_of, cover_between, enemies, hidden_from
+    from .types import Cover
 
     if not encounter.can_spend(actor, ActionType.MINOR):
         return []
@@ -255,7 +288,8 @@ def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
         for e in sorted(enemies(world, actor))
         if alive(world, e)
         and e not in unseeing
-        and (cover_between(world, e, actor) or concealment_of(world, actor))
+        and (cover_between(world, e, actor) is Cover.SUPERIOR
+             or concealment_of(world, actor) is Cover.SUPERIOR)
     ]
     if not hideable:
         return []
@@ -732,7 +766,36 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
 
     out: list[Action] = []
     if is_(world, actor, Condition.PRONE):
-        return out  # stand up first; see `_recovery`
+        # **Crawling**, which this withheld entirely: a prone creature was
+        # offered 0 destinations where the printed action gives it half its
+        # speed. The old comment read "stand up first", and standing is
+        # indeed the usual answer -- but it is not the only legal one, and
+        # the direction of the error matters. `Condition.PRONE` carries
+        # `no_shift=True` off a printed line that says in the same breath
+        # *"you can teleport, **crawl**, or be forced to move"*, so the
+        # condition was costing more than the rules charge rather than less.
+        #
+        # Everything after this point stays withheld, which is why the
+        # early return is kept: a shift is barred by that printed line, and
+        # a prone creature cannot run.
+        #
+        # Priced and walked exactly as a move, because that is what the
+        # printed action is -- *"if you leave a square adjacent to an enemy,
+        # that enemy can make an opportunity attack"* is the ordinary walk's
+        # provocation, not a special one. #995.
+        if encounter.can_spend(actor, ActionType.MOVE) and can_walk(world, actor):
+            for dest, path in sorted(
+                world.reachable_paths(actor, speed(world, actor) // 2).items()
+            ):
+                out.append(
+                    Action(
+                        kind="crawl",
+                        cost=ActionType.MOVE,
+                        dest=dest,
+                        path=tuple(path),
+                    )
+                )
+        return out
     if encounter.can_spend(actor, ActionType.MOVE) and can_walk(world, actor):
         for dest, path in sorted(world.reachable_paths(actor, speed(world, actor)).items()):
             out.append(
@@ -1571,7 +1634,10 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             world, beast, action.ref, targets=list(action.targets) or None, spend=False
         )
 
-    if action.kind == "move":
+    # A crawl walks its path like a move, and is a separate `kind` only so
+    # that the menu, the log and any row gating on it can tell the two
+    # apart -- the squares and the provocation are a walk's. #995.
+    if action.kind in ("move", "crawl"):
         walk(world, actor, list(action.path))
         return True
 

@@ -29679,6 +29679,295 @@ def a_weapon_the_build_chose(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def death_ends_what_the_dead_creature_laid(out: Result) -> None:
+    """*"Death Ends: If you die, the zone ends immediately."* And the same
+    clause, one keyword over, for a conjuration.
+
+    Neither happened, and the zone half failed twice over:
+
+    * `Zones.refresh` ran its owner test **only for an aura**, so a plain
+      zone had no owner-death path at all;
+    * and the test asked whether the owner's `Position` was gone, where **a
+      corpse keeps its position** -- so the aura it did cover went on being
+      recomputed around a dead creature.
+
+    A conjuration is despawned when its *effect's duration* ends, through
+    `Cast._banish` on that effect's `on_end`, and nothing consulted whether
+    the creature that conjured it was alive. One laid for the encounter by a
+    creature that then died held its square for the rest of the fight.
+
+    **Each half is paired with a live-owner control**, because "end it"
+    is trivially satisfiable by ending it always -- which would delete every
+    zone on the board at the first refresh and still pass an assertion that
+    only looked at the dead case. #998.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conjuration, Health, Position
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.zones import Zone
+
+    def laid(kind: str):  # noqa: ANN202
+        """A board with a zone, an aura or a conjuration on it."""
+        world, me, _ = _posed("f2743", 1)
+        c = Cast(world=world, me=me, ref="drivers:death")
+        here = world.need(me, Position).square
+        if kind == "zone":
+            c.zone({here, (here[0] + 1, here[1])}, label="drivers:zone")
+        elif kind == "aura":
+            c.aura(2, label="drivers:aura")
+        else:
+            # `When.ENCOUNTER`, not the `When.SUSTAIN` default: a sustained
+            # conjuration would also go when its owner stopped sustaining
+            # it, so a death test over one could pass for the wrong reason.
+            c.conjure((here[0] + 2, here[1]), label="drivers:conj",
+                      until=When.ENCOUNTER, sustain=None)
+        return world, me, c
+
+    def kill(world, c, who: int) -> None:  # noqa: ANN001
+        """Kill through the real path, so `Died` is emitted and heard.
+
+        `c.flat`, not `c.damage`: the latter takes a dice expression and
+        refuses a bare number. The point is only to reach the real death
+        path -- the conjuration half rides on the `Died` event, so setting
+        `hp` by hand would prove nothing about it.
+        """
+        world.need(who, Health).hp = 1
+        c.flat(500, on=who)
+
+    def zones_of(world) -> int:  # noqa: ANN001
+        return len(list(world.having(Zone)))
+
+    for kind in ("zone", "aura"):
+        world, me, c = laid(kind)
+        world.zones.refresh()
+        before = zones_of(world)
+        out.that(before > 0,
+                 f"the floor: a {kind} its owner laid is on the board, and a"
+                 " refresh with the owner alive leaves it there -- the"
+                 " control, since ending every zone would pass the next line",
+                 f"{before} zone(s)")
+
+        kill(world, c, me)
+        world.zones.refresh()
+        after = zones_of(world)
+        out.that(after < before,
+                 f"and when the owner dies the {kind} ends: the printed"
+                 " clause, which nothing honoured -- the test ran for an"
+                 " aura only and asked after a position a corpse still has",
+                 f"{before} -> {after}")
+
+    # -- a bystander's zone must survive somebody else's death -------------
+    #
+    # **Asserted on this zone's own id, not on a count**, and the count is
+    # what the first draft used. It failed: the board's monsters own zones
+    # too, so killing an enemy took the total from 3 to 2 -- correctly,
+    # since one of the three was *its* aura. A pooled total cannot tell
+    # "my zone wrongly ended" from "its zone rightly ended", which is the
+    # whole question here.
+    world, me, c = laid("zone")
+    world.zones.refresh()
+    mine = {e for e in world.having(Zone)
+            if world.need(e, Zone).owner == me}
+    foe = sorted(enemies(world, me))[0]
+    kill(world, c, foe)
+    world.zones.refresh()
+    left = {e for e in world.having(Zone)} & mine
+    out.that(bool(mine) and left == mine,
+             "and a zone whose owner is **still alive** survives another"
+             " creature's death, which is what stops the fix being 'end"
+             " every zone on any death'",
+             f"mine={sorted(mine)} still={sorted(left)} after killing {foe}")
+
+    # -- the conjuration half ----------------------------------------------
+    world, me, c = laid("conj")
+    conjured = [e for e in world.having(Conjuration)]
+    out.that(bool(conjured)
+             and all(world.get(e, Position) is not None for e in conjured),
+             "the floor: a conjuration is on the board, holding a square",
+             f"{len(conjured)} conjuration(s)")
+
+    kill(world, c, me)
+    still = [e for e in conjured if world.get(e, Position) is not None]
+    out.that(not still,
+             "and it goes when its conjurer dies -- the same printed clause"
+             " for the conjuration keyword, which was despawning on its"
+             " effect's duration and never on a death",
+             f"{len(still)} of {len(conjured)} still on the board")
+
+
+def becoming_hidden_needs_the_greater_degree(out: Result) -> None:
+    """*"You can make a Stealth check against an enemy only if you have
+    **superior cover or total concealment** against the enemy."*
+
+    `_hiding` gated the offer on **any** cover or concealment, as a
+    truthiness test over a `Cover` that carries the degree -- so ordinary
+    concealment, which the same appendix says keeps you hidden rather than
+    makes you hidden, let a creature vanish as a minor action.
+
+    This asserts along the **concealment** axis rather than by laying
+    walls, because `c.conceal(total=)` sets the degree directly and the
+    geometry would be testing `Grid.cover` instead of the gate. Both
+    arrive at `_hiding` as the same `Cover`, which is the point of the fix.
+
+    The pairing is what makes it a test and not a count: the two boards
+    differ **only** in `total=`, so a gate that ignored the degree would
+    offer the hide on both and a gate that refused everything would offer
+    it on neither. #997.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.actions import legal
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import concealment_of, enemies
+    from combat_engine.engine.types import Cover
+
+    def hides(*, total: bool | None) -> tuple[bool, object]:
+        """Is a hide offered, with concealment of the given degree?"""
+        world, me, _ = _posed("f2743", 1)
+        if total is not None:
+            Cast(world=world, me=me, ref="drivers:hide").conceal(
+                on=me, total=total)
+        offered = any(
+            a.kind == "hide" for a in legal(world, world.encounter, me)
+        )
+        return offered, concealment_of(world, me)
+
+    # -- the floor: the board has enemies to hide from at all --------------
+    world, me, _ = _posed("f2743", 1)
+    out.that(bool([e for e in enemies(world, me)]),
+             "the floor: the board has at least one enemy, without which"
+             " no hide could ever be offered and every line below would"
+             " pass for the wrong reason",
+             f"{len(list(enemies(world, me)))} enem(ies)")
+
+    bare, degree = hides(total=None)
+    out.that(not bare and degree is Cover.NONE,
+             "with no concealment at all the hide is not offered, which was"
+             " already true and is the baseline the pair below moves from",
+             f"offered={bare}, concealment={degree!r}")
+
+    # -- the pair that tells the two readings apart ------------------------
+    partial, partial_degree = hides(total=False)
+    out.that(not partial and partial_degree is Cover.PARTIAL,
+             "**ordinary concealment does not let you become hidden** --"
+             " the printed line gives that only to superior cover or total"
+             " concealment, and this is the case the old truthiness test"
+             " got wrong",
+             f"offered={partial}, concealment={partial_degree!r}")
+
+    total, total_degree = hides(total=True)
+    out.that(total and total_degree is Cover.SUPERIOR,
+             "and **total** concealment does: the same board, differing"
+             " only in the degree, so this pair separates a gate that reads"
+             " the degree from one that reads any concealment at all",
+             f"offered={total}, concealment={total_degree!r}")
+
+
+def a_prone_creature_crawls_at_half_speed(out: Result) -> None:
+    """*"When you are prone, you can crawl. Movement: move up to half your
+    speed."* A prone creature was offered **no movement at all**.
+
+    `_movement` returned an empty list on `Condition.PRONE` with the comment
+    *"stand up first"*, and standing is indeed the usual answer -- but it is
+    not the only legal one. The direction of the error is what makes this a
+    bug rather than a simplification: the condition was costing **more** than
+    the rules charge, so this is not a creature getting away with something.
+
+    The printed line `no_shift` comes from says so in the same breath --
+    *"you can't move from your space, although you can teleport, **crawl**,
+    or be forced to move by a pull, a push or a slide"* -- so the shift ban
+    and the crawl are two halves of one sentence and the engine held only
+    the half that takes something away.
+
+    Both halves are asserted here, which is the point: the crawl appears
+    **and** the shift stays gone. A fix that simply stopped withholding
+    movement would offer shifts and runs too, and would pass an assertion
+    that only counted destinations. #995.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import Condition
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.query import is_, speed
+
+    MOVES = ("move", "crawl", "run", "shift")
+
+    def movers(world, who: int) -> list:  # noqa: ANN001
+        return [a for a in legal(world, world.encounter, who)
+                if a.kind in MOVES]
+
+    # -- the control: standing, the menu is full ---------------------------
+    world, me, _ = _posed("f2743", 1)
+    pace = speed(world, me)
+    standing = movers(world, me)
+    out.that(pace > 1 and bool(standing)
+             and {"move", "shift"} <= {a.kind for a in standing},
+             "the control: standing, the creature is offered a walk and a"
+             " shift, without which 'prone offers less' says nothing",
+             f"speed={pace}, {len(standing)} offer(s),"
+             f" kinds={sorted({a.kind for a in standing})}")
+
+    Cast(world=world, me=me, ref="drivers:crawl").prone(on=me)
+    out.that(is_(world, me, Condition.PRONE),
+             "and the creature really is prone, which every line below is"
+             " about",
+             f"prone={is_(world, me, Condition.PRONE)}")
+
+    now = movers(world, me)
+    crawls = [a for a in now if a.kind == "crawl"]
+    out.that(bool(crawls),
+             "a prone creature is offered a crawl, where it was offered no"
+             " movement of any kind -- 0 destinations against a printed"
+             " action that names half its speed",
+             f"{len(now)} offer(s), kinds={sorted({a.kind for a in now})}")
+
+    out.that(crawls and max(len(a.path) for a in crawls) == pace // 2,
+             "and the furthest one is **half** its speed, which is the"
+             " number the action prints -- not its whole speed, which would"
+             " make prone free",
+             f"furthest={max((len(a.path) for a in crawls), default=0)},"
+             f" half of {pace} is {pace // 2}")
+
+    # -- the other half of the same printed sentence ------------------------
+    out.that(not any(a.kind in ("shift", "run") for a in now),
+             "and it is offered neither a shift nor a run: the line the"
+             " shift ban comes from is the same line that allows the crawl,"
+             " so a fix that merely stopped withholding movement would be"
+             " wrong here while passing every assertion above",
+             f"kinds={sorted({a.kind for a in now})}")
+
+    # -- and it is a real action, not a menu entry -------------------------
+    #
+    # Guarded on `crawls` being non-empty, because the plant that withholds
+    # the offer made this line **raise** rather than fail -- `max()` of an
+    # empty sequence -- and a rule that dies on the broken case is worse
+    # than one that reports it: the raise hid the two assertions after it.
+    # Found by planting, which is the plant doing its second job.
+    was = world.need(me, Position).square
+    went = bool(crawls) and perform(
+        world, world.encounter, me, max(crawls, key=lambda a: len(a.path)))
+    out.that(went and world.need(me, Position).square != was,
+             "and taking it actually moves the creature, so this is an"
+             " action and not a row on a menu nothing honours",
+             f"performed={went}, {was} -> {world.need(me, Position).square}")
+
+    # -- the negative control: a crawl is still movement -------------------
+    other, mob, _ = _posed("f2743", 1)
+    c = Cast(world=other, me=mob, ref="drivers:crawl")
+    c.prone(on=mob)
+    c.immobilized(on=mob)
+    out.that(not [a for a in movers(other, mob) if a.kind == "crawl"],
+             "an **immobilized** prone creature is offered none: a crawl is"
+             " movement and goes through the same `can_walk` gate the walk"
+             " does, rather than being a new way around it",
+             f"kinds={sorted({a.kind for a in movers(other, mob)})}")
+
+
 def a_build_time_sub_choice_is_recorded(out: Result) -> None:
     """*"Choose necrotic or cold when you take this feat"* -- a sub-choice
     settled once, when the row was taken, that nothing recorded.
@@ -42248,6 +42537,21 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "death_ends": (
+        death_ends_what_the_dead_creature_laid,
+        "a zone, an aura and a conjuration all end when the creature that"
+        " laid them dies, where a corpse kept all three (#998)",
+    ),
+    "hide_degree": (
+        becoming_hidden_needs_the_greater_degree,
+        "becoming hidden takes superior cover or total concealment, where"
+        " the offer was gated on any cover at all (#997)",
+    ),
+    "crawl": (
+        a_prone_creature_crawls_at_half_speed,
+        "a prone creature crawls at half speed, where it was offered no"
+        " movement at all, and still may not shift (#995)",
     ),
     "build_option": (
         a_build_time_sub_choice_is_recorded,

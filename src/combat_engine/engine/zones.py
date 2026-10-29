@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .components import Ident, Position
+from .components import Health, Ident, Position
 from .durations import When
 from .events import (
     EnterSquare,
@@ -398,10 +398,33 @@ class Zones:
     def refresh(self) -> None:
         """Recompute aura footprints and diff who is standing in what."""
         for eid, zone in self.all():
+            # **"Death Ends: If you die, the zone ends immediately."** Two
+            # things were wrong and they compounded, so neither a zone nor
+            # an aura ended when its owner was killed:
+            #
+            # * the test ran **only for an aura** (`if zone.aura is not
+            #   None`), so a plain zone had no owner-death path at all;
+            # * and it asked whether the owner's `Position` was gone, where
+            #   **a corpse keeps its position** -- the body stays on the
+            #   board -- so even the aura it did cover went on being
+            #   recomputed around a dead creature.
+            #
+            # Asked of every zone, before the aura footprint is redrawn,
+            # which is the order the printed rule implies: a dead owner's
+            # aura has no footprint to recompute.
+            #
+            # **`Health` read directly rather than `query.alive`**, and
+            # deliberately: `alive` is False for anything carrying no
+            # `Health` at all, so routing through it would end a zone owned
+            # by something that was never a living creature. An owner with
+            # no `Health` keeps exactly its old behaviour here. #998.
+            health = self.world.get(zone.owner, Health)
+            if self.world.get(zone.owner, Position) is None or (
+                health is not None and health.hp <= health.dying_at
+            ):
+                self.end(eid, "its owner died")
+                continue
             if zone.aura is not None:
-                if self.world.get(zone.owner, Position) is None:
-                    self.end(eid, "owner gone")
-                    continue
                 zone.squares = spread(squares(self.world, zone.owner), zone.aura)
             was = self.inside.setdefault(eid, set())
             now = {c for c in creatures(self.world) if squares(self.world, c) & zone.squares}

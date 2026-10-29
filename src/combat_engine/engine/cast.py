@@ -7430,7 +7430,13 @@ class Cast:
             # here rather than at the arming site so that a lapse armed by
             # another row, or by a later default, still honours a mark whose
             # own card says it is held. #834.
-            if getattr(held, "keeps_mark", False):
+            #
+            # A plain read now that `Effect` declares the field. It was
+            # `getattr(held, "keeps_mark", False)`, which had to carry a
+            # default because nothing declared it -- and the default was
+            # never the live case: `held.when` is read unguarded four lines
+            # down, so `held` is never `None` here. #1007.
+            if held.keeps_mark:
                 return
             if (ev.actor, getattr(ev, "round", -1)) == laid_on:
                 return
@@ -10544,9 +10550,19 @@ class Cast:
         from .components import Powers
 
         known = self.world.get(self.me, Powers)
+        # **The guard is here rather than inside the comprehension**, where
+        # it used to sit as `for key in (self._clause_keys() if known else
+        # [])`. That did work -- an empty first clause means the second
+        # never evaluates, so `known.pre_empts` was never reached on a
+        # creature with no `Powers` -- but it hid a None-check from both a
+        # reader and `ty`, and a reader had to reconstruct the argument to
+        # convince themselves. Identical behaviour: an empty `waiting` fell
+        # through to the same `default()` below. #1007.
+        if known is None:
+            return default()
         waiting = [
             entry
-            for key in (self._clause_keys() if known else [])
+            for key in self._clause_keys()
             for entry in known.pre_empts.get((key, what), ())
         ]
         for clause, source in waiting:

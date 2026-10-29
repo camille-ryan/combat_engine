@@ -646,6 +646,31 @@ class Encounter:
     def _on_death(self, ev: Died) -> None:
         if ev.actor in self.order and self.world.turn == ev.actor:
             pass  # the turn ends normally; `advance` skips the dead
+        # **"Death Ends: If you die, the conjuration ends immediately."**
+        # The same printed clause `Zones.refresh` now honours for a zone,
+        # one keyword over, and it was missing in the same way: a
+        # conjuration is despawned when **its effect's duration** ends --
+        # `Cast._banish` on the effect's `on_end` -- and nothing asked
+        # whether the creature that conjured it was still alive. One laid
+        # `When.ENCOUNTER` by a creature that then died stayed on the board
+        # for the rest of the fight, holding its square.
+        #
+        # Ending the *effect* rather than despawning the entity, so the
+        # existing `on_end` does the taking-off and anything else hung on
+        # that effect unwinds too. Ending an already-ended effect is a
+        # no-op, so a conjuration whose duration lapsed first is safe.
+        #
+        # Here rather than in `resolve` beside the `Died` emit: this is a
+        # subscriber, so a creature killed by any route pays it. #998.
+        from .components import Conjuration
+
+        for eid in list(self.world.having(Conjuration)):
+            conj = self.world.get(eid, Conjuration)
+            if conj is None or conj.by != ev.actor:
+                continue
+            held = self.world.effects.live.get(conj.effect)
+            if held is not None:
+                self.world.effects.end(held, "its conjurer died")
 
 
 def _rest_window(world: World, rested: list[int]) -> None:
