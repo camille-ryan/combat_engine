@@ -3273,7 +3273,8 @@ def _a_class_at_will(row: object) -> bool:
     )
 
 
-def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+def _provoke(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
+             shot: bool = False) -> bool:
     """Make the thing happen that this row triggers off, and see if it fires.
 
     Three situations between them cover nearly every printed trigger at this
@@ -3396,6 +3397,45 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
 
     foes = [f for f in enemies(world, caster) if alive(world, f)]
     if not foes:
+        return False
+
+    if shot:
+        # **Somebody shoots the caster, and this is the only pass that runs.**
+        # `_provoke`'s area arm cannot fire in the foe->caster direction
+        # because `_area_rows` reads a creature's **own** powers and the foe
+        # on this board knows only `mba`; and there is no ranged arm at all.
+        # Measured 0 in both directions on all six boards #816 sampled.
+        #
+        # **Alone on its own attempt, which is what makes it safe.** An
+        # attack cannot be unwound -- the caster can end up bloodied,
+        # conditioned or dead, and removing the lent row from
+        # `Powers.known` does not take its consequences back. #816 measured
+        # that as a pass inside a shared board three ways: beside the area
+        # loops and before the death pass it reached 50 rows and silenced
+        # 10 then 21 others, and at the very end it gained nothing at all,
+        # because the death pass above had already killed `foes[0]`.
+        #
+        # So it is an axis rather than a pass: `_attempts` hands it a fresh
+        # board, it is reached only by a row that has shown nothing through
+        # every arrangement before it, and nothing else runs here -- which
+        # is the collateral argument the weapon and element axes make. The
+        # other passes were already tried on earlier attempts.
+        known = world.get(foes[0], Powers)
+        if known is None:
+            return False
+        for other in _range_lenders():
+            if other == ref:
+                continue
+            lent = other not in known.all
+            if lent:
+                known.known.append(other)
+            _swing_from_reach(world, foes[0], caster, other)
+            hit = probe()
+            if lent:
+                with contextlib.suppress(ValueError):
+                    known.known.remove(other)
+            if hit:
+                return True
         return False
 
     _grip_for(world, caster, ref)
@@ -3744,6 +3784,82 @@ def _keyword_rows(world, caster: int, exclude: str, kw: Keyword) -> list[str]:  
         if kw in p.keywords:
             out.append(other)
     return out[:2]
+
+
+@cache
+def _wants_a_shot(ref: str) -> bool:
+    """Does this row's trigger ask whether a **ranged or area** attack hit it?
+
+    `triggers.by_ranged` is the one helper for both printed clauses -- it
+    answers `kind in ("ranged", "area_burst")` -- so this gate covers the
+    whole family rather than half of it.
+
+    **Read off the trigger's predicate source, because a predicate is a
+    closure and there is nothing else to read.** The same technique
+    `_wanted_by_word` uses on a body. All 4,034 declared trigger predicates
+    are source-readable, measured, so this is a count rather than a floor.
+
+    **29 rows, which is not what either prior estimate said.** `by_ranged`'s
+    own docstring claims 56 and `#816`'s body estimated 72 from a per-file
+    grep that it correctly flagged as an upper bound. Measured per row,
+    through the predicate: 29, and `by_ranged` appears in **no** row body,
+    so there is no second population. 23 of the 29 already fire; the six
+    that do not are what this axis is for. #816.
+    """
+    row = get(ref)
+    if row is None or not row.triggers:
+        return False
+    for trig in row.triggers:
+        when = getattr(trig, "when", None)
+        if when is None:
+            continue
+        try:
+            src = inspect.getsource(when)
+        except (OSError, TypeError):
+            continue
+        if "by_ranged" in src:
+            return True
+    return False
+
+
+@cache
+def _range_lenders() -> tuple[str, ...]:
+    """Declared at-will ranged or area attacks, one per class.
+
+    `_typed_lenders`' argument applies unchanged: *"neither the caster nor
+    its enemy knew a single row of the wanted keyword, so an owned-only pass
+    fires none of them"*. The foe on an audit board knows `mba` and nothing
+    else, so it can never make a ranged attack of its own -- which is why
+    `_provoke`'s area arm measured **0** in both directions on all six
+    boards #816 sampled.
+
+    One per class for `_typed_lenders`' reason: a trigger may narrow further
+    than the reach and a closure cannot be inspected to see how far.
+
+    At-will and untriggered, also for its reasons: a daily would spend a
+    resource the audit is measuring, and a triggered row cannot be used to
+    order. Built once for the whole run, which matters because this is
+    reached once per attempt by each row that gets this far.
+    """
+    found: list[tuple[int, str, str]] = []
+    for ref, row in REGISTRY.items():
+        if row.attack is None or row.triggers:
+            continue
+        if row.usage is not Usage.AT_WILL:
+            continue
+        reach = getattr(row, "reach", None)
+        if getattr(reach, "kind", "") not in ("ranged", "area_burst"):
+            continue
+        found.append((row.level, row.cls, ref))
+    found.sort()
+    seen: set[str] = set()
+    picked: list[str] = []
+    for _, cls, ref in found:
+        if cls in seen:
+            continue
+        seen.add(cls)
+        picked.append(ref)
+    return tuple(picked)
 
 
 @cache
@@ -5700,14 +5816,14 @@ def _attempts(out: Result):  # noqa: ANN202
     # global would not travel. The header is data and every worker reads it.
     claimed = get(out.ref)
     if claimed is not None and claimed.out_of_combat:
-        yield 1, None, False, "", False
+        yield 1, None, False, "", False, False
         return
     for posed in (False, True):
         for face in LOADED:
             for seed in range(1, TRIES + 1):
                 if out.fired and (out.events & DID_SOMETHING):
                     return
-                yield seed, face, posed, "", False
+                yield seed, face, posed, "", False, False
     # **A third axis, on the same principle as the posed one.** A row naming
     # a weapon its board does not hold can show nothing however it is posed,
     # because the reader walks `Gear.weapons` and finds no match. Paid only
@@ -5740,7 +5856,7 @@ def _attempts(out: Result):  # noqa: ANN202
                 for seed in range(1, TRIES + 1):
                     if out.fired and (out.events & DID_SOMETHING):
                         return
-                    yield seed, face, posed, held, False
+                    yield seed, face, posed, held, False, False
     # **Sixth: an element on the bearer's own build.** `c.element()` reads
     # `element:<type>` out of `Build.choices` and only five legs in the game
     # set one, so for a carried implement the draw never produces a bearer
@@ -5764,7 +5880,23 @@ def _attempts(out: Result):  # noqa: ANN202
                 for seed in range(1, TRIES + 1):
                     if out.fired and (out.events & DID_SOMETHING):
                         return
-                    yield seed, face, posed, "", True
+                    yield seed, face, posed, "", True, False
+    # **Seventh: somebody shoots the caster.** A row triggered on "a ranged
+    # or area attack damages you" has nothing to answer on a board where no
+    # creature can make one -- the foe knows `mba` and `_area_rows` reads
+    # owned powers only. See `_provoke`'s `shot` arm for why this is an axis
+    # and not another pass in there: an attack is the one provocation that
+    # cannot be taken back, so it needs a board of its own.
+    #
+    # Last, for the reason every axis above it is last, and gated on the
+    # trigger's own predicate so the other 23,034 rows never pay it. #816.
+    if _wants_a_shot(out.ref):
+        for posed in (False, True):
+            for face in LOADED:
+                for seed in range(1, TRIES + 1):
+                    if out.fired and (out.events & DID_SOMETHING):
+                        return
+                    yield seed, face, posed, "", False, True
 
 
 @contextlib.contextmanager
@@ -6089,7 +6221,7 @@ def audit(ref: str) -> Result:
     # something on this face, the rest re-prove the same thing. Eight of them
     # meant twenty-four boards for every row, and the audit builds a hundred
     # thousand boards.
-    for seed, face, posed, held, element in _attempts(out):
+    for seed, face, posed, held, element, shot in _attempts(out):
         try:
             world, caster, _armed = board(ref, seed, pose=posed, arm=held,
                                           element=element)
@@ -6160,7 +6292,7 @@ def audit(ref: str) -> Result:
                 # `InitiativeRolled` is announced there, so a row that
                 # answers one has already fired by the time this line runs.
                 cursor = world.fight_cursor
-                if not _provoke(world, caster, ref, cursor):
+                if not _provoke(world, caster, ref, cursor, shot=shot):
                     continue
                 out.fired += 1
                 # Only what happened *after* the row itself went off. The
