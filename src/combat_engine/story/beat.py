@@ -109,6 +109,39 @@ class Intent:
         return f"{self.name}: {' '.join(x for x in (said, does) if x)}".strip()
 
 
+#: How close a check was, as a word rather than a number. The DMG names the
+#: failure this exists to fix -- *"You know you've fallen into this trap when
+#: the table chatter is: 'That's 26 against AC,' 'You hit, now roll damage,'
+#: '31 points'"* -- and prescribes using the numbers as narration material
+#: instead: *"If 26 is barely a hit [...] say: 'You swing wildly, and the
+#: dragonborn brings his shield up just a second too late.'"*
+#:
+#: **A closed set, like every other model input here.** The DM is given the
+#: manner and never the arithmetic: a margin is not a truth claim, so this is
+#: the one thing about a roll the model may colour. The fact itself stays the
+#: module's. #943.
+MARGINS = ("barely", "clearly", "nowhere near")
+
+#: Within this many either way is "barely". Three is a quarter of a d20's
+#: spread and the width of a single ability modifier, so it is the band where
+#: a reader would accept "only just" -- wider and a comfortable success reads
+#: as a near miss.
+CLOSE = 3
+
+
+def margin(total: int, dc: int) -> str:
+    """How close this check came, as one of `MARGINS`.
+
+    Derived rather than asked of the model, which is the whole discipline:
+    the engine already produced the numbers and a word computed from them
+    cannot be wrong in the way a model's guess can.
+    """
+    gap = total - dc
+    if abs(gap) <= CLOSE:
+        return "barely"
+    return "clearly" if gap > 0 else "nowhere near"
+
+
 @dataclass(frozen=True)
 class Ruling:
     """What the engine made of one intent."""
@@ -957,13 +990,29 @@ class Director:
         # and an action for a party member, which the prompt forbids in as
         # many words. A fact is a thing that is now true, not a thing
         # somebody did.
-        facts = [r.fact for r in rulings if r.fact and not r.exit]
+        # **The manner, beside the fact.** The DMG's complaint is that a
+        # table describing events in rules terms has thrown away narration
+        # material the dice already produced -- so a ruling that was close
+        # says so, in one word from `MARGINS`, and the model has something
+        # to write *how* from. The arithmetic itself is still withheld: a
+        # margin is not a truth claim, a d20 is not either, and handing
+        # over "total=25 vs 12" invites the model to quote it back. #943.
+        facts = [
+            f"{r.fact} ({margin(r.roll.total, r.dc)})"
+            if r.rolled and r.roll is not None and r.dc
+            else r.fact
+            for r in rulings if r.fact and not r.exit
+        ]
         told.append(
             "WHAT IS NOW TRUE. **The player has already been shown these "
             "in plain words.** Do not restate them and do not explain "
             "them. Write what the people here say and do in the light of "
             "them -- a reaction, a change of manner, what somebody does "
-            "next. Add nothing beyond them:\n"
+            "next. Add nothing beyond them.\n"
+            "A word in brackets is **how narrowly it went**, not something "
+            "anybody said: write that margin into the picture -- a hand "
+            "that almost closed, a guard who nearly did not look up -- and "
+            "never print the bracketed word itself:\n"
             + "\n".join(f"- {f}" for f in facts)
             if facts else
             "NOTHING NEW IS TRUE. Nobody learnt anything; react only."

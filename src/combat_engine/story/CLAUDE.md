@@ -815,6 +815,38 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## The DM is told how narrowly a check went, never the numbers
+
+The DMG names this failure and prints our own output as its example —
+*"That's 26 against AC," "You hit, now roll damage," "31 points"* — and
+prescribes using the numbers as narration material instead. `react` was
+handed the module's facts and nothing else, so it could say *what* was true
+with nothing to write *how* from.
+
+A ruling that rolled now reaches the DM as `fact (barely)`, from the closed
+set `MARGINS`. Three calls:
+
+* **Derived, not asked for.** `margin()` computes the word from numbers the
+  engine already produced, so it cannot be wrong the way a model's guess
+  can. Same discipline as matching an affordance against an enum.
+* **The arithmetic is still withheld**, and this is the assertion the issue
+  is about rather than the margin itself. No total, no d20, no DC reaches
+  the prompt — a number in a prompt is a number the model quotes back,
+  which is the rut the chapter describes. Fixing *"26 against AC"* by
+  handing over 26 would have been the obvious wrong fix.
+* **`CLOSE = 3` covers both directions**, so a near miss is not narrated as
+  a rout. The fact itself says which way it went, so "barely" is never
+  ambiguous beside it.
+
+The prompt also says the bracketed word is a margin to write into the
+picture and must never be printed — which has its own plant, because an
+instruction nothing checks is an instruction a reflow can delete.
+
+**Not done: the combat half**, which is bigger and still open on #943. A
+story fight prints `Won in 4 rounds` and sends the blow-by-blow to a
+transcript nobody reads during play; there is a whole encounter of this
+material and none of it is narrated.
+
 ## The budget clamps to what the database holds, and says it did
 
 `story.budget` reads a standard monster's XP out of `game.db`, which stops
@@ -1123,11 +1155,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     recall_order borrowed_board party_size_rule challenge_progresses \
     line_kinds objective_verdict objective_budget scene_grant \
     story_milestones timeline rest_lockout stays_cleared \
-    budget_ceiling
+    budget_ceiling roll_margin
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 27 drivers and prints 255 assertions**, and **each was
+**The command above is 28 drivers and prints 263 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

@@ -42106,6 +42106,137 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def the_dm_is_told_how_narrowly_a_check_went_and_never_the_numbers(
+    out: Result,
+) -> None:
+    """The DMG names this failure and prints our own output as the example:
+
+    > *You know you've fallen into this trap when the table chatter is:
+    > "That's 26 against AC," "You hit, now roll damage," "31 points"...*
+
+    and prescribes using the numbers as material instead:
+
+    > *If 26 is barely a hit [...] say: "You swing wildly, and the
+    > dragonborn brings his shield up just a second too late."*
+
+    `Director.react` was handed `[r.fact for r in rulings]` -- the module's
+    own text and nothing else -- so it could say *what* was now true and had
+    nothing to write *how* from.
+
+    **The margin is derived, not asked for, and the arithmetic is still
+    withheld.** A word from a closed set cannot be wrong the way a model's
+    guess can, and the last assertion here is the one that matters: the d20
+    and the total must not reach the prompt, because a number in a prompt
+    is a number the model quotes back -- which is the rut the chapter is
+    about.
+    """
+    from combat_engine.engine.skills import CheckResult
+    from combat_engine.story import beat as beat_mod
+    from combat_engine.story.module import Scene
+
+    # -- the derivation, at both boundaries --------------------------------
+    out.that(
+        beat_mod.margin(15, 12) == "barely"
+        and beat_mod.margin(16, 12) == "clearly",
+        "a success inside the close band is 'barely' and one outside it is "
+        "'clearly', which is the boundary the word turns on",
+        f"+3 -> {beat_mod.margin(15, 12)}, +4 -> {beat_mod.margin(16, 12)}",
+    )
+    out.that(
+        beat_mod.margin(9, 12) == "barely"
+        and beat_mod.margin(8, 12) == "nowhere near",
+        "and a failure inside it is 'barely' while one outside is 'nowhere "
+        "near', so a near miss is not described as a rout",
+        f"-3 -> {beat_mod.margin(9, 12)}, -4 -> {beat_mod.margin(8, 12)}",
+    )
+    out.that(
+        beat_mod.margin(12, 12) == "barely",
+        "a check that exactly met its DC is 'barely', which is what meeting "
+        "a DC means",
+        f"{beat_mod.margin(12, 12)}",
+    )
+    out.that(
+        all(beat_mod.margin(t, 12) in beat_mod.MARGINS
+            for t in range(-20, 60)),
+        "every margin across the whole d20 range is one of the closed set, "
+        "so the prompt can never carry a word the design did not choose",
+        f"{sorted({beat_mod.margin(t, 12) for t in range(-20, 60)})}",
+    )
+
+    # -- what reaches the DM ----------------------------------------------
+    # `react` is the only caller, and the prompt is what has to be checked
+    # rather than the return value: a scripted Director never calls out, so
+    # the fact list is observable only by catching the request.
+    said: dict[str, str] = {}
+
+    def catch(role: beat_mod.llm.Role, messages: list[dict],
+              schema: dict | None = None) -> str:
+        said["user"] = messages[-1]["content"]
+        return "The friar sets down the cup."
+
+    close = beat_mod.Ruling(
+        slot=0, name="Pike", affordance="read-friar", skill="insight",
+        dc=12, roll=CheckResult(skill="insight", natural=11, bonus=2,
+                                total=13, dc=12, success=True),
+        won=True, fact="he is holding something back",
+    )
+    wide = beat_mod.Ruling(
+        slot=1, name="Sela", affordance="ask-around", skill="streetwise",
+        dc=12, roll=CheckResult(skill="streetwise", natural=19, bonus=6,
+                                total=25, dc=12, success=True),
+        won=True, fact="the banker left before dawn",
+    )
+    quiet = beat_mod.Ruling(
+        slot=2, name="Durgan", affordance="none",
+        fact="he asks a question nobody minds",
+    )
+
+    scene = Scene(id="hall", kind="roleplay", name="Hall",
+                  brief="A hall.", exits=())
+    playing = beat_mod.Playing(scene=scene)
+    director = beat_mod.Director()
+    was = beat_mod.llm.chat
+    try:
+        # Monkeypatching a module function is what a transport stub is
+        # here, and `ty` types the attribute as the one function object
+        # rather than its signature -- the same complaint the minion
+        # driver's `is_minion` stub carries. Restored in the `finally`.
+        beat_mod.llm.chat = catch  # ty: ignore[invalid-assignment]
+        director.react(playing, [], [close, wide, quiet])
+    finally:
+        beat_mod.llm.chat = was
+    prompt = said.get("user", "")
+
+    out.that(
+        "(barely)" in prompt and "(clearly)" in prompt,
+        "a narrow ruling and a comfortable one reach the DM with different "
+        "margins, so it has something to write the manner from",
+        prompt[-400:] or "no prompt captured",
+    )
+    out.that(
+        "he asks a question nobody minds" in prompt
+        and "he asks a question nobody minds (" not in prompt,
+        "a ruling with no roll carries no margin, rather than being "
+        "described as barely anything",
+        f"{[ln for ln in prompt.splitlines() if 'nobody minds' in ln]}",
+    )
+    # **The assertion the issue is actually about.**
+    out.that(
+        "total=" not in prompt and "d20" not in prompt
+        and "25" not in prompt and "13" not in prompt,
+        "and the arithmetic never reaches the prompt -- no total, no d20, "
+        "no DC, because a number in a prompt is a number the model quotes "
+        "back, which is the rut the chapter names",
+        f"{[frag for frag in ('total=', 'd20', '25', '13') if frag in prompt]}",
+    )
+    out.that(
+        "never print the bracketed word" in prompt,
+        "and the DM is told the bracketed word is a margin to write into "
+        "the picture rather than something anybody said",
+        prompt[-300:],
+    )
+
+
 def the_budget_clamps_to_what_the_database_can_field_and_says_so(
     out: Result,
 ) -> None:
@@ -43150,6 +43281,11 @@ DRIVERS = {
     # silently by the *last* writer -- so the first registration of this ran
     # the other driver and reported 21 green assertions that had nothing to
     # do with it.
+    "roll_margin": (
+        the_dm_is_told_how_narrowly_a_check_went_and_never_the_numbers,
+        "the DM is told how narrowly a check went and never the numbers "
+        "(#943)",
+    ),
     "budget_ceiling": (
         the_budget_clamps_to_what_the_database_can_field_and_says_so,
         "the budget clamps to what the database can field and says so (#963)",
