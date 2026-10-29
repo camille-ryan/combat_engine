@@ -506,7 +506,21 @@ def _build_map(cov, asked: list[str], whole: int,  # noqa: ANN001
         # so guessing wrong omits rows.
         "seen": sorted(seen),
         "whole_corpus": whole,
-        "sampled": corpus != whole,
+        # **A merge inherits this rather than recomputing it, and
+        # recomputing it is #925.** On a fresh recording `corpus` is the refs
+        # asked for and `whole` the corpus they were drawn from, so the
+        # comparison is exactly "did I deliberately take a slice". On a
+        # *merge* the two count different populations -- `corpus` is the
+        # merged `seen`, `whole` is the live tree -- so a top-up branded a
+        # map that had recorded everything a SAMPLE the moment one row was
+        # declared after it, and a sampled map narrows nothing at all. Two
+        # racial traits disabled the selector for the other 23,061 rows for
+        # 36 hours; the run that found it paid 1,321s where 658 rows were
+        # owed. The word was the expensive part: "SAMPLE" names a decision
+        # somebody took, so the reader goes looking for who chose to sample
+        # instead of at a three-second top-up.
+        "sampled": (merge_into.get("sampled", False)
+                    if merge_into is not None else corpus != whole),
         "ceiling": ceiling,
         "game_db_mtime": GAME.stat().st_mtime if GAME.exists() else 0,
         # **A merge must not advance this, and advancing it broke the guard
@@ -582,11 +596,44 @@ def _load() -> dict | None:
         print(f"# map was recorded at {at[:9]}, which is not in this tree's"
               f" history. Selecting everything.")
         return None
-    live = _declared_now()
-    if live and live != got.get("corpus"):
-        print(f"# the corpus moved: {got.get('corpus')} rows when the map was "
-              f"recorded, {live} now. Selecting everything.")
-        return None
+    seen = set(got.get("seen") or ())
+    try:
+        live_refs = set(declared_refs())
+    except Exception:
+        live_refs = set()        # cannot tell; the other guards speak
+    if not seen:
+        # **A map predating `seen` cannot say which rows it looked at**, so a
+        # corpus that grew is indistinguishable from a recording that came
+        # out short, and only the old blunt refusal is sound here.
+        if live_refs and len(live_refs) != got.get("corpus"):
+            print(f"# the corpus moved: {got.get('corpus')} rows when the map"
+                  f" was recorded, {len(live_refs)} now, and this map does not"
+                  f" say which rows it saw. Selecting everything.")
+            return None
+        return got
+    # **A corpus that merely grew is not a reason to stop narrowing**, which
+    # is what this guard used to do and what #925 is about. The map is a
+    # complete answer for every row it did record; the only rows it cannot
+    # speak for are the ones declared since, and those are *nameable*. So
+    # they are unioned into every selection -- the treatment an engine file
+    # absent from the map already gets -- instead of the whole corpus being
+    # audited on their account.
+    #
+    # This matters because the condition is the normal consequence of any
+    # content wave, so the old refusal meant every wave silently disabled
+    # the map until a nightly re-recorded the corpus in 83 minutes.
+    if live_refs:
+        got["unrecorded"] = sorted(live_refs - seen)
+        got["retired"] = sorted(seen - live_refs)
+        if got["unrecorded"]:
+            gap = got["unrecorded"]
+            shown = ", ".join(gap[:6])
+            more = "" if len(gap) <= 6 else f", and {len(gap) - 6} more"
+            print(f"# {len(gap)} row(s) declared since the recording and never"
+                  f" measured, so they are audited unconditionally rather than"
+                  f" widening the run: {shown}{more}.")
+            print(f"#   close the gap in seconds: `impact.py --record --refs"
+                  f" '{','.join(gap[:40])}'`")
     return got
 
 
@@ -871,6 +918,24 @@ def selection(got: dict, changed: dict[str, set[int]]
         notes.append(f"# the union across those functions is {len(refs)} rows,"
                      f" over the {got['ceiling']} ceiling. WIDE.")
         return None, notes
+    # **The rows the map has never measured, unioned in unconditionally.**
+    # They appear in no function's ref list, and `selection` otherwise fails
+    # *closed* on an absence -- "no row was observed to execute this, so no
+    # row can depend on it" -- which is sound for a recorded corpus and
+    # false for a row recorded by nobody. Without this the narrowing would
+    # omit precisely the newest rows, which are the ones most likely broken.
+    #
+    # Added **after** the ceiling test on purpose: a two-row gap must not be
+    # what tips a selection into WIDE, and the gap is small by construction
+    # because `_load` prints the command that closes it. A gap big enough to
+    # matter is a content wave, which the nightly re-records anyway. #925.
+    gap = sorted(set(got.get("unrecorded", ())) - refs)
+    if gap:
+        refs.update(gap)
+        notes.append(f"# plus {len(gap)} row(s) the map has never measured,"
+                     f" audited unconditionally rather than excluded")
+    # A ref the map saw and the tree no longer declares cannot be audited.
+    refs.difference_update(got.get("retired", ()))
     return sorted(refs), notes
 
 
