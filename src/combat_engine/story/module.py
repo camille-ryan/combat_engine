@@ -492,6 +492,32 @@ class Scene:
         """What fraction of a standard encounter's budget this fight is worth."""
         return DIFFICULTY.get(self.difficulty, 1.0)
 
+    def counts_toward(self, party_level: int) -> int:
+        """How many encounters this scene is worth toward a milestone.
+
+        The printed rule weights the count by level difference rather than
+        taking every fight as one, and says so in as many words: an
+        encounter **two or more levels lower** than the characters "is
+        really easy, and it shouldn't contribute toward a milestone", while
+        one **four or more levels higher** "should count as two
+        encounters".
+
+        So: 0, 1 or 2, and only a `combat` scene counts at all. The same
+        page is explicit that a quest does not -- *"don't count a quest as
+        an encounter for the purposes of earning action points"* -- and a
+        conversation or a challenge is not an encounter either, which is
+        what makes the `kind` test the rule rather than a shortcut.
+
+        `level` falls back to the party's, which is the overwhelming
+        majority of scenes and weighs 1.
+        """
+        if self.kind != "combat":
+            return 0
+        gap = (self.level or party_level) - party_level
+        if gap <= -2:
+            return 0
+        return 2 if gap >= 4 else 1
+
     @property
     def needs(self) -> int:
         """Successes this challenge wants before three failures."""

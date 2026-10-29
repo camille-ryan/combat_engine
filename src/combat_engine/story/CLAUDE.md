@@ -815,6 +815,45 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## Two encounters are a milestone, and the count is weighted
+
+`world.milestones` existed, `c.milestone()` read it, and arcade mode set it
+from its finished legs — **`story/` never did**, so every story fight
+answered 0 for the whole module and the milestone's printed action point
+reached nobody. Camille's ruling on #666 is the printed rule word for word,
+so there was nothing to decide: every two encounters between extended
+rests.
+
+Four calls worth keeping:
+
+* **The count is weighted, not `done // 2`.** The page says a fight two or
+  more levels below the party must not contribute and one four or more
+  above counts as two, so `Scene.counts_toward` returns 0, 1 or 2. Only a
+  `combat` scene counts at all — the same page excludes quests explicitly,
+  and a conversation is not an encounter either.
+* **It lives on `Campaign`, not `Party`.** A fact about the day rather than
+  about any character, and the extended rest that resets it happens in
+  `run.step`.
+* **`world.milestones` is set in `run._fight` before `encounter.start()`**,
+  the same placement and the same stated reason as `api/day.py`: a trait
+  reads it at arming.
+* **The number is printed when it is non-zero**, which is what makes it
+  checkable at all — it is otherwise read inside a world that does not
+  outlive the fight, so nothing above could tell a board that got it from
+  one that did not. This component's rule is that an unobservable effect
+  gets an event rather than a harness that diffs state.
+
+Two traps this hit, both worth knowing:
+
+* **`Campaign` is hand-serialised** while `Sheet` round-trips through
+  `asdict` and a tolerant filter. A new `Campaign` field written in
+  `to_dict` and not read in `from_dict` resets silently on every load,
+  which is what `encounters` did until a driver asked and read 0 against 2.
+* **`DRIVERS` already had a `milestones` key.** A duplicate dict key keeps
+  the *last* writer, so the first registration of the story driver ran the
+  engine-and-arcade one instead and reported 21 green assertions about
+  something else. It is `story_milestones`.
+
 ## A thing handed over in prose has somewhere to go
 
 Camille, playing 2026-10-29:
@@ -903,11 +942,12 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     beat_loop scene_audience module_refusals affordance_match \
     summary_scenes boxed_text graph_furniture graph_administration \
     recall_order borrowed_board party_size_rule challenge_progresses \
-    line_kinds objective_verdict objective_budget scene_grant
+    line_kinds objective_verdict objective_budget scene_grant \
+    story_milestones
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 22 drivers and prints 203 assertions**, and **each was
+**The command above is 23 drivers and prints 214 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

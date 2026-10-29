@@ -42106,6 +42106,163 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def two_encounters_make_a_milestone_and_the_board_is_told(out: Result) -> None:
+    """Camille's ruling on #666, which is the printed rule word for word:
+
+    > *"An adventuring day consists of 4-5 encounters, and a milestone is
+    > every two encounters."*
+
+    `world.milestones` existed, `c.milestone()` read it, arcade mode set
+    it -- and `story/` never did, so **every story fight answered 0** and
+    the milestone's printed action point was never granted to anybody.
+
+    Three things are asserted here and the middle one is the least
+    obvious. The count is **weighted**, because the page says a fight two
+    or more levels below the party must not contribute and one four or
+    more above counts double; the grant has to reach the **sheets**, which
+    is what makes it survive to the next scene; and the number has to
+    reach the **board**, which is where a trait reads it at arming and
+    which nothing above the fight can otherwise see.
+
+    **God mode for the action-point arithmetic, deliberately.** A real
+    fight spends action points, so asserting `[2, 2, 2, 2]` after one
+    would be asserting the policy's spending rather than the grant.
+    `--god-mode` wins without building a board, which is exactly the
+    half this needs. The board assertion then uses a real fight, because
+    god mode builds no world to be told.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def fight(i: int, nxt: str, level: int = 0) -> dict:
+        return {"id": f"f{i}", "kind": "combat", "name": f"F{i}",
+                "exits": [nxt] if nxt else [], "difficulty": "easy",
+                "level": level,
+                "foes": [{"count": 1, "role": "soldier", "rank": "standard"}]}
+
+    def module_of(scenes: list[dict], start: str = "f1",
+                  level: int = 5) -> mod.Module:
+        return mod.parse(
+            {"id": "probe", "party_level": level, "party_size": 4,
+             "start": start, "scenes": scenes}, Path("<driver>"))
+
+    def walk(module: mod.Module, *, god: bool = True,
+             seed: int = 5) -> tuple[save_mod.Campaign, list[str]]:
+        campaign = run_mod.begin(module, seed=seed)
+        said: list[str] = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, module, record=False, god=god)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+        return campaign, said
+
+    # -- the control: only a fight is an encounter --------------------------
+    quiet = module_of([
+        {"id": "f1", "kind": "roleplay", "name": "Talk", "exits": ["c"]},
+        {"id": "c", "kind": "skill_challenge", "name": "Climb",
+         "exits": ["r"], "complexity": 1, "primary": ["athletics"]},
+        {"id": "r", "kind": "rest", "name": "Nap", "exits": []},
+    ])
+    done, _ = walk(quiet)
+    out.that(
+        done.encounters == 0 and done.milestones == 0,
+        "a conversation, a challenge and a rest are not encounters, so "
+        "none of them counts toward a milestone",
+        f"encounters={done.encounters}, milestones={done.milestones}",
+    )
+
+    # -- two fights, one milestone, an action point each --------------------
+    pair = module_of([fight(1, "f2"), fight(2, "")])
+    two, notes = walk(pair)
+    out.that(
+        two.encounters == 2 and two.milestones == 1,
+        "two completed encounters are one milestone",
+        f"encounters={two.encounters}, milestones={two.milestones}",
+    )
+    out.that(
+        [s.action_points for s in two.party.sheets] == [2, 2, 2, 2],
+        "and every character gains the printed action point, on top of "
+        "the one an extended rest leaves them with",
+        f"{[s.action_points for s in two.party.sheets]}",
+    )
+    out.that(
+        any("Milestone 1" in n for n in notes),
+        "and it is printed rather than only recorded",
+        f"{[n for n in notes if 'Milestone' in n] or notes[-2:]}",
+    )
+
+    # -- one fight is not a milestone --------------------------------------
+    alone, _ = walk(module_of([fight(1, "")]))
+    out.that(
+        alone.encounters == 1 and alone.milestones == 0
+        and [s.action_points for s in alone.party.sheets] == [1, 1, 1, 1],
+        "one encounter is not a milestone and grants nothing",
+        f"encounters={alone.encounters}, "
+        f"ap={[s.action_points for s in alone.party.sheets]}",
+    )
+
+    # -- the printed weighting, both ends ----------------------------------
+    easy, _ = walk(module_of([fight(1, "f2", level=3), fight(2, "", level=3)]))
+    out.that(
+        easy.encounters == 0 and easy.milestones == 0,
+        "two fights two levels below the party contribute nothing, which "
+        "the page states in as many words",
+        f"encounters={easy.encounters}",
+    )
+    steep, _ = walk(module_of([fight(1, "", level=9)]))
+    out.that(
+        steep.encounters == 2 and steep.milestones == 1,
+        "and a single fight four levels above the party counts as two, so "
+        "it is a milestone on its own",
+        f"encounters={steep.encounters}, milestones={steep.milestones}",
+    )
+
+    # -- an extended rest resets it ----------------------------------------
+    slept = module_of([
+        fight(1, "f2"), fight(2, "night"),
+        {"id": "night", "kind": "rest", "name": "Night", "exits": ["f3"],
+         "extended": True},
+        fight(3, ""),
+    ])
+    after, _ = walk(slept)
+    out.that(
+        after.encounters == 1 and after.milestones == 0,
+        "an extended rest resets the count, so the fight after it starts "
+        "the next day's tally rather than continuing yesterday's",
+        f"encounters={after.encounters}, milestones={after.milestones}",
+    )
+    out.that(
+        [s.action_points for s in after.party.sheets] == [1, 1, 1, 1],
+        "and the rest takes the unspent action point back, which the page "
+        "also states",
+        f"{[s.action_points for s in after.party.sheets]}",
+    )
+
+    # -- the board is told, which is the whole point -----------------------
+    # A real fight, not god mode: god mode builds no world to be told, and
+    # the third fight is the first that can bring a milestone in because
+    # the second is where it is reached.
+    three = module_of([fight(1, "f2"), fight(2, "f3"), fight(3, "")])
+    _, real = walk(three, god=False)
+    out.that(
+        any("brings in 1 milestone" in n for n in real),
+        "the fight after a milestone is fielded on a board that knows it, "
+        "which is where `c.milestone()` reads it at arming",
+        f"{[n for n in real if 'brings in' in n] or 'no such note'}",
+    )
+
+    # -- and it survives being written down --------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(two))
+    out.that(
+        back.encounters == two.encounters and back.milestones == 1,
+        "and the count survives a save and a load",
+        f"{back.encounters} vs {two.encounters}",
+    )
+
+
 def a_scene_can_hand_the_party_something_that_survives_the_next_scene(
     out: Result,
 ) -> None:
@@ -42366,6 +42523,16 @@ DRIVERS = {
         an_objective_moves_the_budget_one_band_and_says_so,
         "an objective moves the budget one band and prints that it did "
         "(Camille, 2026-10-29)",
+    ),
+    # **`story_milestones`, not `milestones`.** That name is already taken by
+    # the engine-and-arcade driver below, and a duplicate dict key is kept
+    # silently by the *last* writer -- so the first registration of this ran
+    # the other driver and reported 21 green assertions that had nothing to
+    # do with it.
+    "story_milestones": (
+        two_encounters_make_a_milestone_and_the_board_is_told,
+        "two encounters are a milestone in a story campaign, weighted, "
+        "granted and told to the board (#968)",
     ),
     "scene_grant": (
         a_scene_can_hand_the_party_something_that_survives_the_next_scene,

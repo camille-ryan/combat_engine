@@ -131,6 +131,25 @@ class Campaign:
     #: human. One field rather than two flows, so the loop cannot drift the
     #: way encounter setup did when it existed twice (#229).
     control: list[str] = field(default_factory=list)
+    #: Encounters completed since the last extended rest, **weighted by the
+    #: printed rule** rather than counted flat -- see `Scene.counts_toward`.
+    #: Two of these is a milestone and an action point.
+    #:
+    #: On the campaign rather than on `Party`, because it is a fact about
+    #: the day and not about any character, and because an extended rest
+    #: has to reset it from `run.step`, which is where the rest happens.
+    encounters: int = 0
+
+    @property
+    def milestones(self) -> int:
+        """Milestones reached since the last extended rest.
+
+        Camille's ruling on #666: *"an adventuring day consists of 4-5
+        encounters, and a milestone is every two encounters."* So this is
+        `encounters // 2`, over the weighted count -- `day.milestones` is
+        the same arithmetic over the legs of an arcade day.
+        """
+        return self.encounters // 2
 
     def persona(self, slot: int) -> Persona:
         """Who slot N is, falling back to a default by class."""
@@ -182,6 +201,12 @@ def to_dict(campaign: Campaign) -> dict:
         "party": [asdict(s) for s in campaign.party.sheets],
         "personas": [asdict(p) for p in campaign.personas],
         "control": list(campaign.control),
+        # **`Campaign` is hand-serialised, unlike `Sheet`.** A new field here
+        # has to be written in both directions or it silently resets on
+        # every load -- which is what happened to `encounters` until a
+        # driver asked, reading 0 where the campaign held 2. `Sheet` gets
+        # this for free through `asdict` and `_sheet`'s tolerant filter.
+        "encounters": campaign.encounters,
     }
 
 
@@ -208,6 +233,10 @@ def from_dict(raw: dict) -> Campaign:
             for p in raw.get("personas", ())
         ],
         control=[str(c) for c in raw.get("control", ())],
+        # Defaults to 0, so a save written before milestones existed reads
+        # as "no encounters since the last extended rest" -- which is the
+        # safe direction and needs no `VERSION` bump to refuse the file.
+        encounters=int(raw.get("encounters", 0) or 0),
     )
 
 

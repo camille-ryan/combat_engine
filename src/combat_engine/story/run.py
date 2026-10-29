@@ -419,6 +419,26 @@ def _fight(
     }
     watch = watcher(world, scene.objective, len(campaign.party.sheets),
                     named=named)
+    # **How many milestones the party brings in.** A fact about the day, so
+    # a board that knows only its own fight cannot derive it -- which is why
+    # `c.milestone()` answered 0 in every story fight until now while arcade
+    # mode had it. Set before `encounter.start()` arms anything, the same
+    # placement and the same reason as `api/day.py`: a trait that reads it
+    # at arming has to get the right number. #968.
+    world.milestones = campaign.milestones
+    if world.milestones:
+        # **Said out loud, which is what makes it checkable.** The number is
+        # otherwise invisible: it is read by traits at arming, inside a world
+        # that does not outlive the fight, so nothing above could tell a
+        # board that got it from one that did not. This component's own rule
+        # is that an unobservable effect gets an event rather than a harness
+        # that diffs state. It is also a thing a player should be told -- an
+        # action point and any milestone trait are live this fight.
+        step.say(
+            f"The party brings in {world.milestones} milestone(s), so a "
+            "milestone trait is live this fight.",
+            "note",
+        )
     encounter.start()
     while not encounter.finished and world.round <= MAX_ROUNDS:
         if watch is not None and watch.resolved:
@@ -813,10 +833,35 @@ def step(
         _challenge(campaign, module, scene, made, choose)
     elif scene.kind == "rest":
         campaign.party.rest(extended=scene.extended)
+        if scene.extended:
+            # **The reset, which is the half that makes the counter mean
+            # anything.** The printed rule counts encounters *between*
+            # extended rests, and `Party.rest` already drops unspent action
+            # points back to one -- so without this the count would run for
+            # the whole module and every later fight would claim milestones
+            # the party had rested away. #968.
+            campaign.encounters = 0
         made.say(
             "Extended rest: everything back."
             if scene.extended
             else "Short rest: encounter powers back, surges spent to heal.",
+            "note",
+        )
+
+    # **Count the encounter and pay the milestone, after the scene played.**
+    # Weighted by the printed rule rather than flat -- see
+    # `Scene.counts_toward`. Counted whatever the outcome: the page says
+    # "encounters the characters complete", a fight they lost ends the
+    # campaign anyway, and crediting only wins would make a hard-won draw
+    # worth less than a walkover. #968.
+    before = campaign.milestones
+    campaign.encounters += scene.counts_toward(module.party_level)
+    if campaign.milestones > before:
+        for sheet in campaign.party.sheets:
+            sheet.action_points += campaign.milestones - before
+        made.say(
+            f"Milestone {campaign.milestones}: an action point each, "
+            f"{campaign.encounters} encounters since the last extended rest.",
             "note",
         )
 
