@@ -154,11 +154,22 @@ def _noticed(world, trap) -> bool:  # noqa: ANN001
     no Perception DC, and the honest reading of a block that prints none is
     that it cannot be found in advance -- so it stays off the wire until it
     springs.
+
+    **Or somebody has found it by looking** -- `trap.found`, set by the
+    active search (#959). Passive remains a computation and the roll
+    remains a stored bit, which is the split that keeps each honest: the
+    passive half cannot drift, and the rolled half cannot be forgotten.
+
+    The `None` guard stays **first** and governs both. A block printing no
+    DC is unfindable in advance by either route; letting a search beat it
+    would undo the more careful of the two decisions above.
     """
     from combat_engine.engine.skills import passive
 
     if trap.perception_dc is None:
         return False
+    if trap.found:
+        return True
     return any(
         passive(world, eid, "perception") >= trap.perception_dc
         for eid in creatures(world)

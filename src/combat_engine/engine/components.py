@@ -511,6 +511,22 @@ class Trap:
     #: the DC is not a function of level, so a formula would be wrong by
     #: ten either way on the number that decides what a player is shown.
     perception_dc: int | None = None
+    #: Somebody has found it by **looking**, as against noticing it in
+    #: passing. One bit for the whole party, not one per character: a trap
+    #: is found by the party, which is the position `render._noticed`
+    #: already takes for the passive half ("one of them noticing is the
+    #: party noticing").
+    #:
+    #: The stored bit the passive half deliberately does without. Passive
+    #: Perception is recomputed on every render, so it needs no state and
+    #: can never drift; a **roll** has to be remembered or the next render
+    #: forgets it, and a party whose best passive is under the DC would
+    #: have no way to find the trap at all. #959.
+    #:
+    #: It does not override `perception_dc is None`. A block printing no DC
+    #: cannot be found in advance by either route -- otherwise the active
+    #: check would quietly undo the more careful of the two readings above.
+    found: bool = False
 
 
 @dataclass

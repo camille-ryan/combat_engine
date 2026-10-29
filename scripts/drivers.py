@@ -15977,6 +15977,93 @@ def a_clause_keyed_on_a_weapon(out: Result) -> None:
         out.that(True, "a ref and a weapon together are refused")
 
 
+def an_active_search_finds_a_trap(out: Result) -> None:
+    """Looking for a trap, where noticing it in passing was the only way.
+
+    The passive half was built and careful -- `render._noticed` compares
+    every living character's passive Perception against the trap's printed
+    DC on each render, so it holds no state and cannot drift. What it could
+    not do is give a party whose best passive is *under* the DC any way
+    forward: that trap was unfindable by any means, for any amount of time.
+
+    So the active check needs the one thing the passive half deliberately
+    does without -- a remembered bit, `Trap.found`. Two halves with opposite
+    properties, which is the point: the computed one cannot go stale and the
+    rolled one cannot be forgotten.
+
+    The last assertion is the one that keeps the careful decision intact. A
+    block printing no Perception DC means *cannot be found in advance* --
+    275 of the 631 rows print none -- and a search that beat that would
+    quietly undo it. #959.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.api.render import _noticed
+    from combat_engine.engine import actions as acts
+    from combat_engine.engine.components import Position, Trap
+
+    def board_with(dc, *, sprung: bool = False, found: bool = False):  # noqa: ANN001, ANN202
+        world, me, _armed = _posed("f1378b", 5)
+        here = world.need(me, Position).square
+        eid = world.spawn()
+        world.add(eid, Trap(ref="t:drivers", perception_dc=dc,
+                            sprung=sprung, found=found))
+        world.add(eid, Position(square=(here[0] + 1, here[1])))
+        return world, world.encounter, me, eid
+
+    def offered(world, enc, me) -> list:  # noqa: ANN001
+        return [a for a in acts.legal(world, enc, me) if a.kind == "search"]
+
+    # -- the floor: the move is offered at all --------------------------
+    world, enc, me, eid = board_with(60)
+    first = offered(world, enc, me)
+    out.that(bool(first) and eid in first[0].targets,
+             "the floor: a minor action to look for the trap is offered and"
+             " names it, without which nothing below is being tested",
+             f"offers={len(first)}")
+
+    # -- a check it cannot miss finds it, and the board then shows it ----
+    world, enc, me, eid = board_with(1)
+    acts.perform(world, enc, me, offered(world, enc, me)[0])
+    trap = world.get(eid, Trap)
+    out.that(trap.found,
+             "a search against a DC it cannot miss finds the trap")
+    out.that(_noticed(world, trap),
+             "and the board then shows it, so the found bit is what the"
+             " render reads and not a flag nothing consults -- the fault"
+             " `engine/CLAUDE.md` calls this component's commonest")
+
+    # -- a check it cannot pass costs the minor and finds nothing --------
+    world, enc, me, eid = board_with(60)
+    acts.perform(world, enc, me, offered(world, enc, me)[0])
+    out.that(not world.get(eid, Trap).found,
+             "a search against a DC it cannot reach finds nothing -- a spent"
+             " minor and no reveal, which is what makes looking a risk"
+             " rather than a free answer",
+             "it was found anyway, so the roll is not being consulted")
+
+    # -- not offered twice, and not for a trap already gone off ---------
+    world, enc, me, _ = board_with(10, found=True)
+    out.that(not offered(world, enc, me),
+             "a trap already found is not offered again, so a party cannot"
+             " spend minors re-finding it")
+    world, enc, me, _ = board_with(10, sprung=True)
+    out.that(not offered(world, enc, me),
+             "nor one that has already gone off -- it is on the board"
+             " anyway and there is nothing left to discover")
+
+    # -- and a block printing no DC stays unfindable by EITHER route -----
+    world, enc, me, eid = board_with(None)
+    out.that(not offered(world, enc, me),
+             "a trap printing **no** Perception DC is not offered: its block"
+             " means it cannot be found in advance, and 275 of the 631 rows"
+             " print none")
+    out.that(not _noticed(world, world.get(eid, Trap)),
+             "and it stays off the board even so -- the `None` guard governs"
+             " both routes, which is the decision a search that beat it"
+             " would have quietly undone")
+
+
 def a_minion_missed_takes_nothing(out: Result) -> None:
     """A minion takes no damage from an attack that misses it.
 
@@ -41901,6 +41988,11 @@ DRIVERS = {
         invisibility_taken_away,
         "a creature stripped of the benefit of invisibility, against every"
         " watcher rather than one (#774)",
+    ),
+    "active_search": (
+        an_active_search_finds_a_trap,
+        "a minor action to look for a trap, where a party under the passive"
+        " DC had no way to find one at all (#959)",
     ),
     "minion_missed": (
         a_minion_missed_takes_nothing,

@@ -140,6 +140,7 @@ def legal(
     out.extend(_action_points(world, encounter, actor))
     out.extend(_manoeuvres(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
+    out.extend(_searching(world, encounter, actor))
     out.extend(_feinting(world, encounter, actor))
     out.extend(_delaying(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
@@ -275,6 +276,56 @@ FEINT_USE = "feint:used"
 #: advantage" -- and without it that row fires on any successful Bluff check
 #: against anybody, which is wider than its printed line.
 FEINT_PURPOSE = "combat-advantage"
+
+
+def _searching(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Looking for a trap, rather than noticing one in passing. A minor action.
+
+    The passive half was already built and careful: `render._noticed`
+    compares every living character's passive Perception against the trap's
+    printed DC on each render, so it needs no stored state and cannot drift.
+    What it cannot do is give a party whose best passive is **under** the DC
+    any way forward -- that party could not find the trap by any means,
+    however long it spent. This is the move that answers it.
+
+    Offered only where it could do something, which is four conditions and
+    each rules out a real case:
+
+    * the trap is not already sprung -- a trap that has gone off is on the
+      board anyway and there is nothing left to discover;
+    * it is not already `found`, so a party cannot spend minors re-finding
+      what it has found;
+    * it prints a Perception DC. A block printing none cannot be found in
+      advance at all, which is `render._noticed`'s reading and the one this
+      must not undo -- 275 of the 631 rows print no DC;
+    * and the searcher has line of effect to it, so a trap behind a wall or
+      in another room is not findable from here.
+
+    The passive half is deliberately *not* consulted: a trap already visible
+    to the party's passive Perception is on the wire, so searching for it
+    would be an action with no effect. That is the `found` and `sprung`
+    tests' job, and `_noticed` is a render-time question this layer should
+    not be asking.
+    """
+    from .components import Trap
+    from .query import line_of_effect
+
+    if not encounter.can_spend(actor, ActionType.MINOR):
+        return []
+    hidden = [
+        eid
+        for eid, trap in world.each(Trap)
+        if not trap.sprung
+        and not trap.found
+        and trap.perception_dc is not None
+        and line_of_effect(world, actor, eid)
+    ]
+    if not hidden:
+        return []
+    # One action over every candidate rather than one each: the printed move
+    # is to look around, not to look at a particular trap you cannot see.
+    return [Action(kind="search", cost=ActionType.MINOR,
+                   targets=tuple(sorted(hidden)))]
 
 
 def _feinting(world: World, encounter: Encounter, actor: int) -> list[Action]:
@@ -1541,6 +1592,33 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # A failed check is still a spent minor and nothing else, which is
         # the risk this action has always carried.
         Cast(world=world, me=actor, ref="hide").hide(check=True)
+        return True
+
+    if action.kind == "search":
+        from .cast import Cast
+        from .components import Trap
+
+        # **Rolled once against each candidate**, because the DCs differ and
+        # one roll of Perception is the character looking around the room --
+        # the alternative, a roll per trap, would let a party find the easy
+        # trap and miss the hard one off the same look, which is not what
+        # one minor action buys.
+        #
+        # A failed look is a spent minor and nothing else, which is the risk
+        # `hide` above already carries.
+        looking = Cast(world=world, me=actor, ref="search")
+        for eid in action.targets:
+            trap = world.get(eid, Trap)
+            if trap is None or trap.found or trap.sprung:
+                continue
+            if trap.perception_dc is None:
+                continue
+            if looking.check("perception", trap.perception_dc):
+                trap.found = True
+        # **The action succeeded even when the look did not.** The minor is
+        # spent either way, which is what makes searching a risk rather than
+        # a free reveal, and returning False here would read to the caller
+        # as "the action could not be taken" and hand the minor back.
         return True
 
     if action.kind == "action_point":
