@@ -1573,6 +1573,20 @@ def _associated() -> dict[str, list[str]]:
 _TRIGGER_REF = re.compile(
     r'ev\.power\s*==\s*["\']([pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)["\']')
 
+#: A ref written in a row's **printed** trigger, which the ETL resolved there.
+#: The same alternation as `_TRIGGER_REF`'s capture, so the two sources agree
+#: on what a ref looks like and neither invents a shape the other refuses.
+_PRINTED_REF = re.compile(r'\b([pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)\b')
+
+#: Does the printed trigger say the **owner** is the one using the named row?
+#: "you use <ref>" and a monster's "it uses <ref>", against "when an enemy
+#: uses <ref>" -- firing somebody else's power as the caster poses a moment
+#: that cannot happen, which is the illegal-swing fault one level up.
+_TRIGGER_IS_MINE = re.compile(
+    r"\b(?:you|it)\s+(?:use|uses|augment|augments|expend|expends|spend|spends)\b",
+    re.I,
+)
+
 
 #: `cls="wizard"` in a row's source, or in a helper it calls.
 _WANTS_CLASS = re.compile(r'cls\s*=\s*["\'](\w+)["\']')
@@ -1675,9 +1689,34 @@ def _triggered_by(ref: str) -> list[str]:
     `keyword` inside a decorator `Call` to find the same comparison. The
     docstring risk `_label_gated` guards against does not arise either --
     no docstring writes `ev.power ==`.
+
+    **And the declared `trigger=` text is a second source, which this read
+    for a long time and did not.** The pattern above is a *body* search, so
+    it finds a row whose predicate happens to be written as a literal
+    comparison and misses every row that asks the same question through a
+    helper, an `in` against a tuple, or a gate of its own. The printed
+    trigger says the same thing in the author's own words and the ETL has
+    already resolved the cross-reference in it, so the ref is sitting there
+    as a ref.
+
+    Measured: 46 rows on the silent list watch a power being used, and for
+    **20 of them the power their own trigger names is not offered by any
+    sibling pass**. `f1794` is the clearest -- its trigger names one power
+    and `_siblings` was offering a different one.
+
+    **Only when the trigger says the caster is the one using it.** A printed
+    trigger is as often about an enemy's power as the owner's, and firing an
+    enemy's power on the caster's behalf would pose a moment that cannot
+    happen -- the fault `_swing_from_reach`'s docstring records for an
+    illegal swing. 322 rows name another ref in their trigger and **217**
+    read as the caster doing it, so the reading is what bounds this.
     """
     row = REGISTRY.get(ref)
-    return _TRIGGER_REF.findall(_source_of(getattr(row, "body", None), ref))
+    out = _TRIGGER_REF.findall(_source_of(getattr(row, "body", None), ref))
+    printed = getattr(row, "trigger", "") or ""
+    if _TRIGGER_IS_MINE.search(printed):
+        out += _PRINTED_REF.findall(printed)
+    return out
 
 
 def _label_gated(ref: str) -> list[str]:
