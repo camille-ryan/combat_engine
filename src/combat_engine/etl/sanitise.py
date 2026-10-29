@@ -371,7 +371,21 @@ def scrub(
         # briefs. A stat block does refer to itself by a fragment, so the
         # halves must keep matching; longest-first in the pass below is what
         # makes the compound win when the page printed it whole.
-        runs |= set(re.findall(r"[^\W\d_]+(?:-[^\W\d_]+)+", name))
+        # The words again, with each hyphenated compound kept whole, and the
+        # runs over *those*. `Shadar-kai` alone is not enough: the page's
+        # short form is `Shadar-kai Weaponmaster`, and with only the compound
+        # as a token that fired and then `Weaponmaster` fired after it, for
+        # `<ref> <ref>` instead of `<ref>-<ref>` -- the same doubling one
+        # space along. Runs over compound-preserving words give the printed
+        # short form itself, which is what the card actually says.
+        joined = re.findall(r"[^\W\d_]+(?:-[^\W\d_]+)*", name)
+        runs |= {w for w in joined if "-" in w}
+        runs |= {
+            " ".join(joined[i:j])
+            for i in range(len(joined))
+            for j in range(i + 2, len(joined) + 1)
+            if any("-" in w for w in joined[i:j])
+        }
         for token in {name, *runs, *words}:
             low = token.lower()
             long_enough = len(token) > 2 or (len(token) == 2 and low not in STOPWORDS)
@@ -410,7 +424,22 @@ def scrub(
     # have to be flexible or the cheap test rejects it before the regex
     # ever runs.
     here = _straight(out.lower())
-    for name in sorted(usable, key=len, reverse=True):
+    # **A hyphenated token first, then longest.** Longest alone is not
+    # enough, and the case that proves it is why #541's fault 1 had a
+    # residual. For `Kyrion, Shadar-kai Weaponmaster` the space-joined run
+    # `kai Weaponmaster` is 16 characters and the printed compound
+    # `Shadar-kai` is 10 -- and the hyphen is a word boundary, so the run
+    # matches straight across it in "shadar-kai weaponmaster". It fires
+    # first, leaves `shadar-` orphaned, and the lone word then takes that:
+    #
+    #     \bkai\ Weaponmaster\b -> m1819
+    #     \bShadar\b            -> m1819      = "m1819-m1819"
+    #
+    # A token holding a hyphen is the page's own spelling of a compound and
+    # is never a coincidence, so it is tried before any run that could break
+    # it. Found by logging the substitutions rather than by reading: three
+    # readings of this loop all concluded that longest-first was sufficient.
+    for name in sorted(usable, key=lambda n: ("-" in n, len(n)), reverse=True):
         if _straight(name.lower()) not in here:
             continue
         out = re.sub(_apostrophes(name), usable[name], out, flags=re.I)
