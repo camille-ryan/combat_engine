@@ -906,7 +906,7 @@ def f3582(c: Cast) -> None:
 
 @power("f3583", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("cf:fighter-knight-f9", "etl.build.keeps_sections_with_options"))
+       todo=("cf:fighter-knight-f9",))
 def f3583(c: Cast) -> None:
     """One 7th-level class feature of either of two other builds, chosen
     from the six options the two of them print between them.
@@ -914,22 +914,33 @@ def f3583(c: Cast) -> None:
     Re-aimed off the multiclass symbol, and then off the taxonomy symbol:
     the verb is `c.borrow_row(among=...)` and the list is half there.
 
-    **Two gaps, and they are at different layers.** One build's three
-    options are `cf:fighter-knight-f9s0`-`s2`, in the database since #586
-    and declared nowhere, so the first symbol names their undeclared
-    parent. The other build's three are absent from the database
-    altogether: `etl.build._section_rows` skips the whole section on
-    `_POWER_LIST`, and the two sections are near-identical cards that
-    differ only in how their one introducing sentence is phrased. See the
-    note above `FEATURE_CHOICE` for the tree-wide count, and #812.
+    **One gap now, not two, and the ETL half is already paid.** Both
+    builds' options are in the database: one build's are
+    `cf:fighter-knight-f9s0`-`s2` and the other's are
+    `cf:fighter-slayer-f21s0`-`s2`. So the only thing left is that neither
+    parent is **declared** in this tree, which is what the remaining symbol
+    names.
 
-    **The second symbol names the behaviour that does not exist, not the
-    regex that does.** It was `etl.build._POWER_LIST` for one commit and
-    `todo.py` was right to go red: that constant is present, so a marker
-    naming it can never be satisfied by its arrival, which is the whole job
-    of a marker. What is missing is a `_section_rows` that keeps a section
-    carrying sub-marks -- a power-list heading has none and a feature with
-    options always does -- so that is what the symbol says."""
+    **The retired second symbol was `etl.build.keeps_sections_with_options`,
+    and the behaviour it waited for exists.** The note here said the other
+    build's three were "absent from the database altogether" because
+    `_section_rows` skips the section on `_POWER_LIST`. That guard is real
+    and it does fire -- but #812 added the half this row never saw: a
+    skipped section **that carries sub-marks is deferred**, and the caller
+    re-emits it after every section at an ordinal above the class's
+    maximum. Hence `f21` rather than `f9`, which is route (2)'s stated
+    price -- "the ref order stops matching the printed order for these 94".
+
+    Measured on the rebuilt database rather than inferred: 3 sub-options
+    under each build, named as the page prints them.
+
+    Worth keeping about marker spelling: the symbol was
+    `etl.build._POWER_LIST` for one commit and `todo.py` was right to go
+    red, because that constant is present and a marker naming it can never
+    be satisfied by arriving. Its replacement named a *behaviour*, which
+    `todo.py` cannot detect either -- so it outlived the gap by silence
+    rather than by being wrong on the day. A marker naming behaviour is a
+    marker nothing can retire."""
 
 
 @power("f3584", level=1, cls="", usage=ENCOUNTER, action=NONE,
