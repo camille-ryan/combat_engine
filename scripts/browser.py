@@ -576,7 +576,20 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
         sent = len(calls)
         parked = _positions(page)
         _click_box(page, spot)
-        page.wait_for_timeout(600)
+        # **A clock is irreducible here, and the direction it errs decides the
+        # number.** Every other wait in this file has been moved onto the
+        # condition being asserted -- `_settled`, `_cleared`, `_became` -- but
+        # this check asserts that *nothing happens*, so there is no positive
+        # signal to wait for. A click that is going to be ignored produces no
+        # request, no status change and no movement, which is exactly what a
+        # click still in flight also looks like.
+        #
+        # So the only lever is the deadline, and unlike #847's other sites this
+        # one fails **open**: too short a wait means a real move has not landed
+        # yet and the check passes while the page is wrong. That is the
+        # dangerous direction for an absence, so the wait is generous rather
+        # than tight. 2s against 600ms costs 1.4s once and removes the class.
+        page.wait_for_timeout(2000)
         after_bare = _positions(page)
         moves = [c for c in calls[sent:] if "/aim" in c or "/act" in c]
         status = page.eval_on_selector("#status", "el => el.innerText.trim()")
