@@ -89,6 +89,17 @@ class _Decline:
 #: feats grant it and `Cast._manoeuvrable` is the one reader.
 _ANY_SIZE = "manoeuvre:any-size"
 
+#: Prefix for a `Powers.pre_empts` key that names a **weapon** rather than a
+#: row, so a clause can apply to every attack made with it. The weapon's ref
+#: follows, never its slug -- a slug is its printed name.
+#:
+#: A prefixed key rather than a second table, because all three readers of
+#: `pre_empts` already walk it by key, and a parallel store would have to be
+#: suspended, resumed and menu-listed in step with the first. The prefix
+#: cannot collide with a row ref: no ref contains a colon except `cf:` and
+#: `rt:`, and neither spells this word. #928.
+WEAPON_CLAUSE = "weapon:"
+
 #: The ref a bull rush is keyed on -- what `perform` builds its `Cast` with,
 #: what `c.extend_move` lengthens and what `c.pre_empt` replaces a clause of.
 #: A manoeuvre is an action kind and not a row, so it has no declared ref and
@@ -10211,6 +10222,7 @@ class Cast:
         forced: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
+        weapon: str = "",
     ) -> Effect | None:
         """"When you use <row>, you can X **instead of** Y."
 
@@ -10234,9 +10246,38 @@ class Cast:
         fires.
 
         Yours by default, like the rest of this family.
-        """
-        from .components import Powers
 
+        **`weapon=` keys the registration on a weapon instead of a row**,
+        which is the "class of powers" case: a card reading *"when you make
+        a weapon attack with your <weapon> and hit, you can forgo the
+        damage to ..."* names no row at all. The set it means is every
+        weapon power the holder knows plus both basic attacks, filtered by
+        what is in hand, so there is no ref to key on and writing the clause
+        into each reachable power would duplicate it unboundedly.
+
+        Takes a weapon **ref**, never a slug: a slug is the weapon's printed
+        name and has no business in a row. `f959` is the one card in the
+        tree that prints this shape. #928.
+
+        It refuses a `ref` beside it -- a registration is keyed on one thing
+        or the other, and accepting both would silently honour one.
+
+        **The ordering caveat, stated because the variant mechanism is an
+        index.** `instead_of` settles on `c.variant`, a 1-based position
+        into the registrations that apply to the running row, and a
+        weapon-keyed one applies only while that weapon is held. So the menu
+        and the body must see the same hand -- true within one use, since
+        `dsl.use` settles the variant before the body runs -- and a row that
+        stowed a weapon mid-body would read a different list. No row does;
+        if one ever does, this is the sentence to come back to.
+        """
+        from .components import Gear, Powers
+
+        if weapon and ref:
+            raise ValueError(
+                f"c.pre_empt(ref={ref!r}, weapon={weapon!r}): keyed on a row "
+                "or on a weapon, not both"
+            )
         # `_who` would resolve to the *target*, and these are armed by a
         # feat on its own character with nothing targeted -- the
         # `as_basic` convention rather than the `forbid` one.
@@ -10244,8 +10285,10 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return None
+        if weapon and self.world.get(who, Gear) is None:
+            return None
         entry = (clause, self.ref)
-        key = (ref, what)
+        key = (WEAPON_CLAUSE + weapon if weapon else ref, what)
         # The effect first, as `forbid` and `rolls_with` do: registering
         # before it exists left a clause substituted with nothing alive to
         # ever put it back.
@@ -10292,13 +10335,42 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return []
-        want = ref or self.ref
+        # An explicit `ref` is a question about that row and nothing else.
+        # With none, the question is "what can speak for the row running
+        # now", which includes a clause keyed on a weapon in hand. #928.
+        wanted = [ref] if ref else self._clause_keys()
         return [
             source
+            for key in wanted
             for (on_ref, _what), entries in sorted(known.pre_empts.items())
-            if on_ref == want
+            if on_ref == key
             for _clause, source in entries
         ]
+
+    def _clause_keys(self) -> list[str]:
+        """The `pre_empts` keys that can speak for the row running now.
+
+        Its own ref first, then one per weapon **in hand** -- so a clause a
+        feat keyed on a weapon reaches every attack made with it without
+        being written into any of them. `#928`.
+
+        Own ref first and weapons in `Gear.held` order, because `instead_of`
+        turns this into a 1-based `c.variant` index and the menu has to
+        agree with the body about what position means what. Stowing a weapon
+        between the two would renumber the list; no row does that, and
+        `pre_empt`'s docstring is where that caveat lives.
+
+        Costs nothing when nobody registered a weapon clause, which is the
+        normal case: these are keys to look up, and a key absent from the
+        table matches nothing.
+        """
+        from .components import Gear
+
+        keys = [self.ref]
+        gear = self.world.get(self.me, Gear)
+        if gear is not None:
+            keys += [WEAPON_CLAUSE + w.ref for w in gear.held]
+        return keys
 
     def instead_of(
         self, what: str, default: Callable[[], Any], *, on: int | None = None
@@ -10352,10 +10424,12 @@ class Cast:
         known = self.world.get(self.me, Powers)
         if known is None:
             return default()
+        keys = self._clause_keys()
         flat = [
             (on_what, clause)
+            for key in keys
             for (on_ref, on_what), entries in sorted(known.pre_empts.items())
-            if on_ref == self.ref
+            if on_ref == key
             for clause, _source in entries
         ]
         if not 0 < self.variant <= len(flat):
@@ -10420,7 +10494,11 @@ class Cast:
         from .components import Powers
 
         known = self.world.get(self.me, Powers)
-        waiting = list(known.pre_empts.get((self.ref, what), ())) if known else []
+        waiting = [
+            entry
+            for key in (self._clause_keys() if known else [])
+            for entry in known.pre_empts.get((key, what), ())
+        ]
         for clause, source in waiting:
             # Offered, never imposed: every card registering one of these
             # says "you can", so a declined offer leaves `default` running.

@@ -15906,6 +15906,77 @@ def invisibility_taken_away(out: Result) -> None:
              f"{left}")
 
 
+def a_clause_keyed_on_a_weapon(out: Result) -> None:
+    """A substitution that applies to every attack made with one weapon.
+
+    `c.pre_empt` is keyed `(ref, what)` -- one named row -- which is right
+    for a feat that names a power and unusable for a card reading "when you
+    make a weapon attack with your <weapon>". The set that names is every
+    weapon power the holder knows plus both basic attacks, so there is no
+    ref, and writing the clause into each reachable power would duplicate it
+    unboundedly. `f959` is the one card in the tree printing it. #928.
+
+    `weapon=` keys the registration on the weapon's **ref** instead, and
+    `Cast._clause_keys` is what makes a row that was never named consult it.
+
+    The negative control is the whole evidence here: a clause that applied
+    whatever was in hand would pass every positive assertion below while
+    being a feat that works with the wrong weapon.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+
+    world, caster, _armed = _posed("f959", 1)
+    gear = world.get(caster, Gear)
+    out.that(gear is not None and bool(gear.held),
+             "the floor: the posed character is holding a weapon at all,"
+             " without which every assertion below passes vacuously",
+             f"gear={gear is not None}, held={gear and len(gear.held)}")
+    if gear is None or not gear.held:
+        return
+    weapon = gear.held[0].ref
+
+    arming = Cast(world=world, me=caster, ref="drivers:weaponclause")
+    held = arming.pre_empt("", "damage", lambda using: "forgone",
+                           weapon=weapon)
+    out.that(held is not None, "a weapon-keyed substitution is laid")
+
+    # **A row that was never named.** This is the point of the whole
+    # mechanism: `p999` is not the registration's key and never could be.
+    printed = Cast(world=world, me=caster, ref="p999")
+    out.that(printed.instead_of("damage", lambda: "printed") == "printed",
+             "variant 0 is still the printed clause, as every card says"
+             " -- the trade is offered, never imposed")
+
+    taking = Cast(world=world, me=caster, ref="p999", variant=1)
+    out.that(taking.instead_of("damage", lambda: "printed") == "forgone",
+             "and a row the clause was never keyed on reaches it through the"
+             " weapon in hand, which is the gap #928 names")
+
+    # -- the negative control: stow it and the clause is gone -------------
+    gear.stowed |= {weapon}
+    stowed = Cast(world=world, me=caster, ref="p999", variant=1)
+    out.that(stowed.instead_of("damage", lambda: "printed") == "printed",
+             "stow the weapon and the substitution is **not** offered -- a"
+             " clause that applied whatever was in hand would pass every"
+             " assertion above while being a feat that works with the wrong"
+             " weapon",
+             "the clause still ran with the weapon put away")
+    out.that("drivers:weaponclause" not in stowed.substitutions(),
+             "and it is off the menu too, not merely skipped in the body")
+    gear.stowed -= {weapon}
+
+    # Keyed on one thing or the other, never both.
+    try:
+        arming.pre_empt("p999", "damage", lambda using: "both", weapon=weapon)
+        out.that(False, "a ref and a weapon together are refused",
+                 "it was accepted, so one of the two was silently honoured")
+    except ValueError:
+        out.that(True, "a ref and a weapon together are refused")
+
+
 def a_mark_that_lapses(out: Result) -> None:
     """"The mark ends if you do not attack it", and the row that forbids it.
 
@@ -41701,6 +41772,11 @@ DRIVERS = {
         invisibility_taken_away,
         "a creature stripped of the benefit of invisibility, against every"
         " watcher rather than one (#774)",
+    ),
+    "weapon_keyed_clause": (
+        a_clause_keyed_on_a_weapon,
+        "a substitution keyed on the weapon in hand rather than on a named"
+        " row, which one card prints and `c.pre_empt` could not say (#928)",
     ),
     "mark_lapses": (
         a_mark_that_lapses,
