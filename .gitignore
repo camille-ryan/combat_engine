@@ -53,3 +53,17 @@ docs/blocked.csv
 # Fetched guide HTML. Static historical documents, so one fetch is enough --
 # and the pages are full of printed names.
 /.cache/
+
+# Rulebooks and other source material you supply yourself. Same rule as
+# `compendium.sqlite` and `/modules/`: bring your own, and it never enters the
+# tree. The whole directory, because the point of it is to be the place such a
+# thing can be dropped without anyone thinking about it.
+/resources/
+
+# And by extension anywhere, because the first one did not land in
+# `/resources/` -- it arrived at the repository root, where `git add -A` would
+# have taken it. A rulebook is the largest single leak available: not a name in
+# a comment but the publisher's entire text, which is tier 1 of #447 if it ever
+# reaches a reader. No pattern here names a title, deliberately -- this file is
+# tracked, so the rule it is enforcing applies to it too.
+*.pdf
