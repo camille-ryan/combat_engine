@@ -105,7 +105,20 @@ def f959(c: Cast) -> None:
     """The weapon exists now and `chargen` deals it. What is left is the
     shape of the rider: the immobilise is bought by giving the damage up,
     and the critical's knockdown rides inside that same choice, so
-    neither half can be laid without the trade."""
+    neither half can be laid without the trade.
+
+    **Re-pointed to #928, off #780, because the premise differs.** #780 was
+    *"a row cannot decline its own damage"*, and that is false -- two of its
+    three rows are written and they decline it by simply not calling
+    `c.damage`, which `c.strike()` never charged for. This row is the third
+    and its gap is elsewhere: the clause applies to **any** weapon attack
+    made with this weapon, so there is no ref to key on, while
+    `c.pre_empt` is keyed `(ref, what)` for one named row. Writing it into
+    each reachable power is no answer either -- the set is every weapon
+    power in the tree.
+
+    The symbol stays as it is: what is wanted really is a `pre_empt` that
+    can be keyed on the weapon in hand rather than on a row."""
 
 
 _swap("f960", "f960b")
