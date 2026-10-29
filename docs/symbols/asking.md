@@ -149,6 +149,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Did this character take that build? `c.build("infernal")`.
 - `c.by_attack(self, *, ev: 'Any' = None) -> 'bool'`
   - Was an attack behind the blow being announced?
+- `c.chosen_option(self, ref: 'str', *, on: 'int | None' = None) -> 'str | None'`
+  - Which option this character's build settled on for `ref`.
 - `c.chosen_weapons(self, *, on: 'int | None' = None) -> 'frozenset[str]'`
   - The weapon refs this character's build settled on, by ref.
 - `c.considered_bloodied(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

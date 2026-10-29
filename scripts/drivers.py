@@ -29679,6 +29679,144 @@ def a_weapon_the_build_chose(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_build_time_sub_choice_is_recorded(out: Result) -> None:
+    """*"Choose necrotic or cold when you take this feat"* -- a sub-choice
+    settled once, when the row was taken, that nothing recorded.
+
+    Eighteen heroic rows were each reading a **proxy** for one and saying so
+    in their own notes: the best ability on the sheet, the weapon the
+    character happens to be carrying, the first of two damage types. Every
+    one a defensible guess, and three of the four #758 quotes would be wrong
+    for a character who picked the other way.
+
+    `Build.choices` was already where a build-time pick lives -- `chose:`
+    since #719, beside `race:`, `element:` and `beast:` -- so this wants a
+    dealer and a reader rather than a component of its own.
+    `chargen.BUILD_OPTIONS` names the options a card prints,
+    `_build_options` writes `option:<ref>:<value>`, and `c.chosen_option`
+    reads it back.
+
+    **The dealer takes the first printed option deliberately**, because that
+    is the reading the row already had: no character changes, and `replay`
+    staying green on every fixture is the evidence for it. So these
+    assertions are about the *mechanism* -- that the choice is recorded, and
+    that the row reads the record instead of a hard-coded type.
+
+    **The second assertion is the load-bearing one**, and it is why this
+    rule rewrites the record rather than only reading it back: a row that
+    ignored `c.chosen_option` entirely would pass every other line here, by
+    dealing the type it was always going to deal. Only forcing the *other*
+    option can tell the two implementations apart -- the shape a control
+    that could not do so has cost here before.
+
+    And the last is the negative control the reader's sibling asks for in
+    its own docstring: a missing record must not read as a choice that then
+    *withholds* something, so a character whose build recorded nothing still
+    pays out, on the old reading. A reader defaulting the wrong way would
+    make the feat deal nothing at all on a hand-built board. #758.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.content import dummy
+    from combat_engine.engine import Bus, Rng, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied, Hit
+    from combat_engine.engine.grid import Grid
+
+    REF = "f2743"
+    KEEP = "\0keep"
+
+    def built(*, take: bool = True, record: str | None = KEEP):  # noqa: ANN202
+        """A character holding the feat, with the record optionally forced.
+
+        `SCORED_CHOICES` is pinned because the draw reads it and a rule
+        inheriting whichever value ran first is the shared-mutable trap
+        this file has already paid for once.
+        """
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = True
+        try:
+            world = World(Grid(24, 16), Rng(7), Bus())
+            who = chargen.Character(
+                cls="avenger", level=1, feats=[REF] if take else [],
+            )
+            me = chargen.spawn(world, who, (5, 5))
+        finally:
+            chargen.SCORED_CHOICES = was
+        held = world.need(me, Build)
+        if record != KEEP:
+            kept = {
+                ch for ch in held.choices
+                if not ch.startswith(f"option:{REF}:")
+            }
+            held.choices = kept | (
+                {f"option:{REF}:{record}"} if record else set()
+            )
+        return world, me, held
+
+    def crit_types(world: World, me: int) -> list[str]:
+        """Run the row's **body**, land a critical, report what was dealt.
+
+        The body rather than the verb: `c.chosen_option` answering correctly
+        proves the reader, not the row, and it is the row that was guessing.
+        """
+        foe = dummy.spawn(world, level=1, square=(5, 7))
+        dealt: list[str] = []
+        world.bus.on(
+            DamageApplied,
+            lambda ev: dealt.append(str(getattr(ev, "dtype", "?"))),
+        )
+        REGISTRY[REF].body(Cast(world=world, me=me, ref=REF))
+        world.bus.emit(Hit(attacker=me, target=foe, power=REF, critical=True))
+        return dealt
+
+    # -- the floor: the table and the dealer -------------------------------
+    out.that(chargen.BUILD_OPTIONS.get(REF) == ("necrotic", "cold"),
+             "the table names both printed options for this row, in the"
+             " order the card prints them -- without which every line"
+             " below is asserting against a guess",
+             f"{chargen.BUILD_OPTIONS.get(REF)}")
+
+    _, _, held = built()
+    out.that(f"option:{REF}:necrotic" in held.choices,
+             "a character that took the row carries the choice its build"
+             " settled, as `option:<ref>:<value>` on `Build.choices`",
+             f"{sorted(c for c in held.choices if c.startswith('option:'))}")
+
+    world, me, _ = built()
+    out.that(Cast(world=world, me=me, ref=REF).chosen_option(REF) == "necrotic",
+             "and `c.chosen_option` reads that back, which is the door a row"
+             " asks through instead of guessing",
+             f"{Cast(world=world, me=me, ref=REF).chosen_option(REF)!r}")
+
+    # -- the one that tells the two implementations apart -------------------
+    world, me, _ = built()
+    out.that(crit_types(world, me) == ["necrotic"],
+             "the row deals the recorded type on a critical, which is the"
+             " same type it dealt before this issue -- so no dealt character"
+             " moved",
+             f"{crit_types(*built()[:2])}")
+
+    world, me, _ = built(record="cold")
+    out.that(crit_types(world, me) == ["cold"],
+             "and a build that recorded the **other** printed option gets"
+             " the other type -- the only assertion here that a row ignoring"
+             " the record would fail",
+             f"{crit_types(*built(record='cold')[:2])}")
+
+    # -- the negative control: no record must not mean no payout -----------
+    world, me, held = built(record=None)
+    out.that(not any(c.startswith(f"option:{REF}:") for c in held.choices)
+             and crit_types(world, me) == ["necrotic"],
+             "a build that recorded nothing still deals the old type: a"
+             " missing record gates the clause **on**, never off, which is"
+             " what a hand-built board and every monster rely on",
+             f"choices={sorted(c for c in held.choices if 'option' in c)}"
+             f" dealt={crit_types(*built(record=None)[:2])}")
+
+
 def a_power_held_ready_and_paid_for_in_kind(out: Result) -> None:
     """*"That power is now stored… use it by expending another unused wizard
     attack power of its level or higher."*
@@ -42110,6 +42248,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "build_option": (
+        a_build_time_sub_choice_is_recorded,
+        "a sub-choice made when a row was taken is recorded on the build and"
+        " read back, where eighteen rows each guessed a proxy (#758)",
     ),
     "minion_missed": (
         a_minion_missed_takes_nothing,

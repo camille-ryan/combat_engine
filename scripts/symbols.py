@@ -371,8 +371,12 @@ CATEGORIES: dict[str, dict] = {
             # hand, and the hand changes when `c.draw` fires. Keeping the
             # pair beside `element` is how somebody who knows they want a
             # build-time fact finds them. #719.
+            # `c.chosen_option` joins them for the same reason, one step
+            # more general: it is the same question -- what did the *build*
+            # settle -- asked of a sub-choice a card printed rather than of
+            # the weapon in hand. #758.
             ("state and identity", [
-                "bloodied", "build", "chosen_weapons",
+                "bloodied", "build", "chosen_option", "chosen_weapons",
                 # `set_build` is the writer for the reader beside it: six
                 # feats stand a character on a build leg chargen did not
                 # deal. Placed here rather than under choices, because the

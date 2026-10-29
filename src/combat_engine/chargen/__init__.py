@@ -2247,6 +2247,43 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     return False
 
 
+#: Sub-choices a row's card asks the player to make **when it is taken**,
+#: by ref, in the order the card prints them.
+#:
+#: Hand-written, one entry per row, like every other table here: the card
+#: says which options there are and no column records it, so there is
+#: nothing to derive this from. `_build_options` deals the **first** one,
+#: which is what the rows named on #758 were already assuming in prose --
+#: so filling this in records the choice without moving a single number,
+#: and the recorded value is what a row reads instead of guessing.
+#:
+#: Only the one family so far, deliberately. #758 asks for the key and the
+#: dealer to prove themselves on one kind before the other twelve proxies
+#: are switched over, because each switch changes what a character does.
+BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
+    "f2743": ("necrotic", "cold"),
+}
+
+
+def _build_options(feats: list[str]) -> set[str]:
+    """`option:<ref>:<value>` for every row the build took that asks one.
+
+    **No random stream, and that is on purpose.** Every other dealer here
+    takes one of its own so that dealing a character cannot move the dice
+    the fight is about to roll. This one needs none: it takes the first
+    printed option every time, which is the reading the rows already had,
+    so the character is unchanged and `replay` is the proof of it.
+
+    Choosing *well* -- scoring the options the way `choices.feat_options`
+    scores feats -- is a separate question and a separate change, because
+    it would move every character holding one of these rows.
+    """
+    return {
+        f"option:{ref}:{BUILD_OPTIONS[ref][0]}"
+        for ref in feats if ref in BUILD_OPTIONS
+    }
+
+
 def feats_for(
     cls: str, level: int = 1, build: Build | None = None,
     rng: Random | None = None, powers: list[str] | None = None,
@@ -3314,8 +3351,17 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         # names weapons one at a time, and two keys that differ only in which
         # identifier they carry is the kind of near-collision that gets read
         # as the same fact. #719.
+        # **And the sub-choices the taken rows ask for**, as
+        # `option:<ref>:<value>`, from the same reasoning one step on: a
+        # feat printing "choose necrotic or cold" asks a question that has
+        # no moment in a fight either, because the feat was taken before
+        # the character walked in. #758.
         BuildState(
-            choices={*who.choices, *(f"chose:{w.ref}" for w in carried)}
+            choices={
+                *who.choices,
+                *(f"chose:{w.ref}" for w in carried),
+                *_build_options(list(feats)),
+            }
         ),
         # **Training, which nothing recorded until #565.** Its own stream,
         # like the loadout's and the gear's, so which skills a character is

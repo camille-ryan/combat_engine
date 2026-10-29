@@ -1279,6 +1279,47 @@ class Cast:
                 return by_value.get(choice.split(":", 1)[1])
         return None
 
+    def chosen_option(self, ref: str, *, on: int | None = None) -> str | None:
+        """Which option this character's build settled on for `ref`.
+
+        *"Choose necrotic or cold when you take this feat"* and its
+        siblings: a sub-choice made **once, when the row was taken**, that
+        nothing recorded. Eighteen heroic rows were each reading a proxy for
+        it and saying so in their own notes -- the character's best ability,
+        the weapon it happens to be carrying, the first of the two types --
+        every one a defensible guess, and three of the four quoted on #758
+        wrong for a character who picked the other way.
+
+        **Not `c.choose`, and that distinction is the whole reason this
+        exists.** `c.choose` asks `world.decide` *during the fight*, so a
+        row using it for a build-time fact re-asks on every use: the same
+        character could deal cold this round and necrotic the next, and the
+        choice the card says is permanent would not be. `f1224` is written
+        that way today and it is the misuse this replaces.
+
+        Read off `Build.choices` as `option:<ref>:<value>`, beside
+        `chose:`, `element:`, `beast:` and `race:` -- a build-time choice
+        with a reader and no component of its own, which is the arrangement
+        #719 settled for the carried weapon.
+
+        **`None` for a monster, a hand-built board, and a character whose
+        build recorded nothing**, the way `chosen_weapons` returns an empty
+        set and for the same stated reason: a missing record must not read
+        as a choice that then *withholds* something. So a row asking this
+        falls back to the reading it already had and gates a clause **on**,
+        never off. #758.
+        """
+        from .components import Build
+
+        held = self.world.get(self.me if on is None else on, Build)
+        if held is None:
+            return None
+        want = f"option:{ref}:"
+        for choice in held.choices:
+            if choice.startswith(want):
+                return choice[len(want):]
+        return None
+
     def chosen_weapons(self, *, on: int | None = None) -> frozenset[str]:
         """The weapon refs this character's build settled on, by ref.
 

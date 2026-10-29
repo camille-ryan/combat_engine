@@ -166,14 +166,20 @@ def f2742(c: Cast) -> None:
 @power("f2743", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f2743(c: Cast) -> None:
-    """"Necrotic or cold" is a choice made when the feat is taken and
-    nothing records it, so the first of the two is dealt. `c.flat`
-    rather than `c.damage`: a critical maxes dice, and this is a flat
-    number rather than another die to max."""
+    """The damage type is the one the build recorded when the feat was
+    taken, which `chargen.BUILD_OPTIONS` deals and `c.chosen_option` reads
+    back. It used to say "nothing records it, so the first of the two is
+    dealt" -- now something does, and the first is still what a build deals,
+    so the character is unchanged and a character recorded the other way
+    gets the other type. A build that recorded nothing falls back to the
+    old reading rather than withholding the damage. #758.
+
+    `c.flat` rather than `c.damage`: a critical maxes dice, and this is a
+    flat number rather than another die to max."""
     _religion(c)
-    _on_crit(
-        c, lambda ev: c.flat(_boon(c), dtype=DamageType.NECROTIC, on=ev.target)
-    )
+    cold = c.chosen_option("f2743") == "cold"
+    kind = DamageType.COLD if cold else DamageType.NECROTIC
+    _on_crit(c, lambda ev: c.flat(_boon(c), dtype=kind, on=ev.target))
 
 
 @power("f2744", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
