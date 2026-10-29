@@ -32196,6 +32196,92 @@ def training_is_worth_exactly_five_on_a_check(out: Result) -> None:
     table.strike()
 
 
+def a_lost_skill_challenge_still_leads_somewhere(out: Result) -> None:
+    """Camille's ruling, 2026-10-29, quoted:
+
+        "Skill challenes should never prevent the plot from progressing."
+
+    The code obeys it today, by one `or` in `run.step`:
+
+        made.next_id = wanted or module.next_of(scene, choice)
+
+    and **nothing asserted it**. Deleting the fallback would strand a
+    party on any failed challenge whose module named a success branch and
+    no failure branch -- and the campaign would simply end, which is the
+    quiet kind of wrong this component produces.
+
+    The module in hand agrees with the ruling, which is worth recording
+    because it is evidence the rule is the adventure's and not ours: both
+    of its challenges continue either way. Chapter 1's awards its XP on a
+    failure and leaves the fires burning into the fight; chapter 4's
+    sends success and failure to **the same encounter**, charging a
+    healing surge for the failure.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    def build(level: int, **extra: str) -> mod.Module:
+        raw = {"id": "probe", "party_level": 1, "party_size": 4,
+               "start": "fires",
+               "scenes": [
+                   {"id": "fires", "kind": "skill_challenge", "name": "F",
+                    "exits": ["after"], "complexity": 1, "level": level,
+                    "primary": ["arcana", "athletics", "thievery"], **extra},
+                   {"id": "after", "kind": "rest", "name": "A", "exits": []},
+               ]}
+        # Only when something names it: the validator refuses a scene
+        # nothing leads to, which is the *inward* half of reachability.
+        if extra.get("on_success") == "won":
+            raw["scenes"].append(
+                {"id": "won", "kind": "rest", "name": "W", "exits": []})
+        return mod.parse(raw, Path("<driver>"))
+
+    def play(m: mod.Module) -> run_mod.Step:
+        campaign = run_mod.begin(m, seed=5)
+        return run_mod.step(campaign, m, record=False)
+
+    # **The controls first.** A challenge nobody can fail and one nobody
+    # can pass -- a DC the party cannot reach at level 1. Without these
+    # every assertion below could be passing on a win.
+    easy = play(build(1, on_success="won"))
+    hard = play(build(30, on_success="won"))
+    out.that(
+        easy.outcome == "won" and hard.outcome == "lost",
+        "the fixture really does produce one win and one loss",
+        f"easy={easy.outcome} hard={hard.outcome}",
+    )
+
+    # The ruling itself: a loss goes somewhere.
+    out.that(
+        bool(hard.next_id),
+        "a lost challenge still names a next scene",
+        f"lost -> {hard.next_id!r}",
+    )
+    # And specifically it falls back to the ordinary exit when the module
+    # named a success branch and no failure branch. This is the `or`.
+    out.that(
+        hard.next_id == "after",
+        "and with only a success branch written, a loss takes the exit",
+        f"on_success='won', lost -> {hard.next_id!r}, exits=['after']",
+    )
+    out.that(
+        easy.next_id == "won",
+        "while a win still takes the branch the module named",
+        f"won -> {easy.next_id!r}",
+    )
+
+    # With neither branch written, both outcomes take the exit.
+    plain_win = play(build(1))
+    plain_loss = play(build(30))
+    out.that(
+        plain_win.next_id == "after" and plain_loss.next_id == "after",
+        "with no branches at all, both outcomes take the exit",
+        f"won -> {plain_win.next_id!r}, lost -> {plain_loss.next_id!r}",
+    )
+
+
 def a_party_that_is_not_the_module_s_size_gets_the_page_s_rule(
     out: Result,
 ) -> None:
@@ -40960,6 +41046,10 @@ DRIVERS = {
     "training_bonus": (
         training_is_worth_exactly_five_on_a_check,
         "the +5 for training, asserted by taking it away (#791)",
+    ),
+    "challenge_progresses": (
+        a_lost_skill_challenge_still_leads_somewhere,
+        "a lost skill challenge never strands the plot (Camille, 2026-10-29)",
     ),
     "party_size_rule": (
         a_party_that_is_not_the_module_s_size_gets_the_page_s_rule,

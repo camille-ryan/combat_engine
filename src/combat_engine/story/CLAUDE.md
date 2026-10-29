@@ -458,6 +458,41 @@ otherwise identical scene: 0 recall lines against 3. It never bit because
 the one converted module puts all 8 of its rows on a scene that has NPCs.
 #918.
 
+## A skill challenge never stops the plot
+
+Camille's ruling, **2026-10-29**, verbatim:
+
+> *"Skill challenes should never prevent the plot from progressing."*
+
+The code obeys it by one `or` in `run.step` --
+`made.next_id = wanted or module.next_of(scene, choice)` -- so a module
+that names a success branch and no failure branch falls back to the
+ordinary exit instead of stranding the party. Nothing asserted that until
+`drivers.py challenge_progresses`, and deleting the fallback ends the
+campaign silently on any failed challenge.
+
+**The adventure agrees, which is why this is the right rule rather than
+our preference.** Both of its challenges continue either way:
+
+| | success | failure |
+|---|---|---|
+| chapter 1 | the fires go out, every token removed | the fires burn through the whole fight -- *"The heroes receive experience for this skill challenge even if they fail it."* |
+| chapter 4 | good time, they reach the stones by mid-afternoon | rough going, **each character loses a healing surge**, and they reach the same stones late |
+
+Chapter 4's two outcomes name **the same next encounter**. A challenge is
+a toll on the way through, not a gate.
+
+**What a failure costs is a resource or a condition, never the road**, and
+neither of those is modelled: chapter 1's result should add or remove a
+spreading fire hazard *in the fight it runs during*, and chapter 4's
+should take a healing surge from each character. Today a challenge's
+outcome changes nothing but a line of text.
+
+**And the validator only checks reachability inward.** It reports a scene
+nothing leads *to* and says nothing about one nothing leads *out of*, so a
+challenge can be authored that is entered and never left -- measured on a
+two-scene module that parses clean.
+
 ## A band cannot keep a secret, and a printed number beats both
 
 Two measurements that settled the design of `Lore` and are worth not
@@ -666,11 +701,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     challenge_refusal training_bonus challenge_costs_nothing \
     beat_loop scene_audience module_refusals affordance_match \
     summary_scenes boxed_text graph_furniture graph_administration \
-    recall_order borrowed_board party_size_rule
+    recall_order borrowed_board party_size_rule challenge_progresses
 uv run scripts/check.py --only play,drivers
 ```
 
-**24 drivers and 213 assertions** cover this component, and **each was
+**25 drivers and 218 assertions** cover this component, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
