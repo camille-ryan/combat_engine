@@ -815,6 +815,38 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## The budget clamps to what the database holds, and says it did
+
+`story.budget` reads a standard monster's XP out of `game.db`, which stops
+at level 13 by deliberate ETL decision. Above it the function returned
+**0** — and every division downstream guards itself with `max(aim, 1.0)`,
+so a module validated for a paragon party got a budget of nothing and the
+fight fielded nobody without raising. `budget` clamps to `ceiling()` now
+and `cast_list.resolve` reports the clamp.
+
+Three calls:
+
+* **The ceiling comes from the database, never from `etl`'s constant.**
+  `story` importing `etl` would break a contract `.importlinter` holds, and
+  `db.py` is below every component for exactly this.
+* **Not computed from the printed curve**, though the printed table runs to
+  level 40. A budget derived from it would name a figure `cast_list` cannot
+  spend — fielding a level-20 encounter needs level-20 *monsters*, not just
+  the number they are worth — so the scene would still field nobody while
+  now claiming a target. Worse than a 0. The printed table is the answer
+  for a quest or challenge reward at a level with no monsters.
+* **`party_level` is still not bounded at validation**, deliberately,
+  against #963's second suggestion. A module written for level 20 is a
+  legitimate module this build cannot field; refusing it in `module.parse`
+  would call it *invalid* rather than unplayable, and would put a database
+  read into the one command a converter runs before anything is built.
+
+And one correction to #963's wording, because the next reader will trip on
+it: the scene was **not** silent before. `_pool` already reported that
+nothing written fitted the level — that note comes from an empty pool and
+has nothing to do with the budget. What was silent was the **zero**, which
+is why the fault read as a `cast_list` bug.
+
 ## The dead stay dead on a revisit
 
 `Campaign.visited` was recorded and read by nothing, so a scene the module
@@ -1090,11 +1122,12 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     summary_scenes boxed_text graph_furniture graph_administration \
     recall_order borrowed_board party_size_rule challenge_progresses \
     line_kinds objective_verdict objective_budget scene_grant \
-    story_milestones timeline rest_lockout stays_cleared
+    story_milestones timeline rest_lockout stays_cleared \
+    budget_ceiling
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 26 drivers and prints 247 assertions**, and **each was
+**The command above is 27 drivers and prints 255 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

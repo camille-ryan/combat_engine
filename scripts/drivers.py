@@ -42106,6 +42106,113 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def the_budget_clamps_to_what_the_database_can_field_and_says_so(
+    out: Result,
+) -> None:
+    """`story.budget` read a standard monster's XP out of `game.db`, and the
+    database stops at level 13 by deliberate ETL decision. Above it the
+    function returned **0**, silently -- so a module validated for a paragon
+    party got a budget of nothing, every division downstream guarded itself
+    with `max(aim, 1.0)`, and the fight fielded nobody with no exception.
+
+    The clamp mirrors `opposition`, one function down, which already *"drops
+    to whatever level has been written and reports which"*.
+
+    **Not computed from the printed curve**, though that table runs to level
+    40: a budget derived from it would name a figure `cast_list` cannot
+    spend, so the scene would still field nobody while now claiming a
+    target. Worse than a 0, and the reason this asserts the *ceiling's*
+    budget rather than a bigger number.
+
+    One correction to #963's own wording, since the next reader will hit
+    it: the scene was not entirely silent before. `_pool` already reported
+    that nothing written fitted the level, because that note comes from an
+    empty pool and has nothing to do with the budget. What was silent was
+    the **zero** -- which is why the fault would have been diagnosed as a
+    `cast_list` bug rather than a budget one.
+    """
+    from pathlib import Path
+
+    from combat_engine import story
+    from combat_engine.story import cast_list
+    from combat_engine.story import module as mod
+
+    top = story.ceiling()
+
+    out.that(
+        top >= 1 and story.budget(top) > 0,
+        "the ceiling is a level the database can actually field a standard "
+        "monster at, asked of the database rather than of `etl`'s constant",
+        f"ceiling={top}, budget there={story.budget(top)}",
+    )
+
+    # -- the control: at or below the ceiling nothing moved -----------------
+    out.that(
+        story.budget(1) == 400 and story.budget(top) > story.budget(1),
+        "a level inside the database is unchanged, and the curve still "
+        "rises across it",
+        f"budget(1)={story.budget(1)}, budget({top})={story.budget(top)}",
+    )
+
+    # -- above it: the ceiling's budget, not zero ---------------------------
+    out.that(
+        story.budget(top + 1) == story.budget(top)
+        and story.budget(30) == story.budget(top),
+        "a level above the ceiling gets the ceiling's budget rather than "
+        "0, which is what made a paragon scene field nobody in silence",
+        f"budget({top + 1})={story.budget(top + 1)}, "
+        f"budget(30)={story.budget(30)}, budget({top})={story.budget(top)}",
+    )
+    out.that(
+        story.budget(30) > 0,
+        "so nothing downstream divides by a budget of nothing",
+        f"{story.budget(30)}",
+    )
+
+    # -- and the bottom is clamped too --------------------------------------
+    out.that(
+        story.budget(0) == story.budget(1) and story.budget(-5) == story.budget(1),
+        "a level below 1 is clamped up rather than queried, so a bad "
+        "module cannot ask for level 0 and get nothing",
+        f"budget(0)={story.budget(0)}, budget(-5)={story.budget(-5)}",
+    )
+
+    # -- scale still applies after the clamp --------------------------------
+    out.that(
+        story.budget(30, 0.5) < story.budget(30) < story.budget(30, 1.5),
+        "the day's difficulty curve still multiplies a clamped budget, "
+        "rather than the clamp flattening it",
+        f"{story.budget(30, 0.5)} < {story.budget(30)} < "
+        f"{story.budget(30, 1.5)}",
+    )
+
+    # -- the clamp is reported where a reader will see it -------------------
+    def notes_for(level: int) -> list[str]:
+        built = mod.parse(
+            {"id": "probe", "party_level": level, "party_size": 4,
+             "start": "room", "scenes": [{
+                 "id": "room", "kind": "combat", "name": "R", "exits": [],
+                 "difficulty": "standard",
+                 "foes": [{"count": 3, "role": "soldier",
+                           "rank": "standard"}]}]}, Path("<driver>"))
+        return cast_list.resolve(
+            built.scene("room"), party_level=level).notes
+
+    high = notes_for(top + 7)
+    out.that(
+        any("above the highest level" in n for n in high),
+        "a scene above the ceiling says the budget was clamped and that "
+        "the creatures will be the ceiling's too",
+        f"{high}",
+    )
+    out.that(
+        not any("above the highest level" in n for n in notes_for(top)),
+        "and a scene at the ceiling says nothing about it, so the note is "
+        "a report rather than noise on every fight",
+        f"{notes_for(top)}",
+    )
+
+
 def a_revisited_scene_does_not_raise_the_creatures_it_lost(
     out: Result,
 ) -> None:
@@ -43043,6 +43150,10 @@ DRIVERS = {
     # silently by the *last* writer -- so the first registration of this ran
     # the other driver and reported 21 green assertions that had nothing to
     # do with it.
+    "budget_ceiling": (
+        the_budget_clamps_to_what_the_database_can_field_and_says_so,
+        "the budget clamps to what the database can field and says so (#963)",
+    ),
     "stays_cleared": (
         a_revisited_scene_does_not_raise_the_creatures_it_lost,
         "a revisited scene does not raise the creatures it lost (#970)",

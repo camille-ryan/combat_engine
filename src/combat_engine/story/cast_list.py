@@ -57,7 +57,7 @@ from random import Random
 from combat_engine.content import loader
 from combat_engine.db import game, localisation
 
-from . import BAND, SIDE, WORTH, budget
+from . import BAND, SIDE, WORTH, budget, ceiling
 from .module import DIFFICULTY, FoeSpec, Scene
 from .reflavour import Dressed, Reflavour, themed
 
@@ -410,6 +410,20 @@ def resolve(
     share, stepped = _stepped(scene)
     if stepped:
         out.notes.append(stepped)
+    # **The budget's own clamp, said out loud.** `story.budget` returned 0
+    # above the database's ceiling and every division downstream guards
+    # itself with `max(aim, 1.0)`, so a module validated for a paragon party
+    # fielded nobody and raised nothing -- which reads as a `cast_list` bug.
+    # The budget clamps now; this is the half that makes the clamp visible,
+    # the same way a deferred creature and a cut count are already printed.
+    # #963.
+    top = ceiling()
+    if party_level > top:
+        out.notes.append(
+            f"party_level {party_level} is above the highest level this "
+            f"database can field a standard monster at ({top}), so the "
+            f"budget is level {top}'s and the creatures will be too"
+        )
     want = (
         float(scene.xp) if scene.xp
         else budget(party_level) * share * per_head

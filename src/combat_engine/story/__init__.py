@@ -29,6 +29,7 @@ exactly one thing that knows how to field one.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from random import Random
 
 from combat_engine import chargen
@@ -480,8 +481,50 @@ BAND = 3
 MOST = 12
 
 
+@lru_cache(maxsize=1)
+def ceiling() -> int:
+    """The highest level the database can actually field a standard monster at.
+
+    **Asked of the database, never of `etl`'s constant.** `MAX_MONSTER_LEVEL`
+    is the ETL's decision and `story` importing `etl` would break a contract
+    `.importlinter` holds; `db.py` is below every component for exactly this.
+    So this reads what is there, which is also the only thing a budget can
+    honestly be spent on. #963.
+
+    13 today, and a cliff rather than a thin tail: 218 rows at 13 and none
+    at 14.
+    """
+    from combat_engine.db import game
+
+    row = game().execute(
+        "SELECT max(level) FROM monster WHERE minion = 0 AND xp > 0 "
+        "AND (rank IS NULL OR rank = 'standard')"
+    ).fetchone()
+    return int(row[0]) if row and row[0] else 1
+
+
 def budget(level: int, scale: float = 1.0) -> int:
     """The XP a standard encounter for this party is worth.
+
+    **Clamped to `ceiling()`, and the clamp is reported by the caller.**
+    `game.db` stops at level 13 by deliberate ETL decision, and above it
+    this used to return **0** in silence -- so a module validated for a
+    paragon party fielded nobody, with no exception anywhere, because
+    `cast_list` guards its divisions with `max(aim, 1.0)`. An empty fight
+    with no message gets diagnosed as a `cast_list` bug.
+
+    The same call `opposition` makes one function down: *"a fight against
+    nothing is not useful, so rather than refuse, this drops to whatever
+    level has been written and reports which."*
+
+    **Not computed from the printed curve above the cap**, though the
+    printed table does run to level 40. A budget derived from it would name
+    a figure `cast_list` cannot spend -- fielding a level-20 encounter needs
+    level-20 *monsters*, not just the number they would be worth -- so the
+    scene would still field nobody while now claiming a target, which is
+    worse than a 0. The printed table is the answer for a quest or a
+    challenge reward at a level with no monsters, not for an encounter.
+    #963.
 
     One standard monster of the party's level per character, which is the printed
     rule. Read off the database rather than from a table here, so it cannot
@@ -502,7 +545,7 @@ def budget(level: int, scale: float = 1.0) -> int:
     row = game().execute(
         "SELECT xp FROM monster WHERE level = ? AND minion = 0 AND xp > 0 "
         "AND (rank IS NULL OR rank = 'standard') LIMIT 1",
-        (level,),
+        (min(max(level, 1), ceiling()),),
     ).fetchone()
     # **Rounded, not truncated.** `int()` on 0.75 of a 4x100 budget gives 300
     # either way, but on an odd standard XP a truncation loses a creature's
