@@ -5,7 +5,7 @@ This should potentially be moved to the eventual story engine module, but is use
 
 1. The Battlefield Control (The Trap)
 - Composition: 1 Controller, 1 Soldier, 2 Skirmishers, 1 Lurker
-- The Tactic: This was the baseline "smart" encounter. The Soldier holds the frontline, the Skirmishers flank, the Lurker strikes from the shadows, and the single Controller dictates the positioning of the PCs.
+- The Tactic: This was the baseline "smart" encounter. The Soldier holds the front line, the Skirmishers flank, the Lurker strikes from the shadows, and the single Controller dictates the positioning of the PCs.
 2. The Commander and Troops
 - Composition: 1 Leader, 4-8 Minions, 2 Soldiers or Brutes
 - The Tactic: Built to show enemy synergy. The Leader hangs back, using auras or active powers to buff the defenses of the Brutes or grant extra basic attacks to a massive swarm of Minions.
