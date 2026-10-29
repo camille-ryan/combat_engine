@@ -355,6 +355,23 @@ def scrub(
             for i in range(len(words))
             for j in range(i + 2, len(words) + 1)
         }
+        # **And the compound exactly as the page hyphenates it.** The runs
+        # above join with a space, and the hyphen is not a word character,
+        # so a hyphenated name came apart into halves that each matched and
+        # each substituted -- leaving `<ref>-<ref>` where the page printed
+        # one compound. 72 occurrences across 55 rows and 23 creatures, every
+        # one of them a hyphenated name. #541.
+        #
+        # **Added rather than substituted for the halves**, which is the
+        # whole care here. Putting the hyphen in the character class above
+        # would make the compound the *only* token, and this file's own
+        # notes record that the expensive mistake in this function is a form
+        # the card uses that the index does not hold -- `m1526`'s name
+        # survived into its brief that way, and the plural case was 59
+        # briefs. A stat block does refer to itself by a fragment, so the
+        # halves must keep matching; longest-first in the pass below is what
+        # makes the compound win when the page printed it whole.
+        runs |= set(re.findall(r"[^\W\d_]+(?:-[^\W\d_]+)+", name))
         for token in {name, *runs, *words}:
             low = token.lower()
             long_enough = len(token) > 2 or (len(token) == 2 and low not in STOPWORDS)
