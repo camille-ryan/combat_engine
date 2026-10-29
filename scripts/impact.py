@@ -522,7 +522,24 @@ def _build_map(cov, asked: list[str], whole: int,  # noqa: ANN001
         "sampled": (merge_into.get("sampled", False)
                     if merge_into is not None else corpus != whole),
         "ceiling": ceiling,
-        "game_db_mtime": GAME.stat().st_mtime if GAME.exists() else 0,
+        # **A merge must not advance this either, for `recorded_at`'s exact
+        # reason.** This is the stamp `_load` reads to refuse a map recorded
+        # against a different database, and writing it unconditionally meant
+        # a *top-up* claimed the whole map matched the database the top-up
+        # happened to see. Measured: after an ETL rebuild, recording 40 rows
+        # stamped a 23,063-row map as current for the new database while
+        # 23,023 of its entries had been observed against the old one -- so
+        # `_load` would have accepted it and narrowed on stale observations.
+        #
+        # **That is the dangerous direction, and worse than #925.** A map
+        # that narrows nothing is expensive and safe; a map that narrows on
+        # observations taken against different data excludes rows whose
+        # numbers have moved, and `selection` fails *closed* on an absence.
+        # `recorded_at` carries the same note and was got right; this field
+        # was missed by it, which is why both now say so in the same place.
+        "game_db_mtime": ((merge_into or {}).get("game_db_mtime", 0)
+                          if merge_into is not None
+                          else (GAME.stat().st_mtime if GAME.exists() else 0)),
         # **A merge must not advance this, and advancing it broke the guard
         # it exists to feed.** `recorded_at` is the sha whose code the map's
         # *silence* can speak for -- `selection` reads it to tell a function
