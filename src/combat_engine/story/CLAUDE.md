@@ -815,6 +815,51 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## The dead stay dead on a revisit
+
+`Campaign.visited` was recorded and read by nothing, so a scene the module
+routed back to fielded its whole cast again — the party walked into a room
+it had cleared and the dead stood up. The DMG states the rule twice, the
+second time for exactly this:
+
+> *Monsters the party has killed should (usually) stay dead — the site
+> shouldn't just reset to the state it was in the first time around.*
+
+`Campaign.cleared` is `scene id → ref → how many`, accumulated, and
+`run.survivors` takes them off the roster before anything spawns. A fully
+cleared scene is **skipped** with its own wording, because "the party
+cleared this" and "nothing written could be fielded" are different faults
+that read alike.
+
+Two things worth knowing before touching it:
+
+* **It is a count per ref, not a set of cleared scenes.** A scene fielding
+  three of one creature that lost two must field **one**.
+* **`refs` and `flavours` are filtered in step.** They run parallel and are
+  zipped together twice downstream, so dropping a ref without its flavour
+  dresses a survivor as whatever died.
+
+The `(usually)` in the printed rule is latitude this does not spend: a
+revisit fields the survivors, and the book's *"new threats"* reading — a
+site that is **different** rather than emptier — is still open. A module can
+express it today with a `flags` entry and a second scene.
+
+### Two plants stayed green, and the code was what was wrong
+
+The most useful thing to come out of this. The assertion claiming to test
+count-versus-set **was not testing it**: `cast_list` never returns the same
+ref twice for a generated roster, measured across five seeds, so through a
+fight "decrement the budget" and "drop every matching ref" are the same
+behaviour — and so are "accumulate" and "overwrite", because no ref ever
+dies twice. Both plants passed while the assertions read correct.
+
+So the subtraction and the recording are **named functions now**,
+`survivors` and `record_fallen`, rather than six lines inside `_fight`.
+That is not a test convenience: logic a probe cannot reach is logic nobody
+can check, and extracting it is what made the distinction assertable. The
+plant that followed — dropping a ref without its flavour — only became
+possible to write afterwards.
+
 ## An extended rest is once per day, and the refusal is printed
 
 Nothing bounded it: a campaign of three consecutive extended-rest scenes
@@ -1045,11 +1090,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     summary_scenes boxed_text graph_furniture graph_administration \
     recall_order borrowed_board party_size_rule challenge_progresses \
     line_kinds objective_verdict objective_budget scene_grant \
-    story_milestones timeline rest_lockout
+    story_milestones timeline rest_lockout stays_cleared
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 25 drivers and prints 235 assertions**, and **each was
+**The command above is 26 drivers and prints 247 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

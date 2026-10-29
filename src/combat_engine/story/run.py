@@ -42,6 +42,7 @@ from random import Random
 
 from combat_engine.engine import Ident, Side, Team
 from combat_engine.engine.ecs import World
+from combat_engine.engine.query import alive
 from combat_engine.engine.turns import Encounter
 from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
@@ -329,9 +330,35 @@ def _fight(
         stated_size=module.party_size,
     )
     step.notes += dressed.notes
+    # **The dead stay dead on a revisit.** `Campaign.cleared` holds what this
+    # scene's fight killed last time, per ref, and those creatures come off
+    # the roster before anything is spawned. Without it a scene the module
+    # routes back to fielded its whole cast again and the party walked into a
+    # room it had cleared. #970.
+    #
+    # Subtracted in step across `refs` *and* `flavours`, which run parallel
+    # and are zipped together twice below -- dropping a ref without its
+    # flavour would reflavour the survivors as whatever died.
+    standing = campaign.cleared.get(scene.id) or {}
+    if standing:
+        keep_refs, keep_flavours, gone = survivors(
+            dressed.refs, dressed.flavours, standing)
+        if gone:
+            dressed.refs = keep_refs
+            dressed.flavours = keep_flavours
+            step.say(
+                f"Already cleared: {len(gone)} creature(s) killed here "
+                "before and not fielded again.",
+                "note",
+            )
     if not dressed.refs:
         step.outcome = "skipped"
-        step.say("Nothing written could be fielded for this scene.", "note")
+        step.say(
+            "Nothing left to field here -- the party cleared this scene."
+            if standing
+            else "Nothing written could be fielded for this scene.",
+            "note",
+        )
         return
 
 
@@ -460,6 +487,20 @@ def _fight(
     if written is not None:
         written.flush()
     harvest(world, campaign.party)
+    # **Record what this fight killed, so a revisit does not raise it.**
+    # Read off the board rather than from the bus log: the question is which
+    # creatures are down *now*, which is a state, and `query.alive` is the
+    # engine's own answer to it -- `hp > dying_at`, with the character floor
+    # the same reader uses everywhere else.
+    #
+    # Counted per ref and accumulated, because a scene fielding four of the
+    # same creature that lost three must field one next time. #970.
+    fallen: dict[str, int] = {}
+    for eid in _enemy_eids(world):
+        who = world.get(eid, Ident)
+        if who is not None and not alive(world, eid):
+            fallen[who.ref] = fallen.get(who.ref, 0) + 1
+    record_fallen(campaign.cleared, scene.id, fallen)
     # **The round the fight stopped in, and for an objective that is not the
     # same number.** `world.round` has already rolled over by the time the
     # loop head sees `watch.resolved`, so a `survive` objective for two rounds
@@ -793,6 +834,55 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
         step.say(f"  {made}", "roll")
     step.say(run.tally, "note")
     step.outcome = "won" if run.won else "lost"
+
+
+def survivors(
+    refs: list[str], flavours: list, cleared: dict[str, int],
+) -> tuple[list[str], list, list[str]]:
+    """Take the already-dead off a roster. Returns `(refs, flavours, gone)`.
+
+    **A named function rather than six lines inside `_fight`, and the
+    reason is that the six lines were untestable.** `cast_list` never
+    returns the same ref twice for a generated roster -- measured across
+    five seeds -- so through `_fight` the count-per-ref behaviour is
+    indistinguishable from a set of cleared scenes, and a plant that
+    replaced the decrement with nothing stayed green. The distinction is
+    the whole point of the field: a scene fielding three of one creature
+    that lost two must field **one**, which "this scene is cleared" cannot
+    say. #970.
+
+    `refs` and `flavours` run parallel and are zipped together twice
+    downstream, so both are filtered in step -- dropping a ref without its
+    flavour would dress a survivor as whatever died.
+    """
+    budget = dict(cleared)
+    keep_refs: list[str] = []
+    keep_flavours: list = []
+    gone: list[str] = []
+    for ref, flavour in zip(refs, flavours, strict=False):
+        if budget.get(ref, 0) > 0:
+            budget[ref] -= 1
+            gone.append(ref)
+        else:
+            keep_refs.append(ref)
+            keep_flavours.append(flavour)
+    return keep_refs, keep_flavours, gone
+
+
+def record_fallen(
+    cleared: dict[str, dict[str, int]], scene_id: str, fallen: dict[str, int],
+) -> None:
+    """Add a fight's dead to what this scene has already lost.
+
+    **Accumulated, not replaced**, so a scene cleared over two visits stays
+    clear. Named for the same reason `survivors` is: through `_fight` no ref
+    dies twice, so a plant that overwrote the tally could not be caught.
+    """
+    if not fallen:
+        return
+    book = cleared.setdefault(scene_id, {})
+    for ref, count in fallen.items():
+        book[ref] = book.get(ref, 0) + count
 
 
 def _already_rested(campaign: Campaign, module: Module) -> bool:

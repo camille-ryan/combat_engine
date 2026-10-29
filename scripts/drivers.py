@@ -42106,6 +42106,166 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_revisited_scene_does_not_raise_the_creatures_it_lost(
+    out: Result,
+) -> None:
+    """The DMG states this twice, and the second time for a revisit:
+
+    > *When the characters kill a monster, it stays dead.*
+
+    > *Monsters the party has killed should (usually) stay dead -- the site
+    > shouldn't just reset to the state it was in the first time around.*
+
+    `Campaign.visited` was recorded and never read, so a scene the module
+    routed back to fielded its whole cast again: the party walked into a
+    room it had cleared and the dead were standing up.
+
+    **Counted per ref, not held as a set**, which is the assertion a set
+    would fail: a scene fielding three creatures that lost one must field
+    **two** on a revisit, and "this scene is cleared" cannot say that.
+
+    The control is the first assertion -- a scene played once fields what
+    the module asked for, so every module that does not loop is untouched.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    ROOM = {"id": "room", "kind": "combat", "name": "Room", "exits": [],
+            "difficulty": "standard",
+            "foes": [{"count": 3, "role": "soldier", "rank": "standard"}]}
+
+    def built() -> mod.Module:
+        return mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "room", "scenes": [ROOM]}, Path("<driver>"))
+
+    def fight(cleared: dict | None = None,
+              seed: int = 11) -> tuple[save_mod.Campaign, run_mod.Step]:
+        module = built()
+        campaign = run_mod.begin(module, seed=seed)
+        if cleared:
+            campaign.cleared = {"room": dict(cleared)}
+        return campaign, run_mod.step(campaign, module, record=False)
+
+    def notes_of(made: run_mod.Step) -> list[str]:
+        return [str(x) for x in made.lines
+                if getattr(x, "kind", "") == "note"]
+
+    # -- the control: a first visit fields the module's cast ---------------
+    first, made = fight()
+    out.that(
+        len(made.enemies) == 3 and not any(
+            "Already cleared" in n for n in notes_of(made)),
+        "a scene played for the first time fields what the module asked "
+        "for and says nothing about clearing",
+        f"{made.enemies}",
+    )
+
+    # -- and records what it killed, per ref -------------------------------
+    out.that(
+        made.outcome == "won"
+        and sum((first.cleared.get("room") or {}).values()) == 3,
+        "a fight the party won records all three of its dead, by ref",
+        f"outcome={made.outcome}, cleared={first.cleared}",
+    )
+
+    # -- a revisit fields the survivors, not the whole cast ----------------
+    one_down = sorted(first.cleared["room"])[0]
+    _, again = fight({one_down: 1})
+    out.that(
+        len(again.enemies) == 2 and one_down not in again.enemies,
+        "a revisit of a scene that lost one creature fields two, and not "
+        "the one that died -- which a set of cleared scenes could not say",
+        f"fielded {again.enemies} after clearing {one_down}",
+    )
+    out.that(
+        any("Already cleared" in n for n in notes_of(again)),
+        "and the subtraction is printed, the way every other clamp in this "
+        "component is",
+        f"{notes_of(again)}",
+    )
+
+    # -- a fully cleared scene fields nobody, and says which ---------------
+    _, empty = fight(dict(first.cleared["room"]))
+    out.that(
+        empty.outcome == "skipped" and not empty.enemies,
+        "a scene whose whole cast died is skipped rather than played as an "
+        "empty fight",
+        f"outcome={empty.outcome}, enemies={empty.enemies}",
+    )
+    out.that(
+        any("cleared this scene" in n for n in notes_of(empty)),
+        "and says the party cleared it, rather than reporting that nothing "
+        "could be fielded -- two different faults that read alike",
+        f"{notes_of(empty)}",
+    )
+
+    # -- the count accumulates rather than being overwritten ---------------
+    module = built()
+    twice = run_mod.begin(module, seed=11)
+    twice.cleared = {"room": {one_down: 1}}
+    run_mod.step(twice, module, record=False)
+    out.that(
+        sum(twice.cleared["room"].values()) == 3,
+        "a second visit adds its dead to the first visit's tally rather "
+        "than replacing it, so a scene cleared over two visits stays clear",
+        f"{twice.cleared}",
+    )
+
+    # -- the count is a count, which `_fight` alone cannot show ------------
+    # **Driven against the helpers directly, and that is the finding rather
+    # than a shortcut.** `cast_list` never returns the same ref twice for a
+    # generated roster -- measured across five seeds -- so through a fight
+    # "decrement the budget" and "drop every matching ref" are the same
+    # behaviour, and a plant that removed the decrement stayed green while
+    # the assertion above claimed to be testing exactly that. A roster with
+    # one ref three times is the only thing that separates them, and the
+    # only way to get one is to build it.
+    three_of_one = ["mX", "mX", "mX"]
+    kept, flavours, gone = run_mod.survivors(
+        three_of_one, ["a", "b", "c"], {"mX": 2})
+    out.that(
+        kept == ["mX"] and gone == ["mX", "mX"],
+        "a scene fielding three of one creature that lost two fields one "
+        "-- a set of cleared scenes would field none",
+        f"kept={kept}, gone={gone}",
+    )
+    out.that(
+        flavours == ["c"],
+        "and the flavour that survives belongs to the creature that "
+        "survived, not to one of the dead -- the two lists are zipped "
+        "together twice downstream",
+        f"{flavours}",
+    )
+    out.that(
+        run_mod.survivors(["mA", "mB"], ["a", "b"], {"mZ": 5})[0]
+        == ["mA", "mB"],
+        "and a tally naming a creature this scene no longer fields removes "
+        "nobody, rather than taking the first two off the top",
+        f"{run_mod.survivors(['mA', 'mB'], ['a', 'b'], {'mZ': 5})}",
+    )
+    twice_over: dict[str, dict[str, int]] = {}
+    run_mod.record_fallen(twice_over, "room", {"mX": 2})
+    run_mod.record_fallen(twice_over, "room", {"mX": 1, "mY": 1})
+    out.that(
+        twice_over == {"room": {"mX": 3, "mY": 1}},
+        "and two visits that each killed the same creature add up rather "
+        "than the second overwriting the first",
+        f"{twice_over}",
+    )
+
+    # -- and it survives being written down --------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(first))
+    out.that(
+        back.cleared == first.cleared,
+        "what a scene spent survives a save and a load",
+        f"{back.cleared} vs {first.cleared}",
+    )
+
+
 def an_extended_rest_is_once_per_day_and_a_refusal_is_printed(
     out: Result,
 ) -> None:
@@ -42883,6 +43043,10 @@ DRIVERS = {
     # silently by the *last* writer -- so the first registration of this ran
     # the other driver and reported 21 green assertions that had nothing to
     # do with it.
+    "stays_cleared": (
+        a_revisited_scene_does_not_raise_the_creatures_it_lost,
+        "a revisited scene does not raise the creatures it lost (#970)",
+    ),
     "rest_lockout": (
         an_extended_rest_is_once_per_day_and_a_refusal_is_printed,
         "an extended rest is once per day and a refusal is printed (#993)",

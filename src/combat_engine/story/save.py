@@ -146,6 +146,22 @@ class Campaign:
     #: **Without this an entry fires every transition once its tick passes**,
     #: because "due" is a comparison against a counter that only goes up.
     fired: list[str] = field(default_factory=list)
+    #: What each scene's fight killed, by scene id -> ref -> how many.
+    #:
+    #: **The DMG states this as a rule twice** -- *"when the characters kill a
+    #: monster, it stays dead"*, and again that a revisited site *"shouldn't
+    #: just reset to the state it was in the first time around"*. A scene the
+    #: module routes back to was fielding its whole cast again, so the party
+    #: walked into a room it had cleared and the dead were standing up.
+    #:
+    #: A **count per ref**, not a set: a scene fielding four of the same
+    #: creature that lost three of them must field one on a revisit, and a
+    #: set cannot say that. Accumulated across revisits.
+    #:
+    #: On the campaign for the same reason `recalled` is -- `Playing` is
+    #: rebuilt every time a scene is entered, so anything tracked there is
+    #: re-decided by walking back into the room. #970.
+    cleared: dict[str, dict[str, int]] = field(default_factory=dict)
 
     @property
     def clock(self) -> dict[str, int]:
@@ -227,6 +243,7 @@ def to_dict(campaign: Campaign) -> dict:
         "encounters": campaign.encounters,
         "rests": campaign.rests,
         "fired": list(campaign.fired),
+        "cleared": {k: dict(v) for k, v in campaign.cleared.items()},
     }
 
 
@@ -259,6 +276,10 @@ def from_dict(raw: dict) -> Campaign:
         encounters=int(raw.get("encounters", 0) or 0),
         rests=int(raw.get("rests", 0) or 0),
         fired=[str(k) for k in raw.get("fired", ())],
+        cleared={
+            str(k): {str(r): int(n) for r, n in (v or {}).items()}
+            for k, v in (raw.get("cleared") or {}).items()
+        },
     )
 
 
