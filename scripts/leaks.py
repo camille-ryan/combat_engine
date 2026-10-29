@@ -646,6 +646,43 @@ def _module_runs(text: str) -> set[str]:
 MODULE_BENIGN: dict[str, str] = {}
 
 
+#: A trademark, registered-mark or copyright sign. **The mark and not the
+#: publisher's name**, which is the whole point: keying this on the company
+#: or the product would put that name in a tracked file to keep names out of
+#: tracked files, which is the joke #447's own section keeps making about
+#: itself. A glyph carries no name and generalises to any book.
+_BOILERPLATE = re.compile(r"[\u2122\u00ae\u00a9]")
+
+
+def _without_boilerplate(text: str) -> str:
+    """The page with its publisher and legal lines dropped.
+
+    `#917` added `pages/*.txt` and closed an 85% blind spot, but the raw
+    pages are not filtered the way `read_aloud` is -- so what `#909` removed
+    at the extractor came back by a new route. A product title or a credits
+    line in the corpus means any tracked file naming it goes red, which is a
+    false positive on a legitimate row, and this project treats that as
+    worse than a miss.
+
+    **By line and not by page**, which the measurement decided rather than
+    taste. 29 of the one module's 154 pages carry a mark somewhere -- 19% of
+    the book, including running prose that merely mentions a trademark -- so
+    dropping pages would cut the adventure itself. By line it is 86 of
+    10,297, 0.8%, for 486 runs.
+
+    **Two things #921 asked for are not here to drop, measured.** Its
+    "reprinted pre-generated characters, pages 130-141" is the back-cover
+    blurb and the copyright notice on this module, not character sheets; and
+    no stat-block source citation is findable at all -- not by any book
+    title, nor by `First appeared`/`Source:`, while `Level N ... XP` finds
+    the 20 stat-block pages themselves. So the category that *is* in the
+    corpus is the publisher and legal copy, which is `#909`'s credits-line
+    case arriving by the pages route exactly as that issue predicted.
+    """
+    return "\n".join(line for line in text.splitlines()
+                      if not _BOILERPLATE.search(line))
+
+
 def _rules_runs() -> set[str]:
     """Every eight-word run the rules themselves use.
 
@@ -730,7 +767,8 @@ def _module_material() -> tuple[set[str], dict[str, str], int]:
         # from flagging the whole content tree that legitimately quotes
         # them.
         for page in sorted((module.parent / "pages").glob("*.txt")):
-            runs |= _module_runs(page.read_text(errors="replace"))
+            runs |= _module_runs(_without_boilerplate(page.read_text(
+                errors="replace")))
     # Mechanical vocabulary is not this adventure's prose. See
     # `MODULE_BENIGN` for why this is a filter and a short list rather
     # than a looser rule.
