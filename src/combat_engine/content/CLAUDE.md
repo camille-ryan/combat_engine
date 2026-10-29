@@ -340,6 +340,29 @@ Three reasons, and the second is a rule the engine could otherwise break:
 attack". There is no finite list of bodies to edit, so those keep
 `c.pre_empt` / `c.instead_of`.
 
+**And the second exception is a limit that spans the powers it names.**
+"Once per encounter, when you use a power associated with this feat and
+hit ..." is **one** hold across every power on the Associated Powers line —
+`f3230` names four. Migrating such a clause into the bodies gives each body
+its own hold, so the character gets the benefit once per *power* where the
+card gives it once per encounter: strictly stronger than print, and nothing
+reports it, because both halves are individually correct.
+
+`c.once_per_board` cannot rescue it either — it keys on `(self.ref, *key)`,
+the **calling row's** own ref, so four bodies are four keys by construction.
+
+So these keep a trait-level watch, which is what `f3230` already does and
+why it is right: `_on_hit_with(c, _F3230, opening, once=True)` is one
+`c.watch(Hit, ..., once=True)` matching `ev.power in refs`, and `once=` on a
+watch reads the log to see whether the handler *did* anything — so a hit
+with the wrong power does not spend the hold. All four of `f3230`'s powers
+and the feat itself fire today.
+
+**The tell is in the printed sentence**: a clause that says "once per
+encounter" *and* names several powers has one limit between them, and a
+limit is not divisible the way an effect is. #924 is where this was worked
+out, after a note in `p997` had claimed the opposite twice.
+
 **`races/`** — `cls` holds a **race ref** (`r33`), not a class, for the same
 reason a theme row holds `x7_642`: a printed name in that column is a leak.
 A racial trait says its race in its own ref (`rt:r33-...`).
