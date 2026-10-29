@@ -835,6 +835,29 @@ def stat_block(world: World, eid: int) -> dict[str, Any]:
         return {}
 
 
+def is_minion(world: World, eid: int) -> bool:
+    """Is this creature a minion? Read off its stat block's own column.
+
+    **Here rather than only on `Cast`** because two layers need it and the
+    rule is not a row's to apply. `Cast.is_minion` is what a content row
+    gating on "a nonminion enemy" asks; `resolve.deal_damage` needs the same
+    answer with no `Cast` in hand, and a read hand-written in two places is
+    the bug rather than the convenience. `Cast.is_minion` delegates here.
+
+    **The column, never a hit point count.** They agree on almost every row
+    -- a minion is printed with one -- but the corpus says not always:
+    **384** rows carry the column and all 384 have 1 hp, while **2** rows
+    have 1 hp and are *not* minions. So `max_hp <= 1` is wrong for those two
+    and wrong for anything ground down to one, a `Summon(hp=1)`, or a
+    conjuration standing in for a creature.
+
+    A creature with no stat block -- a character, a companion, a summon --
+    is never a minion, which is the printed rule and falls out of
+    `stat_block` returning `{}`.
+    """
+    return bool(stat_block(world, eid).get("minion"))
+
+
 def race_of(world: World, eid: int) -> str:
     """A character's race, by ref -- `r4` -- or `""` for anything without one.
 

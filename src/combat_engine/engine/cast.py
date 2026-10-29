@@ -999,8 +999,17 @@ class Cast:
 
         A creature with no stat block -- a character, a companion, a
         summon -- is never a minion, which is the printed rule.
+
+        **Delegates to `query.is_minion`.** `resolve.deal_damage` needs the
+        same answer with no `Cast` in hand (the miss waiver, #950), and one
+        reader is what keeps the two from drifting.
         """
-        return bool(self._stat_block(self._who(on)).get("minion"))
+        who = self._who(on)
+        if who is None:
+            return False
+        from .query import is_minion
+
+        return is_minion(self.world, who)
 
     def set_origin(
         self,

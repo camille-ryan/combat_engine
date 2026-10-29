@@ -47,6 +47,7 @@ from .query import (
     deals_half,
     defence,
     has_combat_advantage,
+    is_minion,
     light_concealment,
     takes_half,
 )
@@ -1466,8 +1467,26 @@ def deal_damage(
     # `source` as well as the row, so the clause can be scoped to one
     # attacker -- "no damage from **its** attacks that deal damage on a
     # miss". #747.
-    if miss and amount and _mods(
-        world, target, "no_miss_damage", {"power": detail, "source": source}
+    # **And a minion gets it for free, which is where it was missing.** The
+    # waiver above is a modifier a row lays, and both this comment and
+    # `c.no_miss_damage`'s docstring already called it "the minion clause" --
+    # but nothing ever laid it *for* a minion, so the rule it is named after
+    # was the one case it did not cover.
+    #
+    # The cost of the gap is not an edge case. All 384 minions have exactly
+    # 1 hit point, so any damage at all kills one by arithmetic, and a
+    # miss-damage line is commonest on the area powers that get pointed at a
+    # pack of them. So a controller cleared the whole pack on a miss.
+    #
+    # Read off the creature rather than armed at spawn, deliberately: arming
+    # 384 stat blocks with a modifier would make the rule a property of how
+    # each was built, and a spawned or reflavoured minion would miss it.
+    # `only a miss pays for the lookup` still holds -- `miss and amount`
+    # guards both halves. #950.
+    if miss and amount and (
+        is_minion(world, target)
+        or _mods(world, target, "no_miss_damage",
+                 {"power": detail, "source": source})
     ):
         amount = 0
 

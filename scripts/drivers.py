@@ -15977,6 +15977,94 @@ def a_clause_keyed_on_a_weapon(out: Result) -> None:
         out.that(True, "a ref and a weapon together are refused")
 
 
+def a_minion_missed_takes_nothing(out: Result) -> None:
+    """A minion takes no damage from an attack that misses it.
+
+    The printed exception to "any damage destroys a minion", and the one
+    case the waiver named after minions did not cover: `c.no_miss_damage`
+    is a modifier a *row* lays, its own docstring calls it "the minion
+    clause", and nothing ever laid it for a minion.
+
+    Measured, which is why this is not an edge case: all **384** rows
+    carrying the minion column have exactly 1 hit point, so any damage at
+    all destroys one by arithmetic -- and a miss-damage line is commonest
+    on the area powers aimed at a pack of them.
+
+    Three cells, and the third is the one that keeps the rule honest: the
+    waiver is read off the **column**, not off a hit point count. Two rows
+    in the corpus stand at 1 hp without being minions, and a `max_hp <= 1`
+    test would hand them a protection their stat block does not print.
+    #950.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import resolve as _resolve
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.query import enemies, is_minion
+
+    MINION = "m4228a0"
+
+    def miss_against(flip: bool = False) -> int:
+        """Half damage on a miss at a minion; `flip` removes the waiver."""
+        world, mob, _ = _posed(MINION, 1)
+        foe = sorted(enemies(world, mob))[0]
+        health = world.need(mob, Health)
+        was = _resolve.is_minion
+        if flip:
+            _resolve.is_minion = lambda _w, _e: False
+        try:
+            Cast(world=world, me=foe, ref="drivers:minion").half_damage(
+                "4d8", on=mob)
+        finally:
+            _resolve.is_minion = was
+        return health.hp
+
+    world, mob, _ = _posed(MINION, 1)
+    out.that(is_minion(world, mob) and world.need(mob, Health).max_hp == 1,
+             "the floor: the posed creature really is a minion at one hit"
+             " point, without which every assertion below says nothing",
+             f"minion={is_minion(world, mob)},"
+             f" max_hp={world.need(mob, Health).max_hp}")
+
+    out.that(miss_against() == 1,
+             "a minion **missed** by an attack that deals damage on a miss"
+             " keeps its one hit point, which is the printed exception",
+             f"it was left on {miss_against()}")
+
+    # The plant, and the only thing that shows the term is load-bearing:
+    # with the minion test removed the same blow kills it.
+    out.that(miss_against(flip=True) <= 0,
+             "and with the waiver taken away the same blow destroys it --"
+             " so the test is what saves the minion, not the arithmetic",
+             "the minion survived even without the waiver, so this proves"
+             " nothing about it")
+
+    # A hit still kills: the exception is about misses only, and a waiver
+    # that swallowed hits would make minions unkillable by area powers.
+    world, mob, _ = _posed(MINION, 1)
+    foe = sorted(enemies(world, mob))[0]
+    health = world.need(mob, Health)
+    Cast(world=world, me=foe, ref="drivers:minion").damage("4d8", on=mob)
+    out.that(health.hp <= 0,
+             "a minion **hit** still dies, so the waiver reads the miss and"
+             " not merely the creature",
+             f"hp after a hit: {health.hp}")
+
+    # Read off the column, never the hit points.
+    world, mob, _ = _posed(MINION, 1)
+    other = sorted(enemies(world, mob))[0]
+    ordinary = world.need(other, Health)
+    ordinary.hp = 1
+    Cast(world=world, me=mob, ref="drivers:minion").half_damage(
+        "4d8", on=other)
+    out.that(not is_minion(world, other) and ordinary.hp <= 0,
+             "a **nonminion** standing at one hit point still takes miss"
+             " damage -- the waiver is its stat block's column and not a"
+             " hit point count, which two rows in the corpus depend on",
+             f"nonminion={not is_minion(world, other)}, hp={ordinary.hp}")
+
+
 def a_mark_that_lapses(out: Result) -> None:
     """"The mark ends if you do not attack it", and the row that forbids it.
 
@@ -41813,6 +41901,11 @@ DRIVERS = {
         invisibility_taken_away,
         "a creature stripped of the benefit of invisibility, against every"
         " watcher rather than one (#774)",
+    ),
+    "minion_missed": (
+        a_minion_missed_takes_nothing,
+        "a minion takes no damage from an attack that misses it, which the"
+        " waiver named after minions did not cover (#950)",
     ),
     "weapon_keyed_clause": (
         a_clause_keyed_on_a_weapon,
