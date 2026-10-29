@@ -591,6 +591,26 @@ KNOWN_SILENT = {
     "i2318p1": "gives back a sibling's use the caster does not own, so the"
                " verb refuses before the spend question; the board deals no"
                " warlock on that pact leg",
+    # **Reachable since the board learned to read a printed trigger, and
+    # quiet for a reason one line into the body.** It left the never-usable
+    # bucket when `_triggered_by` started reading the `trigger=` text (#908),
+    # which is how it became visible at all.
+    #
+    # Its first line is `getattr(c.trigger, "targets", None) or []` and
+    # returns when that is empty. Measured by wrapping the body: **empty on
+    # 48 of 48 attempts**, so nothing below it ever runs -- the two adjacency
+    # reads and `c.grants_advantage` are never reached, and that last would
+    # emit `EffectApplied` and settle the row if it were.
+    #
+    # The cause is the row it watches, not the board: `p8278` is
+    # `is_attack=False` with `target=None`, so a use of it genuinely picks
+    # nobody and there are no targets for this row to read. Whether that is
+    # the card (a free-action power that really does target nothing, and this
+    # row misreads it) or the import (a Target line that did not parse) is a
+    # compendium question, filed rather than guessed at -- #941.
+    "i847p1": "reads the triggering power's targets and p8278 has"
+              " target=None, so the list is empty on 48 of 48 attempts and"
+              " the body returns at its first line; #941",
     # The initiative order is not one of the five observables.
     "m4448a4": "adds initiative slots; the order is not an observable",
     # Deliberately empty, and its docstring predicts this exact line:
@@ -1280,7 +1300,7 @@ DID_SOMETHING = {
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
-    "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
+    "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent", "TargetAdded",
 }  # fmt: skip
 # `BlowRedirected`, `UseRestored` and `UseSpent` are the **ninth and tenth**
 # classes, and the first of them is the one that says something new about this

@@ -3206,13 +3206,24 @@ class Cast:
         then called for -- attack roll, damage and all. Refused where nothing
         is running underneath, because there is then no power to be a target
         of, and refused for a creature already in the list.
+
+        **It announces `TargetAdded`.** It used to announce nothing and
+        return a bool, so a row whose entire printed Effect is this one line
+        emitted no event the audit counts and reported silent while being
+        correct. The consequence the append produces is a hit credited to
+        the *outer* power, so there is nothing in the log that points back
+        here. Same shape as `c.restore_use` before `UseRestored`.
         """
         from .dsl import running_below
+        from .events import TargetAdded
 
         outer = running_below(self)
         if outer is None or outer is self or who in outer.targets:
             return False
         outer.targets.append(who)
+        self.world.bus.emit(
+            TargetAdded(who=who, power=getattr(outer, "ref", ""), by=self.ref)
+        )
         return True
 
     def drop_target(self, who: int) -> bool:
