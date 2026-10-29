@@ -699,8 +699,8 @@ READERS: dict[str, list[str]] = {
         "stat_block", "targetable", "team",
     ],
     "where, and how far": [
-        "adjacent", "charging", "distance_between", "kept_away_from",
-        "leash_of", "line_of_effect",
+        "adjacent", "charging", "distance_between", "hindering_at",
+        "kept_away_from", "leash_of", "line_of_effect",
         "moved_this_action", "moving_as", "on_the_ground", "prefers_range",
         "ran_this_action", "range_profile",
         "sealed", "speed", "squares", "telepathy_of",

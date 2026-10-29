@@ -15977,6 +15977,111 @@ def a_clause_keyed_on_a_weapon(out: Result) -> None:
         out.that(True, "a ref and a weapon together are refused")
 
 
+def hindering_terrain_burns_and_reads(out: Result) -> None:
+    """A region that damages whoever is in it, and can be asked about.
+
+    The sixth terrain category. Four were modelled -- difficult, cover,
+    blocking, obscured -- and this one had no spelling, so a region that
+    hurts whoever enters it could only be written as a watcher inside one
+    row's body, one row at a time.
+
+    Two halves, and both are needed by things already in the tree. The
+    **writer** is what the converted adventure's opening fight is built on,
+    spreading fire that burns whoever steps into it. The **reader** is what
+    four existing rows print a constraint about and could not ask -- "but
+    not into hindering terrain" is a limit on where a push or a teleport may
+    put somebody, and each of them dropped the clause for want of a
+    question.
+
+    Line of sight is deliberately untouched: this category hurts and
+    hinders, it does not blind. #952.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import TurnEnd
+    from combat_engine.engine.movement import walk
+    from combat_engine.engine.query import enemies, hindering_at
+    from combat_engine.engine.types import DamageType
+
+    def board():  # noqa: ANN202
+        world, me, _armed = _posed("f1378b", 5)
+        foe = sorted(enemies(world, me))[0]
+        here = world.need(me, Position).square
+        return world, me, foe, here
+
+    # -- the writer: burns on arriving, and again for staying -------------
+    world, me, foe, here = board()
+    burn_sq = (here[0] + 2, here[1])
+    laid = Cast(world=world, me=me, ref="drivers:hinder").zone(
+        [burn_sq], until=When.ENCOUNTER,
+        hindering="1d6", hindering_type=DamageType.FIRE)
+    out.that(laid is not None,
+             "the floor: a hindering zone is laid at all")
+
+    hurt = world.need(foe, Health)
+    fp = world.need(foe, Position)
+    world.grid.lift(foe)
+    fp.square = (burn_sq[0] + 1, burn_sq[1])
+    world.grid.place(foe, frozenset({fp.square}))
+    before = hurt.hp
+    walk(world, foe, [burn_sq])
+    out.that(hurt.hp < before,
+             "a creature that walks into it takes the damage",
+             f"hp {before} -> {hurt.hp}")
+
+    staying = hurt.hp
+    world.bus.emit(TurnEnd(actor=foe, round=world.round))
+    out.that(hurt.hp < staying,
+             "and takes it **again** for ending its turn there -- watching"
+             " only the arrival would let a creature stand in fire for free,"
+             " and watching only the turn end would let one walk through"
+             " untouched",
+             f"hp {staying} -> {hurt.hp}")
+
+    # -- the plant: without the category nothing burns --------------------
+    world, me, foe, here = board()
+    plain_sq = (here[0] + 2, here[1])
+    Cast(world=world, me=me, ref="drivers:hinder").zone(
+        [plain_sq], until=When.ENCOUNTER)
+    hurt = world.need(foe, Health)
+    fp = world.need(foe, Position)
+    world.grid.lift(foe)
+    fp.square = (plain_sq[0] + 1, plain_sq[1])
+    world.grid.place(foe, frozenset({fp.square}))
+    was = hurt.hp
+    walk(world, foe, [plain_sq])
+    world.bus.emit(TurnEnd(actor=foe, round=world.round))
+    out.that(hurt.hp == was,
+             "an ordinary zone over the same square burns nobody, so it is"
+             " the category doing the work and not the zone",
+             f"hp {was} -> {hurt.hp}")
+
+    # -- the reader, and that it is specific ------------------------------
+    world, me, foe, here = board()
+    hot, cold, rough = ((here[0] + 2, here[1]),
+                        (here[0] + 5, here[1]),
+                        (here[0] + 3, here[1]))
+    c = Cast(world=world, me=me, ref="drivers:hinder")
+    out.that(not hindering_at(world, hot),
+             "before anything is laid no square is hindering")
+    c.zone([hot], until=When.ENCOUNTER,
+           hindering="1d6", hindering_type=DamageType.FIRE)
+    out.that(hindering_at(world, hot) and not hindering_at(world, cold),
+             "its own squares read as hindering and nothing else does, which"
+             " is what the four rows printing 'not into hindering terrain'"
+             " need to ask",
+             f"hot={hindering_at(world, hot)} cold={hindering_at(world, cold)}")
+    c.zone([rough], until=When.ENCOUNTER, difficult=True)
+    out.that(not hindering_at(world, rough),
+             "and a **difficult** zone does not read as hindering -- the"
+             " reader answers the category, not 'is there a zone here',"
+             " which is the only version of it worth having",
+             "a difficult square read as hindering")
+
+
 def an_active_search_finds_a_trap(out: Result) -> None:
     """Looking for a trap, where noticing it in passing was the only way.
 
@@ -41988,6 +42093,11 @@ DRIVERS = {
         invisibility_taken_away,
         "a creature stripped of the benefit of invisibility, against every"
         " watcher rather than one (#774)",
+    ),
+    "hindering_terrain": (
+        hindering_terrain_burns_and_reads,
+        "a region that damages whoever is in it and can be asked about --"
+        " the sixth terrain category, which had no spelling (#952)",
     ),
     "active_search": (
         an_active_search_finds_a_trap,

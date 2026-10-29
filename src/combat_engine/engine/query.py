@@ -835,6 +835,28 @@ def stat_block(world: World, eid: int) -> dict[str, Any]:
         return {}
 
 
+def hindering_at(world: World, square: Square) -> bool:
+    """Does any live zone make this square hindering terrain?
+
+    The readable half of `c.zone(hindering=)`. Four content rows already
+    print a constraint about this category and none could ask -- "but not
+    into hindering terrain" is a limit on where a push or a teleport may
+    put somebody, and with no reader each of them dropped the clause.
+
+    A property of the **square**, not of a creature, because that is what
+    the printed constraints are about: a destination is or is not hindering
+    before anybody stands in it.
+
+    Hurting is deliberately the test and sight is not. The category hinders
+    and damages while leaving line of sight alone, which is what separates
+    it from `blocks_sight` and from `obscured`. #952.
+    """
+    return any(
+        zone.hindering and square in zone.squares
+        for _eid, zone in world.zones.all()
+    )
+
+
 def is_minion(world: World, eid: int) -> bool:
     """Is this creature a minion? Read off its stat block's own column.
 

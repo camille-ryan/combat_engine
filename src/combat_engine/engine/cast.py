@@ -12449,6 +12449,8 @@ class Cast:
         no_light: bool = False,
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
+        hindering: str = "",
+        hindering_type: DamageType = DamageType.UNTYPED,
     ) -> int:
         """`obscured=Light.DIM` is "lightly obscured", `Light.DARK` is
         "heavily obscured" or a zone of darkness.
@@ -12487,12 +12489,52 @@ class Cast:
         reads exactly like a correct zone. `Zones.obscuring_for` is the
         reader. #424.
         """
-        return self.world.zones.create(
+        made = self.world.zones.create(
             self.me, label or self.ref, frozenset(area), until,
             difficult=difficult, blocks_sight=blocks_sight,
             obscured=obscured, obscured_for=obscured_for,
             no_light=no_light, exempt=exempt, sustain=sustain,
+            hindering=hindering, hindering_type=hindering_type.value,
         )
+        if hindering:
+            self._hinders(made, hindering, hindering_type)
+        return made
+
+    def _hinders(self, zone: int, dice: str, dtype: DamageType) -> None:
+        """Burn whoever is in `zone`, on arriving and again at a turn's end.
+
+        **Both moments, because the printed line names both** -- a creature
+        that walks in takes it, and one that stays takes it again when its
+        turn ends. Watching only the entry lets a creature end its turn
+        standing in fire for nothing; watching only the turn end lets one
+        walk through the whole region untouched.
+
+        Entry is `ZoneEntered`, which `Zones` already emits and which
+        `c.zone_condition` reads for the same reason. The turn's end is read
+        off the zone's own occupant list rather than by tracking arrivals,
+        so a creature pushed in by somebody else is burned too -- the
+        printed line is about being there, not about choosing to be.
+
+        Credited to the row that laid the zone, not to the zone: `by=` is
+        what lets a trigger reading "when you deal fire damage" find the
+        card responsible. #952.
+        """
+        from .events import TurnEnd, ZoneEntered
+
+        def burn(who: int) -> None:
+            self.flat(self.roll(dice), dtype=dtype, on=who)
+
+        def on_enter(ev: ZoneEntered) -> None:
+            if getattr(ev, "zone", None) == zone and alive(self.world, ev.actor):
+                burn(ev.actor)
+
+        def at_turn_end(ev: TurnEnd) -> None:
+            standing = self.world.zones.inside.get(zone) or set()
+            if ev.actor in standing and alive(self.world, ev.actor):
+                burn(ev.actor)
+
+        self.world.bus.on(ZoneEntered, on_enter)
+        self.world.bus.on(TurnEnd, at_turn_end)
 
     def aura(
         self,
