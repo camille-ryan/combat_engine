@@ -53,6 +53,7 @@ from .cast_list import resolve
 from .challenge import Chooser
 from .challenge import play as play_challenge
 from .module import Module, Scene
+from .objective import watcher
 from .reflavour import apply as apply_flavour
 from .save import Campaign
 
@@ -88,6 +89,10 @@ def record_scene(campaign: Campaign, made: Step) -> str:
         "kind": made.scene.kind,
         "name": made.scene.name,
         "outcome": made.outcome,
+        # What the fight was judged on, so a log reads as a session rather
+        # than as a list of wins. `""` for a scene that stated no objective.
+        "objective": made.objective,
+        "clean": made.clean,
         "next": made.next_id,
         "rounds": made.rounds,
         "enemies": made.enemies,
@@ -159,6 +164,13 @@ class Step:
     notes: list[str] = field(default_factory=list)
     rounds: int = 0
     enemies: list[str] = field(default_factory=list)
+    #: The objective kind this fight was judged on, or `""` when the scene
+    #: stated none and the old win condition decided it.
+    objective: str = ""
+    #: The objective was met and nobody went down doing it. Recorded and not
+    #: yet spent: the thing that would pay for it is the XP award, which does
+    #: not exist (#967). Here now so that award has something to read.
+    clean: bool = False
     #: Where the blow-by-blow went, for a combat scene. Empty otherwise.
     transcript: str = ""
     #: The beats, for a roleplay scene that had any. Empty otherwise.
@@ -389,8 +401,36 @@ def _fight(
     encounter = Encounter(world)
     policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
+    # Attached before `start()`, which is the same reason the transcript is:
+    # the watcher counts the opposition at the first round boundary and a
+    # trait armed at the top of round one can already have killed somebody.
+    # **The module's own word for each creature, which is what a
+    # `defeat_foe` objective is written against.** `Reflavour.name` is exactly
+    # that -- "what the module calls it" -- and it runs parallel to `refs`,
+    # which is the same pairing the flavour loop above relies on. Without this
+    # an author would have to know the draw answered `m258`, and could not.
+    #
+    # Handed over **before** the fight, because the watcher consults it at
+    # every round boundary to decide whether it is done.
+    named = {
+        ref: flavour.name
+        for ref, flavour in zip(dressed.refs, dressed.flavours, strict=False)
+        if flavour.name
+    }
+    watch = watcher(world, scene.objective, len(campaign.party.sheets),
+                    named=named)
     encounter.start()
     while not encounter.finished and world.round <= MAX_ROUNDS:
+        if watch is not None and watch.resolved:
+            # **The third exit from the loop.** A fight has always ended when
+            # a side was wiped or the round cap ran out; an objective with a
+            # duration, or one that is satisfied with the opposition still
+            # standing, has to end the moment it is decided. Checked at the
+            # top rather than in the `while` condition so that a watcher
+            # resolving mid-round still finishes the round it is in -- the
+            # watcher only ever updates on `RoundEnd`, so this is the first
+            # moment after it.
+            break
         actor = world.turn
         if actor is None:
             break
@@ -400,10 +440,34 @@ def _fight(
     if written is not None:
         written.flush()
     harvest(world, campaign.party)
-    step.rounds = world.round
+    # **The round the fight stopped in, and for an objective that is not the
+    # same number.** `world.round` has already rolled over by the time the
+    # loop head sees `watch.resolved`, so a `survive` objective for two rounds
+    # reported `rounds=3` beside a verdict line reading "2 of 2" -- two
+    # numbers for one fight, which is how a reader loses faith in both. The
+    # watcher's own count is the authority when there is one.
+    step.rounds = watch.rounds if watch is not None and watch.resolved \
+        else world.round
     step.enemies = list(dressed.refs)
-    won = encounter.winner is Team.PC if encounter.winner is not None else False
-    step.outcome = "won" if won else "lost"
+    objective_line = ""
+    if watch is None:
+        # **Bit for bit what this did before objectives existed**, which is
+        # the whole of the compatibility story: a module that states no
+        # objective never builds a watcher and never reaches the branch
+        # below. `drivers.py no_objective` is the control for it.
+        won = encounter.winner is Team.PC if encounter.winner is not None else False
+        step.outcome = "won" if won else "lost"
+    else:
+        verdict = watch.verdict(
+            winner=encounter.winner, fielded=tuple(dressed.refs))
+        step.objective = scene.objective.kind if scene.objective else ""
+        step.clean = verdict.clean
+        step.outcome = "won" if verdict.met else "lost"
+        asked = (scene.objective.says if scene.objective else "") or step.objective
+        # Held, not said, so it can be printed **after** the cast and the
+        # result. Said here it came out above "Against:" -- the verdict on a
+        # fight before the fight, which reads backwards.
+        objective_line = f"Objective -- {asked}: {verdict.why}."
 
     shown = []
     for eid, flavour in zip(_enemy_eids(world), dressed.flavours, strict=False):
@@ -411,6 +475,8 @@ def _fight(
         shown.append(flavour.name or (ident.ref if ident else "?"))
     step.say(f"Against: {', '.join(shown)}", "note")
     step.say(f"{step.outcome.title()} in {step.rounds} rounds.", "note")
+    if objective_line:
+        step.say(objective_line, "note")
 
 
 def actors_for(campaign: Campaign) -> list[beat_mod.Actor]:

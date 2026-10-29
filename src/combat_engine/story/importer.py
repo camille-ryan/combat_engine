@@ -53,6 +53,8 @@ from pathlib import Path
 from combat_engine.db import ROOT
 
 from .module import COMPLEXITY, DIFFICULTY, KINDS, RANKS, ROLES
+from .objective import KINDS as OBJECTIVES
+from .objective import POSITIONS
 
 #: Where an imported module lives. Git-ignored.
 MODULES = ROOT / "modules"
@@ -565,6 +567,24 @@ Also set `difficulty` ({difficulty}) from how the page pitches the fight, or
 `xp` if it states a number outright. `terrain` takes only: {terrain}.
 `tactics` is the page's own guidance and is carried for the DM to read.
 
+**`objective`, only when the page states a goal other than winning the
+fight.** Leave it out otherwise -- most fights have none, and a scene with no
+objective is judged exactly as it always was. `kind` takes only:
+{objectives}.
+
+* `diminish` -- the page says the enemy breaks or routs rather than dying to
+  the last. `share` is what fraction of their numbers is left, 0 to 1.
+* `defeat_foe` -- the page names a leader whose death ends it. `foes` is the
+  **module's own word** for that creature, exactly as written in the `foes`
+  list above, and it must be one of them.
+* `survive` -- the party has to last. `rounds` is how many.
+* `hold` -- the party defends somewhere. `rounds` and, if the page says which
+  way the enemy comes from, `position` from: {positions}.
+
+Add `harder` or `easier` (never both) when the page says the objective makes
+the fight tougher or lets the party off lighter -- it moves the budget one
+band. `says` is the page's own phrasing of the goal, printed to the player.
+
 **A skill challenge** -- `complexity` {complexity_lo}-{complexity_hi}, and
 `primary`/`secondary` from the skills the page lists. Only these are skills:
 
@@ -744,6 +764,8 @@ def write_brief(into: Path, module_id: str, pages: int, scenes: int,
         scenes=scenes,
         dropped=_dropped_note(dropped or []),
         difficulty=", ".join(sorted(DIFFICULTY)),
+        objectives=", ".join(OBJECTIVES),
+        positions=", ".join(POSITIONS),
         terrain=", ".join(sorted(TERRAIN_WORDS)),
         complexity_lo=min(COMPLEXITY),
         complexity_hi=max(COMPLEXITY),

@@ -58,7 +58,7 @@ from combat_engine.content import loader
 from combat_engine.db import game, localisation
 
 from . import BAND, SIDE, WORTH, budget
-from .module import FoeSpec, Scene
+from .module import DIFFICULTY, FoeSpec, Scene
 from .reflavour import Dressed, Reflavour, themed
 
 #: How far past the budget a scene may go before a creature is skipped. The
@@ -335,6 +335,55 @@ def _for_party_size(
     )
 
 
+def _stepped(scene: Scene) -> tuple[float, str]:
+    """The scene's share of the budget, moved one band by its objective.
+
+    An objective changes what a fight costs to build: a party that has to hold
+    a line, or get something out, is doing two things at once and the printed
+    advice everywhere is to ease the opposition back for it -- or to tighten it
+    when the objective makes the fight shorter. One **band**, not a free
+    multiplier, so an objective can only ever buy what a module could have
+    asked for by writing a different `difficulty`.
+
+    Returns the share and a note, because `CLAUDE.md` is explicit that a cap
+    the reader is not told about *"reads as 'covered everything' when it did
+    not"* -- and a budget that silently moved is the same fault. The note is
+    empty when nothing moved.
+
+    **A stated `xp` figure still wins**, which `resolve` enforces by never
+    consulting the share in that branch. That is deliberate and is the same
+    call `#798` made for party size: a module that prints its own number for
+    its own encounter is more trustworthy than our curve, so an objective
+    cannot quietly re-price a fight the page already priced. A scene that
+    wants both says so by dropping the `xp`.
+    """
+    aim = scene.objective
+    if aim is None or not (aim.harder or aim.easier):
+        return scene.share, ""
+    ladder = sorted(DIFFICULTY, key=lambda name: DIFFICULTY[name])
+    try:
+        at = ladder.index(scene.difficulty)
+    except ValueError:                      # a band the loader would refuse
+        return scene.share, ""
+    to = at + 1 if aim.harder else at - 1
+    if not 0 <= to < len(ladder):
+        # Already at the end of the ladder. Reported rather than clamped
+        # silently: an author who wrote `harder` on a `deadly` scene asked for
+        # something the ladder cannot express and should hear so.
+        return scene.share, (
+            f"{scene.id}: the {aim.kind} objective asks for a "
+            f"{'harder' if aim.harder else 'easier'} fight and "
+            f"{scene.difficulty} is already the end of the ladder, so the "
+            "budget is unchanged"
+        )
+    moved = ladder[to]
+    return DIFFICULTY[moved], (
+        f"{scene.id}: the {aim.kind} objective makes this "
+        f"{'harder' if aim.harder else 'easier'}, so the budget is built "
+        f"as {moved} rather than {scene.difficulty}"
+    )
+
+
 def resolve(
     scene: Scene, *, party_level: int, draw: Random | None = None,
     party_size: int = SIDE, stated_size: int = SIDE,
@@ -354,9 +403,12 @@ def resolve(
         return out
 
     per_head = max(1, int(party_size)) / SIDE
+    share, stepped = _stepped(scene)
+    if stepped:
+        out.notes.append(stepped)
     want = (
         float(scene.xp) if scene.xp
-        else budget(party_level) * scene.share * per_head
+        else budget(party_level) * share * per_head
     )
     # **A stated XP figure overrides the headcount, silently until now.**
     # When a scene prints its own number -- which every fight in the one

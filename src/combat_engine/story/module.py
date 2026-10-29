@@ -57,6 +57,10 @@ from combat_engine.engine.cast import TERRAIN_WORDS
 from combat_engine.engine.skills import SKILLS
 
 from .dc import BANDS
+from .objective import KINDS as OBJECTIVES
+from .objective import POSITIONS, Objective
+from .objective import ROUNDS as OBJECTIVE_ROUNDS
+from .objective import SHARE as OBJECTIVE_SHARE
 
 #: What sort of thing a scene is. Four, and they are the four the module in
 #: `modules/` is made of -- its outline has a heading for each.
@@ -425,6 +429,11 @@ class Scene:
     terrain: tuple[str, ...] = ()
     foes: tuple[FoeSpec, ...] = ()
     tactics: str = ""
+    #: What the fight is *for*, when it is for something other than killing
+    #: everything. `None` is the overwhelming majority and means the scene is
+    #: fielded, played and judged exactly as it was before objectives existed
+    #: -- see `story/objective.py` and `run._fight`.
+    objective: Objective | None = None
 
     # -- skill challenge ----------------------------------------------------
     complexity: int = 0
@@ -510,6 +519,71 @@ class Module:
         if chose and chose in scene.exits:
             return chose
         return scene.exits[0] if scene.exits else ""
+
+
+def _as_objective(raw: Any, where: str,
+                  problems: list[str]) -> Objective | None:
+    """What the fight is for, or `None` when the scene does not say.
+
+    **`None` and `{"kind": "defeat_all"}` are different answers** and both are
+    legal. The first means no watcher is built and `_fight` keeps its original
+    win condition; the second means the watcher runs and has to agree with it.
+    Collapsing them would have made the no-objective control in `drivers.py`
+    untestable, because there would be no way to field a fight that did *not*
+    go through the new code.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        problems.append(
+            f"{where}: an objective must be an object, got {type(raw).__name__}")
+        return None
+    kind = str(raw.get("kind", "defeat_all")).strip().lower()
+    if kind not in OBJECTIVES:
+        problems.append(
+            f"{where}: objective {kind!r} is not one of {', '.join(OBJECTIVES)}")
+        return None
+    position = str(raw.get("position", "")).strip().lower()
+    if kind == "hold":
+        if not position:
+            # Defaulted rather than refused: the party spawns in the west, so
+            # it defends its own end. `objective.py` explains the placement.
+            position = "west"
+        if position not in POSITIONS:
+            problems.append(
+                f"{where}: position {position!r} is not one of "
+                f"{', '.join(POSITIONS)}")
+            position = ""
+    elif position:
+        problems.append(f"{where}: objective {kind!r} takes no position")
+    rounds = raw.get("rounds", OBJECTIVE_ROUNDS)
+    if not isinstance(rounds, int) or rounds < 1:
+        problems.append(f"{where}: objective rounds must be a positive integer")
+        rounds = OBJECTIVE_ROUNDS
+    share = raw.get("share", OBJECTIVE_SHARE)
+    if not isinstance(share, int | float) or not 0 < float(share) < 1:
+        problems.append(f"{where}: objective share must be between 0 and 1")
+        share = OBJECTIVE_SHARE
+    harder, easier = bool(raw.get("harder")), bool(raw.get("easier"))
+    if harder and easier:
+        # Refused rather than cancelled out, because an author who wrote both
+        # meant one of them and a silent no-op hides which.
+        problems.append(f"{where}: an objective cannot be both harder and easier")
+        harder = easier = False
+    foes = tuple(str(f).strip() for f in raw.get("foes", ()) if str(f).strip())
+    if kind == "defeat_foe" and not foes:
+        problems.append(f"{where}: defeat_foe needs at least one ref in foes")
+    elif kind != "defeat_foe" and foes:
+        problems.append(f"{where}: objective {kind!r} takes no foes")
+    leaks = raw.get("leaks", 0)
+    if not isinstance(leaks, int) or leaks < 0:
+        problems.append(f"{where}: objective leaks must be a whole number")
+        leaks = 0
+    return Objective(
+        kind=kind, foes=foes, share=float(share), rounds=rounds,
+        position=position, leaks=leaks, harder=harder, easier=easier,
+        says=str(raw.get("says", "")).strip(),
+    )
 
 
 def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
@@ -772,6 +846,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     if not isinstance(beats, int) or beats < 1:
         problems.append(f"{where}: max_beats must be a positive integer")
         beats = MAX_BEATS
+    objective = _as_objective(raw.get("objective"), where, problems)
     if kind == "combat" and not foes:
         problems.append(f"{where}: a combat scene needs at least one foe line")
 
@@ -780,11 +855,12 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     # fight; a roleplay scene carrying a complexity never counts a success.
     # Both read exactly like a scene that works, which is why they are refused.
     unused = {
-        "roleplay": ("foes", "terrain", "complexity", "primary", "secondary"),
-        "skill_challenge": ("foes", "terrain", "affordances"),
+        "roleplay": ("foes", "terrain", "complexity", "primary", "secondary",
+                     "objective"),
+        "skill_challenge": ("foes", "terrain", "affordances", "objective"),
         "combat": ("complexity", "primary", "secondary", "affordances"),
         "rest": ("foes", "terrain", "complexity", "primary", "secondary",
-                 "affordances", "npcs", "lore"),
+                 "affordances", "npcs", "lore", "objective"),
     }[kind]
     for name in unused:
         if raw.get(name):
@@ -806,6 +882,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         terrain=terrain,
         foes=foes,
         tactics=str(raw.get("tactics", "")),
+        objective=objective,
         complexity=complexity,
         level=int(raw.get("level", 0) or 0),
         primary=primary,

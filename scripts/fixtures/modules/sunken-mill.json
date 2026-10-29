@@ -243,7 +243,15 @@
         }
       ],
       "tactics": "The elite stays beyond the lantern and spends its minions to keep the ladder head crowded.",
-      "exits": []
+      "exits": [],
+      "objective": {
+        "kind": "defeat_foe",
+        "foes": [
+          "the hoarder"
+        ],
+        "easier": true,
+        "says": "cut the hoarder down and the rest will scatter"
+      }
     }
   ]
 }

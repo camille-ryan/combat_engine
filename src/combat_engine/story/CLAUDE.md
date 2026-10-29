@@ -18,6 +18,7 @@ between all of them. The combat engine is a thing this drives.
 | `reflavour.py` | wearing a stat block as something else. |
 | `table.py` | a board with nobody to fight on it, so a conversation can roll. |
 | `challenge.py` | successes against three failures. |
+| `objective.py` | what a fight is *for*, and what counts as failing it. |
 | `dc.py` | what a check has to beat, by level and band. |
 | `beat.py` | a roleplay scene, one exchange at a time: who speaks, what they try, what they already know, what it changes. |
 | `graph.py` | what a campaign knows: entities, facts, and where each fact came from. `docs/STORY_GRAPH.md` is the design. |
@@ -491,6 +492,90 @@ says three. `challenge.py`'s "three failures, and that number does not
 move with complexity" matches the compendium and the adventure, which is
 the right pair to follow.
 
+## A fight can be for something other than killing everything
+
+Camille's call, **2026-10-29**, after reading another system's
+encounter-objective rules:
+
+> *"I'd like these encounter objectives to be represented in encounter
+> design in this project. [...] you don't need to do a 1:1 conversion. This
+> is more of a generic DM advice thing."*
+
+So `objective.py` is the concept, not a port: **a stated goal, a stated way
+to fail it, and one step along the difficulty ladder.** No imported
+currency, no imported formulas. `plans/20261029-encounter-objectives.md`
+records every translation that was made.
+
+Five kinds, and the dividing line for which exist is **whether the board
+can already answer the question**: `defeat_all`, `diminish`, `defeat_foe`,
+`survive`, `hold`. All five read counts, rounds and squares. None needed a
+new component, a new action or a change under `engine/`.
+
+**`None` and `defeat_all` are different answers and both are legal.** A
+scene stating no objective builds no watcher and keeps the original
+`winner is Team.PC` line, bit for bit; naming `defeat_all` runs the watcher
+and has to agree with it. That is the only reason the control in
+`objective_verdict` can exist -- collapse the two and there is no way to
+field a fight that does *not* go through the new code.
+
+### Three faults it had before any driver was written
+
+All three were found by probing it by hand and reading the output, which is
+this component's own rule and worked again:
+
+* **the denominator was counted after round one.** `began_with` was taken at
+  the first `RoundEnd` and its docstring argued that was better. Anything
+  that died during round one had already left the count, so `diminish`
+  asked the party to halve an *already reduced* cast -- reported *"2 of 4
+  are down"* for a fight that began with six. Counted at `attach` now.
+* **winning early read as failing.** `survive` and `hold` were `rounds >=
+  aim.rounds` alone, so a party that wiped the cast in round 4 of a
+  five-round hold was told it had failed. You cannot fail to outlast a
+  fight you have already won, and on these boards winning early is the
+  *common* case because `Encounter.finished` ends the loop the moment a side
+  is gone.
+* **one fight reported two round counts.** `world.round` has rolled over by
+  the time the loop head sees `watch.resolved`, so a two-round `survive`
+  printed `rounds=3` beside a verdict reading "2 of 2".
+
+### And one objective was built and then removed
+
+**`assault` -- take and hold a position -- could not be met on these
+boards**, and the measurement is the whole argument: every arm reported
+`0 of N consecutive rounds`, including the one where the party stood in the
+area having killed everything. Two reasons that compound.
+`Encounter.finished` ends the fight the moment a side is gone, so there is
+at most **one** boundary at which the party holds a cleared area and never
+the three a duration asks for; and a round cap as a resolve condition cuts
+the fight short before the area can be taken at all, so one field was doing
+duty as a deadline *and* as a hold counter.
+
+What it wants is a fight that continues around the party -- reinforcements
+arriving while the position is held, #962. **An objective that cannot be
+met is worse than one that does not exist**, which is the same call
+`a-selected-feat-must-take-effect` makes about a drawable-and-inert feat.
+
+### The difficulty step is one band, and it is printed
+
+An objective may declare `harder` or `easier`, and `cast_list._stepped`
+moves the scene one place along `DIFFICULTY` before the budget is spent --
+so an objective can only ever buy what the module could have asked for by
+writing a different band. Both flags together is refused at load rather
+than cancelled out, because an author who wrote both meant one of them.
+
+**A scene that states its own `xp` is not re-priced**, which is the same
+call #798 made for party size: a module that prints a number for its own
+encounter is more trustworthy than our curve. And the step goes in
+`Dressed.notes`, because a budget that moved in silence is the fault this
+component is told not to commit.
+
+Two numbers worth not re-deriving. At level 4 a roster of three standards
+and four minions is **affordable at `standard`**, so `harder` buys nothing
+and the cast is identical either way -- the band only orders a roster big
+enough to be clamped, and at six and six it is strict: 4 / 5 / 8 / 12
+across the four bands. That is why `objective_budget` uses the larger
+roster.
+
 ## A skill challenge never stops the plot
 
 Camille's ruling, **2026-10-29**, verbatim:
@@ -744,11 +829,12 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     challenge_refusal training_bonus challenge_costs_nothing \
     beat_loop scene_audience module_refusals affordance_match \
     summary_scenes boxed_text graph_furniture graph_administration \
-    recall_order borrowed_board party_size_rule challenge_progresses
+    recall_order borrowed_board party_size_rule challenge_progresses \
+    line_kinds objective_verdict objective_budget
 uv run scripts/check.py --only play,drivers
 ```
 
-**25 drivers and 218 assertions** cover this component, and **each was
+**The command above is 21 drivers and prints 194 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -761,6 +847,14 @@ borrowed board and each half of the party-size rule. All went red.
 Measured, because this sentence said "ten" for three commits after it
 stopped being ten. `uv run scripts/drivers.py <the list above>` prints the
 total; read it off rather than counting the names.
+
+**And it had gone stale again, in the other direction.** It read *"25
+drivers and 218 assertions"* while the command beside it listed **18** and
+printed **169** -- so the number was counting drivers the list did not
+name, and no reader could reconcile the two. Three were genuinely missing
+from the list (`line_kinds` among them) and are in it now. Quote the figure
+**the listed command prints**, or the sentence is unverifiable by the one
+thing it tells you to run.
 
 `affordance_match` is the one that needs a model and **skips** when none is
 serving; the rest run offline.

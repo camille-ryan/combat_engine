@@ -41062,6 +41062,263 @@ def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
              f"same object={first.latches is second.latches}")
 
 
+def a_combat_scene_is_judged_on_the_objective_its_module_states(
+    out: Result,
+) -> None:
+    """Camille, 2026-10-29, after reading another system's objective rules:
+
+    > I'd like these encounter objectives to be represented in encounter
+    > design in this project. [...] you don't need to do a 1:1 conversion.
+    > This is more of a generic DM advice thing.
+
+    A fight had one win condition -- `Encounter.winner is Team.PC` -- and
+    one loss condition, which was its complement. Five objectives now
+    decide it instead, and each is asserted **in both directions**: an
+    objective that can only be met, or only missed, is worth nothing.
+
+    **The control is the first assertion and it is the load-bearing one.**
+    A scene stating no objective must be judged by the original line, and
+    `Step.objective` is how that is visible -- `""` means no watcher was
+    ever built. Making `objective.watcher` return a `Watch` for `None`
+    turns it red, which is the break that proves a module written before
+    any of this existed still plays as it did.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    FAST = [{"count": 4, "role": "skirmisher", "rank": "standard"}]
+    SOLID = [{"count": 2, "role": "soldier", "rank": "standard"}]
+
+    def play(objective: dict | None, foes: list[dict] | None = None,
+             difficulty: str = "easy", seed: int = 5) -> run_mod.Step:
+        foes = SOLID if foes is None else foes
+        scene = {"id": "pit", "kind": "combat", "name": "Pit", "exits": [],
+                 "difficulty": difficulty, "foes": foes}
+        if objective is not None:
+            scene["objective"] = objective
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "pit", "scenes": [scene]}, Path("<driver>"))
+        return run_mod.step(run_mod.begin(built, seed=seed), built,
+                            record=False)
+
+    def said(step: run_mod.Step) -> str:
+        for line in step.lines:
+            if getattr(line, "kind", "") == "note" and "Objective" in line:
+                return str(line)
+        return ""
+
+    # -- the control --------------------------------------------------------
+    bare = play(None)
+    named = play({"kind": "defeat_all"})
+    out.that(
+        bare.objective == "" and not said(bare),
+        "a scene with no objective is judged by the original win condition",
+        f"objective={bare.objective!r}, outcome={bare.outcome}, "
+        f"no objective line printed",
+    )
+    out.that(
+        named.objective == "defeat_all" and bare.outcome == named.outcome,
+        "naming defeat_all runs the watcher and agrees with it",
+        f"{bare.outcome} either way; watched objective={named.objective!r}",
+    )
+
+    # -- each objective, met and missed ------------------------------------
+    quick = play({"kind": "survive", "rounds": 2})
+    out.that(
+        quick.outcome == "won" and quick.rounds == 2,
+        "survive ends the fight the round its duration runs out",
+        f"{quick.rounds} rounds, {quick.outcome} -- {said(quick)}",
+    )
+    early = play({"kind": "survive", "rounds": 9})
+    out.that(
+        early.outcome == "won" and "before the time was up" in said(early),
+        "outlasting the opposition is not a failure to survive",
+        said(early),
+    )
+
+    half = play({"kind": "diminish", "share": 0.5}, FAST, "hard")
+    out.that(
+        half.outcome == "won" and half.rounds < 5,
+        "diminish ends early when the opposition is cut to its share",
+        f"{half.rounds} rounds -- {said(half)}",
+    )
+
+    held = play({"kind": "hold", "rounds": 2})
+    leaked = play({"kind": "hold", "rounds": 3, "leaks": 1,
+                   "position": "east"})
+    out.that(
+        held.outcome == "won" and leaked.outcome == "lost",
+        "hold is met with the line unbroken and missed when it is not",
+        f"west {held.outcome} / east {leaked.outcome} -- {said(leaked)}",
+    )
+
+    # The ref has to come off a real draw: the module names a creature by
+    # its own word and `cast_list` resolves it, so no ref can be written
+    # here by hand without pinning the resolver's answer.
+    fielded = play({"kind": "defeat_all"}).enemies[0]
+    down = play({"kind": "defeat_foe", "foes": [fielded]})
+    out.that(
+        down.outcome == "won" and "is down" in said(down),
+        "defeat_foe is met when the named creature is down",
+        f"{fielded} -- {said(down)}",
+    )
+
+    # **The authoring-facing half, and it was broken twice when first
+    # written.** A converter writes the page's own word for a creature --
+    # every other field in the schema takes one -- and cannot know the draw
+    # answered `m258`. Matching refs only made the objective unusable from a
+    # module file while looking finished.
+    #
+    # **This assertion took three attempts, and the first two could not tell
+    # the two implementations apart.** With the name lookup deleted,
+    # `Watch._matches` matches nobody, so `_left_standing` comes back empty
+    # and the objective declares itself met -- which is the *same verdict
+    # text* the working code produces when the target really does die. Both
+    # "the word resolves" and "the word and the ref agree" stayed green.
+    #
+    # What separates them is **when the fight stopped**. Matching nobody
+    # satisfies the objective at the first round boundary, so a broken build
+    # ends every `defeat_foe` fight in round 1. Designating the creature that
+    # falls *last* must therefore take exactly as long as killing them all --
+    # 4 rounds against 4 here, against 1 when the lookup is gone.
+    NAMED = [{"count": 1, "name": "the captain", "role": "soldier",
+              "rank": "standard"},
+             {"count": 3, "name": "thugs", "role": "skirmisher",
+              "rank": "minion"}]
+    everything = play({"kind": "defeat_all"}, NAMED)
+    last_one = play({"kind": "defeat_foe", "foes": ["the captain"]}, NAMED)
+    sooner = play({"kind": "defeat_foe", "foes": ["thugs"]}, NAMED)
+    out.that(
+        last_one.outcome == "won"
+        and last_one.rounds == everything.rounds > 1,
+        "designating the last creature to fall is as long as killing them all",
+        f"the captain {last_one.rounds} rounds, defeat_all "
+        f"{everything.rounds} rounds",
+    )
+    out.that(
+        sooner.outcome == "won" and 1 < sooner.rounds < last_one.rounds,
+        "designating a creature that falls sooner ends the fight sooner",
+        f"thugs {sooner.rounds} rounds vs the captain {last_one.rounds}",
+    )
+    cased = play({"kind": "defeat_foe", "foes": ["THE CAPTAIN"]}, NAMED)
+    out.that(
+        said(cased) == said(last_one) and cased.rounds == last_one.rounds,
+        "the module's own word is matched with case folded",
+        f"'THE CAPTAIN' == 'the captain' -- {said(cased)}",
+    )
+
+    # -- the quiet-success guard -------------------------------------------
+    #
+    # **The failure this mechanism exists to avoid.** A designation nobody
+    # fielded has nothing left standing, so a naive reading reports it met
+    # -- an objective that was never possible to fail, reported as an
+    # achievement. Deleting the `missing` branch in `Watch._judge` turns
+    # this red and leaves every other assertion here green.
+    ghost = play({"kind": "defeat_foe", "foes": ["m9999"]})
+    out.that(
+        ghost.outcome == "lost" and "did not field" in said(ghost),
+        "a designated foe nobody fielded is reported, not satisfied",
+        said(ghost),
+    )
+    out.that(
+        not ghost.clean,
+        "a missed objective is never clean",
+        f"clean={ghost.clean}",
+    )
+
+
+def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
+    """The difficulty step, which is the design half of an objective.
+
+    A party doing two things at once is the reason every system's advice
+    says to ease the opposition back for an objective -- and to tighten it
+    where the objective shortens the fight. One **band** along
+    `module.DIFFICULTY`, so an objective can only buy what the module could
+    have asked for by writing a different `difficulty`.
+
+    Three things asserted, and the third is the one that would otherwise
+    rot: a scene that **states its own XP** is not re-priced, because a
+    module that prints a number for its own encounter is more trustworthy
+    than our curve. That is the same call #798 made for party size.
+
+    Breaking `_stepped` to return `scene.share` unchanged turns the first
+    two red; breaking `resolve` to consult the share when `scene.xp` is set
+    turns the third red.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story.cast_list import resolve
+    from combat_engine.story.reflavour import Dressed
+
+    # **Big enough that a standard budget clamps it**, which is what makes
+    # the band orderable at all. Measured at level 4: a roster of three
+    # standards and four minions is affordable at `standard`, so `harder`
+    # buys nothing and the cast comes out identical -- 7 either way. At six
+    # and six the clamp is strict: 4 / 5 / 8 / 12 across the four bands.
+    FOES = [{"count": 6, "role": "soldier", "rank": "standard"},
+            {"count": 6, "role": "skirmisher", "rank": "minion"}]
+
+    def scene_for(objective: dict | None = None,
+                  difficulty: str = "standard", xp: int = 0) -> mod.Scene:
+        scene = {"id": "pit", "kind": "combat", "name": "Pit", "exits": [],
+                 "difficulty": difficulty, "foes": FOES}
+        if objective is not None:
+            scene["objective"] = objective
+        if xp:
+            scene["xp"] = xp
+        built = mod.parse(
+            {"id": "probe", "party_level": 4, "party_size": 4,
+             "start": "pit", "scenes": [scene]}, Path("<driver>"))
+        return built.scene("pit")
+
+    def spend(scene: mod.Scene) -> Dressed:
+        return resolve(scene, party_level=4, party_size=4, stated_size=4)
+
+    flat = spend(scene_for())
+    up = spend(scene_for({"kind": "survive", "harder": True}))
+    down = spend(scene_for({"kind": "survive", "easier": True}))
+
+    out.that(
+        not any("objective" in n for n in flat.notes),
+        "an objective that asks for no step leaves the budget alone",
+        f"{len(flat.refs)} creature(s), no step note",
+    )
+    out.that(
+        len(up.refs) > len(flat.refs) > len(down.refs),
+        "harder and easier each move the cast one band",
+        f"easier {len(down.refs)} < standard {len(flat.refs)} "
+        f"< harder {len(up.refs)}",
+    )
+    out.that(
+        any("rather than standard" in n for n in up.notes)
+        and any("rather than standard" in n for n in down.notes),
+        "the step is printed, never silent",
+        next(n for n in up.notes if "objective" in n),
+    )
+
+    # A stated figure wins. Same cast at both ends of the ladder.
+    priced_up = spend(scene_for({"kind": "survive", "harder": True}, xp=900))
+    priced_down = spend(scene_for({"kind": "survive", "easier": True}, xp=900))
+    out.that(
+        list(priced_up.refs) == list(priced_down.refs),
+        "a scene that states its own XP is not re-priced by its objective",
+        f"{len(priced_up.refs)} creature(s), identical both ways",
+    )
+
+    # The end of the ladder is reported rather than clamped in silence.
+    capped = spend(scene_for({"kind": "survive", "harder": True},
+                             difficulty="deadly"))
+    out.that(
+        any("end of the ladder" in n for n in capped.notes),
+        "asking past the end of the ladder says so",
+        next((n for n in capped.notes if "ladder" in n), "no note"),
+    )
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -41162,6 +41419,16 @@ DRIVERS = {
     "line_kinds": (
         every_printed_line_says_what_kind_of_thing_it_is,
         "every printed line says what kind of thing it is (#930)",
+    ),
+    "objective_verdict": (
+        a_combat_scene_is_judged_on_the_objective_its_module_states,
+        "a fight is judged on its module's objective, five kinds both ways "
+        "(Camille, 2026-10-29)",
+    ),
+    "objective_budget": (
+        an_objective_moves_the_budget_one_band_and_says_so,
+        "an objective moves the budget one band and prints that it did "
+        "(Camille, 2026-10-29)",
     ),
     "challenge_progresses": (
         a_lost_skill_challenge_still_leads_somewhere,
