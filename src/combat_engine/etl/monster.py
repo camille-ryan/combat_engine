@@ -390,7 +390,37 @@ def parse(
     # What is printed beside the numbers is mechanics, not prose, and several
     # creatures are named after their own type. Scrubbing "goblin" out of a
     # goblin's rules would hide a word the spec already prints in its tags.
+    #: A word a creature's **own cards use mechanically** while its printed
+    #: name also contains it. `scrub`'s `keep` already exists for exactly this
+    #: judgement -- "never swapped even out of a name ... because they are
+    #: mechanical" -- and it is filled from the stat block's role, size,
+    #: origin and type, which cannot know about this.
+    #:
+    #: `m6230` is the case and both halves of its name are ordinary words.
+    #: One of them is the self-reference and must keep resolving; the other is
+    #: a surface to cross and a destination to arrive at:
+    #:
+    #:     a1  "can move across <word> and mud as if the surfaces ..."
+    #:     a5  "teleports up to 10 squares to a square containing <word>"
+    #:
+    #: Substituted, the second card is unwritable -- the destination is gone
+    #: and an author reads a creature teleporting to a square containing
+    #: itself. #541 fault 2.
+    #:
+    #: **A named entry rather than a rule, and the measurement is why.**
+    #: #541 proposed skipping any lone match that is ordinary vocabulary,
+    #: using `leaks._trusted_vocabulary()`. Measured against the unscrubbed
+    #: `rules_text`: **3,326 briefs** would lose their self-reference, where
+    #: the frequency cut already rejected for #379 cost 1,543. That
+    #: vocabulary is 234,577 terms and holds every creature-type word, so it
+    #: is a looser sieve than the one already refused -- the same trade at
+    #: twice the price, for two cards. So the two cards are named.
+    MECHANICAL_IN_NAME: dict[str, frozenset[str]] = {
+        "m6230": frozenset({"water"}),
+    }
+
     keep = {m.role, m.size, m.origin, m.kind, "minion", "elite", "solo", "leader"}
+    keep |= MECHANICAL_IN_NAME.get(m.ref_id, frozenset())
     for a in m.abilities:
         # **The printed lines, taken before the scrub.** This is the only place
         # the unscrubbed text exists, and the localisation wants it: `a.spec` is
