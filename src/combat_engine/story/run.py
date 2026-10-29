@@ -105,6 +105,43 @@ def record_scene(campaign: Campaign, made: Step) -> str:
     return str(where)
 
 
+#: What wrote a line, so a reader can tell canon from dice from invention.
+#:
+#: **The split is the same one the graph draws between `page`, `earned`
+#: and `invented`**, and it is not decoration: who wrote a line governs
+#: how much it should be trusted. The adventure's prose is canon, a roll
+#: is a fact the dice produced, and the DM's paragraph is a model's
+#: invention that is allowed to be wrong. A reader shown all three in one
+#: voice cannot tell them apart, which is the thing this whole component
+#: spends its effort on. #930.
+KINDS = ("scene", "recall", "roll", "mine", "dm", "note", "exit")
+
+
+class Line(str):
+    """A printed line that remembers what kind of thing it is.
+
+    **A `str` subclass rather than a dataclass, deliberately.** `lines`
+    is read in a dozen places that do `" ".join(...)`, `ln.strip()` and
+    `print(ln)` -- in `play.py`, `dm.py`, the campaign log and nine
+    drivers -- and every one of them keeps working unchanged against a
+    string that happens to carry an attribute. A dataclass would have
+    meant touching all of them to gain nothing a reader of the CLI can
+    see.
+
+    **The sharp edge, stated because it will bite somebody:** any
+    transformation returns a plain `str` and drops the kind.
+    `line.strip()` is text, not a `Line`. Carry the object until the last
+    moment and read `.kind` off the original.
+    """
+
+    kind: str
+
+    def __new__(cls, text: str, kind: str = "scene") -> Line:
+        made = super().__new__(cls, text)
+        made.kind = kind if kind in KINDS else "scene"
+        return made
+
+
 @dataclass
 class Step:
     """What one scene did."""
@@ -116,7 +153,7 @@ class Step:
     #: Where play goes next. Empty ends the module.
     next_id: str = ""
     #: Human-readable lines about what happened. The caller prints them.
-    lines: list[str] = field(default_factory=list)
+    lines: list[Line] = field(default_factory=list)
     #: Things the reader should know that are not the story -- a budget clamp,
     #: a creature deferred, terrain not yet applied.
     notes: list[str] = field(default_factory=list)
@@ -139,12 +176,13 @@ class Step:
     #: Set this and every line is out the moment it exists. `play.py` sets
     #: it when there is a terminal and nothing else does, so `check.py` and
     #: the drivers keep the batched behaviour they assert on.
-    echo: Callable[[str], None] | None = None
+    echo: Callable[[Line], None] | None = None
 
-    def say(self, line: str) -> None:
-        self.lines.append(line)
+    def say(self, line: str, kind: str = "scene") -> None:
+        made = Line(line, kind)
+        self.lines.append(made)
         if self.echo is not None:
-            self.echo(line)
+            self.echo(made)
 
 
 #: Who joins when a module wants more than the standard four, in order.
@@ -250,7 +288,8 @@ def _win(scene: Scene, step: Step) -> None:
     step.outcome = "won"
     step.rounds = 0
     called = sum(f.count for f in scene.foes)
-    step.say(f"God mode: {called} foe(s) not fielded. The party wins.")
+    step.say(f"God mode: {called} foe(s) not fielded. The party wins.",
+             "note")
     step.notes.append(
         f"{scene.id}: GOD MODE -- the fight was skipped, not played. "
         "No damage, no powers spent, no surges. Nothing here is evidence "
@@ -280,7 +319,7 @@ def _fight(
     step.notes += dressed.notes
     if not dressed.refs:
         step.outcome = "skipped"
-        step.say("Nothing written could be fielded for this scene.")
+        step.say("Nothing written could be fielded for this scene.", "note")
         return
 
 
@@ -370,8 +409,8 @@ def _fight(
     for eid, flavour in zip(_enemy_eids(world), dressed.flavours, strict=False):
         ident = world.get(eid, Ident)
         shown.append(flavour.name or (ident.ref if ident else "?"))
-    step.say(f"Against: {', '.join(shown)}")
-    step.say(f"{step.outcome.title()} in {step.rounds} rounds.")
+    step.say(f"Against: {', '.join(shown)}", "note")
+    step.say(f"{step.outcome.title()} in {step.rounds} rounds.", "note")
 
 
 def actors_for(campaign: Campaign) -> list[beat_mod.Actor]:
@@ -467,7 +506,7 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
     # Said once, at the top of the scene, so a character who never speaks
     # reads as down rather than as broken.
     if (out := down(campaign)):
-        step.say(f"  ({', '.join(out)} cannot speak.)")
+        step.say(f"  ({', '.join(out)} cannot speak.)", "note")
     seed = seed_for(campaign, scene, "beats")
     table = table_mod.lay(campaign.party, seed=seed)
     def tell(made: beat_mod.Beat) -> None:
@@ -512,16 +551,16 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         delivered = [knew for knew in made.recalled if knew.knew]
         if len(delivered) > 1:
             step.say(f"  Between you, {len(delivered)} things are already "
-                     f"known -- common talk first:")
+                     f"known -- common talk first:", "recall")
         for knew in sorted(delivered, key=lambda r: r.dc):
             # **Only one knower is said out loud**, because that is the
             # fact a reader should weigh: it took the one character who is
             # good at this, and on a reread it is why they are in the party.
             alone = len(knew.knew) == 1
             if knew.mine and alone:
-                step.say(f"    Only you know: {knew.fact}")
+                step.say(f"    Only you know: {knew.fact}", "recall")
             elif knew.mine:
-                step.say(f"    You know: {knew.fact}")
+                step.say(f"    You know: {knew.fact}", "recall")
             # **A companion's recall is printed too, attributed.** It
             # still goes to the DM, which says it in their voice -- but
             # the DM was the only path and it drops roughly a quarter
@@ -529,9 +568,9 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
             # reaching nobody is the one loss a player is never owed,
             # and a restatement is the cheap failure to prefer.
             elif alone:
-                step.say(f"    Only {knew.knew[0][1]} knows: {knew.fact}")
+                step.say(f"    Only {knew.knew[0][1]} knows: {knew.fact}", "recall")
             else:
-                step.say(f"    {knew.knew[0][1]} knows: {knew.fact}")
+                step.say(f"    {knew.knew[0][1]} knows: {knew.fact}", "recall")
         # **A companion's intent is not printed.** It goes to the DM, which
         # writes it into the paragraph below -- so what a reader sees is one
         # piece of prose in which those things happened, not four captioned
@@ -539,9 +578,9 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         # printed because they typed it and it is theirs.
         for intent in made.intents:
             if not intent.played:
-                step.say(f"  {intent}")
+                step.say(f"  {intent}", "mine")
         if made.reaction:
-            step.say(f"  {made.reaction}")
+            step.say(f"  {made.reaction}", "dm")
         # The dice after the prose, not before it: a roll is the result of
         # the moment and reads as one. Before, it pre-announced the outcome
         # of a paragraph nobody had read yet.
@@ -563,13 +602,13 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         # becomes a harmless restatement instead of a lost payoff.
         for ruling in made.rulings:
             if ruling.affordance != "none":
-                step.say(str(ruling))
+                step.say(str(ruling), "roll")
                 if ruling.fact and not ruling.exit:
-                    step.say(f"    {ruling.fact}")
+                    step.say(f"    {ruling.fact}", "dm")
         # After the reaction, because it is the scene closing rather than
         # anybody answering. The DM is not given it -- #807.
         if made.exit_line:
-            step.say(f"  {made.exit_line}")
+            step.say(f"  {made.exit_line}", "exit")
 
     # Said as each beat lands rather than after the scene, so a person
     # playing sees beat 1 before being asked about beat 2. With no echo set
@@ -665,8 +704,8 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
         scene, table, party_level=module.party_level, choose=choose)
     table.strike()
     for made in run.attempts:
-        step.say(f"  {made}")
-    step.say(run.tally)
+        step.say(f"  {made}", "roll")
+    step.say(run.tally, "note")
     step.outcome = "won" if run.won else "lost"
 
 
@@ -695,7 +734,7 @@ def step(
     # indented block and loses the indent for everything after it.
     for paragraph in scene.seen.split("\n\n"):
         if paragraph.strip():
-            made.say(paragraph.strip())
+            made.say(paragraph.strip(), "scene")
 
     if scene.kind == "roleplay":
         _roleplay(campaign, module, scene, made, director, ask_human)
@@ -711,7 +750,8 @@ def step(
         made.say(
             "Extended rest: everything back."
             if scene.extended
-            else "Short rest: encounter powers back, surges spent to heal."
+            else "Short rest: encounter powers back, surges spent to heal.",
+            "note",
         )
 
     # Where next. A challenge routes on its result when the module says so;

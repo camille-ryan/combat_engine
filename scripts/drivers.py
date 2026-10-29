@@ -32196,6 +32196,118 @@ def training_is_worth_exactly_five_on_a_check(out: Result) -> None:
     table.strike()
 
 
+def every_printed_line_says_what_kind_of_thing_it_is(out: Result) -> None:
+    """#930. A UI cannot style what it cannot distinguish.
+
+    `Step.lines` was a flat `list[str]`, so the only way to tell the
+    adventure's prose from a d20 roll from the DM's paragraph was to
+    pattern-match the text -- which was reworded twice in one week.
+
+    The split is the same one the graph draws between `page`, `earned`
+    and `invented`: **who wrote a line governs how much it should be
+    trusted.**
+
+    `Line` is a `str` subclass, so the assertion that matters as much as
+    the kinds is that **nothing about the printed text moved**.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    LADDER = [
+        {"fact": "the ferry runs at dawn", "skill": "streetwise", "dc": 5},
+        {"fact": "the reeve took a bribe", "skill": "streetwise", "dc": 10},
+    ]
+    raw = {"id": "probe", "party_level": 2, "party_size": 5, "start": "talk",
+           "scenes": [{"id": "talk", "kind": "roleplay", "name": "Talk",
+                       "sets": "The taproom is loud.", "exits": [],
+                       "max_beats": 1, "lore": LADDER,
+                       "npcs": [{"name": "Hask", "wants": "to be left alone"}]}]}
+    module = mod.parse(raw, Path("<driver>"))
+    campaign = run_mod.begin(module, seed=1)
+    campaign.control = (
+        ["human"] + ["ai"] * (len(campaign.party.sheets) - 1))
+    made = run_mod.step(campaign, module, record=False)
+
+    kinds = {getattr(ln, "kind", None) for ln in made.lines}
+    out.that(
+        bool(made.lines) and None not in kinds,
+        "every line carries a kind",
+        f"{len(made.lines)} line(s), kinds "
+        f"{sorted(str(k) for k in kinds)}",
+    )
+    out.that(
+        kinds <= set(run_mod.KINDS),
+        "and every kind is one of the closed vocabulary",
+        f"{sorted(str(k) for k in kinds)} against {sorted(run_mod.KINDS)}",
+    )
+
+    def kinded(want: str) -> list[str]:
+        return [str(ln) for ln in made.lines
+                if getattr(ln, "kind", "") == want]
+
+    # **Every fact line, not just one of them.** Asserting that some
+    # recall line exists passes on the block's header alone, so untagging
+    # an individual `You know:` left this green.
+    facts = [ln for ln in made.lines if "know" in str(ln) and ":" in str(ln)]
+    out.that(
+        bool(facts)
+        and all(getattr(ln, "kind", "") == "recall" for ln in facts),
+        "every fact the party already knew is a recall line",
+        f"{[(getattr(f, 'kind', '?'), str(f).strip()[:34]) for f in facts]}",
+    )
+    out.that(
+        any("taproom" in ln for ln in kinded("scene")),
+        "the adventure's own prose is a scene line",
+        f"{[ln.strip()[:40] for ln in kinded('scene')]}",
+    )
+    out.that(
+        bool(kinded("dm")),
+        "and what the DM wrote is a dm line, not mixed in with the page",
+        f"{[ln.strip()[:40] for ln in kinded('dm')]}",
+    )
+
+    # **The text did not move.** `Line` is a `str`, so every consumer that
+    # joins, strips or prints keeps working -- that is the whole reason it
+    # is not a dataclass, and it is worth an assertion rather than a
+    # comment.
+    out.that(
+        all(isinstance(ln, str) for ln in made.lines)
+        and " ".join(made.lines).count("taproom") == 1,
+        "a line is still a string, so joining and printing are unchanged",
+        f"{type(made.lines[0]).__name__}, joins cleanly",
+    )
+    # And it survives the campaign log, which json-encodes `lines`.
+    import json as _json
+
+    out.that(
+        _json.loads(_json.dumps(made.lines)) == [str(x) for x in made.lines],
+        "and json-encodes as plain strings, so the log format is unchanged",
+        f"{len(made.lines)} line(s) round-tripped",
+    )
+
+    # A god-mode banner is a note, because a reader must not read it as
+    # the story. `story/CLAUDE.md`: god mode says so, every time.
+    fight = mod.parse(
+        {"id": "p2", "party_level": 2, "party_size": 5, "start": "f",
+         "scenes": [{"id": "f", "kind": "combat", "name": "F", "exits": [],
+                     "xp": 500,
+                     "foes": [{"count": 2, "role": "soldier",
+                               "rank": "standard"}]}]},
+        Path("<driver>"))
+    c2 = run_mod.begin(fight, seed=1)
+    god = run_mod.step(c2, fight, record=False, god=True)
+    banner = [ln for ln in god.lines
+              if getattr(ln, "kind", "") == "note" and "God mode" in ln]
+    out.that(
+        bool(banner),
+        "and the god-mode banner is a note, so a page can keep it out of "
+        "the prose",
+        f"{[str(b)[:46] for b in banner]}",
+    )
+
+
 def a_lost_skill_challenge_still_leads_somewhere(out: Result) -> None:
     """Camille's ruling, 2026-10-29, quoted:
 
@@ -41046,6 +41158,10 @@ DRIVERS = {
     "training_bonus": (
         training_is_worth_exactly_five_on_a_check,
         "the +5 for training, asserted by taking it away (#791)",
+    ),
+    "line_kinds": (
+        every_printed_line_says_what_kind_of_thing_it_is,
+        "every printed line says what kind of thing it is (#930)",
     ),
     "challenge_progresses": (
         a_lost_skill_challenge_still_leads_somewhere,
