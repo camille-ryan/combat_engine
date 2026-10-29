@@ -1324,6 +1324,28 @@ class UseSpent(Event):
 
 
 @dataclass
+class MarkHeld(Event):
+    """A standing mark was held against the rule that would have dropped it.
+
+    `c.mark(keeps=True)` on a creature already marked by the same marker
+    **adopts** that effect rather than laying a second one, for the reason
+    its docstring gives. Adopting is a change to an effect that already
+    exists, so there is no `EffectApplied` to see it -- and a row whose
+    entire printed Effect is the exception was therefore silent while being
+    correct. `i2762p1` is the one card in the tree that prints it.
+
+    Announced only on the adoption path. Laying a *fresh* kept mark already
+    emits `EffectApplied`, and announcing both would credit one mark twice.
+
+    `who` is the marked creature and `by` the ref that held the mark. The
+    marker itself is on the effect's relation and is not repeated here.
+    """
+
+    who: int
+    by: str
+
+
+@dataclass
 class TargetAdded(Event):
     """A creature was appended to the target list of the power running below.
 

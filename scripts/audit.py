@@ -1300,7 +1300,8 @@ DID_SOMETHING = {
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
-    "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent", "TargetAdded",
+    "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
+    "TargetAdded", "MarkHeld",
 }  # fmt: skip
 # `BlowRedirected`, `UseRestored` and `UseSpent` are the **ninth and tenth**
 # classes, and the first of them is the one that says something new about this

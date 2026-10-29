@@ -7230,6 +7230,7 @@ class Cast:
         by: int | None = None,
         lapses: bool = False,
         or_adjacent: bool = False,
+        keeps: bool = False,
     ) -> Effect | None:
         """Mark the target -- for you, or for somebody else.
 
@@ -7282,18 +7283,63 @@ class Cast:
         turn unless the row also swung afterwards, which is the opposite of
         what every one of these cards means: `p16374` marks **on a hit**,
         so the attack is already over when the mark arrives.
+
+        **`keeps=True` is the printed exception**, and it is the opposite
+        end of `lapses` rather than its absence: *"the target remains marked
+        even if the mark would normally end"*. `i2762p1` is the one card in
+        the tree that prints it.
+
+        Today that row is approximately right **by omission** -- leaving
+        `lapses` off gives a mark that never ends early, which is what the
+        card wants -- and the difference matters the day anything makes
+        lapsing the default. So this is recorded on the effect and read
+        inside the watcher, not merely a decision not to arm one: a lapse
+        armed by some *other* row or by a later default still has to honour
+        it. An attribute rather than a field, on `eff.by`'s precedent.
+
+        It refuses `lapses=True` beside it, because "ends early if you look
+        away" and "never ends early" cannot both be the card. `c.bonus`
+        refusing an unrecognised key (#544) is the house precedent for
+        raising on a contradiction rather than silently preferring one.
+
+        It is **behind #859** and was filed before it: `p805` armed no lapse
+        at all, so a `keeps=` built first would have suppressed a lapse
+        nobody had armed and read as working. #834.
         """
+        if keeps and lapses:
+            raise ValueError(
+                "c.mark(lapses=True, keeps=True): a mark cannot both end "
+                "early when you look away and never end early -- pass the "
+                "one the card prints"
+            )
         who = self._who(on)
         if who is None:
             return None
         marker = self.me if by is None else by
         if marker == who:
             return None          # nothing is marked by itself
+        # **`keeps=` holds the mark already there rather than laying a
+        # second one**, which is what its card says and is also the only
+        # safe reading. `p805` arms its lapse in a closure over the effect
+        # it laid, so re-marking would leave that watcher holding a
+        # superseded effect and able to end the relation the new one
+        # established -- a mark that silently drops a round later. Adopting
+        # the standing effect keeps one effect, one watcher, one relation.
+        if keeps:
+            standing = self.world.effects.mark_by(who, marker)
+            if standing is not None:
+                from .events import MarkHeld
+
+                standing.keeps_mark = True
+                self.world.bus.emit(MarkHeld(who=who, by=self.ref))
+                return standing
         held = self.world.effects.apply(
             who, marker, until, label=f"{self.ref} mark",
             relations=[(Relation.MARKED_BY, marker, who)],
             by=self.ref,
         )
+        if held is not None and keeps:
+            held.keeps_mark = True
         if held is not None and lapses:
             self._mark_lapses(held, marker, who, or_adjacent=or_adjacent)
         return held
@@ -7318,6 +7364,12 @@ class Cast:
 
         def at_the_end(ev: TurnEnd) -> None:
             if ev.actor != marker:
+                return
+            # **The printed exception wins over the printed rule.** Read
+            # here rather than at the arming site so that a lapse armed by
+            # another row, or by a later default, still honours a mark whose
+            # own card says it is held. #834.
+            if getattr(held, "keeps_mark", False):
                 return
             if (ev.actor, getattr(ev, "round", -1)) == laid_on:
                 return

@@ -3840,10 +3840,43 @@ def i2759p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit with an attack using this holy symbol",
-    todo=("c.mark(keeps=)",),
+    on=HIT_BY_ME,
 )
 def i2762p1(c: Cast) -> None:
-    """Re-aimed three times.
+    """Holds the mark the paladin already laid, instead of laying one.
+
+    `c.mark(keeps=True)` adopts the standing mark rather than applying a
+    second: `p805` arms its lapse in a closure over the effect it laid, so
+    a fresh mark would leave that watcher holding a superseded effect and
+    able to end the relation the new one established. One effect, one
+    watcher, one relation.
+
+    **Written once #859 landed, and it could not have been written before.**
+    The two paragraphs below are kept because they were right when written
+    and are the reason this row waited:
+
+    > the hold is on the other side of the sentence: "even if it would
+    > normally end" has nothing to prevent, because `p805` lays its mark
+    > `until=When.ENCOUNTER` and nothing ends it early
+
+    > The other half is a reading of `p805`'s card and a change to the
+    > paladin's core feature, which is not this row's to make.
+
+    Both are now false, and #859 is what falsified them: `p805` prints a
+    second way for the mark to end -- end of your turn, if you neither
+    attacked the target nor stand beside it -- and armed nothing for it, so
+    a paladin's mark did hold for the encounter whatever the paladin did.
+    It now arms `lapses=True, or_adjacent=True`. So this card's exception
+    has something real to suppress, which is exactly what it prints.
+
+    Recorded this way round because the row was *approximately right by
+    omission* for its whole life -- no lapse existed, so nothing had to be
+    suppressed -- and that is the most dangerous shape a correct-looking
+    row can have. #834.
+
+    What follows is the earlier history, still true.
+
+    Re-aimed three times.
 
     The feature is `p805` and arrives as a ref, so the naming gap closed;
     lengthening a live effect is not the hold either -- `Effect` is a
@@ -3870,6 +3903,10 @@ def i2762p1(c: Cast) -> None:
     The other half is a reading of `p805`'s card and a change to the
     paladin's core feature, which is not this row's to make. Even with that
     settled, the clause still wants the suppression above."""
+    foe = c.target
+    if foe is None:
+        return
+    c.mark(on=foe, until=When.ENCOUNTER, keeps=True)
 
 
 @power(

@@ -15944,7 +15944,7 @@ def a_mark_that_lapses(out: Result) -> None:
     MEDIUM = "m3210a0"
 
     def run(lapses: bool, swing: bool, *, or_adjacent: bool = False,  # noqa: ANN202
-            near: bool = True):
+            near: bool = True, keeps: bool = False):
         world, me, _armed = _posed(MEDIUM, 1)
         foe = sorted(enemies(world, me))[0]
         here = world.need(me, Position).square
@@ -15959,6 +15959,15 @@ def a_mark_that_lapses(out: Result) -> None:
         Cast(world=world, me=me, ref="drivers:lapse").mark(
             on=foe, until=When.ENCOUNTER, lapses=lapses,
             or_adjacent=or_adjacent)
+        # **The exception, laid by a second row over a lapse already armed.**
+        # That is the cell `i2762p1` actually prints and the one the flag
+        # being *absent* cannot pose: `c.mark` refuses `lapses` and `keeps`
+        # together, so the only way for both to be true of one mark is for
+        # another row to hold it -- which is exactly what the item does to
+        # the paladin's. #834.
+        if keeps:
+            Cast(world=world, me=me, ref="drivers:keeps").mark(
+                on=foe, keeps=True)
         before = world.relations.holds(Relation.MARKED_BY, me, foe)
         # a fresh turn of the MARKER's, so the lay-turn guard is past
         world.bus.emit(TurnStart(actor=me, round=world.round + 1))
@@ -15971,10 +15980,11 @@ def a_mark_that_lapses(out: Result) -> None:
         swung = any(
             isinstance(e, AttackDeclared) and getattr(e, "attacker", None) == me
             for e in world.bus.log)
-        return before, after, hit, swung
+        announced = any(type(e).__name__ == "MarkHeld" for e in world.bus.log)
+        return before, after, hit, swung, announced
 
     # -- the floor: the probe can actually swing on this board -----------
-    _b, _a, hit, swung = run(True, True)
+    _b, _a, hit, swung, _ann = run(True, True)
     out.that(hit and swung,
              "the probe's basic attack lands at all -- the floor, and"
              " without it the 'it swung' arm is indistinguishable from the"
@@ -15988,7 +15998,7 @@ def a_mark_that_lapses(out: Result) -> None:
         (False, True): True,    # no lapse, swung -> it stays
     }
     for (lapses, swing), want in WANT.items():
-        before, after, _hit, _swung = run(lapses, swing)
+        before, after, _hit, _swung, _ann = run(lapses, swing)
         out.that(before, f"lapses={lapses} swing={swing}: the mark is laid")
         why = ""
         if (lapses, swing) == (True, False):
@@ -16015,24 +16025,65 @@ def a_mark_that_lapses(out: Result) -> None:
     # engage the target, meaning you neither attacked it during your turn
     # nor are adjacent to it at the end of your turn." `p805` prints this
     # and is the only row in the tree that does.
-    _b, stayed_near, _h, _s = run(True, False, or_adjacent=True, near=True)
+    _b, stayed_near, _h, _s, _ann = run(True, False, or_adjacent=True, near=True)
     out.that(stayed_near,
              "`or_adjacent`: standing next to it **is** engaging it, so a"
              " turn with no swing keeps the mark -- the half the attack-only"
              " test gets wrong",
              f"marked afterwards: {stayed_near}")
 
-    _b, went_far, _h, _s = run(True, False, or_adjacent=True, near=False)
+    _b, went_far, _h, _s, _ann = run(True, False, or_adjacent=True, near=False)
     out.that(not went_far,
              "and walking away still drops it -- without this the parameter"
              " would be a mark that never lapses, which is the bug it was"
              " added to fix rather than a fix for it",
              f"marked afterwards: {went_far}")
 
+    # -- #834: the printed exception, over a lapse that is armed -----------
+    #
+    # `i2762p1`: "your divine challenge remains in effect ... even if it
+    # would normally end". For its whole life this row was approximately
+    # right **by omission** -- `p805` armed no lapse, so nothing had to be
+    # suppressed -- which is the most dangerous shape a correct-looking row
+    # can have. #859 armed the lapse; this is the cell that now exists.
+    #
+    # The negative is the `(True, False)` row of `WANT` above: same board,
+    # same spared turn, no exception, and the mark goes. So the pair differs
+    # in exactly the one thing under test.
+    _b, held, _h, _s, announced = run(True, False, keeps=True)
+    out.that(held,
+             "`keeps`: a lapse is armed and the turn passed without engaging,"
+             " and the mark **stays** -- which is the printed exception. The"
+             " `(True, False)` cell above is the same board without it and"
+             " the mark goes, so this is not the flag merely being absent",
+             f"marked afterwards: {held}")
+    out.that(announced,
+             "and holding it is **announced** (`MarkHeld`), because adopting"
+             " a standing effect applies nothing -- so with no event a row"
+             " whose whole clause is the exception audits silent while being"
+             " correct, which is how `c.add_target` hid",
+             "no MarkHeld on the bus")
+
+    # One effect, not two. Re-marking instead of adopting would leave
+    # `p805`'s lapse watcher closed over a superseded effect and able to end
+    # the relation the new one established -- a mark that drops a round
+    # later, which no assertion about the flag would catch.
+    world, me, _armed = _posed(MEDIUM, 1)
+    foe = sorted(enemies(world, me))[0]
+    lay = Cast(world=world, me=me, ref="drivers:lapse")
+    first = lay.mark(on=foe, until=When.ENCOUNTER, lapses=True)
+    again = Cast(world=world, me=me, ref="drivers:keeps").mark(
+        on=foe, keeps=True)
+    out.that(first is not None and again is first,
+             "`keeps` **adopts** the standing mark rather than laying a"
+             " second, so there is one effect, one watcher and one relation",
+             f"laid id={getattr(first, 'id', None)},"
+             f" returned id={getattr(again, 'id', None)}")
+
     # The control that separates the two modes. Adjacent and no swing:
     # plain `lapses=True` must STILL end the mark, or `or_adjacent` is
     # indistinguishable from it and every assertion above passes either way.
-    _b, plain_near, _h, _s = run(True, False, or_adjacent=False, near=True)
+    _b, plain_near, _h, _s, _ann = run(True, False, or_adjacent=False, near=True)
     out.that(not plain_near,
              "**and plain `lapses=True` drops it even while adjacent** --"
              " the control, since `p16374` prints the attack-only test and"

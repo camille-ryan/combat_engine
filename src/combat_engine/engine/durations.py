@@ -846,6 +846,36 @@ class Effects:
                 return eff
         return None
 
+    def mark_by(self, who: int, marker: int) -> Effect | None:
+        """The live mark `marker` has on `who`, if any.
+
+        At most one, for the same reason `stance_of` returns one:
+        `Relation.MARKED_BY` allows a creature a single marker.
+
+        Here rather than in a row, because a row that wants to *hold* a mark
+        would otherwise hand-roll this relation walk -- and a read
+        hand-written in several files is the bug, not the rows. `stance_of`
+        above is the shape. #834.
+        """
+        # **The newest, not the first found.** More than one mark effect can
+        # be live at once -- the relation allows a single marker but the
+        # effects stack, and a board that arms traits has one standing
+        # before any row runs. Adopting the older one set the exception on
+        # an effect the lapse was not armed on, so the lapse still fired and
+        # the mark still dropped: correct-looking and useless.
+        # `drivers.mark_lapses` caught it by asserting which effect came
+        # back rather than only the outcome.
+        found: Effect | None = None
+        for eff in self.live.values():
+            if (
+                eff.owner == who
+                and (found is None or eff.id > found.id)
+                and any(rel is Relation.MARKED_BY and src == marker and dst == who
+                        for rel, src, dst in eff.relations)
+            ):
+                found = eff
+        return found
+
     def sustaining(self, source: int) -> list[Effect]:
         """What this creature is keeping going, and would lose by not.
 
