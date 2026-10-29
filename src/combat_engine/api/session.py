@@ -65,7 +65,13 @@ class Turnstile:
     """Runs one action on a worker thread, stopping when it needs an answer."""
 
     def __init__(self) -> None:
-        self._answers: queue.Queue[int] = queue.Queue(maxsize=1)
+        # **`Any`, not `int`, so a caller can park on something that is not
+        # a choice from a list.** The engine's `decide` picks an option by
+        # index and always will; the story loop's `ask_human` wants a line
+        # of typed text. One queue serves both because only one question is
+        # ever in flight. `answer` keeps its exact signature so the fight
+        # path is unchanged. #930's UI needs the second shape.
+        self._answers: queue.Queue[Any] = queue.Queue(maxsize=1)
         self._events: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
         self._thread: threading.Thread | None = None
         self.question: Question | None = None
@@ -116,6 +122,27 @@ class Turnstile:
         self._events.put(("ask", Question(kind, actor, prompt, list(options))))
         index = self._answers.get()
         return options[max(0, min(index, len(options) - 1))]
+
+    # -- the same machinery, for an answer that is not an index -------------
+
+    def ask_free(self, actor: int, kind: str, prompt: str) -> Any:
+        """Park for a typed answer rather than a choice from a list.
+
+        The story loop asks a person what their character *says*, which no
+        list of options can express. Everything else about the parking is
+        identical, which is why this shares `Turnstile` rather than
+        copying forty lines of threading beside it.
+        """
+        self._events.put(("ask", Question(kind, actor, prompt, [])))
+        return self._answers.get()
+
+    def answer_free(self, said: Any) -> None:
+        """Hand back a typed answer and let the worker carry on."""
+        if self.question is None:
+            return
+        self.question = None
+        self._answers.put(said)
+        self._pump()
 
 
 #: Which kind of option a clicked square resolves to, by the mode the page

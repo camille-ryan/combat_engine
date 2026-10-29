@@ -267,6 +267,9 @@ def main() -> int:
 
         _check_chargen(page, check, problems)
 
+        # Last, for the same reason chargen is late: it navigates away.
+        _check_story(page, check, problems)
+
         if args.shot:
             page.screenshot(path=args.shot, full_page=True)
             print(f"\n  screenshot: {args.shot}")
@@ -406,6 +409,80 @@ def _became(page, true_yet, timeout: int = 5000) -> bool:  # noqa: ANN001
     with contextlib.suppress(Exception):
         return bool(true_yet())
     return False
+
+
+def _check_story(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN001
+    """The story page: a campaign played over HTTP, and the line kinds.
+
+    **Driven with "no model" on**, which is the point of that setting
+    existing: an instrument that needs ollama goes red for the wrong
+    reason. The scripted director answers every call from canned text and
+    the loop, the rolls and the ending are the same code.
+
+    What this is really covering is #930. The server tags every line with
+    who wrote it and the page turns that into `line-<kind>`; nothing else
+    in the suite would notice if the tags stopped arriving, because the
+    JSON would still be perfectly correct and the page would just render
+    one grey wall.
+    """
+    before = len(problems)
+    # **Not `split("/index.html")`.** This runs after `_check_chargen`, so
+    # the browser is already on `chargen.html` and that split returns the
+    # whole URL -- the first version asked for `chargen.html/story.html`
+    # and waited twenty seconds for a page that does not exist.
+    page.goto(page.url.rsplit("/", 1)[0] + "/story.html")
+    page.wait_for_selector("#settings", timeout=20000)
+
+    # God mode and no-model, set through the settings panel rather than by
+    # poking localStorage -- the toggle being wired is half of what Camille
+    # asked for.
+    page.check("#opt-scripted")
+    page.check("#opt-god")
+    page.fill("#opt-seed", "4")
+    page.click("#start")
+    page.wait_for_selector(".line", timeout=30000)
+
+    # Play it through: answer when asked, continue when not.
+    #
+    # **Budgeted generously on purpose.** The page polls the server every
+    # 700ms and the worker is a thread, so between an answer and the next
+    # question the page shows neither control -- a tight loop sees that as
+    # "nothing to do" and runs out before the module does. The first
+    # version allowed 40 turns of 250ms and never reached the fight, so
+    # `roll` and `note` lines were simply missing rather than wrong.
+    for _ in range(200):
+        if page.locator("#over").is_visible():
+            break
+        if page.locator("#asking").is_visible():
+            page.fill("#speech", "I look around.")
+            page.click("#send")
+        elif page.locator("#advance").is_visible():
+            page.click("#advance")
+        page.wait_for_timeout(250)
+
+    check.that(page.locator("#over").is_visible(),
+               "the story page plays a module to its end")
+
+    kinds = {k for k in ("scene", "mine", "dm", "roll", "note")
+             if page.locator(f".line-{k}").count() > 0}
+    check.that(
+        {"scene", "mine", "dm", "roll"} <= kinds,
+        f"the page styles each kind of line separately: {sorted(kinds)}")
+
+    # **The god-mode banner has to be visible as a note**, not folded into
+    # the prose. `story/CLAUDE.md`: god mode says so, every time, and a run
+    # that looks played is the failure to avoid.
+    banner = page.locator(".line-note", has_text="GOD MODE")
+    check.that(banner.count() > 0,
+               "and a skipped fight says so, in a note the reader can see")
+
+    # The person's own line comes back as theirs, never restyled as the DM's.
+    mine = page.locator(".line-mine")
+    check.that(mine.count() > 0 and "I look around" in mine.first.inner_text(),
+               "the line the person typed is marked as theirs")
+
+    if len(problems) == before:
+        print("  story page ok")
 
 
 def _check_chargen(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN001

@@ -714,7 +714,7 @@ def step(
     choice: str = "", choose: Chooser | None = None, record: bool = True,
     director: beat_mod.Director | None = None,
     ask_human: beat_mod.AskHuman = beat_mod.silent,
-    narrate: Callable[[str], None] | None = None,
+    narrate: Callable[[Line], None] | None = None,
     god: bool = False,
 ) -> Step:
     """Play the scene the campaign is on and advance it.
