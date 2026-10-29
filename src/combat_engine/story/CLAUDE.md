@@ -815,6 +815,46 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## An extended rest is once per day, and the refusal is printed
+
+Nothing bounded it: a campaign of three consecutive extended-rest scenes
+took all three, in silence. The printed rule is a lockout —
+
+> *After you finish an extended rest, you have to wait 12 hours before you
+> can begin another one.*
+
+— and **scenes are what we have, not hours.** `Campaign.clock` is
+deliberately not a real clock, so `_already_rested` asks the coarser
+question the issue proposed: has an extended rest happened with *nothing
+since*?
+
+Four calls:
+
+* **A short rest does not launder one.** The walk steps past a short rest
+  rather than stopping at it — the lockout is twelve hours and a short rest
+  is five minutes.
+* **A refused extended rest is still a short rest.** The page stops another
+  extended rest *beginning* and says nothing against five minutes, so
+  giving the party nothing would invent a harsher rule than the book.
+  Refusing outright is the other defensible reading; what is not defensible
+  is doing it silently.
+* **Derived from `visited`, not counted into a field.** One source of truth,
+  and no second number to keep in step.
+* **The refusal does not print the benefit it declined to give**, which was
+  a real bug in the first draft — the unconditional line underneath said
+  "Extended rest: everything back" directly below the refusal.
+
+**The assertion that matters is not the refusal.** An extended rest resets
+the milestone counter, so an unbounded one lets a party reset it at will and
+`c.milestone()` is 0 for ever — quietly undoing #968. A driver that only
+checked for the printed note would not have seen it.
+
+Still not modelled, both from the same pages and both needing a real clock:
+**sleep gating the benefit** (*"if you haven't slept at least 6 hours in the
+last 24, you gain no benefit"*), which is the printed mechanism for denying
+a rest that #979's pacing wants; and **a short rest renewing a power used
+during it**, which is only reachable once something can act in a rest scene.
+
 ## A scene can happen on the clock, unless the party stopped it
 
 `Scene.exits` could only say "when this scene ends", so nothing could
@@ -1005,11 +1045,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     summary_scenes boxed_text graph_furniture graph_administration \
     recall_order borrowed_board party_size_rule challenge_progresses \
     line_kinds objective_verdict objective_budget scene_grant \
-    story_milestones timeline
+    story_milestones timeline rest_lockout
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 24 drivers and prints 228 assertions**, and **each was
+**The command above is 25 drivers and prints 235 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

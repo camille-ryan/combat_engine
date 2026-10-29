@@ -795,6 +795,43 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
     step.outcome = "won" if run.won else "lost"
 
 
+def _already_rested(campaign: Campaign, module: Module) -> bool:
+    """Has an extended rest happened with nothing since? #993.
+
+    An extended rest is **once per day** with a printed lockout -- *"After
+    you finish an extended rest, you have to wait 12 hours before you can
+    begin another one"* -- and nothing bounded it, so a campaign of three
+    consecutive rest scenes took all three in silence.
+
+    **Scenes, not hours.** `Campaign.clock` counts scenes played and rests
+    taken and is deliberately not a real clock (#965), so the literal
+    twelve hours cannot be expressed. This is the coarser rule the issue
+    proposed instead: a second extended rest waits until *something has
+    happened*. It catches the only shape a module is likely to produce and
+    it is what keeps the milestone counter from being reset at will.
+
+    **A short rest does not unlock one**, which is why this walks past a
+    `rest` scene rather than stopping at it: a short rest is five minutes
+    and the lockout is twelve hours, so a party cannot launder an extended
+    rest through one.
+
+    Derived from `visited` rather than counted into a field. There is
+    exactly one source of truth that way, and the alternative -- a
+    `since_rest` counter -- is another number to keep in step with the
+    thing it describes.
+    """
+    for scene_id in reversed(campaign.visited):
+        scene = module.scenes.get(scene_id)
+        if scene is None:
+            continue
+        if scene.kind == "rest":
+            if scene.extended:
+                return True
+            continue
+        return False
+    return False
+
+
 def _due(campaign: Campaign, module: Module, made: Step) -> str:
     """The timeline scene that fires now, or `""`. #965.
 
@@ -889,8 +926,23 @@ def step(
     elif scene.kind == "skill_challenge":
         _challenge(campaign, module, scene, made, choose)
     elif scene.kind == "rest":
-        campaign.party.rest(extended=scene.extended)
-        if scene.extended:
+        # **An extended rest the lockout refuses becomes a short one, and
+        # says so.** The printed rule stops another extended rest beginning;
+        # it says nothing against the five minutes of a short one, and a
+        # party that stopped to rest getting *nothing* would be inventing a
+        # harsher rule than the page. Refusing outright is the other
+        # defensible reading -- what is not defensible is doing it silently,
+        # which is how three rests in a row passed unremarked. #993.
+        refused = scene.extended and _already_rested(campaign, module)
+        campaign.party.rest(extended=scene.extended and not refused)
+        if refused:
+            made.say(
+                "Refused: an extended rest is once per day and the party "
+                "has had one with nothing since, so this is a short rest "
+                "-- encounter powers back, surges spent to heal.",
+                "note",
+            )
+        elif scene.extended:
             # **The reset, which is the half that makes the counter mean
             # anything.** The printed rule counts encounters *between*
             # extended rests, and `Party.rest` already drops unspent action
@@ -902,12 +954,16 @@ def step(
             #: rather than derived from `visited`, because deriving it would
             #: need the module to ask which of those scenes were extended.
             campaign.rests += 1
-        made.say(
-            "Extended rest: everything back."
-            if scene.extended
-            else "Short rest: encounter powers back, surges spent to heal.",
-            "note",
-        )
+        if not refused:
+            # The refusal note above already says what the party got, so
+            # this would otherwise print "Extended rest: everything back"
+            # directly underneath a line saying they did not get one.
+            made.say(
+                "Extended rest: everything back."
+                if scene.extended
+                else "Short rest: encounter powers back, surges spent to heal.",
+                "note",
+            )
 
     # **Count the encounter and pay the milestone, after the scene played.**
     # Weighted by the printed rule rather than flat -- see

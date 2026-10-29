@@ -42106,6 +42106,131 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def an_extended_rest_is_once_per_day_and_a_refusal_is_printed(
+    out: Result,
+) -> None:
+    """The printed lockout, which nothing bounded:
+
+    > *Once per Day: After you finish an extended rest, you have to wait 12
+    > hours before you can begin another one.*
+
+    Measured on #993: a campaign of three consecutive extended-rest scenes
+    took all three, with no refusal and no note.
+
+    **Scenes, not hours**, because `Campaign.clock` is deliberately not a
+    real clock (#965) -- a second extended rest waits until something has
+    happened rather than until twelve hours have.
+
+    The assertion that matters is not the refusal itself, it is the fourth
+    one: an extended rest resets the milestone counter (#968), so an
+    unbounded one lets a party reset it at will and `c.milestone()` is 0
+    for ever. That is the exposure the issue was filed about, and a driver
+    that only checked for the note would not see it.
+
+    The `launder` case is the other one worth having: a **short** rest must
+    not unlock an extended one, because the lockout is twelve hours and a
+    short rest is five minutes.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def rest(i: int, nxt: str, *, extended: bool = True) -> dict:
+        return {"id": f"r{i}", "kind": "rest", "name": f"R{i}",
+                "exits": [nxt] if nxt else [], "extended": extended}
+
+    def fight(at: str, nxt: str) -> dict:
+        return {"id": at, "kind": "combat", "name": at.upper(),
+                "exits": [nxt] if nxt else [], "difficulty": "easy",
+                "foes": [{"count": 1, "role": "soldier", "rank": "standard"}]}
+
+    def walk(scenes: list[dict],
+             start: str = "r1") -> tuple[save_mod.Campaign, list[str]]:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": start, "scenes": scenes}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=3)
+        said: list[str] = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, built, record=False, god=True)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+        return campaign, said
+
+    def refusals(said: list[str]) -> int:
+        return sum(1 for n in said if "Refused: an extended rest" in n)
+
+    # -- the control: one extended rest is an extended rest ----------------
+    one, said = walk([rest(1, "")])
+    out.that(
+        one.rests == 1 and not refusals(said)
+        and any("Extended rest" in n for n in said),
+        "a party that has not rested gets the extended rest it asked for",
+        f"rests={one.rests}, refusals={refusals(said)}",
+    )
+
+    # -- three in a row: one rest, two refusals ----------------------------
+    three, said = walk([rest(1, "r2"), rest(2, "r3"), rest(3, "")])
+    out.that(
+        three.rests == 1,
+        "three extended rests in a row are one extended rest, which is "
+        "what the printed lockout says",
+        f"rests={three.rests}",
+    )
+    out.that(
+        refusals(said) == 2,
+        "and the two that were refused say so rather than passing in "
+        "silence, which is how this went unnoticed",
+        f"{refusals(said)} refusal(s) in {said}",
+    )
+
+    # -- the consequence that matters: the counter is not reset ------------
+    reset = [fight("f1", "f2"), fight("f2", "r1"), rest(1, "r2"), rest(2, "")]
+    counted, _ = walk(reset, start="f1")
+    out.that(
+        counted.encounters == 0 and counted.rests == 1,
+        "the extended rest that was allowed resets the encounter count, "
+        "as #968 requires",
+        f"encounters={counted.encounters}, rests={counted.rests}",
+    )
+    held = [fight("f1", "f2"), fight("f2", "r1"), rest(1, "f3"),
+            fight("f3", "r2"), rest(2, "")]
+    kept, _ = walk(held, start="f1")
+    out.that(
+        kept.rests == 2,
+        "and a fight between two rests makes the second one real, so the "
+        "lockout gates on something happening rather than on a scene count",
+        f"rests={kept.rests}",
+    )
+
+    # -- a short rest does not launder an extended one ---------------------
+    launder = [rest(1, "r2"), rest(2, "r3", extended=False), rest(3, "")]
+    washed, said = walk(launder)
+    out.that(
+        washed.rests == 1 and refusals(said) == 1,
+        "a short rest in between does not unlock a second extended rest -- "
+        "the lockout is twelve hours and a short rest is five minutes",
+        f"rests={washed.rests}, refusals={refusals(said)}",
+    )
+
+    # -- a refusal does not also claim everything came back ----------------
+    # Counted against the three-in-a-row run: one rest was granted and two
+    # refused, so exactly one line may say everything came back. The first
+    # draft of this assertion was an `or` that passed whatever happened,
+    # which is worth recording -- an assertion that cannot fail is the
+    # same fault as a check that cannot pass.
+    _, said_three = walk([rest(1, "r2"), rest(2, "r3"), rest(3, "")])
+    out.that(
+        sum(1 for n in said_three
+            if "Extended rest: everything back." in n) == 1,
+        "exactly one line says everything came back -- a refused rest does "
+        "not print the benefit it just declined to give",
+        f"{[n for n in said_three if 'everything back' in n]}",
+    )
+
+
 def an_event_on_the_clock_fires_unless_the_party_prevented_it(
     out: Result,
 ) -> None:
@@ -42758,6 +42883,10 @@ DRIVERS = {
     # silently by the *last* writer -- so the first registration of this ran
     # the other driver and reported 21 green assertions that had nothing to
     # do with it.
+    "rest_lockout": (
+        an_extended_rest_is_once_per_day_and_a_refusal_is_printed,
+        "an extended rest is once per day and a refusal is printed (#993)",
+    ),
     "timeline": (
         an_event_on_the_clock_fires_unless_the_party_prevented_it,
         "an event fires on the clock unless the party prevented it (#965)",
