@@ -928,8 +928,13 @@ def f3583(c: Cast) -> None:
     and it does fire -- but #812 added the half this row never saw: a
     skipped section **that carries sub-marks is deferred**, and the caller
     re-emits it after every section at an ordinal above the class's
-    maximum. Hence `f21` rather than `f9`, which is route (2)'s stated
-    price -- "the ref order stops matching the printed order for these 94".
+    maximum. Hence ordinal 21 rather than ordinal 9, which is route (2)'s
+    stated price -- "the ref order stops matching the printed order for
+    these 94". Written out in words rather than backticked, because
+    `scripts/refs.py` reads a backticked f-number in prose as a *feat* ref
+    and that one resolves to nothing -- the first spelling of this note
+    turned that instrument red, and the second did it again inside the
+    sentence explaining the first.
 
     Measured on the rebuilt database rather than inferred: 3 sub-options
     under each build, named as the page prints them.
