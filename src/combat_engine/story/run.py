@@ -41,6 +41,7 @@ from pathlib import Path
 from random import Random
 
 from combat_engine.engine import Ident, Side, Team
+from combat_engine.engine.components import Condition, Conditions
 from combat_engine.engine.ecs import World
 from combat_engine.engine.query import alive
 from combat_engine.engine.turns import Encounter
@@ -53,7 +54,7 @@ from . import table as table_mod
 from .cast_list import resolve
 from .challenge import Chooser
 from .challenge import play as play_challenge
-from .module import Module, Scene
+from .module import CAUGHT, Module, Scene
 from .objective import watcher
 from .reflavour import apply as apply_flavour
 from .save import Campaign
@@ -96,6 +97,7 @@ def record_scene(campaign: Campaign, made: Step) -> str:
         "clean": made.clean,
         "next": made.next_id,
         "rounds": made.rounds,
+        "surprised": made.surprised,
         "enemies": made.enemies,
         "transcript": made.transcript,
         "notes": made.notes,
@@ -172,6 +174,16 @@ class Step:
     #: yet spent: the thing that would pay for it is the XP award, which does
     #: not exist (#967). Here now so that award has something to read.
     clean: bool = False
+    #: How many of the opposition **actually carried SURPRISED** after
+    #: `start`, counted off the board rather than from the list handed to
+    #: it.
+    #:
+    #: **Recorded because the effect is otherwise unobservable**, which is
+    #: this component's own rule: the condition lives on a board that does
+    #: not outlive the fight, and all four readiness states finished the
+    #: fixture fight in the same number of rounds -- so a driver asserting
+    #: on the outcome could not tell a surprise round from none. #945.
+    surprised: int = 0
     #: Where the blow-by-blow went, for a combat scene. Empty otherwise.
     transcript: str = ""
     #: The beats, for a roleplay scene that had any. Empty otherwise.
@@ -466,7 +478,39 @@ def _fight(
             "milestone trait is live this fight.",
             "note",
         )
-    encounter.start()
+    # **Who did not see the party coming.** The engine has had the surprise
+    # round since `Encounter.start(surprised=)` -- `Condition.SURPRISED`
+    # grants combat advantage and stops the creature acting -- and nothing
+    # in `story/` or `api/` had ever passed it, so every campaign fight
+    # began with both sides equally ready and a module could not say
+    # otherwise. The adventure's own read-aloud describes a creature dozing
+    # by a fire. #945.
+    #
+    # **A free round is a real swing in a fight the budget sized for a fair
+    # start**, so it is printed rather than applied quietly: this is a
+    # balance lever as much as a narrative one.
+    caught = (
+        [eid for eid in _enemy_eids(world)]
+        if scene.readiness in CAUGHT else []
+    )
+    encounter.start(surprised=caught)
+    # **Counted off the board after `start`, not from the list before it.**
+    # Recording `len(caught)` was recording what this function *meant* to
+    # do: a plant that computed the list and then called `start()` with no
+    # argument left the count at 3 and every assertion green. So this asks
+    # the creatures, which is the only version that can tell an intention
+    # from an effect. #945.
+    step.surprised = sum(
+        1 for eid in caught
+        if (held := world.get(eid, Conditions)) is not None
+        and held.has(Condition.SURPRISED)
+    )
+    if step.surprised:
+        step.say(
+            f"The opposition is {scene.readiness}: {step.surprised} "
+            "creature(s) are surprised and lose the first round.",
+            "note",
+        )
     while not encounter.finished and world.round <= MAX_ROUNDS:
         if watch is not None and watch.resolved:
             # **The third exit from the loop.** A fight has always ended when

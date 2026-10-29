@@ -42106,6 +42106,137 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_module_can_say_the_opposition_did_not_see_the_party_coming(
+    out: Result,
+) -> None:
+    """The engine has had the surprise round since `Encounter.start(
+    surprised=)`, and **nothing in `story/` or `api/` ever passed it** -- so
+    every campaign fight began with both sides equally ready and a module
+    could not say otherwise, while the converted adventure's own read-aloud
+    describes a creature dozing by a fire.
+
+    `Scene.readiness` takes the DMG's four states. The two in the middle
+    hand the party a surprise round; `ready` is the default and `alert` is
+    accepted and does nothing yet, which is asserted rather than assumed so
+    nobody reads it as working.
+
+    **The Stealth contest is skipped on purpose** -- the module states the
+    state, because a converted adventure states it in prose rather than
+    asking the DM to roll. So the printed Perception modifiers that only
+    feed that contest are deliberately absent, and this asserts their
+    absence: a modifier nothing consults is this project's commonest bug.
+
+    The chain is asserted end to end, because the middle of it is
+    invisible: all four states finished the fixture fight in the **same
+    number of rounds**, so an assertion on the outcome could not tell a
+    surprise round from none. `Step.surprised` is the record, and the last
+    assertion here closes the loop by taking the engine seam directly --
+    scene word, to list, to `start()`, to the condition on the creature.
+    """
+    from pathlib import Path
+
+    from combat_engine import story
+    from combat_engine.engine import Side, Team
+    from combat_engine.engine.components import Condition, Conditions
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    def play(readiness: str | None) -> run_mod.Step:
+        scene: dict = {
+            "id": "room", "kind": "combat", "name": "R", "exits": [],
+            "difficulty": "standard",
+            "foes": [{"count": 3, "role": "soldier", "rank": "standard"}],
+        }
+        if readiness is not None:
+            scene["readiness"] = readiness
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "room", "scenes": [scene]}, Path("<driver>"))
+        return run_mod.step(run_mod.begin(built, seed=11), built, record=False)
+
+    def said(step: run_mod.Step) -> list[str]:
+        return [str(x) for x in step.lines
+                if getattr(x, "kind", "") == "note" and "surprised" in x]
+
+    # -- the control: a module that says nothing is unchanged --------------
+    bare = play(None)
+    out.that(
+        bare.surprised == 0 and not said(bare),
+        "a scene that does not state its readiness surprises nobody, so "
+        "every module written before this plays as it did",
+        f"surprised={bare.surprised}, {said(bare)}",
+    )
+    out.that(
+        play("ready").surprised == 0,
+        "and `ready` -- the state the book says most monsters are in -- is "
+        "the same as saying nothing",
+        f"{play('ready').surprised}",
+    )
+
+    # -- the two that cost the defenders a round ---------------------------
+    for word in ("asleep", "distracted"):
+        got = play(word)
+        out.that(
+            got.surprised == 3 and said(got),
+            f"`{word}` surprises the whole opposition and prints that it "
+            "did, because a free round is a balance swing in a fight the "
+            "budget sized for a fair start",
+            f"surprised={got.surprised}, {said(got)}",
+        )
+
+    # -- alert is accepted and does nothing, which is said out loud --------
+    out.that(
+        play("alert").surprised == 0,
+        "`alert` is accepted and surprises nobody -- its printed effects "
+        "have no mechanism here, and silently treating it as `ready` is "
+        "what the constant's own note admits to",
+        f"{play('alert').surprised}",
+    )
+
+    # -- a word outside the four is refused at validation ------------------
+    try:
+        play("dozing")
+        refused = ""
+    except mod.ModuleError as exc:
+        refused = str(exc)
+    out.that(
+        "is not one of" in refused,
+        "a readiness the book does not print is refused by `--validate`, "
+        "rather than quietly meaning `ready`",
+        refused[:110] or "it was accepted",
+    )
+
+    # -- the Perception modifiers are deliberately absent ------------------
+    scene = mod.Scene(id="x", kind="combat", readiness="asleep")
+    out.that(
+        not hasattr(scene, "perception"),
+        "and no Perception modifier is carried, because the only thing "
+        "that would read one is the Stealth contest this skips",
+        f"{sorted(f for f in scene.__dataclass_fields__ if 'percep' in f)}",
+    )
+
+    # -- the chain's far end: the condition really lands --------------------
+    # Scene word -> list -> `start(surprised=)` -> the creature. The middle
+    # is what `Step.surprised` records; this is the end of it, taken at the
+    # engine seam so the whole claim is covered rather than its first half.
+    fielded = story.field_encounter(7, 2)
+    foes = [eid for eid, side in fielded.world.each(Side)
+            if side.team is Team.ENEMY]
+    Encounter(fielded.world).start(surprised=foes)
+    carried = [
+        eid for eid in foes
+        if (cond := fielded.world.get(eid, Conditions)) is not None
+        and cond.has(Condition.SURPRISED)
+    ]
+    out.that(
+        len(carried) == len(foes) and foes,
+        "a creature handed to `start(surprised=)` carries SURPRISED, which "
+        "is the far end of the chain `Step.surprised` records the middle of",
+        f"{len(carried)} of {len(foes)}",
+    )
+
+
 def the_dm_is_told_how_narrowly_a_check_went_and_never_the_numbers(
     out: Result,
 ) -> None:
@@ -43281,6 +43412,10 @@ DRIVERS = {
     # silently by the *last* writer -- so the first registration of this ran
     # the other driver and reported 21 green assertions that had nothing to
     # do with it.
+    "readiness": (
+        a_module_can_say_the_opposition_did_not_see_the_party_coming,
+        "a module can say the opposition did not see the party coming (#945)",
+    ),
     "roll_margin": (
         the_dm_is_told_how_narrowly_a_check_went_and_never_the_numbers,
         "the DM is told how narrowly a check went and never the numbers "

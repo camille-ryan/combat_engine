@@ -156,6 +156,28 @@ class FoeSpec:
     rank: str = "standard"
 
 
+#: How ready the opposition is when the party arrives. The DMG's four
+#: monster-readiness states, and the two in the middle are the ones with a
+#: consequence here: asleep or distracted and the defenders are **surprised**,
+#: which is a free round for the party.
+#:
+#: **The Stealth contest is deliberately skipped.** The book offers it as the
+#: fuller version -- the party member with the lowest Stealth rolls once for
+#: the group, against passive Perception -- but a converted adventure *states*
+#: in its prose that a creature is dozing by a fire rather than asking the DM
+#: to roll for it. So the module says, and the printed modifiers that only
+#: feed that contest (-5 asleep, -2 distracted) are **not** carried: a
+#: modifier nothing consults is this project's commonest bug.
+#:
+#: `alert` is accepted and does nothing yet, which is said out loud rather
+#: than implied -- its printed effects are active Perception each round,
+#: prepared defences and the best positions, and none of those has a
+#: mechanism here. #945.
+READINESS = ("ready", "asleep", "distracted", "alert")
+
+#: The states that hand the party a surprise round.
+CAUGHT = ("asleep", "distracted")
+
 #: What a timeline entry counts in. Scenes played and extended rests taken
 #: are the two units the book's own examples use -- *"a festival day"*, *"the
 #: night of the full moon"* -- and a tick per scene transition is the coarsest
@@ -489,6 +511,9 @@ class Scene:
     terrain: tuple[str, ...] = ()
     foes: tuple[FoeSpec, ...] = ()
     tactics: str = ""
+    #: How ready the opposition is -- see `READINESS`. `asleep` or
+    #: `distracted` gives the party a surprise round.
+    readiness: str = "ready"
     #: What the fight is *for*, when it is for something other than killing
     #: everything. `None` is the overwhelming majority and means the scene is
     #: fielded, played and judged exactly as it was before objectives existed
@@ -993,6 +1018,13 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     if not isinstance(beats, int) or beats < 1:
         problems.append(f"{where}: max_beats must be a positive integer")
         beats = MAX_BEATS
+    readiness = str(raw.get("readiness", "ready")).strip().lower() or "ready"
+    if readiness not in READINESS:
+        problems.append(
+            f"{where}: readiness {readiness!r} is not one of "
+            f"{', '.join(READINESS)}"
+        )
+        readiness = "ready"
     objective = _as_objective(raw.get("objective"), where, problems)
     grants = tuple(
         g for g in (
@@ -1009,11 +1041,12 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     # Both read exactly like a scene that works, which is why they are refused.
     unused = {
         "roleplay": ("foes", "terrain", "complexity", "primary", "secondary",
-                     "objective"),
-        "skill_challenge": ("foes", "terrain", "affordances", "objective"),
+                     "objective", "readiness"),
+        "skill_challenge": ("foes", "terrain", "affordances", "objective",
+                            "readiness"),
         "combat": ("complexity", "primary", "secondary", "affordances"),
         "rest": ("foes", "terrain", "complexity", "primary", "secondary",
-                 "affordances", "npcs", "lore", "objective"),
+                 "affordances", "npcs", "lore", "objective", "readiness"),
     }[kind]
     for name in unused:
         if raw.get(name):
@@ -1036,6 +1069,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         terrain=terrain,
         foes=foes,
         tactics=str(raw.get("tactics", "")),
+        readiness=readiness,
         objective=objective,
         complexity=complexity,
         level=int(raw.get("level", 0) or 0),

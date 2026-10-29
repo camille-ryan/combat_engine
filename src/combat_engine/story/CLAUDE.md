@@ -815,6 +815,43 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## A module can say the opposition did not see the party coming
+
+The engine has had the surprise round since `Encounter.start(surprised=)`,
+and **nothing in `story/` or `api/` ever passed it** — so every campaign
+fight began with both sides equally ready while the converted adventure's
+own read-aloud describes a creature dozing by a fire.
+
+`Scene.readiness` takes the DMG's four states. `asleep` and `distracted`
+surprise the defenders; `ready` is the default; `alert` is accepted and
+**does nothing yet**, which is asserted rather than implied.
+
+Three calls:
+
+* **The Stealth contest is skipped.** The module states the state, because
+  a converted adventure states it in prose rather than asking the DM to
+  roll. So the printed Perception modifiers that only feed that contest
+  are not carried, and a driver asserts their *absence* — a modifier
+  nothing consults is this component's commonest bug.
+* **A free round is a balance lever**, not just flavour, in a fight the XP
+  budget sized for a fair start. So it is printed.
+* **`Step.surprised` counts off the board after `start`**, never from the
+  list handed to it.
+
+### The plant that proved the last one necessary
+
+`Step.surprised` first recorded `len(caught)` — what `_fight` *intended* —
+and the driver's far-end assertion built its **own** encounter to check
+`start(surprised=)` applies the condition. Both passed, and a plant that
+computed the list and then called `start()` with no argument **stayed
+green**: the one link the design rests on was the one nothing covered.
+
+Counting the creatures that actually carry `SURPRISED` is the version that
+can tell an intention from an effect. The general form, since this has now
+happened three times in a day: *an assertion written from the passing case
+tends to cover the passing case.* The plant is what says whether it was
+ever load-bearing.
+
 ## The DM is told how narrowly a check went, never the numbers
 
 The DMG names this failure and prints our own output as its example —
@@ -1155,11 +1192,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     recall_order borrowed_board party_size_rule challenge_progresses \
     line_kinds objective_verdict objective_budget scene_grant \
     story_milestones timeline rest_lockout stays_cleared \
-    budget_ceiling roll_margin
+    budget_ceiling roll_margin readiness
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 28 drivers and prints 263 assertions**, and **each was
+**The command above is 29 drivers and prints 271 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
