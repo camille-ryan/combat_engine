@@ -3931,12 +3931,18 @@ _SUB_OPTION = re.compile(r"rt:r\d+-s\d+|cf:[a-z0-9-]+-f\d+(?:c\d+)?s\d+")
 #: `bones`, `arcs`, `bolts`, `preserver's`: the dictionary holds the
 #: singular. Stemming fixes those and leaves the two that matter:
 #:
-#:     `i270`      6 swaps, from *"you can wield ki focuses"* -- the
-#:                 implement **category**, which is also one item's printed
-#:                 name. The `i192` "holy symbol" shape from `#340`.
-#:     `m4616a0`   3 swaps, from *"the target gains regeneration 10"* -- a
-#:                 mechanic with a value, where the untrusted token is the
-#:                 number.
+#:     `i270`      6 swaps, from feats saying a character may wield that
+#:                 **class of implement** -- in the plural, and the phrase
+#:                 is the category rather than the one item that shares its
+#:                 printed name. The `i192` shape from `#340`.
+#:     `m4616a0`   3 swaps, from rows granting that **mechanic with a
+#:                 value** -- the untrusted token is the number, and the
+#:                 phrase is the rule rather than one creature's ability.
+#:
+#: Both described rather than quoted, because quoting either prints the name
+#: of a ref this note also cites and `leaks.py --cited` reds on exactly
+#: that -- correctly, and it caught me here. Third time in one session that
+#: the prose explaining the names rule was where I broke it.
 #:
 #: So 2 of 12, and the discriminator is not in the words -- the same
 #: conclusion `#340` reached about its own two-word residual, by a different
