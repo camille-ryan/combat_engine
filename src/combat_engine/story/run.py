@@ -48,7 +48,16 @@ from combat_engine.engine.turns import Encounter
 from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
 
-from . import PARTY, PARTY_AT, Party, field_encounter, harvest, loot, tension
+from . import (
+    PARTY,
+    PARTY_AT,
+    Party,
+    arrival_squares,
+    field_encounter,
+    harvest,
+    loot,
+    tension,
+)
 from . import beat as beat_mod
 from . import formation as formation_mod
 from . import table as table_mod
@@ -202,6 +211,13 @@ class Step:
     #: fixture fight in the same number of rounds -- so a driver asserting
     #: on the outcome could not tell a surprise round from none. #945.
     surprised: int = 0
+    #: Creatures that walked on after the fight started, in arrival order.
+    #: **Not in `enemies`**, which is the opening board -- `cleared`
+    #: bookkeeping and the "Against:" line are both written against that,
+    #: and a reinforcement is neither. #962.
+    arrived: list[str] = field(default_factory=list)
+    #: The subset of `arrived` that earns XP, by the module's own rule.
+    arrived_worth: list[str] = field(default_factory=list)
     #: How the fight went, one phrase from `beat.FIGHTS`. Empty for any
     #: scene that is not a fight. #943.
     aftermath: str = ""
@@ -562,7 +578,25 @@ def _fight(
             "creature(s) are surprised and lose the first round.",
             "note",
         )
+    # **Reinforcements, at the top of each round.** A wave encounter
+    # imported as a flat cast with every arrival standing on the board at
+    # round 1, which is a different fight: the party faced the whole
+    # roster at once with no reason to hurry and no escalation. #962.
+    #
+    # Driven off `world.round` changing rather than a `RoundEnd`
+    # subscription, because round 1's arrivals have to be on the board
+    # *before* the first turn and there is no round boundary before it.
+    walked_on = 0
+    arrived_in: int | None = None
     while not encounter.finished and world.round <= MAX_ROUNDS:
+        if dressed.waves and arrived_in != world.round:
+            arrived_in = world.round
+            for ref, worth in reinforce(
+                    world, encounter, dressed.waves, world.round):
+                step.arrived.append(ref)
+                if worth:
+                    step.arrived_worth.append(ref)
+                walked_on += 1
         if watch is not None and watch.resolved:
             # **The third exit from the loop.** A fight has always ended when
             # a side was wiped or the round cap ran out; an objective with a
@@ -630,6 +664,12 @@ def _fight(
         ident = world.get(eid, Ident)
         shown.append(flavour.name or (ident.ref if ident else "?"))
     step.say(f"Against: {', '.join(shown)}", "note")
+    if step.arrived:
+        step.say(
+            f"Reinforcements: {len(step.arrived)} walked on after the fight "
+            f"started, {len(step.arrived_worth)} of them worth XP.",
+            "note",
+        )
     # **How it went, in one phrase from a closed set.** The fight reported
     # `Won in 4 rounds` and sent the blow-by-blow to a transcript nobody
     # reads during play, so a whole encounter of narration material went
@@ -1008,6 +1048,45 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
     step.outcome = "won" if run.won else "lost"
 
 
+def reinforce(
+    world: World, encounter: Encounter, waves: list, round_now: int,
+) -> list[tuple[str, bool]]:
+    """Walk every wave due this round onto the board. #962.
+
+    Returns `(ref, worth)` per creature that actually arrived, which is not
+    always every creature the wave names -- the module only lets them in
+    where there is room, and a full board turns an arrival away.
+
+    **Three things have to happen or an arrival is scenery.** `loader.spawn`
+    alone makes an entity that is not in the initiative order, so it stands
+    there and never acts -- the lesson `Cast.summon`'s docstring already
+    records. The flavour has to be applied or the module's own word for the
+    creature is lost on everything after round 1. And `join(beside=)` is
+    the module's *"act on the same turn as the others"*: given an existing
+    creature's slot the count is copied rather than rolled, so a wave does
+    not arrive in a different part of the round each time.
+
+    `beside` is the **first** enemy still in the order rather than any of
+    them, so the whole wave lands on one count and two creatures of the
+    same kind do not act half a round apart.
+    """
+    from combat_engine.content import loader
+
+    arrived: list[tuple[str, bool]] = []
+    due = [wave for wave in waves if wave.due(round_now)]
+    if not due:
+        return arrived
+    beside = next(iter(_enemy_eids(world)), None)
+    for wave in due:
+        squares = arrival_squares(world, len(wave.refs))
+        for ref, square in zip(wave.refs, squares, strict=False):
+            eid = loader.spawn(world, ref, square, team=Team.ENEMY)
+            apply_flavour(world, eid, wave.flavour)
+            encounter.join(eid, beside=beside)
+            arrived.append((ref, wave.worth))
+    return arrived
+
+
 def survivors(
     refs: list[str], flavours: list, cleared: dict[str, int],
 ) -> tuple[list[str], list, list[str]]:
@@ -1182,10 +1261,17 @@ def reward(campaign: Campaign, module: Module, scene: Scene,
     earned: list[xp_mod.Award] = []
 
     if scene.kind == "combat" and made.outcome == "won" and made.enemies:
-        total = xp_mod.for_creatures(made.enemies)
+        # **Reinforcements the module says are worth something, and only
+        # those.** The adventure states its own cutoff, counting only
+        # its earliest waves toward the reward, and that is what keeps a
+        # ten-round wave fight from being worth an arbitrary amount. #962.
+        fought = made.enemies + made.arrived_worth
+        total = xp_mod.for_creatures(fought)
         earned.append(xp_mod.Award(
             "encounter", each=0, total=total,
-            why=f"{len(made.enemies)} creatures overcome",
+            why=f"{len(fought)} creatures overcome"
+                + (f", {len(made.arrived_worth)} of them reinforcements"
+                   if made.arrived_worth else ""),
         ))
     elif scene.kind == "skill_challenge" and made.outcome == "won":
         # **A lost challenge pays nothing, which is a reading and not a

@@ -42106,6 +42106,362 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def reinforcements_arrive_on_their_round_and_not_at_the_start(out: Result) -> None:
+    """A wave encounter fielded all ten rounds of reinforcements at once. #962.
+
+    `cast_list.resolve` returned a flat cast and `story.field` spawned all
+    of it before round 1. A `FoeSpec` had `count`, `name`, `words`, `role`
+    and `rank` -- nothing that said *when*.
+
+    The module prints one, with its own XP rule attached: a few more
+    arrive every round until a landmark is destroyed or a round cap runs
+    out, and only its earliest waves count toward the reward. Imported
+    flat, that is **a different fight** --
+    the party faces the whole roster at once with no reason to hurry and no
+    escalation.
+
+    DMG2 makes the staged reveal the *default* advice rather than an exotic
+    case: *"Reveal minions in stages -- maybe two are visible at the start
+    of the encounter, another one runs in during the second round, and the
+    rest come up behind the characters in the next round."*
+
+    **Three things have to be true or an arrival is scenery**, and each has
+    an assertion: it has to be on the board, it has to be **in the
+    initiative order**, and it has to act on the same count as the
+    creatures already there rather than rolling its own.
+    """
+    from pathlib import Path
+    from random import Random
+
+    from combat_engine.engine import Team
+    from combat_engine.engine.components import Initiative
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import arrival_squares, cast_list, field_encounter
+    from combat_engine.story import module as mod
+    from combat_engine.story import reflavour as refl
+    from combat_engine.story import run as run_mod
+
+    # -- the schedule, as arithmetic ---------------------------------------
+    once = mod.FoeSpec(at=3)
+    repeat = mod.FoeSpec(at=2, every=1, until=4)
+    every_other = mod.FoeSpec(at=1, every=2, until=5)
+    out.that(
+        not mod.FoeSpec().arrives and once.arrives and repeat.arrives,
+        "a line with no arrival stated is part of the opening board, which "
+        "is what every line meant before this existed",
+        f"{mod.FoeSpec().arrives}, {once.arrives}, {repeat.arrives}",
+    )
+    out.that(
+        [once.due(r) for r in range(1, 6)] == [False, False, True, False,
+                                               False],
+        "a line that arrives once arrives on its round and no other",
+        f"{[once.due(r) for r in range(1, 6)]}",
+    )
+    out.that(
+        [repeat.due(r) for r in range(1, 7)] == [False, True, True, True,
+                                                 False, False],
+        "a repeating wave arrives every round from `at` and **stops at "
+        "`until`** -- the module's own wave stops on a landmark being "
+        "destroyed or on a round cap",
+        f"{[repeat.due(r) for r in range(1, 7)]}",
+    )
+    out.that(
+        [every_other.due(r) for r in range(1, 7)] == [True, False, True,
+                                                      False, True, False],
+        "and an interval other than 1 skips the rounds between, so the "
+        "repeat is an interval rather than a flag",
+        f"{[every_other.due(r) for r in range(1, 7)]}",
+    )
+
+    # -- the refusals ------------------------------------------------------
+    def scene_of(foes: list[dict]) -> dict:
+        return {"id": "wave", "kind": "combat", "name": "W", "exits": [],
+                "difficulty": "standard", "foes": foes}
+
+    def refused(foes: list[dict]) -> str:
+        try:
+            mod.parse({"id": "probe", "party_level": 2, "party_size": 4,
+                       "start": "wave", "scenes": [scene_of(foes)]},
+                      Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    BASE = {"count": 2, "role": "soldier", "rank": "standard"}
+    out.that(
+        "unbounded fight" in refused(
+            [BASE, {"count": 1, "role": "brute", "every": 1}]),
+        "a repeating wave with no last round is refused -- reinforcements "
+        "that never stop are an unbounded fight, and one that earned XP "
+        "would be an unbounded reward",
+        refused([BASE, {"count": 1, "role": "brute", "every": 1}])[:90]
+        or "accepted",
+    )
+    out.that(
+        "only means something with `every`" in refused(
+            [BASE, {"count": 1, "role": "brute", "until": 4}]),
+        "and `until` without `every` is refused rather than silently doing "
+        "nothing: a wave that arrives once arrives on `at`",
+        refused([BASE, {"count": 1, "role": "brute", "until": 4}])[:90]
+        or "accepted",
+    )
+    out.that(
+        "never arrives" in refused(
+            [BASE, {"count": 1, "role": "brute", "at": 6, "every": 1,
+                    "until": 3}]),
+        "a wave whose last round is before its first is refused, because "
+        "it would never arrive at all",
+        refused([BASE, {"count": 1, "role": "brute", "at": 6, "every": 1,
+                        "until": 3}])[:90] or "accepted",
+    )
+    out.that(
+        "round 1 or later" in refused(
+            [BASE, {"count": 1, "role": "brute", "at": 0}]),
+        "and round 0 is refused: there is no round before the first",
+        refused([BASE, {"count": 1, "role": "brute", "at": 0}])[:80]
+        or "accepted",
+    )
+
+    # -- resolve keeps them off the opening board --------------------------
+    def dressed(foes: list[dict]) -> refl.Dressed:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "wave", "scenes": [scene_of(foes)]}, Path("<driver>"))
+        return cast_list.resolve(
+            built.scene("wave"), party_level=2, draw=Random(3), party_size=4)
+
+    flat = dressed([BASE])
+    waved = dressed([BASE, {"count": 3, "role": "brute", "rank": "standard",
+                            "at": 2, "every": 1, "until": 4,
+                            "worth": False}])
+    out.that(
+        len(flat.refs) == len(waved.refs) and not flat.waves
+        and len(waved.waves) == 1,
+        "a wave is **not** in the opening cast: the board is the same size "
+        "with and without one, which is the whole bug -- all ten rounds of "
+        "reinforcements used to be standing there at round 1",
+        f"flat {len(flat.refs)} refs / {len(flat.waves)} waves, "
+        f"waved {len(waved.refs)} refs / {len(waved.waves)} waves",
+    )
+    out.that(
+        len(waved.waves[0].refs) == 3 and waved.waves[0].at == 2
+        and waved.waves[0].until == 4 and not waved.waves[0].worth,
+        "and the wave carries its own schedule and its own XP rule, so a "
+        "`Dressed` that outlives its scene still knows when they come",
+        f"{waved.waves[0].at}/{waved.waves[0].every}/"
+        f"{waved.waves[0].until}, worth={waved.waves[0].worth}",
+    )
+    out.that(
+        any("worth no XP by the module's own rule" in n
+            and "unpriced" in n for n in waved.notes),
+        "an unpriced wave is said out loud -- this is #958's finding in a "
+        "second place, and difficulty the budget never paid for is "
+        "difficulty nobody priced",
+        f"{[n for n in waved.notes if 'unpriced' in n]}",
+    )
+
+    # -- and they actually arrive, in the order, on the right count -------
+    fielded = field_encounter(seed=3, level=2)
+    world = fielded.world
+    encounter = Encounter(world)
+    encounter.start()
+    before = set(run_mod._enemy_eids(world))
+    order_before = list(encounter.order)
+
+    def count_of(eid: int | None) -> int | None:
+        """An initiative count, or None -- so a missing one fails an
+        assertion instead of raising. Eleven plants went red by *crashing*
+        the first time round, which is a weaker signal than a named
+        verdict."""
+        if eid is None:
+            return None
+        got = world.get(eid, Initiative)
+        return got.rolled if got is not None else None
+
+    wave = waved.waves[0] if waved.waves else None
+    out.that(
+        wave is not None,
+        "the wave survives into the fielded cast at all, which everything "
+        "below reads",
+        f"{len(waved.waves)} waves",
+    )
+    if wave is None:
+        return
+    got = run_mod.reinforce(world, encounter, [wave], wave.at)
+    after = set(run_mod._enemy_eids(world))
+    fresh = sorted(after - before)
+    out.that(
+        len(got) == len(wave.refs) and len(fresh) == len(wave.refs),
+        "a wave due this round walks onto the board",
+        f"{len(got)} reported, {len(fresh)} new enemies",
+    )
+    out.that(
+        all(eid in encounter.order for eid in fresh)
+        and len(encounter.order) == len(order_before) + len(fresh),
+        "**and is in the initiative order**, which is the difference "
+        "between a reinforcement and a statue: `loader.spawn` alone makes "
+        "an entity that stands there and never acts",
+        f"{len(order_before)} -> {len(encounter.order)} slots",
+    )
+    beside = next(iter(sorted(before)), None)
+    counts = {count_of(eid) for eid in fresh if count_of(eid) is not None}
+    out.that(
+        len(counts) == 1 and beside is not None
+        and counts == {count_of(beside)},
+        "and acts on the same count as the creatures already there -- the "
+        "module says the arrivals act with the others rather than rolling "
+        "fresh, and one count for the whole wave keeps two of a kind from "
+        "acting half a round apart",
+        f"wave counts {counts}, beside {count_of(beside)}",
+    )
+    out.that(
+        run_mod.reinforce(world, encounter, [wave], wave.at + 10) == [],
+        "a round no wave is due for arrives nobody, which is the control "
+        "for the hook running every round",
+        f"{run_mod.reinforce(world, encounter, [wave], wave.at + 10)}",
+    )
+
+    # **An arrival is dressed like anything else on the board.** A plant
+    # deleting `apply_flavour` stayed green, because the probe's wave was
+    # found by shape and `Reflavour.name` alone is not *mechanical* -- so
+    # the call really did nothing there. Posed with a themed flavour,
+    # whose fire resistance is readable off the creature.
+    from combat_engine.engine.components import Defences
+
+    themed_flavour = refl.themed(("fire",), 2)
+    dressed_world = field_encounter(seed=3, level=2)
+    dressed_enc = Encounter(dressed_world.world)
+    dressed_enc.start()
+    was = set(run_mod._enemy_eids(dressed_world.world))
+    run_mod.reinforce(
+        dressed_world.world, dressed_enc,
+        [refl.Wave(at=1, every=0, until=0,
+                   refs=(sorted(dressed_world.enemies)[0],),
+                   flavour=themed_flavour, worth=False)], 1)
+    dressed_fresh = sorted(set(run_mod._enemy_eids(dressed_world.world)) - was)
+    def resist_of(eid: int) -> dict | None:
+        got = dressed_world.world.get(eid, Defences)
+        return got.resist if got is not None else None
+
+    resists = [resist_of(eid) for eid in dressed_fresh]
+    out.that(
+        themed_flavour.mechanical and dressed_fresh
+        and all(r and any(v for v in r.values()) for r in resists),
+        "a creature that walks on is dressed the way the module asked, so "
+        "a reinforcement is not a plain creature wearing the same name -- "
+        "a themed wave arrives carrying its resistance",
+        f"{resists}",
+    )
+
+    # -- the module's own guard: only if there are unoccupied spaces -------
+    out.that(
+        all(dressed_world.world.grid.inside(sq)
+            for sq in arrival_squares(dressed_world.world, 40)),
+        "every square offered is on the board -- searching outward from "
+        "the opposition's column runs off the far edge, and a creature "
+        "spawned there is off the map",
+        f"{len(arrival_squares(dressed_world.world, 40))} offered, "
+        f"all inside",
+    )
+    packed = field_encounter(seed=3, level=2)
+    free = arrival_squares(packed.world, 400)
+    from combat_engine.content import loader
+    for square in free:
+        loader.spawn(packed.world, waved.waves[0].refs[0], square,
+                     team=Team.ENEMY)
+    out.that(
+        arrival_squares(packed.world, 4) == [],
+        "a board with no room reports no arrival squares -- the module's "
+        "own guard only lets them in where there is room, and "
+        "`Grid.place` refusing to overwrite makes that a check rather than "
+        "a new facility",
+        f"{arrival_squares(packed.world, 4)}",
+    )
+    packed_enc = Encounter(packed.world)
+    packed_enc.start()
+    turned_away = run_mod.reinforce(
+        packed.world, packed_enc, [waved.waves[0]], waved.waves[0].at)
+    out.that(
+        turned_away == [],
+        "and a wave due on a full board is turned away rather than "
+        "stacked on top of somebody",
+        f"{turned_away}",
+    )
+
+    # -- through a whole fight ---------------------------------------------
+    def play(foes: list[dict], seed: int = 7) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "wave", "scenes": [scene_of(foes)]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        made = run_mod.step(campaign, built, record=False)
+        return campaign, made
+
+    plain_c, plain = play([BASE])
+    out.that(
+        plain.arrived == [] and plain.enemies and plain.outcome == "won",
+        "a scene with no wave fields exactly what it did before and "
+        "nothing walks on -- the control, and it is also every combat "
+        "scene written so far",
+        f"board={len(plain.enemies)}, arrived={plain.arrived}",
+    )
+
+    WORTHY = {"count": 1, "role": "brute", "rank": "standard", "at": 2,
+              "worth": True}
+    FREE = {"count": 1, "role": "brute", "rank": "standard", "at": 2,
+            "worth": False}
+    paid_c, paid = play([BASE, WORTHY])
+    unpaid_c, unpaid = play([BASE, FREE])
+    out.that(
+        len(paid.arrived) == 1 and len(paid.arrived_worth) == 1
+        and len(unpaid.arrived) == 1 and unpaid.arrived_worth == [],
+        "a reinforcement arrives either way, and only the one the module "
+        "says is worth something is marked as such",
+        f"paid {paid.arrived}/{paid.arrived_worth}, "
+        f"unpaid {unpaid.arrived}/{unpaid.arrived_worth}",
+    )
+    out.that(
+        paid.outcome == unpaid.outcome == "won"
+        and paid_c.party.sheets[0].xp > unpaid_c.party.sheets[0].xp
+        == plain_c.party.sheets[0].xp,
+        "and it is paid for only when the module says so: the same "
+        "creature arriving earns XP or earns nothing, which is the rule "
+        "that keeps a ten-round wave fight from being worth an arbitrary "
+        "amount",
+        f"plain {plain_c.party.sheets[0].xp}, "
+        f"unpaid {unpaid_c.party.sheets[0].xp}, "
+        f"paid {paid_c.party.sheets[0].xp}",
+    )
+    out.that(
+        any("Reinforcements:" in str(x) and "worth XP" in str(x)
+            for x in paid.lines),
+        "and the fight reports how many walked on and how many of them "
+        "counted, because a fight that quietly doubled in size is a fight "
+        "a reader cannot check",
+        f"{[str(x).strip() for x in paid.lines if 'Reinforcements' in str(x)]}",
+    )
+
+    # **A repeating wave arrives more than once**, which a single arrival
+    # cannot distinguish from a one-off.
+    REPEAT = {"count": 2, "role": "brute", "rank": "standard", "at": 2,
+              "every": 1, "until": 4, "worth": False}
+    _, many = play([BASE, REPEAT])
+    out.that(
+        len(many.arrived) > 2 and many.arrived_worth == [],
+        "a repeating wave walks on round after round rather than once -- "
+        "two at a time over three rounds, not two in total",
+        f"{len(many.arrived)} arrived over {many.rounds} rounds",
+    )
+    out.that(
+        len(many.arrived) > len(paid.arrived)
+        and len(many.enemies) == len(plain.enemies),
+        "and all of it is still outside the opening board, which stays the "
+        "size the budget paid for",
+        f"board {len(many.enemies)} vs {len(plain.enemies)}, "
+        f"arrived {len(many.arrived)}",
+    )
+
+
 def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     """The combat half of #943. A fight reported `Won in 4 rounds`.
 
@@ -46369,6 +46725,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "reinforcements": (
+        reinforcements_arrive_on_their_round_and_not_at_the_start,
+        "reinforcements arrive on their round, not at the start (#962)",
+    ),
     "fight_aftermath": (
         a_fight_says_how_it_went_and_the_next_scene_carries_it,
         "a fight says how it went and the next scene carries it (#943)",

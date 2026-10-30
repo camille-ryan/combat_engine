@@ -154,6 +154,40 @@ class FoeSpec:
     words: tuple[str, ...] = ()
     role: str = ""
     rank: str = "standard"
+    #: The round this line walks on. 1 is on the board before the first
+    #: turn, which is what every line meant before arrivals existed. #962.
+    at: int = 1
+    #: Repeat every this many rounds from `at`. 0 is "once".
+    #:
+    #: The module's own wave prints *"at the start of each round, three
+    #: more emerge"*, so a repeat is the shape it needs rather than a list
+    #: of rounds.
+    every: int = 0
+    #: The last round a repeat may arrive on. **Required with `every`**, and
+    #: refused without it: *"they keep coming until the building is
+    #: a round cap, and unbounded reinforcements are an unbounded fight.
+    until: int = 0
+    #: Does this line earn XP. The module states its own cutoff -- only
+    #: its earliest waves count toward the reward -- which is also what
+    #: keeps a ten-round fight from being worth an arbitrary amount.
+    worth: bool = True
+
+    @property
+    def arrives(self) -> bool:
+        """Is this line a reinforcement rather than part of the opening board."""
+        return self.at > 1 or bool(self.every)
+
+    def due(self, round_now: int) -> bool:
+        """Does this line walk on at the start of `round_now`."""
+        if round_now < self.at:
+            return False
+        if round_now == self.at:
+            return True
+        if not self.every:
+            return False
+        if self.until and round_now > self.until:
+            return False
+        return (round_now - self.at) % self.every == 0
 
 
 #: What a quest is, and what it is worth saying about one.
@@ -939,9 +973,44 @@ def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
         problems.append(f"{where}: rank {rank!r} is not one of {', '.join(RANKS)}")
         rank = "standard"
     words = tuple(str(w).strip().lower() for w in raw.get("words", ()) if str(w).strip())
+
+    def whole(key: str, floor: int = 0) -> int:
+        got = raw.get(key, 0)
+        if not isinstance(got, int) or got < floor:
+            problems.append(
+                f"{where}: {key} must be an integer of at least {floor}, "
+                f"got {got!r}")
+            return 0
+        return got
+
+    at = whole("at") or 1
+    if "at" in raw and (not isinstance(raw["at"], int) or raw["at"] < 1):
+        problems.append(f"{where}: at must be round 1 or later, got {raw['at']!r}")
+        at = 1
+    every = whole("every")
+    until = whole("until")
+    # **A repeat must be capped.** The module's own wave stops on either a
+    # landmark being destroyed or a round cap -- the round cap is the half
+    # this can express, and without it a wave fields a creature every round until
+    # `MAX_ROUNDS`, which is an unbounded fight and, if it earned XP, an
+    # unbounded reward.
+    if every and not until:
+        problems.append(
+            f"{where}: a repeating wave needs `until` -- reinforcements with "
+            "no last round are an unbounded fight")
+    if until and not every:
+        problems.append(
+            f"{where}: `until` only means something with `every`; a wave "
+            "that arrives once arrives on `at`")
+    if until and every and until < at:
+        problems.append(
+            f"{where}: until {until} is before at {at}, so this wave never "
+            "arrives")
     return FoeSpec(
         count=count, name=str(raw.get("name", "")).strip(),
         words=words, role=role, rank=rank,
+        at=at, every=every, until=until,
+        worth=bool(raw.get("worth", True)),
     )
 
 

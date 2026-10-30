@@ -756,6 +756,36 @@ def number_repeats(world: World) -> None:
             ident.tag = str(seen[ident.ref])
 
 
+def arrival_squares(world: World, how_many: int) -> list[tuple[int, int]]:
+    """Free squares in the opposition's band for creatures walking on. #962.
+
+    **The module's own guard is a check rather than a new facility**: it
+    only lets reinforcements emerge where there is room for them, and
+    `Grid.place` already refuses to overwrite an occupant -- so this asks
+    the index which squares are free and hands back as many as it found,
+    which may be fewer than asked for.
+
+    Searched outward from the same column `field_encounter` opens on, so a
+    wave lands where its kin are standing rather than in the middle of the
+    party. That is **not** DMG2's *"come up behind the characters"*: this
+    board has no behind, and inventing one would be a placement feature
+    rather than an arrival one.
+    """
+    grid = world.grid
+    free: list[tuple[int, int]] = []
+    for back in range(0, 6):
+        for step in range(0, 12):
+            square = (ENEMY_AT[0] - back, ENEMY_AT[1] + step)
+            if not grid.inside(square):
+                continue
+            if grid.occupant(square) is not None:
+                continue
+            free.append(square)
+            if len(free) >= how_many:
+                return free
+    return free
+
+
 def field_encounter(
     seed: int,
     level: int = 1,

@@ -59,7 +59,7 @@ from combat_engine.db import game, localisation
 
 from . import BAND, SIDE, WORTH, budget, ceiling
 from .module import DIFFICULTY, FoeSpec, Scene
-from .reflavour import Dressed, Reflavour, themed
+from .reflavour import Dressed, Reflavour, Wave, themed
 
 #: How far past the budget a scene may go before a creature is skipped. The
 #: same 10% `_compose` allows, for the same reason: the last creature taken is
@@ -517,6 +517,41 @@ def resolve(
             if tier == BY_SHAPE
             else Reflavour(name=spec.name)
         )
+
+        # **A line that walks on later is a wave, not part of the board.**
+        # The module's wave encounter imported as a flat cast with every
+        # reinforcement standing there at round 1, which is a different
+        # fight: the party faces the whole roster at once with no reason
+        # to hurry and no escalation. #962.
+        if spec.arrives:
+            picked = tuple(pool[i % len(pool)] for i in range(spec.count))
+            out.waves.append(Wave(
+                at=spec.at, every=spec.every, until=spec.until,
+                refs=picked, flavour=flavour, worth=spec.worth,
+                name=spec.name))
+            unpaid = sum(float(_facts(r)[0]) for r in picked)
+            if spec.worth:
+                # A wave that earns XP is paid for out of the budget, the
+                # same as anything else on the board.
+                spent += unpaid
+            else:
+                # **Said out loud rather than quietly free.** This is
+                # #958's finding in a second place: difficulty that costs
+                # the budget nothing is difficulty nobody priced. The
+                # module states the rule, so it is followed and reported
+                # rather than overridden.
+                out.notes.append(
+                    f"{scene.id}: a wave of {spec.count} arrives from round "
+                    f"{spec.at} and is worth no XP by the module's own rule, "
+                    f"so {unpaid:.0f} XP of threat is unpriced (#958)"
+                )
+            out.notes.append(
+                f"{scene.id}: {spec.count} arrive at the start of round "
+                f"{spec.at}"
+                + (f" and every {spec.every} round(s) to {spec.until}"
+                   if spec.every else "")
+            )
+            continue
 
         taken = 0
         for i in range(spec.count):

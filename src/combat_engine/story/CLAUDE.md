@@ -1574,11 +1574,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
-    graph_edges challenge_says fight_aftermath
+    graph_edges challenge_says fight_aftermath reinforcements
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 43 drivers and prints 477 assertions**, and **each was
+**The command above is 44 drivers and prints 503 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -1975,3 +1975,77 @@ The `0 <` that keeps somebody face-down out of the bloodied count: `aftermath`
 ranks down above bloodied, so a character counted as both cannot change the
 phrase today. It is kept because the count should be a correct count, and it
 is the thing that would silently go wrong if that ranking were ever reordered.
+
+## Reinforcements arrive on their round (#962)
+
+`cast_list.resolve` returned a flat cast and `story.field` spawned all of it
+before round 1. A `FoeSpec` had `count`, `name`, `words`, `role` and `rank` —
+**nothing that said when**. The module prints a wave encounter: a few more
+arrive every round until a landmark is destroyed or a round cap runs out, and
+only its earliest waves count toward the reward. Imported flat, that is **a
+different fight** — the party
+faces the whole roster at once with no reason to hurry and no escalation.
+
+DMG2 makes the staged reveal the *default* advice rather than an exotic case:
+*"Reveal minions in stages."*
+
+`FoeSpec` gains `at`, `every`, `until` and `worth`; `Dressed` gains `waves`,
+which are **not** in `refs` — `refs` is what stands on the board before the
+first turn, and `cleared` bookkeeping and the "Against:" line are both
+written against that.
+
+**The opening board is the same size with and without a wave**, which is the
+assertion the whole issue comes down to.
+
+### Three things or an arrival is scenery
+
+Each has its own assertion, and each was proven by a plant:
+
+* **on the board** — `loader.spawn`;
+* **in the initiative order** — `Encounter.join`. Spawn alone makes an entity
+  that stands there and never acts, which `Cast.summon`'s docstring already
+  records;
+* **on the same count as the creatures already there** — `join(beside=)`, the
+  module's *"act on the same turn as the others"*. One count for the whole
+  wave, so two of a kind do not act half a round apart.
+
+And a fourth that a plant found missing: **an arrival is dressed like anything
+else on the board.** Deleting `apply_flavour` stayed green, because a wave
+found by shape carries `Reflavour.name` only and a name is not *mechanical* —
+so the call really did nothing in that probe. Posed with a themed flavour,
+whose fire resistance is readable off the creature.
+
+### What keeps it bounded, and what it admits
+
+* **a repeat must state `until`.** Refused without it: reinforcements with no
+  last round are an unbounded fight, and one that earned XP would be an
+  unbounded reward. `until` without `every`, a last round before the first,
+  and round 0 are all refused too.
+* **`worth=False` earns nothing**, which is the module's own rule and what
+  keeps a ten-round wave fight from being worth an arbitrary amount. The XP
+  award reads `enemies + arrived_worth`.
+* **an unpriced wave is said out loud.** A `worth=False` wave is not charged
+  against the encounter budget, so it is difficulty nobody paid for — which is
+  #958's finding in a second place. The note names the XP figure rather than
+  overriding the module.
+* **the module's guard is a check, not a facility**: *"if there are any
+  room for them. `arrival_squares` asks the grid index, and `Grid.place`
+  already refuses to overwrite. A full board turns a wave away.
+
+**Not done**: DMG2's *"come up behind the characters"* has nowhere to land —
+this board has no behind — and the module's other stop condition (destroy the
+building) is an objective rather than a round cap. Both are stated on the
+issue.
+
+### A note on plants, from this one going wrong twice
+
+**A plant can run away.** One wrote `arrived_in = 999`, which made the arrival
+hook fire on *every turn* rather than every round, so the fight spawned
+without bound and the run had to be killed and restored from the snapshot. The
+claim it was meant to test is already covered by two other plants.
+
+**And eleven plants first went red by *crashing*** rather than by naming a
+verdict, because the driver indexed `waves[0]` and read `Initiative.rolled`
+without a guard. A crash is red, but it says nothing about *which* rule broke.
+Nine of the eleven now report properly, and the fix was two defensive reads in
+the driver rather than anything in the engine.
