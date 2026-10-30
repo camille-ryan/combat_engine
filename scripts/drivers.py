@@ -16240,7 +16240,16 @@ def an_ongoing_trap_takes_a_turn(out: Result) -> None:
             # column that is supposed to decide them and by nothing else.
             row["initiative"] = None
         real = terrain.printed_trap
-        terrain.printed_trap = lambda level, pick=None: row
+        # `ty` declares the attribute as *this function* -- a `def` with a
+        # `Random | None` second parameter and a `dict | None` return -- so
+        # no lambda satisfies it, the same refusal `minion_missed`'s
+        # `is_minion` patch records and for the same reason. Ignored with
+        # the reason rather than widened: the real signature returns
+        # `dict | None` and this one never returns None, which is the
+        # point of the stand-in. #1006, #956.
+        terrain.printed_trap = (  # ty: ignore[invalid-assignment]
+            lambda level, pick=None: row
+        )
         try:
             world, me, _ = _posed("f1378b", 5)
             here = world.need(me, Position).square
