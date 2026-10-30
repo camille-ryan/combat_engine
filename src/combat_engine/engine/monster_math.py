@@ -66,10 +66,37 @@ class Table:
     rank_hp: dict[str, float] = field(default_factory=dict)
 
     def target(self, level: int, kind: str) -> float:
+        """What a `kind` of attack should average at this level.
+
+        **A minion reads a printed table rather than half this curve.** This
+        used to be `out / 2`, which was quoting the book -- DMG2 prints
+        *"Minion damage is roughly half of a standard creature's damage"* in
+        the same paragraph as the table -- but "roughly" is doing real work:
+        half the curve is a continuous line through a step function, so the
+        error changes sign inside every band. Mean absolute difference 0.38
+        over 30 levels, worst `+0.99` at level 9 against `-0.60` at level 10.
+
+        So this follows `etl/CLAUDE.md`'s rule one layer up: never derive a
+        number the page prints. `#1010`.
+        """
         if kind == LIMITED:
             return float(self.limited(level))
         out = float(self.damage(level))
-        return out / 2 if kind == MINION else out
+        if kind != MINION:
+            return out
+        # Imported here rather than at module level: `by_level` is below
+        # every component and imports nothing, so either direction is safe,
+        # but a module-level import in `engine/` widens an audit batch and
+        # this file is reached by the whole corpus.
+        from combat_engine.by_level import minion_damage
+
+        try:
+            return float(minion_damage(level))
+        except ValueError:
+            # Outside the printed bands. The old approximation is the honest
+            # fallback -- it is what the book's own prose says -- rather than
+            # clamping to the top band, which would under-deal silently.
+            return out / 2
 
 
 #: Attack bonus over level, by role, as published. Reported by
