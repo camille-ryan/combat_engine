@@ -17141,6 +17141,117 @@ def a_vestige_bargain_selects_one_remnant(out: Result) -> None:
              f"returned {c2.active_vestige(of=m2)!r}")
 
 
+def a_downed_character_can_be_fielded(out: Result) -> None:
+    """A creature can be put into the dying or dead state at a spawn. #1022.
+
+    `resolve` reached every state a dying or dead creature is in and only as
+    a **consequence of damage**, so a record of a downed character could not
+    be restored: the issue measured a sheet at **-26** arriving on the board
+    at 0 hit points, `alive`, `conscious` and **able to act**, because the
+    conditions that give a negative total its meaning are applied by the
+    damage path.
+
+    **The two assertions that are design calls rather than arithmetic** are
+    the ones worth reading:
+
+    * **no `Dropped` and no `Died`.** Those events mean *this just
+      happened*. At a restore it did not, and a listener pricing a knockdown
+      would count a character who went down two fights ago.
+    * **but `ConditionApplied` must fire**, because the conditions go
+      through `effects.apply`. `_die`'s own comment records the trap:
+      `Relations.set` imposing a grab without that event left thirteen rows
+      armed and unable to fire. Applying `DROPPED` quietly would be the same
+      fault on a bigger scale.
+
+    The three bands are read through the real readers -- `query.alive`,
+    `conscious`, `can_act` -- rather than off `Health`, because what the
+    issue's measurement showed was those three disagreeing with the number.
+    """
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import ConditionApplied, Died, Dropped
+    from combat_engine.engine.query import alive, can_act, conscious, is_
+    from combat_engine.engine.resolve import restore_hp
+    from combat_engine.engine.types import Condition
+
+    world, me, _ = _board("f2743", 1)
+    floor = world.get(me, Health).dying_at
+    top = world.get(me, Health).max_hp
+    out.that(floor < 0 < top,
+             "the creature has a negative dying threshold and a positive"
+             " maximum, so all three bands below are reachable",
+             f"dying_at {floor}, max_hp {top}")
+
+    def field(hp: int):  # noqa: ANN202
+        w, m, _ = _board("f2743", 1)
+        seen: list[str] = []
+        w.bus.on(Dropped, lambda ev: seen.append("Dropped"))
+        w.bus.on(Died, lambda ev: seen.append("Died"))
+        w.bus.on(ConditionApplied, lambda ev: seen.append("ConditionApplied"))
+        verdict = restore_hp(w, m, hp)
+        return w, m, verdict, seen
+
+    # Band 1: up.
+    w, m, verdict, seen = field(top + 10)
+    out.that(verdict == "" and w.get(m, Health).hp == top,
+             "a total above the maximum fields the creature up, clamped",
+             f"verdict {verdict!r}, hp {w.get(m, Health).hp} of {top}")
+    out.that(alive(w, m) and conscious(w, m) and can_act(w, m),
+             "and it is alive, conscious and able to act",
+             f"alive {alive(w, m)}, conscious {conscious(w, m)},"
+             f" can_act {can_act(w, m)}")
+
+    # Band 2: down but not out.
+    w, m, verdict, seen = field(-1)
+    out.that(verdict == "dropped" and w.get(m, Health).hp == -1,
+             "a negative total above the threshold fields the creature"
+             " dropped, with the negative kept rather than clamped to 0",
+             f"verdict {verdict!r}, hp {w.get(m, Health).hp}")
+    out.that(alive(w, m) and not conscious(w, m) and not can_act(w, m),
+             "alive but unconscious and unable to act -- which is the"
+             " combination the issue measured as all three True",
+             f"alive {alive(w, m)}, conscious {conscious(w, m)},"
+             f" can_act {can_act(w, m)}")
+    for cond in (Condition.UNCONSCIOUS, Condition.PRONE, Condition.DYING):
+        out.that(is_(w, m, cond),
+                 f"and carries {cond.name.lower()}",
+                 f"{cond.name}: {is_(w, m, cond)}")
+    out.that("ConditionApplied" in seen,
+             "the conditions arrive through `effects.apply`, so a"
+             " `ConditionApplied` is emitted -- applying them quietly is the"
+             " trap that left thirteen rows armed and unable to fire",
+             f"events: {sorted(set(seen))}")
+    out.that("Dropped" not in seen and "Died" not in seen,
+             "and NO `Dropped` or `Died` -- those mean 'this just happened',"
+             " and at a restore it did not",
+             f"events: {sorted(set(seen))}")
+
+    # Band 3: dead.
+    w, m, verdict, seen = field(floor - 13)
+    out.that(verdict == "dead",
+             "a total below the threshold fields the creature dead -- the"
+             " case the issue measured arriving alive and able to act",
+             f"verdict {verdict!r}")
+    out.that(not alive(w, m) and not can_act(w, m),
+             "and it is not alive and cannot act",
+             f"alive {alive(w, m)}, can_act {can_act(w, m)}")
+    out.that(is_(w, m, Condition.DEAD),
+             "carrying the dead condition",
+             f"DEAD: {is_(w, m, Condition.DEAD)}")
+    out.that("Died" not in seen,
+             "and still no `Died` event",
+             f"events: {sorted(set(seen))}")
+
+    # Idempotent: a restore up after a restore down clears what it imposed.
+    w, m, _v, _s = field(-1)
+    restore_hp(w, m, top)
+    out.that(alive(w, m) and conscious(w, m) and can_act(w, m),
+             "restoring a dropped creature back up clears what dropping it"
+             " imposed, so the call is idempotent and a sheet cannot leave a"
+             " creature both down and standing",
+             f"alive {alive(w, m)}, conscious {conscious(w, m)},"
+             f" can_act {can_act(w, m)}")
+
+
 def a_minion_missed_takes_nothing(out: Result) -> None:
     """A minion takes no damage from an attack that misses it.
 
@@ -50466,6 +50577,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "fielded_down": (
+        a_downed_character_can_be_fielded,
+        "a record of a downed character fields dying or dead rather than"
+        " alive and able to act, and emits no Dropped or Died (#1022)",
     ),
     "vestige": (
         a_vestige_bargain_selects_one_remnant,

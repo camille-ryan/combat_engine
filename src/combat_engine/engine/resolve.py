@@ -1774,6 +1774,68 @@ def _check_down(world: World, eid: int, health: Health,
         )
 
 
+def restore_hp(world: World, eid: int, hp: int) -> str:
+    """Put a creature at a hit point total, with whatever that total means.
+
+    The spawn-side counterpart to `_drop`. `resolve` could reach every state
+    a dying or dead creature is in and only ever as a **consequence of
+    damage**, so a record of a downed character could not be fielded: a
+    sheet at -26 came back onto the board at 0 hit points, `alive`,
+    `conscious` and able to act, because the conditions that give a negative
+    total its meaning are applied by the damage path. #1022.
+
+    Returns what it decided -- `"dead"`, `"dropped"` or `""` -- so a caller
+    restoring a party can report it rather than inferring it from the
+    numbers afterwards.
+
+    **The three-way decision is `_drop`'s, deliberately shared in shape
+    rather than in code.** Sharing the function is what cannot be done: that
+    one emits `Dropped` and reads hit points *after* the emit so a row
+    healing itself in answer is honoured. Neither applies here -- nothing
+    attacked, and there is nobody to answer -- so the branch is restated and
+    this docstring is the record that the two must move together. The
+    boundaries are `health.dying_at` and `0`, read from the component rather
+    than written down twice.
+
+    **It does not emit `Dropped` or `Died`, and that is the design call
+    `#1022` asked to have made rather than assumed.** Those events say
+    *this just happened*; at a restore it did not, and a story-side listener
+    pricing a knockdown would count a character who went down two fights
+    ago. What it *does* go through is `effects.apply`, so the conditions
+    arrive with a `ConditionApplied` -- `_die`'s own comment records the
+    trap, where `Relations.set` imposing a grab without that event left
+    thirteen rows armed and unable to fire.
+
+    **Call it before `Encounter.start`**, which is the second thing `#1022`
+    asked to have stated. A trait reads its state when it arms -- the reason
+    `story/` sets `world.milestones` before `start()` -- so a character who
+    is already dying when once-per-fight traits arm is a different board
+    from one dropped after. Before is the honest order: the character
+    *arrived* in that state. This does not enforce it, because `resolve`
+    cannot see whether an encounter has started without reaching for one.
+    """
+    health = world.get(eid, Health)
+    if health is None:
+        return ""
+    # Clear whatever a previous restore or a previous fight left, so the
+    # call is idempotent and a creature cannot be both dead and dropped.
+    _revive(world, eid)
+    health.hp = max(health.dying_at, min(hp, health.max_hp))
+    if health.hp > 0:
+        return ""
+    if health.hp <= health.dying_at:
+        world.effects.apply(
+            eid, eid, When.ENCOUNTER, label="dead",
+            conditions=(Condition.DEAD,),
+        )
+        world.grid.lift(eid)
+        return "dead"
+    world.effects.apply(
+        eid, eid, When.ENCOUNTER, label="dropped", conditions=DROPPED
+    )
+    return "dropped"
+
+
 def _revive(world: World, eid: int) -> None:
     """Healing a dying creature clears what dropping it imposed.
 
