@@ -802,6 +802,10 @@ class Scene:
     level: int = 0
     primary: tuple[str, ...] = ()
     secondary: tuple[str, ...] = ()
+    #: How many successes one primary skill may contribute, by skill.
+    #: A skill not named here takes the default -- see `Scene.cap_for`.
+    #: #984.
+    caps: tuple[tuple[str, int], ...] = ()
     #: `"bonus"` or `"success"` -- see `SECONDARY_GRANTS`.
     secondary_grants: str = "bonus"
     #: Where success and failure lead. Both fall back to `exits` when empty,
@@ -873,6 +877,39 @@ class Scene:
     def needs(self) -> int:
         """Successes this challenge wants before three failures."""
         return COMPLEXITY.get(self.complexity, (0, 0, 0))[0]
+
+    @property
+    def capped(self) -> bool:
+        """Can a per-skill cap apply here at all. #984.
+
+        DMG2: *"limiting the number of successes that any particular
+        skill can contribute. A good maximum is equal to the complexity
+        of the challenge."* That is the bottleneck rule -- *"if only one
+        skill does the heavy lifting, you need to rethink the
+        challenge"* -- and it needs enough skills to go round.
+
+        **It does not go round in the one converted challenge**, which is
+        complexity 1 with three primary skills and wants four successes:
+        a cap of one each allows three, so the party could not win at
+        all. A default that makes a printed challenge unwinnable is
+        wrong, so the cap is withheld rather than applied, and
+        `_challenge` says so.
+        """
+        if not self.primary or self.complexity < 1:
+            return False
+        return len(self.primary) * self.complexity >= self.needs
+
+    def cap_for(self, skill: str) -> int:
+        """How many successes this skill may contribute. 0 means no cap.
+
+        A module's own figure wins -- DMG2's samples print one (*"this
+        skill can be used to gain 1 success in this challenge"*) -- and
+        is applied whether or not the default would have been.
+        """
+        for named, most in self.caps:
+            if named == skill.lower():
+                return most
+        return self.complexity if self.capped else 0
 
     @property
     def bands(self) -> tuple[str, ...]:
@@ -1479,6 +1516,39 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
             f"{where}: a {kind} scene states what a skill check means, but "
             "only a skill_challenge rolls them")
 
+    caps: list[tuple[str, int]] = []
+    for skill, most in dict(raw.get("caps") or {}).items():
+        name = str(skill).strip().lower()
+        if name not in (*primary, *secondary):
+            problems.append(
+                f"{where}: a cap names {name!r}, which this challenge does "
+                "not list")
+            continue
+        if not isinstance(most, int) or most < 1:
+            problems.append(
+                f"{where}: the cap on {name!r} must be a positive integer, "
+                f"got {most!r}")
+            continue
+        caps.append((name, most))
+    if caps and kind != "skill_challenge":
+        problems.append(
+            f"{where}: a {kind} scene caps a skill, but only a "
+            "skill_challenge rolls them")
+    # **A stated cap may not make the challenge unwinnable.** The default
+    # withholds itself when it would (`Scene.capped`); a module's own
+    # figure is trusted over the default, so it needs the same check or
+    # the trust is a hole. Only when *every* primary is capped -- one
+    # uncapped skill can carry the rest.
+    if caps and kind == "skill_challenge" and primary:
+        stated = dict(caps)
+        if all(s in stated for s in primary):
+            most = sum(stated[s] for s in primary)
+            needs = COMPLEXITY.get(complexity, (0, 0, 0))[0]
+            if most < needs:
+                problems.append(
+                    f"{where}: the caps allow {most} success(es) and the "
+                    f"challenge wants {needs}, so it could never be won")
+
     grants = str(raw.get("secondary_grants", "bonus")).strip().lower()
     if grants not in SECONDARY_GRANTS:
         problems.append(
@@ -1649,6 +1719,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         primary=primary,
         secondary=secondary,
         tries=tries,
+        caps=tuple(caps),
         secondary_grants=grants,
         on_success=str(raw.get("on_success", "")).strip(),
         on_failure=str(raw.get("on_failure", "")).strip(),

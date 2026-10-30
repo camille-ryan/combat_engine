@@ -42106,6 +42106,237 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def one_skill_cannot_carry_a_whole_challenge(out: Result) -> None:
+    """A challenge had no per-skill success cap at all. #984.
+
+    DMG2's ground rule 2 is entirely about the bottleneck that allows:
+
+    > *If your potential skill challenge has a similar bottleneck -- in
+    > which only one skill does the heavy lifting for the challenge --
+    > you need to rethink the challenge.*
+
+    and its remedy comes with a number: *"limiting the number of
+    successes that any particular skill can contribute. A good maximum is
+    equal to the complexity of the challenge."* So the default needs no
+    authoring -- it is a field `Scene` already has.
+
+    **The default withholds itself when it would make a challenge
+    unwinnable**, which is not a hypothetical: the one converted
+    challenge is complexity 1 with **three** primary skills and wants
+    **four** successes, so a cap of one each allows three. A default that
+    makes a printed challenge impossible is wrong.
+
+    **The default is a small, measured difficulty increase**, not a free
+    rail: over 150 seeds at complexity 3 with four skills the party wins
+    **21.3% capped against 25.3% uncapped**. That is the rule working --
+    forcing the weaker skills in is the whole point -- and it is worth
+    stating because the first measurement of it, taken before the
+    chooser learned to skip a capped skill, said the cap cost nothing.
+    It did; the wasted attempts were hiding it.
+    """
+    import collections
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    FOUR = ["arcana", "athletics", "thievery", "endurance"]
+
+    def scene_of(complexity: int = 3, primary: list[str] | None = None,
+                 caps: dict | None = None,
+                 kind: str = "skill_challenge") -> dict:
+        got = {"id": "c", "kind": kind, "name": "C", "exits": [],
+               "complexity": complexity, "primary": primary or FOUR}
+        if caps is not None:
+            got["caps"] = caps
+        return got
+
+    def parsed(**kw) -> mod.Scene:  # noqa: ANN003
+        return mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "c", "scenes": [scene_of(**kw)]},
+            Path("<driver>")).scene("c")
+
+    def refused(**kw) -> str:  # noqa: ANN003
+        try:
+            parsed(**kw)
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the default is the complexity, when it can be ---------------------
+    roomy = parsed()
+    out.that(
+        roomy.capped and roomy.cap_for("arcana") == 3 == roomy.complexity,
+        "a challenge with skills to spare caps each at its complexity, "
+        "which is the printed figure and needs no authoring",
+        f"capped={roomy.capped}, cap={roomy.cap_for('arcana')}",
+    )
+    tight = parsed(complexity=1,
+                   primary=["arcana", "athletics", "thievery"])
+    out.that(
+        not tight.capped and tight.cap_for("arcana") == 0
+        and tight.needs == 4 and len(tight.primary) == 3,
+        "and one that could not be won under it is **not** capped -- the "
+        "converted challenge is complexity 1 with three skills and wants "
+        "four successes, so a cap of one each allows three",
+        f"needs {tight.needs} from {len(tight.primary)} skills, "
+        f"capped={tight.capped}",
+    )
+    out.that(
+        parsed(caps={"arcana": 1}).cap_for("arcana") == 1
+        and parsed(caps={"arcana": 1}).cap_for("thievery") == 3,
+        "a module's own figure wins for the skill it names and leaves the "
+        "others on the default -- DMG2's samples print one per skill",
+        f"{parsed(caps={'arcana': 1}).caps}",
+    )
+    stated_on_tight = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "c",
+         "scenes": [scene_of(complexity=1,
+                             primary=["arcana", "athletics", "thievery"],
+                             caps={"arcana": 1})]},
+        Path("<driver>")).scene("c")
+    out.that(
+        stated_on_tight.cap_for("arcana") == 1
+        and stated_on_tight.cap_for("thievery") == 0,
+        "and a stated cap applies even where the **default** withheld "
+        "itself: the module asked for it, so it is not second-guessed",
+        f"arcana {stated_on_tight.cap_for('arcana')}, "
+        f"thievery {stated_on_tight.cap_for('thievery')}",
+    )
+
+    # -- the refusals ------------------------------------------------------
+    out.that(
+        "does not list" in refused(caps={"haggling": 1}),
+        "a cap on a skill the challenge does not list is refused, rather "
+        "than silently capping nothing",
+        refused(caps={"haggling": 1})[:80] or "accepted",
+    )
+    out.that(
+        "positive integer" in refused(caps={"arcana": 0}),
+        "and a cap of nought is refused -- it would mean the skill may "
+        "never count, which is deleting it from the challenge",
+        refused(caps={"arcana": 0})[:80] or "accepted",
+    )
+    every_one = refused(caps=dict.fromkeys(FOUR, 1))
+    out.that(
+        "could never be won" in every_one,
+        "caps that together allow fewer successes than the challenge "
+        "wants are refused: the default withholds itself in that case, so "
+        "trusting a stated figure without the same check is a hole",
+        every_one[:90] or "accepted",
+    )
+    out.that(
+        refused(caps=dict.fromkeys(FOUR, 2)) == ""
+        and refused(caps={"arcana": 1}) == "",
+        "while caps that exactly reach it are fine, and one capped skill "
+        "among four free ones is fine -- an uncapped skill can carry the "
+        "rest",
+        "accepted both",
+    )
+    out.that(
+        "only a skill_challenge" in refused(caps={"arcana": 1},
+                                            kind="combat"),
+        "and a scene that rolls no skills may not cap one",
+        refused(caps={"arcana": 1}, kind="combat")[:80] or "accepted",
+    )
+
+    # -- and it binds on a played challenge --------------------------------
+    def play(caps: dict | None = None, complexity: int = 3,
+             primary: list[str] | None = None, seed: int = 4) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "c",
+             "scenes": [scene_of(complexity, primary, caps)]},
+            Path("<driver>"))
+        made = run_mod.step(
+            run_mod.begin(built, seed=seed), built, record=False)
+        rolls = [str(x) for x in made.lines
+                 if getattr(x, "kind", "") == "roll"]
+        wins = collections.Counter(
+            line.split()[2] for line in rolls
+            if line.strip().startswith("+"))
+        return made, dict(wins), sum("skill capped" in r for r in rolls)
+
+    _, free_wins, _ = play(caps=dict.fromkeys(FOUR, 99))
+    _, held_wins, spun = play(caps={"arcana": 1})
+    out.that(
+        held_wins.get("arcana", 0) <= 1,
+        "a capped skill contributes no more than its cap, counted off the "
+        "rolls the challenge printed",
+        f"capped run {held_wins}, uncapped {free_wins}",
+    )
+    out.that(
+        spun == 0,
+        "**and the chooser stops offering it**, rather than naming a "
+        "skill that can no longer count. Measured before this: 33 refused "
+        "attempts in one challenge, which burned `play`'s attempt limit "
+        "and turned a win into a loss -- a cap that makes the default "
+        "chooser spin is a cap that broke the challenge",
+        f"{spun} wasted attempts",
+    )
+    out.that(
+        sum(held_wins.values()) > 1 and len(held_wins) > 1,
+        "and the challenge goes on with the other skills, which is the "
+        "whole point of the bottleneck rule",
+        f"{held_wins}",
+    )
+
+    # **A chooser that insists on a capped skill.** The default one stops
+    # offering it, so `attempt`'s own refusal is never reached through
+    # `taking_turns` -- two plants (deleting that refusal, and never
+    # counting a skill's successes) both stayed green until this. The
+    # case the refusal is for is a chooser that does not know about caps:
+    # a model, or anything passed as `choose`.
+    def insists(skill: str):  # noqa: ANN202
+        def chooser(run, table) -> tuple[int, str]:  # noqa: ANN001
+            return 0, skill
+        return chooser
+
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "c",
+         "scenes": [scene_of(3, FOUR, {"arcana": 1})]}, Path("<driver>"))
+    stubborn = run_mod.step(
+        run_mod.begin(built, seed=4), built, record=False,
+        choose=insists("arcana"))
+    lines = [str(x) for x in stubborn.lines
+             if getattr(x, "kind", "") == "roll"]
+    arcana_wins = sum(
+        1 for line in lines
+        if line.strip().startswith("+") and " arcana " in line)
+    out.that(
+        arcana_wins <= 1 and any("skill capped" in x for x in lines),
+        "a chooser that keeps naming a capped skill is **refused at the "
+        "attempt**, not merely un-offered: the default chooser filters, "
+        "so this is the only path that reaches the guard, and a model "
+        "knows nothing about caps",
+        f"{arcana_wins} arcana successes, "
+        f"{sum('skill capped' in x for x in lines)} refusals",
+    )
+
+    # -- the default is a rail, not a balance change -----------------------
+    def rate(caps: dict | None, seeds: int) -> int:
+        won = 0
+        for seed in range(1, seeds + 1):
+            made, _, _ = play(caps=caps, seed=seed)
+            won += made.outcome == "won"
+        return won
+
+    with_cap = rate(None, seeds=60)
+    without = rate(dict.fromkeys(FOUR, 99), seeds=60)
+    out.that(
+        0 < with_cap <= without,
+        "the default cap makes a challenge **harder and still winnable** "
+        "-- which is the bottleneck rule doing what it says, since "
+        "forcing the weaker skills in is the point. Measured over 150 "
+        "seeds at complexity 3 with four skills: **21.3% capped against "
+        "25.3% uncapped**, a four-point drop. Asserted as a direction "
+        "rather than a figure, because a rate from 60 seeds is noisy and "
+        "pinning one would flake",
+        f"with the default {with_cap}/60, with it off {without}/60",
+    )
+
+
 def the_printed_encounter_templates_can_be_fielded(out: Result) -> None:
     """Four paradigms keyed by rank, where the book gives five by role. #951.
 
@@ -47793,6 +48024,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "skill_cap": (
+        one_skill_cannot_carry_a_whole_challenge,
+        "one skill cannot carry a whole challenge (#984)",
+    ),
     "templates": (
         the_printed_encounter_templates_can_be_fielded,
         "the printed encounter templates can be fielded (#951)",

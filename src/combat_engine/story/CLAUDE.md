@@ -1575,11 +1575,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
     graph_edges challenge_says fight_aftermath reinforcements \
-    scene_allies trap_budget room_shape templates
+    scene_allies trap_budget room_shape templates skill_cap
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 48 drivers and prints 577 assertions**, and **each was
+**The command above is 49 drivers and prints 591 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -2261,3 +2261,50 @@ is this component's own recorded caution: 253 of 384 minions carry
   nothing, so the board is never empty either way — what the guard actually
   buys is that the template **stays that template** instead of silently
   becoming a standard encounter. The assertion reads the third return value.
+
+## One skill cannot carry a whole challenge (#984, the cap)
+
+A challenge had no per-skill success cap, so the party could win it four
+times on one skill — the bottleneck DMG2's ground rule 2 is entirely about:
+*"if only one skill does the heavy lifting for the challenge, you need to
+rethink the challenge."*
+
+The remedy comes with a number — *"a good maximum is equal to the complexity
+of the challenge"* — so the default needs no authoring. `Scene.cap_for`
+returns the module's own figure if it states one, else the complexity, else 0
+for no cap. `Running.won_with` is the tally.
+
+**The default withholds itself when it would make a challenge unwinnable**,
+and that is not hypothetical: the one converted challenge is complexity 1 with
+**three** primary skills and wants **four** successes, so a cap of one each
+allows three. `Scene.capped` is that test. A stated cap is trusted over the
+default and gets the same check at parse time — caps that together allow fewer
+successes than the challenge wants are refused, because trusting a figure
+without the check the default applies is a hole.
+
+**The cap is enforced in two places and both are needed.** `taking_turns`
+stops offering a capped skill, and `attempt` refuses one. The first is what
+keeps the challenge moving: before it, the chooser kept naming a skill that
+could no longer count — **33 refused attempts in one challenge**, which burned
+`play`'s attempt limit and turned a win into a loss. The second is for a
+chooser that knows nothing about caps, which is every model.
+
+**It is a small measured difficulty increase, not a free rail**: over 150
+seeds at complexity 3 with four skills, **21.3% capped against 25.3%
+uncapped**. Worth stating because the first measurement, taken *before* the
+chooser learned to skip a capped skill, said the cap cost nothing — the wasted
+attempts were hiding it. A figure measured against a half-built mechanism is
+not a figure.
+
+Two plants also showed that `attempt`'s refusal is **unreachable through the
+default chooser**, since the chooser filters first. Posing it needed a
+`choose=` that insists on the capped skill — the same trick #932's driver
+needed, and for the same reason.
+
+**`secondary_grants: "success"` is still there and probably should not be.**
+DMG2's list of what a secondary check can do does not include it, the tree
+already measured it as degenerate (5 wins in 5, three of four successes from
+easy secondary rolls), and **no converted scene sets it** — measured, the one
+challenge in `modules/` uses `bonus`. Retiring it is a one-line deletion plus
+three sites in `challenge.py`; left for a decision rather than taken, because
+removing an authoring option is not a thing to do silently.

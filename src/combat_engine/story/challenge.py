@@ -128,6 +128,11 @@ class Running:
     attempts: list[Attempt] = field(default_factory=list)
     #: Secondary skills already spent, so the once-each cap can be enforced.
     spent: set[str] = field(default_factory=set)
+    #: Successes each primary skill has contributed, for `Scene.cap_for`.
+    #: DMG2's ground rule 2 is entirely about the bottleneck this stops:
+    #: *"if only one skill does the heavy lifting for the challenge, you
+    #: need to rethink the challenge."* #984.
+    won_with: dict[str, int] = field(default_factory=dict)
 
     @property
     def over(self) -> bool:
@@ -204,6 +209,12 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
         return refuse("not a listed skill")
     if is_secondary and skill in run.spent:
         return refuse("secondary already used")
+    # **A primary that has given all it can.** Refused before the roll,
+    # like every other refusal here, so a capped skill does not spend a
+    # draw from the scene's stream and move every roll after it.
+    cap = run.scene.cap_for(skill) if is_primary else 0
+    if cap and run.won_with.get(skill, 0) >= cap:
+        return refuse("skill capped")
 
     band = run.band_now if is_primary else "easy"
     # **The reactive band, and only on a primary check.** A secondary is
@@ -231,6 +242,7 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
         counted = "success" if success else "failure"
         if success:
             run.successes += 1
+            run.won_with[skill] = run.won_with.get(skill, 0) + 1
         else:
             run.failures += 1
     elif success:
@@ -282,7 +294,21 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
             taken[made.slot] += 1
     slot = min(order, key=lambda i: (taken[i], i))
 
-    options: list[tuple[str, str]] = [(s, run.band_now) for s in run.scene.primary]
+    # **A capped skill is not an option.** The chooser would otherwise
+    # keep naming one that can no longer count, burning `play`'s attempt
+    # limit without progressing -- measured at 33 refusals in one
+    # challenge, which turned a win into a loss. A cap that makes the
+    # default chooser spin is a cap that broke the challenge. #984.
+    options: list[tuple[str, str]] = [
+        (s, run.band_now) for s in run.scene.primary
+        if not (cap := run.scene.cap_for(s))
+        or run.won_with.get(s, 0) < cap
+    ]
+    if not options:
+        # Every primary has given all it can. Nothing left to roll, so say
+        # so rather than spinning: `play`'s loop ends on a refusal it
+        # cannot act on.
+        return slot, next(iter(run.scene.primary), "")
     # **No second secondary while a +2 is already banked.** The bonus is spent
     # by the next primary check and does not stack, so a chooser that takes the
     # easy roll whenever it has the best margin opens by burning every
