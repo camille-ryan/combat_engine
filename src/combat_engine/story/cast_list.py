@@ -624,28 +624,38 @@ def _trap_allowance(
     the ceiling every creature is held to, silently, because it is added
     by a function that was never told there is a budget.
 
-    **A dressed trap is priced as a minion**, which is DMG2's rule and a
-    correction to this issue's body: *"Single-shot traps should be
-    considered minions"*, and every trap this engine arms is single-shot
-    by construction -- `terrain.arm` sets `sprung` on the first body across
-    the square and never resets it. So one trap is 6.25% of a board rather
-    than the 25% the body assumed, which makes this a bookkeeping fault
-    rather than a balance emergency: one trap lands **inside**
-    `OVER = 1.1` and two land just outside.
+    **A dressed trap is priced as a standard monster, and that changed
+    when #956 landed.** DMG2's rule is that a single-shot trap counts as a
+    minion and an ongoing one as a standard or elite. When this was first
+    written every trap `terrain.arm` produced was single-shot by
+    construction, so a minion was right -- and then #956 taught `arm` to
+    give a trap an `Initiative` and a turn. Measured on the merged tree:
+    **21 of 43 traps armed by `dress` over 40 boards are ongoing**, about
+    half.
+
+    The allowance is worked out *before* the board exists -- `dress` draws
+    at `RoundStart` -- so which kind each trap will be is unknowable here.
+    Pricing them at the minion rate under-charges roughly half of them by
+    four times, so they are charged at the **standard** rate: an
+    allowance may be too cautious, and must not overspend. One trap is
+    therefore 25% of a board rather than 6.25%, which is outside
+    `OVER = 1.1` -- so a board spent to its ceiling now affords **none**
+    where it used to afford one.
 
     An unspendable budget (`inf`, when no XP is written for the level)
     allows the full `MOST_TRAPS`, because there is nothing to overspend.
     """
     if want == float("inf"):
         return MOST_TRAPS
-    each = _slot_cost(party_level, "minion")
+    each = _slot_cost(party_level, "standard")
     spare = want * OVER - spent
     allowed = max(0, min(MOST_TRAPS, int(spare // each)))
     if allowed < MOST_TRAPS:
         out.notes.append(
             f"traps: the budget pays for {allowed} of up to {MOST_TRAPS} "
-            f"({spare:.0f} XP spare, {each:.0f} each as a single-shot "
-            "trap is priced like a minion)"
+            f"({spare:.0f} XP spare, {each:.0f} each -- about half the "
+            "traps `dress` arms are ongoing, so they are charged at the "
+            "standard rate rather than the minion one)"
         )
     return allowed
 

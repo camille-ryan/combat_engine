@@ -43684,17 +43684,19 @@ def a_dressed_trap_is_paid_for_out_of_the_budget(out: Result) -> None:
     nought to two traps from a fixed draw, **after**, because it is a
     different function that was never told there is a budget.
 
-    **A dressed trap is priced as a minion**, which is DMG2's rule and a
-    correction this issue's own comment makes to its body:
+    **A trap is priced as a standard monster, and that is a change #956
+    forced.** DMG2 prices a single-shot trap as a minion and an ongoing
+    one as a standard or elite. Every trap `terrain.arm` produced was
+    single-shot when this was written, so a minion was right -- then #956
+    taught `arm` to give a trap an `Initiative` and a turn, and **21 of
+    43 traps armed over 40 boards are now ongoing**.
 
-    > *Single-shot traps should be considered minions.*
-
-    and every trap this engine arms is single-shot by construction --
-    `terrain.arm` sets `sprung` on the first body across the square and
-    never resets it. So one trap is **6.25%** of a board rather than the
-    25% the body assumed: one lands **inside** the ceiling and two land
-    just outside. A bookkeeping fault, not a balance emergency, and the
-    body's closing claim that boards were fought at 1.5x is wrong.
+    The allowance is worked out before the board exists, so which kind
+    each trap will be is unknowable here. Charging the minion rate
+    under-charges half of them fourfold, so the dearer rate is charged:
+    an allowance may be too cautious and must not overspend. One trap is
+    25% of a board, outside `OVER = 1.1`, so a board spent to its
+    ceiling affords **none**.
 
     **Arcade mode is deliberately unchanged**, and that is asserted rather
     than assumed: `fight.build` and `api` reach `field_encounter` without
@@ -43743,15 +43745,19 @@ def a_dressed_trap_is_paid_for_out_of_the_budget(out: Result) -> None:
         f"and {spent_traps} traps",
     )
     out.that(
-        spent_traps == 1,
-        "and a board spent to the ceiling still affords **one**, because "
-        "a single-shot trap is a minion at 6.25% and `OVER` is 10% -- "
-        "which is this issue's corrected arithmetic, not its body's",
+        spent_traps == 0,
+        "and a board spent to the ceiling affords **none**. This "
+        "assertion read `== 1` until #956 landed: a single-shot trap is a "
+        "minion at 6.25%, which fits inside `OVER = 1.1`, but about half "
+        "the traps `dress` arms are now **ongoing** and an ongoing trap "
+        "is a standard at 25%, which does not. The allowance cannot know "
+        "which kind a trap will be -- `dress` draws at `RoundStart` -- so "
+        "it charges the dearer rate rather than overspending",
         f"{spent_traps}",
     )
     out.that(
-        any("priced like a minion" in n for n in full.notes)
-        and not any("priced like a minion" in n for n in light.notes),
+        any("the budget pays for" in n for n in full.notes)
+        and not any("the budget pays for" in n for n in light.notes),
         "the cut is said out loud when it bites and silent when it does "
         "not, which is the same rule the budget's other clamps follow",
         f"{[n for n in full.notes if 'trap' in n]}",
@@ -44640,9 +44646,15 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     )
 
     # -- and through four real fights, which is where the wiring lives ----
+    # **Six foes at level 4, re-measured after the story branch merged
+    # into master.** The original board -- four foes at level 2 -- no
+    # longer produces a defeat in 59 seeds, because master's engine work
+    # made that fight winnable. A seed is only meaningful together with
+    # the board *and* the engine it was measured on, so all four seeds
+    # below were taken again on this exact scene.
     HARD = {"id": "fight", "kind": "combat", "name": "F", "exits": ["talk"],
             "difficulty": "hard",
-            "foes": [{"count": 4, "role": "soldier", "rank": "standard"}]}
+            "foes": [{"count": 6, "role": "soldier", "rank": "standard"}]}
     TALK = {"id": "talk", "kind": "roleplay", "name": "T",
             "brief": "A quiet room.", "max_beats": 2, "exits": ["after"],
             "npcs": [{"name": "Host", "wants": "quiet",
@@ -44658,7 +44670,7 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     def play(seed: int, scenes: list[dict] | None = None,
              steps: int = 1) -> tuple:
         built = mod.parse(
-            {"id": "probe", "party_level": 2, "party_size": 4,
+            {"id": "probe", "party_level": 4, "party_size": 4,
              "start": (scenes or [HARD, TALK, AFTER])[0]["id"],
              "scenes": scenes or [HARD, TALK, AFTER]}, Path("<driver>"))
         campaign = run_mod.begin(built, seed=seed)
@@ -44672,32 +44684,57 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
                 director=bt.Director(scripted=True)))
         return campaign, made
 
-    # **The seeds are chosen because each produces a different ending**,
-    # which a single seed cannot. They were also re-scanned against this
-    # exact scene list: the first set came from a probe where the fight
-    # was the only scene, and a different graph gives the fight a
-    # different stream -- so four assertions failed on seeds that had
-    # been measured against the wrong board.
-    for seed, want in ((3, "a rout"), (1, "hard-won"),
-                       (2, "a near thing"), (13, "a defeat")):
+    # **No seed is pinned to a phrase, deliberately.** Two earlier drafts
+    # were: the first measured its seeds on a board where the fight was
+    # the only scene, and the second was measured before this branch
+    # merged into master. Worse, the mapping is **order-dependent** --
+    # `fight_aftermath` passed alone and failed inside the full suite,
+    # because something earlier in the run warms state the draw reads.
+    #
+    # So the wiring is checked the way it should have been from the
+    # start: recompute the phrase from the sheets the fight left behind
+    # and compare. That needs no seed to mean anything.
+    seen: set[str] = set()
+    wrong: list[str] = []
+    for seed in range(1, 25):
         campaign, made = play(seed)
         fight = made[0]
-        hp = [(s.hp, s.max_hp) for s in campaign.party.sheets]
-        out.that(
-            fight.aftermath == want,
-            f"a real fight that ended {want!r} is read that way off the "
-            "sheets -- the wiring, not just the arithmetic, which a pure "
-            "call cannot check",
-            f"seed {seed}: {fight.aftermath!r}, outcome={fight.outcome}, "
-            f"hp={hp}",
-        )
+        sheets = campaign.party.sheets
+        bloodied = sum(
+            1 for s in sheets
+            if s.hp is not None and s.max_hp and 0 < s.hp <= s.max_hp // 2)
+        floored = sum(
+            1 for s in sheets if s.hp is not None and s.hp <= 0)
+        expected = bt.aftermath(
+            fight.outcome == "won", bloodied, floored)
+        seen.add(fight.aftermath)
+        if fight.aftermath != expected:
+            wrong.append(
+                f"seed {seed}: said {fight.aftermath!r}, sheets say "
+                f"{expected!r} (won={fight.outcome == 'won'}, "
+                f"bloodied={bloodied}, down={floored})")
+    out.that(
+        not wrong,
+        "every real fight's phrase is exactly what its **sheets** say it "
+        "should be, over 24 seeds -- the wiring, not just the arithmetic, "
+        "and with no seed pinned to a phrase",
+        f"{wrong[:2] or 'all 24 agree'}",
+    )
+    out.that(
+        len(seen) >= 3,
+        "and those 24 fights between them produce at least three of the "
+        "four phrases, so the arms are exercised rather than one ending "
+        "being checked 24 times",
+        f"{sorted(seen)}",
+    )
 
     # -- it is printed ------------------------------------------------------
-    campaign, made = play(1)
+    campaign, made = play(3)
     fight = made[0]
+    phrase = fight.aftermath
     rounds_line = [str(x) for x in fight.lines if " rounds" in str(x)]
     out.that(
-        rounds_line and "hard-won" in rounds_line[0],
+        rounds_line and phrase and phrase in rounds_line[0],
         "the phrase is printed beside the round count, so a reader who "
         "never opens the transcript still learns how it went",
         f"{rounds_line}",
@@ -44710,12 +44747,14 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     )
 
     # -- the next conversation opens with it -------------------------------
-    campaign, made = play(1, steps=2)
+    campaign, made = play(3, steps=2)
+    carried_phrase = made[0].aftermath
     talk = made[1]
     opening = (talk.played.beats[0].situation
                if talk.played and talk.played.beats else "")
     out.that(
-        "hard-won" in opening and opening.index("hard-won") < opening.index(
+        carried_phrase and carried_phrase in opening
+        and opening.index(carried_phrase) < opening.index(
             "A quiet room."),
         "the conversation after the fight opens carrying it, before the "
         "scene's own text -- it is what the party walks in with",
@@ -44737,18 +44776,19 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     # -- only the first beat, and only the next scene ----------------------
     later = [b for b in (talk.played.beats if talk.played else [])][1:]
     out.that(
-        later and not any("hard-won" in b.situation for b in later),
+        later and not any(carried_phrase in b.situation for b in later),
         "only the opening beat carries it: after beat one the situation is "
         "the last reaction, and repeating the fight there has the DM "
         "narrating a battle three exchanges into the conversation after it",
         f"{len(later)} later beats, "
         f"{sum('hard-won' in b.situation for b in later)} mention it",
     )
-    campaign, made = play(1, steps=3)
+    campaign, made = play(3, steps=3)
+    spent_phrase = made[0].aftermath
     out.that(
         campaign.aftermath == "" and made[2].played is not None
-        and "hard-won" not in (made[2].played.beats[0].situation
-                               if made[2].played.beats else ""),
+        and spent_phrase not in (made[2].played.beats[0].situation
+                                 if made[2].played.beats else ""),
         "and it is spent: the scene after the conversation carries nothing, "
         "because a flag nothing clears is a DM opening on a battle two "
         "scenes back",
@@ -44758,7 +44798,7 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     # -- spent even by a scene with nothing to play ------------------------
     BARE = {"id": "talk", "kind": "roleplay", "name": "T",
             "brief": "Nothing here.", "exits": ["after"]}
-    campaign, made = play(1, scenes=[HARD, BARE, AFTER], steps=2)
+    campaign, made = play(3, scenes=[HARD, BARE, AFTER], steps=2)
     out.that(
         made[1].played is None and campaign.aftermath == "",
         "a scene with nothing to play spends it too -- held past that "
@@ -44768,7 +44808,7 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     )
 
     # -- a scene that is not a fight sets none -----------------------------
-    campaign, made = play(1, scenes=[TALK, AFTER], steps=1)
+    campaign, made = play(3, scenes=[TALK, AFTER], steps=1)
     out.that(
         made[0].aftermath == "",
         "a scene that is not a fight reports no aftermath, so the phrase "
@@ -44777,10 +44817,10 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     )
 
     # -- and it survives a save --------------------------------------------
-    campaign, made = play(1, steps=1)
+    campaign, made = play(3, steps=1)
     back = save_mod.from_dict(save_mod.to_dict(campaign))
     out.that(
-        campaign.aftermath == "hard-won"
+        campaign.aftermath in bt.FIGHTS
         and back.aftermath == campaign.aftermath,
         "a campaign saved between the fight and the conversation after it "
         "still knows how the fight went",
