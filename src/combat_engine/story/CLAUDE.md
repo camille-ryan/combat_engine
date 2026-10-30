@@ -1575,11 +1575,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
     graph_edges challenge_says fight_aftermath reinforcements \
-    scene_allies trap_budget room_shape
+    scene_allies trap_budget room_shape templates
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 47 drivers and prints 565 assertions**, and **each was
+**The command above is 48 drivers and prints 577 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -2221,3 +2221,43 @@ one that did not, so the assertions had to be:
 A seventh needed a room **taller** than the floor: on a shorter board the
 bounds filter drops the overflow, so a wrong column height produces the same
 squares. `Shape(10, 16)` is where six-to-a-column and five-to-a-column differ.
+
+## The printed encounter templates (#951)
+
+`PARADIGMS` is four shapes keyed by **rank**; the book gives five keyed by
+**role**. `solo` is its Dragon's Den and `leader` its Commander and Troops —
+**Double Line, Battlefield Control and Wolf Pack had no analogue**, and the
+first two are the ones that make a fight worth positioning in. Fielding five
+creatures of one role gives the policy nothing to do, which is half of the
+standing complaint about the combat AI.
+
+`TEMPLATES` holds the three, as `(rank, share, roles)`. `COMPOSITION` is
+unchanged and is read as the same shape with no roles, so `_compose` fills
+both in one loop.
+
+**The draw is deliberately untouched.** The book rolls five templates at equal
+weight; adopting that would re-shape every arcade board and every fixture,
+which owes `winrate` both ways and a re-record. So `PARADIGMS` is still the
+four that get **drawn** and `SHAPES_BY_NAME` is the seven that can be **asked
+for** — `field_encounter(paradigm=)` and `fight.py --paradigm` are what ask.
+All eight replay fixtures pass unchanged.
+
+Measured at level 5: a double line fields 3 front and 2 rear, battlefield
+control 1 controller and 3 skirmishers, a wolf pack 4 skirmishers — and
+`standard` still mixes roles freely, which is the control.
+
+**A role filter that empties the pool is dropped rather than obeyed**, which
+is this component's own recorded caution: 253 of 384 minions carry
+`role = 'minion'` rather than a tactical role.
+
+### Two things the plants sharpened
+
+* **The empty-filter guard could not be posed against real data** — measured,
+  every tactical role exists at every level in the standard rank, so no
+  printed template can empty its own pool. Posed with a template asking for a
+  role nothing has, injected into `TEMPLATES` and removed in a `finally`.
+* **And asserting that it still fielded somebody was not enough.**
+  `opposition` already falls back to `standard` when a named paradigm yields
+  nothing, so the board is never empty either way — what the guard actually
+  buys is that the template **stays that template** instead of silently
+  becoming a standard encounter. The assertion reads the third return value.

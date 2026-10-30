@@ -42106,6 +42106,169 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def the_printed_encounter_templates_can_be_fielded(out: Result) -> None:
+    """Four paradigms keyed by rank, where the book gives five by role. #951.
+
+    `PARADIGMS` is `standard`, `leader`, `elites`, `solo` -- and `solo`
+    maps to the printed Dragon's Den, `leader` to Commander and Troops.
+    **There was no analogue for Double Line, Battlefield Control or Wolf
+    Pack**, and the first two are the ones that make a fight worth
+    positioning in: a protected back rank, or movement control paired
+    with mobile attackers. Fielding five creatures of one role gives the
+    policy nothing to do, which is the standing complaint this is half of.
+
+    The printed shape, which the composer did not state:
+
+    > *pick a brute or soldier monster and use two or three of them. Pick
+    > one or two monsters of other roles to round out the encounter.*
+
+    **The draw is deliberately unchanged.** The book rolls five templates
+    at equal weight; adopting that would re-shape every arcade board and
+    every fixture, which owes `winrate` both ways and a re-record.
+    `PARADIGMS` is still the four that get drawn and `SHAPES_BY_NAME` is
+    the longer list that can be **asked for** -- `fight.py --paradigm` is
+    what asks.
+    """
+    import collections
+    from random import Random
+
+    from combat_engine.story import (
+        COMPOSITION,
+        PARADIGMS,
+        SHAPES_BY_NAME,
+        TEMPLATES,
+        _role_of,
+        field_encounter,
+        opposition,
+    )
+
+    # -- the draw is the draw it was ---------------------------------------
+    out.that(
+        PARADIGMS == ("standard", "leader", "elites", "solo"),
+        "the four paradigms that get **drawn** are unchanged, so no "
+        "arcade board moves -- the printed templates are askable and not "
+        "rollable until somebody pays for the re-record",
+        f"{PARADIGMS}",
+    )
+    out.that(
+        set(SHAPES_BY_NAME) == set(PARADIGMS) | set(TEMPLATES)
+        and len(SHAPES_BY_NAME) == 7,
+        "and everything that can be asked for by name is the four plus "
+        "the three printed templates",
+        f"{SHAPES_BY_NAME}",
+    )
+    out.that(
+        set(TEMPLATES) == {"double line", "battlefield control",
+                           "wolf pack"},
+        "the three with no analogue are the ones added: `solo` was "
+        "already Dragon's Den and `leader` already Commander and Troops",
+        f"{sorted(TEMPLATES)}",
+    )
+
+    # -- each printed template fields its printed shape --------------------
+    def roles_of(name: str, level: int = 5, seed: int = 7) -> dict:
+        refs, _, _ = opposition(level, Random(seed), paradigm=name)
+        return dict(collections.Counter(_role_of(r) for r in refs))
+
+    line = roles_of("double line")
+    out.that(
+        line and set(line) <= {"brute", "soldier", "artillery",
+                               "controller"}
+        and sum(line.get(r, 0) for r in ("brute", "soldier")) >= 2
+        and sum(line.get(r, 0) for r in ("artillery", "controller")) >= 1,
+        "a double line fields a brute-and-soldier front and an "
+        "artillery-and-controller rear, and **nothing else** -- which is "
+        "the whole of the template",
+        f"{line}",
+    )
+    control = roles_of("battlefield control")
+    out.that(
+        control and set(control) <= {"controller", "skirmisher"}
+        and control.get("controller", 0) >= 1
+        and control.get("skirmisher", 0) > control.get("controller", 0),
+        "battlefield control fields one controller and more skirmishers "
+        "than controllers, which is the printed 1-and-6 scaled to the "
+        "budget rather than copied",
+        f"{control}",
+    )
+    pack = roles_of("wolf pack")
+    out.that(
+        pack and set(pack) == {"skirmisher"},
+        "and a wolf pack is skirmishers and nothing else",
+        f"{pack}",
+    )
+
+    # -- the control: the old four are untouched ---------------------------
+    plain = roles_of("standard")
+    out.that(
+        len(plain) > 1,
+        "a `standard` encounter still mixes roles freely, because it "
+        "names none -- the control for the filter, and the reason the "
+        "existing four could not express a line",
+        f"{plain}",
+    )
+    out.that(
+        all(len(slots) == len(COMPOSITION[name])
+            for name, slots in COMPOSITION.items()),
+        "and `COMPOSITION` is unchanged in shape: a rank-keyed paradigm "
+        "is read as a role-keyed one with no roles, so the fill is one "
+        "loop rather than two",
+        f"{ {k: len(v) for k, v in COMPOSITION.items()} }",
+    )
+
+    # -- a role filter that would empty the pool is dropped ----------------
+    # This component's own caution: 253 of 384 minions carry
+    # `role = 'minion'`, so filtering can empty a whole rank. Posed at a
+    # level where the wanted role is thin.
+    thin = [
+        (level, roles_of("wolf pack", level=level))
+        for level in (1, 2, 3, 11, 12, 13)
+    ]
+    out.that(
+        all(got for _, got in thin),
+        "every level fields somebody under a role filter, from 1 to 13",
+        f"{[(lvl, sum(got.values())) for lvl, got in thin]}",
+    )
+    # **Posed with a role no creature has**, because the real data cannot
+    # show it: measured, every tactical role exists at every level in the
+    # standard rank, so no printed template can empty its own pool. The
+    # guard is for the recorded caution -- 253 of 384 minions carry
+    # `role = 'minion'` -- and a plant obeying an empty filter stayed
+    # green until this.
+    TEMPLATES["probe-nonesuch"] = [("standard", 1.0, ("nonesuch",))]
+    try:
+        impossible, _, fielded_as = opposition(
+            5, Random(7), paradigm="probe-nonesuch")
+    finally:
+        del TEMPLATES["probe-nonesuch"]
+    out.that(
+        impossible and fielded_as == "probe-nonesuch",
+        "a template asking for a role nothing has still fields somebody, "
+        "**and is still that template**. `opposition` would otherwise "
+        "fall back to `standard` -- a different shape under the same "
+        "request -- so asserting only that somebody was fielded left the "
+        "plant green",
+        f"{len(impossible)} creatures as {fielded_as!r}",
+    )
+
+    # -- and it reaches a board --------------------------------------------
+    fielded = field_encounter(5, 5, paradigm="double line")
+    out.that(
+        fielded.paradigm == "double line" and fielded.enemies,
+        "`field_encounter` fields a named template and says which it "
+        "fielded, which is what `fight.py --paradigm` asks for -- a shape "
+        "nothing can select is the same as no shape",
+        f"{fielded.paradigm}, {len(fielded.enemies)} creatures",
+    )
+    drawn = field_encounter(5, 5)
+    out.that(
+        drawn.paradigm in PARADIGMS,
+        "and a board that asks for nothing still draws from the four, so "
+        "the default path is untouched",
+        f"{drawn.paradigm}",
+    )
+
+
 def a_scene_can_say_how_big_the_room_is(out: Result) -> None:
     """Every board was one of two hard-coded rectangles. #974.
 
@@ -47630,6 +47793,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "templates": (
+        the_printed_encounter_templates_can_be_fielded,
+        "the printed encounter templates can be fielded (#951)",
+    ),
     "room_shape": (
         a_scene_can_say_how_big_the_room_is,
         "a scene can say how big the room is (#974)",

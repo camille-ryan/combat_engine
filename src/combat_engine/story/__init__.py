@@ -451,6 +451,17 @@ def mixed(pool: list[str]) -> list[str]:
 #: and not a budget.
 PARADIGMS = ("standard", "leader", "elites", "solo")
 
+#: Every shape that can be **asked for** by name, which is a longer list
+#: than the one that gets **drawn**.
+#:
+#: `PARADIGMS` is the draw, and the printed templates are deliberately not
+#: in it: the book rolls five templates at equal weight, so adopting that
+#: would re-shape every arcade board and every fixture -- which owes
+#: `winrate` both ways and a re-record. The templates are reachable by
+#: name until somebody wants to pay for that. #951.
+SHAPES_BY_NAME = (*PARADIGMS, "double line", "battlefield control",
+                  "wolf pack")
+
 #: How many standards' worth each rank costs, from the printed maths.
 RANK_COST = {"standard": 1, "elite": 2, "solo": 5}
 
@@ -475,6 +486,37 @@ COMPOSITION: dict[str, list[tuple[str, float]]] = {
     "elites": [("elite", 1.0)],
     "solo": [("solo", 1.0)],
     "leader": [("standard", 0.5), ("minion", 0.5)],
+}
+
+#: The printed templates, which are keyed by **role** where `COMPOSITION`
+#: is keyed by rank. #951.
+#:
+#: The book gives five and we had analogues for two: `solo` is Dragon's
+#: Den and `leader` is Commander and Troops. The three here are the ones
+#: with no analogue, and two of them are the ones that make a fight worth
+#: positioning in -- a protected back rank, or movement control paired
+#: with mobile attackers. Fielding five creatures of one role gives the
+#: policy nothing to do.
+#:
+#: Each slot is `(rank, share, roles)`; an empty `roles` takes anything.
+#: **A role filter that empties the pool is dropped rather than obeyed**,
+#: which is this component's own recorded caution: 253 of 384 minions
+#: carry `role = 'minion'` rather than a tactical role, so filtering on
+#: role can empty a whole rank.
+TEMPLATES: dict[str, list[tuple[str, float, tuple[str, ...]]]] = {
+    # *"pick a brute or soldier monster and use two or three of them.
+    # Pick one or two monsters of other roles to round out."*
+    "double line": [
+        ("standard", 0.6, ("brute", "soldier")),
+        ("standard", 0.4, ("artillery", "controller")),
+    ],
+    "battlefield control": [
+        ("standard", 0.25, ("controller",)),
+        ("standard", 0.75, ("skirmisher",)),
+    ],
+    "wolf pack": [
+        ("standard", 1.0, ("skirmisher",)),
+    ],
 }
 
 #: How far either way a fight may reach for a monster. Camille's call.
@@ -627,6 +669,15 @@ def opposition(
     return [], level, "standard"
 
 
+def _role_of(ref: str) -> str:
+    """A creature's tactical role, lowercased. `""` when it has none."""
+    from combat_engine.db import game
+
+    row = game().execute(
+        "SELECT role FROM monster WHERE ref = ?", (ref,)).fetchone()
+    return (row[0] or "").strip().lower() if row else ""
+
+
 def _compose(level: int, paradigm: str, draw: Random | None,
              scale: float = 1.0) -> list[str]:
     """The refs for one paradigm, filled to the XP budget. `[]` if unbuildable.
@@ -654,7 +705,16 @@ def _compose(level: int, paradigm: str, draw: Random | None,
     if not total:
         return []
     out: list[str] = []
-    for rank, share in COMPOSITION.get(paradigm, COMPOSITION["standard"]):
+    # **A printed template is role-keyed; our own paradigms are not.** Both
+    # are read as `(rank, share, roles)` here so the fill below is one
+    # loop rather than two. #951.
+    slots: list[tuple[str, float, tuple[str, ...]]] = (
+        TEMPLATES[paradigm] if paradigm in TEMPLATES
+        else [(rank, share, ())
+              for rank, share in COMPOSITION.get(
+                  paradigm, COMPOSITION["standard"])]
+    )
+    for rank, share, roles in slots:
         # **A solo is the encounter, so it does not get the band.** Its whole
         # point is one creature matched to the party, and three levels of slack
         # on a creature worth five standards is the difference between a fight
@@ -666,6 +726,14 @@ def _compose(level: int, paradigm: str, draw: Random | None,
         )
         if not pool:
             return []
+        # **A role filter that empties the pool is dropped.** This
+        # component's own recorded caution: 253 of 384 minions carry
+        # `role = 'minion'` rather than a tactical role, so filtering can
+        # empty a whole rank -- and a template that fields nobody is
+        # worse than one that fields the wrong shape.
+        if roles:
+            wanted = [r for r in pool if _role_of(r) in roles]
+            pool = wanted or pool
         costs: dict[str, float] = {}
         depth: dict[str, int] = {}
         for ref in pool:
@@ -968,6 +1036,7 @@ def field_encounter(
     squares: list[tuple[int, int]] | None = None,
     traps: int | None = None,
     room: Shape | None = None,
+    paradigm: str | None = None,
 ) -> Fielded:
     """Build a board and put both sides on it.
 
@@ -1066,7 +1135,8 @@ def field_encounter(
         # would shift every roll after it, so a change to how monsters are
         # chosen would also change every attack in the fight and the two could
         # not be told apart.
-        pool, found_at, shape = opposition(level, Random(seed), scale=scale)
+        pool, found_at, shape = opposition(
+            level, Random(seed), paradigm=paradigm, scale=scale)
     if not pool:
         return Fielded(world=world, enemies=[], found_at=found_at, paradigm=shape)
 
