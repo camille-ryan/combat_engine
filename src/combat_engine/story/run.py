@@ -74,6 +74,7 @@ from .module import (
     Scene,
 )
 from .objective import watcher
+from .reflavour import Dressed
 from .reflavour import apply as apply_flavour
 from .save import Campaign
 
@@ -211,6 +212,10 @@ class Step:
     #: fixture fight in the same number of rounds -- so a driver asserting
     #: on the outcome could not tell a surprise round from none. #945.
     surprised: int = 0
+    #: Creatures fielded **on the party's side**, by ref. Not in
+    #: `enemies`, and not characters -- they carry no sheet and take no
+    #: wear out of the fight. #961.
+    allies: list[str] = field(default_factory=list)
     #: Creatures that walked on after the fight started, in arrival order.
     #: **Not in `enemies`**, which is the opening board -- `cleared`
     #: bookkeeping and the "Against:" line are both written against that,
@@ -442,6 +447,26 @@ def _fight(
         squares=standing,
     )
     world = fielded.world
+    # **The module's own allies, on the party's side. #961.**
+    #
+    # Spawned after the party and before the encounter, which is where the
+    # opposition's reflavouring happens too, and placed in the party's band
+    # rather than the opposition's -- an ally that walked on among the
+    # creatures it came to fight would be surrounded before it acted.
+    #
+    # `Side(team=Team.PC)` on a monster row is a thing the board already
+    # supports, and both `harvest` and `table.characters` filter on a
+    # `c:<class>` ref precisely so a PC-side non-character does not count
+    # as a sheet (#797). So an ally takes no wear out of the fight and
+    # cannot be mistaken for a character -- which is right for a per-scene
+    # roster and is the limit of what this does.
+    step.allies = field_allies(world, dressed)
+    if len(step.allies) < len(dressed.allies):
+        step.say(
+            f"Only {len(step.allies)} of {len(dressed.allies)} allies "
+            "found room to stand beside the party.",
+            "note",
+        )
     # Off the board, not from the list handed in -- the same correction
     # `surprised` needed, for the same reason.
     step.stood = [
@@ -1048,6 +1073,43 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
     step.outcome = "won" if run.won else "lost"
 
 
+def field_allies(world: World, dressed: Dressed) -> list[str]:
+    """Put the module's own allies on the party's side. #961.
+
+    **A named function rather than six lines inside `_fight`, and the
+    reason is the one `Step.stood` already records**: a driver that spawns
+    an ally itself proves the spawn works while `_fight` quietly does
+    something else, which is exactly what five green plants showed here.
+    Through this, "on the PC side", "in the party's band" and "dressed the
+    way the module asked" are all assertable against the code that runs.
+
+    Returns the refs that **actually** stood up, which may be fewer than
+    asked for: the party's band fills like any other.
+
+    Placed in the party's band rather than the opposition's -- an ally
+    that walked on among the creatures it came to fight would be
+    surrounded before it acted.
+
+    `Side(team=Team.PC)` on a monster row is a thing the board already
+    supports, and both `harvest` and `table.characters` filter on a
+    `c:<class>` ref so a PC-side non-character does not count as a sheet
+    (#797). So an ally takes no wear out of the fight and cannot be
+    mistaken for a character.
+    """
+    from combat_engine.content import loader
+
+    stood: list[str] = []
+    if not dressed.allies:
+        return stood
+    spots = arrival_squares(world, len(dressed.allies), band=PARTY_AT)
+    for ref, flavour, square in zip(
+            dressed.allies, dressed.ally_flavours, spots, strict=False):
+        eid = loader.spawn(world, ref, square, team=Team.PC)
+        apply_flavour(world, eid, flavour)
+        stood.append(ref)
+    return stood
+
+
 def reinforce(
     world: World, encounter: Encounter, waves: list, round_now: int,
 ) -> list[tuple[str, bool]]:
@@ -1292,10 +1354,15 @@ def reward(campaign: Campaign, module: Module, scene: Scene,
         if drama is not None:
             earned.append(drama)
 
+    # **An ally takes a share.** *"When a nonplayer character participates
+    # in an encounter, that character earns an equal share of experience
+    # points"* -- so four characters with two allies divide by six, and
+    # the two shares the allies earn are paid to nobody. #961.
+    heads = len(campaign.party.sheets) + len(made.allies)
     for award in earned:
         if award.total <= 0:
             continue
-        got = xp_mod.pay(campaign.party.sheets, award)
+        got = xp_mod.pay(campaign.party.sheets, award, heads=heads)
         made.say(
             f"{award.source.capitalize()}: {got.each} XP each "
             f"({award.why}).",

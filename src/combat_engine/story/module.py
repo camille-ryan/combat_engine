@@ -744,6 +744,26 @@ class Scene:
     #: -- see `story/objective.py` and `run._fight`.
     objective: Objective | None = None
 
+    #: Creatures fighting **on the party's side**. #961.
+    #:
+    #: The imported adventure's encounter chapter is built on these: it
+    #: says each of its encounters includes one or more allies, controlled
+    #: by the players, and then prints a roster for every one of them --
+    #: typically a handful of minion guards with map positions. Four of its
+    #: encounters cannot be fielded as written without this.
+    #:
+    #: A `FoeSpec` on the other side, deliberately: the same `count`,
+    #: `name`, `words`, `role` and `rank`, drawn by the same tiers, and
+    #: arriving on the same schedule if the module says so. A second
+    #: near-identical spec type would be a second set of rules to keep in
+    #: step.
+    #:
+    #: **Not a companion character.** DMG2's companion is a party member
+    #: built from formulas and it explicitly rules out the minions this
+    #: fields -- *"minions are too weak to help out the party"*. That is
+    #: #1015.
+    allies: tuple[FoeSpec, ...] = ()
+
     # -- skill challenge ----------------------------------------------------
     complexity: int = 0
     #: Per-skill prose: what is now true because a check went that way.
@@ -1426,6 +1446,13 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     foes = tuple(
         _as_foe(f, where, problems) for f in raw.get("foes", ())
     )
+    allies = tuple(
+        _as_foe(a, where, problems) for a in raw.get("allies", ())
+    )
+    if allies and kind != "combat":
+        problems.append(
+            f"{where}: a {kind} scene lists allies, but only a combat scene "
+            "fields anybody")
     npcs = tuple(
         n for n in (_as_npc(x, where, problems) for x in raw.get("npcs", ()))
         if n is not None
@@ -1557,6 +1584,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         xp=int(raw.get("xp", 0) or 0),
         terrain=terrain,
         foes=foes,
+        allies=allies,
         tactics=str(raw.get("tactics", "")),
         readiness=readiness,
         objective=objective,

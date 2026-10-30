@@ -1574,11 +1574,12 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
-    graph_edges challenge_says fight_aftermath reinforcements
+    graph_edges challenge_says fight_aftermath reinforcements \
+    scene_allies
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 44 drivers and prints 503 assertions**, and **each was
+**The command above is 45 drivers and prints 525 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -2049,3 +2050,63 @@ verdict, because the driver indexed `waves[0]` and read `Initiative.rolled`
 without a guard. A crash is red, but it says nothing about *which* rule broke.
 Nine of the eleven now report properly, and the fix was two defensive reads in
 the driver rather than anything in the engine.
+
+## A scene can field allies (#961)
+
+`Scene` had `foes` and nothing on the other side. Every creature the story
+engine fielded was a party member (`chargen.spawn`, ref `c:<class>`) or an
+enemy, so a module could not say that a handful of guards fight alongside the
+party — and the imported adventure's encounter chapter is **built on that**.
+Four of its encounters could not be fielded as written.
+
+**The engine could already hold them; `story` could not ask.** A PC-side
+creature that is not a character is something the board supports and is
+careful about: both `harvest` and `table.characters` filter on a `c:<class>`
+ref precisely so a familiar does not count as a sheet (#797). So this is a
+field, a resolver and a spawn.
+
+`Scene.allies` is a tuple of **`FoeSpec`** — deliberately the same type, so an
+ally is drawn by the same three tiers, validated by the same rules, and can
+arrive on a `#962` schedule for free. A second near-identical spec type would
+be a second set of rules to keep in step.
+
+**Three consequences, which are most of the work:**
+
+* **the budget.** *"You should build encounters to challenge the party that
+  includes the ally."* The allies are drawn **before** a penny is spent and
+  their worth is added to what the opposition may cost — so a fight with help
+  is a bigger fight, and a scene with six allies is not trivial.
+  **Their own XP, not a standard monster each**: the module's allies are
+  minions worth a quarter, and crediting each with a full monster would double
+  a four-character fight for guards who die to one hit. DMG2's exact *"add the
+  experience value of a standard monster"* is written for a **companion**,
+  which is #1015.
+* **the XP share.** *"When a nonplayer character participates in an encounter,
+  that character earns an equal share of experience points."* Four characters
+  with two allies divide by six, and the two shares are paid to nobody.
+* **an ally is not a character.** The party still holds four sheets, takes no
+  wear for its guards, and `table.characters` still answers four.
+
+### `field_allies` is a function because five plants said so
+
+The spawn was six lines inside `_fight` and the driver spawned its own allies
+to check them. **Five plants stayed green** against that: putting them on the
+enemy side, standing them in the opposition's band, never dressing them. The
+driver was proving its own spawn rather than the engine's — which is exactly
+the reason `Step.stood` exists one issue over (#994). Through
+`run.field_allies`, all three are assertable against the code that runs.
+
+Two more the plants sharpened:
+
+* **the top-up amount**, not just its direction. Multiplying it by twenty left
+  *"more foes than before"* true, so the note's figure is asserted against
+  what the allies are actually worth.
+* **the band widens toward the board**, not into the wall behind the party.
+  Reversing it produced perfectly legal squares, so what tells them apart is
+  the count: six columns and 50 squares against three columns and half that.
+
+**Not done**: an ally has no sheet, so nothing carries one between scenes —
+the module's *"survivors of the previous encounter"* is out of reach. Who
+plays them is unanswered; they are run by the same policy as everything else
+on the board. And DMG2's **companion character** — formulas, no items, an
+advancement table — is a different feature, split out as **#1015**.

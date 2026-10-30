@@ -251,13 +251,20 @@ def drama(beats: object, level: int) -> Award | None:
     )
 
 
-def pay(sheets: list, award: Award) -> Award:
+def pay(sheets: list, award: Award, *, heads: int = 0) -> Award:
     """Add an award to every sheet, and report what each one got.
 
     `Award.each` set means the figure is per character already -- a major
     quest -- and is paid as it stands. Otherwise the total is shared.
+
+    `heads` overrides how many ways it divides, and the one caller that
+    passes it is a fight with allies: *"when a nonplayer character
+    participates in an encounter, that character earns an equal share of
+    experience points"*, so a party of four with two allies divides by
+    six. The allies hold no sheet, so their shares are simply not paid to
+    anybody -- which is the point, not a rounding loss. #961.
     """
-    each = award.each or share(award.total, len(sheets))
+    each = award.each or share(award.total, heads or len(sheets))
     for sheet in sheets:
         sheet.xp += each
     return Award(award.source, each=each, total=each * len(sheets),

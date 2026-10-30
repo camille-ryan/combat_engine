@@ -388,6 +388,71 @@ def _stepped(scene: Scene) -> tuple[float, str]:
     )
 
 
+def _draw_for(
+    spec: FoeSpec, scene: Scene, party_level: int, draw: Random | None,
+    out: Dressed,
+) -> tuple[list[str], Reflavour]:
+    """Which rows one module line could be, and how to dress them.
+
+    **Lifted out of the foes loop so an ally draws the same way a foe
+    does.** #961 wants a module's printed ally roster on the PC side, and
+    an ally resolved by a second, similar-looking path is a second set of
+    tiers to keep in step -- which is the duplication `table.characters`
+    already records as a cost it could not avoid. Here it could.
+
+    Returns an empty pool when nothing fits, having said so in `notes`.
+    """
+    named = find_by_name(spec.name) if spec.name else ""
+    tier = ""
+    pool: list[str] = []
+
+    if named and usable(named) and in_tier(named, party_level):
+        tier, pool = BY_NAME, [named]
+    elif named and usable(named):
+        out.notes.append(
+            f"{scene.id}: the creature written for {spec.name!r} is level "
+            f"{_facts(named)[1]}, outside the party's tier -- fielding "
+            "something of the right shape instead"
+        )
+    elif named:
+        out.notes.append(
+            f"{scene.id}: {spec.name!r} resolves to {named}, which is not "
+            "written yet -- fielding something of the right shape instead"
+        )
+
+    if not pool:
+        candidates = _pool(spec, party_level)
+        if spec.words:
+            matching = [
+                r for r in candidates if set(spec.words) & _facts(r)[2]
+            ]
+            if matching:
+                tier, pool = BY_THEME, _rank(
+                    matching, spec, party_level, draw)
+        if not pool and candidates:
+            tier, pool = BY_SHAPE, _rank(
+                candidates, spec, party_level, draw)
+
+    if not pool:
+        out.notes.append(
+            f"{scene.id}: nothing written fits {spec.count}x "
+            f"{spec.rank} {spec.role or 'any role'} near level "
+            f"{party_level} -- that line is not fielded"
+        )
+        return [], Reflavour()
+
+    # A reflavour is only mechanical when the shape tier had to dress
+    # something; a creature found by name or theme already *is* the thing,
+    # and bending it further would be inventing rules the module did not
+    # ask for. All three tiers carry the module's own name for display.
+    flavour = (
+        themed(spec.words, party_level, name=spec.name)
+        if tier == BY_SHAPE
+        else Reflavour(name=spec.name)
+    )
+    return pool, flavour
+
+
 def resolve(
     scene: Scene, *, party_level: int, draw: Random | None = None,
     party_size: int = SIDE, stated_size: int = SIDE,
@@ -466,57 +531,23 @@ def resolve(
             "budget cannot be worked out -- fielding the module's own counts"
         )
         want = float("inf")
+    # **The allies, before a penny of the budget is spent**, because the
+    # printed rule is to build the encounter for the party *including*
+    # them -- so their worth is added to what the opposition may cost. #961.
+    helped = _allies(out, scene, party_level, draw)
+    if helped and want != float("inf"):
+        want += helped
+        out.notes.append(
+            f"{scene.id}: the opposition's budget is topped up by "
+            f"{helped:.0f} XP for them, so the fight is built to challenge "
+            "the party that includes them"
+        )
     spent = 0.0
 
     for spec in scene.foes:
-        named = find_by_name(spec.name) if spec.name else ""
-        tier = ""
-        pool: list[str] = []
-
-        if named and usable(named) and in_tier(named, party_level):
-            tier, pool = BY_NAME, [named]
-        elif named and usable(named):
-            out.notes.append(
-                f"{scene.id}: the creature written for {spec.name!r} is level "
-                f"{_facts(named)[1]}, outside the party's tier -- fielding "
-                "something of the right shape instead"
-            )
-        elif named:
-            out.notes.append(
-                f"{scene.id}: {spec.name!r} resolves to {named}, which is not "
-                "written yet -- fielding something of the right shape instead"
-            )
-
+        pool, flavour = _draw_for(spec, scene, party_level, draw, out)
         if not pool:
-            candidates = _pool(spec, party_level)
-            if spec.words:
-                matching = [
-                    r for r in candidates if set(spec.words) & _facts(r)[2]
-                ]
-                if matching:
-                    tier, pool = BY_THEME, _rank(
-                        matching, spec, party_level, draw)
-            if not pool and candidates:
-                tier, pool = BY_SHAPE, _rank(
-                    candidates, spec, party_level, draw)
-
-        if not pool:
-            out.notes.append(
-                f"{scene.id}: nothing written fits {spec.count}x "
-                f"{spec.rank} {spec.role or 'any role'} near level "
-                f"{party_level} -- that line is not fielded"
-            )
             continue
-
-        # A reflavour is only mechanical when the shape tier had to dress
-        # something; a creature found by name or theme already *is* the thing,
-        # and bending it further would be inventing rules the module did not
-        # ask for. All three tiers carry the module's own name for display.
-        flavour = (
-            themed(spec.words, party_level, name=spec.name)
-            if tier == BY_SHAPE
-            else Reflavour(name=spec.name)
-        )
 
         # **A line that walks on later is a wave, not part of the board.**
         # The module's wave encounter imported as a flat cast with every
@@ -572,3 +603,46 @@ def resolve(
 
     _for_party_size(out, scene, party_level, party_size, stated_size)
     return out
+
+
+def _allies(
+    out: Dressed, scene: Scene, party_level: int, draw: Random | None,
+) -> float:
+    """Draw the module's own ally roster, on the party's side. #961.
+
+    **After the foes and after the party-size scaling**, deliberately: an
+    ally is not part of the opposition's budget and must not be able to
+    push a creature off it. What it *does* do is make the fight easier, and
+    the printed rule says to pay for that --
+
+    > *When a nonplayer character participates in an encounter, that
+    > character earns an equal share of experience points. You should build
+    > encounters to challenge the party that includes the ally.*
+
+    -- so the opposition is topped up by what the allies are worth. **Each
+    ally's own XP, not a standard monster each**: the module's allies are
+    minions, worth a quarter, and crediting each with a full standard
+    monster would double a four-character fight for six guards who die to
+    one hit. DMG2's exact *"add the experience value of a standard monster
+    of the companion character's level"* is written for a **companion**,
+    which is a full party member and is #1015.
+    """
+    if scene.kind != "combat" or not scene.allies:
+        return 0.0
+    paid = 0.0
+    for spec in scene.allies:
+        pool, flavour = _draw_for(spec, scene, party_level, draw, out)
+        if not pool:
+            continue
+        for i in range(spec.count):
+            ref = pool[i % len(pool)]
+            out.allies.append(ref)
+            out.ally_flavours.append(flavour)
+            paid += float(_facts(ref)[0])
+    if not out.allies:
+        return 0.0
+    out.notes.append(
+        f"{scene.id}: {len(out.allies)} ally/allies fight alongside the "
+        f"party, worth {paid:.0f} XP"
+    )
+    return paid

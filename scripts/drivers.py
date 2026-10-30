@@ -42106,6 +42106,332 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_scene_can_field_allies_on_the_party_side(out: Result) -> None:
+    """`Scene` had `foes` and nothing on the other side. #961.
+
+    Every creature the story engine fielded was either a party member
+    (`chargen.spawn`, ref `c:<class>`) or an enemy. A module could not say
+    that a handful of guards are fighting alongside the party -- and the
+    imported adventure's encounter chapter is **built on that**: it says
+    each of its encounters includes one or more allies, controlled by the
+    players, and prints a roster for every one of them. Four of its
+    encounters cannot be fielded as written without this.
+
+    **The engine could already hold them; `story` could not ask.** A
+    PC-side creature that is not a character is a thing the board supports
+    and is careful about: both `harvest` and `table.characters` filter on
+    a `c:<class>` ref precisely so a familiar does not count as a sheet
+    (#797). So this is a field, a resolver and a spawn, not a new kind of
+    entity -- and the assertions below are mostly about the **three
+    consequences**: the budget, the XP share, and an ally not becoming a
+    character.
+
+    **Not a companion character.** DMG2's companion is a party member
+    built from formulas, and it rules out the minions this fields --
+    *"minions are too weak to help out the party"*. That is #1015, split
+    out of this issue.
+    """
+    from pathlib import Path
+    from random import Random
+
+    from combat_engine.engine import Side, Team
+    from combat_engine.engine.components import Defences, Position
+    from combat_engine.story import PARTY_AT, arrival_squares, cast_list, xp
+    from combat_engine.story import module as mod
+    from combat_engine.story import reflavour as refl
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import table as tbl
+
+    GUARDS = [{"count": 2, "rank": "minion", "role": "soldier"}]
+
+    def scene_of(allies: list[dict] | None = None, foes: int = 2,
+                 kind: str = "combat") -> dict:
+        got = {"id": "fight", "kind": kind, "name": "F", "exits": [],
+               "difficulty": "standard",
+               "foes": [{"count": foes, "role": "soldier",
+                         "rank": "standard"}]}
+        if allies is not None:
+            got["allies"] = allies
+        return got
+
+    def parsed(scene: dict) -> mod.Module:
+        return mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "fight", "scenes": [scene]}, Path("<driver>"))
+
+    def refused(scene: dict) -> str:
+        try:
+            parsed(scene)
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the field ---------------------------------------------------------
+    plain = parsed(scene_of()).scene("fight")
+    withal = parsed(scene_of(GUARDS)).scene("fight")
+    out.that(
+        plain.allies == () and len(withal.allies) == 1
+        and withal.allies[0].count == 2
+        and withal.allies[0].rank == "minion",
+        "a scene can state a roster of allies, and one that does not has "
+        "none -- which is every scene written before this",
+        f"{plain.allies}, {[(a.count, a.rank) for a in withal.allies]}",
+    )
+    out.that(
+        "only a combat scene fields anybody" in refused(
+            scene_of(GUARDS, kind="roleplay")),
+        "a scene that does not field anybody is refused an ally roster, "
+        "rather than carrying one nothing will ever spawn",
+        refused(scene_of(GUARDS, kind="roleplay"))[:90] or "accepted",
+    )
+    out.that(
+        "is not one of" in refused(scene_of(
+            [{"count": 1, "role": "nonsense"}])),
+        "and an ally is validated the way a foe is, because it **is** a "
+        "`FoeSpec` -- a second near-identical spec type would be a second "
+        "set of rules to keep in step",
+        refused(scene_of([{"count": 1, "role": "nonsense"}]))[:80]
+        or "accepted",
+    )
+
+    # -- resolved onto their own side of the Dressed -----------------------
+    def dressed(allies: list[dict] | None, foes: int = 2) -> refl.Dressed:
+        return cast_list.resolve(
+            parsed(scene_of(allies, foes)).scene("fight"),
+            party_level=2, draw=Random(5), party_size=4)
+
+    bare = dressed(None)
+    helped = dressed(GUARDS)
+    out.that(
+        not bare.allies and len(helped.allies) == 2
+        and len(helped.ally_flavours) == 2,
+        "the allies resolve onto their own list, drawn by the same tiers a "
+        "foe is",
+        f"{helped.allies}",
+    )
+    out.that(
+        not set(helped.allies) & set(helped.refs)
+        or all(helped.refs.count(r) == bare.refs.count(r)
+               for r in set(helped.allies) & set(helped.refs)),
+        "and they are **not** in `refs`: that is what the XP award and the "
+        "`cleared` tally are written against, and an ally is neither "
+        "something the party overcame nor something it killed",
+        f"refs {len(helped.refs)}, allies {len(helped.allies)}",
+    )
+
+    # -- the printed budget consequence ------------------------------------
+    # *"You should build encounters to challenge the party that includes
+    # the ally."* Posed with allies worth enough to buy another creature,
+    # because two minions are not.
+    BIG = [{"count": 3, "rank": "standard", "role": "soldier"}]
+    many = dressed(BIG, foes=8)
+    none = dressed(None, foes=8)
+    out.that(
+        len(many.refs) > len(none.refs),
+        "the opposition is topped up by what the allies are worth, so a "
+        "fight with help on the party's side is a bigger fight -- "
+        "otherwise a scene with six allies is trivial",
+        f"{len(none.refs)} foes alone, {len(many.refs)} with "
+        f"{len(many.allies)} allies",
+    )
+    worth = xp.for_creatures(many.allies)
+    out.that(
+        any(f"topped up by {worth:.0f} XP" in n for n in many.notes)
+        and any(f"worth {worth:.0f} XP" in n for n in many.notes),
+        "and the top-up is **what the allies are worth**, not a standard "
+        "monster each: the module's allies are minions worth a quarter, "
+        "and crediting each with a full monster would double a fight for "
+        "guards who die to one hit. A plant multiplying it by twenty left "
+        "`more foes than before` true, so the figure is asserted",
+        f"allies worth {worth:.0f}, "
+        f"notes {[n for n in many.notes if 'topped up' in n]}",
+    )
+    out.that(
+        not any("topped up by" in n for n in none.notes),
+        "while a scene with no allies says nothing about them, which is "
+        "the control for the note",
+        f"{[n for n in none.notes if 'ally' in n or 'topped' in n]}",
+    )
+
+    # -- and now on a board ------------------------------------------------
+    def play(allies: list[dict] | None, foes: int = 2,
+             seed: int = 9) -> tuple:
+        built = parsed(scene_of(allies, foes))
+        campaign = run_mod.begin(built, seed=seed)
+        made = run_mod.step(campaign, built, record=False)
+        return campaign, made
+
+    alone_c, alone = play(None)
+    with_c, withem = play(GUARDS)
+    out.that(
+        alone.allies == [] and len(withem.allies) == 2,
+        "the allies reach the board",
+        f"{withem.allies}",
+    )
+    out.that(
+        alone.outcome == withem.outcome == "won",
+        "and both fights are fightable, so the comparisons below are "
+        "between two finished fights rather than one and a wipe",
+        f"{alone.outcome}, {withem.outcome}",
+    )
+
+    # **The three consequences.**
+    out.that(
+        len(with_c.party.sheets) == len(alone_c.party.sheets) == 4,
+        "an ally does not become a character: the party still holds four "
+        "sheets, because `harvest` filters on a `c:<class>` ref and an "
+        "ally has a monster's",
+        f"{len(with_c.party.sheets)} sheets",
+    )
+    out.that(
+        with_c.party.sheets[0].xp == xp.share(
+            xp.for_creatures(withem.enemies), 6)
+        and with_c.party.sheets[0].xp < alone_c.party.sheets[0].xp,
+        "an ally takes an **equal share** of the XP -- *\"when a nonplayer "
+        "character participates in an encounter, that character earns an "
+        "equal share\"* -- so four characters with two allies divide by "
+        "six, and the two shares are paid to nobody",
+        f"alone {alone_c.party.sheets[0].xp}, "
+        f"with two allies {with_c.party.sheets[0].xp}, "
+        f"expected {xp.share(xp.for_creatures(withem.enemies), 6)}",
+    )
+    with_allies_counted = xp.for_creatures(withem.enemies + withem.allies)
+    out.that(
+        with_allies_counted > xp.for_creatures(withem.enemies)
+        and with_c.party.sheets[0].xp != xp.share(with_allies_counted, 6),
+        "and nobody is paid for killing an ally: counting them among the "
+        "opposition would be a bigger figure, and the party was not paid "
+        "it",
+        f"paid {with_c.party.sheets[0].xp}, "
+        f"would have been {xp.share(with_allies_counted, 6)}",
+    )
+
+    # -- which side of the board, and dressed how --------------------------
+    built = parsed(scene_of(GUARDS))
+    campaign = run_mod.begin(built, seed=9)
+    scene = built.scene("fight")
+    board = cast_list.resolve(scene, party_level=2,
+                              draw=run_mod._stream(campaign, scene, "cast"),
+                              party_size=4)
+    bands_world = run_mod.field_encounter(3, 2).world
+    beside_party = arrival_squares(bands_world, 3, band=PARTY_AT)
+    beside_foes = arrival_squares(bands_world, 3)
+    out.that(
+        beside_party and beside_foes
+        and not set(beside_party) & set(beside_foes)
+        and all(x < y for (x, _), (y, _) in zip(beside_party, beside_foes,
+                                                strict=False)),
+        "the party's band and the opposition's are disjoint, and the "
+        "party's is the nearer column -- which is what makes 'beside the "
+        "party' mean anything",
+        f"party {beside_party}, enemy {beside_foes}",
+    )
+    room = arrival_squares(bands_world, 200, band=PARTY_AT)
+    out.that(
+        all(bands_world.grid.inside(sq) for sq in room),
+        "and every square it offers on that side is on the board, the same "
+        "as the opposition's",
+        f"{len(room)} offered",
+    )
+    out.that(
+        len(room) >= 48 and {x for x, _ in room} == {2, 3, 4, 5, 6, 7},
+        "the band widens **toward the board** rather than into the wall "
+        "behind the party -- searching the other way leaves three columns "
+        "instead of six and halves the room a roster has. A plant "
+        "reversing it produced legal squares either way, so the count and "
+        "the columns are what tell the two apart",
+        f"{len(room)} squares in columns {sorted({x for x, _ in room})}",
+    )
+
+    # **Through `run.field_allies`, which is what `_fight` calls.** The
+    # first draft spawned the allies itself and five plants stayed green
+    # against it -- putting them on the enemy side, standing them in the
+    # opposition's band and never dressing them all passed, because the
+    # driver was proving its own spawn rather than the engine's. That is
+    # the reason `Step.stood` exists one issue over.
+    fielded = run_mod.field_encounter(
+        3, 2, enemies=list(board.refs), party=campaign.party)
+    before_pc = {eid for eid, side in fielded.world.each(Side)
+                 if side.team is Team.PC}
+    stood = run_mod.field_allies(fielded.world, board)
+    pcs = [eid for eid, side in fielded.world.each(Side)
+           if side.team is Team.PC]
+    ally_eids = sorted(set(pcs) - before_pc)
+    out.that(
+        stood == list(board.allies) and len(ally_eids) == len(board.allies),
+        "`field_allies` reports exactly who stood up, and that many "
+        "entities appeared",
+        f"{stood} reported, {len(ally_eids)} new",
+    )
+    out.that(
+        ally_eids and all(eid in pcs for eid in ally_eids),
+        "an ally is on the party's **side**, which is the whole ask: "
+        "`Side(team=Team.PC)` on a monster row, which the board already "
+        "supports",
+        f"{len(pcs)} on the PC side, {len(ally_eids)} of them allies",
+    )
+    out.that(
+        len(tbl.characters(fielded.world)) == 4,
+        "and `table.characters` still answers four, so the beat loop and "
+        "the wear both see the party and not the party plus its guards",
+        f"{len(tbl.characters(fielded.world))}",
+    )
+    def column_of(eid: int) -> int | None:
+        spot = fielded.world.get(eid, Position)
+        return spot.square[0] if spot is not None else None
+
+    ally_x = [x for x in map(column_of, ally_eids) if x is not None]
+    out.that(
+        ally_x and all(abs(x - PARTY_AT[0]) <= 5 for x in ally_x)
+        and all(x < (PARTY_AT[0] + 12) // 2 for x in ally_x),
+        "standing **in** the party's band -- within a few columns of where "
+        "the characters start and on their half of the board, not merely "
+        "somewhere legal. A plant searching the wrong way from the "
+        "party's column still produced squares that were on the board",
+        f"{ally_x} against the party's column {PARTY_AT[0]}",
+    )
+
+    # -- dressed like anything else ----------------------------------------
+    themed_world = run_mod.field_encounter(3, 2, party=campaign.party)
+    themed_flavour = refl.themed(("fire",), 2)
+    themed_dressed = refl.Dressed(
+        allies=[board.allies[0]], ally_flavours=[themed_flavour])
+    was_pc = {eid for eid, side in themed_world.world.each(Side)
+              if side.team is Team.PC}
+    run_mod.field_allies(themed_world.world, themed_dressed)
+    fresh_pc = sorted(
+        {eid for eid, side in themed_world.world.each(Side)
+         if side.team is Team.PC} - was_pc)
+
+    def resist_of(eid: int) -> dict | None:
+        got = themed_world.world.get(eid, Defences)
+        return got.resist if got is not None else None
+
+    out.that(
+        themed_flavour.mechanical and fresh_pc
+        and all(r and any(r.values()) for r in map(resist_of, fresh_pc)),
+        "an ally is dressed the way the module asked, the same as anything "
+        "on the other side -- asserted through the function `_fight` "
+        "calls, because a plant deleting the dressing passed against a "
+        "driver that spawned its own",
+        f"{[resist_of(eid) for eid in fresh_pc]}",
+    )
+
+    # -- no room -----------------------------------------------------------
+    from combat_engine.content import loader
+
+    packed = run_mod.field_encounter(3, 2, party=campaign.party)
+    for square in arrival_squares(packed.world, 400, band=PARTY_AT):
+        loader.spawn(packed.world, board.allies[0], square, team=Team.PC)
+    out.that(
+        arrival_squares(packed.world, 2, band=PARTY_AT) == [],
+        "and a party band with no room offers no squares, so an ally is "
+        "turned away rather than stacked on somebody -- the same guard a "
+        "reinforcement gets",
+        f"{arrival_squares(packed.world, 2, band=PARTY_AT)}",
+    )
+
+
 def reinforcements_arrive_on_their_round_and_not_at_the_start(out: Result) -> None:
     """A wave encounter fielded all ten rounds of reinforcements at once. #962.
 
@@ -46725,6 +47051,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "scene_allies": (
+        a_scene_can_field_allies_on_the_party_side,
+        "a scene can field allies on the party's side (#961)",
+    ),
     "reinforcements": (
         reinforcements_arrive_on_their_round_and_not_at_the_start,
         "reinforcements arrive on their round, not at the start (#962)",

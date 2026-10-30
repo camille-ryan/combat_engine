@@ -376,6 +376,13 @@ class Dressed:
     #: Reinforcements, which are **not** in `refs`: those are the creatures
     #: standing on the board before the first turn. #962.
     waves: list[Wave] = field(default_factory=list)
+    #: Creatures on the **party's** side, and their dressing, running
+    #: parallel the way `refs` and `flavours` do. Not in `refs` for the
+    #: obvious reason and for a second one: `refs` is what the XP award and
+    #: the `cleared` tally are written against, and an ally is neither
+    #: something the party overcame nor something it killed. #961.
+    allies: list[str] = field(default_factory=list)
+    ally_flavours: list[Reflavour] = field(default_factory=list)
 
     def __len__(self) -> int:
         return len(self.refs)
