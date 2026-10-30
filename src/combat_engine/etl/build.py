@@ -1043,6 +1043,7 @@ def build() -> Report:
     # written down as a ref instead of as a printed name. #235.
     report.build_options, report.build_forks = _build_options(source, out, names)
     report.crossed += _swap_sub_options(out, names)
+    report.crossed += _hand_swaps(out, names)
     report.links_found, report.links_total = _links_resolve(source, out)
     # **Last, and it has to be.** The vocabulary is the `weapon` table and the
     # text is `power.spec`, so this runs once both are finished; earlier it would
@@ -3895,6 +3896,119 @@ def _other_names(
 #: pattern needed `s<N>` straight after `f<N>`, so it matched neither
 #: and `_swap_sub_options` left both printed names in the spec. #897.
 _SUB_OPTION = re.compile(r"rt:r\d+-s\d+|cf:[a-z0-9-]+-f\d+(?:c\d+)?s\d+")
+
+
+#: **Names a spec genuinely cites that no vocabulary test can reach**, read
+#: one at a time and keyed on refs so this list holds no printed name.
+#:
+#: `(the spec's ref, the refs whose names it prints)`.
+#:
+#: **Why a list and not a rule.** `#506` is `f1411`, which prints three
+#: weapon names where its sibling `f1415` prints two refs. All three
+#: weapons exist as rows with names, and neither feat page links them by
+#: id, so both go through name matching -- and the three fall between the
+#: two doors:
+#:
+#:     identifies         waives them, two ordinary words
+#:     _uniquely_owned    refuses them, `len(low.split()) > 2`
+#:
+#: One of the three, `w3667`, is **not uniquely owned** -- a monster
+#: ability shares its printed name -- so it is deliberately absent below
+#: and stays prose. The page does not say which is meant and nor can this.
+#:
+#: **The rule I tried first, and the measurement that killed it.** Lower
+#: the word floor to two and require one word the *trusted* sources do not
+#: know -- dictionary, engine enums, `RULES_TERMS`, without the
+#: compendium-frequency source that #337 records as handing proper nouns
+#: over as English. Measured corpus-wide:
+#:
+#:     candidates                              3,929 names
+#:     swaps it would make                        34
+#:     after stemming plurals and possessives     12
+#:     of those, genuine                           2
+#:
+#: 32 of the first 34 were dictionary-coverage artefacts -- `shadows`,
+#: `bones`, `arcs`, `bolts`, `preserver's`: the dictionary holds the
+#: singular. Stemming fixes those and leaves the two that matter:
+#:
+#:     `i270`      6 swaps, from *"you can wield ki focuses"* -- the
+#:                 implement **category**, which is also one item's printed
+#:                 name. The `i192` "holy symbol" shape from `#340`.
+#:     `m4616a0`   3 swaps, from *"the target gains regeneration 10"* -- a
+#:                 mechanic with a value, where the untrusted token is the
+#:                 number.
+#:
+#: So 2 of 12, and the discriminator is not in the words -- the same
+#: conclusion `#340` reached about its own two-word residual, by a different
+#: route. A 17% swap is a bad pointer nine times in ten, and this file has
+#: settled that trade the other way twice: a wrong ref is not visibly wrong.
+#:
+#: Shrinks when a rule can be shown to cover an entry, never grows without
+#: the sentence being read. #506.
+_HAND_SWAPS: dict[str, tuple[str, ...]] = {
+    "f1411": ("w3670", "w3666"),
+}
+
+
+def _hand_swaps(
+    out: sqlite3.Connection, names: dict[str, dict[str, str]]
+) -> int:
+    """Swap the names in `_HAND_SWAPS`, which no test can reach.
+
+    A post-pass for the reason `_swap_sub_options` is one: it needs the
+    whole name index, which does not exist earlier.
+
+    **Refuses an entry it cannot act on**, rather than passing quietly. A
+    ref whose name is absent from the index, or a spec that does not print
+    it, means the list has gone stale against a rebuild -- and a hand list
+    that silently stops applying is the failure mode every baseline in this
+    tree is written to avoid.
+    """
+    from .sanitise import scrub
+
+    swapped = 0
+    for ref, owners in _HAND_SWAPS.items():
+        row = out.execute(
+            "SELECT spec FROM feat WHERE ref = ?", (ref,)
+        ).fetchone()
+        if row is None:
+            raise AssertionError(
+                f"_HAND_SWAPS names {ref}, which this build has no feat row "
+                f"for. The list is stale -- read the card and fix it, never "
+                f"drop the entry to make this pass."
+            )
+        spec = row[0] or ""
+        mapping = {}
+        for owner in owners:
+            printed = (names.get(owner) or {}).get("name", "")
+            if not printed:
+                raise AssertionError(
+                    f"_HAND_SWAPS wants {owner}'s name swapped into {ref} "
+                    f"and the index has no name for it."
+                )
+            # **Already a ref means applied, not spent**, and getting that
+            # backwards made both of this function's guards untestable: run
+            # against a built database rather than a fresh spec, the swap
+            # has happened, the printed name is gone, and "the entry is
+            # spent" fired on a *success*. Two plants both raised on that
+            # instead of on what they planted, which is the
+            # break-did-not-apply trap -- a guard that always fires is the
+            # same as no guard.
+            if owner in spec:
+                continue
+            if printed.lower() not in spec.lower():
+                raise AssertionError(
+                    f"{ref}'s spec prints neither {owner}'s name nor its "
+                    f"ref, so this entry is spent. Take it out and say so."
+                )
+            mapping[printed] = owner
+        fixed = scrub(spec, mapping)
+        if fixed != spec:
+            out.execute(
+                "UPDATE feat SET spec = ? WHERE ref = ?", (fixed, ref)
+            )
+            swapped += len(mapping)
+    return swapped
 
 
 def _swap_sub_options(
