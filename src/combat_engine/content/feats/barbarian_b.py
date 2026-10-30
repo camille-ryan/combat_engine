@@ -1,19 +1,26 @@
-"""Barbarian feats, the second batch.
+"""Barbarian feats, the second batch. 19 rows, 4 of them still waiting.
 
-`barbarian.py` holds the first and names the gap this list is mostly
-made of: **`Keyword.RAGE` does not exist**, so "while raging" is not a
-state anything can ask about. Six rows here want it and name it
-exactly, which is `docs/blocked.json`'s `cf:barbarian-rage` and the
-four rows already waiting on the same symbol.
+**This docstring described a state the file left, and said so in its own
+first sentence.** It opened *"`Keyword.RAGE` does not exist, so 'while
+raging' is not a state anything can ask about. Six rows here want it"* --
+while `f1858`'s own note further down reads *"Re-pointed: `Keyword.RAGE`
+exists now (#503)"*. It does exist, and **no row in this file waits on it**;
+the six mentions of `RAGE` are rows reading the keyword, not rows blocked on
+it. Rewritten from the markers the file actually carries. #838.
 
-Three of the class features these ride on arrive as prose rather than
-as refs, and two more want a weapon to be treated as something it is
-not -- an off-hand blade or a chair leg thrown like a handaxe, which
-is `c.make_thrown()` and `c.weapon_range()`.
+What is actually left, by marker, one row each:
 
-What is left is four rows that turn on things the board already
-announces: a mark laid on **you**, the burst of a ref'd feature, the
-fear keyword, and the reach of the weapon in hand.
+* `Gear.ranged(thrown=)` -- a weapon made throwable. The old text named
+  `c.make_thrown()` and `c.weapon_range()` for this, and the second is the
+  trap `#838` is about: `c.weapon_range` sets `Weapon.thrown` on the
+  character's own copy and buys the row nothing, because whether a power
+  offers a thrown branch is decided by `thrown_by_hand`, a **header field on
+  the power**. The two notes further down say this per row.
+* `chargen.IMPROVISED` -- a chair leg swung as a weapon.
+* `c.choose(before_damage=)`
+* `Defences.immune_keywords`
+
+The other fifteen play.
 """
 
 from __future__ import annotations
