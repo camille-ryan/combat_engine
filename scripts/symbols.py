@@ -214,6 +214,15 @@ CATEGORIES: dict[str, dict] = {
             ("riders that behave like conditions", [
                 "curse", "cursed", "rattled", "rattling", "shroud", "shrouds",
             ]),
+            # **A bargain is a selection, not a rider**, which is why it has
+            # its own heading rather than sitting beside `curse` above: the
+            # curse marks an enemy and does something, where the vestige
+            # bargain does nothing at all on its own -- it decides which
+            # clause of somebody else's card pays. One at a time, per
+            # encounter. #897.
+            ("the vestige bargain", [
+                "active_vestige", "bargain",
+            ]),
             # Its own track, not a condition and not a modifier: a disease
             # has stages and a saving throw at the end of the encounter
             # rather than a duration from `When`. Filed under cover and

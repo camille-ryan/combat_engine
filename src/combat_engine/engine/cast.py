@@ -85,6 +85,10 @@ class _Decline:
         return False
 
 
+#: Marks which remnant a vestige-pact warlock is bargaining with. One at a
+#: time, per encounter, read back by `c.active_vestige`. #897.
+_VESTIGE = "vestige:"
+
 #: The hold that waives the printed size rule on a basic manoeuvre. Two
 #: feats grant it and `Cast._manoeuvrable` is the one reader.
 _ANY_SIZE = "manoeuvre:any-size"
@@ -15558,6 +15562,82 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         self.world.bus.emit(UseRestored(who=who, power=chosen, by=self.ref))
         return chosen
+
+
+    def bargain(self, *refs: str, on: int | None = None) -> str:
+        """"You bargain with one of your vestiges." #897.
+
+        A vestige-pact warlock strikes a bargain with **one** remnant at a
+        time, and which one is active decides which clause of a boon card
+        pays. The card prints its clauses per remnant --
+        `cf:warlock-f1c12s0` and `...s1` -- and a row that paid both would
+        be twice the card.
+
+        **Per encounter, which is why this is state and not a `Build`
+        token.** The pact leg is chosen at creation and never changes; the
+        remnant is bargained with afresh each fight. Held as a labelled
+        effect at `When.ENCOUNTER`, the same way `c.set_origin` holds a
+        granted origin word and for the same reason: one reader answers and
+        the word lasts exactly as long as the thing that gave it.
+
+        **Exclusive, because the bargain is with one remnant.** A second
+        bargain ends the first rather than stacking, so `c.active_vestige`
+        can never have two answers. That is the printed rule and it is also
+        what makes the eight waiting rows writable -- a creature with two
+        active remnants would make every one of them ambiguous again.
+
+        **The options come from the row, not from here.** The engine decides
+        what happens; which remnants a warlock has access to is content's
+        knowledge -- two primary ones on the boon card plus any a daily
+        attack power grants ("other pact boons are described in the daily
+        attack powers that give you access to new vestiges"), which is an
+        **open** set and therefore cannot be a closed vocabulary here.
+        Measured in the imported tier: the 2 printed clauses plus **1**
+        power that grants access, so three in practice and open in
+        principle.
+
+        With several it asks `c.choose`, so the decision reaches the wire
+        and the AI policy rather than defaulting to the first silently.
+        Returns the ref bargained with, or `""` when offered nothing.
+        """
+        who = on if on is not None else self.me
+        options = [r for r in refs if r]
+        if not options:
+            return ""
+        chosen = options[0] if len(options) == 1 else (
+            self.choose(options, "which vestige to bargain with") or options[0])
+        # End any standing bargain first: one remnant at a time.
+        for eff in list(self.world.effects.of(who)):
+            if _VESTIGE in str(eff.label):
+                self.world.effects.end(eff)
+        self.world.effects.apply(
+            who, self.me, When.ENCOUNTER,
+            # The ref leads the label, which is what `audit._claimed` credits
+            # by -- an `EffectApplied` counts for a row only if its label
+            # starts with that row's ref, and 17 rows reported SILENT for
+            # getting this the other way round (#374).
+            label=f"{self.ref} {_VESTIGE}{chosen}",
+            by=self.ref,
+        )
+        return chosen
+
+    def active_vestige(self, *, of: int | None = None) -> str:
+        """Which remnant this warlock is bargaining with. `c.active_vestige()`
+
+        The ref, or `""` when no bargain is standing -- which is the honest
+        answer before the first one of the fight and is what a clause keyed
+        to a remnant needs in order to not fire.
+
+        **Searched for rather than anchored**, because the laying row's ref
+        leads the label so `audit._claimed` can credit it. Same reading as
+        `query.kinds_of` does for `origin:`.
+        """
+        who = of if of is not None else self.me
+        for eff in self.world.effects.of(who):
+            tag = str(eff.label)
+            if _VESTIGE in tag:
+                return tag.split(_VESTIGE, 1)[1].strip()
+        return ""
 
     # -- the spellbook -------------------------------------------------------
 

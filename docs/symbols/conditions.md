@@ -121,6 +121,13 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
 - `c.shrouds(self, on: 'int | None' = None, *, of: 'int | None' = None) -> 'int'`
   - How many of my shrouds that creature is carrying. 0 for anybody
 
+## the vestige bargain
+
+- `c.active_vestige(self, *, of: 'int | None' = None) -> 'str'`
+  - Which remnant this warlock is bargaining with. `c.active_vestige()`
+- `c.bargain(self, *refs: 'str', on: 'int | None' = None) -> 'str'`
+  - "You bargain with one of your vestiges." #897.
+
 ## disease
 
 - `c.expose(self, ref: 'str', *, on: 'int | None' = None, stage: 'int' = 1, bonus: 'int' = 0) -> 'Effect | None'`

@@ -17015,6 +17015,132 @@ def a_monsters_level_can_be_adjusted(out: Result) -> None:
              f" hp {down_from[1]} -> {h2.max_hp}")
 
 
+def a_vestige_bargain_selects_one_remnant(out: Result) -> None:
+    """One remnant at a time, per encounter, and a reader for it. #897.
+
+    A vestige-pact warlock bargains with **one** remnant and which one is
+    active decides which clause of a boon card pays. Eight rows waited on
+    this -- two of them refused in play -- and the card's own note says why:
+    *"nothing says which of them fires, and a row that paid both would be
+    twice the card."*
+
+    **Exclusivity is the assertion that matters.** A reader that could
+    return either of two standing bargains leaves every one of those eight
+    rows ambiguous again, which is the state the issue was filed about. So
+    a second bargain must *end* the first rather than stack, and the count
+    of standing marks is asserted rather than just the reader's answer.
+
+    The two other checks are traps this repo has paid for before:
+
+    * **the label leads with the laying row's ref**, because
+      `audit._claimed` credits an `EffectApplied` to a row only if the label
+      starts with that row's ref -- 17 rows laid a real effect and still
+      reported SILENT for getting that the other way round (#374);
+    * **it ends with the encounter**, because the bargain is re-made each
+      fight. A mark that outlived its encounter would make the next fight
+      start mid-bargain.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.turns import Encounter
+
+    world, me, _ = _board("f1028", 1)
+    c = Cast(world=world, me=me, ref="cf:warlock-f1c12")
+    s0, s1 = "cf:warlock-f1c12s0", "cf:warlock-f1c12s1"
+
+    def marks() -> list[str]:
+        return [str(e.label) for e in world.effects.of(me)
+                if "vestige:" in str(e.label)]
+
+    out.that(c.active_vestige() == "",
+             "before any bargain the reader says nothing is active, which is"
+             " what a clause keyed to a remnant needs in order not to fire",
+             f"returned {c.active_vestige()!r}")
+    out.that(not marks(),
+             "and no mark is standing",
+             f"marks: {marks()}")
+
+    got = c.bargain(s0)
+    out.that(got == s0 and c.active_vestige() == s0,
+             "bargaining with one remnant sets it and reads back",
+             f"bargain returned {got!r}, reader says {c.active_vestige()!r}")
+    out.that(len(marks()) == 1,
+             "as exactly one standing mark",
+             f"marks: {marks()}")
+    out.that(marks()[0].startswith("cf:warlock-f1c12"),
+             "whose label LEADS with the laying row's ref -- `audit._claimed`"
+             " credits by that prefix, and 17 rows reported SILENT for"
+             " putting the marker first (#374)",
+             f"label: {marks()[0]!r}")
+
+    got2 = c.bargain(s1)
+    out.that(got2 == s1 and c.active_vestige() == s1,
+             "a second bargain replaces the first",
+             f"bargain returned {got2!r}, reader says {c.active_vestige()!r}")
+    out.that(len(marks()) == 1,
+             "and STILL exactly one mark -- a creature with two active"
+             " remnants would make all eight waiting rows ambiguous again,"
+             " which is the state this issue was filed about",
+             f"marks: {marks()}")
+
+    out.that(c.bargain() == "",
+             "offered no remnants it returns the empty string rather than"
+             " inventing one",
+             f"returned {c.bargain()!r}")
+    out.that(c.active_vestige() == s1,
+             "and that refusal leaves the standing bargain alone",
+             f"reader says {c.active_vestige()!r}")
+
+    # **It lasts the fight, which is the half that is testable.** The
+    # obvious control -- end the encounter and watch it go -- proves
+    # nothing: `effects.end_encounter()` ends *every* duration, so
+    # `When.ENCOUNTER` is indistinguishable from any other there. Measured:
+    # planting `When.STANCE` left that assertion green.
+    #
+    # What a wrong duration would really cost is the other direction. A
+    # bargain that expired at the end of a turn would be useless -- the
+    # boon clause it selects is read on later turns -- so the live question
+    # is whether it survives one.
+    # **The holder's own turn has to come round and go**, or nothing is
+    # tested: `When.EOT` expires when *that creature's* turn ends, so four
+    # arbitrary advances leave it standing and the control passes for the
+    # wrong reason. Measured -- planting `When.EOT` was green until this
+    # walked the order properly, which is the third control in this file to
+    # need it.
+    enc = Encounter(world)
+    enc.start()
+    walked = []
+    for _ in range(24):
+        nxt = enc.advance()
+        walked.append(nxt)
+        if walked.count(me) >= 2:
+            break
+    out.that(walked.count(me) >= 2,
+             "the holder's turn came round twice, so a turn-length duration"
+             " would have expired by now",
+             f"walked {walked}")
+    out.that(c.active_vestige() == s1,
+             "and the bargain survives it -- struck for the fight, where one"
+             " that expired at end of turn would select nothing by the time"
+             " a boon clause is read on a later turn",
+             f"the reader says {c.active_vestige()!r}")
+
+    # And it does end with the encounter, asserted after the above so the
+    # two cannot be confused: this one is weak on its own.
+    world.effects.end_encounter()
+    out.that(c.active_vestige() == "" and not marks(),
+             "and it is gone once the encounter ends, so the next fight does"
+             " not start mid-bargain",
+             f"reader says {c.active_vestige()!r}, marks {marks()}")
+
+    # Another creature's bargain is not this one's.
+    w2, m2, _ = _board("f1028", 1)
+    c2 = Cast(world=w2, me=m2, ref="cf:warlock-f1c12")
+    c2.bargain(s0)
+    out.that(c2.active_vestige(of=m2) == s0,
+             "`of=` reads a named creature's bargain",
+             f"returned {c2.active_vestige(of=m2)!r}")
+
+
 def a_minion_missed_takes_nothing(out: Result) -> None:
     """A minion takes no damage from an attack that misses it.
 
@@ -50340,6 +50466,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "vestige": (
+        a_vestige_bargain_selects_one_remnant,
+        "a vestige-pact warlock bargains with one remnant at a time, per"
+        " encounter, and a reader says which (#897)",
     ),
     "levelled": (
         a_monsters_level_can_be_adjusted,
