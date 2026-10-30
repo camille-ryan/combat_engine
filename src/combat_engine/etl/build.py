@@ -615,6 +615,34 @@ CREATE TABLE trap (
   ref TEXT PRIMARY KEY, id INTEGER, level INTEGER, rank TEXT, role TEXT,
   kind TEXT,
   perception_dc INTEGER, attack INTEGER, defence TEXT, damage TEXT, spec TEXT,
+  -- **The printed initiative modifier**, which 246 of the 631 blocks state
+  -- as a number. 0 to 26 across 24 distinct values, commonest +6, +2, +8,
+  -- +5, +7 -- so it is a number the page prints per block and not a
+  -- function of level, and the component rule against deriving one applies
+  -- directly. `#956` needs it: a trap that takes a turn needs a place in
+  -- the order, and inventing one would mis-sort every board it is on.
+  --
+  -- **NULL means "prints no initiative *number*", and that covers two
+  -- different cases** -- which is the distinction `trap.perception_dc`'s
+  -- own note insists on and the reason this is spelled out rather than
+  -- left to a reader:
+  --
+  --   225 blocks name no initiative at all;
+  --   160 name one and state it as a **rule** instead of a number --
+  --       entering the order after whoever triggered it, acting last in a
+  --       round, or acting on fixed counts like 20 and 10.
+  --
+  -- The second group is deliberately **not** modelled here. Those are
+  -- placement rules rather than modifiers, they take at least four
+  -- distinct shapes, and a column holding a number cannot say any of them;
+  -- turning them into a derived taxonomy is the thing that failed at 38-41%
+  -- unmatched when it was tried for the countermeasure clauses on `#989`.
+  -- They belong to whatever `#956` builds for a trap's turn.
+  --
+  -- So a reader must not treat NULL as "goes last" or as "has no turn".
+  -- It means this column could not answer, and 160 of those 385 have an
+  -- answer the page states in words. #1004.
+  initiative INTEGER,
   -- Which of the two layouts the page used. `monster` has carried this since
   -- it was written and the component rule says to record it for every dialect
   -- pair; traps did not, and without it nothing can tell a trap that *prints*
@@ -622,6 +650,35 @@ CREATE TABLE trap (
   dialect TEXT
 );
 CREATE INDEX trap_level ON trap(level);
+
+-- **Every (skill, DC) a trap block prints**, which is what a countermeasure
+-- is made of and what `#955` needs to offer one. 567 of the 631 blocks print
+-- at least one; 1,477 pairs across 16 of the 17 skills; DCs 5 to 41.
+--
+-- **The classification is deliberately absent, after two attempts at it.**
+-- `#989` tried deriving a verb vocabulary for what each check *does* --
+-- delay, disable, trigger -- twice: six guessed verbs left 38% unmatched and
+-- a vocabulary read out of the corpus itself left 41%. Two passes at ~40% is
+-- a finding rather than a reason for a third, so this table holds the two
+-- quantities that parse cleanly and nothing it cannot stand behind.
+--
+-- **And the clause text is deliberately absent too, which is where this
+-- departs from `#989`'s own recommendation.** That comment proposed storing
+-- `(skill, dc, clause)`. The clause is already in `trap.spec`, sanitised, so
+-- a second copy would add no information and would add a second place for a
+-- printed name to sit. A reader wanting the words reads the spec.
+--
+-- **Perception pairs are kept rather than filtered**, even though
+-- `trap.perception_dc` exists, because that column turns out to be lossy:
+-- **10 blocks print two different Perception DCs** -- 24 and 28, 16 and 21 --
+-- and a single INTEGER keeps one. So the discovery DC has a home for the
+-- common case and this table is where the second number survives. 531 of
+-- the 567 print at least one *non*-Perception pair, which is the
+-- countermeasure population `#989` measured. #989, #1004.
+CREATE TABLE trap_countermeasure (
+  ref TEXT, skill TEXT, dc INTEGER
+);
+CREATE INDEX trap_countermeasure_ref ON trap_countermeasure(ref);
 
 -- A disease, which 47 rows wait on and nothing had ever read. #389.
 --
@@ -691,6 +748,16 @@ class Report:
     #: `_conjured` with an `m<item id>c<n>` ref. #601.
     conjured: int = 0
     traps: int = 0
+    #: How many trap blocks print an initiative **modifier**. Reported
+    #: separately from `traps` because the gap between them is the number
+    #: that matters: a NULL in that column covers both "names no
+    #: initiative" and "names one as a rule", and only the report says how
+    #: many of each there were on the run that built the database. #1004.
+    trap_initiative: int = 0
+    #: (skill, DC) pairs across every trap block -- what a countermeasure is
+    #: made of. Deliberately no classification of what each check *does*;
+    #: see the table's note. #989.
+    countermeasures: int = 0
     poisons: int = 0
     skill_powers: int = 0
     diseases: int = 0
@@ -751,6 +818,10 @@ class Report:
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
             f"traps         {self.traps:6d}  (with a printed Perception DC where one is given)",
+            f"trap init     {self.trap_initiative:6d}  "
+            f"(print a modifier; the rest state one in words or not at all)",
+            f"counter-meas  {self.countermeasures:6d}  "
+            f"(skill + DC pairs a trap prints, across 16 of 17 skills)",
             f"poisons       {self.poisons:6d}",
             f"skill powers  {self.skill_powers:6d}",
             f"diseases      {self.diseases:6d}  (stage track and the DC shape its page prints)",
@@ -847,6 +918,16 @@ def build() -> Report:
     report.crossed += _cross_reference(out, names, table="class_feature")
     report.companions = _companions(source, out, names)
     report.traps = _traps(source, out, names)
+    # Counted off the **written table** rather than tallied in the loop, so
+    # the report describes what the database holds instead of what the
+    # parser believed. A column that failed to be written would show up
+    # here as a zero rather than as a confident number. #1004.
+    report.trap_initiative = out.execute(
+        "SELECT COUNT(*) FROM trap WHERE initiative IS NOT NULL"
+    ).fetchone()[0]
+    report.countermeasures = out.execute(
+        "SELECT COUNT(*) FROM trap_countermeasure"
+    ).fetchone()[0]
     report.poisons = _poisons(source, out, names)
     report.diseases = _diseases(source, out, names)
     report.build_powers = _build_powers(source, out, names)
@@ -2387,6 +2468,39 @@ _TRAP_ATTACK = re.compile(r"Attack:?\s*([+-]\s*\d+)\s*vs\.?\s*(\w+)", re.I)
 #: `Hit: ... takes 3d10 damage`. The dice only -- the rest of the Hit line is
 #: rules text for somebody to write as code, like a monster's.
 _TRAP_DAMAGE = re.compile(r"(\d+d\d+(?:\s*\+\s*\d+)?)\s+damage", re.I)
+#: `Thievery DC 12`, `Arcana check DC 20` -- a skill beside a DC.
+#:
+#: Built from `engine.skills.SKILLS` rather than from a hand-written list,
+#: **longest name first**, which is the ordering `_skill_powers` needs for
+#: the same reason: two skill names share a prefix and the shorter would
+#: match inside the longer. The skill names are mechanical vocabulary, so
+#: they are safe in a column -- the same judgement `power.class` records for
+#: a skill power, and `leaks --specs` is the gate on it.
+#:
+#: `check` is optional because both spellings are printed, and the DC
+#: spelling is matched case-insensitively for the handful printing `dc`.
+#: Measured: 567 blocks, 1,477 pairs, DCs 5 to 41. #989.
+def _countermeasure_pattern() -> re.Pattern[str]:
+    from combat_engine.engine.skills import SKILLS
+
+    alt = "|".join(re.escape(s) for s in sorted(SKILLS, key=len, reverse=True))
+    return re.compile(rf"\b({alt})\b\s*(?:check\s*)?DC\s*(\d+)", re.I)
+
+
+#: `Initiative +6`, off the block's own Initiative field.
+#:
+#: **A number immediately after the word, and nothing cleverer**, because
+#: the same field is also printed as a sentence -- "Initiative A mote acts
+#: last in a round", "enters the initiative order directly after the
+#: creature that triggered it". A looser pattern reaching into that prose
+#: for the first digit it could find would read a count out of "initiative
+#: counts 20 and 10" and store 20 as a *modifier*, which is a different
+#: quantity and wrong by its whole magnitude.
+#:
+#: Measured over all 631: 246 match, and spot-reading the 160 mentions this
+#: does not match confirms every one is prose rather than a missed number.
+#: The sign is optional because a handful print `Initiative 6` flat. #1004.
+_TRAP_INIT = re.compile(r"\bInitiative\s*([+-]?\s*\d+)", re.I)
 
 
 #: Every field the three armour kinds print, anchored on the **line** rather
@@ -2708,6 +2822,9 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
     from .html import detail as _detail
 
     written = 0
+    # Compiled once: the alternation holds all 17 skill names, so rebuilding
+    # it per row would recompile a long pattern 631 times.
+    pairs = _countermeasure_pattern()
     for tid, name, level, role, kind, plain, raw in source.execute(
         "SELECT ID, Name, Level, Role, Type, PlainTxt, Txt FROM Trap ORDER BY ID"
     ):
@@ -2724,6 +2841,20 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
         dc = _TRAP_DC.search(spec)
         hit = _TRAP_ATTACK.search(spec)
         dmg = _TRAP_DAMAGE.search(spec)
+        init = _TRAP_INIT.search(spec)
+        # Every (skill, DC) the block prints, de-duplicated but order kept,
+        # so a block printing `Thievery DC 12` twice stores it once and a
+        # block printing two different Perception DCs stores both. #989.
+        seen_pairs: set[tuple[str, int]] = set()
+        for skill, at in pairs.findall(spec):
+            pair = (skill.lower(), int(at))
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            out.execute(
+                "INSERT INTO trap_countermeasure VALUES (?,?,?)",
+                (ref, pair[0], pair[1]),
+            )
         # **The older layout is the one with prose**, in a `<p class="flavor">`
         # italic line; the newer one opens straight into `<span class="traplead">`
         # and prints none at all. Recorded rather than inferred downstream.
@@ -2731,7 +2862,7 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
         dialect = "old" if 'class="flavor"' in (raw or "") else "new"
         prose = classed_prose(page, "flavor") if dialect == "old" else ""
         out.execute(
-            "INSERT OR REPLACE INTO trap VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO trap VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 ref,
                 tid,
@@ -2747,6 +2878,7 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
                 hit.group(2).strip().lower() if hit else None,
                 dmg.group(1).replace(" ", "") if dmg else None,
                 sanitise.scrub(spec, {name: ref}),
+                int(init.group(1).replace(" ", "")) if init else None,
                 dialect,
             ),
         )
