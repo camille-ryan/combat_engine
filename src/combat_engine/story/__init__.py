@@ -491,11 +491,15 @@ COMPOSITION: dict[str, list[tuple[str, float]]] = {
 #:
 #: Left at 3 on purpose. Two things to know before changing it: the page
 #: attaches a role caveat to the top of the range -- *"be careful of using
-#: high-level soldiers and brutes [...] soldier monsters get really hard to
-#: hit when they're five levels above the party"* -- so a wider band is not
-#: uniform across roles, and `cast_list._facts` already reads `role` if that
-#: is wanted. And #972's level adjustment would make this a preference
-#: rather than a wall, which is probably the answer that needs no change to
+#: high-level soldiers and brutes"*, because a soldier five levels up is
+#: very hard to hit and a brute does too much damage -- so a wider band is
+#: not uniform across roles, and `cast_list._facts` already reads `role` if
+#: that is wanted. (Quoted short on purpose: the full sentence carries a
+#: contraction that `leaks.py` matches against part of a monster ability
+#: name, which is the #494 partial-match noise.)
+#:
+#: And #972's level adjustment would make this a preference rather than a
+#: wall, which is probably the answer that needs no change to
 #: the number at all. #966.
 BAND = 3
 

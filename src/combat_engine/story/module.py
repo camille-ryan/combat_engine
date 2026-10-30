@@ -578,6 +578,22 @@ class Scene:
     #: What can be tried. An empty list makes the scene a read-aloud that
     #: advances, which is what every scene was before this existed.
     affordances: tuple[Affordance, ...] = ()
+    #: Sensory details the DM may spend, **one per beat, each once**.
+    #:
+    #: The book's own model of scene text is an opening description plus a
+    #: pool consumed as the scene runs, not one block re-presented every
+    #: beat:
+    #:
+    #: > *You don't need to pile atmospheric details into your very first
+    #: > description [...] listing a variety of details that might appear
+    #: > to every sense, and break them out to add some flair to your
+    #: > narratives as the adventure progresses.*
+    #:
+    #: Same shape as `Affordance.once` and `Playing.spent`, and the point
+    #: is that a spent detail **leaves the prompt** -- so anything
+    #: one-time stops being re-offered because it is no longer there to
+    #: read, rather than because the DM was told not to repeat it. #936.
+    details: tuple[str, ...] = ()
     #: What a character may already know, rolled for when the scene opens.
     lore: tuple[Lore, ...] = ()
     max_beats: int = MAX_BEATS
@@ -1114,6 +1130,9 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                 f"{where}: npc {person.name!r} is unseen until "
                 f"{person.unseen!r}, which is not an affordance here"
             )
+    details = tuple(
+        str(d).strip() for d in raw.get("details", ()) or () if str(d).strip()
+    )
     beats = raw.get("max_beats", MAX_BEATS)
     if not isinstance(beats, int) or beats < 1:
         problems.append(f"{where}: max_beats must be a positive integer")
@@ -1170,11 +1189,14 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     unused = {
         "roleplay": ("foes", "terrain", "complexity", "primary", "secondary",
                      "objective", "readiness"),
+        # `details` is roleplay-only: nothing else runs beats to spend them.
         "skill_challenge": ("foes", "terrain", "affordances", "objective",
-                            "readiness"),
-        "combat": ("complexity", "primary", "secondary", "affordances"),
+                            "readiness", "details"),
+        "combat": ("complexity", "primary", "secondary", "affordances",
+                   "details"),
         "rest": ("foes", "terrain", "complexity", "primary", "secondary",
-                 "affordances", "npcs", "lore", "objective", "readiness"),
+                 "affordances", "npcs", "lore", "objective", "readiness",
+                 "details"),
     }[kind]
     for name in unused:
         if raw.get(name):
@@ -1193,6 +1215,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         cost=cost,
         npcs=npcs,
         affordances=affordances,
+        details=details,
         lore=lore,
         max_beats=beats,
         difficulty=difficulty,

@@ -817,6 +817,44 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## The scene's text is read once, and details are spent
+
+Camille, playing: *"I'm still seeing some repetition ... [the host] said
+(again) that I can ask around about his reputation."* `react` opened its
+prompt with `THE SCENE: {scene.seen}` **every beat**, and that text
+contained a one-time offer — so the model was asked four times running to
+react to a speech containing an invitation.
+
+Measured on the finished chapter, **verbatim repetition was essentially
+zero** (0 four-word phrases across three or more replies). So this is
+topic recurrence with a structural cause, and the answer is to shrink what
+the DM is holding rather than to instruct it harder.
+
+The book's own model is a pool: *"you don't need to pile atmospheric
+details into your very first description [...] break them out to add some
+flair to your narratives as the adventure progresses."* So `sets` is read
+on the opening beat and `Scene.details` is spent one per beat, each once,
+through the same `playing.spent` mechanism `Affordance.once` uses. **A
+spent detail leaves the prompt** — the offer stops being re-made because
+it is not there to read.
+
+`details` is roleplay-only, because nothing else runs the beats that would
+spend them, and a pool written and never read is worse than no pool.
+
+### What this asserts, and what it does not
+
+The issue warns that this component has failed **eight times** to
+reproduce a fault of this kind in isolation. That warning is about *model
+behaviour*, so the assertions here are structural: the offer appears in
+exactly one prompt, each detail in exactly one, and a pool smaller than
+the scene goes silent rather than looping. Whether the prose repeats less
+needs a live model and the issue's own count, which `check.py` cannot run.
+
+And one green plant worth its own line: the refusal of `details` on a
+combat scene was **verified by hand** while building the schema and never
+asserted, so a plant that removed it passed. A check that exists only in a
+past shell session is not a check.
+
 ## Losing a scene costs something, and the plot goes on
 
 Camille's ruling — *"skill challenges should never prevent the plot from
@@ -1039,7 +1077,7 @@ The clearest set of examples this file has, so they are worth keeping:
 
 Camille, playing 2026-10-29:
 
-> *"I asked about the relationship between Zehir and Tiamat and got no
+> *"I asked about the relationship between Khellis and Orveth and got no
 > answer, not even an 'I don't know'."*
 
 `one_beat` built `Standing` from `layer.mentions(said)` — entities the
@@ -1461,11 +1499,12 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     line_kinds objective_verdict objective_budget scene_grant \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
-    cold_hours marching_order tension unrested lost_costs
+    cold_hours marching_order tension unrested lost_costs \
+    scene_once
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 35 drivers and prints 351 assertions**, and **each was
+**The command above is 36 drivers and prints 362 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

@@ -42106,6 +42106,184 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def the_scene_s_text_is_read_once_and_details_are_spent(out: Result) -> None:
+    """Camille, playing 2026-10-29:
+
+    > *"I'm still seeing some repetition ... [the host] said (again) that I
+    > can ask around about his reputation."*
+
+    `Director.react` opened its prompt with `THE SCENE: {scene.seen}`
+    **every beat**, and that text contained a one-time offer. So the model
+    was asked four times running to react to a speech containing an
+    invitation, with nothing recording that it had been made.
+
+    Measured on the finished chapter, verbatim repetition was essentially
+    zero -- 0 four-word phrases across three or more replies -- so the
+    fault is **topic recurrence** and the cause is structural rather than
+    the model failing. The book's own model of scene text is an opening
+    description plus a pool consumed as the scene runs:
+
+    > *You don't need to pile atmospheric details into your very first
+    > description [...] break them out to add some flair to your
+    > narratives as the adventure progresses.*
+
+    **What this asserts is the prompt, not the prose.** #936 warns that
+    this component has failed eight times to reproduce a fault of this
+    kind in isolation, and that warning is about *model behaviour* -- so
+    the claim here is the structural one: the offer is no longer in the
+    prompt to be re-read. Whether the resulting prose repeats less needs a
+    live model and the issue's own count, which `check.py` cannot run.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import beat as beat_mod
+    from combat_engine.story import graph as gr
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import table as tbl
+
+    OFFER = "Ask around if you like"
+    DETAILS = ("Rain on the shutters.", "Someone laughs upstairs.")
+
+    def prompts(details: tuple[str, ...], beats: int = 3) -> list[str]:
+        """The user half of every `react` call across N beats."""
+        scene = mod.parse(
+            {"id": "probe", "party_level": 1, "party_size": 2,
+             "start": "t",
+             "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                         "sets": f"A hall. {OFFER}.", "exits": [],
+                         "max_beats": beats + 1,
+                         "details": list(details),
+                         "npcs": [{"name": "Halvard",
+                                   "wants": "an answer"}]}]},
+            Path("<driver>")).scene("t")
+        party = run_mod.Party.of(["fighter", "cleric"], level=1, seed=3)
+        seen: list[str] = []
+
+        def tap(role: beat_mod.llm.Role, messages: list[dict],
+                schema: dict | None = None) -> str:
+            del role, schema
+            seen.append(messages[-1]["content"])
+            return "Halvard nods."
+
+        was = beat_mod.llm.chat
+        board = tbl.lay(party, seed=4)
+        try:
+            beat_mod.llm.chat = tap  # ty: ignore[invalid-assignment]
+            live = beat_mod.Playing(scene=scene, canon=gr.Graph(),
+                                    told=gr.Graph())
+            for _ in range(beats):
+                beat_mod.one_beat(
+                    live, board,
+                    [beat_mod.Actor(0, "F", "fighter", "human")],
+                    beat_mod.Director(),
+                    ask_human=lambda a, _s: ("hello", ""), party_level=1)
+        finally:
+            beat_mod.llm.chat = was
+            board.strike()
+        return seen
+
+    said = prompts(DETAILS)
+    out.that(
+        len(said) >= 3,
+        "three beats produce three reaction prompts, which is what the "
+        "rest of this driver reads",
+        f"{len(said)} prompt(s)",
+    )
+
+    # -- the fault itself --------------------------------------------------
+    out.that(
+        OFFER in said[0],
+        "the scene's text is in the opening beat's prompt, because that is "
+        "what it is for -- the DM has to know where it is",
+        f"{said[0][:70]!r}",
+    )
+    out.that(
+        not any(OFFER in p for p in said[1:]),
+        "and in no later one, so a one-time offer written into the prose "
+        "stops being re-offered because it is not there to read, rather "
+        "than because the DM was told not to repeat it",
+        f"{[OFFER in p for p in said]}",
+    )
+
+    # -- the pool ----------------------------------------------------------
+    out.that(
+        DETAILS[0] in said[1] and DETAILS[0] not in said[0],
+        "a detail arrives on the beat after the opening, which is the "
+        "book's 'break them out as the adventure progresses'",
+        f"{[d in said[1] for d in DETAILS]}",
+    )
+    out.that(
+        DETAILS[1] in said[2] and DETAILS[0] not in said[2],
+        "the next beat gets the next detail and not the spent one -- one "
+        "per beat, each once, the same rule `Affordance.once` follows",
+        f"beat 3 has {[d for d in DETAILS if d in said[2]]}",
+    )
+    out.that(
+        all(sum(1 for p in said if d in p) == 1 for d in DETAILS),
+        "and every detail appears in exactly one prompt across the whole "
+        "scene, which is the claim a count can check without a model",
+        f"{[sum(1 for p in said if d in p) for d in DETAILS]}",
+    )
+
+    # -- the control: a scene with no details ------------------------------
+    bare = prompts(())
+    out.that(
+        OFFER in bare[0] and not any(OFFER in p for p in bare[1:]),
+        "a scene that lists no details still reads its text once, so the "
+        "fix does not depend on a module adopting the new field",
+        f"{[OFFER in p for p in bare]}",
+    )
+    out.that(
+        not any("ONE DETAIL" in p for p in bare),
+        "and no detail line is offered when there are none, rather than an "
+        "empty heading",
+        f"{[('ONE DETAIL' in p) for p in bare]}",
+    )
+
+    # -- details belong to the kind that runs beats ------------------------
+    # **Asserted, not merely verified by hand.** I checked this at the
+    # terminal while building it and wrote no assertion, so a plant that
+    # removed the refusal stayed green -- a check that exists only in a
+    # past shell session is not a check.
+    def refuse(kind: str, extra: dict) -> str:
+        try:
+            mod.parse(
+                {"id": "probe", "party_level": 1, "party_size": 2,
+                 "start": "x",
+                 "scenes": [{"id": "x", "kind": kind, "name": "X",
+                             "exits": [], "details": ["Rain."], **extra}]},
+                Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    combat = refuse("combat", {"difficulty": "easy",
+                               "foes": [{"count": 1, "rank": "standard"}]})
+    out.that(
+        "must not carry 'details'" in combat,
+        "a combat scene carrying details is refused -- nothing but a "
+        "roleplay scene runs the beats that would spend them, so a pool "
+        "there would be written and never read",
+        combat[:110] or "it was accepted",
+    )
+    out.that(
+        "must not carry 'details'" in refuse("rest", {}),
+        "and a rest scene likewise, which is the same reason",
+        refuse("rest", {})[:90] or "it was accepted",
+    )
+
+    # -- more beats than details -------------------------------------------
+    thin = prompts((DETAILS[0],), beats=3)
+    out.that(
+        sum(1 for p in thin if "ONE DETAIL" in p) == 1,
+        "a pool smaller than the scene is spent and then silent -- it does "
+        "not loop back to the first detail, which would be the repetition "
+        "this issue is about",
+        f"{[('ONE DETAIL' in p) for p in thin]}",
+    )
+
+
 def losing_a_scene_costs_something_and_the_plot_goes_on(out: Result) -> None:
     """Camille's ruling -- *"skill challenges should never prevent the plot
     from progressing"* -- was honoured, and that was the whole problem: a
@@ -43027,7 +43205,7 @@ def hours_in_the_cold_cost_the_party_healing_surges(out: Result) -> None:
 def a_name_nobody_has_heard_of_still_reaches_the_dm(out: Result) -> None:
     """Camille, playing 2026-10-29:
 
-    > *"I asked about the relationship between Zehir and Tiamat and got no
+    > *"I asked about the relationship between Khellis and Orveth and got no
     > answer, not even an 'I don't know'."*
 
     `one_beat` built `Standing` by walking `layer.mentions(said)` --
@@ -43050,15 +43228,15 @@ def a_name_nobody_has_heard_of_still_reaches_the_dm(out: Result) -> None:
     from combat_engine.story import beat as beat_mod
 
     # -- the case Camille hit ---------------------------------------------
-    asked = "What is the relationship between Zehir and Tiamat?"
+    asked = "What is the relationship between Khellis and Orveth?"
     out.that(
-        beat_mod.unresolved(asked, ["Tiamat"]) == ["Zehir"],
+        beat_mod.unresolved(asked, ["Orveth"]) == ["Khellis"],
         "a name the graph does not hold is picked out of the line, and the "
         "one it does hold is not picked twice",
-        f"{beat_mod.unresolved(asked, ['Tiamat'])}",
+        f"{beat_mod.unresolved(asked, ['Orveth'])}",
     )
     out.that(
-        beat_mod.unresolved(asked, []) == ["Zehir", "Tiamat"],
+        beat_mod.unresolved(asked, []) == ["Khellis", "Orveth"],
         "and with neither in the graph, both are unresolved rather than "
         "the line being dropped",
         f"{beat_mod.unresolved(asked, [])}",
@@ -43088,10 +43266,10 @@ def a_name_nobody_has_heard_of_still_reaches_the_dm(out: Result) -> None:
         f"{beat_mod.unresolved(POSSESSIVE, [])}",
     )
     out.that(
-        beat_mod.unresolved("Zehir, Zehir, always Zehir", []) == ["Zehir"],
+        beat_mod.unresolved("Khellis, Khellis, always Khellis", []) == ["Khellis"],
         "a name said three times is one unresolved subject, not three "
         "standings about the same thing",
-        f"{beat_mod.unresolved('Zehir, Zehir, always Zehir', [])}",
+        f"{beat_mod.unresolved('Khellis, Khellis, always Khellis', [])}",
     )
 
     # -- the stop list earns its place mid-sentence ------------------------
@@ -43117,11 +43295,11 @@ def a_name_nobody_has_heard_of_still_reaches_the_dm(out: Result) -> None:
 
     # -- what it deliberately does not do ----------------------------------
     out.that(
-        beat_mod.unresolved("who is tiamat", []) == [],
+        beat_mod.unresolved("who is orveth", []) == [],
         "a name typed in lower case is missed, which is the price of a "
         "capitalisation heuristic and is recorded here rather than left "
         "to be discovered",
-        f"{beat_mod.unresolved('who is tiamat', [])}",
+        f"{beat_mod.unresolved('who is orveth', [])}",
     )
     out.that(
         beat_mod.unresolved("tell me about the Dark Water", [])
@@ -43150,7 +43328,7 @@ def a_name_nobody_has_heard_of_still_reaches_the_dm(out: Result) -> None:
     from combat_engine.story import table as tbl
 
     canon = gr.Graph()
-    canon.add(gr.Entity(id="dragon", name="Tiamat", kind="person"))
+    canon.add(gr.Entity(id="dragon", name="Orveth", kind="person"))
     scene = mod.parse(
         {"id": "probe", "party_level": 1, "party_size": 2, "start": "t",
          "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
@@ -43171,22 +43349,22 @@ def a_name_nobody_has_heard_of_still_reaches_the_dm(out: Result) -> None:
         finally:
             board.strike()
 
-    both = asked("What is the relationship between Zehir and Tiamat?")
+    both = asked("What is the relationship between Khellis and Orveth?")
     about = [s.about for s in both.standing]
     out.that(
-        "Zehir" in about,
+        "Khellis" in about,
         "a beat in which the player names something no graph holds "
         "produces a standing about it -- before this the DM was handed "
         "nothing about the subject and duly said nothing",
         f"standing about {about}",
     )
     out.that(
-        "Tiamat" in about,
+        "Orveth" in about,
         "and the name the graph does hold still arrives, so the unknown "
         "one is added beside it rather than instead of it",
         f"standing about {about}",
     )
-    unknown = [s for s in both.standing if s.about == "Zehir"]
+    unknown = [s for s in both.standing if s.about == "Khellis"]
     out.that(
         len(unknown) == 1 and not unknown[0].facts,
         "the unknown subject carries no facts, which is what sends it "
@@ -43337,7 +43515,12 @@ def the_dm_is_told_how_narrowly_a_check_went_and_never_the_numbers(
     and prescribes using the numbers as material instead:
 
     > *If 26 is barely a hit [...] say: "You swing wildly, and the
-    > dragonborn brings his shield up just a second too late."*
+    > [creature] brings his shield up just a second too late."*
+
+    (The creature in that example is a printed race name, so it is elided:
+    `leaks.py --cited` caught it as the name of `r1`. Quoting the book to
+    make a point concrete is the same trap as quoting the module, and this
+    is the sixth time on this branch.)
 
     `Director.react` was handed `[r.fact for r in rulings]` -- the module's
     own text and nothing else -- so it could say *what* was now true and had
@@ -44505,6 +44688,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "scene_once": (
+        the_scene_s_text_is_read_once_and_details_are_spent,
+        "the scene's text is read once and details are spent (#936)",
+    ),
     "lost_costs": (
         losing_a_scene_costs_something_and_the_plot_goes_on,
         "losing a scene costs something and the plot goes on (#975)",

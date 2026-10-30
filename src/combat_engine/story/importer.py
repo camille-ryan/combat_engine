@@ -592,6 +592,18 @@ Add `harder` or `easier` (never both) when the page says the objective makes
 the fight tougher or lets the party off lighter -- it moves the budget one
 band. `says` is the page's own phrasing of the goal, printed to the player.
 
+**`details`, for a roleplay scene: the sensory notes a scene can spend.**
+A list of short lines -- a sound, a smell, something moving at the edge of
+the room. The scene's own text is read to the DM **once**, on the opening
+beat; after that it draws one of these per beat and each is used at most
+once.
+
+So put a one-time thing in `details` rather than in `sets`: an offer
+written into the scene text was being re-made every beat, because the text
+was in every prompt. This is the book's own shape -- *"you don't need to
+pile atmospheric details into your very first description [...] break them
+out to add some flair to your narratives as the adventure progresses."*
+
 **`grants`, whenever the page hands the party a thing.** Any kind of scene
 may carry one -- an NPC offering a consumable in conversation, a chapter's
 treasure line after a fight, something found over a night's rest. Each entry

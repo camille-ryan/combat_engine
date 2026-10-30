@@ -583,7 +583,7 @@ NOT_A_NAME = frozenset({
 #: carries no evidence of being a name -- and taking it anyway is what made
 #: *"Tell me about your brass compass."* produce a standing about `Tell`,
 #: breaking an assertion a previous session wrote on purpose. The cost is
-#: that a player who opens with a bare name (*"Zehir, who is he?"*) is
+#: that a player who opens with a bare name (*"Khellis, who is he?"*) is
 #: missed; the benefit is that ordinary typing does not produce noise.
 _PROPER = re.compile(r"(?<![\w'])([A-Z][a-z]{2,})(?:'s)?(?![\w'])")
 
@@ -596,7 +596,7 @@ def unresolved(text: str, known: Iterable[str]) -> list[str]:
 
     Camille, playing 2026-10-29:
 
-    > *"I asked about the relationship between Zehir and Tiamat and got no
+    > *"I asked about the relationship between Khellis and Orveth and got no
     > answer, not even an 'I don't know'."*
 
     **A name the graph has never heard of produced no `Standing` at all**,
@@ -962,7 +962,34 @@ class Director:
         # reading the module reads. What the DM needs to stay in character --
         # who is here, what they want, what they may say -- is below, and is
         # written for exactly that.
-        told = [f"THE SCENE: {scene.seen}"]
+        # **The scene's text on the opening beat only, and a detail after
+        # that.** Camille, playing: *"I'm still seeing some repetition ...
+        # [the host] said (again) that I can ask around about his
+        # reputation."* The block was in every beat's prompt, so a
+        # one-time offer written into the prose was re-read by the model
+        # every beat with nothing recording that it had been made.
+        #
+        # Measured on the finished chapter, verbatim repetition was
+        # essentially zero -- 0 four-word phrases across three or more
+        # replies -- so this is **topic recurrence**, and the cause is
+        # structural rather than the model failing. The book's own model
+        # is an opening description plus a pool consumed as the scene
+        # runs, so a spent detail *leaves the prompt* and a one-time offer
+        # stops being re-made because it is not there to read.
+        #
+        # `recent()` carries the situation after beat one, which is what
+        # the text was standing in for. #936.
+        opening = not playing.beats
+        told = [f"THE SCENE: {scene.seen}"] if opening else []
+        if not opening:
+            spare = next(
+                (d for d in scene.details
+                 if f"detail:{d}" not in playing.spent), "")
+            if spare:
+                playing.spent.add(f"detail:{spare}")
+                told.append(
+                    "ONE DETAIL to work in, if it fits -- it will not be "
+                    f"offered again:\n{spare}")
         if who:
             told.append("WHO IS HERE:\n" + "\n".join(who))
         # **An intent that matched nothing changes nothing**, and the DM
