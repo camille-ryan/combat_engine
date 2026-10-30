@@ -49,7 +49,7 @@ would field a fight with no terrain and look exactly like one that worked.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -455,6 +455,34 @@ class Lore:
 
 
 @dataclass(frozen=True)
+class Person:
+    """Somebody the module has, as opposed to somebody in one scene.
+
+    > *Keep track of the way you have important NPCs act so you can
+    > maintain consistency if the same character appears again.*
+
+    We could not: `Npc` lived on a `Scene` and nowhere else, so the same
+    person across three scenes was three independent entries and nothing
+    made them agree. Voice and looks drifted, `wants` could contradict
+    itself, and a name typo made a second person in silence.
+
+    **The split is the one #944 settles in its own last paragraph**:
+    `wants`, `voice` and `looks` are the person's and live here;
+    `knows`, `hides` and `unseen` are the scene's and stay on `Npc`,
+    because what somebody will tell you depends on where you meet them.
+
+    This is also the half `story/graph.py` deliberately does not carry: a
+    graph records what is *true* about a person, and how they are *played*
+    is a presentation property rather than a fact.
+    """
+
+    name: str
+    wants: str = ""
+    voice: str = ""
+    looks: str = ""
+
+
+@dataclass(frozen=True)
 class Npc:
     """Somebody in the scene for the model to play.
 
@@ -710,6 +738,12 @@ class Module:
     #: a reputation score, a body count, a door left unlocked. The module in
     #: `modules/` counts one of these and spends it on rewards.
     flags: dict[str, int] = field(default_factory=dict)
+    #: The people this module has, by name -- their `wants`, `voice` and
+    #: `looks`, which travel between scenes. A scene naming one of them
+    #: inherits those, and a scene that **contradicts** one is refused.
+    #: Empty for every module written before this, which then behaves
+    #: exactly as it did. #944.
+    cast: tuple[Person, ...] = ()
     #: Events that fire on the clock rather than on what the party did.
     #: Empty for every module converted so far, which is why nothing plays
     #: differently until one states an entry. See `Timed` and `run._due`.
@@ -894,6 +928,68 @@ def _as_grant(raw: Any, where: str, problems: list[str]) -> Grant | None:
         )
         count = 1
     return Grant(what=what, count=count)
+
+
+def _as_person(raw: Any, where: str, problems: list[str]) -> Person | None:
+    """One cast entry: the half of a character that travels."""
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a cast entry must be an object")
+        return None
+    name = str(raw.get("name", "")).strip()
+    if not name:
+        problems.append(f"{where}: a cast entry needs a name")
+        return None
+    return Person(
+        name=name,
+        wants=str(raw.get("wants", "")).strip(),
+        voice=str(raw.get("voice", "")).strip(),
+        looks=str(raw.get("looks", "")).strip(),
+    )
+
+
+def _agree(scene_id: str, npcs: tuple[Npc, ...], cast: dict[str, Person],
+           problems: list[str]) -> tuple[Npc, ...]:
+    """Fill a scene's npcs from the cast, and refuse a contradiction.
+
+    **Inherit when the scene is silent, refuse when it disagrees.** The
+    alternative -- preferring one side -- is how the drift in #944 stayed
+    invisible: whichever value won, the other was written down and
+    ignored, and nothing said so. A module that means to change somebody
+    changes the cast entry.
+
+    A name not in the cast is left alone rather than refused, because a
+    walk-on who appears once is legitimate and a cast is not required to
+    be exhaustive. What that costs is the typo case: a misspelling makes a
+    walk-on rather than a complaint. Said out loud here because #944 hoped
+    the refusal would fall out for free, and it only does if the cast is
+    exhaustive -- which would refuse every one-scene character.
+    """
+    # No `if not cast` fast path: with an empty cast every npc takes the
+    # walk-on branch and comes back unchanged, so the guard changed
+    # nothing -- a plant that removed it stayed green. Fifth dead guard of
+    # this shape on this branch.
+    out: list[Npc] = []
+    for who in npcs:
+        known = cast.get(who.name)
+        if known is None:
+            out.append(who)
+            continue
+        for field_ in ("wants", "voice", "looks"):
+            mine = getattr(who, field_)
+            theirs = getattr(known, field_)
+            if mine and theirs and mine != theirs:
+                problems.append(
+                    f"scene {scene_id!r}: npc {who.name!r} sets {field_} to "
+                    f"{mine!r} and the cast says {theirs!r} -- change the "
+                    "cast entry rather than contradicting it here"
+                )
+        out.append(replace(
+            who,
+            wants=who.wants or known.wants,
+            voice=who.voice or known.voice,
+            looks=who.looks or known.looks,
+        ))
+    return tuple(out)
 
 
 def _as_npc(raw: Any, where: str, problems: list[str]) -> Npc | None:
@@ -1243,12 +1339,28 @@ def parse(raw: dict, path: Path) -> Module:
     if not module_id:
         problems.append("the module needs an id")
 
+    cast_list = tuple(
+        c for c in (
+            _as_person(r, f"cast entry {i + 1}", problems)
+            for i, r in enumerate(raw.get("cast", ()) or ())
+        ) if c is not None
+    )
+    cast = {c.name: c for c in cast_list}
+    if len(cast) != len(cast_list):
+        problems.append(
+            "the cast names somebody twice, so a scene naming them could "
+            "inherit either entry"
+        )
+
     scenes: dict[str, Scene] = {}
     order: list[str] = []
     for i, raw_scene in enumerate(raw.get("scenes", ())):
         scene = _as_scene(raw_scene, i, problems)
         if scene is None:
             continue
+        if scene.npcs:
+            scene = replace(
+                scene, npcs=_agree(scene.id, scene.npcs, cast, problems))
         if scene.id in scenes:
             problems.append(f"scene {scene.id!r}: declared twice")
             continue
@@ -1335,6 +1447,7 @@ def parse(raw: dict, path: Path) -> Module:
         party_size=int(raw.get("party_size", 4) or 4),
         edition=str(raw.get("edition", "")).strip(),
         flags=flags,
+        cast=cast_list,
         timeline=timeline,
     )
 

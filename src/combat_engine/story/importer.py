@@ -592,6 +592,17 @@ Add `harder` or `easier` (never both) when the page says the objective makes
 the fight tougher or lets the party off lighter -- it moves the budget one
 band. `says` is the page's own phrasing of the goal, printed to the player.
 
+**`cast`, at the top of the module: the people who appear more than once.**
+Each entry is `{{"name": ..., "wants": ..., "voice": ..., "looks": ...}}`.
+A scene naming one of them inherits all three, so write them **once** here
+rather than in every scene -- and a scene that contradicts the cast is
+refused rather than quietly preferring one, which is how a recurring
+character used to drift between appearances.
+
+What stays on the scene is what depends on where you meet them: `knows`,
+`hides` and `unseen`. Somebody who appears in one scene only needs no cast
+entry.
+
 **`details`, for a roleplay scene: the sensory notes a scene can spend.**
 A list of short lines -- a sound, a smell, something moving at the edge of
 the room. The scene's own text is read to the DM **once**, on the opening

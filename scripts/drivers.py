@@ -42106,6 +42106,151 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_recurring_character_is_the_same_person_each_time(out: Result) -> None:
+    """The DMG, on portraying NPCs:
+
+    > *Keep track of the way you have important NPCs act so you can
+    > maintain consistency if the same character appears again.*
+
+    We could not. `Npc` lived on a `Scene` and nowhere else, so the same
+    person across three scenes was three independent entries and nothing
+    made them agree -- voice and looks could drift, `wants` could
+    contradict itself, and a name typo made a second person in silence.
+
+    **The split is the one #944 settles in its own last paragraph**:
+    `wants`, `voice` and `looks` are the person's and live on
+    `Module.cast`; `knows`, `hides` and `unseen` are the scene's, because
+    what somebody will tell you depends on where you meet them.
+
+    **A contradiction is refused rather than resolved**, which is the
+    assertion that matters. Preferring one side is how the drift stayed
+    invisible: whichever value won, the other was written down and
+    ignored, and nothing said so.
+
+    The last assertion records what this does *not* buy. #944 hoped a
+    refusal for a scene naming somebody not in the cast would fall out for
+    free; it only does if the cast is exhaustive, which would refuse every
+    one-scene walk-on. So a typo still makes a walk-on rather than a
+    complaint, and that is stated rather than left to be discovered.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+
+    PERSON = {"name": "Halvard", "wants": "the ledger back",
+              "voice": "slowly, with long pauses",
+              "looks": "a stooped man"}
+
+    def build(cast: list[dict], first: list[dict],
+              second: list[dict] | None = None) -> mod.Module:
+        scenes: list[dict] = [
+            {"id": "a", "kind": "roleplay", "name": "A",
+             "exits": ["b"] if second is not None else [], "npcs": first}]
+        if second is not None:
+            scenes.append({"id": "b", "kind": "roleplay", "name": "B",
+                           "exits": [], "npcs": second})
+        return mod.parse(
+            {"id": "probe", "party_level": 1, "party_size": 2,
+             "start": "a", "cast": cast, "scenes": scenes},
+            Path("<driver>"))
+
+    def refused(cast: list[dict], npcs: list[dict]) -> str:
+        try:
+            build(cast, npcs)
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the control: a module with no cast is untouched -------------------
+    # **Accepted, and then unchanged -- two assertions.** The first draft
+    # called `build` directly, so a plant that refused every unknown name
+    # crashed the driver instead of reddening a claim: red either way, but
+    # a crash does not say which rule broke.
+    out.that(
+        refused([], [{"name": "Halvard", "wants": "a drink"}]) == "",
+        "a module that declares no cast is accepted, so this is additive "
+        "rather than a new requirement on every existing module",
+        refused([], [{"name": "Halvard", "wants": "a drink"}])[:90]
+        or "accepted",
+    )
+    bare = build([], [{"name": "Halvard", "wants": "a drink",
+                       "voice": "briskly"}])
+    out.that(
+        bare.cast == ()
+        and bare.scene("a").npcs[0].wants == "a drink"
+        and bare.scene("a").npcs[0].voice == "briskly",
+        "and it keeps whatever each scene wrote, so every module written "
+        "before this behaves exactly as it did",
+        f"{bare.scene('a').npcs[0]}",
+    )
+
+    # -- the person's half travels ----------------------------------------
+    twice = build([PERSON],
+                  [{"name": "Halvard", "knows": ["the door is barred"]}],
+                  [{"name": "Halvard", "knows": ["the banker left"]}])
+    here, there = twice.scene("a").npcs[0], twice.scene("b").npcs[0]
+    out.that(
+        here.wants == there.wants == PERSON["wants"]
+        and here.voice == there.voice == PERSON["voice"]
+        and here.looks == there.looks == PERSON["looks"],
+        "the same person in two scenes has one set of wants, one voice and "
+        "one description, inherited rather than restated",
+        f"{here.wants!r}/{there.wants!r} {here.voice!r}/{there.voice!r}",
+    )
+
+    # -- and the scene's half does not ------------------------------------
+    out.that(
+        here.knows == ("the door is barred",)
+        and there.knows == ("the banker left",),
+        "and what they will say is still the scene's, because what "
+        "somebody tells you depends on where you meet them",
+        f"{here.knows} vs {there.knows}",
+    )
+
+    # -- a contradiction is refused, not resolved -------------------------
+    for field_, value in (("voice", "briskly"), ("wants", "a quiet life"),
+                          ("looks", "a tall woman")):
+        clash = refused([PERSON], [{"name": "Halvard", field_: value}])
+        out.that(
+            f"sets {field_} to" in clash and "change the cast entry" in clash,
+            f"a scene contradicting the cast's {field_} is refused -- "
+            "preferring one side is how the drift stayed invisible, "
+            "because the other was written down and ignored",
+            clash[:100] or "it was accepted",
+        )
+
+    # -- a scene agreeing with the cast is not a contradiction ------------
+    same = build([PERSON], [{"name": "Halvard",
+                             "voice": PERSON["voice"]}])
+    out.that(
+        same.scene("a").npcs[0].voice == PERSON["voice"],
+        "and a scene that restates the cast's own value is accepted, so "
+        "the refusal is about disagreement rather than about repetition",
+        f"{same.scene('a').npcs[0].voice!r}",
+    )
+
+    # -- a duplicate cast entry is refused --------------------------------
+    twins = refused([PERSON, PERSON], [{"name": "Halvard"}])
+    out.that(
+        "names somebody twice" in twins,
+        "a cast naming the same person twice is refused, because a scene "
+        "naming them could inherit either entry",
+        twins[:90] or "it was accepted",
+    )
+
+    # -- what this does not buy, stated -----------------------------------
+    walk_on = build([PERSON], [{"name": "Halvardd", "wants": "a drink"}])
+    out.that(
+        walk_on.scene("a").npcs[0].name == "Halvardd"
+        and walk_on.scene("a").npcs[0].wants == "a drink",
+        "a name not in the cast is left alone rather than refused -- a "
+        "one-scene walk-on is legitimate, so a typo still makes a second "
+        "person quietly, which #944 hoped would fall out for free and "
+        "only would if a cast were exhaustive",
+        f"{walk_on.scene('a').npcs[0].name!r}",
+    )
+
+
 def the_scene_s_text_is_read_once_and_details_are_spent(out: Result) -> None:
     """Camille, playing 2026-10-29:
 
@@ -44688,6 +44833,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "module_cast": (
+        a_recurring_character_is_the_same_person_each_time,
+        "a recurring character is the same person each time (#944)",
+    ),
     "scene_once": (
         the_scene_s_text_is_read_once_and_details_are_spent,
         "the scene's text is read once and details are spent (#936)",

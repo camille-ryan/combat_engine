@@ -817,6 +817,48 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## A recurring character is the same person each time
+
+> *Keep track of the way you have important NPCs act so you can maintain
+> consistency if the same character appears again.*
+
+We could not: `Npc` lived on a `Scene` and nowhere else, so the same
+person across three scenes was three independent entries and nothing made
+them agree. Only invisible because one session authored all six scenes and
+kept them consistent by hand.
+
+`Module.cast` holds the half that travels. The split is #944's own:
+**`wants`, `voice`, `looks`** are the person's; **`knows`, `hides`,
+`unseen`** stay on the scene, because what somebody tells you depends on
+where you meet them. It is also the half `graph.py` deliberately does not
+carry — a graph records what is *true* about a person, and how they are
+*played* is presentation rather than fact.
+
+Two calls:
+
+* **A contradiction is refused, not resolved.** Preferring one side is how
+  the drift stayed invisible: whichever value won, the other was written
+  down and ignored and nothing said so. The message points at the cast
+  entry as the thing to change. A scene restating the cast's own value is
+  fine — the refusal is about disagreement, not repetition.
+* **A name not in the cast is a walk-on, not an error.** #944 hoped a
+  refusal would fall out for free; it only does if the cast is
+  exhaustive, which would refuse every one-scene character. So a **typo
+  still makes a second person quietly**, and that is asserted rather than
+  left to be found.
+
+### Two findings from one green plant
+
+* **The `if not cast` fast path was dead** — with an empty cast every npc
+  takes the walk-on branch and returns unchanged. Fifth guard of this
+  shape on this branch; I keep writing one for a case the general path
+  already handles.
+* **And the control crashed rather than failing.** Checking what covered
+  it showed the walk-on plant raising an uncaught `ModuleError` from the
+  control's own `build`. Red either way, but a crash does not say which
+  rule broke, so the control is two assertions now — accepted, then
+  unchanged.
+
 ## The scene's text is read once, and details are spent
 
 Camille, playing: *"I'm still seeing some repetition ... [the host] said
@@ -1500,11 +1542,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
-    scene_once
+    scene_once module_cast
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 36 drivers and prints 362 assertions**, and **each was
+**The command above is 37 drivers and prints 372 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
