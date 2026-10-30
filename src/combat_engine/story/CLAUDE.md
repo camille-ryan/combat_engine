@@ -1574,11 +1574,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
-    graph_edges challenge_says
+    graph_edges challenge_says fight_aftermath
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 42 drivers and prints 459 assertions**, and **each was
+**The command above is 43 drivers and prints 477 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -1920,3 +1920,58 @@ Posing that took two corrections:
   refusal, which makes the assertion unable to fail. **Seed 1** has the first
   use succeed, so the lose text is never true and a refusal printing it is
   visible. 39 refusals there; the plant now reddens.
+
+## A fight says how it went, and the next scene carries it (#943, combat half)
+
+A story fight reported `Won in 4 rounds` and sent the blow-by-blow to a
+transcript file nobody reads during play — *"there is a whole encounter of
+this material and none of it is narrated."* The skill-check half of #943
+landed earlier (`MARGINS`, `fact (barely)`); this is the half that body
+separated out.
+
+**Same discipline, deliberately mirrored**: one phrase from a closed set
+(`beat.FIGHTS`), derived from what the engine already produced, and **no
+arithmetic anywhere near the prompt**. A number in a prompt is a number the
+model quotes back, so fixing *"26 against AC"* by handing over 26 reproduces
+the rut inside its own fix. There is an assertion that the carried sentence
+holds no digit.
+
+`aftermath(won, bloodied, down)` reads **two printed states and nothing
+else** — *bloodied* is the game's own word for half hit points, *down* is
+nought or less. Neither is a threshold invented here, which a round count
+would have been: "short" has no printed definition. Worst-first among the
+wins, because the worst thing that happened to the party is what a narrator
+leads with.
+
+**It has a reader, which is the part a derived phrase usually lacks.** The
+conversation after the fight opens with it, before the scene's own text,
+because it is what the party walks in carrying — and the DM is told it is for
+the mood and *"not something anybody announces"*, the same instruction the
+margin carries.
+
+Three scoping rules, each with its own assertion:
+
+* **the opening beat only.** After beat one the situation is the last
+  reaction, and repeating the fight there has the DM narrating a battle three
+  exchanges into the conversation after it.
+* **spent on read**, like `campaign.denied`. A flag nothing clears is a DM
+  opening on a battle two scenes back.
+* **spent at the top of the scene, not where the beats start.** `_roleplay`
+  returns early for a scene with nothing to play; holding the phrase past it
+  would describe a fight two scenes back. A scene nobody narrates drops it,
+  which is right — nobody was asked.
+
+### Two things the plants settled
+
+**The seeds had to be re-measured against the exact scene list.** All four
+phrases are posed through *real* fights rather than only through the pure
+function, and the first set of seeds came from a probe where the fight was the
+only scene. A different graph gives the fight a different stream, so four
+assertions failed on seeds measured against the wrong board. 22 plants, 20
+red.
+
+**And one guard cannot be reddened, which is recorded rather than hidden.**
+The `0 <` that keeps somebody face-down out of the bloodied count: `aftermath`
+ranks down above bloodied, so a character counted as both cannot change the
+phrase today. It is kept because the count should be a correct count, and it
+is the thing that would silently go wrong if that ranking were ever reordered.

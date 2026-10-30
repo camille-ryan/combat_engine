@@ -142,6 +142,37 @@ def margin(total: int, dc: int) -> str:
     return "clearly" if gap > 0 else "nowhere near"
 
 
+#: How a fight went, as one phrase from a closed set. The combat half of
+#: #943, and the same discipline as `MARGINS` one definition up: derived
+#: from what the engine already produced, handed to the DM as narration
+#: material, and never a number.
+#:
+#: A story fight printed `Won in 4 rounds` and sent the blow-by-blow to a
+#: transcript file nobody reads during play -- *"there is a whole encounter
+#: of this material and none of it is narrated"*.
+FIGHTS = ("a rout", "hard-won", "a near thing", "a defeat")
+
+
+def aftermath(won: bool, bloodied: int, down: int) -> str:
+    """How the fight went, as one of `FIGHTS`.
+
+    **Read off two printed states and nothing else.** *Bloodied* is the
+    game's own word for half hit points and *down* is nought or less, so
+    neither is a threshold invented here -- which was the alternative, and
+    a round count would have been one: "short" has no printed definition.
+
+    Ordered worst-first among the wins, because the worst thing that
+    happened to the party is what a narrator leads with.
+    """
+    if not won:
+        return "a defeat"
+    if down:
+        return "a near thing"
+    if bloodied:
+        return "hard-won"
+    return "a rout"
+
+
 @dataclass(frozen=True)
 class Ruling:
     """What the engine made of one intent."""
@@ -235,6 +266,11 @@ class Playing:
     beats: list[Beat] = field(default_factory=list)
     #: Affordance ids already taken, for the `once` rule.
     spent: set[str] = field(default_factory=set)
+    #: What happened just before this scene, for the DM to narrate from.
+    #: Carries the last fight's `aftermath` into the conversation after it,
+    #: which is the only reader the combat half of #943 has -- a derived
+    #: phrase nothing reads is the same as no phrase.
+    carried: str = ""
     #: Facts the party has learnt, which later beats may refer back to.
     learnt: list[str] = field(default_factory=list)
     #: What the adventure's pages say, built by `scripts/ingest.py`. Read
@@ -1209,6 +1245,12 @@ def one_beat(
     situation = (
         playing.beats[-1].reaction if playing.beats else scene.seen
     ) or scene.seen
+    # **On the first beat only**, and before the scene's own text: it is
+    # what the party walks in carrying. After beat one the situation is the
+    # last reaction, and repeating the fight there would have the DM
+    # narrating a battle three exchanges into the conversation after it.
+    if not playing.beats and playing.carried:
+        situation = f"{playing.carried}\n\n{situation}".strip()
     beat = Beat(n=len(playing.beats) + 1, situation=situation)
 
     # -- what the party already knows. First beat only: this is "what do you
@@ -1467,6 +1509,7 @@ def play_scene(
     asked: set[str] | None = None,
     canon: Any = None,
     told: Any = None,
+    carried: str = "",
 ) -> Playing:
     """Run a roleplay scene to its end.
 
@@ -1477,7 +1520,7 @@ def play_scene(
     lines, not their own roll, not the reply. Four prompts into a
     conversation that has not visibly started.
     """
-    playing = Playing(scene=scene, asked=set(asked or ()),
+    playing = Playing(scene=scene, asked=set(asked or ()), carried=carried,
                       canon=canon, told=told)
     while not playing.over:
         made = one_beat(playing, table, actors, director,

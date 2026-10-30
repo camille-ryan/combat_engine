@@ -42106,6 +42106,222 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
+    """The combat half of #943. A fight reported `Won in 4 rounds`.
+
+    DMG chapter 2 names the failure and we printed its example:
+
+    > *"You know you've fallen into this trap when the table chatter is:
+    > 'That's 26 against AC,' 'You hit, now roll damage,' '31 points'..."*
+
+    and prescribes using the numbers as narration material instead. The
+    skill-check half landed earlier -- a ruling reaches `react` as
+    `fact (barely)` from `MARGINS`. This is the half that body separated
+    out: *"a story-mode fight prints `Won in 4 rounds` and the
+    blow-by-blow goes to a transcript file nobody reads during play. There
+    is a whole encounter of this material and none of it is narrated."*
+
+    **Same discipline, which is the point of mirroring it**: one phrase
+    from a closed set, derived from what the engine already produced, and
+    **no arithmetic reaches the prompt**. A number in a prompt is a number
+    the model quotes back, so fixing *"26 against AC"* by handing over 26
+    reproduces the rut inside its own fix.
+
+    **Derived off two printed states and nothing else.** *Bloodied* is the
+    game's own word for half hit points and *down* is nought or less, so
+    neither is a threshold invented here -- which a round count would have
+    been, since "short" has no printed definition.
+
+    And it has a reader, which is the part a derived phrase usually lacks:
+    the conversation after the fight opens with it.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import beat as bt
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    # -- the derivation, every arm -----------------------------------------
+    out.that(
+        bt.aftermath(True, 0, 0) == "a rout"
+        and bt.aftermath(True, 1, 0) == "hard-won"
+        and bt.aftermath(True, 0, 1) == "a near thing"
+        and bt.aftermath(False, 0, 0) == "a defeat",
+        "the four arms of the derivation each give their phrase",
+        f"{[bt.aftermath(*a) for a in ((True, 0, 0), (True, 1, 0), (True, 0, 1), (False, 0, 0))]}",
+    )
+    out.that(
+        bt.aftermath(True, 2, 1) == "a near thing",
+        "and somebody down outranks somebody bloodied -- the worst thing "
+        "that happened to the party is what a narrator leads with",
+        f"{bt.aftermath(True, 2, 1)}",
+    )
+    out.that(
+        bt.aftermath(False, 0, 0) == "a defeat"
+        and bt.aftermath(False, 4, 4) == "a defeat",
+        "a loss is a defeat however the bodies fell, because nothing "
+        "about a win is true of it",
+        f"{bt.aftermath(False, 4, 4)}",
+    )
+    out.that(
+        set(bt.FIGHTS) == {bt.aftermath(w, b, d)
+                           for w in (True, False) for b in (0, 1)
+                           for d in (0, 1)},
+        "and the closed set is exactly what the derivation can produce, "
+        "so `FIGHTS` is the vocabulary rather than a comment about it",
+        f"{bt.FIGHTS}",
+    )
+
+    # -- and through four real fights, which is where the wiring lives ----
+    HARD = {"id": "fight", "kind": "combat", "name": "F", "exits": ["talk"],
+            "difficulty": "hard",
+            "foes": [{"count": 4, "role": "soldier", "rank": "standard"}]}
+    TALK = {"id": "talk", "kind": "roleplay", "name": "T",
+            "brief": "A quiet room.", "max_beats": 2, "exits": ["after"],
+            "npcs": [{"name": "Host", "wants": "quiet",
+                      "knows": ["nothing"]}],
+            "affordances": [{"id": "ask", "what": "ask", "win": "told",
+                             "once": False}]}
+    AFTER = {"id": "after", "kind": "roleplay", "name": "A",
+             "brief": "Elsewhere.", "max_beats": 1, "exits": [],
+             "npcs": [{"name": "Other", "wants": "quiet",
+                       "knows": ["nothing"]}],
+             "affordances": [{"id": "ask2", "what": "ask", "win": "told"}]}
+
+    def play(seed: int, scenes: list[dict] | None = None,
+             steps: int = 1) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": (scenes or [HARD, TALK, AFTER])[0]["id"],
+             "scenes": scenes or [HARD, TALK, AFTER]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        campaign.control = ["ai"] * len(campaign.party.sheets)
+        made = []
+        for _ in range(steps):
+            if campaign.finished:
+                break
+            made.append(run_mod.step(
+                campaign, built, record=False,
+                director=bt.Director(scripted=True)))
+        return campaign, made
+
+    # **The seeds are chosen because each produces a different ending**,
+    # which a single seed cannot. They were also re-scanned against this
+    # exact scene list: the first set came from a probe where the fight
+    # was the only scene, and a different graph gives the fight a
+    # different stream -- so four assertions failed on seeds that had
+    # been measured against the wrong board.
+    for seed, want in ((3, "a rout"), (1, "hard-won"),
+                       (2, "a near thing"), (13, "a defeat")):
+        campaign, made = play(seed)
+        fight = made[0]
+        hp = [(s.hp, s.max_hp) for s in campaign.party.sheets]
+        out.that(
+            fight.aftermath == want,
+            f"a real fight that ended {want!r} is read that way off the "
+            "sheets -- the wiring, not just the arithmetic, which a pure "
+            "call cannot check",
+            f"seed {seed}: {fight.aftermath!r}, outcome={fight.outcome}, "
+            f"hp={hp}",
+        )
+
+    # -- it is printed ------------------------------------------------------
+    campaign, made = play(1)
+    fight = made[0]
+    rounds_line = [str(x) for x in fight.lines if " rounds" in str(x)]
+    out.that(
+        rounds_line and "hard-won" in rounds_line[0],
+        "the phrase is printed beside the round count, so a reader who "
+        "never opens the transcript still learns how it went",
+        f"{rounds_line}",
+    )
+    out.that(
+        not any(ch.isdigit() for ch in fight.aftermath),
+        "and the phrase itself carries no number: a number in a prompt is "
+        "a number the model quotes back, which is the rut this is fixing",
+        f"{fight.aftermath!r}",
+    )
+
+    # -- the next conversation opens with it -------------------------------
+    campaign, made = play(1, steps=2)
+    talk = made[1]
+    opening = (talk.played.beats[0].situation
+               if talk.played and talk.played.beats else "")
+    out.that(
+        "hard-won" in opening and opening.index("hard-won") < opening.index(
+            "A quiet room."),
+        "the conversation after the fight opens carrying it, before the "
+        "scene's own text -- it is what the party walks in with",
+        f"{opening[:70]!r}",
+    )
+    out.that(
+        "not something anybody announces" in opening,
+        "and the DM is told it is for the mood rather than a line to "
+        "deliver, which is the same instruction the margin carries",
+        f"{opening[:120]!r}",
+    )
+    out.that(
+        not any(ch.isdigit() for ch in opening.split("A quiet room.")[0]),
+        "with no arithmetic anywhere in it -- not the rounds, not a hit "
+        "point, not a die",
+        f"{opening.split('A quiet room.')[0]!r}",
+    )
+
+    # -- only the first beat, and only the next scene ----------------------
+    later = [b for b in (talk.played.beats if talk.played else [])][1:]
+    out.that(
+        later and not any("hard-won" in b.situation for b in later),
+        "only the opening beat carries it: after beat one the situation is "
+        "the last reaction, and repeating the fight there has the DM "
+        "narrating a battle three exchanges into the conversation after it",
+        f"{len(later)} later beats, "
+        f"{sum('hard-won' in b.situation for b in later)} mention it",
+    )
+    campaign, made = play(1, steps=3)
+    out.that(
+        campaign.aftermath == "" and made[2].played is not None
+        and "hard-won" not in (made[2].played.beats[0].situation
+                               if made[2].played.beats else ""),
+        "and it is spent: the scene after the conversation carries nothing, "
+        "because a flag nothing clears is a DM opening on a battle two "
+        "scenes back",
+        f"{campaign.aftermath!r}",
+    )
+
+    # -- spent even by a scene with nothing to play ------------------------
+    BARE = {"id": "talk", "kind": "roleplay", "name": "T",
+            "brief": "Nothing here.", "exits": ["after"]}
+    campaign, made = play(1, scenes=[HARD, BARE, AFTER], steps=2)
+    out.that(
+        made[1].played is None and campaign.aftermath == "",
+        "a scene with nothing to play spends it too -- held past that "
+        "scene, it would describe a fight two scenes back; nobody was "
+        "asked to narrate, so it is dropped",
+        f"played={made[1].played}, held={campaign.aftermath!r}",
+    )
+
+    # -- a scene that is not a fight sets none -----------------------------
+    campaign, made = play(1, scenes=[TALK, AFTER], steps=1)
+    out.that(
+        made[0].aftermath == "",
+        "a scene that is not a fight reports no aftermath, so the phrase "
+        "always describes a fight",
+        f"{made[0].aftermath!r}",
+    )
+
+    # -- and it survives a save --------------------------------------------
+    campaign, made = play(1, steps=1)
+    back = save_mod.from_dict(save_mod.to_dict(campaign))
+    out.that(
+        campaign.aftermath == "hard-won"
+        and back.aftermath == campaign.aftermath,
+        "a campaign saved between the fight and the conversation after it "
+        "still knows how the fight went",
+        f"{campaign.aftermath!r} -> {back.aftermath!r}",
+    )
+
+
 def a_challenge_says_what_each_check_meant(out: Result) -> None:
     """A challenge emitted five mechanical lines and nothing else. #932.
 
@@ -46153,6 +46369,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "fight_aftermath": (
+        a_fight_says_how_it_went_and_the_next_scene_carries_it,
+        "a fight says how it went and the next scene carries it (#943)",
+    ),
     "challenge_says": (
         a_challenge_says_what_each_check_meant,
         "a challenge says what each check meant (#932)",

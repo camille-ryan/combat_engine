@@ -202,6 +202,9 @@ class Step:
     #: fixture fight in the same number of rounds -- so a driver asserting
     #: on the outcome could not tell a surprise round from none. #945.
     surprised: int = 0
+    #: How the fight went, one phrase from `beat.FIGHTS`. Empty for any
+    #: scene that is not a fight. #943.
+    aftermath: str = ""
     #: Where the blow-by-blow went, for a combat scene. Empty otherwise.
     transcript: str = ""
     #: The beats, for a roleplay scene that had any. Empty otherwise.
@@ -627,9 +630,58 @@ def _fight(
         ident = world.get(eid, Ident)
         shown.append(flavour.name or (ident.ref if ident else "?"))
     step.say(f"Against: {', '.join(shown)}", "note")
-    step.say(f"{step.outcome.title()} in {step.rounds} rounds.", "note")
+    # **How it went, in one phrase from a closed set.** The fight reported
+    # `Won in 4 rounds` and sent the blow-by-blow to a transcript nobody
+    # reads during play, so a whole encounter of narration material went
+    # nowhere. Derived off two printed states -- bloodied, and down -- and
+    # read from the sheets, which `harvest` has already written. #943.
+    # The `0 <` keeps somebody face-down out of the bloodied count, which
+    # **no plant can redden** and is kept anyway: `aftermath` ranks down
+    # above bloodied, so a character counted as both cannot change the
+    # phrase today. It is the count being a correct count, and the thing
+    # that would silently go wrong if that ranking were ever reordered.
+    bloodied = sum(
+        1 for sheet in campaign.party.sheets
+        if sheet.hp is not None and sheet.max_hp
+        and 0 < sheet.hp <= sheet.max_hp // 2)
+    floored = sum(
+        1 for sheet in campaign.party.sheets
+        if sheet.hp is not None and sheet.hp <= 0)
+    step.aftermath = beat_mod.aftermath(
+        step.outcome == "won", bloodied, floored)
+    step.say(
+        f"{step.outcome.title()} in {step.rounds} rounds -- "
+        f"{step.aftermath}.",
+        "note",
+    )
+    # **Handed to the next conversation's DM**, which is the only reader it
+    # has: a derived phrase nothing reads is the same as no phrase, which
+    # is what #934 found `Known.near` doing for the whole of its life.
+    # Spent on use, like `campaign.denied`, so it colours the scene after
+    # the fight and not every scene after that.
+    campaign.aftermath = step.aftermath
     if objective_line:
         step.say(objective_line, "note")
+
+
+def _carried(campaign: Campaign) -> str:
+    """What the party walks into this conversation carrying, and spend it.
+
+    **Spent on read, like `campaign.denied`**, and read at the top of
+    every roleplay scene rather than where the beats start -- a scene with
+    nothing to play returns early, and holding the phrase past it would
+    have the DM opening on a battle two scenes back. A flag nothing clears
+    is this component's own recorded failure shape.
+    """
+    held = campaign.aftermath
+    campaign.aftermath = ""
+    if not held:
+        return ""
+    return (
+        f"The fight just before this was {held}. Use it for the mood and "
+        "for how people carry themselves; it is not something anybody "
+        "announces."
+    )
 
 
 def actors_for(campaign: Campaign) -> list[beat_mod.Actor]:
@@ -720,6 +772,12 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
     lines against 3. It did not bite only because the one converted module
     puts all 8 of its lore rows on a scene that has NPCs. #918.
     """
+    # **Read before the early return, so it is spent either way.** The
+    # phrase is about the fight immediately before this scene; held past a
+    # scene with nothing to play it would have the DM opening on a battle
+    # two scenes back. A scene nobody narrates drops it, which is right --
+    # nobody was asked.
+    carried = _carried(campaign)
     if not (scene.affordances or scene.npcs or scene.lore):
         return
     # Said once, at the top of the scene, so a character who never speaks
@@ -839,6 +897,7 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         ask_human=ask_human, party_level=module.party_level,
         after=tell, asked=set(campaign.recalled),
         canon=_canon(module), told=_told(campaign),
+        carried=carried,
     )
     # Back onto the campaign, so a `once` row stays rolled across a revisit
     # and across a save. `Playing` does not survive the scene.

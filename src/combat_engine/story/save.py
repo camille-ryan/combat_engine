@@ -191,6 +191,9 @@ class Campaign:
     #: is the book's own framing: *"you should grant drama rewards for
     #: vignettes only if you rely on them in any given session."* #967.
     drama: bool = False
+    #: How the last fight went, one phrase from `beat.FIGHTS`, waiting for
+    #: the next conversation's DM to narrate from. Spent on read. #943.
+    aftermath: str = ""
 
     @property
     def clock(self) -> dict[str, int]:
@@ -277,6 +280,7 @@ def to_dict(campaign: Campaign) -> dict:
         "quests": dict(campaign.quests),
         "advanced": list(campaign.advanced),
         "drama": bool(campaign.drama),
+        "aftermath": str(campaign.aftermath),
         "record": list(campaign.record),
         "formation": list(campaign.formation),
         "spread": campaign.spread,
@@ -321,6 +325,7 @@ def from_dict(raw: dict) -> Campaign:
                 for k, v in (raw.get("quests") or {}).items()},
         advanced=[int(i) for i in (raw.get("advanced") or [])],
         drama=bool(raw.get("drama", False)),
+        aftermath=str(raw.get("aftermath", "")),
         record=[str(o) for o in raw.get("record", ())],
         formation=[str(b) for b in raw.get("formation", ())],
         spread=int(raw.get("spread", 2) or 2),
