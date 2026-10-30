@@ -1434,6 +1434,31 @@ def parse(raw: dict, path: Path) -> Module:
             if orphan not in seen:
                 problems.append(f"scene {orphan!r}: nothing leads to it")
 
+    # **A challenge no harder than the party is numerous.** DMG2:
+    #
+    # > *As a guideline, make skill challenge complexity no higher than 1
+    # > above the number of characters in the party.*
+    #
+    # So a party of two should not face a complexity-4 challenge. Checked
+    # here rather than in `_as_scene` because the party size is the
+    # module's and a scene does not know it -- which is why the harder
+    # refusal (a complexity outside the table) has existed for longer than
+    # this easier one. #939.
+    size = int(raw.get("party_size", 4) or 4)
+    for scene in scenes.values():
+        # No `kind != "skill_challenge"` guard: `complexity` is in every
+        # other kind's `unused` list, so a non-challenge scene is refused
+        # for carrying one at all and always has 0 here. A plant that
+        # removed the guard changed nothing -- sixth dead guard of this
+        # shape on this branch.
+        if scene.complexity > size + 1:
+            problems.append(
+                f"scene {scene.id!r}: complexity {scene.complexity} for a "
+                f"party of {size} -- the printed guideline is no higher "
+                f"than one above the party's number, so {size + 1} is the "
+                "most this module should ask for"
+            )
+
     level = raw.get("party_level", 1)
     if not isinstance(level, int) or not 1 <= level <= 30:
         problems.append(f"party_level must be 1-30, got {level!r}")
@@ -1444,7 +1469,7 @@ def parse(raw: dict, path: Path) -> Module:
     return Module(
         id=module_id, scenes=scenes, start=start,
         party_level=level,
-        party_size=int(raw.get("party_size", 4) or 4),
+        party_size=size,
         edition=str(raw.get("edition", "")).strip(),
         flags=flags,
         cast=cast_list,

@@ -42106,6 +42106,81 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_challenge_is_no_harder_than_the_party_is_numerous(out: Result) -> None:
+    """DMG2, which #939's comment found and its body does not mention:
+
+    > *As a guideline, make skill challenge complexity no higher than 1
+    > above the number of characters in the party.*
+
+    So a party of two should not face a complexity-4 challenge. Everything
+    needed was already there -- `Scene.complexity`, `Module.party_size`,
+    and a `validate` that already refused a complexity outside the table.
+
+    Checked in `parse` rather than `_as_scene`, because the party size is
+    the **module's** and a scene does not know it. That is why the harder
+    refusal has existed longer than this easier one.
+
+    The boundary is asserted on both sides at three party sizes, because a
+    guideline stated as "no higher than 1 above" is exactly the shape that
+    gets implemented one off.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+
+    def built(size: int, complexity: int) -> str:
+        try:
+            mod.parse(
+                {"id": "probe", "party_level": 2, "party_size": size,
+                 "start": "c",
+                 "scenes": [{"id": "c", "kind": "skill_challenge",
+                             "name": "C", "exits": [],
+                             "complexity": complexity,
+                             "primary": ["athletics"]}]},
+                Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the boundary, both sides, three sizes -----------------------------
+    for size in (2, 3, 4):
+        allowed = size + 1
+        out.that(
+            built(size, allowed) == "",
+            f"a party of {size} may face complexity {allowed} -- one above "
+            "their number is what the guideline allows, not one below",
+            built(size, allowed)[:90] or "accepted",
+        )
+        if allowed + 1 in range(1, 6):
+            refused = built(size, allowed + 1)
+            out.that(
+                "the printed guideline" in refused,
+                f"and complexity {allowed + 1} is refused for a party of "
+                f"{size}, naming the most the module should ask for",
+                refused[:100] or "it was accepted",
+            )
+
+    # -- the control: a party of five may face anything in the table -------
+    out.that(
+        all(built(5, c) == "" for c in range(1, 6)),
+        "a party of five may face every complexity the table holds, so the "
+        "bound never refuses a challenge the printed table offers",
+        f"{[bool(built(5, c)) for c in range(1, 6)]}",
+    )
+
+    # -- and it is a challenge rule, not a scene rule ----------------------
+    other = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 2, "start": "t",
+         "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                     "exits": []}]}, Path("<driver>"))
+    out.that(
+        other.party_size == 2,
+        "a module with no challenge at all is unaffected, which is most of "
+        "them",
+        f"{other.party_size}",
+    )
+
+
 def a_recurring_character_is_the_same_person_each_time(out: Result) -> None:
     """The DMG, on portraying NPCs:
 
@@ -44833,6 +44908,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "complexity_bound": (
+        a_challenge_is_no_harder_than_the_party_is_numerous,
+        "a challenge is no harder than the party is numerous (#939)",
+    ),
     "module_cast": (
         a_recurring_character_is_the_same_person_each_time,
         "a recurring character is the same person each time (#944)",

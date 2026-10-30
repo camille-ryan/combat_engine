@@ -817,6 +817,37 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## A challenge is no harder than the party is numerous
+
+> *As a guideline, make skill challenge complexity no higher than 1 above
+> the number of characters in the party.*
+
+**DMG2 page 52, read in the file rather than taken from the quote** — and
+the quote was exact, word for word. Everything needed already existed:
+`Scene.complexity`, `Module.party_size`, and a `validate` that already
+refused a complexity outside the table.
+
+Checked in `parse` rather than `_as_scene`, because the party size is the
+**module's** and a scene does not know it — which is why the harder
+refusal has existed longer than this easier one. The boundary is asserted
+on both sides at three party sizes, since "no higher than 1 above" is
+exactly the shape that gets implemented one off.
+
+### Reading the page found a rule the quote did not carry
+
+This is the root `CLAUDE.md` rule about quoted tables paying off on its
+first use. **Page 85** carries a second, tighter bound that no issue
+mentions: an in-combat challenge is capped at complexity **2**, and it
+*replaces* monsters rather than adding to them — so a combined scene's
+budget subtracts the challenge's worth from the roster. Filed as #1011,
+to land with #922's combined scene kind rather than before it.
+
+Also worth knowing: **DMG2 is in `resources/`**, 226 pages, extracting
+cleanly. The filenames differ in an apostrophe — `Dungeon Master's
+Guide.pdf` for DMG1 and `Dungeon Masters Guide 2.pdf` for DMG2 — so a
+search for the apostrophe form finds nothing, which is probably why a note
+on master says DMG2 cannot be checked. It can.
+
 ## A recurring character is the same person each time
 
 > *Keep track of the way you have important NPCs act so you can maintain
@@ -1542,11 +1573,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
-    scene_once module_cast
+    scene_once module_cast complexity_bound
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 37 drivers and prints 372 assertions**, and **each was
+**The command above is 38 drivers and prints 379 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
