@@ -1700,36 +1700,38 @@ POSITION_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
 #: the thing `audit.py`'s own note calls a bare allowance.
 #:
 #: Each is a citation the compendium writes in a position `_elsewhere` and
-#: `_granted` do not yet read, named here with the position it wants:
+#: `_granted` do not read. **Four of the original seven are resolved**, by
+#: `build._CITING` -- `when you use`, `use of your`, `affected by your` and
+#: `squares of a`, each measured over the live specs before it was turned on
+#: and each with a negative control. These three are what is left:
 #:
-#: * `feat.f1591` -> `p8097` -- *"one additional use of your <name>, <name>,
-#:   or <name>"*. **Three** powers in one clause and none resolved, so this
-#:   entry is itself a floor.
-#: * `feat.f2321` -> `f2319b` -- *"when you use <name>"*. `when you use`
-#:   carries a ref 169 times, so the position is as strong as `_GRANTS`; it
-#:   has no trailing noun, which is the only reason it is not built yet.
-#: * `feat.f3180` -> `p11778` -- *"allies affected by your <name>"*.
-#: * `feat.f2269` -> `x8_323` -- *"the <name> within you awakens"*. The
-#:   weakest of the seven: flavour prose rather than a citing construction,
-#:   and the only position is the bare `the`.
+#: * `terrain.x2_55` -> `x2_56` -- *"the <name> (see below)"*. **The one I
+#:   tried and withdrew**, and the reason is worth keeping: a phrase before
+#:   a parenthesised *see* looks like the most generally useful position in
+#:   the corpus, and of 8 swaps **6 are right and 2 are wrong** -- both
+#:   wrong ones reading *"(see below)"* exactly as two of the right ones
+#:   do. What separates them is whether the thing described below has a
+#:   **ref of its own**: a conjuration belonging to the summoning row does,
+#:   a creature an unrelated item happens to share a name with does not.
+#:   That is not a question about position, so no position can answer it.
 #: * `item_block.i2693x1` -> `b:c128-3` -- *"you can use your <build>
 #:   <feature> feature"*. Names a **build and a class feature** in one
-#:   clause, and the second is unresolved too, so also a floor.
-#: * `terrain.x2_55` -> `x2_56` -- *"the <name> (see below)"*. A phrase
-#:   before a parenthesised *see* is a cross-reference by construction, and
-#:   this looks like the most generally useful of the seven to build.
-#: * `terrain.x2_120` -> `x2_72` -- *"within 5 squares of a <name>"*.
+#:   clause and the second is unresolved too, so this entry is a floor.
+#: * `feat.f2269` -> `x8_323` -- *"the <name> within you awakens"*. The
+#:   weakest of the seven: flavour prose rather than a citing
+#:   construction, and the only position is the bare `the`.
+#:
+#: And `f1591` resolving is itself a floor confirmed: its clause names
+#: **three** powers and one resolved, so the other two are either absent
+#: from the index or not uniquely owned. The gate will say so if they ever
+#: become either.
 #:
 #: Shrinks, never grows, and unlike the waivers above **every entry here is
 #: work**. #340 holds the list and the reasoning.
 POSITION_OWED: frozenset[tuple[str, str, str]] = frozenset({
-    ("feat", "f1591", "p8097"),
     ("feat", "f2269", "x8_323"),
-    ("feat", "f2321", "f2319b"),
-    ("feat", "f3180", "p11778"),
     ("item_block", "i2693x1", "b:c128-3"),
     ("terrain", "x2_55", "x2_56"),
-    ("terrain", "x2_120", "x2_72"),
 })
 
 

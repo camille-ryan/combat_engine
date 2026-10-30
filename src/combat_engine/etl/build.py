@@ -4542,6 +4542,69 @@ _GRANTS = re.compile(
 #: (`m2927`). `_granted` refuses one; see the note at its call site.
 _MONSTER_ABILITY = re.compile(r"^m\d+[a-z]?\d*a\d")
 
+#: Where a captured run ends, for the positions whose name follows the verb.
+#: Bounded for the reason `_BECOMES`'s note gives.
+_CITE_STOP = (
+    r"(?=\s+(?:until|while|and|or|that|for|to|in|on|with|as|when|if|from)\b"
+    r"|[.,;:)]|$)"
+)
+
+#: Where the name may sit inside a captured run. `_elsewhere` anchors at the
+#: **end** -- right for `<name> ritual`, where the noun follows -- and that
+#: is wrong for a position where the name comes *after* the verb: the run
+#: trails the rest of the sentence in, and a longest-from-the-end search
+#: never tries the name alone. `_BECOMES`'s note records the same trap, and
+#: it cost `affected by your <name>` **zero** swaps in the first draft
+#: before anchoring was made a property of the position.
+_AT_END, _AT_START = "end", "start"
+
+#: **A demonstrative or a third-person possessive means the row's own
+#: thing.** The one guard the citing positions below all need, and it was
+#: found by reading the two swaps that came out wrong:
+#:
+#:     "When you use *this* <name> as a focus ..."   the block's own item
+#:     "until it takes on *its* <name> (see ...)"    the monster's own form
+#:
+#: Both would have resolved onto a different row that shares the printed
+#: name. `your` is deliberately **not** here: *"regain the use of your
+#: <name>"* is the character citing their own class feature, which is a real
+#: citation and resolves correctly.
+_OWN_THING = frozenset({"this", "these", "its", "his", "her", "their"})
+
+#: The citing positions, each with where its name sits. Measured over the
+#: live specs before being turned on, which is how two false swaps and one
+#: dead pattern were caught rather than shipped:
+#:
+#:     when you use <name>       12 swaps, all 12 right after `_OWN_THING`
+#:     use of your <name>         2 swaps, both right
+#:     squares of a <name>        2 swaps, both right
+#:     affected by your <name>    1 swap, and 0 before anchoring was fixed
+#:
+#: **`(see ...)` is deliberately absent and that is a finding, not an
+#: omission.** A phrase before a parenthesised *see* looks like the most
+#: generally useful position in the corpus and it is not safe: of 8 swaps, 6
+#: are right and 2 are wrong, and both wrong ones read *"(see below)"*
+#: exactly as two of the right ones do. What separates them is whether the
+#: thing described below has a **ref of its own** -- a conjuration belonging
+#: to the summoning row does, a creature an unrelated item happens to share
+#: a name with does not -- and that is not a question about position. Left
+#: owed in `leaks.POSITION_OWED` rather than automated. #340.
+_CITING: tuple[tuple[re.Pattern[str], str], ...] = (
+    (_GRANTS, _AT_END),
+    (re.compile(
+        r"\bwhen you use\s+(?:the|your|a|an)?\s*(.{0,46}?)" + _CITE_STOP,
+        re.I | re.S), _AT_START),
+    (re.compile(
+        r"\buses? of (?:your|the)\s+(.{0,46}?)" + _CITE_STOP,
+        re.I | re.S), _AT_START),
+    (re.compile(
+        r"\baffected by (?:your|the)\s+(.{0,46}?)" + _CITE_STOP,
+        re.I | re.S), _AT_START),
+    (re.compile(
+        r"\bsquares of (?:a|an|the)\s+(.{0,46}?)" + _CITE_STOP,
+        re.I | re.S), _AT_START),
+)
+
 
 def _granted(
     spec: str,
@@ -4571,10 +4634,23 @@ def _granted(
     grants two powers in a single clause and resolving from either end of a
     five-word run cannot reach both.
     """
-    def one(run: str) -> str:
+    def one(run: str, anchor: str) -> str:
         words = run.split()
         for size in range(len(words), 0, -1):
-            name = _low(" ".join(words[-size:]))
+            head, tail = (
+                (words[:-size], words[-size:]) if anchor == _AT_END
+                else (words[size:], words[:size])
+            )
+            name = _low(" ".join(tail))
+            # **A demonstrative or third-person possessive before the name
+            # means this row's own thing**, not a citation -- see
+            # `_OWN_THING`. Only the end-anchored positions need the test:
+            # a start-anchored run *begins* with the determiner, so every
+            # candidate still holds it and fails to be a printed name on its
+            # own. That is the guard arriving for free, and it is why
+            # anchoring is a property of the position rather than a detail.
+            if anchor == _AT_END and head and head[-1].lower() in _OWN_THING:
+                continue
             ref = by_name.get(name) or by_other.get(name)
             # Its own name is its own business, and `cited` still has to
             # agree the phrase is not a rules term or nothing but function
@@ -4596,17 +4672,22 @@ def _granted(
                 continue
             if not sanitise.cited(name, rules, whole_name=True):
                 continue
-            head = " ".join(words[:-size])
-            return " ".join(w for w in (head, ref) if w)
+            kept = " ".join(head)
+            pieces = (kept, ref) if anchor == _AT_END else (ref, kept)
+            return " ".join(w for w in pieces if w)
         return run
 
-    def swap(m: re.Match) -> str:
+    def swap(m: re.Match, anchor: str) -> str:
         run = m.group(1)
         parts = re.split(r"(\s*,\s*|\s+and\s+|\s+or\s+)", run)
-        done = "".join(p if i % 2 else one(p) for i, p in enumerate(parts))
+        done = "".join(
+            p if i % 2 else one(p, anchor) for i, p in enumerate(parts)
+        )
         return m.group(0).replace(run, done, 1)
 
-    return _GRANTS.sub(swap, spec)
+    for pattern, anchor in _CITING:
+        spec = pattern.sub(lambda m, a=anchor: swap(m, a), spec)
+    return spec
 
 
 #: The same name on the other side of the noun: "you gain the barbarian
