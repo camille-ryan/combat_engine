@@ -42864,14 +42864,62 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
         f"level 0 -> {tr.market_price(0)}, level 99 -> {tr.shares(99)}",
     )
 
+    # -- the four item parcels ---------------------------------------------
+    from random import Random
+
+    out.that(
+        tr.ITEM_STEPS == (4, 3, 2, 1),
+        "the four item parcels are one to four levels above the party, "
+        "**descending** -- the page lists parcel 1 as the dearest, and "
+        "DMG2's alternative rewards replace *\"the highest-level magic "
+        "items you would otherwise give out\"*, which only means "
+        "something if parcel 1 is the best of them",
+        f"{tr.ITEM_STEPS}",
+    )
+    drawn = tr.items(5, Random(4))
+    out.that(
+        len(drawn) == 4 and len(set(drawn)) == 4,
+        "four distinct items are drawn for a level",
+        f"{drawn}",
+    )
+
+    def level_of(ref: str) -> set[int]:
+        from combat_engine.db import game
+        return {
+            row[0] for row in game().execute(
+                "SELECT s.level FROM item_step s WHERE s.ref = ? "
+                "AND s.cost > 0", (ref,))
+        }
+
+    out.that(
+        all(5 + step in level_of(ref)
+            for ref, step in zip(drawn, tr.ITEM_STEPS, strict=False)),
+        "and each is **priced at the level its parcel asks for** -- the "
+        "draw joins `item` to `item_step`, the way `chargen.treasure` "
+        "does, so it can only pick a rung that exists",
+        f"{[(r, sorted(level_of(r))[:4]) for r in drawn]}",
+    )
+    out.that(
+        tr.item_for(999, Random(4)) == ""
+        and tr.items(999, Random(4)) == (),
+        "a level the database prices nothing at yields no item rather "
+        "than quietly substituting another level, which would hide the "
+        "gap in the corpus",
+        f"{tr.item_for(999, Random(4))!r}",
+    )
+
     # -- and through a module of fights ------------------------------------
-    def nine_fights(level: int = 5, seed: int = 3) -> tuple:
+    def nine_fights(level: int = 5, seed: int = 3, fights: int = 12) -> tuple:
+        # **Twelve, not nine.** Ten parcels now -- four items then six
+        # monetary -- so nine fights left the last monetary parcel unpaid
+        # and three assertions short. Two spare fights also prove the
+        # level's treasure runs out.
         scenes = [
             {"id": f"f{i}", "kind": "combat", "name": "F",
              "difficulty": "easy",
-             "exits": [f"f{i + 1}"] if i < 8 else [],
+             "exits": [f"f{i + 1}"] if i < fights - 1 else [],
              "foes": [{"count": 1, "role": "soldier", "rank": "standard"}]}
-            for i in range(9)
+            for i in range(fights)
         ]
         built = mod.parse(
             {"id": "probe", "party_level": level, "party_size": 4,
@@ -42886,14 +42934,17 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
 
     campaign, found = nine_fights()
     out.that(
-        sum(found) == 6 and found[:6] == [1] * 6 and found[6:] == [0] * 3,
-        "six fights carry treasure and the rest carry none -- which is "
-        "the printed distribution without a roll: the level's parcels are "
-        "simply spent",
+        sum(found) == 10 and found[:10] == [1] * 10
+        and found[10:] == [0, 0],
+        "the first ten fights of a level each carry a parcel and the rest "
+        "carry none -- four items then six monetary, over the eight to ten "
+        "encounters the page budgets a level at. The tail is the printed "
+        "*\"two to four encounters with no treasure reward\"*, and it "
+        "falls out of the parcels being spent rather than from a roll",
         f"{found}",
     )
     out.that(
-        campaign.parcels == 6,
+        campaign.parcels == 10,
         "and the campaign knows how many it has found",
         f"{campaign.parcels}",
     )
@@ -42913,13 +42964,26 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
         f"{sum(coins)} of {tr.monetary(5)}, "
         f"lost {tr.monetary(5) - sum(coins)}",
     )
+    carried = [dict(sheet.carried) for sheet in campaign.party.sheets]
     out.that(
-        all(not sheet.carried for sheet in campaign.party.sheets),
-        "**and nobody is carrying an item**, which is the scope line: the "
-        "four item parcels are not awarded, because an item above "
-        "`band(level)` moves the party off the curve monster defences are "
-        "set against",
-        f"{[sheet.carried for sheet in campaign.party.sheets]}",
+        sum(sum(c.values()) for c in carried) == 4
+        and all(len(c) == 1 for c in carried),
+        "the four items land **one per character**, round-robin by "
+        "parcel, because an item is one object where coin divides -- a "
+        "four-item level must not load one sheet",
+        f"{carried}",
+    )
+    out.that(
+        all(not sheet.gear_changed() if hasattr(sheet, "gear_changed")
+            else True for sheet in campaign.party.sheets)
+        and all(ref not in (sheet.powers or [])
+                for sheet in campaign.party.sheets
+                for ref in sheet.carried),
+        "and a found item is **carried, not worn** -- it is in "
+        "`Sheet.carried`, which nothing in a fight reads, so the party's "
+        "power is unchanged. That is the whole reason this owes no "
+        "`winrate` run; equipping one is the part that would",
+        f"{carried}",
     )
 
     # -- what does not pay --------------------------------------------------
@@ -42968,7 +43032,7 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
     # -- and it survives a save --------------------------------------------
     back = save_mod.from_dict(save_mod.to_dict(campaign))
     out.that(
-        back.parcels == campaign.parcels == 6
+        back.parcels == campaign.parcels == 10
         and [s.coins for s in back.party.sheets] == coins,
         "the coins and the count of parcels found both survive a save, so "
         "reloading is not a way to find the level's treasure twice",
@@ -48888,8 +48952,14 @@ def a_scene_can_hand_the_party_something_that_survives_the_next_scene(
 
     # -- it survives a whole fight ------------------------------------------
     kept, _ = play([{"what": REF, "count": 1}], then_fight=True)
+    # **The granted ref specifically, not the total.** This asked whether the
+    # party carried exactly one thing, which was the same question until #969
+    # put the four item parcels into the same `carried` bag -- a won fight now
+    # hands over a magic item, so the total is 2 and the assertion failed while
+    # the grant it is about had survived perfectly. A total conflates "the
+    # grant survived" with "nothing else arrived"; the ref is the claim.
     out.that(
-        sum(sum(bag.values()) for bag in held(kept)) == 1,
+        sum(bag.get(REF, 0) for bag in held(kept)) == 1,
         "what the party was handed is still carried after the next fight, "
         "which `harvest` writes over the sheets it could have cleared",
         f"{held(kept)}",

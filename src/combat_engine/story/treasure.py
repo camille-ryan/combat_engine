@@ -4,14 +4,22 @@ No treasure was awarded anywhere: a party finished a module with the
 equipment `chargen` dealt it and nothing else -- no coins, no gems, no
 record of any.
 
-**This is the monetary half only, and that is a deliberate line.** The
-printed system is ten parcels per level: four magic items at party level
-+1 to +4, and six monetary parcels. The item half is left alone because
-found items sit **above** `band(level)`, and `band` is exactly what
-monster defences are set against -- so items beyond the dealt baseline
-move the party off the curve `engine/scaling.py` cannot see, and that
-owes `winrate` both ways. Coins change no number on any board, so they
-owe nothing.
+**Ten parcels per level: four magic items at party level +1 to +4, and
+six monetary.** Both halves are here now, on Camille's call of
+2026-10-30.
+
+**A found item is carried, not worn, and that is the whole of why this
+owes no `winrate` run.** `chargen.treasure` equips three items at
+`band(level)` and monster defences are set against that number -- so an
+item *in play* above the band would move the party off the curve
+`engine/scaling.py` cannot see. A parcel goes into `Sheet.carried`,
+which is a count of what happened to the party and which nothing in a
+fight reads. So the party's power is unchanged, provably: `replay`'s
+fixtures are identical.
+
+**Equipping one is the part that owes the measurement**, and nothing
+equips from inventory today -- there is no action for it. Said here
+rather than left to be discovered.
 
 **Nothing is written down here that the database already holds.** The
 monetary curve is `2 x market_price(level)`, computed, and it is exact:
@@ -22,6 +30,7 @@ heroic levels agree to the gold piece and the tenth is off by 5.
 from __future__ import annotations
 
 import collections
+from random import Random
 
 #: What each of the six monetary parcels is worth, as a share of the
 #: level's total. The printed 5-10 split, which is regular across every
@@ -88,6 +97,57 @@ def shares(level: int) -> tuple[int, ...]:
     cut = [int(total * share) for share in PARCELS]
     cut[0] += total - sum(cut)
     return tuple(cut)
+
+
+#: What the four item parcels are worth, as levels above the party's.
+#:
+#: *"Expect a group of five characters to acquire four magic items ranging
+#: in level from one to four levels above the party level."* Descending,
+#: because the page lists parcel 1 as the best of them -- and because
+#: DMG2's alternative rewards replace *"the highest-level magic items you
+#: would otherwise give out"*, which only means anything if parcel 1 is
+#: the dearest.
+ITEM_STEPS = (4, 3, 2, 1)
+
+
+def item_for(level: int, draw: Random) -> str:
+    """One magic item of that level, or `""` if none is priced there.
+
+    **Drawn the way `chargen.treasure` draws**, which is the pattern to
+    reuse rather than `terrain.printed_trap`'s: it joins `item` to
+    `item_step` and so only ever picks a rung that actually exists at the
+    level asked for. The difference is the level bound -- a parcel is
+    above the party rather than at its band.
+
+    Not filtered by slot or base item, deliberately: a parcel is what the
+    party *found*, and the page does not promise it is usable by anybody
+    present. `chargen`'s `_fits_base` matters when an item is being
+    **equipped**, which nothing here does.
+    """
+    from combat_engine.db import game
+
+    rows = [
+        row[0] for row in game().execute(
+            "SELECT DISTINCT i.ref FROM item i "
+            "JOIN item_step s ON s.ref = i.ref "
+            "WHERE s.level = ? AND s.cost > 0 ORDER BY i.ref",
+            (max(level, 1),),
+        )
+    ]
+    return draw.choice(rows) if rows else ""
+
+
+def items(level: int, draw: Random) -> tuple[str, ...]:
+    """The four item parcels for a level, best first.
+
+    Empty entries are dropped rather than retried at another level: a
+    level the database prices nothing at is a gap in the corpus, and
+    quietly substituting a different level would hide it.
+    """
+    found = tuple(
+        item_for(level + step, draw) for step in ITEM_STEPS
+    )
+    return tuple(ref for ref in found if ref)
 
 
 def per_head(parcel: int, heads: int) -> int:
