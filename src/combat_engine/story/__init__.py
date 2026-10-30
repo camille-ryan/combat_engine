@@ -471,8 +471,32 @@ COMPOSITION: dict[str, list[tuple[str, float]]] = {
     "leader": [("standard", 0.5), ("minion", 0.5)],
 }
 
-#: How far either way a fight may reach for a monster. Camille's call, and it is
-#: what the printed encounter-building rules allow.
+#: How far either way a fight may reach for a monster. Camille's call.
+#:
+#: **A symmetric narrowing of an asymmetric printed window, chosen
+#: deliberately** -- the second sentence here used to say it *was* "what the
+#: printed encounter-building rules allow", and that is not true. Measured
+#: against the page, monster levels relative to the party are:
+#:
+#: | encounter | printed window |
+#: |---|---|
+#: | easy | -4 .. 0 |
+#: | standard | **-3 .. +4** |
+#: | hard | -3 .. **+7** |
+#:
+#: So 3 is right on the low side, one short above for a standard fight and
+#: four short for a hard one -- and the book asks for a hard encounter once
+#: per character level. Chapter 10's own 50-card encounter deck puts 5 cards
+#: at +4 or +5, so 26% of it is outside this band.
+#:
+#: Left at 3 on purpose. Two things to know before changing it: the page
+#: attaches a role caveat to the top of the range -- *"be careful of using
+#: high-level soldiers and brutes [...] soldier monsters get really hard to
+#: hit when they're five levels above the party"* -- so a wider band is not
+#: uniform across roles, and `cast_list._facts` already reads `role` if that
+#: is wanted. And #972's level adjustment would make this a preference
+#: rather than a wall, which is probably the answer that needs no change to
+#: the number at all. #966.
 BAND = 3
 
 #: The most creatures one rank's share may field. Minions are a quarter of a
