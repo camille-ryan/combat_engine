@@ -42106,6 +42106,192 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def hours_in_the_cold_cost_the_party_healing_surges(out: Result) -> None:
+    """A healing surge could only ever be lost to a fight, and the printed
+    rules have another way to spend one:
+
+    > *Every eight hours within an area of environmental danger, the
+    > character must succeed on an Endurance check. Each time a character
+    > fails, he loses one healing surge. If a character has no healing
+    > surges left when he fails a check, he loses hit points equal to his
+    > level.*
+
+    Six content rows across six files already said so in their own
+    docstrings -- an inert racial trait, a level-4 daily with an empty
+    body, a marked item power, and two monster traits noting there was no
+    rule for them to switch off.
+
+    Three printed details are asserted because each could plausibly have
+    gone the other way: a check **per danger** rather than per scene, a
+    check **every eight hours** so the count falls out of the module's
+    stated hours, and **+2 while sheltered** during an extended rest.
+
+    The last assertion is the branch a probe would otherwise never reach:
+    with no surges left, a failure costs hit points equal to level.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def play(exposure: list[str] | None, hours: int = 0, *,
+             kind: str = "roleplay", surges: int | None = None,
+             seed: int = 5) -> tuple[save_mod.Campaign, list[str]]:
+        scene: dict = {"id": "trek", "kind": kind, "name": "Trek",
+                       "exits": [], "hours": hours}
+        if exposure is not None:
+            scene["exposure"] = exposure
+        if kind == "rest":
+            scene["extended"] = True
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "trek", "scenes": [scene]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        if surges is not None:
+            for sheet in campaign.party.sheets:
+                sheet.surges = surges
+        made = run_mod.step(campaign, built, record=False)
+        notes = [str(x) for x in made.lines
+                 if getattr(x, "kind", "") == "note"]
+        return campaign, notes
+
+    # -- the control: a scene that states no weather spends nothing --------
+    bare, said = play(None)
+    out.that(
+        all(s.surges is None for s in bare.party.sheets)
+        and not any("Endurance" in n for n in said),
+        "a scene that states no exposure rolls no Endurance check and "
+        "leaves every surge pool untouched",
+        f"{[s.surges for s in bare.party.sheets]}",
+    )
+
+    # -- under eight hours nothing falls due, and it says so ---------------
+    _, brief = play(["frigid cold"], 4)
+    out.that(
+        any("no Endurance check falls due" in n for n in brief),
+        "four hours of frigid cold is under the eight the rule names, so "
+        "no check falls due -- and the scene says that rather than being "
+        "silently free",
+        f"{brief}",
+    )
+
+    # -- the count falls out of the hours ----------------------------------
+    _, long = play(["frigid cold"], 24)
+    out.that(
+        any("3 Endurance check(s)" in n for n in long),
+        "twenty-four hours is three checks each, because the rule is one "
+        "every eight and not one per scene",
+        f"{[n for n in long if 'Endurance check(s)' in n]}",
+    )
+
+    # -- and a failure spends a surge, surviving the board being struck ----
+    # **Against a harvested baseline, not a guessed number.** The first
+    # draft asserted `surges < 12`, which passes for any class whose pool
+    # is smaller than twelve -- so a plant that spent nothing stayed green.
+    # The baseline lays and strikes a board with no exposure at all, which
+    # is the only way to know what an untouched pool is after `harvest`.
+    from combat_engine.story import table as tbl
+
+    rested = run_mod.begin(
+        mod.parse({"id": "base", "party_level": 2, "party_size": 4,
+                   "start": "t",
+                   "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                               "exits": []}]}, Path("<driver>")),
+        seed=5)
+    board = tbl.lay(rested.party, seed=1)
+    board.strike()
+    full = [s.surges or 0 for s in rested.party.sheets]
+
+    cold, chilled = play(["frigid cold"], 24)
+    spent_now = [s.surges or 0 for s in cold.party.sheets]
+    out.that(
+        sum(spent_now) < sum(full),
+        "a failed check spends a healing surge, measured against a pool "
+        "harvested the same way rather than against a guessed number",
+        f"exposed {spent_now} vs untouched {full}",
+    )
+    out.that(
+        sum(full) - sum(spent_now)
+        == sum(1 for n in chilled if "spends a healing surge" in n),
+        "and every surge the notes claim was spent is one the sheets "
+        "actually lost -- which is what proves the spend survives "
+        "`Table.strike`, since `harvest` writes the board's own count back "
+        "over every sheet",
+        f"drop {sum(full) - sum(spent_now)} vs "
+        f"{sum(1 for n in chilled if 'spends a healing surge' in n)} notes",
+    )
+
+    # -- one check per danger, which the page states ----------------------
+    _, two = play(["cold", "severe weather"], 8)
+    out.that(
+        any("2 Endurance check(s)" in n for n in two),
+        "two dangers for eight hours are two checks, not one -- the page "
+        "says characters roll against each danger, and the stated total is "
+        "what makes that observable rather than the danger's name "
+        "appearing in a summary line either way",
+        f"{[n for n in two if 'Endurance check(s)' in n]}",
+    )
+
+    # -- sheltered eases it by two ----------------------------------------
+    _, sheltered = play(["frigid cold"], 24, kind="rest")
+    out.that(
+        any("+2 while sheltered" in n for n in sheltered)
+        and any("Endurance 24" in n for n in sheltered),
+        "an extended rest eases the DC by two, so a cold night costs less "
+        "than a cold day's march",
+        f"{[n[:70] for n in sheltered if 'Endurance' in n]}",
+    )
+    out.that(
+        not any("+2 while sheltered" in n for n in long),
+        "and a scene that is not a rest gets no such bonus",
+        f"{[n for n in long if 'sheltered' in n]}",
+    )
+
+    # -- with nothing left to spend, it costs hit points ------------------
+    spent, hurt = play(["frigid cold"], 24, surges=0)
+    out.that(
+        any("no surges left and takes" in n for n in hurt),
+        "a character with no surges left loses hit points instead, which "
+        "is the printed consequence and the branch a full party never "
+        "reaches",
+        f"{[n[:80] for n in hurt if 'takes' in n]}",
+    )
+    out.that(
+        any(s.hp is not None and s.max_hp and s.hp < s.max_hp
+            for s in spent.party.sheets),
+        "and the damage lands on the sheet rather than only being printed "
+        "-- the first draft of this carried an `or` on the note, which let "
+        "a plant that printed the line and skipped the subtraction pass",
+        f"{[(s.cls, s.hp, s.max_hp) for s in spent.party.sheets]}",
+    )
+
+    # -- the vocabulary is closed and the hours are required --------------
+    try:
+        play(["bitter wind"], 8)
+        bad = ""
+    except mod.ModuleError as exc:
+        bad = str(exc)
+    out.that(
+        "is not one of" in bad,
+        "a danger the page does not print is refused by `--validate`, the "
+        "way every other closed vocabulary here is",
+        bad[:110] or "it was accepted",
+    )
+    try:
+        play(["cold"], 0)
+        missing = ""
+    except mod.ModuleError as exc:
+        missing = str(exc)
+    out.that(
+        "no hours" in missing,
+        "and exposure with no hours is refused rather than quietly never "
+        "falling due -- a module that says it is cold and does not say for "
+        "how long has not finished the scene",
+        missing[:110] or "it was accepted",
+    )
+
+
 def a_name_nobody_has_heard_of_still_reaches_the_dm(out: Result) -> None:
     """Camille, playing 2026-10-29:
 
@@ -43583,6 +43769,14 @@ DRIVERS = {
     # silently by the *last* writer -- so the first registration of this ran
     # the other driver and reported 21 green assertions that had nothing to
     # do with it.
+    # **`cold_hours`, not `exposure`.** That key is already the disease
+    # driver's, and a duplicate dict key is kept silently by the *last*
+    # writer -- the second time today a new registration ran somebody
+    # else's driver and reported its green assertions as mine.
+    "cold_hours": (
+        hours_in_the_cold_cost_the_party_healing_surges,
+        "hours in the cold cost the party healing surges (#971)",
+    ),
     "unknown_name": (
         a_name_nobody_has_heard_of_still_reaches_the_dm,
         "a name nobody has heard of still reaches the DM (#933)",

@@ -815,6 +815,57 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## Hours in the cold cost healing surges
+
+A surge could only ever be lost to a fight, and the rules have another way
+to spend one — which **six content rows across six files already said in
+their own docstrings**: an inert racial trait, a level-4 daily with an
+empty body, a marked item power, and two monster traits noting there was no
+rule for them to switch off.
+
+`Scene.exposure` names dangers from `DANGERS`, `Scene.hours` says how long,
+and `run.weather` rolls Endurance every `EXPOSURE_HOURS` against each.
+A failure spends a surge; with none left it costs hit points equal to level.
+
+Four calls:
+
+* **Fixed DCs, not a level band.** `dc.py` scales with level because a
+  challenge is pitched at the party; weather is not, and the page prints
+  one DC per condition. Reading these off `dc(level, band)` would make
+  frigid cold *easier* for a stronger party.
+* **A check per danger**, so a mountain in a snowstorm rolls twice as
+  often as a still mountain.
+* **+2 while sheltered**, which is the only reason the scene kind is
+  consulted — an extended rest is *"resting and not exerting himself"*.
+* **Rolled on the board, spent after it is struck.** `Table.strike` calls
+  `harvest`, which writes the board's own surge count back over every
+  sheet, so a surge subtracted while the board was live is silently undone.
+
+**Deprivation is not here.** The rule of three — three weeks without food,
+three days without water, three minutes without air — needs a surge pool
+that remembers *why* a surge went, because one lost to thirst does not
+return until the character drinks and `Sheet.surges` is a single integer.
+That half stays on #971, as does the per-round breath-holding check, which
+is the engine's.
+
+### Four of ten plants stayed green, and every one was a weak assertion
+
+The clearest set of examples this file has, so they are worth keeping:
+
+* **A guessed threshold.** `surges < 12` passes for any class whose pool is
+  smaller than twelve. It now measures against a pool harvested the same
+  way, and additionally asserts that every surge the notes *claim* was
+  spent is one the sheets actually lost.
+* **Matching the wrong line.** The per-danger assertion looked for the
+  danger's name anywhere in the output, and the summary line carries it
+  either way. The note states the **product** now — checks × dangers —
+  which a one-danger implementation cannot print.
+* **An `or` escape hatch.** `hp < max_hp ... or any("takes" in notes)` let
+  a plant print the line and skip the subtraction.
+* **And one plant was simply wrong**: setting a surge count before
+  `strike()` proves nothing, since `harvest` overwrites it either way.
+  Never striking the board is the real test of "harvest before spend".
+
 ## A name nobody has heard of still reaches the DM
 
 Camille, playing 2026-10-29:
@@ -1228,11 +1279,12 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     recall_order borrowed_board party_size_rule challenge_progresses \
     line_kinds objective_verdict objective_budget scene_grant \
     story_milestones timeline rest_lockout stays_cleared \
-    budget_ceiling roll_margin readiness unknown_name
+    budget_ceiling roll_margin readiness unknown_name \
+    cold_hours
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 30 drivers and prints 284 assertions**, and **each was
+**The command above is 31 drivers and prints 296 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

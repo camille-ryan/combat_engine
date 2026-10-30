@@ -54,7 +54,14 @@ from . import table as table_mod
 from .cast_list import resolve
 from .challenge import Chooser
 from .challenge import play as play_challenge
-from .module import CAUGHT, Module, Scene
+from .module import (
+    CAUGHT,
+    DANGERS,
+    EXPOSURE_HOURS,
+    SHELTERED,
+    Module,
+    Scene,
+)
 from .objective import watcher
 from .reflavour import apply as apply_flavour
 from .save import Campaign
@@ -929,6 +936,100 @@ def record_fallen(
         book[ref] = book.get(ref, 0) + count
 
 
+def weather(campaign: Campaign, module: Module, scene: Scene,
+            made: Step) -> None:
+    """Spend the party's surges on the hours they stood in the cold. #971.
+
+    **A healing surge could only be lost to a fight**, and the printed rules
+    have another way to spend one. Six content rows across six files already
+    say so in their own docstrings -- a racial trait that is wholly inert, a
+    level-4 daily with an empty body, a marked item power, and two monster
+    traits that note there is no rule for them to switch off.
+
+    > *Every eight hours within an area of environmental danger, the
+    > character must succeed on an Endurance check. Each time a character
+    > fails, he loses one healing surge. If a character has no healing
+    > surges left when he fails a check, he loses hit points equal to his
+    > level.*
+
+    Three things the printed text decides and this follows:
+
+    * **One check per danger**, not one per scene: *"if two or more
+      environmental dangers apply at the same time (such as climbing a
+      mountain in a snowstorm), characters make Endurance checks against
+      each danger."*
+    * **A check every eight hours**, so the hours are what the module
+      states and the number of checks falls out of them.
+    * **+2 while sheltered**, because an extended rest is *"resting and not
+      exerting himself"* -- which makes a cold night cheaper than a cold
+      day's march, and is the only reason the rest kind is consulted here.
+
+    **Not deprivation.** The rule of three -- three weeks without food,
+    three days without water, three minutes without air -- is the other half
+    of #971 and is left there, because it needs a surge pool that remembers
+    *why* a surge went: one lost to deprivation does not come back until the
+    character eats, drinks or breathes, and `Sheet.surges` is a single
+    integer that cannot say that.
+    """
+    if not scene.exposure or scene.hours <= 0:
+        return
+    spells = scene.hours // EXPOSURE_HOURS
+    if spells <= 0:
+        made.say(
+            f"{scene.hours}h of {', '.join(scene.exposure)}: under "
+            f"{EXPOSURE_HOURS}h, so no Endurance check falls due.",
+            "note",
+        )
+        return
+    eased = SHELTERED if scene.kind == "rest" else 0
+
+    # **Rolled on the board, applied after it is struck.** `Table.strike`
+    # calls `harvest`, which writes the board's `Health.surges` back onto
+    # every sheet -- so a surge subtracted while the board was live would be
+    # overwritten by the board that never knew about it. Collect, strike,
+    # then spend. Finding that out first saved a silent no-op.
+    failures: list[tuple[int, str, int]] = []
+    board = table_mod.lay(campaign.party, seed=seed_for(campaign, scene, "cold"))
+    try:
+        for danger in scene.exposure:
+            target = DANGERS[danger] - eased
+            for _ in range(spells):
+                for slot in range(len(campaign.party.sheets)):
+                    if not board.check(slot, "endurance", target):
+                        failures.append((slot, danger, target))
+    finally:
+        board.strike()
+
+    # **The total, not the per-danger count.** One check every eight hours
+    # *against each danger*, so a party on a mountain in a snowstorm rolls
+    # twice as often as one on a still mountain -- and stating the product
+    # is what makes that observable. A note saying only `spells` passed a
+    # plant that rolled against the first danger and ignored the rest.
+    told = (f"{scene.hours}h of {', '.join(scene.exposure)}: "
+            f"{spells * len(scene.exposure)} Endurance check(s) each")
+    made.say(told + (f", +{eased} while sheltered." if eased else "."), "note")
+    for slot, danger, target in failures:
+        sheet = campaign.party.sheets[slot]
+        left = sheet.surges or 0
+        if left > 0:
+            sheet.surges = left - 1
+            made.say(
+                f"{sheet.cls} fails Endurance {target} against {danger} "
+                "and spends a healing surge.",
+                "note",
+            )
+        else:
+            # Damage equal to level, which is the printed consequence of
+            # having nothing left to spend.
+            hurt = sheet.level
+            sheet.hp = (sheet.max_hp if sheet.hp is None else sheet.hp) - hurt
+            made.say(
+                f"{sheet.cls} fails Endurance {target} against {danger} "
+                f"with no surges left and takes {hurt} damage.",
+                "note",
+            )
+
+
 def _already_rested(campaign: Campaign, module: Module) -> bool:
     """Has an extended rest happened with nothing since? #993.
 
@@ -1115,6 +1216,12 @@ def step(
             f"{campaign.encounters} encounters since the last extended rest.",
             "note",
         )
+
+    # **The hours the scene took, before the grant and after the body.**
+    # A scene that spends a surge on the weather has to do it whatever kind
+    # of scene it is -- a conversation on a mountainside is as cold as a
+    # fight on one -- so this sits outside the kind dispatch. #971.
+    weather(campaign, module, scene, made)
 
     # **After the body, so a fight's grant is a reward rather than a loan.**
     # Unconditional on the outcome, which is the smallest honest version:

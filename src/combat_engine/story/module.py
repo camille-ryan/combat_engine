@@ -156,6 +156,37 @@ class FoeSpec:
     rank: str = "standard"
 
 
+#: Environmental dangers and the Endurance DC each one imposes, printed.
+#:
+#: **Fixed numbers, not a level band.** `dc.py`'s table scales with level
+#: because a skill challenge is pitched at the party; weather is not, and the
+#: page prints one DC per condition. Reading these off `dc(level, band)`
+#: would have made frigid cold easier for a stronger party, which is the
+#: opposite of what the rule says.
+#:
+#: A separate vocabulary from `TERRAIN_WORDS`, which is what a *board* is
+#: made of -- ice, snow, aquatic. A snowstorm a party walks through for eight
+#: hours and a patch of ice they fight on are different facts. #971.
+DANGERS = {
+    "severe weather": 20,
+    "high altitude": 21,
+    "cold": 22,
+    "heat": 22,
+    "extreme altitude": 26,
+    "frigid cold": 26,
+    "stifling heat": 26,
+}
+
+#: *"Every eight hours within an area of environmental danger, the character
+#: must succeed on an Endurance check."*
+EXPOSURE_HOURS = 8
+
+#: *"During the six hours that include extended rest, the character gets a
+#: +2 bonus to Endurance checks because he's resting and not exerting
+#: himself."*
+SHELTERED = 2
+
+
 #: How ready the opposition is when the party arrives. The DMG's four
 #: monster-readiness states, and the two in the middle are the ones with a
 #: consequence here: asleep or distracted and the defenders are **surprised**,
@@ -493,6 +524,13 @@ class Scene:
     #: What this scene hands the party, applied when it plays. Any kind may
     #: carry one -- see `Grant` and `loot.hand_over`.
     grants: tuple[Grant, ...] = ()
+    #: Environmental dangers the party is exposed to while this scene
+    #: happens, from `DANGERS`. Any kind may carry them: a conversation on
+    #: a mountainside is as cold as a fight on one.
+    exposure: tuple[str, ...] = ()
+    #: How long the scene takes, in hours. Only read when `exposure` is
+    #: stated -- an Endurance check falls due every `EXPOSURE_HOURS`.
+    hours: int = 0
 
     # -- roleplay ------------------------------------------------------------
     #: Who is here to be talked to.
@@ -1018,6 +1056,28 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     if not isinstance(beats, int) or beats < 1:
         problems.append(f"{where}: max_beats must be a positive integer")
         beats = MAX_BEATS
+    exposure = tuple(
+        str(w).strip().lower() for w in raw.get("exposure", ()) or ()
+        if str(w).strip()
+    )
+    for word in exposure:
+        if word not in DANGERS:
+            problems.append(
+                f"{where}: exposure {word!r} is not one of "
+                f"{', '.join(sorted(DANGERS))}"
+            )
+    hours = raw.get("hours", 0)
+    if not isinstance(hours, int) or isinstance(hours, bool) or hours < 0:
+        problems.append(
+            f"{where}: hours is {hours!r}; it is how long the scene takes "
+            "and must be a non-negative integer"
+        )
+        hours = 0
+    if exposure and not hours:
+        problems.append(
+            f"{where}: states exposure {list(exposure)} and no hours, so no "
+            "Endurance check would ever fall due -- say how long it takes"
+        )
     readiness = str(raw.get("readiness", "ready")).strip().lower() or "ready"
     if readiness not in READINESS:
         problems.append(
@@ -1060,6 +1120,8 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         chapter=str(raw.get("chapter", "")).strip(),
         exits=tuple(str(e).strip() for e in raw.get("exits", ()) if str(e).strip()),
         grants=grants,
+        exposure=exposure,
+        hours=hours,
         npcs=npcs,
         affordances=affordances,
         lore=lore,
