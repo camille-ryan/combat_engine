@@ -42106,6 +42106,226 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_quest_is_offered_completed_and_can_be_ruled_out(out: Result) -> None:
+    """The DMG lists quests first among what an adventure is made of, and
+    sets a level's budget as *"six to eight encounters, one major quest,
+    and one minor quest per character"*. The converted adventure prints
+    two and nothing carried either: both awarded nothing, and nothing
+    recorded whether the party had done them.
+
+    **A state per quest, not a boolean**, which is what #940's comment
+    rules out:
+
+    > *You can present quests that conflict with each other* -- so two
+    > active quests may be mutually exclusive, and completing one must be
+    > able to fail the other. A set of independent booleans cannot express
+    > that.
+
+    The assertion that proves the point is the one where a **failed quest
+    stays failed** even when the scene that would have completed it plays
+    anyway. Flags would have let it come back.
+
+    **The XP is carried and not awarded**, deliberately: `Sheet` has no XP
+    field and nothing here advances a character, which is #967. That has
+    its own assertion so nobody reads the figure as working.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    THREE = [
+        {"id": "brief", "kind": "roleplay", "name": "Brief",
+         "exits": ["save"]},
+        {"id": "save", "kind": "roleplay", "name": "Save",
+         "exits": ["burn"]},
+        {"id": "burn", "kind": "roleplay", "name": "Burn", "exits": []},
+    ]
+
+    def walk(quests: list[dict], scenes: list[dict] | None = None,
+             start: str = "brief") -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": start, "scenes": scenes or THREE, "quests": quests},
+            Path("<driver>"))
+        campaign = run_mod.begin(built, seed=5)
+        said: list[str] = []
+        states: list[dict] = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, built, record=False)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+            states.append(dict(campaign.quests))
+        return campaign, states, said
+
+    def refused(quests: list[dict],
+                scenes: list[dict] | None = None) -> str:
+        try:
+            mod.parse(
+                {"id": "probe", "party_level": 2, "party_size": 4,
+                 "start": "brief", "scenes": scenes or THREE,
+                 "quests": quests}, Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the control: a module with no quests ------------------------------
+    plain, states, said = walk([])
+    out.that(
+        plain.quests == {} and not any("uest" in n for n in said),
+        "a module that declares no quests carries none and says nothing, "
+        "so every module written before this is unchanged",
+        f"{plain.quests}",
+    )
+
+    # -- offered, then completed -------------------------------------------
+    ONE = [{"id": "rescue", "kind": "major", "xp": 20,
+            "offered_by": "brief", "done_when": "save",
+            "says": "A major quest: get them out alive."}]
+    done, states, said = walk(ONE)
+    out.that(
+        states[0].get("rescue") == "open",
+        "a quest is open from the scene that grants it",
+        f"{states[0]}",
+    )
+    out.that(
+        any("get them out alive" in n for n in said),
+        "and the module's own words announce it, because the point of "
+        "carrying a quest is that the player can see it",
+        f"{[n for n in said if 'alive' in n]}",
+    )
+    out.that(
+        states[1].get("rescue") == "done",
+        "and it is done when its `done_when` scene plays",
+        f"{states[1]}",
+    )
+
+    # -- the XP is carried and not awarded --------------------------------
+    out.that(
+        any("unspent" in n for n in said)
+        and not hasattr(done.party.sheets[0], "xp"),
+        "the XP is announced as unspent and no sheet has an XP field at "
+        "all, so nobody reads the figure as working -- that is #967",
+        f"{[n for n in said if 'unspent' in n]}",
+    )
+
+    # -- a conflict, which is why a quest has a state ---------------------
+    TWO = [
+        {"id": "rescue", "kind": "major", "offered_by": "brief",
+         "done_when": "save", "fails": ["burn-it"]},
+        {"id": "burn-it", "kind": "minor", "offered_by": "brief",
+         "done_when": "burn"},
+    ]
+    clash, states, said = walk(TWO)
+    out.that(
+        states[1] == {"rescue": "done", "burn-it": "failed"},
+        "completing a quest fails the one it rules out",
+        f"{states[1]}",
+    )
+    out.that(
+        states[2].get("burn-it") == "failed",
+        "and the failed quest stays failed when the scene that would have "
+        "completed it plays anyway -- which is the assertion a set of "
+        "booleans could not make, because a flag would simply be set",
+        f"{states[2]}",
+    )
+    out.that(
+        any("ruled it out" in n for n in said),
+        "and the failure is said out loud rather than discovered later",
+        f"{[n for n in said if 'ruled' in n]}",
+    )
+
+    # -- and not before its own scene -------------------------------------
+    # A green plant found this missing: opening every quest in every scene
+    # passed every assertion above, because all of them are granted by the
+    # first scene the probe plays.
+    LATE = [{"id": "late", "offered_by": "save", "done_when": "burn"}]
+    _, states, said = walk(LATE)
+    out.that(
+        states[0].get("late", "") == ""
+        and states[1].get("late") == "open",
+        "a quest is not open before the scene that grants it -- the state "
+        "appears in the scene named and not one earlier",
+        f"after brief {states[0]}, after save {states[1]}",
+    )
+    out.that(
+        sum(n.startswith("New ") and "late" in n for n in said) == 1,
+        "and it is offered once rather than re-announced in every scene it "
+        "is still open for",
+        f"{[n for n in said if 'late' in n]}",
+    )
+
+    # -- a quest nobody grants is open from the start ---------------------
+    START = [{"id": "always", "done_when": "save"}]
+    _, states, _ = walk(START)
+    out.that(
+        states[0].get("always") == "open",
+        "a quest with no `offered_by` is open without a separate start "
+        "hook, which is how a module states something the party already "
+        "has",
+        f"{states[0]}",
+    )
+
+    # -- any kind of scene may grant one ----------------------------------
+    # The module grants one mid-combat, so keying this on a roleplay scene
+    # would have missed it.
+    MIXED = [
+        {"id": "brief", "kind": "combat", "name": "B", "exits": ["save"],
+         "difficulty": "easy",
+         "foes": [{"count": 1, "role": "soldier", "rank": "standard"}]},
+        {"id": "save", "kind": "roleplay", "name": "Save", "exits": []},
+    ]
+    _, states, _ = walk(
+        [{"id": "mid", "offered_by": "brief", "done_when": "save"}], MIXED)
+    out.that(
+        states[0].get("mid") == "open",
+        "a combat scene can grant a quest, which the adventure's own "
+        "chapter 5 does",
+        f"{states[0]}",
+    )
+
+    # -- the refusals ------------------------------------------------------
+    out.that(
+        "neither a scene nor an affordance" in refused(
+            [{"id": "q", "done_when": "nowhere"}]),
+        "a quest finished by something that is not a scene or an "
+        "affordance is refused, rather than never completing",
+        refused([{"id": "q", "done_when": "nowhere"}])[:100] or "accepted",
+    )
+    out.that(
+        "no `done_when`" in refused([{"id": "q"}]),
+        "and one with no `done_when` at all is refused, because nothing "
+        "could ever complete it",
+        refused([{"id": "q"}])[:100] or "accepted",
+    )
+    out.that(
+        "pays the party for arriving" in refused(
+            [{"id": "q", "offered_by": "save", "done_when": "save"}]),
+        "a quest granted and completed by the same scene is refused -- "
+        "*don't reward the characters twice for the same actions*",
+        refused([{"id": "q", "offered_by": "save",
+                  "done_when": "save"}])[:100] or "accepted",
+    )
+    out.that(
+        "not a quest in this module" in refused(
+            [{"id": "q", "done_when": "save", "fails": ["ghost"]}]),
+        "and a conflict naming a quest that does not exist is refused",
+        refused([{"id": "q", "done_when": "save",
+                  "fails": ["ghost"]}])[:100] or "accepted",
+    )
+
+    # -- and the states survive a save ------------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(clash))
+    out.that(
+        back.quests == clash.quests
+        and back.quests.get("burn-it") == "failed",
+        "the quest states survive a save and a load, so reloading is not a "
+        "way to un-fail one",
+        f"{back.quests}",
+    )
+
+
 def a_challenge_is_no_harder_than_the_party_is_numerous(out: Result) -> None:
     """DMG2, which #939's comment found and its body does not mention:
 
@@ -44908,6 +45128,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "quests": (
+        a_quest_is_offered_completed_and_can_be_ruled_out,
+        "a quest is offered, completed and can be ruled out (#940)",
+    ),
     "complexity_bound": (
         a_challenge_is_no_harder_than_the_party_is_numerous,
         "a challenge is no harder than the party is numerous (#939)",

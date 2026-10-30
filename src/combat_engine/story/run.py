@@ -979,6 +979,75 @@ def record_fallen(
         book[ref] = book.get(ref, 0) + count
 
 
+def quests(campaign: Campaign, module: Module, scene: Scene,
+           made: Step) -> None:
+    """Offer, complete and fail the module's quests. #940.
+
+    The DMG lists quests first among what an adventure is made of and the
+    converted adventure prints two; nothing carried either, so both
+    awarded nothing and nothing recorded whether the party had done them.
+
+    Three things happen here, in this order:
+
+    * a quest whose `offered_by` is this scene becomes **open**, which may
+      be any kind of scene -- the module grants one mid-combat, so keying
+      this on a roleplay scene would miss it;
+    * an **open** quest whose `done_when` matches this scene, or an
+      affordance the party won in it, becomes done;
+    * every quest that one `fails` becomes failed, which is why a quest
+      has a state rather than a flag.
+
+    **Said out loud**, because the point of carrying a quest is that the
+    player can see it: *"don't be shy about letting the players know what
+    their quests are [...] that avoids searching for the fun."*
+
+    The XP is **not** awarded: `Sheet` has no XP field and nothing in the
+    story engine advances a character. That is #967, and the figure is
+    carried so the award has something to read.
+    """
+    if not module.quests:
+        return
+    won = {r.affordance for r in (made.played.beats[-1].rulings
+                                  if made.played and made.played.beats
+                                  else []) if r.won}
+    if made.played is not None:
+        won |= set(made.played.found)
+
+    for quest in module.quests:
+        state = campaign.quests.get(quest.id, "")
+        if not state and quest.offered_by == scene.id:
+            campaign.quests[quest.id] = state = "open"
+            made.say(
+                quest.says or f"New {quest.kind} quest: {quest.id}.",
+                "note",
+            )
+        elif not state and not quest.offered_by:
+            # A quest the party starts with is open from the first scene
+            # it could be finished in, which keeps a module that states no
+            # `offered_by` working without a separate "start" hook.
+            campaign.quests[quest.id] = state = "open"
+
+        if state != "open":
+            continue
+        if quest.done_when != scene.id and quest.done_when not in won:
+            continue
+        campaign.quests[quest.id] = "done"
+        made.say(
+            f"Quest done: {quest.id}"
+            + (f" ({quest.xp} XP, unspent -- see #967)" if quest.xp else "")
+            + ".",
+            "note",
+        )
+        for other in quest.fails:
+            if campaign.quests.get(other) == "open":
+                campaign.quests[other] = "failed"
+                made.say(
+                    f"Quest failed: {other} -- finishing {quest.id} ruled "
+                    "it out.",
+                    "note",
+                )
+
+
 def charge(campaign: Campaign, scene: Scene, made: Step) -> None:
     """Charge what losing this scene cost, with the exit unchanged. #975.
 
@@ -1382,6 +1451,7 @@ def step(
             "note",
         )
 
+    quests(campaign, module, scene, made)
     charge(campaign, scene, made)
 
     # **The hours the scene took, before the grant and after the body.**

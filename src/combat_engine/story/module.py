@@ -156,6 +156,31 @@ class FoeSpec:
     rank: str = "standard"
 
 
+#: What a quest is, and what it is worth saying about one.
+#:
+#: The DMG lists quests first among what an adventure is made of, and sets a
+#: level's budget as *"six to eight encounters, one major quest, and one
+#: minor quest per character"* -- so a quest is a third of the level's XP
+#: structure rather than decoration. The converted adventure prints two and
+#: nothing carried either.
+#:
+#: > **Major quests** [...] are the main story arc. **Minor quests** are the
+#: > subplots [...] Often, minor quests matter primarily to a particular
+#: > character or perhaps a subset of the party.
+QUEST_KINDS = ("major", "minor")
+
+#: The states a quest moves through. **Not a boolean per quest**, which is
+#: what #940's comment rules out:
+#:
+#: > *You can present quests that conflict with each other* -- so two active
+#: > quests may be mutually exclusive, and completing one must be able to
+#: > fail the other. A set of independent booleans cannot express that.
+#:
+#: `""` is a quest the module declares and has not offered yet, which is the
+#: mid-combat grant the same comment names: *"the characters gain a minor
+#: quest"* in a scene that is not a roleplay scene.
+QUEST_STATES = ("", "open", "done", "failed")
+
 #: What a scene may charge the party for losing it.
 #:
 #: Camille's ruling -- *"skill challenges should never prevent the plot from
@@ -236,6 +261,35 @@ CAUGHT = ("asleep", "distracted")
 #: night of the full moon"* -- and a tick per scene transition is the coarsest
 #: thing that can express any of them. Deliberately **not** a real clock.
 UNITS = ("scene", "rest")
+
+
+@dataclass(frozen=True)
+class Quest:
+    """Why the party is doing any of this, and what finishes it.
+
+    `done_when` is a **scene id or an affordance id**, both of which the
+    module already names, so nothing new has to be invented for a quest to
+    know when it is over.
+
+    `offered_by` is the scene that grants it, for a quest the party does
+    not start with. Any kind of scene may grant one.
+
+    `fails` names other quests this one's completion ends -- the conflict
+    case, which is why a quest has a state rather than a flag.
+
+    `xp` is carried and **spent by nothing**: `Sheet` has no XP field and
+    nothing in the story engine advances a character, which is #967. The
+    figure is recorded so that award has something to read, the same way
+    `Step.clean` waits for it.
+    """
+
+    id: str
+    kind: str = "major"
+    xp: int = 0
+    done_when: str = ""
+    offered_by: str = ""
+    fails: tuple[str, ...] = ()
+    says: str = ""
 
 
 @dataclass(frozen=True)
@@ -744,6 +798,9 @@ class Module:
     #: Empty for every module written before this, which then behaves
     #: exactly as it did. #944.
     cast: tuple[Person, ...] = ()
+    #: Why the party is doing any of this. Empty for every module written
+    #: before this. #940.
+    quests: tuple[Quest, ...] = ()
     #: Events that fire on the clock rather than on what the party did.
     #: Empty for every module converted so far, which is why nothing plays
     #: differently until one states an entry. See `Timed` and `run._due`.
@@ -848,6 +905,45 @@ def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
     return FoeSpec(
         count=count, name=str(raw.get("name", "")).strip(),
         words=words, role=role, rank=rank,
+    )
+
+
+def _as_quest(raw: Any, where: str, problems: list[str]) -> Quest | None:
+    """One quest. Its scene and affordance ids are checked in `parse`."""
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a quest must be an object")
+        return None
+    ident = str(raw.get("id", "")).strip()
+    if not ident:
+        problems.append(f"{where}: a quest needs an id")
+        return None
+    kind = str(raw.get("kind", "major")).strip().lower() or "major"
+    if kind not in QUEST_KINDS:
+        problems.append(
+            f"{where}: quest {ident!r} is {kind!r}; it must be one of "
+            f"{', '.join(QUEST_KINDS)}"
+        )
+        kind = "major"
+    xp = raw.get("xp", 0)
+    if not isinstance(xp, int) or isinstance(xp, bool) or xp < 0:
+        problems.append(
+            f"{where}: quest {ident!r} has xp {xp!r}; it must be a "
+            "non-negative integer"
+        )
+        xp = 0
+    done = str(raw.get("done_when", "")).strip()
+    if not done:
+        problems.append(
+            f"{where}: quest {ident!r} has no `done_when`, so nothing could "
+            "ever complete it -- name the scene or affordance that does"
+        )
+        return None
+    return Quest(
+        id=ident, kind=kind, xp=xp, done_when=done,
+        offered_by=str(raw.get("offered_by", "")).strip(),
+        fails=tuple(str(f).strip() for f in raw.get("fails", ())
+                    if str(f).strip()),
+        says=str(raw.get("says", "")).strip(),
     )
 
 
@@ -1444,6 +1540,52 @@ def parse(raw: dict, path: Path) -> Module:
     # module's and a scene does not know it -- which is why the harder
     # refusal (a complexity outside the table) has existed for longer than
     # this easier one. #939.
+    quests = tuple(
+        q for q in (
+            _as_quest(r, f"quest {i + 1}", problems)
+            for i, r in enumerate(raw.get("quests", ()) or ())
+        ) if q is not None
+    )
+    by_id = {q.id: q for q in quests}
+    if len(by_id) != len(quests):
+        problems.append("the module names the same quest twice")
+    affordances = {
+        a.id for s in scenes.values() for a in s.affordances
+    }
+    for quest in quests:
+        where = f"quest {quest.id!r}"
+        if quest.done_when not in scenes and quest.done_when not in affordances:
+            problems.append(
+                f"{where}: `done_when` is {quest.done_when!r}, which is "
+                "neither a scene nor an affordance in this module"
+            )
+        if quest.offered_by and quest.offered_by not in scenes:
+            problems.append(
+                f"{where}: `offered_by` is {quest.offered_by!r}, which is "
+                "not a scene in this module"
+            )
+        # **The trivially redundant case.** DMG2: *"don't reward the
+        # characters twice for the same actions [...] 'defeat ten
+        # encounters of your level' isn't a quest."* A quest finished by
+        # the very scene that grants it is paid for arriving, which is the
+        # clearest instance and the only one checkable without walking
+        # every path. The general case -- a goal the scenes it spans
+        # satisfy anyway -- is a reachability question and is left on the
+        # issue.
+        if quest.offered_by and quest.offered_by == quest.done_when:
+            problems.append(
+                f"{where}: granted and completed by the same scene "
+                f"{quest.done_when!r}, so it pays the party for arriving"
+            )
+        for other in quest.fails:
+            if other not in by_id:
+                problems.append(
+                    f"{where}: fails {other!r}, which is not a quest in "
+                    "this module"
+                )
+            elif other == quest.id:
+                problems.append(f"{where}: fails itself")
+
     size = int(raw.get("party_size", 4) or 4)
     for scene in scenes.values():
         # No `kind != "skill_challenge"` guard: `complexity` is in every
@@ -1473,6 +1615,7 @@ def parse(raw: dict, path: Path) -> Module:
         edition=str(raw.get("edition", "")).strip(),
         flags=flags,
         cast=cast_list,
+        quests=quests,
         timeline=timeline,
     )
 

@@ -176,6 +176,10 @@ class Campaign:
     #: The next short rest is denied, because a scene was lost and said
     #: that was the cost. Cleared by the rest it denies. #975.
     denied: bool = False
+    #: Quest id -> one of `module.QUEST_STATES`. **A state per quest, not
+    #: a boolean**, because quests can conflict: completing one must be
+    #: able to fail another, which a set of flags cannot express. #940.
+    quests: dict[str, str] = field(default_factory=dict)
     record: list[str] = field(default_factory=list)
     formation: list[str] = field(default_factory=list)
     spread: int = 2
@@ -262,6 +266,7 @@ def to_dict(campaign: Campaign) -> dict:
         "fired": list(campaign.fired),
         "cleared": {k: dict(v) for k, v in campaign.cleared.items()},
         "denied": campaign.denied,
+        "quests": dict(campaign.quests),
         "record": list(campaign.record),
         "formation": list(campaign.formation),
         "spread": campaign.spread,
@@ -302,6 +307,8 @@ def from_dict(raw: dict) -> Campaign:
             for k, v in (raw.get("cleared") or {}).items()
         },
         denied=bool(raw.get("denied", False)),
+        quests={str(k): str(v)
+                for k, v in (raw.get("quests") or {}).items()},
         record=[str(o) for o in raw.get("record", ())],
         formation=[str(b) for b in raw.get("formation", ())],
         spread=int(raw.get("spread", 2) or 2),

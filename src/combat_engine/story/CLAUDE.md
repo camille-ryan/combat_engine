@@ -1573,11 +1573,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
-    scene_once module_cast complexity_bound
+    scene_once module_cast complexity_bound quests
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 38 drivers and prints 379 assertions**, and **each was
+**The command above is 39 drivers and prints 396 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -1629,3 +1629,50 @@ One honest limit, because it is the kind of thing that rots: `training_bonus`
 asserts the difference equals `TRAINING`, so changing the constant moves both
 sides and it stays green. It proves the bonus is *applied*, which is the half
 that was actually missing here (#565). Break the read, not the number.
+
+## Quests carry a state, not a flag (#940)
+
+The DMG lists quests first among what an adventure is made of, and sets a
+level's budget as *"six to eight encounters, one major quest, and one minor
+quest per character"*. The converted adventure prints two and **nothing
+carried either**: both awarded nothing, and nothing recorded whether the
+party had done them.
+
+`Module.quests` is a list of `Quest(id, kind, xp, done_when, offered_by,
+fails, says)`, and `Campaign.quests` is a **state per quest** —
+`"" | "open" | "done" | "failed"` — rather than a set of booleans. That is
+#940's comment, which is the whole reason for the shape:
+
+> *You can present quests that conflict with each other*
+
+Two active quests may be mutually exclusive, so completing one must be able
+to **fail** the other, and a failed quest must stay failed when the scene
+that would have completed it plays anyway. A flag would simply be set. That
+is the assertion in the driver worth reading first.
+
+Three things happen in `run.quests`, in order: a quest whose `offered_by` is
+this scene opens; an open quest whose `done_when` matches this scene **or an
+affordance won in it** is done; everything that one `fails` is failed. Each
+is said out loud, because *"don't be shy about letting the players know what
+their quests are [...] that avoids searching for the fun."*
+
+**Any kind of scene may grant one** — the adventure grants one mid-combat,
+so keying this on `roleplay` would have missed it. A quest with no
+`offered_by` is open from the first scene, which is how a module states
+something the party already has without a separate start hook.
+
+Four refusals at parse time, each proven red: a `done_when` resolving to
+neither a scene nor an affordance, no `done_when` at all, a quest whose
+`offered_by == done_when` (*"don't reward the characters twice for the same
+actions"*), and a `fails` naming a quest that does not exist.
+
+**The XP is carried and not awarded.** `Sheet` has no XP field and nothing
+here advances a character; that is **#967**. The figure is stored so the
+award has something to read, and the line says `unspent` so nobody reads it
+as working. The driver asserts both halves.
+
+**What a green plant found**, and the reason that assertion exists: opening
+*every* quest in *every* scene passed all thirteen original assertions,
+because every quest in the probe is granted by the first scene it plays. The
+driver now asserts a quest offered by a **later** scene is absent until that
+scene, and is offered once rather than re-announced.
