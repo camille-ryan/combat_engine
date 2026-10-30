@@ -455,18 +455,28 @@ def mixed(pool: list[str]) -> list[str]:
 #: budget** -- three of them at 4,000 XP and one at 6,000, against a standard 2,000.
 #: An elite is worth two standards and a solo five, so "four creatures" is a count
 #: and not a budget.
-PARADIGMS = ("standard", "leader", "elites", "solo")
+#: The shapes a random encounter is **drawn** from, which is now the
+#: printed five rather than four of our own. Camille's call, 2026-10-30,
+#: asked directly and answered yes. #951.
+#:
+#: The printed d10 rolls them at equal weight -- commander and troops,
+#: wolf pack, dragon's den, battlefield control, double line -- so `leader`
+#: and `solo` keep their places as the first and third of those, and the
+#: three that had no analogue join them.
+#:
+#: **`standard` and `elites` leave the draw, and that is the part worth
+#: knowing.** Neither is a printed template: `standard` is "a mix of roles
+#: freely" and `elites` is the only shape that fielded elite monsters at
+#: all. Both are still reachable by name through `SHAPES_BY_NAME`, so
+#: nothing can no longer be built -- but a random arcade board will not
+#: produce an elite pair any more, and that was not obvious from the ask.
+PARADIGMS = ("leader", "wolf pack", "solo", "battlefield control",
+             "double line")
 
 #: Every shape that can be **asked for** by name, which is a longer list
-#: than the one that gets **drawn**.
-#:
-#: `PARADIGMS` is the draw, and the printed templates are deliberately not
-#: in it: the book rolls five templates at equal weight, so adopting that
-#: would re-shape every arcade board and every fixture -- which owes
-#: `winrate` both ways and a re-record. The templates are reachable by
-#: name until somebody wants to pay for that. #951.
-SHAPES_BY_NAME = (*PARADIGMS, "double line", "battlefield control",
-                  "wolf pack")
+#: than the one that gets **drawn** -- it keeps `standard` and `elites`,
+#: which the printed draw does not roll. #951.
+SHAPES_BY_NAME = (*PARADIGMS, "standard", "elites")
 
 #: How many standards' worth each rank costs, from the printed maths.
 RANK_COST = {"standard": 1, "elite": 2, "solo": 5}

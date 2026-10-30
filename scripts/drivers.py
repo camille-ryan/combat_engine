@@ -43326,18 +43326,33 @@ def the_printed_encounter_templates_can_be_fielded(out: Result) -> None:
 
     # -- the draw is the draw it was ---------------------------------------
     out.that(
-        PARADIGMS == ("standard", "leader", "elites", "solo"),
-        "the four paradigms that get **drawn** are unchanged, so no "
-        "arcade board moves -- the printed templates are askable and not "
-        "rollable until somebody pays for the re-record",
+        PARADIGMS == ("leader", "wolf pack", "solo",
+                      "battlefield control", "double line"),
+        "the shapes that get **drawn** are the printed five at equal "
+        "weight -- commander and troops, wolf pack, dragon's den, "
+        "battlefield control, double line. Camille's call, 2026-10-30. "
+        "`leader` and `solo` are the first and third of those under our "
+        "own names",
         f"{PARADIGMS}",
     )
     out.that(
-        set(SHAPES_BY_NAME) == set(PARADIGMS) | set(TEMPLATES)
-        and len(SHAPES_BY_NAME) == 7,
-        "and everything that can be asked for by name is the four plus "
-        "the three printed templates",
-        f"{SHAPES_BY_NAME}",
+        "standard" not in PARADIGMS and "elites" not in PARADIGMS
+        and {"standard", "elites"} <= set(SHAPES_BY_NAME),
+        "and **`standard` and `elites` leave the draw**, which is the part "
+        "of adopting the printed table that was not obvious from the ask: "
+        "neither is a printed template, and `elites` was the only shape "
+        "that fielded elite monsters. Both stay askable by name, so "
+        "nothing has become unbuildable",
+        f"drawn {PARADIGMS}, askable {sorted(SHAPES_BY_NAME)}",
+    )
+    out.that(
+        set(SHAPES_BY_NAME) == set(PARADIGMS) | {"standard", "elites"}
+        and len(SHAPES_BY_NAME) == 7
+        and all(p in set(TEMPLATES) | set(COMPOSITION)
+                for p in SHAPES_BY_NAME),
+        "and every shape that can be named can be built -- the draw list "
+        "and the buildable list cannot drift apart",
+        f"{sorted(SHAPES_BY_NAME)}",
     )
     out.that(
         set(TEMPLATES) == {"double line", "battlefield control",
@@ -43444,9 +43459,10 @@ def the_printed_encounter_templates_can_be_fielded(out: Result) -> None:
     )
     drawn = field_encounter(5, 5)
     out.that(
-        drawn.paradigm in PARADIGMS,
-        "and a board that asks for nothing still draws from the four, so "
-        "the default path is untouched",
+        drawn.paradigm in PARADIGMS or drawn.paradigm == "standard",
+        "and a board that asks for nothing draws from the printed five -- "
+        "or falls back to `standard`, which `opposition` does when a named "
+        "shape cannot be built at a level",
         f"{drawn.paradigm}",
     )
 
