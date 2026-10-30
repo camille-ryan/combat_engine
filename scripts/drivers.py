@@ -45657,6 +45657,7 @@ def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None
     """
     from pathlib import Path
 
+    from combat_engine import story
     from combat_engine.story import SIDE, WORTH, xp
     from combat_engine.story import beat as bt
     from combat_engine.story import module as mod
@@ -45686,30 +45687,126 @@ def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None
         f"{got}",
     )
 
-    # -- the mode, not the first row --------------------------------------
-    # #1014 is the same question asked of `budget`, which still uses
-    # `LIMIT 1`. At level 10 one creature carries 300 against 141 at 500.
+    # -- the commonest figure, not the first row --------------------------
+    # #1014 was the same question asked of `budget` with `LIMIT 1`. Both go
+    # through `story.commonest` now, which is why the assertions below name
+    # it rather than a private copy in `xp.py`.
     from combat_engine.db import game
 
     rows = [r[0] for r in game().execute(
         "SELECT xp FROM monster WHERE level = 10 AND minion = 0 AND xp > 0 "
         "AND (rank IS NULL OR rank = 'standard')")]
     out.that(
-        xp._mode([300, 500, 500]) == 500 and xp._mode([]) == 0,
-        "a level's XP is the mode and not whichever row sorted first. "
-        "**Posed against a list and not the database**, because `LIMIT 1` "
-        "agrees with the mode at all 13 levels today (#1014) -- so a plant "
-        "swapping the mode for `rows[0]` stayed green, and this assertion "
-        "exists because that plant did not go red",
-        f"{xp._mode([300, 500, 500])}",
+        story.commonest([300, 500, 500]) == 500 and story.commonest([]) == 0,
+        "a level's XP is the commonest figure there and not whichever row "
+        "sorted first. **Posed against a list and not the database**, "
+        "because the two agree at all 13 levels today (#1014) -- so a plant "
+        "swapping it for `rows[0]` stayed green, and this assertion exists "
+        "because that plant did not go red",
+        f"{story.commonest([300, 500, 500])}",
     )
     out.that(
         xp.standard(10) == 500 and 300 in rows
-        and xp.standard(10) == xp._mode(rows),
+        and xp.standard(10) == story.commonest(rows),
         "and the live rows go through it -- level 10 holds a stray "
-        "creature at 300 against 141 at 500, and the figure is the mode of "
-        "what is actually there",
+        "creature at 300 against 141 at 500, and the figure is the "
+        "commonest of what is actually there",
         f"standard={xp.standard(10)}, strays={sorted(set(rows))}",
+    )
+    # **The reward side and the spending side read one function**, which is
+    # the whole of #1014: `budget` asked this column with `LIMIT 1` and no
+    # `ORDER BY`, so its figure was whatever the query plan returned. The
+    # claim cannot be posed against the live rows -- they agree -- so what
+    # is asserted is that the two callers agree *with each other* on every
+    # level the database holds, which a second private copy would let drift.
+    agree = [
+        lvl for lvl in range(1, story.ceiling() + 1)
+        if story.budget(lvl) != xp.standard(lvl) * SIDE
+    ]
+    out.that(
+        not agree,
+        "`budget` and the award read the same column through the same "
+        "function, at every level the database holds -- so a stray row "
+        "cannot make an encounter cost one figure and pay another",
+        f"levels that disagree: {agree} of 1..{story.ceiling()}",
+    )
+    # **Asserted through both callers, not only on the helper.** Three
+    # plants stayed green against the helper assertions above -- `budget`
+    # reverting to `rows[0]`, the award reverting to `rows[0]`, and `budget`
+    # going back to `LIMIT 1` -- because on the live rows all three agree
+    # with the right answer, which is the whole reason #1014 could sit
+    # unnoticed. So the shared function is replaced with a recorder and the
+    # question becomes: did this caller route through it, and was it handed
+    # the **whole** column rather than one row?
+    #
+    # Patched in **two** places on purpose: `xp.py` does
+    # `from combat_engine.story import commonest`, so rebinding
+    # `story.commonest` alone leaves the award reading the original and the
+    # plant stays green -- a bare-name import defeating a patch on its
+    # source module.
+    seen: list[list[int]] = []
+
+    def recorder(rows: list[int]) -> int:
+        seen.append(list(rows))
+        return 7
+
+    # **Rebound through `setattr` with the name in a variable**, which is
+    # the one spelling all three gates accept, and each refuses a different
+    # obvious version: `ty` reads a direct `module.fn = other` as an
+    # invalid assignment; `ruff`'s structural walk refuses a mypy-style
+    # suppression comment, which `ty` would not honour anyway; and
+    # `ruff`'s B009/B010 refuse `setattr` with a *literal* attribute name.
+    # A variable is none of those.
+    #
+    # Worth knowing that the walk is a text search, so naming the
+    # suppression it forbids is enough to trip it -- writing this comment
+    # with the directive spelled out turned the gate red, which is the
+    # instrument being right rather than fussy.
+    SHARED = "commonest"
+    homes = (story, xp)
+    was = [getattr(home, SHARED) for home in homes]
+    try:
+        for home in homes:
+            setattr(home, SHARED, recorder)
+        spent = story.budget(5)
+        from_budget = list(seen)
+        seen.clear()
+        paid = xp.standard(5)
+    finally:
+        for home, before in zip(homes, was, strict=True):
+            setattr(home, SHARED, before)
+    out.that(
+        spent == 7 * SIDE and from_budget and len(from_budget[0]) > 1,
+        "`budget` routes through the shared read and is handed the whole "
+        "column -- which is what `LIMIT 1` could not be, and the three "
+        "plants that stayed green against the assertions above are the "
+        "reason this is asserted through the caller rather than the helper",
+        f"budget={spent}, rows handed over={[len(r) for r in from_budget]}",
+    )
+    out.that(
+        paid == 7 and seen and len(seen[0]) > 1,
+        "and so does the award, patched separately because its `from ... "
+        "import commonest` would otherwise keep reading the original",
+        f"standard={paid}, rows handed over={[len(r) for r in seen]}",
+    )
+    # And the strays that make it matter are really there: a quarter at one
+    # level and five times at another, so the exposure was never the 40%
+    # the issue's title names.
+    strays = {}
+    for lvl in (1, 8, 13):
+        at = [r[0] for r in game().execute(
+            "SELECT xp FROM monster WHERE level = ? AND minion = 0 AND xp > 0 "
+            "AND (rank IS NULL OR rank = 'standard')", (lvl,))]
+        common = story.commonest(at)
+        strays[lvl] = (common, sorted({x for x in at if x != common}))
+    out.that(
+        strays[1][1] and min(strays[1][1]) < strays[1][0]
+        and strays[8][1] and max(strays[8][1]) >= strays[8][0] * 4,
+        "and the column really does hold strays far enough out to matter -- "
+        "one below the commonest figure at level 1 and one at least four "
+        "times it at level 8, so whichever row sorted first was never a "
+        "bounded error",
+        f"{strays}",
     )
 
     # -- the rank is in the row, so it must not be applied twice ----------

@@ -1251,6 +1251,82 @@ story fight prints `Won in 4 rounds` and sends the blow-by-blow to a
 transcript nobody reads during play; there is a whole encounter of this
 material and none of it is narrated.
 
+## What a level is worth is read once, and asserted through both callers (#1014)
+
+`budget` asked `monster.xp` for a level with `LIMIT 1` and no `ORDER BY`, so
+its figure was whichever row the query plan handed back. `xp.standard` asked
+the same column the same question and took the **mode** — two copies of one
+rule, which is what lets them drift. `story.commonest` is the single
+definition, a layer below both: `xp.py` already imports from
+`story/__init__.py`, so this needed no new edge and no function-local import.
+
+Not called `mode`. In this tree that word already means a movement mode
+(`c.lose_mode`) and a way of playing (arcade, day, story), and a third sense
+reads as one of those.
+
+**A verified no-op**: the commonest value and the first row agree at all 13
+levels, so no board moved and the eight `replay` fixtures are identical.
+
+**The exposure was never the 40% the issue's title names**, and the strays are
+in the table today:
+
+| level | commonest | a stray that is there | |
+|---|---|---|---|
+| 1 | 100 | **25** | a quarter |
+| 8 | 350 | **1,750** | five times |
+| 13 | 800 | 1,600 | twice |
+
+### The rank filter and `LIMIT 1` were guarding one failure
+
+A plant that dropped the standard-rank filter **stayed green**, which is worth
+more than the fix. Measured across all 13 levels:
+
+```
+                       with the filter   without it
+  commonest                     same           same
+  LIMIT 1, level 10              500          2,500
+  LIMIT 1, level 13              800          4,000
+```
+
+That 2,500 is verbatim the bug `budget`'s own comment describes — a solo read
+as a standard monster, declaring a budget of 10,000. So the filter was never
+what stood between here and that number; **reading the column properly is.**
+The filter stays, because it states which monsters the printed rule is about
+and a rebuild can move a distribution, but it is belt-and-braces rather than
+the guard — and the comment says that a plant dropping it is *expected* to be
+green.
+
+### Asserting the answer cannot catch this, so the assertion is through the caller
+
+The sharpest thing here. Three plants stayed green against assertions on the
+figure — `budget` reverting to `rows[0]`, the award reverting to `rows[0]`, and
+`budget` going back to `LIMIT 1` — because **against this database every wrong
+read returns the right answer.** That is precisely why the bug sat unnoticed,
+so no assertion on the output can ever see it.
+
+So `commonest` is replaced with a recorder and the questions become: did this
+caller route through it, and **was it handed the whole column or one row?** A
+`LIMIT 1` query hands over exactly one. All three went red, as did two further
+plants that inline a second copy of the rule instead of sharing one.
+
+Two traps in writing that, both costing a red run:
+
+* **`xp.py` does `from combat_engine.story import commonest`**, so patching
+  `story.commonest` alone leaves the award reading the original and the plant
+  stays green regardless. Both names are patched.
+* **three gates each refuse a different obvious spelling of a module rebind** —
+  `ty` refuses `module.fn = other`; `ruff`'s structural walk refuses a
+  mypy-style suppression comment, which `ty` would not honour anyway; and
+  `ruff`'s B009/B010 refuse `setattr` with a *literal* attribute name. The name
+  in a variable is none of those. And the structural walk is a **text search**,
+  so the comment explaining which suppression it forbids tripped it by naming
+  one — the instrument being right rather than fussy, and the same shape as
+  every other place in this repo where explaining a rule is where it gets
+  broken.
+
+18 plants over two rounds, 17 red, 1 control green, 1 documented
+expected-green.
+
 ## The budget clamps to what the database holds, and says it did
 
 `story.budget` reads a standard monster's XP out of `game.db`, which stops
@@ -1580,7 +1656,7 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 50 drivers and prints 622 assertions**, and **each was
+**The command above is 50 drivers and prints 626 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

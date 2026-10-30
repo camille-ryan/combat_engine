@@ -18,10 +18,9 @@ the monsters are actually worth, and then two numbers describe one rule.
 
 from __future__ import annotations
 
-import collections
 from dataclasses import dataclass
 
-from combat_engine.story import SIDE, ceiling
+from combat_engine.story import SIDE, ceiling, commonest
 
 #: How many encounters of their own level a character gains a level over.
 #:
@@ -68,31 +67,22 @@ class Award:
     why: str = ""
 
 
-def _mode(rows: list[int]) -> int:
-    """The most common value, which is the figure the page printed.
-
-    **Separated out because the claim cannot be posed against the database
-    as it stands.** `LIMIT 1` returns this same answer at all 13 levels
-    today (#1014), so a driver asserting "the mode, not the first row"
-    against real rows passes either way and tests nothing -- a plant
-    swapping the mode for `rows[0]` stayed green, which is how this
-    function came to exist. Here the two can be told apart.
-    """
-    if not rows:
-        return 0
-    return collections.Counter(rows).most_common(1)[0][0]
-
-
 def standard(level: int) -> int:
     """A standard monster of this level's XP.
 
-    **The mode, not the first row.** `budget` asks the same question with
-    `LIMIT 1` and no `ORDER BY`, which happens to agree at all 13 levels
-    today and is one mis-extracted row away from not: level 10 carries a
-    single creature at 300 against 141 at 500, and level 13 one at 1,600
-    against 110 at 800. Had either sorted first, a budget would have been
-    40% light or twice over in silence. Filed separately -- this file is
-    not the place to change what `budget` spends.
+    **The commonest figure at the level, not whichever row sorted first.**
+    `budget` asks the same column the same question and used to ask it with
+    `LIMIT 1` and no `ORDER BY` -- which agrees at all 13 levels today and
+    was one re-ordering away from not: level 10 carries a single creature at
+    300 against 141 at 500, level 8 one at **1,750** against 350, and level
+    1 one at **25** against 100. So the exposure ran from a quarter to five
+    times, not the 40% #1014's title names. Both now go through
+    `story.commonest`, which lives a layer down so there is one definition.
+
+    **The claim still cannot be posed against the database**, which is why
+    `commonest` is a named function at all: a plant swapping it for
+    `rows[0]` stays green on the live rows, so the driver asserts it against
+    a list where the two differ.
 
     Clamped to `ceiling()` for the same reason `budget` clamps: the
     database stops where the ETL stopped, and a figure above it would
@@ -107,7 +97,7 @@ def standard(level: int) -> int:
             (min(max(level, 1), ceiling()),),
         )
     ]
-    return _mode(rows)
+    return commonest(rows)
 
 
 def for_creatures(refs: list[str]) -> int:

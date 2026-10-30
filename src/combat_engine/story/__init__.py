@@ -28,6 +28,7 @@ exactly one thing that knows how to field one.
 
 from __future__ import annotations
 
+import collections
 from dataclasses import dataclass, field
 from functools import lru_cache
 from random import Random
@@ -573,6 +574,28 @@ BAND = 3
 MOST = 12
 
 
+def commonest(rows: list[int]) -> int:
+    """The most common value in a column, which is the figure the page printed.
+
+    **Here rather than in `xp.py` so there is one definition of the rule.**
+    Two callers ask a level's `monster.xp` the same question -- `budget`,
+    for what an encounter may cost, and `xp.standard`, for what overcoming
+    one pays -- and a second copy is a second thing to keep in step. `xp.py`
+    already imports from this module, so this is the direction that needs no
+    new edge and no function-local import. #1014.
+
+    Not called `mode`: in this tree that word already means a movement mode
+    (`c.lose_mode`) and a way of playing (arcade, day, story), and a third
+    sense would read as one of those.
+
+    Returns 0 for an empty column, which every caller treats as "nothing is
+    written at this level" rather than as a figure.
+    """
+    if not rows:
+        return 0
+    return collections.Counter(rows).most_common(1)[0][0]
+
+
 @lru_cache(maxsize=1)
 def ceiling() -> int:
     """The highest level the database can actually field a standard monster at.
@@ -622,6 +645,24 @@ def budget(level: int, scale: float = 1.0) -> int:
     rule. Read off the database rather than from a table here, so it cannot
     disagree with what the monsters are actually worth.
 
+    **The commonest XP at the level, and that is a correctness fix rather
+    than a tidy-up.** This was `LIMIT 1` with no `ORDER BY`, so the figure
+    was whichever row the query plan happened to hand back. A verified
+    no-op today -- the commonest value and the first row agree at **all 13
+    levels** -- and one re-ordering away from not, because the strays are
+    already in the table:
+
+        level   commonest   a stray that is there
+            1         100   one at    25   (a quarter)
+            8         350   one at 1,750   (five times)
+           13         800   one at 1,600   (twice)
+
+    So the failure was never bounded at the 40% #1014's title names: a
+    level-8 encounter could have been fielded five times over, in silence,
+    with nothing to raise. `commonest` is shared with `xp.standard`, which
+    asks the same column the same question for what overcoming a fight
+    pays. #1014.
+
     `scale` multiplies it, which is what an adventuring day's difficulty curve
     is made of -- a soft opener and a hard finale around standard middles. It
     is a **multiple of the printed budget** and not a second notion of
@@ -634,17 +675,40 @@ def budget(level: int, scale: float = 1.0) -> int:
     # **A *standard* monster's XP**, which the rank filter is for: taking the
     # first row with an XP at all picked up a solo at 2,500 and declared the
     # budget 10,000, which fielded 48 creatures on a 16x12 board.
-    row = game().execute(
-        "SELECT xp FROM monster WHERE level = ? AND minion = 0 AND xp > 0 "
-        "AND (rank IS NULL OR rank = 'standard') LIMIT 1",
-        (min(max(level, 1), ceiling()),),
-    ).fetchone()
+    #
+    # **The commonest figure at the level, not whichever row sorted first.**
+    # This was `LIMIT 1` with no `ORDER BY`, so the answer was whatever the
+    # query plan handed back -- and the strays that would have made that
+    # wrong are in the table today. #1014.
+    #
+    # And the two guards above were guarding one failure, which a plant
+    # showed by staying green. Measured across all 13 levels:
+    #
+    #                        with the filter   without it
+    #     commonest                  same           same
+    #     LIMIT 1, level 10           500          2,500
+    #     LIMIT 1, level 13           800          4,000
+    #
+    # That 2,500 is the bug the paragraph above describes, so the rank
+    # filter was never what stood between here and a 10,000 budget --
+    # reading the column properly is. The filter **stays**, because it
+    # states which monsters the printed rule is about and a rebuild can
+    # move a distribution, but it is belt-and-braces now rather than the
+    # guard. Said here because a plant that drops it is green, and the next
+    # reader deserves to know that is expected rather than a hole.
+    rows = [
+        r[0] for r in game().execute(
+            "SELECT xp FROM monster WHERE level = ? AND minion = 0 AND xp > 0 "
+            "AND (rank IS NULL OR rank = 'standard')",
+            (min(max(level, 1), ceiling()),),
+        )
+    ]
     # **Rounded, not truncated.** `int()` on 0.75 of a 4x100 budget gives 300
     # either way, but on an odd standard XP a truncation loses a creature's
     # worth at the bottom of the band -- and `opposition` skips a candidate
     # that would break the ceiling, so a budget one point short is a monster
     # fewer rather than a rounding nicety.
-    return round((row[0] if row else 0) * SIDE * scale)
+    return round(commonest(rows) * SIDE * scale)
 
 
 def opposition(
