@@ -997,13 +997,25 @@ def i836p1(c: Cast) -> None:
     on=Trigger(PowerUsed, _used_by_me("p8278"), "you use p8278"),
 )
 def i847p1(c: Cast) -> None:
-    """`PowerUsed` announces before the body runs, so the targets are
-    already chosen and trustworthy -- which is the one thing this row
-    reads off it."""
-    picked = getattr(c.trigger, "targets", None) or []
-    if not picked:
+    """The card says "the creature that **triggered** p8278", and this read
+    its *targets* instead -- so it returned at its first line on 48 of 48
+    attempts, because p8278 prints no Target line and genuinely picks
+    nobody.
+
+    `PowerUsed.trigger` is what the watched power was used in answer to,
+    which for p8278 is the `Dropped` event its own card names: "a creature
+    within 5 squares of you is reduced to 0 hit points". So the creature
+    this row is about is that event's `actor`.
+
+    **`PowerUsed`'s own docstring predicted this exact mistake** -- *"`targets`
+    is not that thing and is not a stand-in for it: an immediate action is
+    routinely NO_TARGET, or aims itself at a creature off its own trigger,
+    so the two name different creatures exactly when the distinction
+    matters."* This row was the case it was warning about. #941."""
+    dropped = getattr(c.trigger, "trigger", None)
+    who = getattr(dropped, "actor", None)
+    if who is None:
         return
-    who = picked[0]
     near = [e for e in c.enemies() if e != who and c.adjacent_to(who, e)]
     if not near:
         return
