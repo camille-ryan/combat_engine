@@ -123,6 +123,18 @@ def item_for(level: int, draw: Random) -> str:
     party *found*, and the page does not promise it is usable by anybody
     present. `chargen`'s `_fits_base` matters when an item is being
     **equipped**, which nothing here does.
+
+    **One consequence of that, measured rather than assumed: about 5% of the
+    pool is an alternative reward** -- 64 of the 1,287 refs priced at levels
+    6 to 9 -- and one of those is *not a physical object*. It cannot be
+    carried, bought or sold, it occupies no slot, and it fades after five
+    levels. So a reward drawn here is filed as a carried object, which is
+    the wrong noun. It is harmless today because nothing reads `carried`,
+    and it is not fixed here because the right fix is to award one
+    deliberately rather than to filter the category out: a reward is the
+    one parcel that could safely be put *in play*, since the page says
+    alternative rewards **never grant enhancement bonuses** and the
+    enhancement curve is the whole reason the item half owes nothing.
     """
     from combat_engine.db import game
 

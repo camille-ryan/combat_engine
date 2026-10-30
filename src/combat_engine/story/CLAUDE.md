@@ -1580,7 +1580,7 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 50 drivers and prints 609 assertions**, and **each was
+**The command above is 50 drivers and prints 622 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -2310,18 +2310,53 @@ challenge in `modules/` uses `bonus`. Retiring it is a one-line deletion plus
 three sites in `challenge.py`; left for a decision rather than taken, because
 removing an authoring option is not a thing to do silently.
 
-## The party finds the money it is owed (#969, the monetary half)
+## The party finds the treasure it is owed (#969)
 
 No treasure was awarded anywhere: a party finished a module with the equipment
 `chargen` dealt it and nothing else.
 
-**The monetary half only, and the line is the point.** The printed system is
-ten parcels per level — four magic items at party level +1 to +4, and six
-monetary. The item half is left alone because a found item sits **above**
-`band(level)`, and `band` is exactly what monster defences are set against, so
-items off that curve owe `winrate` both ways. **Coins change no number on any
-board**, so they owe nothing — which is what makes this the half worth landing
-first.
+Ten parcels per level — **four magic items at party level +1 to +4, and six
+monetary.** Both halves are here. The monetary one landed first, on the ground
+that coins change no number on any board; the item half was held for a decision
+because a parcel sits **above** `band(level)` and `band` is exactly what monster
+defences are set against, so an item off that curve looked like it owed
+`winrate` both ways. Camille's call, 2026-10-30, was to award them.
+
+**It owes no `winrate` run, and the reason is a scoping call rather than an
+argument: a found item is carried, not worn.** `Sheet.carried` is a count of
+what happened to the party and **nothing in a fight reads it**, so the party's
+power is unchanged — all eight replay fixtures identical, which is the proof
+rather than the hope. `chargen.treasure` equips three items at `band(level)`;
+**equipping from inventory is the part that would owe the measurement**, and
+there is no action for it today. Both docstrings say so, so the next reader does
+not re-derive it.
+
+`ITEM_STEPS = (4, 3, 2, 1)`, descending, because the page lists parcel 1 as the
+best of them — and because DMG2's alternative rewards replace *"the
+highest-level magic items you would otherwise give out"*, which only means
+anything if parcel 1 is the dearest.
+
+**`item_for` draws the way `chargen.treasure` draws** — joining `item` to
+`item_step` — so it can only ever pick a rung that exists at the level asked
+for. That is the pattern to reuse here rather than `terrain.printed_trap`'s.
+**Not** filtered by slot or base item, deliberately: a parcel is what the party
+*found*, and the page does not promise anybody present can use it;
+`chargen`'s `_fits_base` matters when an item is being **equipped**, which
+nothing here does. A level the database prices nothing at yields `""` and the
+parcel is **dropped rather than retried elsewhere**, because substituting a
+different level would hide a gap in the corpus.
+
+An item goes to **one character**, round-robin by parcel, because an item is
+one object; coin divides because coin does. Measured at level 5 over twelve
+fights: items at levels 9, 8, 7 and 6, then 550, 500, 340, 340, 160, 110, then
+nothing on fights 11 and 12 — ten parcels, 499 gp each, one item on each sheet.
+
+**And one existing assertion had to change its question.** `scene_grant` asked
+whether the party carried *exactly one thing* after the next fight, which was
+the same question as "#935's grant survived" until a won fight started handing
+over an item into the same bag. A total conflates *the grant survived* with
+*nothing else arrived*; it asks about the granted ref now, which is the claim
+and is equally breakable in both directions.
 
 **Nothing is written down that the database already holds.** The curve is
 `2 x market_price(level)`, computed from the mode of `item_step.cost`, and it
@@ -2347,8 +2382,28 @@ because a die said so. Measured over nine fights at level 5: 550, 500, 340,
 340, 160, 110, then nothing, and the party holds **1,996 of 2,000** with the
 4 gp lost to the per-head flooring.
 
-Nothing resets the count, because nothing levels up (#1013) — so six parcels
+Nothing resets the count, because nothing levels up (#1013) — so ten parcels
 is the module's lot, and `hoard`'s docstring says so.
 
 **Nothing spends the coins.** An economy wants rituals (#453) and a market; a
 visible number that cannot be spent is honest, awarding nothing was not.
+
+**Two pieces of the printed system are absent, both filed with a measurement:**
+
+* **#1020, alternative rewards.** They go in an item parcel's *place*, are not
+  physical objects, occupy no slot, and fade after five levels — and **119 of
+  them are already in `game.db`** under their own category with `slot = ''`.
+  `item_for` filters on nothing, so **5% of the pool is already one** (64 of
+  1,287 refs at levels 6–9) and `hoard` files it as a carried object, which is
+  the wrong noun. Harmless today because nothing reads `carried`.
+
+  The reason it is the *interesting* half rather than the leftover: the page
+  says alternative rewards **never grant enhancement bonuses**, so a reward is
+  the only parcel that could be put **in play** without moving the curve the
+  monster defences are set against. That curve is the whole reason the item
+  half had to be carried rather than worn.
+* **#1021, the group-size adjustment.** The printed table adds and drops
+  parcels for a party that is not five; this divides a fixed ten evenly, so a
+  party of three is richer per head and the level's total never moves. Filed
+  **without** the table's contents, because the page has not been read — which
+  is the rule about a quoted table applied to an issue I was writing myself.
