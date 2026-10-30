@@ -1,9 +1,9 @@
 {
-  "sha": "57f5ad0c1a96f91500db1a15c2aa613cedda6101",
+  "sha": "6feb569cc6cb4cdcbb04174852fff6c205bd7f7a",
   "refs": 21490,
-  "fired": 19916,
-  "silent": 553,
-  "never": 849,
+  "fired": 19912,
+  "silent": 552,
+  "never": 854,
   "known_quiet": 172,
   "known_quiet_refs": [
     "cf:monk-f0s0",
@@ -725,7 +725,6 @@
     "p5910",
     "p7441",
     "p7469",
-    "p7505",
     "p949",
     "p9667",
     "p9744",
