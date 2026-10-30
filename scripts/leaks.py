@@ -2023,7 +2023,149 @@ def history() -> int:
     return 1 if bad else 0
 
 
+#: Where the residue of the inverted check is baselined, as **digests**.
+#:
+#: Digests and never the phrases, for the reason `fixtures/localisation.json`
+#: holds them: some unknown fraction of this residue is real printed names,
+#: which is precisely why it is interesting -- so a committed file listing
+#: them in plain text would *be* the leak this gate exists to catch. The
+#: phrase behind a digest is recoverable only by re-running against a
+#: database the reader already has, which is the same bargain the
+#: localisation freeze makes. #493.
+INGEST = Path(__file__).resolve().parent / "fixtures" / "ingest.json"
+
+#: A printed name's shape, without needing to know any name: two or more
+#: adjacent capitalised words.
+#:
+#: **This is the inverted question** -- `leaks.py`'s main walk searches for
+#: the 22,343 names it has a copy of, and by construction can never report
+#: one it has no copy of. #493 measured that blind spot and controlled it: of
+#: the distinct phrases this finds, **0 are a known printed name and 0
+#: contain one as a sub-phrase**, with a positive control proving the lookup
+#: that produced those zeros works (4 of 5 real names resolve through the
+#: same path). So this residue is not "names the matcher is too weak to
+#: see". It is names the matcher has no copy of, and no amount of matcher
+#: work reaches it.
+_PHRASE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b")
+
+#: A brief's structural heading, which must be cut **before** phrases are
+#: extracted or the walk runs straight across the boundary and reports
+#: `<Heading> <whatever follows>` as one phrase.
+#:
+#: Matched as a shape rather than listed, so a heading the extractor starts
+#: printing tomorrow is handled without editing this.
+#:
+#: Measured, because #493's comment implies a bigger effect than this has:
+#: 43% of occurrences *begin with* a heading, but cutting them drops only
+#: **19%** -- 2,444 occurrences to 1,986, 506 distinct phrases to 416.
+#: The gap is tails that are still a capitalised phrase once the heading is
+#: gone, so they are findings in their own right rather than artifacts.
+_HEADING = re.compile(r"\b[A-Z][a-z]+s?\s*:")
+
+
+def _spec_phrases(spec: str, trusted: frozenset[str]) -> set[str]:
+    """Capitalised multi-word phrases in one spec, refs and headings removed.
+
+    A phrase every word of which is trusted vocabulary is waived -- the same
+    judgement `--cited` makes, and for the same reason: "makes a double
+    attack" is three capitalised words in a heading-adjacent position and
+    leaks nothing.
+    """
+    text = _HEADING.sub(" | ", CITED_REF.sub(" ", spec))
+    return {
+        found.group() for found in _PHRASE.finditer(text)
+        if not all(word.lower() in trusted for word in found.group().split())
+    }
+
+
+def ingest() -> int:
+    """Ask whether a spec is reference-complete, instead of searching it.
+
+    Camille, 2026-10-10: *"I don't understand why we aren't just, when
+    ingesting a new row, checking to make sure that the code used
+    localization."*
+
+    Every hole `leaks.py`'s blocklist search has ever had -- a hyphen, a
+    non-ASCII letter, a comma, a whole table missing from the walks list --
+    was a consequence of its shape rather than a bug in its matcher. This is
+    the other shape: find anything in a spec that **looks like** a name and
+    is not vocabulary, and require it to have been seen before.
+
+    Red on a phrase whose digest is not in the baseline. The baseline may
+    shrink and never grow, which is the discipline `keywords.py` and
+    `targets.py` already use -- so curating the residue down is recorded and
+    a new one is a failure.
+    """
+    import hashlib
+
+    db = game()
+    trusted = _trusted_vocabulary()
+    found: dict[str, list[str]] = {}
+    shown: dict[str, str] = {}
+    specs = 0
+    for table in sorted(_spec_columns()):
+        for (spec,) in db.execute(
+                f"SELECT spec FROM {table} WHERE spec IS NOT NULL"):
+            specs += 1
+            for phrase in _spec_phrases(spec, trusted):
+                digest = hashlib.sha256(
+                    phrase.lower().encode("utf-8")).hexdigest()[:12]
+                found.setdefault(digest, []).append(table)
+                shown[digest] = phrase
+
+    print(f"  {specs} spec(s) scanned, {len(found)} distinct phrase(s) that"
+          f" look like a name and are not vocabulary")
+    by_table: dict[str, int] = {}
+    for tables in found.values():
+        for table in tables:
+            by_table[table] = by_table.get(table, 0) + 1
+    for table, n in sorted(by_table.items(), key=lambda kv: -kv[1])[:6]:
+        print(f"      {table:16} {n}")
+
+    # `--show` prints the phrases to this terminal and writes none of them,
+    # which is the one place a reader may see the residue. The main session
+    # reading a name and telling Camille is explicitly allowed; a tracked
+    # file holding it is not.
+    if "--show" in sys.argv:
+        print("\n  the residue, printed here and written nowhere:")
+        for digest, phrase in sorted(shown.items(), key=lambda kv: kv[1]):
+            print(f"      {digest}  {phrase!r}"
+                  f"  [{', '.join(sorted(set(found[digest])))}]")
+
+    if "--record" in sys.argv or not INGEST.exists():
+        first = not INGEST.exists()
+        INGEST.write_text(json.dumps(
+            {"note": "digests only, never the phrases -- see leaks.INGEST",
+             "specs": specs,
+             "phrases": sorted(found)}, indent=2) + "\n")
+        print(f"  {'wrote a first' if first else 're-recorded the'} baseline"
+              f" in {INGEST.name}: {len(found)} digest(s)")
+        return 0
+
+    known = set(json.loads(INGEST.read_text()).get("phrases", []))
+    fresh = sorted(set(found) - known)
+    gone = sorted(known - set(found))
+    if gone:
+        print(f"  {len(gone)} digest(s) no longer present -- the residue"
+              f" shrank, which is the good direction. Re-record with"
+              f" `--ingest --record`.")
+    if fresh:
+        print(f"\n  {len(fresh)} phrase(s) in a spec that the baseline does"
+              f" not hold. A spec gained something shaped like a printed"
+              f" name:")
+        for digest in fresh[:12]:
+            print(f"      {digest}  in {', '.join(sorted(set(found[digest])))}")
+        print("  The phrase itself is deliberately not printed -- see"
+              " `leaks.INGEST`. Re-run with `--ingest --show` to see it"
+              " locally, which never writes it anywhere.")
+        return 1
+    print("  no spec holds a name-shaped phrase the baseline does not know")
+    return 0
+
+
 def main() -> int:
+    if "--ingest" in sys.argv:
+        return ingest()
     if "--categories" in sys.argv:
         return feat_categories()
     if "--cited" in sys.argv:

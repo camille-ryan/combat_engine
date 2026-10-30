@@ -154,6 +154,25 @@ CHECKS = (
     Instrument("categories",
                ("uv", "run", "scripts/leaks.py", "--categories"),
                "no tracked file prints a feat category that is a name"),
+    # **The question asked the other way round, which is the only shape that
+    # can see a name the repo has no copy of.** Every hole the blocklist
+    # search has had -- a hyphen, a non-ASCII letter, a comma, a whole table
+    # missing from the walks list -- came from its shape rather than its
+    # matcher, and #493 measured the limit: of the phrases this finds, **0
+    # are a known printed name and 0 contain one**, with a positive control
+    # proving the lookup behind those zeros works. So no amount of matcher
+    # work reaches this residue.
+    #
+    # **A gate rather than opt-in, deliberately, and against the precedent
+    # of `localise --drift`.** That one is kept out because every legitimate
+    # ETL change moves a value; this one moves on an import that adds
+    # name-shaped text to a spec, which is *exactly* the moment a leak
+    # arrives. Keeping it manual would reproduce the fault #493 describes --
+    # "nobody has ever looked". The cost is a re-record when an import
+    # legitimately adds a phrase, which is the same bargain `keywords.py`
+    # and `targets.py` already make, and it is 0.35s a run. #493.
+    Instrument("ingest", ("uv", "run", "scripts/leaks.py", "--ingest"),
+               "no spec holds a name-shaped phrase the baseline does not know"),
     Instrument("todo", ("uv", "run", "scripts/todo.py"),
                "no `todo=` waits on a symbol that now exists"),
     Instrument("bonuses", ("uv", "run", "scripts/bonuses.py", "--quiet"),
