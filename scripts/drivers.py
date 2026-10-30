@@ -42106,6 +42106,202 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def the_party_s_recent_record_pitches_the_next_scene(out: Result) -> None:
+    """The printed system is a closed loop and this engine ran it open:
+
+    > **Tension and release.** [...] **adjusting DCs or encounter levels to
+    > reflect the party's recent record of loss and gain.** When a string
+    > of failures discourages players, adjust the numbers downward [...]
+    > If the PCs are cocky in the wake of successive wins, tighten the
+    > screws.
+
+    Every lever already existed -- `budget(level, scale)`, `dc(level,
+    band)` -- and a story campaign passed nothing to either.
+
+    **Bounded is the whole design**, so the first three assertions are
+    about what *cannot* happen: `footing` is only ever -1, 0 or +1, a long
+    losing streak is no more generous than a short one, and conversation
+    moves nothing.
+
+    Two faults this caught in its own implementation, both recorded here
+    because each read as working:
+
+    * the band shift was **inverted** -- a cocky party got *easier* checks
+      and a struggling one got no change at all, which is the exact
+      opposite of the rule and invisible without printing both directions;
+    * the fight note claimed the scene was pitched harder when the roster
+      had not moved. The budget is a **ceiling**, so a module asking for
+      fewer creatures than it allows is unaffected -- measured, a
+      10-creature ask fields 3/4/5 by footing and a 3-creature ask fields
+      3 regardless.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import cast_list
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+    from combat_engine.story import tension as tn
+    from combat_engine.story.dc import BANDS
+
+    # -- bounded, which is the whole design --------------------------------
+    streak = ["lost"] * 20
+    out.that(
+        {tn.footing(r) for r in ([], ["won"], ["lost"], streak,
+                                 ["won"] * 20)} <= {-1, 0, 1},
+        "footing is only ever -1, 0 or +1, however long the record -- an "
+        "unbounded loop that eases after every loss converges on a game "
+        "nobody can lose",
+        f"{sorted({tn.footing(r) for r in ([], ['lost'], streak)})}",
+    )
+    out.that(
+        tn.scale(streak) == tn.scale(["lost", "lost"]),
+        "and twenty losses are no more generous than two, because the "
+        "record is short by design rather than cumulative",
+        f"{tn.scale(streak)} vs {tn.scale(['lost', 'lost'])}",
+    )
+    # **What `[-RECENT:]` is actually for.** Comparing twenty losses to two
+    # does not test the window -- both ease -- so a plant that removed the
+    # slice stayed green. The discriminating case is old losses with newer
+    # wins on top: the record is *recent*, so they stop counting.
+    out.that(
+        tn.footing(["lost", "lost", "won", "won", "won", "won"]) == 1,
+        "two losses followed by four wins tightens rather than eases -- "
+        "the window is what makes the record recent, and without it a bad "
+        "patch early in a campaign would discount every later win",
+        f"{tn.footing(['lost', 'lost', 'won', 'won', 'won', 'won'])}",
+    )
+    out.that(
+        tn.footing(["won"] * 4 + ["lost", "lost"]) == -1,
+        "and the same two losses *after* four wins do ease, so the window "
+        "reads the end of the record rather than discarding its start",
+        f"{tn.footing(['won'] * 4 + ['lost', 'lost'])}",
+    )
+    out.that(
+        tn.footing(["done"] * 10) == 0 and tn.scale(["done"] * 10) == 1.0,
+        "a stretch of conversation moves nothing -- only a decided scene "
+        "is evidence about how the party is faring",
+        f"{tn.footing(['done'] * 10)}",
+    )
+
+    # -- the control: a fresh campaign is pitched at nothing ---------------
+    out.that(
+        tn.footing([]) == 0 and tn.scale([]) == 1.0 and not tn.says([]),
+        "a campaign with no record pitches nothing and says nothing, so "
+        "every module plays as it did before this existed",
+        f"footing={tn.footing([])} scale={tn.scale([])}",
+    )
+
+    # -- one setback is not a string of failures ---------------------------
+    out.that(
+        tn.footing(["lost"]) == 0 and tn.footing(["lost", "lost"]) == -1,
+        "one loss is a setback and two are a string of failures, which is "
+        "the distinction the word 'string' is doing in the rule",
+        f"one={tn.footing(['lost'])} two={tn.footing(['lost', 'lost'])}",
+    )
+    out.that(
+        tn.footing(["won", "won", "won"]) == 0
+        and tn.footing(["won", "won", "won", "won"]) == 1,
+        "and tightening is stricter than easing -- every remembered scene "
+        "must be a win, because a kindness and a judgement are not "
+        "symmetric",
+        f"three={tn.footing(['won'] * 3)} four={tn.footing(['won'] * 4)}",
+    )
+
+    # -- the band moves the right way, which it did not at first ----------
+    cocky, sunk = ["won"] * 4, ["lost", "lost"]
+    out.that(
+        tn.band("moderate", cocky, BANDS) == "hard"
+        and tn.band("moderate", sunk, BANDS) == "easy",
+        "a cocky party's check gets harder and a struggling party's gets "
+        "easier -- the first draft had this inverted, which read as "
+        "working and was the opposite of the rule",
+        f"cocky={tn.band('moderate', cocky, BANDS)} "
+        f"sunk={tn.band('moderate', sunk, BANDS)}",
+    )
+    out.that(
+        tn.band("hard", cocky, BANDS) == "hard"
+        and tn.band("easy", sunk, BANDS) == "easy",
+        "and it clamps at both ends rather than running off the table",
+        f"{tn.band('hard', cocky, BANDS)}/{tn.band('easy', sunk, BANDS)}",
+    )
+
+    # -- the fight lever, where the budget actually binds ------------------
+    def roster(record: list[str], count: int) -> int:
+        scene = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4, "start": "f",
+             "scenes": [{"id": "f", "kind": "combat", "name": "F",
+                         "exits": [], "difficulty": "standard",
+                         "foes": [{"count": count, "role": "soldier",
+                                   "rank": "standard"}]}]},
+            Path("<driver>")).scene("f")
+        return len(cast_list.resolve(
+            scene, party_level=2, pitch=tn.scale(record)).refs)
+
+    out.that(
+        roster(sunk, 10) < roster([], 10) < roster(cocky, 10),
+        "where the module asks for more than the budget allows, a losing "
+        "party is given fewer creatures and a winning party more",
+        f"{roster(sunk, 10)} < {roster([], 10)} < {roster(cocky, 10)}",
+    )
+    out.that(
+        roster(sunk, 3) == roster(cocky, 3) == 3,
+        "and where it asks for fewer than the budget allows, nothing "
+        "moves -- the budget is a ceiling, which is why the printed note "
+        "says so rather than claiming the scene got harder",
+        f"{roster(sunk, 3)} vs {roster(cocky, 3)}",
+    )
+    out.that(
+        tn.ONLY_A_CEILING in tn.says(sunk, fight=True)
+        and tn.ONLY_A_CEILING not in tn.says(sunk),
+        "the caveat is on the fight note and not the check note, because a "
+        "pitched band moves every primary roll and a pitched budget may "
+        "move nothing",
+        tn.says(sunk, fight=True)[-60:],
+    )
+
+    # -- a module's stated XP is left alone --------------------------------
+    stated = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "f",
+         "scenes": [{"id": "f", "kind": "combat", "name": "F", "exits": [],
+                     "xp": 400,
+                     "foes": [{"count": 10, "role": "soldier",
+                               "rank": "standard"}]}]},
+        Path("<driver>")).scene("f")
+    out.that(
+        len(cast_list.resolve(stated, party_level=2,
+                              pitch=tn.scale(cocky)).refs)
+        == len(cast_list.resolve(stated, party_level=2,
+                                 pitch=tn.scale(sunk)).refs),
+        "a scene that states its own XP is identical whatever the record, "
+        "so a published encounter stays the encounter the page describes",
+        f"{len(cast_list.resolve(stated, party_level=2, pitch=1.15).refs)}",
+    )
+
+    # -- the record is written by playing, and survives a save ------------
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "f",
+         "scenes": [{"id": "f", "kind": "combat", "name": "F", "exits": [],
+                     "difficulty": "easy",
+                     "foes": [{"count": 1, "role": "soldier",
+                               "rank": "standard"}]}]}, Path("<driver>"))
+    live = run_mod.begin(built, seed=5)
+    made = run_mod.step(live, built, record=False)
+    out.that(
+        live.record == [made.outcome] and made.outcome in tn.DECIDED,
+        "playing a decided scene appends its outcome to the record, which "
+        "is what the next scene is pitched from",
+        f"{live.record} after a {made.outcome}",
+    )
+    back = save_mod.from_dict(save_mod.to_dict(live))
+    out.that(
+        back.record == live.record,
+        "and the record survives a save and a load, so a campaign "
+        "reloaded mid-module pitches from the same history",
+        f"{back.record} vs {live.record}",
+    )
+
+
 def the_party_stands_where_its_marching_order_says(out: Result) -> None:
     """Placement was `chargen.spawn` at `(2, 3 + i*2)` -- a column at x=2,
     two apart, in whatever order `party.sheets` happened to be in. The
@@ -43963,6 +44159,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "tension": (
+        the_party_s_recent_record_pitches_the_next_scene,
+        "the party's recent record pitches the next scene (#977)",
+    ),
     "marching_order": (
         the_party_stands_where_its_marching_order_says,
         "the party stands where its marching order says (#994)",

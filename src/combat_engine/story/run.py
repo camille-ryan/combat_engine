@@ -48,7 +48,7 @@ from combat_engine.engine.turns import Encounter
 from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
 
-from . import PARTY, PARTY_AT, Party, field_encounter, harvest, loot
+from . import PARTY, PARTY_AT, Party, field_encounter, harvest, loot, tension
 from . import beat as beat_mod
 from . import formation as formation_mod
 from . import table as table_mod
@@ -353,11 +353,21 @@ def _fight(
     broken, did not give the same fight twice.
     """
     draw = _stream(campaign, scene, "cast")
+    pitch = tension.scale(campaign.record)
     dressed = resolve(
         scene, party_level=module.party_level, draw=draw,
         party_size=len(campaign.party.sheets),
         stated_size=module.party_size,
+        pitch=pitch,
     )
+    if pitch != 1.0 and not scene.xp:
+        step.say(tension.says(campaign.record, fight=True), "note")
+    elif pitch != 1.0 and scene.xp:
+        step.say(
+            "The party's record would have moved this fight's size, but "
+            "the module states its XP outright, so it is left alone.",
+            "note",
+        )
     step.notes += dressed.notes
     # **The dead stay dead on a revisit.** `Campaign.cleared` holds what this
     # scene's fight killed last time, per ref, and those creatures come off
@@ -905,8 +915,11 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
     seed = _stream(campaign, scene, "challenge").randrange(1 << 30)
     table = table_mod.lay(campaign.party, seed=seed)
     run = play_challenge(
-        scene, table, party_level=module.party_level, choose=choose)
+        scene, table, party_level=module.party_level, choose=choose,
+        record=campaign.record)
     table.strike()
+    if tension.footing(campaign.record):
+        step.say(tension.says(campaign.record), "note")
     for made in run.attempts:
         step.say(f"  {made}", "roll")
     step.say(run.tally, "note")
@@ -1269,6 +1282,11 @@ def step(
     else:
         made.next_id = module.next_of(scene, choice)
 
+    # **The record the next scene is pitched from.** Appended after the
+    # scene is decided and before the next one is chosen, so a campaign
+    # reloaded mid-module pitches from the same history. #977.
+    if made.outcome in tension.DECIDED:
+        campaign.record.append(made.outcome)
     campaign.visited.append(scene.id)
     # **The timeline, after the tick and instead of the scene's own exit.**
     # `visited` is appended first because the scene just played is part of

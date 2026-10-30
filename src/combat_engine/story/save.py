@@ -169,6 +169,11 @@ class Campaign:
     #: On the campaign rather than the scene because the rules call it a
     #: *standing* arrangement a player sets once and may change at any
     #: time, not something a module re-authors per fight.
+    #: The outcome of each decided scene, oldest first. Read by
+    #: `tension.footing` to pitch the next scene, and **bounded** -- only
+    #: the last few matter, which is what keeps the loop from converging on
+    #: a game nobody can lose. #977.
+    record: list[str] = field(default_factory=list)
     formation: list[str] = field(default_factory=list)
     spread: int = 2
 
@@ -253,6 +258,7 @@ def to_dict(campaign: Campaign) -> dict:
         "rests": campaign.rests,
         "fired": list(campaign.fired),
         "cleared": {k: dict(v) for k, v in campaign.cleared.items()},
+        "record": list(campaign.record),
         "formation": list(campaign.formation),
         "spread": campaign.spread,
     }
@@ -291,6 +297,7 @@ def from_dict(raw: dict) -> Campaign:
             str(k): {str(r): int(n) for r, n in (v or {}).items()}
             for k, v in (raw.get("cleared") or {}).items()
         },
+        record=[str(o) for o in raw.get("record", ())],
         formation=[str(b) for b in raw.get("formation", ())],
         spread=int(raw.get("spread", 2) or 2),
     )

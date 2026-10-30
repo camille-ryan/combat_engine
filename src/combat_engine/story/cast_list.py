@@ -391,6 +391,7 @@ def _stepped(scene: Scene) -> tuple[float, str]:
 def resolve(
     scene: Scene, *, party_level: int, draw: Random | None = None,
     party_size: int = SIDE, stated_size: int = SIDE,
+    pitch: float = 1.0,
 ) -> Dressed:
     """The creatures a combat scene fields, and how each one is dressed.
 
@@ -424,9 +425,13 @@ def resolve(
             f"database can field a standard monster at ({top}), so the "
             f"budget is level {top}'s and the creatures will be too"
         )
+    # **The reactive scale, and only where the module said nothing.** A
+    # printed `xp` figure overrides the headcount already, so a dynamic
+    # scale has to sit outside it or a published encounter stops being the
+    # encounter the page describes. #977.
     want = (
         float(scene.xp) if scene.xp
-        else budget(party_level) * share * per_head
+        else budget(party_level) * share * per_head * pitch
     )
     # **A stated XP figure overrides the headcount, silently until now.**
     # When a scene prints its own number -- which every fight in the one

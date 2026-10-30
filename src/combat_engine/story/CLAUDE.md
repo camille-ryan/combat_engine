@@ -21,6 +21,7 @@ between all of them. The combat engine is a thing this drives.
 | `objective.py` | what a fight is *for*, and what counts as failing it. |
 | `loot.py` | what a scene hands the party, and the item refs they carry away. |
 | `formation.py` | where the party is standing when a fight starts. |
+| `tension.py` | the party's recent record, read back into the next scene's numbers. |
 | `dc.py` | what a check has to beat, by level and band. |
 | `beat.py` | a roleplay scene, one exchange at a time: who speaks, what they try, what they already know, what it changes. |
 | `graph.py` | what a campaign knows: entities, facts, and where each fact came from. `docs/STORY_GRAPH.md` is the design. |
@@ -816,6 +817,45 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## The party's recent record pitches the next scene
+
+The printed system is a closed loop — *"adjusting DCs or encounter levels
+to reflect the party's recent record of loss and gain"* — and this engine
+ran it open. Every lever already existed and a campaign passed nothing to
+either.
+
+`Campaign.record` holds decided outcomes, `tension.footing` reads the last
+`RECENT` of them, and two levers move: the `pitch` on an unstated-XP
+fight's budget, and the primary band of a skill challenge.
+
+**Bounded is the design, not a safeguard on it.** `footing` is only ever
+-1, 0 or +1; twenty losses are no more generous than two; the window is
+short so old losses stop counting once newer wins push them out. An
+unbounded loop that eases after every loss converges on a game nobody can
+lose, which is the opposite of tension and release.
+
+Three things it does not touch: a module's **stated `xp`** (asserted
+byte-identical whatever the record, so a published encounter stays the
+encounter the page describes), `Scene.difficulty`, and `api.day.scales`.
+And nothing silently — every adjustment is a `note`.
+
+### Two faults my own probe caught, both of which read as working
+
+* **The band shift was inverted.** `BANDS` runs easy→hard, so tightening
+  must *raise* the index; subtracting gave a cocky party easier checks and
+  a struggling party no change at all. Invisible until both directions
+  were printed side by side.
+* **The fight note overstated.** It claimed the scene was pitched harder
+  when the roster had not moved, because **the budget is a ceiling**: a
+  module asking for fewer creatures than it allows is unaffected. Measured
+  — a 10-creature ask fields 3/4/5 by footing, a 3-creature ask fields 3
+  regardless. The note says so now, and only the fight note carries the
+  caveat, since a pitched band moves every primary roll.
+
+And one green plant worth copying as a lesson: comparing **twenty** losses
+to **two** tests nothing about the window, because both ease. The
+discriminating case is old losses with newer wins on top.
+
 ## The party stands where its marching order says
 
 Placement was `chargen.spawn` at `(2, 3 + i*2)` — a column at x=2, two
@@ -1339,11 +1379,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     line_kinds objective_verdict objective_budget scene_grant \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
-    cold_hours marching_order
+    cold_hours marching_order tension
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 32 drivers and prints 311 assertions**, and **each was
+**The command above is 33 drivers and prints 327 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

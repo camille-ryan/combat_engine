@@ -61,6 +61,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from . import tension
+from .dc import BANDS
 from .dc import dc as dc_for
 from .module import SECONDARY_BONUS, Scene
 from .table import Table
@@ -112,6 +114,9 @@ class Running:
     level: int
     needs: int
     bands: tuple[str, ...] = ()
+    #: The campaign's recent decided outcomes, for `tension.band`. Empty
+    #: for a challenge run outside a campaign, which pitches nothing.
+    record: list[str] = field(default_factory=list)
     successes: int = 0
     failures: int = 0
     #: How many primary checks have been rolled, which is the index into
@@ -147,13 +152,20 @@ class Running:
         )
 
 
-def open_challenge(scene: Scene, *, party_level: int = 1) -> Running:
-    """Start counting. `scene.level` wins over the party's when it is set."""
+def open_challenge(scene: Scene, *, party_level: int = 1,
+                   record: list[str] | None = None) -> Running:
+    """Start counting. `scene.level` wins over the party's when it is set.
+
+    `record` is the campaign's recent decided outcomes, which pitch the
+    primary band one rung either way. Omitted outside a campaign, where
+    there is no record and nothing to react to.
+    """
     return Running(
         scene=scene,
         level=scene.level or party_level,
         needs=scene.needs,
         bands=scene.bands,
+        record=list(record or []),
     )
 
 
@@ -194,6 +206,12 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
         return refuse("secondary already used")
 
     band = run.band_now if is_primary else "easy"
+    # **The reactive band, and only on a primary check.** A secondary is
+    # already pitched easy by design, so moving it would turn the helping
+    # roll into the challenge. The module's own complexity still decides
+    # the sequence of bands -- this moves which rung it lands on, never how
+    # many rungs there are. #977.
+    band = tension.band(band, run.record, BANDS) if is_primary else band
     target = dc_for(run.level, band)
     carried = run.pending_bonus if is_primary else 0
     rolled = table.check(slot, skill, target - carried if carried else target)
@@ -303,6 +321,7 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
 def play(
     scene: Scene, table: Table, *, party_level: int = 1,
     choose: Chooser | None = None, limit: int = 40,
+    record: list[str] | None = None,
 ) -> Running:
     """Run a whole challenge and return the finished tally.
 
@@ -311,7 +330,8 @@ def play(
     challenge that stops early. Hitting it is the caller's to report rather
     than swallow.
     """
-    run = open_challenge(scene, party_level=party_level)
+    run = open_challenge(scene, party_level=party_level,
+                         record=record)
     picker = choose or taking_turns
     for _ in range(limit):
         if run.over:
