@@ -42106,6 +42106,196 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def the_party_stands_where_its_marching_order_says(out: Result) -> None:
+    """Placement was `chargen.spawn` at `(2, 3 + i*2)` -- a column at x=2,
+    two apart, in whatever order `party.sheets` happened to be in. The
+    players never chose, and the rules say they should:
+
+    > **Marching Order.** [...] having it set out before you get into an
+    > encounter lets the DM know exactly where everyone is when the
+    > encounter begins.
+
+    **The first assertion is the one that matters most**, and it is a
+    compatibility claim rather than a feature: with no formation stated the
+    squares are byte-identical to the old expression. Every replay fixture
+    is a fight that starts from them, so a one-square drift re-records all
+    eight -- which is a change that would look like a placement feature and
+    land as eight re-recorded regression baselines.
+
+    `by_role` is asserted to exist and **not** to be the default, because
+    making the printed advice automatic would move every existing party and
+    is a balance change wearing a fidelity fix.
+    """
+    from pathlib import Path
+
+    from combat_engine.engine import Side, Team
+    from combat_engine.engine.components import Position
+    from combat_engine.story import PARTY_AT, field_encounter
+    from combat_engine.story import formation as fm
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    FOUR = ["fighter", "cleric", "rogue", "wizard"]
+
+    # -- the control, and the reason the default exists --------------------
+    old = [(PARTY_AT[0], PARTY_AT[1] + i * 2) for i in range(4)]
+    out.that(
+        fm.squares(4, PARTY_AT) == old,
+        "with no formation the squares are exactly the column the "
+        "placement has always used -- which is what keeps the eight "
+        "replay fixtures still",
+        f"{fm.squares(4, PARTY_AT)} vs {old}",
+    )
+    out.that(
+        fm.squares(4, PARTY_AT, fm.Formation()) == old,
+        "and an empty `Formation` is the same as none, so a campaign that "
+        "carries the field without setting it is unchanged too",
+        f"{fm.squares(4, PARTY_AT, fm.Formation())}",
+    )
+
+    # -- an order moves people, front toward the opposition ----------------
+    ordered = fm.Formation(bands=("front", "back", "middle", "middle"))
+    placed = fm.squares(4, PARTY_AT, ordered)
+    out.that(
+        placed[0][0] > placed[2][0] > placed[1][0],
+        "front stands nearer the opposition than middle, and middle than "
+        "back -- the enemy corner is at a higher x, so the order is along "
+        "the axis between the two sides",
+        f"{placed}",
+    )
+    out.that(
+        [sq[1] for sq in placed] == [sq[1] for sq in old],
+        "and the order moves nobody along the line, so the spread and the "
+        "order are the two independent halves the printed advice names",
+        f"{placed}",
+    )
+
+    # -- the spread is the other half --------------------------------------
+    wide = fm.squares(4, PARTY_AT, fm.Formation(spread=3))
+    out.that(
+        [sq[1] for sq in wide] == [3, 6, 9, 12],
+        "a wider spread puts the party further apart along the line, "
+        "which is the clustering trade the page describes",
+        f"{wide}",
+    )
+    out.that(
+        fm.squares(4, PARTY_AT, fm.Formation(spread=0)) == old,
+        "and a spread of zero is clamped to the printed default rather "
+        "than stacking the whole party on one square",
+        f"{fm.squares(4, PARTY_AT, fm.Formation(spread=0))}",
+    )
+
+    # -- the printed advice, offered and not imposed -----------------------
+    roles = fm.roles_of(FOUR)
+    out.that(
+        roles == ["defender", "leader", "striker", "controller"],
+        "each class's role is read off `chargen.CLASSES` rather than "
+        "written out again, so it cannot disagree with the class pages",
+        f"{roles}",
+    )
+    advised = fm.Formation.by_role(roles)
+    out.that(
+        advised.bands == ("front", "back", "middle", "middle"),
+        "the page's own advice puts the defender at the front and the "
+        "leader at the back, with the striker and controller between",
+        f"{advised.bands}",
+    )
+    out.that(
+        fm.Formation().bands == (),
+        "and it is not the default -- a party gets the old column until "
+        "somebody asks for the advice, because imposing it would move "
+        "every existing party and every fixture with them",
+        f"{fm.Formation().bands}",
+    )
+
+    # -- it reaches the board, which is the half a helper cannot show ------
+    def standing(bands: tuple[str, ...] = (), spread: int = 2) -> list:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4, "start": "r",
+             "scenes": [{"id": "r", "kind": "combat", "name": "R",
+                         "exits": [], "difficulty": "easy",
+                         "foes": [{"count": 1, "role": "soldier",
+                                   "rank": "standard"}]}]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=9)
+        squares = fm.squares(
+            4, PARTY_AT, fm.Formation(bands=bands, spread=spread))
+        fielded = field_encounter(
+            1, 2, party=campaign.party, enemies=["m1656"], squares=squares)
+        pcs = sorted(e for e, s in fielded.world.each(Side)
+                     if s.team is Team.PC)
+        return [spot.square for e in pcs
+                if (spot := fielded.world.get(e, Position)) is not None]
+
+    out.that(
+        standing() == old,
+        "a party fielded with no formation stands in the old column on a "
+        "real board, not just in the helper's return value",
+        f"{standing()}",
+    )
+    out.that(
+        standing(("front", "back", "middle", "middle")) == placed,
+        "and one fielded with an order stands where the order says -- the "
+        "squares reach `chargen.spawn` rather than being computed and "
+        "dropped",
+        f"{standing(('front', 'back', 'middle', 'middle'))}",
+    )
+
+    # -- through `run.step`, which is the half calling `field_encounter`
+    # directly cannot show. A plant that computed the squares and then
+    # fielded the old column stayed green against the two assertions
+    # above, because they build their own encounter: the same hole #945
+    # had, found the same way.
+    def played(bands: list[str], spread: int = 2) -> list:
+        fought = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4, "start": "r",
+             "scenes": [{"id": "r", "kind": "combat", "name": "R",
+                         "exits": [], "difficulty": "easy",
+                         "foes": [{"count": 1, "role": "soldier",
+                                   "rank": "standard"}]}]}, Path("<driver>"))
+        campaign = run_mod.begin(fought, seed=9)
+        campaign.formation = list(bands)
+        campaign.spread = spread
+        return run_mod.step(campaign, fought, record=False).stood
+
+    out.that(
+        played([]) == old,
+        "a campaign that states no marching order plays a fight from the "
+        "old column, recorded off the board it was fielded on",
+        f"{played([])}",
+    )
+    out.that(
+        played(["front", "back", "middle", "middle"]) == placed,
+        "and one that states an order plays the fight standing in it -- "
+        "which is the link `field_encounter(squares=)` on its own cannot "
+        "prove, because `_fight` is what has to pass them",
+        f"{played(['front', 'back', 'middle', 'middle'])}",
+    )
+    out.that(
+        [sq[1] for sq in played([], spread=3)] == [3, 6, 9, 12],
+        "and the campaign's spread reaches the board too, not only its "
+        "bands",
+        f"{played([], spread=3)}",
+    )
+
+    # -- and it survives being written down --------------------------------
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "r",
+         "scenes": [{"id": "r", "kind": "roleplay", "name": "R",
+                     "exits": []}]}, Path("<driver>"))
+    live = run_mod.begin(built, seed=9)
+    live.formation = ["front", "back", "middle", "middle"]
+    live.spread = 3
+    back = save_mod.from_dict(save_mod.to_dict(live))
+    out.that(
+        back.formation == live.formation and back.spread == 3,
+        "the marching order survives a save and a load, because it is a "
+        "standing arrangement a player sets once rather than something a "
+        "module re-authors per fight",
+        f"{back.formation} spread={back.spread}",
+    )
+
+
 def hours_in_the_cold_cost_the_party_healing_surges(out: Result) -> None:
     """A healing surge could only ever be lost to a fight, and the printed
     rules have another way to spend one:
@@ -43773,6 +43963,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "marching_order": (
+        the_party_stands_where_its_marching_order_says,
+        "the party stands where its marching order says (#994)",
+    ),
     "cold_hours": (
         hours_in_the_cold_cost_the_party_healing_surges,
         "hours in the cold cost the party healing surges (#971)",

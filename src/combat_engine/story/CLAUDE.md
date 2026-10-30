@@ -20,6 +20,7 @@ between all of them. The combat engine is a thing this drives.
 | `challenge.py` | successes against three failures. |
 | `objective.py` | what a fight is *for*, and what counts as failing it. |
 | `loot.py` | what a scene hands the party, and the item refs they carry away. |
+| `formation.py` | where the party is standing when a fight starts. |
 | `dc.py` | what a check has to beat, by level and band. |
 | `beat.py` | a roleplay scene, one exchange at a time: who speaks, what they try, what they already know, what it changes. |
 | `graph.py` | what a campaign knows: entities, facts, and where each fact came from. `docs/STORY_GRAPH.md` is the design. |
@@ -815,6 +816,52 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## The party stands where its marching order says
+
+Placement was `chargen.spawn` at `(2, 3 + i*2)` — a column at x=2, two
+apart, in whatever order `party.sheets` happened to be in. The players
+never chose, and the rules say they should.
+
+`Campaign.formation` is a band per slot from `formation.BANDS` plus a
+`spread`, resolved against the real starting corner by
+`formation.squares`. An order and a number, never coordinates — the same
+reasoning `objective.POSITIONS` is built on: a player knows "front" and
+does not know the board is 16x12.
+
+Four calls:
+
+* **The default is byte-identical to the old expression**, which is what
+  keeps the eight replay fixtures still. That is load-bearing rather than
+  polite: a placement change moves every fight, so getting it wrong would
+  look like a placement feature and land as eight re-recorded baselines.
+* **`by_role` is offered, not imposed.** The page's advice — defender
+  front, leader back — is a classmethod nothing calls by default, because
+  imposing it would move every existing party and that is a balance change
+  wearing a fidelity fix.
+* **A controller goes middle**, though the passage does not name one: the
+  same sentence calls a front defender *"protecting your controllers"*,
+  which puts them behind the defender rather than at the back where the
+  leader is wanted.
+* **A spread of zero falls back to the printed default**, not to one. Zero
+  is an unset value; a player wanting shoulder to shoulder writes 1.
+
+### The two green plants were both faults from earlier the same day
+
+* **Dead code.** The `if plan.bands else 0` guard did nothing, because
+  `band()` already answers `middle` for an unset slot and middle's offset
+  is 0. Removing it changed no behaviour — the same shape as #970's
+  parallel `matched` list.
+* **The wiring hole from #945, verbatim.** The board assertions called
+  `field_encounter(squares=)` directly, so a plant that computed the
+  squares and fielded the old column anyway **stayed green**: `_fight` is
+  what has to pass them. `Step.stood` records where the party actually
+  stood, off the board, and three assertions go through `run.step`.
+
+The transferable part is not "remember the wiring". It is that a
+helper-level assertion and a wiring-level assertion are **different
+claims**, and writing the probe against the helper is the path of least
+resistance every time.
+
 ## Hours in the cold cost healing surges
 
 A surge could only ever be lost to a fight, and the rules have another way
@@ -1280,11 +1327,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     line_kinds objective_verdict objective_budget scene_grant \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
-    cold_hours
+    cold_hours marching_order
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 31 drivers and prints 296 assertions**, and **each was
+**The command above is 32 drivers and prints 311 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

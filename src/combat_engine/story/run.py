@@ -41,15 +41,16 @@ from pathlib import Path
 from random import Random
 
 from combat_engine.engine import Ident, Side, Team
-from combat_engine.engine.components import Condition, Conditions
+from combat_engine.engine.components import Condition, Conditions, Position
 from combat_engine.engine.ecs import World
 from combat_engine.engine.query import alive
 from combat_engine.engine.turns import Encounter
 from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
 
-from . import PARTY, Party, field_encounter, harvest, loot
+from . import PARTY, PARTY_AT, Party, field_encounter, harvest, loot
 from . import beat as beat_mod
+from . import formation as formation_mod
 from . import table as table_mod
 from .cast_list import resolve
 from .challenge import Chooser
@@ -105,6 +106,7 @@ def record_scene(campaign: Campaign, made: Step) -> str:
         "next": made.next_id,
         "rounds": made.rounds,
         "surprised": made.surprised,
+        "stood": made.stood,
         "enemies": made.enemies,
         "transcript": made.transcript,
         "notes": made.notes,
@@ -181,6 +183,14 @@ class Step:
     #: yet spent: the thing that would pay for it is the XP award, which does
     #: not exist (#967). Here now so that award has something to read.
     clean: bool = False
+    #: Where the party actually stood when the fight began, in party
+    #: order, read off the board after it was fielded.
+    #:
+    #: **Recorded because the wiring is otherwise invisible**: a driver can
+    #: call `field_encounter(squares=)` directly and prove the squares
+    #: work while `_fight` quietly passes none, which is exactly what a
+    #: green plant showed. #994.
+    stood: list[tuple[int, int]] = field(default_factory=list)
     #: How many of the opposition **actually carried SURPRISED** after
     #: `start`, counted off the board rather than from the list handed to
     #: it.
@@ -382,13 +392,29 @@ def _fight(
 
 
     board_seed = seed_for(campaign, scene, "fight")
+    # **Where the party is standing, which nobody could choose before.**
+    # Empty `formation` resolves to the single column the placement has
+    # always used, so a campaign that says nothing is unchanged. #994.
+    standing = formation_mod.squares(
+        len(campaign.party.sheets), PARTY_AT,
+        formation_mod.Formation(
+            bands=tuple(campaign.formation), spread=campaign.spread),
+    )
     fielded = field_encounter(
         board_seed,
         module.party_level,
         enemies=dressed.refs,
         party=campaign.party,
+        squares=standing,
     )
     world = fielded.world
+    # Off the board, not from the list handed in -- the same correction
+    # `surprised` needed, for the same reason.
+    step.stood = [
+        spot.square
+        for eid in sorted(e for e, s in world.each(Side) if s.team is Team.PC)
+        if (spot := world.get(eid, Position)) is not None
+    ]
 
     # **What sort of place the fight is in, which nothing ever said.**
     # `World.terrain` was initialised empty and never written to, so all

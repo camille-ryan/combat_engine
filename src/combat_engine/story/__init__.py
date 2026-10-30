@@ -734,6 +734,7 @@ def field_encounter(
     powers: dict[str, list[str]] | None = None,
     party: Party | None = None,
     scale: float = 1.0,
+    squares: list[tuple[int, int]] | None = None,
 ) -> Fielded:
     """Build a board and put both sides on it.
 
@@ -782,10 +783,18 @@ def field_encounter(
     terrain.dress(world, seed, level=level)
 
     if party is not None:
+        # **`squares` or the column this has always used.** The default
+        # keeps every replay fixture still: a fight starts from these
+        # squares, so a one-square drift re-records all eight. #994.
+        standing = squares or [
+            (PARTY_AT[0], PARTY_AT[1] + i * SPACING)
+            for i in range(len(party.sheets))
+        ]
         for i, sheet in enumerate(party.sheets):
             eid = chargen.spawn(
                 world, sheet.character,
-                (PARTY_AT[0], PARTY_AT[1] + i * SPACING),
+                standing[i] if i < len(standing)
+                else (PARTY_AT[0], PARTY_AT[1] + i * SPACING),
             )
             _wear(world, eid, sheet)
     else:

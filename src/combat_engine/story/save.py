@@ -162,6 +162,15 @@ class Campaign:
     #: rebuilt every time a scene is entered, so anything tracked there is
     #: re-decided by walking back into the room. #970.
     cleared: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: The party's standing marching order: a band per slot, and how far
+    #: apart. Empty means the single column placement has always used, so
+    #: a campaign saved before this plays exactly as it did. #994.
+    #:
+    #: On the campaign rather than the scene because the rules call it a
+    #: *standing* arrangement a player sets once and may change at any
+    #: time, not something a module re-authors per fight.
+    formation: list[str] = field(default_factory=list)
+    spread: int = 2
 
     @property
     def clock(self) -> dict[str, int]:
@@ -244,6 +253,8 @@ def to_dict(campaign: Campaign) -> dict:
         "rests": campaign.rests,
         "fired": list(campaign.fired),
         "cleared": {k: dict(v) for k, v in campaign.cleared.items()},
+        "formation": list(campaign.formation),
+        "spread": campaign.spread,
     }
 
 
@@ -280,6 +291,8 @@ def from_dict(raw: dict) -> Campaign:
             str(k): {str(r): int(n) for r, n in (v or {}).items()}
             for k, v in (raw.get("cleared") or {}).items()
         },
+        formation=[str(b) for b in raw.get("formation", ())],
+        spread=int(raw.get("spread", 2) or 2),
     )
 
 
