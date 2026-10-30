@@ -56,6 +56,31 @@ TIGHTEN = 1.15
 #: one is a setback.
 ENOUGH = 2
 
+#: What a fight entered with no short rest since the last one is scaled by.
+#:
+#: > *Starting a new encounter without the benefit of a short rest after
+#: > the last one makes the new encounter more challenging. If you're
+#: > designing encounters in which you expect characters to move from one
+#: > to the next without a rest, treat the two events as a single
+#: > encounter. If the characters surprise you by running on to a new
+#: > encounter without resting, it might be worth scaling back the new
+#: > encounter a bit.*
+#:
+#: **The second lever, not the first**, and the page separates them by who
+#: is deciding: *treating two events as one* is advice to whoever is
+#: **designing** the encounters, and *scaling back* is what the DM does
+#: when the party **surprises** them at the table. We are always the
+#: second case -- the module is the authority on where the party rests, so
+#: a fight reached without one is exactly the surprise the sentence
+#: describes. It is also the smaller intervention of the two. #947.
+UNRESTED = 0.85
+
+#: The floor and ceiling on the combined pitch. The record and the party's
+#: state are independent adjustments for different reasons, so they
+#: compose -- but two 0.85s is 0.72, which is a third of a fight gone, and
+#: an unclamped product is the unbounded loop this module exists to avoid.
+FLOOR, CEILING = 0.75, 1.25
+
 
 def footing(record: list[str]) -> int:
     """`-1` struggling, `+1` cocky, `0` neither. Never anything else.
@@ -86,6 +111,27 @@ def scale(record: list[str]) -> float:
     if stance < 0:
         return EASE
     return TIGHTEN if stance > 0 else 1.0
+
+
+def pitch(record: list[str], *, rested: bool = True) -> float:
+    """Everything that moves a fight's budget, clamped to one range.
+
+    Two independent inputs -- the party's recent record, and whether they
+    have had a short rest since the last fight -- composed and then
+    bounded. Composing without the clamp lets two reasonable adjustments
+    multiply into an unreasonable one.
+    """
+    got = scale(record) * (1.0 if rested else UNRESTED)
+    return max(FLOOR, min(CEILING, got))
+
+
+def why(record: list[str], *, rested: bool = True) -> str:
+    """What to print about an unrested fight, or `""`."""
+    if rested:
+        return ""
+    return (f"No short rest since the last fight, so this one is scaled "
+            f"back (x{UNRESTED}) -- the page's own advice for a party that "
+            "runs on without resting.")
 
 
 def band(base: str, record: list[str], bands: tuple[str, ...]) -> str:

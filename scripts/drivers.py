@@ -42106,6 +42106,152 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_fight_reached_without_a_rest_is_scaled_back(out: Result) -> None:
+    """The sidebar "When Is an Encounter Over?":
+
+    > *Starting a new encounter without the benefit of a short rest after
+    > the last one makes the new encounter more challenging. If you're
+    > designing encounters in which you expect characters to move from one
+    > to the next without a rest, treat the two events as a single
+    > encounter. If the characters surprise you by running on to a new
+    > encounter without resting, it might be worth scaling back the new
+    > encounter a bit.*
+
+    **The second lever, and the page chooses for us by saying who is
+    deciding.** "Treat the two as one encounter" is advice to whoever is
+    *designing* them; "scaling back" is what the DM does when the party
+    *surprises* them at the table. A module is the authority on where its
+    rests are, so a fight reached without one is exactly that surprise.
+
+    The last assertion is the one the previous two issues taught me to
+    write: the adjustment has to reach a fielded roster through
+    `run.step`, not merely be computed by a helper.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import tension as tn
+
+    def fight(i: int, nxt: str, *, count: int = 8, xp: int = 0) -> dict:
+        scene: dict = {"id": f"f{i}", "kind": "combat", "name": f"F{i}",
+                       "exits": [nxt] if nxt else [],
+                       "difficulty": "standard",
+                       "foes": [{"count": count, "role": "soldier",
+                                 "rank": "standard"}]}
+        if xp:
+            scene["xp"] = xp
+        return scene
+
+    def rest(nxt: str, *, extended: bool = False) -> dict:
+        return {"id": "r", "kind": "rest", "name": "R",
+                "exits": [nxt] if nxt else [], "extended": extended}
+
+    def talk(nxt: str) -> dict:
+        return {"id": "t", "kind": "roleplay", "name": "T",
+                "exits": [nxt] if nxt else []}
+
+    def walk(scenes: list[dict], start: str) -> list[tuple]:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": start, "scenes": scenes}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=5)
+        rows: list[tuple] = []
+        while not campaign.finished:
+            here = campaign.scene
+            fresh = run_mod.rested_since_the_last_fight(campaign, built)
+            made = run_mod.step(campaign, built, record=False)
+            said = [str(x) for x in made.lines
+                    if "short rest since" in x]
+            rows.append((here, fresh, len(made.enemies), said))
+            del made
+        return rows
+
+    # -- the arithmetic, bounded -------------------------------------------
+    out.that(
+        tn.pitch([], rested=True) == 1.0
+        and tn.pitch([], rested=False) == tn.UNRESTED,
+        "a rested party is pitched at nothing and an unrested one is "
+        "scaled back by the one step the page calls 'a bit'",
+        f"{tn.pitch([], rested=True)} / {tn.pitch([], rested=False)}",
+    )
+    out.that(
+        tn.pitch(["lost", "lost"], rested=False) == tn.FLOOR,
+        "a losing party that also did not rest is held at the floor "
+        "rather than taking both cuts -- two reasonable adjustments "
+        "multiply into an unreasonable one, which is the clamp's whole job",
+        f"{tn.pitch(['lost', 'lost'], rested=False)} vs unclamped "
+        f"{tn.scale(['lost', 'lost']) * tn.UNRESTED:.4f}",
+    )
+    out.that(
+        not tn.why([], rested=True) and tn.why([], rested=False),
+        "and it says so only when it applied",
+        f"{tn.why([], rested=False)[:50]!r}",
+    )
+
+    # -- the control: a first fight is fresh -------------------------------
+    first = walk([fight(1, "")], "f1")
+    out.that(
+        first[0][1] is True and not first[0][3],
+        "a party's first fight counts as rested -- there is no previous "
+        "encounter to have run on from, so nothing is scaled back",
+        f"rested={first[0][1]}, said={first[0][3]}",
+    )
+
+    # -- two fights in a row -----------------------------------------------
+    pair = walk([fight(1, "f2"), fight(2, "")], "f1")
+    out.that(
+        pair[0][1] is True and pair[1][1] is False,
+        "the second of two fights with nothing between them is reached "
+        "without a rest",
+        f"{[(r[0], r[1]) for r in pair]}",
+    )
+    out.that(
+        pair[1][2] < pair[0][2],
+        "and it fields fewer creatures than the first -- which is the "
+        "whole claim, reached through `run.step` rather than computed by "
+        "a helper and dropped",
+        f"{pair[0][2]} then {pair[1][2]}",
+    )
+    out.that(
+        any("scaled back" in n for n in pair[1][3]),
+        "and says why, because a silently smaller fight is the kind of "
+        "adjustment players resent noticing",
+        f"{pair[1][3]}",
+    )
+
+    # -- a rest between them clears it -------------------------------------
+    for extended, word in ((False, "a short"), (True, "an extended")):
+        slept = walk([fight(1, "r"), rest("f2", extended=extended),
+                      fight(2, "")], "f1")
+        out.that(
+            slept[2][1] is True and slept[2][2] == slept[0][2]
+            and not slept[2][3],
+            f"{word} rest between two fights clears it, so the second "
+            "is the size the module asked for",
+            f"{[(r[0], r[1], r[2]) for r in slept]}",
+        )
+
+    # -- a conversation is not a rest --------------------------------------
+    chatted = walk([fight(1, "t"), talk("f2"), fight(2, "")], "f1")
+    out.that(
+        chatted[2][1] is False and chatted[2][2] < chatted[0][2],
+        "a conversation between two fights is not a rest -- the sidebar's "
+        "phrase is 'the benefit of a short rest', and talking is not one",
+        f"{[(r[0], r[1], r[2]) for r in chatted]}",
+    )
+
+    # -- a module's stated XP is still untouched ---------------------------
+    stated = walk([fight(1, "f2", xp=400), fight(2, "", xp=400)], "f1")
+    out.that(
+        stated[1][1] is False and stated[1][2] == stated[0][2],
+        "a fight that states its own XP is the size the page printed even "
+        "when it was reached without a rest -- the same boundary #977 "
+        "draws, for the same reason",
+        f"{[(r[0], r[1], r[2]) for r in stated]}",
+    )
+
+
 def the_party_s_recent_record_pitches_the_next_scene(out: Result) -> None:
     """The printed system is a closed loop and this engine ran it open:
 
@@ -44159,6 +44305,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "unrested": (
+        a_fight_reached_without_a_rest_is_scaled_back,
+        "a fight reached without a rest is scaled back (#947)",
+    ),
     "tension": (
         the_party_s_recent_record_pitches_the_next_scene,
         "the party's recent record pitches the next scene (#977)",

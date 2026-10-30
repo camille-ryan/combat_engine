@@ -817,6 +817,43 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## A fight reached without a rest is scaled back
+
+The sidebar offers two levers and **the page chooses between them by
+saying who is deciding**:
+
+> *If you're **designing** encounters in which you expect characters to
+> move from one to the next without a rest, treat the two events as a
+> single encounter. If the characters **surprise you** by running on to a
+> new encounter without resting, it might be worth scaling back the new
+> encounter a bit.*
+
+A module is the authority on where its rests are, so a fight reached
+without one is exactly that surprise — the second lever, and the smaller
+intervention. `rested_since_the_last_fight` walks back through `visited`
+and answers on whichever comes first: a rest means yes, a fight means no,
+neither means this is the party's first fight.
+
+Three calls:
+
+* **Short or extended both count.** The phrase is *"the benefit of a short
+  rest"* and an extended rest is strictly more, so distinguishing them
+  would make a night's sleep worth less than five minutes.
+* **A conversation is not a rest**, which has its own assertion because it
+  is the case a module actually produces.
+* **It composes with #977 and the product is clamped.** A losing *and*
+  unrested party would take 0.72 — a third of the fight gone — and an
+  unclamped product is the unbounded loop `tension.py` exists to avoid.
+
+It needed no new state, which is what the issue predicted: `visited`
+already holds the sequence and the module already knows each kind.
+
+**Still unmodelled from the same sidebar**, both noted on #947: an
+encounter-long effect lasting *"about 5 minutes"* across a second fight —
+ours end with the `World`, which does not outlive one — and the reading
+that an unrested pair *is* one encounter, which is the designer-side
+lever this deliberately did not take.
+
 ## The party's recent record pitches the next scene
 
 The printed system is a closed loop — *"adjusting DCs or encounter levels
@@ -1379,11 +1416,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     line_kinds objective_verdict objective_budget scene_grant \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
-    cold_hours marching_order tension
+    cold_hours marching_order tension unrested
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 33 drivers and prints 327 assertions**, and **each was
+**The command above is 34 drivers and prints 338 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

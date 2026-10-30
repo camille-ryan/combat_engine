@@ -353,7 +353,8 @@ def _fight(
     broken, did not give the same fight twice.
     """
     draw = _stream(campaign, scene, "cast")
-    pitch = tension.scale(campaign.record)
+    rested = rested_since_the_last_fight(campaign, module)
+    pitch = tension.pitch(campaign.record, rested=rested)
     dressed = resolve(
         scene, party_level=module.party_level, draw=draw,
         party_size=len(campaign.party.sheets),
@@ -361,7 +362,10 @@ def _fight(
         pitch=pitch,
     )
     if pitch != 1.0 and not scene.xp:
-        step.say(tension.says(campaign.record, fight=True), "note")
+        for line in (tension.says(campaign.record, fight=True),
+                     tension.why(campaign.record, rested=rested)):
+            if line:
+                step.say(line, "note")
     elif pitch != 1.0 and scene.xp:
         step.say(
             "The party's record would have moved this fight's size, but "
@@ -1067,6 +1071,32 @@ def weather(campaign: Campaign, module: Module, scene: Scene,
                 f"with no surges left and takes {hurt} damage.",
                 "note",
             )
+
+
+def rested_since_the_last_fight(campaign: Campaign, module: Module) -> bool:
+    """Has the party had a rest since their last fight? #947.
+
+    Walks back through `visited` and answers on whichever comes first: a
+    rest means yes, a fight means no. Neither means this is their first
+    fight and they arrived fresh.
+
+    **Short or extended, both count.** The sidebar's phrase is *"the
+    benefit of a short rest"* and an extended rest is strictly more, so
+    distinguishing them here would make a night's sleep count for less
+    than five minutes.
+
+    Needs no new bookkeeping, which is what the issue noticed: `visited`
+    already holds the sequence and the module already knows each kind.
+    """
+    for scene_id in reversed(campaign.visited):
+        scene = module.scenes.get(scene_id)
+        if scene is None:
+            continue
+        if scene.kind == "rest":
+            return True
+        if scene.kind == "combat":
+            return False
+    return True
 
 
 def _already_rested(campaign: Campaign, module: Module) -> bool:
