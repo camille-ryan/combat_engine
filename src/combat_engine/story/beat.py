@@ -538,6 +538,17 @@ class Standing:
     #: `well`, `vaguely` or `not at all` -- how well the speaker would
     #: know, which sets the register rather than permitting or forbidding.
     knows: str = "vaguely"
+    #: Names one hop out along the graph's edges. Context, not permission:
+    #: it tells the DM what this thing is tied to so an invention lands in
+    #: the right part of the world. Empty until #934 drew any edges -- the
+    #: graph had 99 entities and 0 links, so this was always empty and
+    #: nothing read it.
+    near: tuple[str, ...] = ()
+    #: This standing is about **two** things and how they connect. The
+    #: message is different in kind: a speaker can know both perfectly
+    #: well and there still be nothing on record tying them together,
+    #: which the `not at all` register would state as ignorance.
+    pair: bool = False
 
     def __str__(self) -> str:
         """The line the DM is handed. The three cases read differently.
@@ -548,9 +559,18 @@ class Standing:
         just said this person has never heard of it -- which is the
         licence the guard exists to withhold.
         """
+        hop = (f"\n    (connected to: {', '.join(self.near)})"
+               if self.near else "")
         if self.facts:
             return (f"{self.about} -- already true, do not contradict:\n"
-                    + "\n".join(f"    - {f}" for f in self.facts))
+                    + "\n".join(f"    - {f}" for f in self.facts) + hop)
+        if self.pair:
+            # **Camille's complaint, answered in the negative case.** The
+            # pair question returning silence is what opened #934; saying
+            # nothing connects them is an answer and improvising a
+            # connection is not.
+            return (f"{self.about} -- nothing on record connects them. Say "
+                    "so if asked; do not invent a tie between them." + hop)
         if self.knows == "not at all":
             return (f"{self.about} -- this speaker has never heard of it. "
                     "Have them say so plainly. Do not invent an answer.")
@@ -559,6 +579,11 @@ class Standing:
                 f"know it {self.knows}{hedge}. What they say about it "
                 "becomes true, so keep it small and keep it consistent.")
 
+
+#: How many one-hop neighbours go in a `Standing`. A hub has 33 of them in
+#: the one converted module, and a prompt listing all 33 is noise that
+#: crowds out the facts the line exists to carry.
+NEAR = 6
 
 #: Capitalised words that are not somebody's name. Short, because the cost
 #: of a miss is small -- an extra "nobody here has heard of that" line -- and
@@ -651,18 +676,56 @@ def standing(playing: Playing, mention: str, *, speaker: str,
     """
 
     facts: list[str] = []
+    near: list[str] = []
     for layer in (playing.canon, playing.told):
         if layer is None:
             continue
         found = layer.find(mention)
         if found is not None:
             facts += [f.text for f in found.facts]
+            # **One hop out, which is what the edges are for.** `around`
+            # returned nothing at all until #934, so this is the first
+            # thing in the tree that reads an edge.
+            near += [other.name for other in layer.around(found)]
     if facts:
         return Standing(about=mention, facts=tuple(dict.fromkeys(facts)),
-                        knows="well")
+                        knows="well",
+                        near=tuple(dict.fromkeys(near))[:NEAR])
     return Standing(about=mention,
+                    near=tuple(dict.fromkeys(near))[:NEAR],
                     knows=director.would_know(speaker, mention, looks=looks,
                                               wants=wants))
+
+
+def linking(playing: Playing, one: str, two: str) -> Standing:
+    """How two things the player named in one line are connected. #934.
+
+    Camille, playing 2026-10-29:
+
+    > *"I asked about the relationship between Khellis and Orveth and got
+    > no answer, not even an 'I don't know'."*
+
+    #933 fixed the half where a name the graph had never heard of produced
+    no `Standing`. **This is the other half**: both names resolving and the
+    answer still being two separate fact lists, because `mentions` looks
+    each one up independently and nothing asked about the pair.
+
+    `Graph.between` is the lookup, and what it returns is the **sentence**
+    that names both rather than a relation word -- which is the thing a DM
+    can actually read out. When it returns nothing, the standing says
+    nothing connects them, which is an answer.
+    """
+    facts: list[str] = []
+    for layer in (playing.canon, playing.told):
+        if layer is None:
+            continue
+        first, second = layer.find(one), layer.find(two)
+        if first is None or second is None:
+            continue
+        facts += [f.text for f in layer.between(first, second)]
+    return Standing(about=f"{one} and {two}", pair=True,
+                    facts=tuple(dict.fromkeys(facts)),
+                    knows="well" if facts else "vaguely")
 
 
 @dataclass
@@ -1280,10 +1343,14 @@ def one_beat(
             if intent.played:
                 continue
             said = f"{intent.speech} {intent.doing}".strip()
+            here: list[str] = []
             for layer in (playing.canon, playing.told):
                 if layer is None:
                     continue
                 for found in layer.mentions(said):
+                    if found.name in here:
+                        continue
+                    here.append(found.name)
                     if found.name in seen:
                         continue
                     seen.add(found.name)
@@ -1292,6 +1359,21 @@ def one_beat(
                         else "somebody here", director=director,
                         looks=speaker.looks if speaker else "",
                         wants=speaker.wants if speaker else ""))
+            # **Two names in one line is a question about the pair**, and
+            # it is the question that opened #934: both resolved, and the
+            # answer was two separate fact lists with nothing about how
+            # they connect. Only the first pair -- a line naming four
+            # things would otherwise produce six standings and bury the
+            # scene.
+            #
+            # `here` rather than `seen`: `seen` carries every name from
+            # every earlier intent in the beat, so pairing off it would
+            # tie together two things nobody mentioned together.
+            if len(here) > 1:
+                link = linking(playing, here[0], here[1])
+                if link.about not in seen:
+                    seen.add(link.about)
+                    beat.standing.append(link)
             # **A name the graph does not hold still gets a `Standing`.**
             # It falls through `standing()` to `would_know`, which is where
             # the "not at all" register lives -- so the DM is told nobody

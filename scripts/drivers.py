@@ -42106,6 +42106,331 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def the_graph_has_edges_and_can_answer_about_a_pair(out: Result) -> None:
+    """`around()` had never returned anything. #934.
+
+    `Entity.links` existed, `Graph.around` read it, `docs/STORY_GRAPH.md`
+    was written as though edges existed, and the graph held **99 entities
+    and 0 links**. `scripts/ingest.py` extracts entities and quotes and
+    writes no edge, so the structure was a bag of facts.
+
+    Found when Camille asked about the relationship between two entities
+    and got nothing back:
+
+    > *"I asked about the relationship between Khellis and Orveth and got
+    > no answer, not even an 'I don't know'."*
+
+    #933 fixed the half where an **unknown** name produced no `Standing`.
+    This is the other half: both names resolving and the answer still
+    being two separate fact lists, because `mentions` looks each one up
+    independently and nothing asked about the pair.
+
+    **Two things had to be true for this to be worth anything**, and they
+    are what the assertions are about: an edge has to exist, and something
+    has to read it. `Known.near` was populated by `ask()` the whole time
+    and **nothing in the tree read it** -- a graph nothing consults is the
+    same as no graph.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from combat_engine.story import Party
+    from combat_engine.story import beat as bt
+    from combat_engine.story import graph as gr
+    from combat_engine.story import module as mod
+    from combat_engine.story import table as tbl
+
+    def built() -> gr.Graph:
+        """Three entities, and facts whose quotes name one or two of them.
+
+        **No printed name anywhere near this**, which is why the cast is
+        invented: a graph fixture naming an adventure's people would put
+        them in a tracked file, and the one rule is absolute about that.
+        """
+        g = gr.Graph()
+        g.add(gr.Entity(
+            id="warden", name="Warden", kind="person",
+            facts=[
+                # Names Warden and Hollow -- an edge.
+                gr.Fact("The Warden keeps the gate at Hollow.", "page",
+                        where="p2"),
+                # Names only the owner. No edge from this one.
+                gr.Fact("The Warden is tired.", "page", where="p3"),
+                # **Does not repeat the owner's own name**, which is the
+                # common shape and the one `between` has to handle.
+                gr.Fact("He has never been to Fenn.", "page", where="p4"),
+            ]))
+        g.add(gr.Entity(id="hollow", name="Hollow", kind="place"))
+        g.add(gr.Entity(id="fenn", name="Fenn", kind="place"))
+        g.add(gr.Entity(id="orbit", name="Orbit", kind="thing",
+                        facts=[gr.Fact("Orbit sits alone.", "page",
+                                       where="p9")]))
+        return g
+
+    # -- the control: facts naming one thing draw nothing -----------------
+    alone = gr.Graph()
+    alone.add(gr.Entity(id="orbit", name="Orbit", kind="thing",
+                        facts=[gr.Fact("Orbit sits alone.", "page",
+                                       where="p9")]))
+    alone.add(gr.Entity(id="hollow", name="Hollow", kind="place"))
+    drew = gr.derive(alone)
+    out.that(
+        drew == 0 and not any(e.links for e in alone.entities.values()),
+        "a fact that names only its own entity draws no edge, so the "
+        "derivation does not simply connect everything to everything",
+        f"{drew} edges",
+    )
+
+    # -- an edge, at both ends --------------------------------------------
+    g = built()
+    drew = gr.derive(g)
+    warden, hollow, fenn = (g.entities["warden"], g.entities["hollow"],
+                            g.entities["fenn"])
+    out.that(
+        (gr.NAMED_WITH, "hollow") in warden.links
+        and (gr.NAMED_WITH, "warden") in hollow.links,
+        "two entities named in one grounded quote get an edge, and both "
+        "ends carry it -- an edge in one direction only would answer the "
+        "question from one side and not the other",
+        f"warden {warden.links}, hollow {hollow.links}",
+    )
+    out.that(
+        all(relation == gr.NAMED_WITH for e in g.entities.values()
+            for relation, _ in e.links),
+        "and it is unlabelled: the derivation says two things are "
+        "connected and leaves what the connection is to the sentence, "
+        "because nothing here may invent a relation the page did not state",
+        f"{sorted({r for e in g.entities.values() for r, _ in e.links})}",
+    )
+    out.that(
+        [e.id for e in g.around(warden)] and
+        sorted(e.id for e in g.around(warden)) == ["fenn", "hollow"],
+        "so `around()` returns something, which it never had: the whole "
+        "point of the issue is that this was always empty",
+        f"{sorted(e.id for e in g.around(warden))}",
+    )
+    out.that(
+        gr.derive(g) == 0,
+        "and the derivation is idempotent -- running it twice draws "
+        "nothing, so a load that derives cannot inflate the graph",
+        f"{gr.derive(g)}",
+    )
+
+    # -- a negative edge: nothing ties the lone thing to anything ---------
+    out.that(
+        not g.entities["orbit"].links
+        and not g.around(g.entities["orbit"]),
+        "an entity whose only fact names nobody else stays unconnected, "
+        "which is the half that makes a degree mean anything",
+        f"{g.entities['orbit'].links}",
+    )
+
+    # -- what is written down, and what is recomputed ---------------------
+    stated = gr.Graph()
+    stated.add(gr.Entity(id="guild", name="Guild", kind="group",
+                         links=(("led_by", "warden"),),
+                         facts=[gr.Fact("The Guild answers to the Warden.",
+                                        "page", where="p5")]))
+    stated.add(gr.Entity(id="warden", name="Warden", kind="person"))
+    gr.derive(stated)
+    raw = gr.to_dict(stated)
+    written = [tuple(x) for e in raw["entities"] for x in e["links"]]
+    out.that(
+        ("led_by", "warden") in written
+        and not any(r == gr.NAMED_WITH for r, _ in written),
+        "a **stated** edge is written to the file and a **derived** one is "
+        "not -- otherwise the file becomes the record of a derivation "
+        "rather than of what the page said, and a stale derived edge "
+        "outlives the fact it came from",
+        f"{written}",
+    )
+    back = gr.from_dict(raw)
+    out.that(
+        ("led_by", "warden") in back.entities["guild"].links
+        and (gr.NAMED_WITH, "warden") in back.entities["guild"].links,
+        "and loading re-derives it, so a graph on disk with no derived "
+        "edges in it still has them in memory",
+        f"{back.entities['guild'].links}",
+    )
+    with tempfile.TemporaryDirectory() as box:
+        where = Path(box) / "g.json"
+        gr.save(stated, where)
+        reread = gr.load(where)
+    out.that(
+        len(reread.entities["guild"].links)
+        == len(stated.entities["guild"].links),
+        "through a real file as well as a dict, which is the path "
+        "`ingest.py` and the campaign both take",
+        f"{reread.entities['guild'].links}",
+    )
+    out.that(
+        gr.NAMED_WITH in gr.RELATIONS and "rival_of" in gr.RELATIONS
+        and "enemy_of" in gr.RELATIONS,
+        "the relation vocabulary names the printed Enemies/Rivals split, "
+        "which is why an edge is typed rather than a bare set: *\"openly "
+        "or violently conflicts with\"* and *\"peaceful intrigue\"* are "
+        "different answers to who opposes a group",
+        f"{gr.RELATIONS}",
+    )
+    # An unrecognised relation passes through rather than raising -- see
+    # `RELATIONS`. A refusal here broke a graph driver that has declared a
+    # `lives in` edge since before the list existed.
+    odd = gr.from_dict(gr.to_dict(gr.Graph()))
+    ad_hoc = gr.Graph()
+    ad_hoc.add(gr.Entity(id="a", name="A", kind="person",
+                         links=(("lives in", "b"),)))
+    ad_hoc.add(gr.Entity(id="b", name="B", kind="place"))
+    out.that(
+        gr.from_dict(gr.to_dict(ad_hoc)).entities["a"].links
+        == (("lives in", "b"),) and not odd.entities,
+        "and a relation outside that vocabulary is kept rather than "
+        "refused -- an unknown relation launders nothing, which is what "
+        "the `kind` and `source` refusals are for",
+        f"{gr.from_dict(gr.to_dict(ad_hoc)).entities['a'].links}",
+    )
+
+    # -- the pair lookup, which is what Camille asked for -----------------
+    out.that(
+        [f.where for f in g.between(warden, hollow)] == ["p2"],
+        "the pair lookup returns the sentence that names both, grounded "
+        "where it was found -- not a relation word, because the sentence "
+        "is the thing a DM can read out",
+        f"{[(f.where, f.text[:30]) for f in g.between(warden, hollow)]}",
+    )
+    out.that(
+        [f.where for f in g.between(warden, fenn)] == ["p4"],
+        "including a fact that does not repeat its own entity's name -- "
+        "*\"He has never been to Fenn\"* is filed under the Warden and "
+        "requiring both names in the span would drop exactly the facts "
+        "most worth having",
+        f"{[(f.where, f.text[:30]) for f in g.between(warden, fenn)]}",
+    )
+    out.that(
+        g.between(hollow, fenn) == [],
+        "and a pair with nothing between them returns nothing, which is "
+        "an answer and not a failure",
+        f"{g.between(hollow, fenn)}",
+    )
+    # **Both sides' facts, which a plant found missing.** Every connecting
+    # fact in the fixture above is filed under one of the two entities, so
+    # looking at only `one`'s facts answered every assertion -- and the
+    # order the player happens to name two things in is not something the
+    # answer may depend on.
+    out.that(
+        [f.where for f in g.between(hollow, warden)] == ["p2"]
+        and [f.where for f in g.between(fenn, warden)] == ["p4"],
+        "the pair lookup reads both entities' facts, so it gives the same "
+        "answer whichever way round the pair is named -- here the "
+        "connecting sentence is filed under the second one",
+        f"{[f.where for f in g.between(hollow, warden)]}, "
+        f"{[f.where for f in g.between(fenn, warden)]}",
+    )
+
+    # -- and now through a beat, which is the only thing that matters -----
+    raw_mod = {
+        "id": "probe", "party_level": 2, "party_size": 3, "start": "talk",
+        "scenes": [{"id": "talk", "kind": "roleplay", "name": "T",
+                    "brief": "A room.", "max_beats": 1, "exits": [],
+                    "npcs": [{"name": "Host", "wants": "quiet",
+                              "knows": ["nothing"]}],
+                    "affordances": [{"id": "ask", "what": "ask",
+                                     "win": "told", "once": False}]}],
+    }
+    module = mod.parse(raw_mod, Path("<driver>"))
+    scene = module.scene("talk")
+    party = Party.of(["fighter", "cleric", "rogue"], level=2, seed=7)
+    actors = [bt.Actor(i, n, c, "ai") for i, (n, c) in enumerate(
+        [("A", "fighter"), ("B", "cleric"), ("C", "rogue")])]
+
+    def asking(*lines: str) -> list:
+        """One beat in which each character says one of `lines`."""
+        said = list(lines)
+
+        class Says(bt.Director):
+            def declare(self, actor, playing, situation) -> bt.Intent:  # noqa: ANN001
+                # **`played=False` matters**: the scripted default sets it
+                # True and the standing block skips a played intent, so a
+                # probe using the default produced no standings at all.
+                return bt.Intent(
+                    slot=actor.slot, name=actor.name, played=False,
+                    speech=said[actor.slot % len(said)], doing="")
+
+            def match(self, playing, intents) -> dict:  # noqa: ANN001
+                return {}
+
+        playing = bt.Playing(scene=scene, canon=built())
+        gr.derive(playing.canon)
+        beat = bt.one_beat(playing, tbl.lay(party, seed=4), actors,
+                           Says(scripted=True), ask_human=bt.silent,
+                           party_level=2)
+        return beat.standing
+
+    both = asking("What is between the Warden and Hollow?")
+    pairs = [s for s in both if s.pair]
+    out.that(
+        len(pairs) == 1 and pairs[0].facts,
+        "a line naming two known entities produces a standing about the "
+        "**pair**, carrying the sentence that connects them -- which is "
+        "the answer the question got none of",
+        f"{[(s.about, len(s.facts)) for s in both]}",
+    )
+    out.that(
+        any(s.near for s in both if not s.pair),
+        "and a single-entity standing carries its one-hop neighbours, so "
+        "an invention lands in the right part of the world. `Known.near` "
+        "was fed by `ask()` all along and nothing read it",
+        f"{[(s.about, s.near) for s in both if not s.pair]}",
+    )
+
+    missing = asking("What is between the Warden and Orbit?")
+    lone = [s for s in missing if s.pair]
+    out.that(
+        len(lone) == 1 and not lone[0].facts
+        and "nothing on record connects them" in str(lone[0])
+        and "do not invent" in str(lone[0]),
+        "and an unconnected pair is told plainly that nothing connects "
+        "them, with the invitation to improvise withheld -- the silence "
+        "in the complaint was *\"not even an 'I don't know'\"*",
+        f"{str(lone[0])[:90] if lone else 'no pair standing'}",
+    )
+
+    # **Two names in two different lines are not a pair.** `seen` carries
+    # every name from every earlier intent in the beat, so pairing off it
+    # would tie together two things nobody mentioned together.
+    apart = asking("Tell me about the Warden.", "Tell me about Orbit.")
+    out.that(
+        not [s for s in apart if s.pair]
+        and len([s for s in apart if not s.pair]) >= 2,
+        "two entities named in **different** lines are not treated as a "
+        "pair: one character asking about each is two questions, and "
+        "answering them as one invents a connection nobody asked about",
+        f"{[(s.about, s.pair) for s in apart]}",
+    )
+
+    # -- the cap, because a hub has dozens --------------------------------
+    crowd = gr.Graph()
+    many = [f"n{i}" for i in range(bt.NEAR + 5)]
+    crowd.add(gr.Entity(
+        id="hub", name="Hub", kind="place",
+        facts=[gr.Fact("Hub holds " + ", ".join(n.upper() for n in many)
+                       + ".", "page", where="p1")]))
+    for name in many:
+        crowd.add(gr.Entity(id=name, name=name.upper(), kind="thing"))
+    gr.derive(crowd)
+    playing = bt.Playing(scene=scene, canon=crowd)
+    hub_standing = bt.standing(
+        playing, "Hub", speaker="Host", director=bt.Director(scripted=True))
+    out.that(
+        len(crowd.around(crowd.entities["hub"])) > bt.NEAR
+        and len(hub_standing.near) == bt.NEAR,
+        "a hub's neighbours are capped in the line the DM reads -- the one "
+        "converted module's busiest node has 33, and a prompt listing all "
+        "33 crowds out the facts the line exists to carry",
+        f"{len(crowd.around(crowd.entities['hub']))} neighbours, "
+        f"{len(hub_standing.near)} shown",
+    )
+
+
 def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None:
     """The reward nothing paid. #967.
 
@@ -45566,6 +45891,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "graph_edges": (
+        the_graph_has_edges_and_can_answer_about_a_pair,
+        "the graph has edges and can answer about a pair (#934)",
+    ),
     "story_xp": (
         xp_is_awarded_by_the_printed_arithmetic_and_never_spent,
         "XP is awarded by the printed arithmetic and never spent (#967)",

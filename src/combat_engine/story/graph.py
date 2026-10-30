@@ -41,6 +41,35 @@ SOURCES = ("page", "earned", "invented")
 #: 4,269 entities and that was enough for twenty-seven books.
 KINDS = ("person", "place", "thing", "group", "creature", "idea")
 
+#: The relation on a **derived** edge: two entities named in one grounded
+#: quote, with that quote as the evidence. Unlabelled on purpose -- it says
+#: they are connected and leaves what the connection *is* to the sentence,
+#: which is the half a DM can read for themselves.
+NAMED_WITH = "named_with"
+
+#: Relations a module or an ingest pass may **state**, which is the other
+#: half and the one that carries meaning.
+#:
+#: **A vocabulary, not a closed set.** `from_dict` briefly refused a
+#: relation that was not in here, on the reasoning that an unreadable
+#: `kind` or `source` is refused -- and that was wrong twice over. An
+#: unknown relation launders nothing, which is what those two refusals are
+#: for, and `around()` follows it perfectly well. It also broke a graph
+#: driver that had been declaring a `lives in` edge since before this list
+#: existed. So an unrecognised relation passes through; this names the
+#: five the page gives, for whoever writes the labelled pass.
+#:
+#: Five of them are DMG2's own organisation fields, and the vocabulary is
+#: taken from there rather than invented: Leadership, Headquarters, Enemies,
+#: Rivals, Factions. The **Enemies/Rivals split is why an edge is typed
+#: rather than a bare set** -- *"openly or violently conflicts with"* against
+#: *"political opponents with whom the group engages in peaceful intrigue"*
+#: are different answers to "who opposes this group", and collapsing them
+#: hands the DM the wrong register.
+RELATIONS = (
+    NAMED_WITH, "led_by", "based_at", "enemy_of", "rival_of", "faction_of",
+)
+
 
 class GraphError(RuntimeError):
     """A graph file that cannot be trusted. Reported, never patched over."""
@@ -172,6 +201,31 @@ class Graph:
         return [self.entities[eid] for _, eid in entity.links
                 if eid in self.entities]
 
+    def between(self, one: Entity, two: Entity) -> list[Fact]:
+        """Every fact that names **both**. The pair lookup.
+
+        **The question `mentions` cannot answer**, and the one this whole
+        issue was opened over: Camille asked how two entities were related
+        and got two separate fact lists, because `mentions` resolves each
+        name independently and nothing looked at a pair. A fact naming both
+        is the sentence that connects them, which is what a DM wants handed
+        over rather than a relation word.
+
+        Searched over both entities' facts and de-duplicated, because the
+        same sentence is usually filed under one of them and not the other.
+        """
+        out: dict[str, Fact] = {}
+        for owner, other in ((one, two), (two, one)):
+            for fact in owner.facts:
+                # **The owner counts as named.** A fact filed under
+                # somebody often does not repeat their name -- *"He is the
+                # banker"* -- so requiring both names in the span would
+                # drop exactly the facts most worth having.
+                named = {e.id for e in self.mentions(fact.quote or fact.text)}
+                if other.id in named:
+                    out.setdefault(fact.quote or fact.text, fact)
+        return list(out.values())
+
     def remember(self, name: str, text: str, *, where: str,
                  kind: str = "person") -> Entity:
         """Write down something the table made up, tagged `invented`.
@@ -185,6 +239,64 @@ class Graph:
             found = self.add(Entity(id=_slug(name), name=name, kind=kind))
         found.facts.append(Fact(text=text, source="invented", where=where))
         return found
+
+
+def derive(graph: Graph) -> int:
+    """Draw an edge between entities named in one grounded quote. #934.
+
+    **The graph had no edges at all**: 99 entities, 148 facts, **0 links**,
+    so `around()` had never returned anything and the structure was a bag
+    of facts rather than a graph. `scripts/ingest.py` extracts entities and
+    quotes and writes no edge.
+
+    This is the version that *"costs nothing at all"* and it is worth what
+    it costs. Measured over the one converted module: **207 edges across 75
+    of the 99 entities**, with a degree distribution that looks like an
+    adventure rather than an artifact -- 16 entities with a single edge, a
+    long tail through the middle, and a handful of hubs that are the
+    adventure's principal person, its principal place and the party.
+
+    **Unlabelled, and that is the honest shape**: these say two things are
+    connected and hand over the sentence that connects them, which is what
+    a DM can read for themselves. A *labelled* edge -- `led_by`,
+    `based_at`, the DMG2 organisation vocabulary in `RELATIONS` -- is a
+    second pass that has to come from the page, and nothing here invents
+    one.
+
+    **Groundable in a span, like every fact.** The evidence is a quote that
+    was already extracted and already cited, so an edge cannot exist here
+    without a sentence behind it. That is the same rule the facts follow
+    and the reason this needs no model call.
+
+    **One known distortion, measured rather than assumed.** An entity
+    carrying a generic alias is over-connected by it: the party's own node
+    has the alias *"characters"*, which appears in a great many quotes, and
+    it lands in the top three by degree on that alone. The edges are not
+    *wrong* -- the quote really does name both -- but the node is central
+    for a grammatical reason rather than a narrative one. Worth knowing
+    before anybody reads degree as importance.
+
+    Idempotent and symmetric: both ends get the edge, and running twice
+    adds nothing.
+    """
+    drawn = 0
+    pairs: set[tuple[str, str]] = set()
+    for owner in list(graph.entities.values()):
+        for fact in owner.facts:
+            here = {e.id for e in graph.mentions(fact.quote or fact.text)}
+            here.add(owner.id)
+            for one in here:
+                for two in here:
+                    if one < two:
+                        pairs.add((one, two))
+    for one, two in pairs:
+        for a, b in ((one, two), (two, one)):
+            entity = graph.entities[a]
+            if (NAMED_WITH, b) in entity.links:
+                continue
+            entity.links = (*entity.links, (NAMED_WITH, b))
+            drawn += 1
+    return drawn
 
 
 def reconcile(graph: Graph) -> list[tuple[str, str]]:
@@ -256,7 +368,13 @@ def to_dict(graph: Graph) -> dict:
             {
                 "id": e.id, "name": e.name, "kind": e.kind,
                 "aliases": list(e.aliases),
-                "links": [list(x) for x in e.links],
+                # **Only the stated edges.** A derived one is recomputed
+                # on every load, so writing it would make the file the
+                # record of a derivation rather than of what the page
+                # said -- and a stale derived edge would outlive the fact
+                # it came from.
+                "links": [list(x) for x in e.links
+                          if x[0] != NAMED_WITH],
                 "facts": [
                     {"text": f.text, "source": f.source, "where": f.where,
                      "quote": f.quote, "told_by": list(f.told_by),
@@ -302,6 +420,7 @@ def from_dict(raw: dict) -> Graph:
             aliases=tuple(str(a) for a in item.get("aliases", ())),
             links=tuple((str(r), str(t)) for r, t in item.get("links", ())),
             facts=facts))
+    derive(graph)
     return graph
 
 

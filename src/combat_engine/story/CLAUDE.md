@@ -1573,11 +1573,12 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
-    scene_once module_cast complexity_bound quests story_xp
+    scene_once module_cast complexity_bound quests story_xp \
+    graph_edges
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 40 drivers and prints 422 assertions**, and **each was
+**The command above is 41 drivers and prints 442 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -1761,3 +1762,99 @@ stayed green:
 And a probe caught `to_advance` returning one level's *increment* against a
 cumulative `Sheet.xp` — ready at 1,250 instead of 2,250. The two agree at
 level 1, which is where a first probe looks.
+
+## The graph had no edges, and now reads as one (#934)
+
+`Entity.links` existed, `Graph.around` read it, `docs/STORY_GRAPH.md` was
+written as though edges existed, and the graph held **99 entities and 0
+links**. `scripts/ingest.py` extracts entities and quotes and writes no edge,
+so `around()` had never returned anything and the structure was a bag of
+facts.
+
+Camille, playing 2026-10-29:
+
+> *"I asked about the relationship between Khellis and Orveth and got no
+> answer, not even an 'I don't know'."*
+
+**#933 fixed one half of that and this is the other.** #933 was a name the
+graph had never heard of producing no `Standing` at all. This is both names
+resolving and the answer *still* being two separate fact lists, because
+`mentions` looks each one up independently and nothing asked about the pair.
+
+### Two edges, and only one of them is invented here
+
+`derive(graph)` draws an edge between entities named in **one grounded
+quote**, relation `NAMED_WITH`, and that is the version the issue called
+*"costs nothing at all"*. Measured over the one converted module: **207 edges
+across 75 of the 99 entities**, with a degree distribution that looks like an
+adventure rather than an artifact — 16 nodes with a single edge, a long tail
+through the middle, and a few hubs that are the adventure's principal person,
+its principal place and the party.
+
+They are **unlabelled on purpose**. They say two things are connected and
+hand over the sentence that connects them, which is what a DM can read for
+themselves. `RELATIONS` names the five DMG2 organisation relations —
+`led_by`, `based_at`, `enemy_of`, `rival_of`, `faction_of` — for whoever
+writes the labelled pass, which has to come from the page. The
+**Enemies/Rivals split is why an edge is typed** rather than a bare set:
+*"openly or violently conflicts with"* against *"peaceful intrigue"* are
+different answers to who opposes a group.
+
+**Every edge is groundable in a span**, like every fact: the evidence is a
+quote already extracted and already cited, so no edge exists without a
+sentence behind it, and no model call is needed.
+
+**A derived edge is never written to the file.** Only stated ones persist;
+loading re-derives. Otherwise the file becomes the record of a derivation
+rather than of what the page said, and a stale derived edge outlives the fact
+it came from.
+
+**One measured distortion.** A node carrying a generic alias is
+over-connected by it — the party's own node has a one-word alias that appears
+in a great many quotes, and that alone puts it in the top three by degree.
+The edges are not wrong, but the node is central for a grammatical reason
+rather than a narrative one. Do not read degree as importance.
+
+### `RELATIONS` is a vocabulary, not a closed set
+
+`from_dict` briefly **refused** a relation that was not in the list, by
+analogy with the `kind` and `source` refusals. That was wrong twice: an
+unknown relation launders nothing — which is what those two refusals are for
+— and `around()` follows it perfectly well. It also broke a graph driver that
+has been declaring a `lives in` edge since before the list existed. An
+unrecognised relation passes through.
+
+### Something has to read an edge
+
+`ask()` has populated `Known.near` from `around()` the whole time and
+**nothing in the tree read it**. A graph nothing consults is the same as no
+graph, so:
+
+* `Standing.near` carries the one-hop neighbours into the line the DM reads,
+  capped at `NEAR = 6` — the busiest node has 33, and a prompt listing all 33
+  crowds out the facts the line exists to carry;
+* `linking()` answers the **pair** question from `Graph.between`, which
+  returns the sentences naming both;
+* a beat where **one line** names two known entities gets a pair `Standing`.
+  **One line, not the beat**: `seen` carries every name from every earlier
+  intent, so pairing off it ties together two things nobody mentioned
+  together. One character asking about each is two questions.
+
+And the negative case is the complaint itself: nothing connecting them prints
+*"nothing on record connects them. Say so if asked; do not invent a tie
+between them."* — the register #933 established, with the invitation to
+improvise withheld.
+
+### What the plants found
+
+Twenty-one plants, nineteen red, one intended control green. Two findings
+worth keeping:
+
+* **`between` read only one side's facts** and every assertion passed,
+  because every connecting fact in the fixture is filed under one of the two
+  entities. The order a player names two things in cannot change the answer,
+  so there is now an assertion that the connecting sentence filed under the
+  *second* one is found.
+* **a fact usually does not repeat its own entity's name** — *"He has never
+  been to Fenn"* is filed under the person — so requiring both names in the
+  span drops exactly the facts most worth having. The owner counts as named.
