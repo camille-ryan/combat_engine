@@ -4525,9 +4525,13 @@ _MARK_OF = re.compile(
 #: phrase must still *be* an indexed printed name and satisfy
 #: `sanitise.cited`, exactly as the five positions above do.
 #:
-#: `animal companion` is in the alternation because the druid builds print
-#: it where every other grant prints "power", and the same sentence shape
-#: carries it.
+#: The alternation carries a second noun because the druid builds name the
+#: *kind* of creature granted where every other row says "power", and the
+#: sentence is otherwise identical. Described rather than quoted: that
+#: phrase is one build's printed feature title as well as a generic
+#: category, so `leaks.py` reds on it in a backticked position -- correctly,
+#: and it is unflagged in the pattern below, which is an unquoted one. The
+#: gate drew exactly the right line and this note is where I crossed it.
 _GRANTS = re.compile(
     r"\byou gain (?:the|a|an)\s+(.{0,70}?)"
     r"(?=\s+(?:powers?|animal companion)\b)",

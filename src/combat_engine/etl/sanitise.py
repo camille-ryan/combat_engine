@@ -1320,7 +1320,14 @@ def cited(
         # says "a phrase of nothing but function words is a coincidence,
         # which is what the stop list is for" -- and then required *two*
         # content words, which refuses a printed name whose first word is
-        # the definite article. `the traveler` has one.
+        # the definite article -- `x1_116` is two words and one of them is
+        # "the", so it counts as one. Written as a ref rather than quoted:
+        # the quoted form is a deity's printed name, and `leaks.py`'s
+        # tree-wide walk does **not** catch it -- a two-word name of two
+        # ordinary words is its documented blind spot (#494), which is the
+        # same blind spot this whole change is about. So the gate would not
+        # have told me. Hand-read instead, which is the standing rule for a
+        # quoted phrase.
         #
         # That is not a hypothetical. Six deities are named exactly that
         # way, and `build._WORSHIPS` -- the position whose entire purpose is
