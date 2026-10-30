@@ -75,8 +75,29 @@ class Table:
 #: Attack bonus over level, by role, as published. Reported by
 #: `scripts/mm3.py` rather than applied -- the corpus says the real gap is
 #: about half a point, not two.
+#:
+#: **The vs-AC row, all six of them.** The printed table has two attack rows
+#: and this used to mix them: five cells came off *attack vs. AC* and
+#: `artillery` off *attack vs. other defenses*, which is 5 where the vs-AC
+#: row says 7. Read from the book rather than corrected by pattern --
+#:
+#:     attack vs. ac              skirmisher +5  brute +3  soldier +7
+#:                                lurker +5  controller +5  artillery +7
+#:     attack vs. other defenses  +3  +1  +5  +3  +4  +5
+#:
+#: **It was not a typo, which is why it survived.** +5 is also artillery's
+#: measured corpus figure (+5.1), so the wrong value sat beside a number
+#: that appeared to confirm it, and `mm3.py` reported that role's
+#: published-versus-measured gap as **zero** where it is about -1.9 -- the
+#: same shape as soldier's -1.7. The one column whose job is to carry the
+#: book's claim was silently agreeing with the corpus instead.
+#:
+#: Two printed oddities, both verified and neither to be smoothed: the
+#: table's footnote is *"reduce the attack bonus by 2 for powers that affect
+#: multiple creatures"*, and controller's vs-other value is **+4** where
+#: every other role's second row is exactly 2 below its first. #973.
 ATTACK_OLD = {
-    "brute": 3, "soldier": 7, "artillery": 5,
+    "brute": 3, "soldier": 7, "artillery": 7,
     "lurker": 5, "skirmisher": 5, "controller": 5,
 }  # fmt: skip
 ATTACK_MM3 = dict.fromkeys(ATTACK_OLD, 5)
