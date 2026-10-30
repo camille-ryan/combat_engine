@@ -437,6 +437,28 @@ class Try:
     skill: str
     win: str = ""
     lose: str = ""
+    #: **The words a player would type**, exactly as `Affordance.what` is,
+    #: and for exactly the same reason: it is the only thing the matcher
+    #: compares a declared intent against. A skill *name* is not that.
+    #:
+    #: Measured through the shipped `Director.match`, four intents against
+    #: the converted chapter-1 challenge's three skills, three runs each
+    #: way at temperature 0 -- and perfectly stable, so these are two
+    #: different answers rather than noise:
+    #:
+    #:     bare skill name        3/12 correct
+    #:     a written phrasing    12/12 correct
+    #:
+    #: The failure is the dangerous one rather than a shrug. Every run,
+    #: *"I draw my sword and look for someone to hit"* matched **athletics**
+    #: while *"I grab a blanket and start beating down the flames"* matched
+    #: **none** -- the matcher inventing an affordance, which is the one
+    #: thing the enum-constrained design exists to prevent.
+    #:
+    #: Empty is fine and is what every converted challenge holds. A
+    #: challenge with no phrasings simply cannot run beats; it still rolls
+    #: exactly as it does today. #932.
+    what: str = ""
 
 
 @dataclass(frozen=True)
@@ -1499,7 +1521,8 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                 said.append(Try(
                     skill=skill,
                     win=str(item.get("win", "")).strip(),
-                    lose=str(item.get("lose", "")).strip()))
+                    lose=str(item.get("lose", "")).strip(),
+                    what=str(item.get("what", "")).strip()))
                 continue
             if str(item).strip():
                 names.append(str(item).strip().lower())
@@ -1538,6 +1561,36 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         problems.append(
             f"{where}: a {kind} scene states what a skill check means, but "
             "only a skill_challenge rolls them")
+
+    # **A phrasing that is just the skill name is refused**, because it is
+    # the exact thing measured at 3 of 12 -- and the three failures include
+    # the matcher putting an intent with nothing to match onto a skill. An
+    # author writing `"what": "athletics"` has written something that looks
+    # filled in and performs worse than leaving it empty, which is the
+    # shape of mistake worth a refusal rather than a note. #932.
+    bare = sorted({t.skill for t in tries
+                   if t.what and t.what.strip().lower() == t.skill})
+    if bare:
+        problems.append(
+            f"{where}: {', '.join(bare)} states a phrasing that is just the "
+            "skill name. `what` is the words a player would type -- a bare "
+            "name matched 3 of 12 declared intents against 12 of 12 for a "
+            "written phrasing, and stretched an unrelated intent onto a "
+            "skill every run"
+        )
+    # **All of them or none of them.** A challenge where some skills carry a
+    # phrasing and others do not is one the player can only half engage
+    # with: the matcher is offered the phrased ones and the rest are
+    # unreachable by any intent, silently. That is a cap nobody printed.
+    phrased = {t.skill for t in tries if t.what}
+    if phrased and phrased != set(primary) | set(secondary):
+        missing = sorted((set(primary) | set(secondary)) - phrased)
+        problems.append(
+            f"{where}: {', '.join(missing)} carry no `what`, while other "
+            "skills in the same challenge do. Either all of them are "
+            "reachable by a declared intent or none are -- a partly phrased "
+            "challenge silently hides the rest from the matcher"
+        )
 
     caps: list[tuple[str, int]] = []
     for skill, most in dict(raw.get("caps") or {}).items():

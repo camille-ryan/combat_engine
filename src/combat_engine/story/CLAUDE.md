@@ -1757,7 +1757,7 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 50 drivers and prints 626 assertions**, and **each was
+**The command above is 51 drivers and prints 646 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -2038,7 +2038,7 @@ worth keeping:
   been to Fenn"* is filed under the person — so requiring both names in the
   span drops exactly the facts most worth having. The owner counts as named.
 
-## A challenge says what each check meant (#932, step 1 of two)
+## A challenge says what each check meant (#932)
 
 A converted challenge emitted five mechanical lines and a tally:
 
@@ -2099,6 +2099,77 @@ Posing that took two corrections:
   refusal, which makes the assertion unable to fail. **Seed 1** has the first
   use succeed, so the lose text is never true and a refusal printing it is
   visible. 39 refusals there; the plant now reddens.
+
+### The matcher needs a phrasing, which is why the beat loop is still not here
+
+`#932`'s second half is the beat loop in `_challenge`, and it is **blocked on
+the same shape of gap step 1 was**. Step 1's argument was that wiring the loop
+before the skills carried `win`/`lose` would hand the DM *"a roll to narrate
+and nothing to narrate from"*. The mirror: `Affordance.what` is, in its own
+docstring, *"the only thing the matcher compares an intent against"*, and a
+`Try` had only `skill` plus DM-facing prose.
+
+Measured through the shipped `Director.match` — never a hand-rolled prompt,
+since a reflow of identical words flips this model 5/5 the other way. Four
+intents against the converted challenge's three skills, three runs each way at
+temperature 0:
+
+```
+bare skill name        3/12 correct
+a written phrasing    12/12 correct
+```
+
+**Perfectly stable in both arms**, so these are two different answers rather
+than noise. And the failure is the dangerous one rather than a shrug — every
+single run:
+
+```
+"I grab a blanket and start beating down the flames"  -> none
+"I draw my sword and look for someone to hit"         -> athletics
+```
+
+The intent with nothing to match stretched onto a skill, and the one that
+plainly was athletics was refused. That is the matcher inventing an
+affordance, which is exactly what the enum-constrained design exists to
+prevent, and it is #801's lesson again: replaying real intents against a
+player-facing phrasing took a tavern scene from 0 of 4 to 3 of 4.
+
+So `Try.what` landed and the loop did not. With a `what`, a `Try` **is** an
+`Affordance` in every way the matcher and the DM care about, so the loop can
+reuse `play_scene` wholesale rather than growing a second one.
+
+**Two refusals, and the measurement is what earned the first.**
+
+* **A phrasing that is just the skill name is refused.** `"what":
+  "athletics"` looks filled in and performs *worse* than leaving it empty.
+  That is the shape of mistake worth refusing rather than noting. A phrasing
+  that merely *mentions* the skill is fine — the refusal is narrow.
+* **All of them or none.** A half-phrased challenge offers the matcher the
+  phrased skills and leaves the rest unreachable by any intent, silently,
+  which is a cap nobody printed.
+
+A challenge written as bare strings — which is every converted one — still
+parses, carries no `tries`, and rolls exactly as it always did.
+
+**Worth stating plainly, because `check.py` could not have caught it:**
+`--no-llm` runs the scripted matcher, which takes the affordances in order. So
+shipping the loop first would have put a quarter of declared intents on the
+wrong skill with every instrument green.
+
+### And the importer brief had gone stale against this repo's own parser
+
+`b2d63e85` retired `secondary_grants: "success"` and the brief still offered
+it — *"or `success` (it counts outright)"*. An importing agent following the
+brief would write a value `parse` refuses outright:
+
+```
+REFUSED: scene 'c': secondary_grants 'success' is not one of bonus
+```
+
+Found by reading the brief to add the `what` guidance, not by any gate.
+Nothing checks that the brief and the parser agree, which is a gap worth
+knowing about: the brief is prose in a tracked file and the parser is the
+thing it describes.
 
 ## A fight says how it went, and the next scene carries it (#943, combat half)
 

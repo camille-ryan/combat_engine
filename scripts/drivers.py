@@ -45097,6 +45097,73 @@ def a_challenge_says_what_each_check_meant(out: Result) -> None:
         except mod.ModuleError as exc:
             return str(exc)
 
+    # -- `what`: the words a player would type ---------------------------
+    # **Measured before it was built.** `Affordance.what` is "the only
+    # thing the matcher compares an intent against" and a `Try` had no
+    # such field, so the beat loop this issue asks for would have handed
+    # the matcher a skill name. Through the shipped `Director.match`, four
+    # intents against three skills, three runs each way at temperature 0:
+    #
+    #     bare skill name        3/12 correct
+    #     a written phrasing    12/12
+    #
+    # Perfectly stable both ways, and every run put "I draw my sword and
+    # look for someone to hit" onto **athletics** -- the matcher inventing
+    # an affordance, which is what the enum design exists to prevent.
+    phrased = parsed(scene_of([
+        {"skill": "athletics", "what": "beat out the flames, smother it",
+         "win": "the fire dies", "lose": "it spreads"},
+    ]))
+    out.that(
+        phrased.tries and phrased.tries[0].what.startswith("beat out"),
+        "a challenge's skill can carry the words a player would type, "
+        "which is what the matcher compares a declared intent against -- "
+        "a `Try` had only the skill name and the DM-facing win/lose prose",
+        f"{phrased.tries[0].what!r}",
+    )
+    # Read defensively: a plant that refuses a bare-string challenge makes
+    # this *raise*, and a crash says something changed rather than which
+    # rule broke -- the lesson from #996's twelve plants.
+    try:
+        bare = parsed(scene_of(["athletics"]))
+        bare_tries: tuple | None = bare.tries
+        why = ""
+    except mod.ModuleError as exc:
+        bare_tries = None
+        why = f" -- it was REFUSED: {str(exc)[:70]}"
+    out.that(
+        bare_tries == (),
+        "and a challenge written as bare strings still parses and carries "
+        "none -- every converted challenge is one, and it rolls exactly as "
+        "it always did rather than becoming unplayable",
+        f"tries={bare_tries}{why}",
+    )
+    out.that(
+        "just the skill name" in refused(scene_of([
+            {"skill": "athletics", "what": "athletics"}])),
+        "a phrasing that is **just the skill name** is refused -- it looks "
+        "filled in and measures worse than leaving it empty, which is the "
+        "shape of mistake worth refusing rather than noting",
+        refused(scene_of([{"skill": "athletics", "what": "athletics"}]))[:70],
+    )
+    out.that(
+        not refused(scene_of([
+            {"skill": "athletics", "what": "Athletics, haul it clear"}])),
+        "while a phrasing that merely *contains* the name is fine -- the "
+        "refusal is for a bare name, not for mentioning it",
+        "accepted",
+    )
+    half = refused({**scene_of(
+        [{"skill": "athletics", "what": "beat out the flames"}],
+        [{"skill": "arcana", "win": "x"}])})
+    out.that(
+        "carry no `what`" in half,
+        "and a half-phrased challenge is refused: the matcher would be "
+        "offered the phrased skills and the rest would be unreachable by "
+        "any intent, silently -- a cap nobody printed",
+        half[:80],
+    )
+
     # -- the control: bare strings still parse, and say nothing -----------
     bare = parsed(scene_of(["athletics", "endurance"]))
     out.that(
