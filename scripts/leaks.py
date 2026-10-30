@@ -1291,7 +1291,8 @@ def specs() -> int:
     print("no printed names in any spec")
     bad = _self_named_clauses()
     return (registered or bad or _unresolved_citations()
-            or _unswapped_names(index) or _entitled_names() or columns(index))
+            or _unswapped_names(index) or _resolved_positions(index)
+            or _entitled_names() or columns(index))
 
 
 #: `<Head> (<class>, <book>, page <N>)` -- the compendium's inline citation,
@@ -1601,6 +1602,245 @@ def _unswapped_names(index: dict[str, list[str]]) -> int:
     print(f"no NEW spec prints a uniquely-resolving name it does not cite "
           f"({len(UNSWAPPED_BASELINE)} known and waived with a reason --"
           f" see UNSWAPPED_BASELINE, #628)")
+    return 0
+
+
+#: How many words of lead-in identify a position. Three is what the corpus
+#: wanted: two collapses `you gain the` into `gain the`, which also heads
+#: `gain the following`, and four splits one position into a dozen.
+_LEAD = 3
+
+#: How often a lead-in must carry a **ref** before this walk will believe a
+#: name sitting in it is a missed swap, and the share of names it tolerates.
+#: Ten and a half: at ten resolutions the position is a habit of the
+#: compendium rather than an accident, and a position where names outnumber
+#: half the refs is a position the scrub does not really handle.
+_RESOLVED_ENOUGH = 10
+_NAME_SHARE = 0.5
+
+#: Anything that looks like a ref rather than a word. Deliberately narrow --
+#: `b:c128-3`, `cf:druid-f1s2`, `m5441a5`, `x2_56`, `rt:r68-t3`, `t:80` --
+#: because a bare word with a digit in it must not be counted as a
+#: resolution, or every damage expression inflates the denominator.
+_LOOKS_REF = re.compile(r"^(?:[a-z]+:[\w:-]*\d[\w:-]*|[a-z]{1,3}\d[\w:_-]*)$")
+
+#: **Two ordinary words in a position the scrub demonstrably handles.**
+#: `_unswapped_names` asks the same question and requires **three or more**
+#: words, deliberately -- the two-word case is where coincidence lives, and
+#: every one of these names is two dictionary words, so `identifies` waives
+#: them and `_trusted_vocabulary` cannot tell them apart either. Measured:
+#: all 23 distinct names here are made entirely of trusted vocabulary, which
+#: is the premise of #340 restated.
+#:
+#: So the discriminator is **position and nothing else**: the same three-word
+#: lead-in, in the same corpus, resolving a ref at least ten times and a name
+#: here. `you gain the` resolves 207 times and failed 4; `you must worship`
+#: 10 and 1, and in that one the sentence resolves a second deity correctly
+#: two words away. That narrows 796 occurrences of the two-word class to 34
+#: with no vocabulary judgement anywhere, which is what gives this pass none
+#: of the waivers the tree-wide walk needs.
+#:
+#: **Everything below is a coincidence, hand-read, and none of it is owed.**
+#: Each is a printed name that is also a generic mechanic, category or
+#: setting word, so the position is right and the match is not:
+#:
+#: * `m5441a5` nine times, and `m6361a4` -- a setting's magic system, whose
+#:   name a monster ability shares. The `x_p4494` shape #340 already names.
+#: * `i192` -- an implement **category** every divine power's Requirement
+#:   names, which is also one item's printed name. Broadest of the lot: 87
+#:   spec rows.
+#: * `rt:r8-t1`, `m1531a2`, `m4746a1`, `f2255` -- a resistance, a heal, a
+#:   weapon type and the familiar mechanic, each also the title of one row.
+#: * `m3999a5`, `x1_122` -- a name beginning with the definite article, so
+#:   the match starts on the preceding `the` and the phrase is prose.
+#: * `f1113` in `m1116a1` -- two monsters sharing an ability title.
+#: * `p15832`, `m2927` -- read both and could not settle them from the
+#:   sentence; left as coincidences because a *wrong* swap points an author
+#:   at the wrong row, which is worse than a name a reader can see.
+#: * `p12746` in `p13341` -- **the one I nearly got wrong.** The sentence
+#:   names a creature the power *summons*, whose printed name happens to be
+#:   another power's. It wants a summon ref and must not take this one.
+#:
+#: Breadth is why the list reads this way and is not a rule: the generic ones
+#: are the broad ones, 87 and 28 and 17 spec rows against 1 to 4 for every
+#: genuine citation -- but two coincidences sit at breadth 0 and 1, inside
+#: any threshold that keeps all the genuine ones. A ranker, not a gate, the
+#: same verdict `triage.py` carries.
+#:
+#: Shrinks, never grows. #340.
+POSITION_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
+    ("feat", "f748", "rt:r8-t1"),
+    ("feat", "f1712", "f2255"),
+    ("feat", "f2099", "m4746a1"),
+    ("feat", "f3068", "f1113"),
+    ("feat", "f3190", "m5441a5"),
+    ("feat", "f3244", "m5441a5"),
+    ("feat", "f3262", "m5441a5"),
+    ("feat", "f3267", "m5441a5"),
+    ("feat", "f3269", "m5441a5"),
+    ("item_block", "i580x1", "m5441a5"),
+    ("item_block", "i630p1", "i192"),
+    ("item_block", "i694x1", "m5441a5"),
+    ("item_block", "i2749p1", "m3999a5"),
+    ("monster_power", "m1116a1", "f1113"),
+    ("monster_power", "m2011a1", "p15832"),
+    ("monster_power", "m3546a4", "m1531a2"),
+    ("power", "p11841", "m2927"),
+    ("power", "p13341", "p12746"),
+    ("power", "p13952", "x1_122"),
+    ("power", "p13952b", "x1_122"),
+    ("terrain", "x2_68", "m6361a4"),
+    ("terrain", "x2_140", "m5441a5"),
+})
+
+#: **Real misses, hand-read, with no position built for them yet.** Separate
+#: from `POSITION_BASELINE` on purpose: that one is *waived* -- a coincidence
+#: the scrub must not touch -- and these are **owed**. One frozenset could
+#: not say which, and a baseline that cannot tell a waiver from a debt is
+#: the thing `audit.py`'s own note calls a bare allowance.
+#:
+#: Each is a citation the compendium writes in a position `_elsewhere` and
+#: `_granted` do not yet read, named here with the position it wants:
+#:
+#: * `feat.f1591` -> `p8097` -- *"one additional use of your <name>, <name>,
+#:   or <name>"*. **Three** powers in one clause and none resolved, so this
+#:   entry is itself a floor.
+#: * `feat.f2321` -> `f2319b` -- *"when you use <name>"*. `when you use`
+#:   carries a ref 169 times, so the position is as strong as `_GRANTS`; it
+#:   has no trailing noun, which is the only reason it is not built yet.
+#: * `feat.f3180` -> `p11778` -- *"allies affected by your <name>"*.
+#: * `feat.f2269` -> `x8_323` -- *"the <name> within you awakens"*. The
+#:   weakest of the seven: flavour prose rather than a citing construction,
+#:   and the only position is the bare `the`.
+#: * `item_block.i2693x1` -> `b:c128-3` -- *"you can use your <build>
+#:   <feature> feature"*. Names a **build and a class feature** in one
+#:   clause, and the second is unresolved too, so also a floor.
+#: * `terrain.x2_55` -> `x2_56` -- *"the <name> (see below)"*. A phrase
+#:   before a parenthesised *see* is a cross-reference by construction, and
+#:   this looks like the most generally useful of the seven to build.
+#: * `terrain.x2_120` -> `x2_72` -- *"within 5 squares of a <name>"*.
+#:
+#: Shrinks, never grows, and unlike the waivers above **every entry here is
+#: work**. #340 holds the list and the reasoning.
+POSITION_OWED: frozenset[tuple[str, str, str]] = frozenset({
+    ("feat", "f1591", "p8097"),
+    ("feat", "f2269", "x8_323"),
+    ("feat", "f2321", "f2319b"),
+    ("feat", "f3180", "p11778"),
+    ("item_block", "i2693x1", "b:c128-3"),
+    ("terrain", "x2_55", "x2_56"),
+    ("terrain", "x2_120", "x2_72"),
+})
+
+
+def _resolved_positions(index: dict[str, list[str]]) -> int:
+    """A spec printing a name where the scrub usually writes a ref.
+
+    The **fourth** position where `identifies` must not be consulted, after
+    `--cited`, `--categories` and `_unswapped_names`, and the one that
+    finally reaches the two-word class those three leave alone. See
+    `POSITION_BASELINE` for why position is the only discriminator that
+    works here and why vocabulary is not.
+
+    Two passes over the specs. The first counts, for every three-word
+    lead-in, how often a **ref** follows it -- that is the compendium's own
+    habit, measured rather than declared. The second asks where a uniquely
+    resolving two-word name sits in one of those positions instead.
+
+    Not a count: a `(table, ref, owner)` baseline, so one entry healing
+    while another breaks cannot cancel out. The same shape as
+    `UNSWAPPED_BASELINE` and `keywords.json`, and for the reason given
+    there.
+    """
+    db = game()
+    unique = {
+        phrase: refs[0] for phrase, refs in index.items()
+        if len(refs) == 1 and len(phrase.split()) == 2
+    }
+    rows: list[tuple[str, str, str]] = []
+    for table in _SPEC_TABLES:
+        try:
+            rows += [
+                (table, ref, spec) for ref, spec in db.execute(
+                    f"SELECT ref, spec FROM {table} WHERE spec IS NOT NULL"
+                ).fetchall()
+            ]
+        except sqlite3.OperationalError:
+            continue
+
+    from collections import Counter
+
+    resolved: Counter[str] = Counter()
+    named: dict[str, list[tuple[str, str, str]]] = {}
+    for table, ref, spec in rows:
+        low = (spec or "").lower()
+        words = re.findall(r"[a-z0-9:'_-]+", low)
+        for i, word in enumerate(words):
+            lead = " ".join(words[max(0, i - _LEAD):i])
+            if not lead:
+                continue
+            if _LOOKS_REF.match(word):
+                resolved[lead] += 1
+                continue
+            owner = unique.get(" ".join(words[i:i + 2]))
+            if owner is None:
+                continue
+            # Its own name is its own business, and a spec that cites the ref
+            # has been swapped and is merely repeating itself -- both
+            # exactly as `_unswapped_names` has it.
+            if owner.startswith(ref) or ref.startswith(owner):
+                continue
+            if owner in (spec or ""):
+                continue
+            named.setdefault(lead, []).append((table, ref, owner))
+
+    found = {
+        key
+        for lead, hits in named.items()
+        if resolved.get(lead, 0) >= _RESOLVED_ENOUGH
+        and len(hits) <= resolved[lead] * _NAME_SHARE
+        for key in hits
+    }
+    known = POSITION_BASELINE | POSITION_OWED
+    fresh = sorted(found - known)
+    healed = sorted(known - found)
+
+    for table, ref, owner in fresh[:40]:
+        print(f"{table}.{ref}: prints {owner}'s name where the scrub writes"
+              f" a ref")
+    if fresh:
+        extra = " (showing 40)" if len(fresh) > 40 else ""
+        print()
+        print(f"\n{len(fresh)} spec(s) print a name in a position the scrub"
+              f" resolves elsewhere{extra}.")
+        print("Every one is shown to an author verbatim. Read the sentence "
+              "before swapping it -- a name in a citing position can still "
+              "mean a creature the row summons, which is how one of "
+              "POSITION_BASELINE's entries got there. Fix the extraction in "
+              "`_cross_reference`, or name the coincidence in "
+              "`POSITION_BASELINE` with the reason.")
+        return 1
+    if healed:
+        where = {
+            True: "POSITION_OWED -- it is resolved, so take it out",
+            False: "POSITION_BASELINE -- take it out",
+        }
+        print(f"{len(healed)} known entr"
+              f"{'y' if len(healed) == 1 else 'ies'} no longer hit:")
+        for key in healed[:20]:
+            print(f"  {key[0]}.{key[1]} no longer prints {key[2]}'s name"
+                  f" -- {where[key in POSITION_OWED]}")
+        return 1
+    # **The owed ones are named on every run, not just counted**, because
+    # they are the only half of this report that is work. A number alone
+    # would read the same as the waivers beside it.
+    print(f"no NEW spec prints a two-word name where the scrub resolves a "
+          f"ref ({len(POSITION_BASELINE)} coincidences read and waived, see "
+          f"POSITION_BASELINE)")
+    print(f"  {len(POSITION_OWED)} real miss(es) still owed, each wanting a "
+          f"position nothing reads yet -- see POSITION_OWED, #340:")
+    for table, ref, owner in sorted(POSITION_OWED):
+        print(f"    {table}.{ref} prints {owner}'s name")
     return 0
 
 

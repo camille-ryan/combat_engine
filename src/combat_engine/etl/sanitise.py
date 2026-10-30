@@ -1284,7 +1284,9 @@ def identifies(
     )
 
 
-def cited(name: str, rules: set[str] | frozenset[str]) -> bool:
+def cited(
+    name: str, rules: set[str] | frozenset[str], *, whole_name: bool = False
+) -> bool:
     """Can this phrase be a power's name where the position already says
     one is?
 
@@ -1312,7 +1314,29 @@ def cited(name: str, rules: set[str] | frozenset[str]) -> bool:
     """
     if name in rules or _stem(name) in rules:
         return False
-    return len([w for w in name.split() if w not in STOPWORDS]) >= 2
+    words = name.split()
+    if whole_name:
+        # **The docstring above is right and the count below was not.** It
+        # says "a phrase of nothing but function words is a coincidence,
+        # which is what the stop list is for" -- and then required *two*
+        # content words, which refuses a printed name whose first word is
+        # the definite article. `the traveler` has one.
+        #
+        # That is not a hypothetical. Six deities are named exactly that
+        # way, and `build._WORSHIPS` -- the position whose entire purpose is
+        # *"you must worship X"* -- could not resolve a single one of them.
+        # `i738` reads "worship <the first> or x1_10": the pass split the
+        # conjunction, resolved the second deity, and refused the first, in
+        # the same sentence. 15 compendium pages are in this state.
+        #
+        # Only offered where the caller has matched the phrase **whole**
+        # against an index of printed names, so uniqueness and ownership
+        # are already settled and this test is left doing only the job the
+        # docstring describes. Relaxing it for every caller would admit 117
+        # row names of the "no opening" / "trip up" shape, where the
+        # two-content-word clause is load-bearing. #340.
+        return len(words) >= 2 and any(w not in STOPWORDS for w in words)
+    return len([w for w in words if w not in STOPWORDS]) >= 2
 
 
 def _stem(word: str) -> str:

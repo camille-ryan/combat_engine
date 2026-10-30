@@ -4275,6 +4275,13 @@ def _cross_reference_rest(
             # what `identifies` waives. The rows this serves are the ones it
             # was skipping. #340.
             fixed = _elsewhere(fixed, by_other, rules)
+            # **Outside the `others` guard too, and for the fifth time the
+            # same reason**: that guard skips a row whose spec names nothing
+            # `identifies` believes, and a granted power's name is very
+            # often two ordinary words. `cf:warlock-binder-f22s2` is the
+            # whole of its spec -- "You gain the <name> power." -- so the
+            # guard was skipping the only sentence it has. #340.
+            fixed = _granted(fixed, by_name, by_other, ref, rules)
             if others:
                 fixed = scrub(fixed, others)
                 fixed = _named_powers(fixed, by_name, ref, by_feature, rules, cls)
@@ -4509,6 +4516,94 @@ _MARK_OF = re.compile(
     r"\bmark of\s+(.{0,46}?)(?=\s+(?:until|while|and|or|that|for)\b|[.,;]|$)",
     re.I | re.S,
 )
+
+#: **"You gain the *<name>* power."** The strongest citation position in the
+#: whole corpus, and until #340 nothing read it: `you gain the` is followed
+#: by a **ref** 207 times, so a name sitting there is a swap that did not
+#: happen rather than a coincidence. The trailing noun is what makes it
+#: safe -- the compendium names the kind of thing it just granted -- and the
+#: phrase must still *be* an indexed printed name and satisfy
+#: `sanitise.cited`, exactly as the five positions above do.
+#:
+#: `animal companion` is in the alternation because the druid builds print
+#: it where every other grant prints "power", and the same sentence shape
+#: carries it.
+_GRANTS = re.compile(
+    r"\byou gain (?:the|a|an)\s+(.{0,70}?)"
+    r"(?=\s+(?:powers?|animal companion)\b)",
+    re.I | re.S,
+)
+
+#: A monster's ability -- `m5441a5`, `m965a3` -- as against a monster itself
+#: (`m2927`). `_granted` refuses one; see the note at its call site.
+_MONSTER_ABILITY = re.compile(r"^m\d+[a-z]?\d*a\d")
+
+
+def _granted(
+    spec: str,
+    by_name: dict[str, str],
+    by_other: dict[str, str],
+    own: str,
+    rules: set[str],
+) -> str:
+    """Swap the name of a power a row says it grants you for its ref.
+
+    **The one position in this corpus strong enough to need no argument.**
+    A row saying *"you gain the X power"* is citing X, and the compendium
+    writes the sentence that way everywhere -- `_GRANTS`'s note has the
+    207-to-4 measurement. What made it invisible is the same thing that hid
+    the five positions in `_elsewhere`: the names are two ordinary words, so
+    `identifies` waives them and `leaks.py`'s tree-wide walk reports clean.
+
+    **Both indexes, unlike `_elsewhere`, and that difference is the point.**
+    `_elsewhere` resolves against printed *pages* only, and its docstring
+    says why -- a ritual sharing a name with a power would point an author
+    at the power. Here the sentence has *said* the thing is a power, so a
+    row is the right answer and is tried first; a page is the fallback, for
+    a pact boon or an animal companion that is a compendium page with no
+    row of its own.
+
+    Conjunctions split before matching, like `_elsewhere.swap`: one row
+    grants two powers in a single clause and resolving from either end of a
+    five-word run cannot reach both.
+    """
+    def one(run: str) -> str:
+        words = run.split()
+        for size in range(len(words), 0, -1):
+            name = _low(" ".join(words[-size:]))
+            ref = by_name.get(name) or by_other.get(name)
+            # Its own name is its own business, and `cited` still has to
+            # agree the phrase is not a rules term or nothing but function
+            # words. `whole_name=` for the reason its note gives: the match
+            # above was against an index of printed names, whole.
+            if not ref or ref == own:
+                continue
+            # **Never a monster's ability**, and this was a real bug in the
+            # first draft of this pass. A feat or class feature saying "you
+            # gain the X power" is granting it to a *player*, so a monster
+            # ability that happens to share the printed name is the wrong
+            # row -- the `x_p4494` shape, arriving by a route the position
+            # test cannot see. Three rows swapped that way and **two of
+            # them were in no finding list**, so they would have shipped a
+            # wrong ref silently. The position was right and the target was
+            # not, which is why reading the sentence is not enough on its
+            # own and this guard is in the resolver.
+            if _MONSTER_ABILITY.match(ref):
+                continue
+            if not sanitise.cited(name, rules, whole_name=True):
+                continue
+            head = " ".join(words[:-size])
+            return " ".join(w for w in (head, ref) if w)
+        return run
+
+    def swap(m: re.Match) -> str:
+        run = m.group(1)
+        parts = re.split(r"(\s*,\s*|\s+and\s+|\s+or\s+)", run)
+        done = "".join(p if i % 2 else one(p) for i, p in enumerate(parts))
+        return m.group(0).replace(run, done, 1)
+
+    return _GRANTS.sub(swap, spec)
+
 
 #: The same name on the other side of the noun: "you gain the barbarian
 #: **class feature** *<name>*". Rare -- one row in the corpus asks for it
@@ -5061,7 +5156,14 @@ def _elsewhere(spec: str, by_other: dict[str, str], rules: set[str]) -> str:
         for size in range(len(words), 0, -1):
             name = _low(" ".join(words[-size:]))
             ref = by_other.get(name)
-            if not ref or not sanitise.cited(name, rules):
+            # `whole_name=` because the line above has already matched this
+            # phrase **whole** against the 3,003 printed page names, so
+            # ownership is settled and `cited` is left asking only whether
+            # the phrase is a rules term or nothing but function words. See
+            # its own note: without this, every deity printed with a
+            # leading article was refused in the position built to name
+            # one. #340.
+            if not ref or not sanitise.cited(name, rules, whole_name=True):
                 continue
             head = " ".join(words[:-size])
             return " ".join(w for w in (head, ref) if w)
