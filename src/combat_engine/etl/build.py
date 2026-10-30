@@ -2204,7 +2204,24 @@ def _card_row(
     )
     names[ref] = {"name": name, "description": sanitise.description(fragment),
                   "rules_text": sanitise.power_rules(fragment)}
-    return 1
+    written = 1
+    # **A card may print its own family of options**, and until #897 nothing
+    # read them: `cf:warlock-f1c12` lists two pact boons as labelled lines
+    # inside this card, so they are not caps headings and `_sub_marks` never
+    # sees them. `item.shared_tail_options` recognises the family by its
+    # labels repeating a phrase -- see its note for why both of
+    # `sub_option_lines`' gates fail here, one of them inverted.
+    #
+    # Each becomes a row and a name, which is what lets `_swap_sub_options`
+    # take the printed label back out of this spec: two vestige names were
+    # reaching authors verbatim in `class_feature.spec` precisely because
+    # they had no refs, so the scrub had nothing to swap and `leaks.py` had
+    # nothing to compare them against.
+    for label, sub, benefit in item.shared_tail_options(spec, ref):
+        written += _feature_row(
+            out, names, sub, cls, ord_, build, benefit, label
+        )
+    return written
 
 
 #: `spec` -> `power.ref`, built once. Rebuilt per connection, because the
@@ -3872,7 +3889,12 @@ def _other_names(
 #: gain its benefit:" followed by **five printed names**, with the five refs that
 #: are the answer appearing nowhere. 50 specs across 6 tables were in that state.
 #: #439.
-_SUB_OPTION = re.compile(r"rt:r\d+-s\d+|cf:[a-z0-9-]+-f\d+s\d+")
+#: **And a sub-option may hang off a card**, not only off a feature.
+#: `cf:warlock-f1c12` prints its two pact boons inside the card, so
+#: their refs carry the card ordinal -- `...-f1c12s0` -- and the old
+#: pattern needed `s<N>` straight after `f<N>`, so it matched neither
+#: and `_swap_sub_options` left both printed names in the spec. #897.
+_SUB_OPTION = re.compile(r"rt:r\d+-s\d+|cf:[a-z0-9-]+-f\d+(?:c\d+)?s\d+")
 
 
 def _swap_sub_options(

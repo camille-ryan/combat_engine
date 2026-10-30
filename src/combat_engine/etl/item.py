@@ -106,6 +106,78 @@ def sub_option_lines(spec: str, ref: str) -> list[tuple[str, str, str]]:
     return out
 
 
+def shared_tail_options(spec: str, ref: str) -> list[tuple[str, str, str]]:
+    """A family of options recognised by its labels repeating a phrase.
+
+    **The second shape of the same thing, and the reason it needs its own
+    test is that both of `sub_option_lines`' gates fail on it -- one of them
+    inverted.** `cf:warlock-f1c12` prints four labelled lines: the action
+    line, a preamble, and the two options. Measured:
+
+        `choose one` in the spec                 no -- it reads
+                                                 "the pact boons associated
+                                                 with the primary vestiges
+                                                 are given below"
+        the benefit names a card                 the **preamble** does, and
+                                                 neither option does
+
+    So the structural test that works for a race -- "each offers particular
+    benefits and provides an associated encounter power", which that family
+    *is* -- keeps the one line that is prose about the others and drops both
+    real options. Pointing the existing extractor at class features would
+    therefore have minted one sub-option for the preamble and none for the
+    boons, which is worse than nothing because it would look extracted.
+
+    **The signal here is the labels agreeing with each other.** Two or more
+    labelled lines whose labels end in the same multi-word phrase are a
+    printed family: the shared tail is what kind of thing they are and the
+    differing head is the name. A preamble and an action line do not share
+    it, so they fall out **structurally** rather than by being listed --
+    which is what `sub_option_lines`' own note requires, since "a deny-list
+    of heading names would be the leak it is here to close".
+
+    Measured over every spec table before this was written, families of two
+    or more sharing a tail of two to four words:
+
+        class_feature     1 row   -- `cf:warlock-f1c12`, 2 options
+        race, racial_trait, build_option   0
+        feat, power       6 rows  -- all mechanical phrases, `saving throw`,
+                                    `failed saving throw`, `the cf`,
+                                    `personal requirement`
+
+    Which is why the caller applies it to class features only: in that table
+    it finds exactly the one card this is about and nothing else, and the
+    false positives all live in tables that have no sub-options.
+
+    **Honest about its own footing**: this is a structural test with one
+    example behind it. It is not tuned to a printed word -- it spells no
+    label and would find the next card of this shape -- but one example is
+    one example, and a second would be worth measuring against before
+    trusting the generalisation.
+    """
+    labels = [(m.group(1).strip(), m.group(2)) for m in _LABELLED.finditer(spec)]
+    tails: dict[str, list[tuple[str, str]]] = {}
+    for label, benefit in labels:
+        words = label.split()
+        # Two to four words of tail, and the label must have something
+        # before it: a label that *is* the shared phrase is the family's
+        # own heading rather than a member of it.
+        for size in range(2, 5):
+            if len(words) > size:
+                tails.setdefault(
+                    " ".join(words[-size:]).lower(), []
+                ).append((label, benefit))
+    family = max(
+        (group for group in tails.values() if len(group) >= 2),
+        key=len,
+        default=[],
+    )
+    return [
+        (label, f"{ref}s{n}", benefit)
+        for n, (label, benefit) in enumerate(family)
+    ]
+
+
 #: Labels on a race page that are **chassis, not traits**. Every one is already
 #: a column or is read into one, and all of them are printed with the same
 #: `Label :` shape as a real trait -- which is why the raw count of labelled
