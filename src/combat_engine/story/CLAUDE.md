@@ -1574,11 +1574,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
-    graph_edges
+    graph_edges challenge_says
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 41 drivers and prints 442 assertions**, and **each was
+**The command above is 42 drivers and prints 459 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -1858,3 +1858,65 @@ worth keeping:
 * **a fact usually does not repeat its own entity's name** — *"He has never
   been to Fenn"* is filed under the person — so requiring both names in the
   span drops exactly the facts most worth having. The owner counts as named.
+
+## A challenge says what each check meant (#932, step 1 of two)
+
+A converted challenge emitted five mechanical lines and a tally:
+
+```
+- fighter   athletics     moderate d20=8  total=11  vs 12
++ cleric    athletics     moderate d20=13 total=14  vs 12
+2/4 successes, 3/3 failures
+```
+
+The fires were never described going out or spreading, the sigils never did
+anything, nobody said a word. Camille: *"I don't know that the result was
+incorrect. But skill challenges should be an opportunity for narration."*
+
+**The order here is the whole point, and it is #932's own.** An `Affordance`
+carries `win`/`lose` — *facts*, what is now true because the roll went that
+way — and `Director.react` is handed them and told to deliver them. That is
+what keeps the DM narrating the adventure instead of inventing it. A
+challenge's skills were **bare strings with no such text**, so wiring the beat
+loop in first would have handed the DM a roll to narrate and nothing to
+narrate from, and invented prose about the adventure's own set piece is the
+one thing the affordance design exists to prevent.
+
+So: `Try(skill, win, lose)` and `Scene.tries`, the text reaching the player,
+and **the beat loop still to do**.
+
+`primary` and `secondary` stay tuples of names, so every reader of them —
+`band_of`, `attempt`, the validator — is untouched. A skill may be written
+bare or as an object, **mixed in one list**, so a module adding prose to the
+two skills the page describes need not rewrite the other four. Every converted
+challenge is unchanged and prints exactly what it printed before.
+
+Four refusals: an entry with prose and no skill; a skill listed as both
+primary and secondary (`band_of` answers with the primary, so the secondary
+entry and its prose were silently dead); a non-challenge scene stating what a
+check means; and the skill name still checked in the new form, because a
+second code path is exactly where that stops happening.
+
+**Each sentence is said once.** The text is a fact, and a fact does not become
+true again on the second success with the same skill — the first probe printed
+one brazier toppling into the sand three times, which reads as three braziers.
+
+### The guard that was nearly dead, and the seed that made it posable
+
+`if made.rolled` withholds the text from a refused attempt, because a refused
+attempt never happened. A plant removing it **stayed green**, and the reason
+is worth keeping: for an *unlisted* skill `means()` answers with nothing
+anyway, so on that path the guard carries no weight at all. The case that
+needs it is a refused attempt whose skill **does** carry text — a secondary
+spent twice.
+
+Posing that took two corrections:
+
+* the default chooser never refuses. Eight seeds of `taking_turns` produced
+  **0** refused attempts, so counting refusals in a normal run asserts
+  nothing. `run.step(choose=)` names the skill instead.
+* at the first seed tried, arcana's first counted attempt *fails*, so its lose
+  text is said once legitimately — and then the dedupe hides every later
+  refusal, which makes the assertion unable to fail. **Seed 1** has the first
+  use succeed, so the lose text is never true and a refusal printing it is
+  visible. 39 refusals there; the plant now reddens.

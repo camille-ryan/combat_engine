@@ -366,6 +366,20 @@ MAX_BEATS = 6
 
 
 @dataclass(frozen=True)
+class Try:
+    """One of a challenge's skills, and what either result means.
+
+    The challenge-side twin of an `Affordance`'s `win`/`lose`. Both are
+    **facts** -- what is true because the roll went that way -- not
+    narration: the DM is handed them to deliver, and may not state more.
+    """
+
+    skill: str
+    win: str = ""
+    lose: str = ""
+
+
+@dataclass(frozen=True)
 class Affordance:
     """Something a character can try in this scene, and what it costs.
 
@@ -698,6 +712,17 @@ class Scene:
 
     # -- skill challenge ----------------------------------------------------
     complexity: int = 0
+    #: Per-skill prose: what is now true because a check went that way.
+    #: **The gap that blocked the beat loop on a challenge** (#932): an
+    #: `Affordance` carries `win`/`lose` and `Director.react` is handed
+    #: them and told to deliver them, which is what keeps the DM narrating
+    #: the adventure rather than inventing it. A challenge's skills were
+    #: bare strings with no text at all, so wiring the loop in would have
+    #: given the DM a roll to narrate and nothing to narrate from.
+    #:
+    #: `primary` and `secondary` stay tuples of names, so every reader of
+    #: them is unchanged; this sits alongside and is looked up by skill.
+    tries: tuple[Try, ...] = ()
     #: The level the DCs are read at. Defaults to the party's when 0.
     level: int = 0
     primary: tuple[str, ...] = ()
@@ -730,6 +755,18 @@ class Scene:
     def share(self) -> float:
         """What fraction of a standard encounter's budget this fight is worth."""
         return DIFFICULTY.get(self.difficulty, 1.0)
+
+    def means(self, skill: str, *, won: bool) -> str:
+        """What a check with this skill turning out that way means.
+
+        Empty when the module said nothing, which is every challenge
+        converted so far -- so a caller prints the roll and no more, which
+        is exactly what it did before. #932.
+        """
+        for said in self.tries:
+            if said.skill == skill.lower():
+                return said.win if won else said.lose
+        return ""
 
     def counts_toward(self, party_level: int) -> int:
         """How many encounters this scene is worth toward a milestone.
@@ -1244,15 +1281,48 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         )
         difficulty = "standard"
 
-    primary = tuple(str(s).strip().lower() for s in raw.get("primary", ()) if str(s).strip())
-    secondary = tuple(
-        str(s).strip().lower() for s in raw.get("secondary", ()) if str(s).strip()
-    )
+    # **Both forms accepted**: a bare skill name, which is what every
+    # converted scene holds, or an object carrying what either result
+    # means. Mixing them in one list is fine -- a module adding prose to
+    # the two skills the page describes should not have to rewrite the
+    # other four.
+    def _skills(key: str) -> tuple[tuple[str, ...], list[Try]]:
+        names: list[str] = []
+        said: list[Try] = []
+        for item in raw.get(key, ()):
+            if isinstance(item, dict):
+                skill = str(item.get("skill", "")).strip().lower()
+                if not skill:
+                    problems.append(
+                        f"{where}: a {key} entry has no skill: {item!r}")
+                    continue
+                names.append(skill)
+                said.append(Try(
+                    skill=skill,
+                    win=str(item.get("win", "")).strip(),
+                    lose=str(item.get("lose", "")).strip()))
+                continue
+            if str(item).strip():
+                names.append(str(item).strip().lower())
+        return tuple(names), said
+
+    primary, primary_says = _skills("primary")
+    secondary, secondary_says = _skills("secondary")
+    tries = tuple(primary_says + secondary_says)
     for skill in (*primary, *secondary):
         if skill not in SKILLS:
             problems.append(
                 f"{where}: {skill!r} is not a skill. Known: {', '.join(sorted(SKILLS))}"
             )
+    seen_twice = {s for s in (*primary, *secondary)
+                  if (primary + secondary).count(s) > 1}
+    if seen_twice:
+        # A skill listed twice is two different DCs for one skill, and
+        # `band_of` answers with the primary -- so the secondary entry is
+        # silently dead, along with any prose on it.
+        problems.append(
+            f"{where}: {', '.join(sorted(seen_twice))} listed more than "
+            "once across primary and secondary")
 
     complexity = raw.get("complexity", 0)
     if not isinstance(complexity, int) or complexity < 0:
@@ -1265,6 +1335,10 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         )
     if kind == "skill_challenge" and not primary:
         problems.append(f"{where}: a skill challenge needs at least one primary skill")
+    if tries and kind != "skill_challenge":
+        problems.append(
+            f"{where}: a {kind} scene states what a skill check means, but "
+            "only a skill_challenge rolls them")
 
     grants = str(raw.get("secondary_grants", "bonus")).strip().lower()
     if grants not in SECONDARY_GRANTS:
@@ -1421,6 +1495,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         level=int(raw.get("level", 0) or 0),
         primary=primary,
         secondary=secondary,
+        tries=tries,
         secondary_grants=grants,
         on_success=str(raw.get("on_success", "")).strip(),
         on_failure=str(raw.get("on_failure", "")).strip(),

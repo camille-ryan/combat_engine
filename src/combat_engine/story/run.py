@@ -925,8 +925,26 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
     table.strike()
     if tension.footing(campaign.record):
         step.say(tension.says(campaign.record), "note")
+    meant_already: set[str] = set()
     for made in run.attempts:
         step.say(f"  {made}", "roll")
+        # **What the roll meant, when the module said.** The challenge
+        # printed five mechanical lines and a tally and nothing else: the
+        # fires were never described going out or spreading. #932.
+        #
+        # Only for a roll that counted -- a refused skill did not happen,
+        # so neither its success nor its failure text is true.
+        #
+        # **And each sentence once.** The text is a *fact* -- what is now
+        # true because the roll went that way -- and a fact does not
+        # become true again on the second success with the same skill. The
+        # probe printed one brazier toppling into the sand three times,
+        # which reads as three braziers.
+        if made.rolled:
+            meant = scene.means(made.skill, won=made.success)
+            if meant and meant not in meant_already:
+                meant_already.add(meant)
+                step.say(f"    {meant}", "scene")
     step.say(run.tally, "note")
     step.outcome = "won" if run.won else "lost"
 

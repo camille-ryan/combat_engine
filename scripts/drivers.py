@@ -42106,6 +42106,268 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_challenge_says_what_each_check_meant(out: Result) -> None:
+    """A challenge emitted five mechanical lines and nothing else. #932.
+
+    The whole of a converted challenge, from a finished playthrough:
+
+        - fighter   athletics     moderate d20=8  total=11  vs 12
+        + cleric    athletics     moderate d20=13 total=14  vs 12
+        + rogue     thievery      moderate d20=16 total=25  vs 12
+        - wizard    arcana        moderate d20=3  total=11  vs 12
+        - ranger    athletics     moderate d20=4  total=8   vs 12
+        2/4 successes, 3/3 failures
+
+    Camille: *"I don't know that the result was incorrect. But skill
+    challenges should be an opportunity for narration."*
+
+    **This is step 1 of the two #932 names, and the order matters.** An
+    `Affordance` carries `win`/`lose` -- *facts*, what is now true because
+    the roll went that way -- and `Director.react` is handed them and told
+    to deliver them, which is what keeps the DM narrating the adventure
+    instead of inventing it. A challenge's skills were **bare strings**
+    with no such text, so wiring the beat loop in first would have handed
+    the DM a roll to narrate and nothing to narrate from, and invented
+    prose about the adventure's own set piece is the one thing the
+    affordance design exists to prevent.
+
+    So: the schema, the text reaching the player, and the beat loop left
+    for step 2.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    WIN = "The brazier topples into the sand."
+    LOSE = "The flames jump to the next hanging."
+    SIGIL = "The sigil's rhythm is legible now."
+
+    def scene_of(primary: list, secondary: list | None = None,
+                 kind: str = "skill_challenge") -> dict:
+        return {"id": "chal", "kind": kind, "name": "C", "exits": [],
+                "complexity": 2, "primary": primary,
+                "secondary": secondary or []}
+
+    def parsed(scene: dict) -> mod.Scene:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "chal", "scenes": [scene]}, Path("<driver>"))
+        return built.scene("chal")
+
+    def refused(scene: dict) -> str:
+        try:
+            mod.parse({"id": "probe", "party_level": 2, "party_size": 4,
+                       "start": "chal", "scenes": [scene]},
+                      Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the control: bare strings still parse, and say nothing -----------
+    bare = parsed(scene_of(["athletics", "endurance"]))
+    out.that(
+        bare.primary == ("athletics", "endurance") and bare.tries == ()
+        and bare.means("athletics", won=True) == "",
+        "a challenge written as bare skill names parses exactly as it did "
+        "and says nothing -- which is every challenge converted so far, so "
+        "this is not a migration",
+        f"primary={bare.primary}, tries={bare.tries}",
+    )
+
+    # -- both forms, mixed in one list -------------------------------------
+    mixed = parsed(scene_of(
+        [{"skill": "athletics", "win": WIN, "lose": LOSE}, "endurance"],
+        [{"skill": "arcana", "win": SIGIL, "lose": "It scrambles."}]))
+    out.that(
+        mixed.primary == ("athletics", "endurance")
+        and mixed.secondary == ("arcana",),
+        "a skill written as an object and one written bare sit in the same "
+        "list, so a module adding prose to the two skills the page "
+        "describes need not rewrite the other four",
+        f"primary={mixed.primary}, secondary={mixed.secondary}",
+    )
+    out.that(
+        mixed.means("athletics", won=True) == WIN
+        and mixed.means("athletics", won=False) == LOSE
+        and mixed.means("arcana", won=True) == SIGIL,
+        "and each skill's two results are looked up by skill, on a "
+        "secondary as well as a primary",
+        f"{mixed.means('athletics', won=True)!r}",
+    )
+    out.that(
+        mixed.means("endurance", won=True) == ""
+        and mixed.means("thievery", won=True) == "",
+        "a skill with no text, and a skill the challenge does not list, "
+        "both answer with nothing rather than raising -- the caller prints "
+        "the roll and no more",
+        f"{mixed.means('endurance', won=True)!r}",
+    )
+
+    # -- the refusals ------------------------------------------------------
+    out.that(
+        "has no skill" in refused(scene_of([{"win": WIN}])),
+        "an entry with prose and no skill is refused, because there is "
+        "nothing to attach it to",
+        refused(scene_of([{"win": WIN}]))[:80] or "accepted",
+    )
+    twice = refused(scene_of(
+        [{"skill": "athletics", "win": WIN}],
+        [{"skill": "athletics", "win": SIGIL}]))
+    out.that(
+        "listed more than once" in twice,
+        "a skill listed as both primary and secondary is refused -- "
+        "`band_of` answers with the primary, so the secondary entry and "
+        "any prose on it were silently dead",
+        twice[:90] or "accepted",
+    )
+    wrong_kind = refused(scene_of(
+        [{"skill": "athletics", "win": WIN}], kind="roleplay"))
+    out.that(
+        "only a skill_challenge rolls them" in wrong_kind,
+        "and a scene that is not a challenge stating what a check means is "
+        "refused, rather than carrying text nothing will ever print",
+        wrong_kind[:90] or "accepted",
+    )
+    out.that(
+        "is not a skill" in refused(scene_of([{"skill": "haggling"}])),
+        "the skill name is still checked when it arrives in the new form, "
+        "which a second code path is exactly where that stops happening",
+        refused(scene_of([{"skill": "haggling"}]))[:70] or "accepted",
+    )
+
+    # -- and now through a played challenge -------------------------------
+    def play(scene: dict, seed: int = 6) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "chal", "scenes": [scene]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        made = run_mod.step(campaign, built, record=False)
+        rolls = [str(x) for x in made.lines
+                 if getattr(x, "kind", "") == "roll"]
+        said = [str(x).strip() for x in made.lines
+                if getattr(x, "kind", "") == "scene"]
+        return made, rolls, said
+
+    told = scene_of(
+        [{"skill": "athletics", "win": WIN, "lose": LOSE}, "endurance"],
+        [{"skill": "arcana", "win": SIGIL, "lose": "It scrambles."}])
+    made, rolls, said = play(told)
+    out.that(
+        rolls and WIN in said and LOSE in said,
+        "a played challenge says what its successes and its failures "
+        "meant, where before it printed the rolls and a tally and the "
+        "fires were never described going out or spreading",
+        f"{len(rolls)} rolls, {len(said)} said: {said}",
+    )
+    out.that(
+        said.count(WIN) == 1 and said.count(LOSE) == 1,
+        "and each sentence once: the text is a fact, and a fact does not "
+        "become true again on the second success with the same skill -- "
+        "the probe printed one brazier toppling three times, which reads "
+        "as three braziers",
+        f"{[(s[:20], said.count(s)) for s in set(said)]}",
+    )
+    out.that(
+        len(set(said)) > 1,
+        "while two different sentences both still print, which is the half "
+        "a dedupe can break",
+        f"{sorted(set(said))}",
+    )
+
+    # -- a roll that did not count says nothing ---------------------------
+    # **Posed with a chooser, because the default one never refuses.**
+    # Eight seeds of `taking_turns` produced 0 refused attempts, so an
+    # assertion counting refusals in a normal run passes without testing
+    # anything -- which is what the first draft of this did.
+    def picks(skill: str):  # noqa: ANN202
+        def chooser(run, table) -> tuple[int, str]:  # noqa: ANN001
+            return 0, skill
+        return chooser
+
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4,
+         "start": "chal", "scenes": [told]}, Path("<driver>"))
+    campaign = run_mod.begin(built, seed=6)
+    turned = run_mod.step(campaign, built, record=False,
+                          choose=picks("thievery"))
+    lines = [str(x) for x in turned.lines
+             if getattr(x, "kind", "") in ("roll", "scene")]
+    out.that(
+        any("not a listed skill" in x for x in lines)
+        and not any(x.strip() in (WIN, LOSE, SIGIL) for x in lines),
+        "a check that could not count contributes no sentence -- a refused "
+        "attempt never happened, so neither its success nor its failure is "
+        "true",
+        f"{len(lines)} lines, refusals "
+        f"{sum('not a listed skill' in x for x in lines)}",
+    )
+
+    # **The refusal that the guard is actually for.** A plant removing
+    # `if made.rolled` stayed green against the assertion above, because
+    # an *unlisted* skill has no text either way -- so `means` answers
+    # with nothing and the guard is never load-bearing on that path. The
+    # case that needs it is a refused attempt whose skill **does** carry
+    # text: a secondary spent twice. Its second attempt is refused with
+    # "secondary already used", and without the guard its *lose* text
+    # would print as though the sigil had scrambled.
+    # **Seed 1, chosen because arcana's first counted attempt succeeds
+    # there.** At seed 6 it fails first, so its lose text is said once
+    # legitimately -- and then the dedupe hides every later refusal,
+    # which makes the assertion unable to fail. Here the lose text is
+    # never true, so a refusal printing it is visible.
+    campaign = run_mod.begin(built, seed=1)
+    twice_said = run_mod.step(campaign, built, record=False,
+                              choose=picks("arcana"))
+    twice_lines = [str(x).strip() for x in twice_said.lines]
+    out.that(
+        any("secondary already used" in x for x in twice_lines)
+        and "It scrambles." not in twice_lines,
+        "a refused attempt whose skill does carry text still says nothing "
+        "-- a secondary spent twice is refused, and its failure text is "
+        "not true because the attempt never happened",
+        f"refusals {sum('secondary already used' in x for x in twice_lines)}, "
+        f"lose text {'It scrambles.' in twice_lines}",
+    )
+    out.that(
+        any(x == SIGIL for x in twice_lines),
+        "while its first, counted use did say its success text, so the "
+        "assertion above is about the refusal rather than about arcana "
+        "never being reached",
+        f"{[x[:28] for x in twice_lines if x in (SIGIL, 'It scrambles.')]}",
+    )
+
+    # And the same chooser naming a skill that *is* listed does say it,
+    # so the assertion above is about the refusal and not about the
+    # chooser being ignored.
+    campaign = run_mod.begin(built, seed=6)
+    kept = run_mod.step(campaign, built, record=False,
+                        choose=picks("athletics"))
+    out.that(
+        any(str(x).strip() in (WIN, LOSE) for x in kept.lines),
+        "while the same chooser naming a listed skill does, so the "
+        "refusal is what withheld it rather than the chooser being "
+        "ignored",
+        f"{[str(x).strip()[:30] for x in kept.lines if getattr(x, 'kind', '') == 'scene']}",
+    )
+
+    bare_made, bare_rolls, bare_said = play(scene_of(
+        ["athletics", "endurance"]))
+    out.that(
+        bare_rolls and not bare_said,
+        "and a challenge whose module said nothing prints exactly what it "
+        "printed before -- the rolls, and no scene lines at all",
+        f"{len(bare_rolls)} rolls, {len(bare_said)} said",
+    )
+    out.that(
+        bare_made.outcome in ("won", "lost")
+        and made.outcome in ("won", "lost"),
+        "neither form changes the outcome: this is narration, and the "
+        "tally is still the tally",
+        f"bare={bare_made.outcome}, told={made.outcome}",
+    )
+
+
 def the_graph_has_edges_and_can_answer_about_a_pair(out: Result) -> None:
     """`around()` had never returned anything. #934.
 
@@ -45891,6 +46153,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "challenge_says": (
+        a_challenge_says_what_each_check_meant,
+        "a challenge says what each check meant (#932)",
+    ),
     "graph_edges": (
         the_graph_has_edges_and_can_answer_about_a_pair,
         "the graph has edges and can answer about a pair (#934)",
