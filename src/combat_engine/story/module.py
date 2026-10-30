@@ -1044,10 +1044,13 @@ def _as_objective(raw: Any, where: str,
         problems.append(f"{where}: defeat_foe needs at least one ref in foes")
     elif kind != "defeat_foe" and foes:
         problems.append(f"{where}: objective {kind!r} takes no foes")
-    leaks = raw.get("leaks", 0)
-    if not isinstance(leaks, int) or leaks < 0:
+    # **`None` when unstated, so `0` can mean nought.** They were the same
+    # value, and `watcher` tested `not objective.leaks` -- so a module
+    # asking for no leaks at all got the party-size default instead. #1017.
+    leaks = raw.get("leaks")
+    if leaks is not None and (not isinstance(leaks, int) or leaks < 0):
         problems.append(f"{where}: objective leaks must be a whole number")
-        leaks = 0
+        leaks = None
     return Objective(
         kind=kind, foes=foes, share=float(share), rounds=rounds,
         position=position, leaks=leaks, harder=harder, easier=easier,

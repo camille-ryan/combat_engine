@@ -42553,6 +42553,56 @@ def a_combat_scene_is_judged_on_the_objective_its_module_states(
         "hold is met with the line unbroken and missed when it is not",
         f"west {held.outcome} / east {leaked.outcome} -- {said(leaked)}",
     )
+    # **The breach has to be counted when it happens.** This assertion was
+    # red for two days and the cause was the sampling: `reached` was read
+    # only on `RoundEnd`, and on these boards the party usually wins
+    # inside a round or two, so by the first boundary the opposition is
+    # dead and `_standing(ENEMY)` is empty. A `hold` over four different
+    # bands -- including the centre, which the opposition must cross --
+    # reported **0 reached** every time. #1017.
+    out.that(
+        len(leaked.lines) and "2 of an allowed 1" in said(leaked),
+        "and the foes that stood in the area are **counted**, including "
+        "ones that were already standing there when the fight began -- "
+        "the east band is the opposition's own starting band on a 16-wide "
+        "board, so this hold was breached before anybody moved",
+        f"{said(leaked)}",
+    )
+    # **Three sampling points, and no single one of them reddens.** The
+    # breach is read at setup, on `Moved`, and at `RoundEnd`; deleting any
+    # one leaves the other two catching this scenario, so three plants
+    # stayed green. That is redundancy rather than a gap -- each covers a
+    # case the others cannot:
+    #
+    # * **setup** -- a foe that begins inside and never steps out, which
+    #   is this very scenario, since the east band is the opposition's own
+    #   starting band;
+    # * **`Moved`** -- a foe that walks in and dies before the boundary,
+    #   which is what the two-day red was;
+    # * **`RoundEnd`** -- a creature that appears inside the area without
+    #   moving, which is a #962 reinforcement spawning there.
+    #
+    # The third is not posed here: a fight with a wave due in round 2 ends
+    # in round 1 against this party, so the arrival never happens. Said
+    # rather than contrived.
+    none_allowed = play({"kind": "hold", "rounds": 3, "leaks": 0,
+                         "position": "centre"})
+    out.that(
+        "an allowed 0" in said(none_allowed)
+        and none_allowed.outcome == "won",
+        "a module may ask for **no** leaks at all and hold it. `leaks: 0` "
+        "was unexpressible twice over: `watcher` tested `not "
+        "objective.leaks`, so nought became the party-size default of "
+        "four; and the verdict compared `through < allowed`, under which "
+        "nought permitted is unwinnable because `0 < 0` is false",
+        f"{said(none_allowed)}",
+    )
+    out.that(
+        "an allowed 4" in said(held),
+        "while a module that says nothing still gets the party-size "
+        "default, which is what keeps `leaks` optional",
+        f"{said(held)}",
+    )
 
     # The ref has to come off a real draw: the module names a creature by
     # its own word and `cast_list` resolves it, so no ref can be written
