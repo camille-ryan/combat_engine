@@ -42984,6 +42984,17 @@ def one_skill_cannot_carry_a_whole_challenge(out: Result) -> None:
         except mod.ModuleError as exc:
             return str(exc)
 
+    def refused_grant(word: str) -> str:
+        got = dict(scene_of())
+        got["secondary_grants"] = word
+        try:
+            mod.parse(
+                {"id": "probe", "party_level": 2, "party_size": 4,
+                 "start": "c", "scenes": [got]}, Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
     # -- the default is the complexity, when it can be ---------------------
     roomy = parsed()
     out.that(
@@ -43059,6 +43070,76 @@ def one_skill_cannot_carry_a_whole_challenge(out: Result) -> None:
                                             kind="combat"),
         "and a scene that rolls no skills may not cap one",
         refused(caps={"arcana": 1}, kind="combat")[:80] or "accepted",
+    )
+
+    # -- the retired reading, and the bug that hid it ----------------------
+    out.that(
+        mod.SECONDARY_GRANTS == ("bonus",)
+        and "is not one of bonus" in refused_grant("success"),
+        "`success` is gone and a module asking for it is **refused** "
+        "rather than quietly reinterpreted. Camille's call, 2026-10-30, "
+        "asked directly: DMG2 does not list it, the measurement against "
+        "it was already recorded, and nothing used it",
+        f"{mod.SECONDARY_GRANTS}",
+    )
+    out.that(
+        parsed(caps=None).secondary_grants == "bonus",
+        "and the field holds the **word** it claims to. It did not: "
+        "`grants` was assigned twice in one function -- once for this and "
+        "again 110 lines down for the scene's loot grants (#935) -- so "
+        "`Scene.secondary_grants` held a *tuple of items*, and "
+        "`== \"success\"` could never be true. The reading was dead on "
+        "arrival, which is why retiring it cost nothing",
+        f"{parsed(caps=None).secondary_grants!r}",
+    )
+
+    # **What a secondary does instead**, which nothing in the suite
+    # asserted. Two plants proved that: scoring a secondary as a success,
+    # and dropping the banked-bonus gate, both stayed green because the
+    # `assist` payout had never been checked anywhere.
+    assisted = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "c",
+         "scenes": [{"id": "c", "kind": "skill_challenge", "name": "C",
+                     "exits": [], "complexity": 2,
+                     "primary": ["athletics", "endurance"],
+                     "secondary": ["arcana", "diplomacy"]}]},
+        Path("<driver>"))
+    helped = run_mod.step(
+        run_mod.begin(assisted, seed=1), assisted, record=False)
+    lines = [str(x).strip() for x in helped.lines
+             if getattr(x, "kind", "") == "roll"]
+    assists = [i for i, line in enumerate(lines) if line.startswith(">")]
+    out.that(
+        assists and all(
+            not lines[i].startswith("+") and "carried" not in lines[i]
+            for i in assists),
+        "a successful secondary is marked an **assist** and scores no "
+        "success of its own -- it is the `success` reading that would "
+        "have counted it, and that reading is retired",
+        f"{[lines[i] for i in assists]}",
+    )
+    paid = [
+        lines[i + 1] for i in assists
+        if i + 1 < len(lines) and "+2 carried" in lines[i + 1]
+    ]
+    out.that(
+        len(paid) == len(assists),
+        "and every assist is spent on the **next** check as +2, which is "
+        "what `bonus` means and the only thing a secondary now does",
+        f"{len(paid)} of {len(assists)} assists carried: {paid}",
+    )
+    doubled = [
+        i for i in assists
+        if i + 1 < len(lines) and lines[i + 1].startswith(">")
+    ]
+    out.that(
+        not doubled,
+        "and no second secondary is rolled while a +2 is already banked. "
+        "The bonus does not stack, so a chooser taking the easy roll "
+        "whenever it has the best margin burns every secondary for one "
+        "usable +2 -- measured at three assists rolled and two thrown "
+        "away before the gate existed",
+        f"{[lines[i] for i in doubled] or 'none doubled'}",
     )
 
     # -- and it binds on a played challenge --------------------------------

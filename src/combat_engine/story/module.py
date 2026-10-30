@@ -129,7 +129,23 @@ COMPLEXITY = {
 #: As a bonus to the next primary check, a secondary does what the word means:
 #: it helps, from an angle, and the challenge is still decided on the skills it
 #: named first.
-SECONDARY_GRANTS = ("bonus", "success")
+#:
+#: **`success` was the other option and it is gone.** Camille's call,
+#: 2026-10-30, asked directly and answered "yes" to retiring it. Three
+#: things agreed:
+#:
+#: * **DMG2 does not list it.** Its five printed secondary effects are
+#:   cancel a failure, give a bonus, grant a reroll, open another skill,
+#:   and raise a primary's success cap -- and the standing instruction is
+#:   that DMG2 wins where the two books differ. #984.
+#: * **the measurement above**, which was already recorded here;
+#: * **nothing used it.** Measured before cutting: the one converted
+#:   challenge sets `bonus`, and no driver referenced it.
+#:
+#: The field stays, so a module that spells `secondary_grants: "bonus"`
+#: still parses and a module that spells `"success"` is now refused
+#: rather than silently reinterpreted.
+SECONDARY_GRANTS = ("bonus",)
 
 #: What a secondary success adds to the next primary check under `bonus`.
 SECONDARY_BONUS = 2
@@ -806,7 +822,7 @@ class Scene:
     #: A skill not named here takes the default -- see `Scene.cap_for`.
     #: #984.
     caps: tuple[tuple[str, int], ...] = ()
-    #: `"bonus"` or `"success"` -- see `SECONDARY_GRANTS`.
+    #: `"bonus"`, which is the only one left -- see `SECONDARY_GRANTS`.
     secondary_grants: str = "bonus"
     #: Where success and failure lead. Both fall back to `exits` when empty,
     #: so a challenge that only gates flavour needs neither.
@@ -1549,13 +1565,21 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                     f"{where}: the caps allow {most} success(es) and the "
                     f"challenge wants {needs}, so it could never be won")
 
-    grants = str(raw.get("secondary_grants", "bonus")).strip().lower()
-    if grants not in SECONDARY_GRANTS:
+    # **`assists`, not `grants`.** The name `grants` is used again 110
+    # lines down for the scene's *loot* grants (#935), and the second
+    # assignment won: `Scene.secondary_grants` has been receiving a
+    # **tuple of items** since that field was added, so the string it
+    # claims to hold was never there. `secondary_grants == "success"`
+    # could not be true, which is why retiring that reading cost nothing
+    # -- it had never once fired. Found by cutting the option and watching
+    # a probe return `()` where a word was expected. #984.
+    assists = str(raw.get("secondary_grants", "bonus")).strip().lower()
+    if assists not in SECONDARY_GRANTS:
         problems.append(
-            f"{where}: secondary_grants {grants!r} is not one of "
+            f"{where}: secondary_grants {assists!r} is not one of "
             f"{', '.join(SECONDARY_GRANTS)}"
         )
-        grants = "bonus"
+        assists = "bonus"
     overlap = set(primary) & set(secondary)
     if overlap:
         problems.append(
@@ -1720,7 +1744,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         secondary=secondary,
         tries=tries,
         caps=tuple(caps),
-        secondary_grants=grants,
+        secondary_grants=assists,
         on_success=str(raw.get("on_success", "")).strip(),
         on_failure=str(raw.get("on_failure", "")).strip(),
         extended=bool(raw.get("extended", False)),
