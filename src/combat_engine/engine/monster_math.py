@@ -234,3 +234,125 @@ def _retune(expr: str, delta: float) -> str:
     flat = int(m.group(4) or 0) * (-1 if m.group(3) == "-" else 1)
     flat = max(0, round(flat + delta))
     return f"{count}d{faces}" + (f"+{flat}" if flat else "")
+
+
+#: Hit points a monster gains per level, by role. DMG p.184, the
+#: "Monster Statistics by Role" table, read off the page.
+#:
+#: Verified against the printing rather than transcribed from an issue --
+#: the AC and other-defence columns on the same table came out exactly as
+#: the book has them (`level + 14` for a skirmisher, `+ 16` for a soldier,
+#: `+ 12` for the other defences of every role), which is what says this
+#: column was read correctly too.
+#:
+#: **Only the per-level figure is here**, because that is all a level
+#: *adjustment* needs. The baselines belong to whoever creates a monster
+#: from scratch, and this engine never does -- every creature comes off a
+#: printed page with its numbers already on it.
+HP_PER_LEVEL: dict[str, int] = {
+    "brute": 10,
+    "skirmisher": 8,
+    "soldier": 8,
+    "controller": 8,
+    "lurker": 6,
+    "artillery": 6,
+}
+
+#: The book's own ceiling on this operation, and therefore the code's.
+#:
+#:     "This process works best for adjusting a monster's level up to five
+#:      higher or lower. Beyond that, the monster changes so much that
+#:      you'd do better to start with another creature of the desired role
+#:      and level range."
+#:
+#: So beyond five this refuses rather than clamping: "start with another
+#: creature" is a decision for the caller that picks creatures, and
+#: clamping would silently field a creature five levels out while
+#: reporting it had been fitted.
+LEVEL_REACH = 5
+
+
+def adjust_level(world: object, eid: int, by: int) -> bool:
+    """Move a spawned creature's level by `by`, the way the DMG says. #972
+
+        "Just increase its attack rolls, defenses, and AC by 1 for every
+         level you add. For every two levels, increase the damage it deals
+         with its attacks by 1. The monster also gains extra hit points at
+         each level, based on its role."
+
+        "Decreasing a monster's level works like increasing it, but in
+         reverse."
+
+    Returns True when it was applied, False when it refused -- which is the
+    answer a caller needs, because the printed alternative to a refusal is
+    to go and pick a different creature.
+
+    **Modifiers, not rewritten numbers.** A monster's attack bonus and
+    defences are not fields on the creature: `query.defence` reads
+    `Defenses.base` plus a level term plus `Mods`, and the attack bonus is
+    in each row's own header. So the adjustment is three standing `Mod`s and
+    one change to `Health`, which also means `scripts/show.py` and the wire
+    can report *why* a number moved rather than finding it mysteriously
+    different from the page.
+
+    **Untyped, so it stacks with everything and with nothing twice.** `Mods`
+    buckets typed bonuses by kind and takes the larger; a level adjustment
+    is not a printed bonus of any type, and two adjustments of the same
+    creature would be a caller error rather than something to silently take
+    the max of. The label carries the delta so a second call is visible.
+
+    Three things it deliberately does not touch:
+
+    * **the level itself**, because nothing stores a spawned creature's
+      level as mutable state -- `stats.level` comes off the stat block, and
+      `world.scaling`'s level term reads it. Changing the numbers is what
+      the printed rule says to do, and is what every reader of those
+      numbers will see;
+    * **XP**, which is a budget question the story side prices (`#962`);
+    * **the damage expression**, where `Math.convert` rewrites dice. The
+      printed adjustment is a flat `+1 per two levels`, so it is a damage
+      modifier rather than a retune -- and `_retune` moves the flat part of
+      an expression, which would double-count against a `Mod`.
+    """
+    from .components import Health, Mod, Mods
+    from .query import stat_block
+    from .types import DEFENCES
+
+    if by == 0 or abs(by) > LEVEL_REACH:
+        return False
+    row = stat_block(world, eid)
+    role = str((row or {}).get("role") or "").strip().lower()
+    per_level = HP_PER_LEVEL.get(role)
+    if per_level is None:
+        # **A role this table does not name gets nothing**, rather than a
+        # guessed 8. The table has six roles; a creature whose role column
+        # is empty or says something else -- a minion template, a hazard --
+        # has no printed hp-per-level, and inventing one is the thing
+        # `etl/CLAUDE.md` forbids one layer down.
+        return False
+
+    mods = world.get(eid, Mods)
+    if mods is None:
+        return False
+    label = f"level{by:+d}"
+    mods.items.append(Mod(what="attack", value=by, kind="untyped", label=label))
+    for d in DEFENCES:
+        mods.items.append(
+            Mod(what=d.value, value=by, kind="untyped", label=label))
+    # **Toward zero, both ways.** "For every two levels" means a three-level
+    # boost is +1 and not +1.5, and a three-level drop is -1. `int()` on a
+    # negative quotient would floor to -2, so the halving is done on the
+    # magnitude and the sign put back.
+    damage = (abs(by) // 2) * (1 if by > 0 else -1)
+    if damage:
+        mods.items.append(
+            Mod(what="damage", value=damage, kind="untyped", label=label))
+
+    health = world.get(eid, Health)
+    if health is not None:
+        gained = per_level * by
+        # A drop may not take a creature to nothing: one hit point is the
+        # floor `loader.spawn` already uses for a printed hp of zero.
+        health.max_hp = max(1, health.max_hp + gained)
+        health.hp = max(1, min(health.hp + gained, health.max_hp))
+    return True

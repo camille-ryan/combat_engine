@@ -16843,6 +16843,178 @@ def underwater_modifiers_apply_to_everyone(out: Result) -> None:
              f"fire {mod(fire)} vs {dry_fire}, other {mod(cold)} vs {dry_cold}")
 
 
+def a_monsters_level_can_be_adjusted(out: Result) -> None:
+    """The DMG's level adjustment, on a spawned creature. #972.
+
+    DMG p.173, verified against the printing rather than taken from the
+    issue:
+
+        "Just increase its attack rolls, defenses, and AC by 1 for every
+         level you add. For every two levels, increase the damage it deals
+         with its attacks by 1. The monster also gains extra hit points at
+         each level, based on its role."
+
+        "This process works best for adjusting a monster's level up to five
+         higher or lower. Beyond that ... you'd do better to start with
+         another creature."
+
+    **Every number is read through its own reader, not off the component.**
+    A defence comes from `query.defence`, which is base + level term +
+    `Mods`; the attack bonus from `situational_attack`; the damage from a
+    real `DamageApplied` event. A rule that summed `Mods` itself would stay green
+    if none of those readers consulted them -- which is this component's
+    documented failure mode and the reason `c.bonus("initiative")` was read
+    by nothing for seven rows.
+
+    The hp-per-level figures are the printed "Monster Statistics by Role"
+    table (DMG p.184). Both halves of that table were checked against the
+    page: its AC column gives a skirmisher `level + 14` and a soldier
+    `level + 16`, and its other-defences column `level + 12` for every role,
+    exactly as printed -- which is what says the hp column was read right
+    too.
+    """
+    from combat_engine.content.loader import spawn
+    from combat_engine.db import game
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.monster_math import (
+        HP_PER_LEVEL,
+        LEVEL_REACH,
+        adjust_level,
+    )
+    from combat_engine.engine.query import alive, defence, enemies, stat_block
+    from combat_engine.engine.resolve import situational_attack
+    from combat_engine.engine.types import DEFENCES
+
+    world, me, _ = _board("f2743", 1)
+    foe = next(f for f in enemies(world, me) if alive(world, f))
+    role = str((stat_block(world, foe) or {}).get("role") or "").lower()
+    per_level = HP_PER_LEVEL.get(role)
+    out.that(per_level is not None,
+             "the creature's role is one the printed table names, so the"
+             " hit-point arm below is testable",
+             f"role={role!r}, hp/level={per_level}")
+    if per_level is None:
+        return
+
+    health = world.get(foe, Health)
+    was = {d: defence(world, foe, d) for d in DEFENCES}
+    was_attack = situational_attack(world, foe, me, "mba", {})
+    was_hp, was_max = health.hp, health.max_hp
+
+    out.that(adjust_level(world, foe, 3),
+             "a three-level boost is applied",
+             "adjust_level returned False")
+
+    for d in DEFENCES:
+        out.that(defence(world, foe, d) - was[d] == 3,
+                 f"{d.value} rises by 1 per level, read through"
+                 f" `query.defence`",
+                 f"{was[d]} -> {defence(world, foe, d)}")
+    out.that(situational_attack(world, foe, me, "mba", {}) - was_attack == 3,
+             "and the attack roll by 1 per level, read through"
+             " `situational_attack`",
+             f"{was_attack} -> {situational_attack(world, foe, me, 'mba', {})}")
+    out.that(health.max_hp - was_max == per_level * 3,
+             f"hit points by the printed {per_level} per level for a"
+             f" {role}",
+             f"{was_max} -> {health.max_hp}, wanted +{per_level * 3}")
+    out.that(health.hp - was_hp == per_level * 3,
+             "and the current total moves with the maximum, so a boost does"
+             " not leave the creature already wounded",
+             f"{was_hp} -> {health.hp}")
+
+    # **The damage arm through a real damage event**, because a `Mods` sum
+    # would not prove any damage path reads it. Two boards from the same
+    # seed, one adjusted, and the same blow struck on each.
+    def hit_for(by: int) -> int | None:
+        w, m, _ = _board("f2743", 1)
+        f = next(x for x in enemies(w, m) if alive(w, x))
+        if by:
+            adjust_level(w, f, by)
+        seen: list[int] = []
+        w.bus.on(DamageApplied, lambda ev: seen.append(ev.amount))
+        Cast(world=w, me=f, ref="mba").damage("2d6", 3, on=m)
+        return seen[0] if seen else None
+
+    plain, boosted = hit_for(0), hit_for(4)
+    out.that(plain is not None and boosted is not None,
+             "a blow lands on both boards, so the damage arm is comparable",
+             f"plain={plain}, boosted={boosted}")
+    if plain is not None and boosted is not None:
+        out.that(boosted - plain == 2,
+                 "damage rises by 1 per TWO levels -- a four-level boost is"
+                 " +2, read off the `DamageApplied` event rather than off `Mods`",
+                 f"{plain} -> {boosted}")
+
+    # Toward zero both ways, which `int()` on a negative quotient gets wrong.
+    three_up, three_down = hit_for(3), hit_for(-3)
+    base = plain or 0
+    out.that(three_up is not None and three_up - base == 1,
+             "three levels up is +1 damage, not +1.5",
+             f"{base} -> {three_up}")
+    out.that(three_down is not None and three_down - base == -1,
+             "and three levels DOWN is -1, not -2 -- the halving is on the"
+             " magnitude with the sign put back, where `int(-3 // 2)` floors"
+             " to -2",
+             f"{base} -> {three_down}")
+
+    # The book's own ceiling, and the two refusals.
+    out.that(not adjust_level(world, foe, LEVEL_REACH + 1),
+             f"beyond {LEVEL_REACH} levels it refuses rather than clamping --"
+             " the printed alternative is to pick another creature, which is"
+             " the caller's decision",
+             f"returned {adjust_level(world, foe, LEVEL_REACH + 1)}")
+    out.that(not adjust_level(world, foe, 0),
+             "and a zero adjustment is a no-op rather than a pile of"
+             " zero-valued modifiers",
+             f"returned {adjust_level(world, foe, 0)}")
+
+    # **A role the printed table does not name gets nothing**, asserted on a
+    # real creature rather than a contrived one. Measured over the imported
+    # corpus: 253 monster rows carry `role='minion'` and 63 carry `''` --
+    # **316 of 3,139** -- because a minion's stat block prints "Level N
+    # Minion" with no role word, so there is no printed hp-per-level to
+    # apply. Guessing 8 for them would invent a number for one creature in
+    # ten.
+    #
+    # This control was missing and a plant found that: substituting
+    # `HP_PER_LEVEL.get(role, 8)` left every other assertion green, because
+    # the board's own foe is a brute and the branch was never reached.
+    minion = next((r[0] for r in game().execute(
+        "SELECT ref FROM monster WHERE role='minion' AND level<=3 LIMIT 1")), "")
+    if minion:
+        w3, _m3, _ = _board("f2743", 1)
+        eid = spawn(w3, minion, (2, 2))
+        h3 = w3.get(eid, Health)
+        roleless = str((stat_block(w3, eid) or {}).get("role") or "").lower()
+        hp_before = (h3.max_hp, h3.hp)
+        refused = adjust_level(w3, eid, 2)
+        out.that(roleless not in HP_PER_LEVEL,
+                 "a real minion's role is outside the printed table, so the"
+                 " refusal below is testing the live case",
+                 f"role={roleless!r}")
+        out.that(not refused and (h3.max_hp, h3.hp) == hp_before,
+                 "and adjusting it is refused with nothing changed -- no"
+                 " guessed hit points per level for a creature the table"
+                 " does not price",
+                 f"returned {refused}, hp {hp_before} -> "
+                 f"{(h3.max_hp, h3.hp)}")
+
+    # A drop really drops.
+    w2, m2, _ = _board("f2743", 1)
+    f2 = next(x for x in enemies(w2, m2) if alive(w2, x))
+    h2 = w2.get(f2, Health)
+    down_from = (defence(w2, f2, DEFENCES[0]), h2.max_hp)
+    adjust_level(w2, f2, -2)
+    out.that(defence(w2, f2, DEFENCES[0]) - down_from[0] == -2
+             and h2.max_hp - down_from[1] == -2 * per_level,
+             "a two-level drop takes the same numbers the other way",
+             f"defence {down_from[0]} -> {defence(w2, f2, DEFENCES[0])},"
+             f" hp {down_from[1]} -> {h2.max_hp}")
+
+
 def a_minion_missed_takes_nothing(out: Result) -> None:
     """A minion takes no damage from an attack that misses it.
 
@@ -50168,6 +50340,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "levelled": (
+        a_monsters_level_can_be_adjusted,
+        "a monster's level can be moved the way the DMG says -- attack,"
+        " defences, hit points and damage -- and refuses beyond five (#972)",
     ),
     "underwater": (
         underwater_modifiers_apply_to_everyone,
