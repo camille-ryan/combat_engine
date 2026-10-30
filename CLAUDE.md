@@ -249,7 +249,7 @@ say so in the commit.
 |---|---|---|
 | ETL | `src/combat_engine/etl/` | compendium → `data/game.db`. Extraction, never rules. |
 | Engine | `src/combat_engine/engine/` | the rules kernel. |
-| Content | `src/combat_engine/content/` | 677 modules of hand-written rows. |
+| Content | `src/combat_engine/content/` | 783 modules of hand-written rows. |
 | Wire | `src/combat_engine/api/` | engine state → DTOs → the page. |
 | UI | `web/` | the page. Vanilla JS, no build step. |
 | AI Policy | `src/combat_engine/policy/` | what the AI chooses, not what the rules allow. |
@@ -268,13 +268,22 @@ below reads differently from how it did:
 * `etl` → `content` is **zero direct imports** (content reads the built
   database).
 * `engine` → `content` is **four** sites and is a known leak:
-  `query.py:675` and `cast.py:7965, 8132, 8154`, all function-local to dodge
-  the import cycle. It was documented as five, at five line numbers, none of
-  which were right.
+  all in `query.py` and `cast.py`, all function-local to dodge the import
+  cycle. `.importlinter` holds exactly which and `check.py --only seams`
+  asserts it in 0.2s.
+
+  **No line numbers here any more, and that is the fix rather than a
+  shortcut.** This said five sites at five line numbers, every one wrong.
+  They were corrected to four, with numbers, and **went stale again**:
+  `query.py:675` and `cast.py:7965, 8132, 8154` are now `query.py:875` and
+  `cast.py:8729, 8896, 8918`, because `cast.py` grew from 7,500 lines to
+  17,672 underneath them. Resetting them a second time buys the same decay
+  a third. A count and a file list decay slowly; a line number decays
+  whenever anybody edits above it; the contract cannot decay at all.
 * **The package imports nothing from `api/`** — `web/` reaches it over HTTP,
   which is the cleanest boundary here. This used to say *nothing* imports it
-  in Python at all, and that was false: `scripts/drivers.py:14196,14245`
-  imports `api.day` to play the day mode, which is an instrument doing its
+  in Python at all, and that was false: `scripts/drivers.py`
+  imports `api.day` at two sites to play the day mode, which is an instrument doing its
   job rather than a breach.
 * **Nothing imports `etl/` to read the database**: `game()` lives in
   `db.py`, which imports nothing from the package, so five readers reach a

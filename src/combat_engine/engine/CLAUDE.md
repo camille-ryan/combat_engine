@@ -143,16 +143,18 @@ is checked rather than believed. Making it a gate corrected every number
 this list used to carry.
 
 * **Engine must not reach into `content/`.** It does, at **four** sites —
-  `query.py:675` and `cast.py:7965, 8132, 8154` — all function-local to
-  dodge the import cycle. The kernel needs a spawner and a row lookup and
+  in `query.py` and `cast.py` — all function-local to dodge the import
+  cycle, with `.importlinter` holding which and `seams` checking it. The kernel needs a spawner and a row lookup and
   reaches into content to get them, which means **the kernel cannot run
   without a built database**. Do not add a fifth; if you need one, that is
   the issue to file.
 
-  This said **five** sites at `cast.py:382,3982,4075,4095` and
-  `query.py:380`, and every one of those five line numbers was wrong. A
-  count and five line numbers, all stale, is what a paragraph decays into
-  and why the contract exists.
+  This said **five** sites at five line numbers, every one wrong. They were
+  then corrected to four *with* numbers -- and those went stale too, because
+  `cast.py` grew from 7,500 lines to 17,672 and carried them along. So the
+  numbers are gone from here as well: the count and the file list are what
+  a paragraph can hold without rotting, and the contract is the only record
+  that cannot.
 * `engine` → `etl` and `engine` → `api` are both **zero**. Keep them zero.
 * `engine` → `chargen` is **zero**, and this list never mentioned the
   relationship while it was one. `skills.py:263` imported `ARMOUR_CHECK` and
