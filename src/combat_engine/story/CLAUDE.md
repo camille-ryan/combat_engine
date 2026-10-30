@@ -1288,11 +1288,23 @@ double-count.
 
 ## Seams
 
-* **`story/__init__.py` was not edited by this work, until #935 added one
-  field to `Sheet`.** The rule stands and is worth keeping — arcade mode is
-  built in parallel, so import from this file rather than changing it — but
-  it is now a rule with one exception, and pretending otherwise would make
-  the next person distrust the whole paragraph.
+* **`story/__init__.py` has now been edited twice**, and saying "one
+  exception" would be the third draft of a sentence that keeps going
+  stale. The rule is still worth keeping — arcade mode is built in
+  parallel, so import from this file rather than changing it — but it is a
+  rule with exceptions, which means **the bar is a stated reason in the
+  commit, not an unbroken record**:
+
+  | # | what | why nothing else would do |
+  |---|---|---|
+  | #935 | one field on `Sheet` | a granted item lives with the *wear*, and `Sheet` is the only record that survives a scene |
+  | #994 | one keyword on `field_encounter` | placement happens inside it; the arithmetic lives in `formation.py` and the default reproduces today exactly |
+
+  Both are additive with defaults that move nothing, which is the shape to
+  keep. Measure the premise before the next one: the
+  `sequential-encounters` worktree was last committed 2026-10-25 and has
+  touched nothing under `story/`, so the collision this guards against has
+  not been live all day.
 
   What the exception cost and why there was no alternative: a granted item
   has to live with the **wear**, because the wear is by definition what
