@@ -34,8 +34,68 @@ cover it because nobody had both directories at once when it was written.
 
 from __future__ import annotations
 
+import os
+import re
 import subprocess
 import sys
+
+
+def _ancestry() -> set[int]:
+    """This process and every parent of it.
+
+    Needed because the check below looks for *other* `scripts/` processes and
+    this one is itself `uv run scripts/build.py` -- under `nohup` that is a
+    chain of three or four, so excluding `getpid()` and `getppid()` alone
+    leaves the build reporting itself and refusing every time. A guard that
+    always fires gets `--force`-d by reflex and then protects nothing.
+    """
+    mine, pid = set(), os.getpid()
+    for _ in range(12):
+        if pid <= 1 or pid in mine:
+            break
+        mine.add(pid)
+        try:
+            got = subprocess.run(
+                ["ps", "-o", "ppid=", "-p", str(pid)],
+                capture_output=True, text=True, check=True).stdout.strip()
+        except Exception:
+            break
+        pid = int(got) if got.isdigit() else 0
+    return mine
+
+
+def _live_readers() -> list[str]:
+    """Other `scripts/` processes running right now.
+
+    Every one of them resolves rows through `data/game.db`, and this build
+    opens by deleting it. Fails open -- if `ps` cannot be read the build
+    proceeds, because refusing on a broken probe would be worse than the
+    hazard.
+    """
+    mine = _ancestry()
+    try:
+        listing = subprocess.run(
+            ["ps", "-axo", "pid=,command="],
+            capture_output=True, text=True, check=True).stdout
+    except Exception:
+        return []
+    found = []
+    for line in listing.splitlines():
+        pid, _, command = line.strip().partition(" ")
+        if not pid.isdigit() or int(pid) in mine:
+            continue
+        if "scripts/" not in command or "ps -axo" in command:
+            continue
+        # The shell that launched an instrument carries the command in its
+        # own argv, so one run shows up as both the wrapper and the
+        # interpreter. Counting the wrapper reported "3 processes" for a
+        # single `replay.py verify`, and a count that overstates by 50% is
+        # the kind of number this project does not leave standing even when
+        # the decision it drives ("wait") is unchanged.
+        if re.match(r"^(?:/bin/)?(?:z|ba|da|k)?sh\b", command):
+            continue
+        found.append(f"  {pid}  {command[:96]}")
+    return found
 
 
 def _in_worktree() -> str:
@@ -71,6 +131,23 @@ if __name__ == "__main__":
             f"branch merges.\n"
             f"\n"
             f"`--force` if you mean it. #857.",
+            file=sys.stderr)
+        raise SystemExit(1)
+    readers = _live_readers()
+    if readers and "--force" not in sys.argv:
+        listed = "\n".join(readers)
+        print(
+            f"refusing: {len(readers)} other `scripts/` process(es) are live, "
+            f"and they read\n"
+            f"`data/game.db` -- which this build opens by deleting.\n"
+            f"\n"
+            f"{listed}\n"
+            f"\n"
+            f"Deleting it under a reader does not slow that run, it makes it\n"
+            f"*wrong*: `audit.py` reports a raise on a sound row, and a sweep\n"
+            f"certifies nothing. Wait for them to finish.\n"
+            f"\n"
+            f"`--force` if you mean it.",
             file=sys.stderr)
         raise SystemExit(1)
     from combat_engine.etl.build import build
