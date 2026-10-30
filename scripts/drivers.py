@@ -16187,6 +16187,157 @@ def an_active_search_finds_a_trap(out: Result) -> None:
              " would have quietly undone")
 
 
+def an_ongoing_trap_takes_a_turn(out: Result) -> None:
+    """A trap whose block prints an initiative acts on its own count.
+
+    DMG2 splits traps before anything else about them: a single-shot trap
+    "attacks once and is done", and an ongoing one "continually attacks the
+    targets while they are in the area" -- with the book's own example of
+    the second being *"attacked every round as long as you stand in a
+    square"*. `terrain.arm` implemented only the first.
+
+    **Four things have to hold at once, and three of them are absences.**
+    `Trap`'s docstring says having no `Health` and no `Side` is what keeps
+    it out of `query.creatures`, "so it takes no turn, holds no initiative
+    slot, and grants nobody cover" -- three consequences of one absence, and
+    #956 changes the first while leaving the others exactly as they were. A
+    rule that only checked the turn would pass just as well on the much
+    larger change of making a trap a creature, which is `#955`'s question
+    and was explicitly not taken.
+
+    So the negative controls are the point here rather than the decoration:
+    the trap must be in the **roster** and absent from `creatures`, from
+    `combatants`, and from what decides the fight is over.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.content import terrain
+    from combat_engine.db import game
+    from combat_engine.engine.components import Health, Initiative, Position
+    from combat_engine.engine.query import combatants, creatures, turn_takers
+
+    printed = game().execute(
+        "SELECT ref, level, perception_dc, attack, defence, damage, "
+        "initiative FROM trap WHERE initiative IS NOT NULL "
+        "AND attack IS NOT NULL AND level IS NOT NULL AND damage IS NOT NULL "
+        "AND level <= 5 ORDER BY level DESC, ref LIMIT 1"
+    ).fetchone()
+    out.that(printed is not None,
+             "the floor: some printed trap row carries an initiative"
+             " modifier, without which nothing below is being tested",
+             f"row={dict(printed) if printed else None}")
+    if printed is None:
+        return
+
+    def armed(*, ongoing: bool, on_top: bool):  # noqa: ANN202
+        """A board with one trap, its kind chosen, and maybe somebody on it."""
+        row = dict(printed)
+        if not ongoing:
+            # The single-shot case is **the same printed row with the
+            # modifier taken away**, so the two branches differ by the one
+            # column that is supposed to decide them and by nothing else.
+            row["initiative"] = None
+        real = terrain.printed_trap
+        terrain.printed_trap = lambda level, pick=None: row
+        try:
+            world, me, _ = _posed("f1378b", 5)
+            here = world.need(me, Position).square
+            square = here if on_top else (here[0] + 3, here[1])
+            eid = terrain.arm(world, square, level=5, pick=Random(3))
+        finally:
+            terrain.printed_trap = real
+        return world, world.encounter, me, eid
+
+    # -- the roster, and the three absences -----------------------------
+    world, enc, me, eid = armed(ongoing=True, on_top=True)
+    out.that(eid in turn_takers(world),
+             "an ongoing trap is in the initiative roster",
+             f"turn_takers holds it: {eid in turn_takers(world)}")
+    out.that(eid not in creatures(world),
+             "and is still not a creature, so nothing can target it, flank"
+             " it or take cover behind it -- the absence #955 owns",
+             f"creatures={len(creatures(world))}, trap in it:"
+             f" {eid in creatures(world)}")
+    out.that(eid not in combatants(world),
+             "and is still not a combatant, so it is not a side",
+             f"combatants={len(combatants(world))}")
+    out.that(world.get(eid, Health) is None,
+             "and gained no Health, which is what all three absences above"
+             " actually rest on",
+             f"health={world.get(eid, Health)}")
+
+    # -- it is in the order, which is where this nearly failed ----------
+    out.that(eid in enc.order,
+             "and it holds a slot in a fight that had already started --"
+             " `dress` lays its traps from a RoundStart watcher and `start`"
+             " rolls initiative before that fires, so without `join` the"
+             " component sat in the world with no slot at all",
+             f"order={len(enc.order)}, trap at"
+             f" {enc.order.index(eid) if eid in enc.order else None}")
+    init = world.get(eid, Initiative)
+    out.that(init is not None and init.bonus == printed["initiative"],
+             "carrying the printed modifier rather than a rolled or"
+             " invented one",
+             f"bonus={init.bonus if init else None},"
+             f" printed={printed['initiative']}")
+
+    # -- the turn, and the attack ---------------------------------------
+    hp_before = world.need(me, Health).hp
+    reached = False
+    for _ in range(40):
+        who = enc.advance()
+        if who is None:
+            break
+        if who == eid:
+            reached = True
+            break
+    out.that(reached, "the trap's slot comes up and is a turn rather than a"
+                      " ghost -- `alive` is False for anything with no"
+                      " Health, so this is the gate #956 was really on",
+             f"reached={reached}")
+    out.that(world.need(me, Health).hp < hp_before,
+             "and on its turn it attacks whoever is standing in its square",
+             f"hp {hp_before} -> {world.need(me, Health).hp}")
+
+    # -- the negative control: an empty square --------------------------
+    world2, enc2, me2, eid2 = armed(ongoing=True, on_top=False)
+    hp2 = world2.need(me2, Health).hp
+    for _ in range(40):
+        who = enc2.advance()
+        if who is None or who == eid2:
+            break
+    out.that(world2.need(me2, Health).hp == hp2,
+             "a trap nobody is standing on attacks nobody, so the turn is"
+             " not simply hitting the nearest creature",
+             f"hp {hp2} -> {world2.need(me2, Health).hp}")
+
+    # -- the negative control: the single-shot kind ---------------------
+    world3, enc3, _me3, eid3 = armed(ongoing=False, on_top=True)
+    out.that(eid3 not in turn_takers(world3),
+             "and the same printed row with no initiative modifier takes no"
+             " turn at all, so the column decides the kind and the rest of"
+             " the row does not",
+             f"turn_takers holds it: {eid3 in turn_takers(world3)}")
+    out.that(eid3 not in enc3.order,
+             "nor a slot in the order",
+             f"order={len(enc3.order)}")
+
+    # -- a standing trap cannot keep a fight from ending ----------------
+    world4, enc4, me4, eid4 = armed(ongoing=True, on_top=False)
+    for other in list(combatants(world4)):
+        health = world4.get(other, Health)
+        if other != me4 and health is not None:
+            health.hp = health.dying_at - 1
+    out.that(enc4.over,
+             "and with every enemy down the fight is over even though the"
+             " trap is still standing in the order -- `over` and `winner`"
+             " keep asking `combatants`, which is why",
+             f"over={enc4.over}, winner={enc4.winner},"
+             f" trap still in order: {eid4 in enc4.order}")
+
+
 def a_minion_missed_takes_nothing(out: Result) -> None:
     """A minion takes no damage from an attack that misses it.
 
@@ -42555,6 +42706,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "ongoing_trap": (
+        an_ongoing_trap_takes_a_turn,
+        "a trap whose block prints an initiative acts on its own count,"
+        " and is still not a creature while doing it (#956)",
     ),
     "death_ends": (
         death_ends_what_the_dead_creature_laid,

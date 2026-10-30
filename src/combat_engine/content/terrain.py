@@ -26,8 +26,14 @@ from __future__ import annotations
 from random import Random
 
 from combat_engine.engine import AC, FORT, REF, WILL, DamageType, World
-from combat_engine.engine.components import Health, Ident, Position, Trap
-from combat_engine.engine.events import EnterSquare, RoundStart
+from combat_engine.engine.components import (
+    Health,
+    Ident,
+    Initiative,
+    Position,
+    Trap,
+)
+from combat_engine.engine.events import EnterSquare, RoundStart, TurnStart
 from combat_engine.engine.grid import Square
 from combat_engine.engine.resolve import attack
 
@@ -67,7 +73,8 @@ def printed_trap(level: int, pick: Random | None = None) -> dict | None:
 
     try:
         rows = list(game().execute(
-            "SELECT ref, level, perception_dc, attack, defence, damage FROM trap "
+            "SELECT ref, level, perception_dc, attack, defence, damage, "
+            "initiative FROM trap "
             "WHERE attack IS NOT NULL AND level IS NOT NULL "
             "AND damage IS NOT NULL AND level <= ? ORDER BY level DESC, ref",
             (max(1, level),),
@@ -146,9 +153,34 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",
     and `printed_trap` picks one worth this board's level. The curve is kept
     only as the fallback for a tree with no database built.
 
-    One attack, then `sprung` stays set: a plate that goes off and does not
-    reset is what the flag was written for, and a trap that fires every time
-    something crosses it grinds a creature down for walking.
+    **Two kinds, which is DMG2's first design decision about a trap** and
+    now the split this function makes. The book:
+
+        Single-Shot Traps: single-shot traps attack once and are done.
+          [...] Being attacked every round as long as you stand in a square
+          is not a single-shot trap.
+        Ongoing Attack Traps: these traps continually attack the targets
+          while they are in the area.
+
+    So the printed `Initiative` modifier decides which this row is, and it
+    is a signal rather than a rule of ours: a block that prints one is
+    saying it acts on its own count. 90 of the drawable rows print one.
+
+    * **no modifier** -- the single-shot case. One `EnterSquare` attack and
+      then `sprung` stays set: a plate that goes off and does not reset is
+      what the flag was written for, and a trap that fires every time
+      something crosses it grinds a creature down for walking. Unchanged.
+    * **a modifier** -- an `Initiative`, a slot in the order, and an attack
+      on its own turn against whoever is standing in its square.
+
+    **The geometry is the book's, not invented.** An ongoing trap's area is
+    in `trap.spec` as prose and is unparsed, so there is no column to read
+    -- but DMG2's own example of the category *is* "attacked every round as
+    long as you stand in a square", so the square it occupies is the area it
+    names. `_TRAP_AREA` would be a guessed number and this is a quoted one.
+
+    `sprung` is deliberately not consulted on that branch: an ongoing trap
+    is defined by not being done after one attack.
     """
     printed = printed_trap(level, pick)
     eid = world.spawn(
@@ -169,23 +201,64 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",
     hurts = printed["damage"] if printed and printed["damage"] else f"1d10+{level}"
     against = _DEFENCES.get((printed or {}).get("defence") or "", REF)
 
-    def stepped(ev: EnterSquare) -> None:
-        if trap.sprung or ev.square != square:
-            return
-        # Health is what tells a creature from the scenery and the zones,
-        # which also walk through squares.
-        if world.get(ev.actor, Health) is None:
-            return
-        trap.sprung = True
+    def strike(victim: int) -> None:
         # Through `resolve.attack` with the trap itself as the attacker, so
         # `is_trap(ctx["attacker"])` is true for the rows that ask and an
         # attack bonus hung on the trap by a power is read like anyone
         # else's.
-        if attack(world, eid, ev.actor, bonus, against, power=trap.ref):
+        if attack(world, eid, victim, bonus, against, power=trap.ref):
             hurt = world.rng.roll(hurts).total
-            world.damage(eid, ev.actor, hurt, DamageType.UNTYPED, detail=trap.ref)
+            world.damage(eid, victim, hurt, DamageType.UNTYPED, detail=trap.ref)
 
-    world.bus.on(EnterSquare, stepped, owner=eid)
+    ticks = printed.get("initiative") if printed else None
+    if ticks is None:
+        def stepped(ev: EnterSquare) -> None:
+            if trap.sprung or ev.square != square:
+                return
+            # Health is what tells a creature from the scenery and the
+            # zones, which also walk through squares.
+            if world.get(ev.actor, Health) is None:
+                return
+            trap.sprung = True
+            strike(ev.actor)
+
+        world.bus.on(EnterSquare, stepped, owner=eid)
+        return eid
+
+    # **The ongoing case.** An `Initiative` is what puts it in the order --
+    # `query.turn_takers` tests for exactly that -- and the modifier is
+    # stored as printed so `level_term` takes the level back out of it the
+    # way it does for a monster.
+    world.add(eid, Initiative(bonus=ticks))
+    # **And it has to `join`, or the slot never exists.** `dress` lays its
+    # traps from a `RoundStart` watcher -- deliberately, so the floor can be
+    # asked whether a square is free -- and `start` rolls initiative
+    # *before* the first `RoundStart` fires. So a trap armed the normal way
+    # arrives after the order is built and was absent from it: measured, and
+    # the component was right there in the world with nobody calling on it.
+    #
+    # `join` is the door already built for exactly this ("anything spawned
+    # mid-fight was simply absent from the order before this, which meant it
+    # never got a turn at all"), and it rolls the initiative off the
+    # component laid above. Guarded on a *started* encounter because `arm`
+    # is also called directly, before one exists.
+    enc = getattr(world, "encounter", None)
+    if enc is not None and getattr(enc, "started", False):
+        enc.join(eid)
+
+    def each_turn(ev: TurnStart) -> None:
+        if ev.actor != eid or ev.ghost:
+            return
+        # Whoever is standing in it, and nobody if the square is empty.
+        # The trap is deliberately absent from the occupancy index -- see
+        # above -- so this reads the creature on top of it rather than the
+        # trap itself.
+        victim = world.grid.occupant(square)
+        if victim is None or world.get(victim, Health) is None:
+            return
+        strike(victim)
+
+    world.bus.on(TurnStart, each_turn, owner=eid)
     return eid
 
 

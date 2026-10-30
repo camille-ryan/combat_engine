@@ -885,6 +885,21 @@ def take_turn(
     is a guard against a bug, not a rule, so hitting it is worth noticing.
     """
     from combat_engine.engine.actions import recharge
+    from combat_engine.engine.components import Trap
+
+    # **A trap's turn is the engine's, not the AI's.** `#956` gave an
+    # ongoing-attack trap a slot in the initiative order, and its attack
+    # fires from a `TurnStart` watcher that `terrain.arm` installs -- so by
+    # the time this is called the turn has already happened. There is
+    # nothing here for a policy to decide: a trap has no powers, no budget
+    # worth spending and nowhere to go, and `legal` would hand `act` an
+    # empty menu.
+    #
+    # Guarded at the top rather than per-driver, because there are four
+    # callers of this function and a fifth would not know to do it. The
+    # seam is crossed deliberately and in one line.
+    if world.get(actor, Trap) is not None:
+        return
 
     recharge(world, actor)
     for _ in range(cap):

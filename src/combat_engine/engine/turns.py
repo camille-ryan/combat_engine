@@ -13,7 +13,15 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from .components import Budget, Gear, Health, Initiative, Movement, Powers
+from .components import (
+    Budget,
+    Gear,
+    Health,
+    Initiative,
+    Movement,
+    Powers,
+    Trap,
+)
 from .conditions import rules
 from .durations import When
 from .events import (
@@ -84,6 +92,28 @@ def arm_traits(world: World, eid: int) -> None:
             # nowhere, and never again.
             if p is not None and p.action is ActionType.NONE and not p.triggers:
                 use(world, eid, ref, spend=True)
+
+
+def _acts(world: World, eid: int) -> bool:
+    """Is this slot a turn, or a dead creature's ghost?
+
+    **`alive` was the real gate on #956, not `Side`.** It reads
+    `health is not None and hp > dying_at`, so an entity with no `Health`
+    answers False -- and a trap put into the order would therefore have held
+    a place and been `_ghost`ed every round, taking a slot and never acting.
+    That is a quieter failure than a crash and it is what reading the code
+    found rather than reasoning about components.
+
+    A trap is live while it is on the board. It has no hit points to lose,
+    so there is nothing else for "acts" to mean; `#955` is where being
+    attackable is decided and it is a different question.
+
+    Everything else is unchanged: a creature still has to be above its dying
+    line, which is the whole of what this gate meant before. #956.
+    """
+    if world.get(eid, Trap) is not None:
+        return True
+    return alive(world, eid)
 
 
 class Encounter:
@@ -211,9 +241,13 @@ class Encounter:
         sort, which was built from a local copy. The row read as working and
         moved nobody.
         """
-        from .query import level_term
+        from .query import level_term, turn_takers
 
-        order = list(combatants(self.world))
+        # **The roster, not the win condition.** `over` and `winner` below
+        # go on asking `combatants`, deliberately: a trap takes a slot and
+        # is not a side, so a standing one must not be able to keep a fight
+        # from ending. See `turn_takers`. #956.
+        order = list(turn_takers(self.world))
         for eid in order:
             init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
             init.rolled = (
@@ -470,7 +504,7 @@ class Encounter:
                 self.world.round += 1
                 self.world.bus.emit(RoundStart(round=self.world.round))
             nxt = self.order[self.index]
-            if alive(self.world, nxt):
+            if _acts(self.world, nxt):
                 self._begin(nxt)
                 return nxt
             self._ghost(nxt)

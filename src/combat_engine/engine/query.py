@@ -22,6 +22,7 @@ from .components import (
     Defences,
     Defenses,
     Health,
+    Initiative,
     Mods,
     Movement,
     Position,
@@ -29,6 +30,7 @@ from .components import (
     Shapes,
     Side,
     Stats,
+    Trap,
 )
 from .conditions import rules, rules_for
 from .grid import Square, between, linked_spread, spread
@@ -181,6 +183,49 @@ def combatants(world: World) -> list[int]:
         # Added here rather than tested at every call site, which is what
         # the paragraph above asks for. #714.
         and world.get(e, Conjuration) is None
+    ]
+
+
+def turn_takers(world: World) -> list[int]:
+    """The initiative roster: who gets a slot in the order.
+
+    **The inverse of the case `combatants` was built for**, which is why it
+    could not go there. That function's note says it is "kept as a
+    subtraction rather than a component test at every call site, so anything
+    later that is targetable-but-not-a-combatant lands here by adding itself
+    to one list" -- and a trap is the other way round: it takes a turn and is
+    **not** a target. A subtraction from `creatures` has nowhere to put
+    something that is not a creature at all.
+
+    So `creatures` -> `combatants` -> this is the third cut of what used to
+    be one question, and the split is the same shape as the second: the
+    roster, the win condition and the target pool wanted the same answer
+    until something on the board wanted different ones.
+
+    `Trap`'s docstring says having no `Health` and no `Side` is what keeps it
+    out of `creatures`, "so it takes no turn, holds no initiative slot, and
+    grants nobody cover" -- three consequences of one absence. Only the first
+    changes here. A trap gains no `Health`, stays out of `creatures`, and so
+    goes on being untargetable and granting nobody cover; whether it should
+    be attackable is #955's question and a different one.
+
+    **An `Initiative` is the test, and it is the printed signal rather than a
+    rule of ours.** A trap block that prints an initiative modifier is saying
+    it acts on its own count; `arm` gives one only to those rows. A pressure
+    plate prints none, gets none, and is absent from here -- so the
+    single-shot case DMG2 describes, and `arm` already implements, is
+    untouched.
+
+    Used by the roster alone. `Encounter.over` and `.winner` keep
+    `combatants`, deliberately: a trap is not a side and a standing one must
+    not be able to stop a fight ending. #956.
+    """
+    roster = combatants(world)
+    seen = set(roster)
+    return roster + [
+        e
+        for e in world.having(Trap, Position, Initiative)
+        if e not in seen
     ]
 
 
