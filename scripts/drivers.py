@@ -16347,6 +16347,232 @@ def an_ongoing_trap_takes_a_turn(out: Result) -> None:
              f" trap still in order: {eid4 in enc4.order}")
 
 
+def a_readied_attack_waits_for_reach_and_is_spent_either_way(out: Result) -> None:
+    """Hold a basic attack for an enemy that comes into reach. #996.
+
+    One of the twenty printed actions, and the printed answer to the failure
+    mode DMG2 names: *"delay some of the monsters' turns or **ready their
+    attacks for when the characters move closer**"*. Delay was built; this is
+    the other half.
+
+    **Every assertion here is a pair**, because each half of this mechanism
+    fails in a way the other half cannot see. A hold that fires at any
+    distance is an opportunity attack with extra steps; a hold that never
+    fires is a wasted standard action; and a hold that *persists* is a free
+    attack every round, which is the `c.watch(once=True)` fault `#540`
+    records.
+
+    Three of the five checks are therefore absences:
+
+    * nothing fires while the enemy is still out of reach -- the thing a
+      geometric `distance <= 1` test would get right and a missing test
+      would not;
+    * nothing fires a **second** time for a second enemy walking in, which
+      is what `once` buys;
+    * and nothing fires after the holder's next turn has begun, which is the
+      printed spend rule -- *"if the trigger doesn't occur or you choose to
+      ignore it, you can't use your readied action"*.
+
+    **The spend rule is the one that caught a wrong probe rather than wrong
+    code.** My first attempt at it reported 1 attack where 0 was required,
+    and the fault was that the probe never reached the holder's next turn --
+    it guessed at an `Encounter` attribute instead of walking `advance()` and
+    checking the holder came round. Walking the order and asserting `me` is
+    in it is what makes this check mean anything, so that is done here
+    explicitly rather than assumed.
+    """
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.events import AttackDeclared
+    from combat_engine.engine.movement import step
+    from combat_engine.engine.query import alive, enemies
+    from combat_engine.engine.turns import Encounter
+
+    world, me, _ = _board("f2743", 1)
+    enc = Encounter(world)
+    enc.start()
+    foe = next(f for f in enemies(world, me) if alive(world, f))
+    mine = world.get(me, Position).square
+
+    # Back the foe off first. On this board it starts **adjacent**, so a
+    # walk-toward-me loop would exit immediately and test nothing while
+    # printing plausible zeros -- which is exactly what happened on #996's
+    # first attempt and is recorded there.
+    for dx in range(1, 5):
+        step(world, foe, (mine[0] + dx, mine[1]))
+    out.that(
+        not _in_reach(world, me, foe),
+        "the foe is backed out of reach before the hold is laid, so the"
+        " in-reach check below is actually testing something",
+        f"foe at {world.get(foe, Position).square}, me at {mine}")
+
+    # Readying is legal only on the holder's own turn -- it costs a standard.
+    for _ in range(20):
+        if any(a.kind == "ready" for a in legal(world, enc, me)):
+            break
+        enc.advance()
+    ready = next((a for a in legal(world, enc, me) if a.kind == "ready"), None)
+    out.that(ready is not None,
+             "`ready` is offered on the holder's own turn",
+             f"offered: {ready is not None}")
+    if ready is None:
+        return
+    out.that(perform(world, enc, me, ready),
+             "performing it succeeds",
+             "perform returned False")
+    out.that(_holds(world, me),
+             "and a hold is live on the board afterwards -- the watch was"
+             " really laid, not merely offered",
+             f"holds: {_holds(world, me)}")
+
+    seen: list[int] = []
+    world.bus.on(AttackDeclared, lambda ev: seen.append(ev.attacker))
+
+    step(world, foe, (mine[0] + 3, mine[1]))
+    step(world, foe, (mine[0] + 2, mine[1]))
+    out.that(not seen,
+             "an enemy entering a square still OUT of reach draws nothing --"
+             " a hold that fired at any distance would be an opportunity"
+             " attack wearing a readied action's name",
+             f"{len(seen)} attack(s) at distance 2 or more")
+
+    out.that(_holds(world, me),
+             "and the hold SURVIVES an out-of-reach step -- `once` spends it"
+             " on a payout, not on being invoked, so approaching from far"
+             " away does not waste the readied action",
+             f"holds: {_holds(world, me)}")
+
+    step(world, foe, (mine[0] + 1, mine[1]))
+    out.that(len(seen) == 1,
+             "and entering reach draws exactly one",
+             f"{len(seen)} attack(s) after the step into reach")
+    out.that(not _holds(world, me),
+             "which consumes the hold",
+             f"holds: {_holds(world, me)}")
+    out.that(seen[:1] == [me],
+             "swung by the holder, not by somebody else",
+             f"attacker(s): {seen}")
+
+    # **A second enemy has to be walked out and back in, and the step has to
+    # be asserted.** The obvious version of this control -- step another foe
+    # into a square beside the holder -- is **vacuous on this board**: every
+    # square adjacent to the holder is already taken, `step` returns False,
+    # no `EnterSquare` is emitted and `once` is never exercised. Measured:
+    # planting `once=False` left this check green, which is how the hole was
+    # found rather than reasoned about.
+    before = len(seen)
+    second = next((f for f in enemies(world, me)
+                   if alive(world, f) and f != foe), None)
+    if second is not None:
+        for dx in range(2, 6):
+            step(world, second, (mine[0] + dx, mine[1] + 1))
+        went = world.get(second, Position).square
+        out.that(not _in_reach(world, me, second),
+                 "a second enemy can be backed out of reach, so the"
+                 " one-payout control below is not vacuous",
+                 f"second foe at {went}, me at {mine}")
+        landed = step(world, second, (mine[0] + 1, mine[1] + 1))
+        out.that(landed and _in_reach(world, me, second),
+                 "and walked back into reach -- the step really happened,"
+                 " which is what a green `once` control depends on",
+                 f"step returned {landed}, now at"
+                 f" {world.get(second, Position).square}")
+        out.that(len(seen) == before,
+                 "a SECOND enemy entering reach draws nothing more -- one"
+                 " readied action does not pay out down a line",
+                 f"{len(seen) - before} further attack(s)")
+
+    # The spend rule. Walk the order until the holder comes round again, and
+    # say so, because a loop that never got there would pass this vacuously.
+    walked = []
+    for _ in range(20):
+        nxt = enc.advance()
+        walked.append(nxt)
+        if nxt == me:
+            break
+    out.that(me in walked,
+             "the turn order came back round to the holder, so the spend"
+             " check below is not vacuous",
+             f"walked {walked}")
+    out.that(not _holds(world, me),
+             "the hold is gone at the start of the holder's next turn,"
+             " whether or not it fired",
+             f"holds: {_holds(world, me)}")
+    spent_at = len(seen)
+    step(world, foe, (mine[0] + 3, mine[1]))
+    step(world, foe, (mine[0] + 1, mine[1]))
+    out.that(len(seen) == spent_at,
+             "and an enemy entering reach after that draws nothing -- a hold"
+             " that silently persisted would be a free attack every round",
+             f"{len(seen) - spent_at} attack(s) after the hold was spent")
+
+    # **The ignored trigger, on its own board, because `once` hides it.**
+    # Everything above happens after the hold has already fired, and a fired
+    # hold is consumed by `once` whatever its duration -- so those checks
+    # cannot tell `SONT` from `ENCOUNTER`. Measured: planting
+    # `until=When.ENCOUNTER` left all of them green.
+    #
+    # The printed rule's distinctive half is the other one -- *"if the
+    # trigger doesn't occur or you choose to ignore it, you can't use your
+    # readied action"* -- so it needs a hold that never fires at all.
+    world2, me2, _ = _board("f2743", 1)
+    enc2 = Encounter(world2)
+    enc2.start()
+    foe2 = next(f for f in enemies(world2, me2) if alive(world2, f))
+    mine2 = world2.get(me2, Position).square
+    for dx in range(1, 5):
+        step(world2, foe2, (mine2[0] + dx, mine2[1]))
+    for _ in range(20):
+        if any(a.kind == "ready" for a in legal(world2, enc2, me2)):
+            break
+        enc2.advance()
+    hold2 = next((a for a in legal(world2, enc2, me2) if a.kind == "ready"), None)
+    if hold2 is None:
+        return
+    perform(world2, enc2, me2, hold2)
+    out.that(_holds(world2, me2),
+             "a second hold is laid and this time nothing triggers it",
+             f"holds: {_holds(world2, me2)}")
+    quiet: list[int] = []
+    world2.bus.on(AttackDeclared, lambda ev: quiet.append(ev.attacker))
+    walked2 = []
+    for _ in range(20):
+        nxt = enc2.advance()
+        walked2.append(nxt)
+        if nxt == me2:
+            break
+    out.that(me2 in walked2,
+             "the order came round to the holder with the trigger never"
+             " having occurred",
+             f"walked {walked2}")
+    out.that(not _holds(world2, me2),
+             "an IGNORED hold is spent too -- gone at the start of the"
+             " holder's next turn though it never fired",
+             f"holds: {_holds(world2, me2)}")
+    step(world2, foe2, (mine2[0] + 3, mine2[1]))
+    step(world2, foe2, (mine2[0] + 1, mine2[1]))
+    out.that(not quiet,
+             "and it pays out nothing afterwards, so a readied action costs"
+             " the standard action whether or not it is used",
+             f"{len(quiet)} attack(s) from a hold that should have expired")
+
+
+def _holds(world, me) -> list[str]:  # noqa: ANN001
+    """The readied-attack holds live on this creature, by label."""
+    return [str(e.label) for e in world.effects.of(me)
+            if "ready" in str(e.label).lower()]
+
+
+def _in_reach(world, me, foe) -> bool:  # noqa: ANN001
+    """Could the holder's basic attack reach that creature from here?"""
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, _within_reach
+
+    held = (world.get(me, Powers) or Powers()).basic
+    power = REGISTRY.get(held) if held else None
+    return bool(power) and _within_reach(world, me, power, foe)
+
+
 def a_minion_missed_takes_nothing(out: Result) -> None:
     """A minion takes no damage from an attack that misses it.
 
@@ -49672,6 +49898,12 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "readied": (
+        a_readied_attack_waits_for_reach_and_is_spent_either_way,
+        "a held basic attack fires when an enemy walks into reach, once,"
+        " and is spent at the start of the holder's next turn whether or"
+        " not the trigger ever came (#996)",
     ),
     "ongoing_trap": (
         an_ongoing_trap_takes_a_turn,

@@ -141,6 +141,7 @@ def legal(
     out.extend(_manoeuvres(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
     out.extend(_searching(world, encounter, actor))
+    out.extend(_readying(world, encounter, actor))
     out.extend(_feinting(world, encounter, actor))
     out.extend(_delaying(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
@@ -360,6 +361,53 @@ def _searching(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # is to look around, not to look at a particular trap you cannot see.
     return [Action(kind="search", cost=ActionType.MINOR,
                    targets=tuple(sorted(hidden)))]
+
+
+def _readying(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Hold a basic attack for an enemy that comes into reach. #996.
+
+    One of the twenty printed actions, and the printed answer to a failure
+    mode DMG2 names and this engine has -- monsters win initiative, each
+    walks up and attacks, and nothing is ever fought anywhere but the
+    doorway. The book's advice is to *"delay some of the monsters' turns or
+    **ready their attacks for when the characters move closer**"*, and delay
+    was the half already built.
+
+    **One trigger, deliberately.** The printed action lets a creature choose
+    any trigger and any of three action types; this offers the one the book
+    itself highlights -- *"if you want to use a readied action to attack
+    before an enemy attacks, you should ready your action in response to the
+    enemy's movement"* -- because that is the interrupting case and the one
+    that means holding a line. A free-text trigger would be the open
+    vocabulary `objective.KINDS` and `Scene.terrain` both avoid.
+
+    Three conditions, each ruling out an offer that could not pay:
+
+    * the standard action is affordable -- *"whichever action you choose,
+      the act of readying it is a standard action"*;
+    * the creature has a basic attack to hold. `Powers.basic` is a monster's
+      own printed row rather than the generic one, so this is asked of the
+      component and not assumed;
+    * a live enemy exists. Readying against an empty board is a standard
+      action that can never trigger, which is the "never offer what cannot
+      pay out" rule the trap search above follows.
+
+    **Not gated on an enemy being out of reach**, which was tempting and is
+    wrong: an enemy already adjacent may still *leave and re-enter*, and
+    more to the point a creature holding a line wants the attack armed
+    before anything approaches. Gating on distance would make the action
+    unavailable in exactly the position it is for.
+    """
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return []
+    if not can_act(world, actor) or not alive(world, actor):
+        return []
+    known = world.get(actor, Powers)
+    if not (known and known.basic):
+        return []
+    if not any(alive(world, f) for f in enemies(world, actor)):
+        return []
+    return [Action(kind="ready", cost=ActionType.STANDARD)]
 
 
 def _feinting(world: World, encounter: Encounter, actor: int) -> list[Action]:
@@ -1658,6 +1706,71 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # A failed check is still a spent minor and nothing else, which is
         # the risk this action has always carried.
         Cast(world=world, me=actor, ref="hide").hide(check=True)
+        return True
+
+    if action.kind == "ready":
+        from .cast import Cast
+        from .dsl import REGISTRY, use
+        from .events import EnterSquare
+
+        # **No local import of `Powers`, `When`, `alive` or `enemies`**, all
+        # four of which are module-level here. A function-local import of a
+        # name used earlier in the *same* function makes it local for the
+        # whole body, so importing `Powers` here raised `F823` on
+        # `perform`'s power branch three hundred lines above -- and importing
+        # `When` silently orphaned the module-level one. `#996` recorded this
+        # trap from the previous attempt and `ruff` caught it again here,
+        # which is the only reason it is a comment rather than a bug.
+
+        # **The payout is `use(..., opportunity=True)`, not `c.basic`.** A
+        # readied action *is* an immediate reaction by the printed rules, and
+        # `opportunity=True` is how this engine costs one -- `Cast.opportunity`
+        # is a field the attack context reads, so a row saying "+2 AC against
+        # opportunity attacks" applies to it. Swinging through `c.basic`
+        # instead would land the same damage uncosted and invisible to every
+        # row written about reactions.
+        held = (world.get(actor, Powers) or Powers()).basic
+        power = REGISTRY.get(held) if held else None
+        if power is None:
+            return False
+
+        def strike(ev: object) -> None:
+            mover = getattr(ev, "actor", -1)
+            # The mover is standing in the square by the time this runs --
+            # `movement.step` assigns `pos.square` and places the creature on
+            # the grid *before* emitting, so reach is measured to where it
+            # arrived and not to where it left. Proven on #996.
+            if mover == actor or not alive(world, mover):
+                return
+            if mover not in enemies(world, actor):
+                return
+            # **No reach test here, and that is measured rather than
+            # assumed.** `use` already refuses an out-of-reach melee swing on
+            # its explicit-target arm -- that is `#381`, which found 100 such
+            # swings -- and it does so with `_reach_of`, so a reach weapon
+            # gets the 2 squares it actually reaches rather than a geometric
+            # 1. An explicit `_within_reach` guard here was written first and
+            # a plant proved it **dead**: removing it left every assertion in
+            # `drivers.readied` green, including the out-of-reach ones.
+            #
+            # And the hold is not wasted by the refusal, which is the thing
+            # that made the guard look necessary. `once` spends the watch on
+            # a successful payout, not on being invoked: measured, a foe
+            # stepping through three out-of-reach squares leaves the hold
+            # live, and only the step into reach consumes it.
+            use(world, actor, held, targets=[mover], opportunity=True)
+
+        # **`SONT` and `once` together are the printed spend rule.**
+        # *"If the trigger doesn't occur or you choose to ignore it, you
+        # can't use your readied action"* -- so the hold ends at the start of
+        # the holder's next turn whether or not it fired, which `SONT` does;
+        # and `once` stops one readied attack paying out down a whole line of
+        # approaching enemies. A hold that silently persisted would be a free
+        # attack every round, which is the `c.watch(once=True)` fault #540
+        # already records.
+        Cast(world=world, me=actor, ref="ready").watch(
+            EnterSquare, strike, until=When.SONT, once=True, label="ready",
+        )
         return True
 
     if action.kind == "search":
