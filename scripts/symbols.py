@@ -701,6 +701,10 @@ READERS: dict[str, list[str]] = {
         "printed_kinds",
         "race_of", "race_sizes", "race_skills", "races_sized", "scenery",
         "stat_block", "targetable", "team",
+        # Beside `combatants` and `creatures`, which are the other two cuts
+        # of the same question -- the target pool, the win condition and
+        # now the initiative roster. #956.
+        "turn_takers",
     ],
     "where, and how far": [
         "adjacent", "charging", "distance_between", "hindering_at",

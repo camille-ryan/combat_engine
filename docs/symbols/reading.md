@@ -63,6 +63,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Can a power be aimed at this, and land on it?
 - `query.team(world: 'World', eid: 'int') -> 'Team | None'`
   - (no docstring)
+- `query.turn_takers(world: 'World') -> 'list[int]'`
+  - The initiative roster: who gets a slot in the order.
 
 ## where, and how far
 
