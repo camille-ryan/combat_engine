@@ -16712,6 +16712,137 @@ def a_refresh_gives_back_one_expended_power(out: Result) -> None:
              f"{before} uses spent before, {known.times(twice)} after")
 
 
+def underwater_modifiers_apply_to_everyone(out: Result) -> None:
+    """The printed aquatic-combat modifiers, on everybody in the fight. #949.
+
+    DMG p.45. Three of the four bullets are attack-roll modifiers and are
+    checked here; the fourth is about movement.
+
+        "creatures using powers that have the fire keyword take a -2 penalty"
+        "...the spear and crossbow weapon groups take no penalties ... any
+         other weapon takes a -2 penalty"
+        "aquatic ... +2 bonus to attack rolls against opponents that do not
+         have this ability"
+
+    **Asserted through `situational_attack`, not through the helper.** That
+    is the function the kernel and `expect.py` both call, so a rule that
+    reached past it into `_underwater` would stay green if the wiring were
+    removed -- which is the whole failure this project has a standing note
+    about.
+
+    **Every arm has its dry twin.** A blanket modifier that fired on a dry
+    board would be far worse than one that never fires: almost every board in
+    the corpus is dry, so it would be a silent -2 on the whole game. The dry
+    reading is therefore asserted first and for each arm.
+    """
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies, kinds_of
+    from combat_engine.engine.resolve import situational_attack
+    from combat_engine.engine.types import Keyword
+
+    world, me, _ = _board("f1028", 1)
+    foe = next(f for f in enemies(world, me) if world.get(f, Gear) is not None
+               or True)
+    known = world.get(me, Gear)
+
+    # A power the holder knows that prints the fire keyword, and one that
+    # does not -- both off the real corpus rather than invented.
+    from combat_engine.engine.components import Powers
+    mine = world.get(me, Powers)
+    fire = next((r for r in mine.all
+                 if (p := REGISTRY.get(r)) is not None
+                 and Keyword.FIRE in getattr(p, "keywords", ())), "")
+    cold = next((r for r in mine.all
+                 if (p := REGISTRY.get(r)) is not None
+                 and Keyword.FIRE not in getattr(p, "keywords", ())), "")
+    out.that(bool(fire) and bool(cold),
+             "this creature knows a fire power and a non-fire one, so the"
+             " keyword arm below is testing something",
+             f"fire={fire!r} other={cold!r}")
+    if not (fire and cold):
+        return
+
+    def mod(power: str) -> int:
+        return situational_attack(world, me, foe, power, {})
+
+    dry_fire, dry_cold = mod(fire), mod(cold)
+    out.that(not world.terrain,
+             "the board starts dry, which is what the dry readings below"
+             " mean",
+             f"terrain: {sorted(world.terrain)}")
+
+    world.terrain.add("aquatic")
+    wet_fire, wet_cold = mod(fire), mod(cold)
+
+    # **The fire arm isolated as a difference, not read off a total.** The
+    # first version of this asserted `wet_fire - dry_fire == -2` and it
+    # failed at -4, correctly: this attacker holds a longsword, so the weapon
+    # arm is -2 as well and the two stack -- which is what the book allows
+    # and what the verb's docstring claims. Comparing a fire power against a
+    # non-fire one *on the same board* cancels every other arm and leaves
+    # exactly the keyword.
+    out.that(wet_fire - wet_cold == -2,
+             "a fire power takes -2 underwater, measured against a non-fire"
+             " power on the same board so the weapon arm cancels",
+             f"fire {wet_fire}, other {wet_cold}, both dry {dry_fire}/{dry_cold}")
+    out.that(dry_fire == dry_cold,
+             "and on a dry board the two are equal -- the keyword costs"
+             " nothing out of the water",
+             f"dry fire {dry_fire}, dry other {dry_cold}")
+    out.that(wet_cold - dry_cold == -2,
+             "a land-dweller with an ordinary weapon is -2 underwater from"
+             " the weapon arm alone",
+             f"dry {dry_cold}, wet {wet_cold}")
+
+    # The weapon arm. `f1028` is a sorcerer, so what it holds decides.
+    held = known.main if known is not None else None
+    out.that(held is not None,
+             "the attacker is holding a weapon, so the weapon arm is"
+             " testable",
+             f"held: {getattr(held, 'group', None)!r}")
+    if held is not None:
+        was = held.group
+        held.group = "spear"
+        spear = mod(cold)
+        held.group = "longsword"
+        other = mod(cold)
+        held.group = was
+        out.that(other - spear == -2,
+                 "a weapon outside the spear and crossbow groups takes -2"
+                 " where a spear takes none",
+                 f"spear {spear}, other {other}")
+
+    # The aquatic arm, both directions.
+    me_wet = "aquatic" in {w.lower() for w in kinds_of(world, me)}
+    out.that(not me_wet,
+             "the attacker is not aquatic to begin with, so the +2 below is"
+             " a change rather than a starting state",
+             f"kinds: {sorted(kinds_of(world, me))[:5]}")
+    before = mod(cold)
+    world.effects.apply(me, me, When.ENCOUNTER, label="x:origin:aquatic")
+    after = mod(cold)
+    out.that(after - before == 2,
+             "an aquatic creature gains +2 against an opponent that is not"
+             " aquatic",
+             f"before {before}, after {after}")
+    world.effects.apply(foe, foe, When.ENCOUNTER, label="x:origin:aquatic")
+    both = mod(cold)
+    out.that(both - before == 0,
+             "and nothing when the opponent is aquatic too -- the bonus is"
+             " against creatures without the ability, not a flat bonus for"
+             " having it",
+             f"one-sided {after}, both {both}")
+
+    # And the whole thing goes away when the water does.
+    world.terrain.discard("aquatic")
+    out.that(mod(fire) == dry_fire and mod(cold) == dry_cold,
+             "taking the water away restores every dry reading exactly -- the"
+             " modifier is read from `world.terrain` and holds no state",
+             f"fire {mod(fire)} vs {dry_fire}, other {mod(cold)} vs {dry_cold}")
+
+
 def a_minion_missed_takes_nothing(out: Result) -> None:
     """A minion takes no damage from an attack that misses it.
 
@@ -50037,6 +50168,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "underwater": (
+        underwater_modifiers_apply_to_everyone,
+        "the printed aquatic-combat modifiers apply to everyone in the"
+        " fight, and to nobody on a dry board (#949)",
     ),
     "refresh": (
         a_refresh_gives_back_one_expended_power,

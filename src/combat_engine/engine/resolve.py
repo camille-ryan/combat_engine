@@ -220,7 +220,92 @@ def situational_attack(
         situational -= max(from_cover, from_concealment)
     situational -= _long_range(world, attacker, target, power, branch, ctx)
     situational += _mark_penalty(world, attacker, among or (target,))
+    situational += _underwater(world, attacker, target, power)
     return situational
+
+
+#: The two weapon groups the printed underwater rule exempts.
+_SWIMMABLE_GROUPS = frozenset({"spear", "crossbow"})
+
+
+def _underwater(world: World, attacker: int, target: int, power: str) -> int:
+    """The printed aquatic-combat modifiers to an attack roll. #949.
+
+    DMG p.45, three of the four bullets -- the fourth is about movement and
+    belongs to `movement.py`, not here:
+
+        "creatures using powers that have the fire keyword take a -2 penalty
+         to attack rolls"
+
+        "characters using weapons from the spear and crossbow weapon groups
+         take no penalties to attack rolls with those weapons while fighting
+         underwater. characters using any other weapon take a -2 penalty"
+
+        "aquatic: creatures native to watery environments have the aquatic
+         ability. They gain a +2 bonus to attack rolls against opponents that
+         do not have this ability."
+
+    **In `situational_attack` and nowhere else**, because that function's own
+    docstring is the argument: `expect.py` reads it out of the kernel rather
+    than keeping its own copy, and when it kept one it priced away combat
+    advantage, cover, concealment, prone, long range and a mark. A blanket
+    modifier added anywhere else would be the same fault again.
+
+    **A no-op on every dry board**, which is almost all of them: the first
+    test is `world.terrain`, so nothing is read and nothing allocated unless
+    a module declared the fight underwater. The same shape as `Grid.light`
+    being empty until a row darkens a square.
+
+    The three stack, and the book does not say otherwise: a fire power swung
+    with a longsword by a land-dweller against a sahuagin is -2 for the
+    keyword and -2 for the weapon, and the sahuagin's +2 is on *its* rolls
+    rather than against these.
+    """
+    if "aquatic" not in getattr(world, "terrain", frozenset()):
+        return 0
+    from .components import Gear
+    from .dsl import get
+    from .types import Keyword
+
+    out = 0
+    declared = get(power)
+    # **The power's own keywords, not the damage type.** A fire power is one
+    # printed with the keyword; a power that happens to deal fire damage off
+    # a rider is not what the sentence is about.
+    if declared is not None and Keyword.FIRE in getattr(declared, "keywords", ()):
+        out -= 2
+    # **The weapon in hand decides, and only for a weapon attack.** A
+    # creature swinging no weapon -- a monster's claw, an implement power --
+    # takes no weapon penalty, because the printed sentence is about
+    # "characters using weapons".
+    gear = world.get(attacker, Gear)
+    held = gear.main if gear is not None else None
+    if held is not None and (held.group or "") not in _SWIMMABLE_GROUPS:
+        out -= 2
+    # **Aquatic against non-aquatic.** `monster.keywords` carries the word
+    # for the creatures whose stat block prints it; a character has no such
+    # keyword, so a land-dweller reads False on both sides and gets nothing.
+    if _is_aquatic(world, attacker) and not _is_aquatic(world, target):
+        out += 2
+    return out
+
+
+def _is_aquatic(world: World, eid: int) -> bool:
+    """Does this creature's stat block print the aquatic ability?
+
+    **`query.kinds_of`, not a field on a component.** The first draft read
+    `Ident.keywords`, and `Ident` carries `ref`, `tag`, `book` and `role` and
+    no keywords at all -- so it would have answered False for every creature
+    in the game, silently, which is the failure mode `engine/CLAUDE.md` opens
+    with. `kinds_of` is the reader that exists: it parses the stat block's own
+    `keywords` column, adds `kind` and `origin`, and honours
+    `c.set_origin`/`unorigin` -- so a creature *made* aquatic by a row counts
+    too, which the printed sentence ("creatures native to watery
+    environments have the aquatic ability") does not forbid.
+    """
+    from .query import kinds_of
+
+    return "aquatic" in {w.lower() for w in kinds_of(world, eid)}
 
 
 def settle(result: AttackResult, *, floor: int = 20) -> None:
