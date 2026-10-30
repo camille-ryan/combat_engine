@@ -1700,39 +1700,38 @@ POSITION_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
 #: the thing `audit.py`'s own note calls a bare allowance.
 #:
 #: Each is a citation the compendium writes in a position `_elsewhere` and
-#: `_granted` do not read. **Four of the original seven are resolved**, by
-#: `build._CITING` -- `when you use`, `use of your`, `affected by your` and
-#: `squares of a`, each measured over the live specs before it was turned on
-#: and each with a negative control. These three are what is left:
+#: `_granted` do not read. **Empty, and that is the end of #340's
+#: residual** -- 34 occurrences in a lead-in the scrub resolves elsewhere,
+#: all 34 now either swapped or read and waived.
 #:
-#: * `terrain.x2_55` -> `x2_56` -- *"the <name> (see below)"*. **The one I
-#:   tried and withdrew**, and the reason is worth keeping: a phrase before
-#:   a parenthesised *see* looks like the most generally useful position in
-#:   the corpus, and of 8 swaps **6 are right and 2 are wrong** -- both
-#:   wrong ones reading *"(see below)"* exactly as two of the right ones
-#:   do. What separates them is whether the thing described below has a
-#:   **ref of its own**: a conjuration belonging to the summoning row does,
-#:   a creature an unrelated item happens to share a name with does not.
-#:   That is not a question about position, so no position can answer it.
-#: * `item_block.i2693x1` -> `b:c128-3` -- *"you can use your <build>
-#:   <feature> feature"*. Names a **build and a class feature** in one
-#:   clause and the second is unresolved too, so this entry is a floor.
-#: * `feat.f2269` -> `x8_323` -- *"the <name> within you awakens"*. The
-#:   weakest of the seven: flavour prose rather than a citing
-#:   construction, and the only position is the bare `the`.
+#: How the last ones went, because the route matters more than the count:
 #:
-#: And `f1591` resolving is itself a floor confirmed: its clause names
-#: **three** powers and one resolved, so the other two are either absent
-#: from the index or not uniquely owned. The gate will say so if they ever
-#: become either.
+#: * **four by position** -- `build._CITING`'s `when you use`,
+#:   `use of your`, `affected by your` and `squares of a`, each measured
+#:   over the live specs before being turned on and each with a negative
+#:   control.
+#: * **three by hand**, in `build._HAND_SWAPS`, keyed on refs. Those three
+#:   are the ones no position can decide, and the measurement that says so
+#:   is worth keeping: a phrase before a parenthesised *see* looks like the
+#:   most generally useful position in the corpus and is **6 of 8** -- with
+#:   both wrong ones reading *"(see below)"* exactly as two of the right
+#:   ones do. What separates them is whether the thing described below has
+#:   a **ref of its own**, which is not a question about position.
+#:
+#: **Kept as an empty frozenset rather than deleted**, with the gate still
+#: reporting it, because the next occurrence of this shape wants somewhere
+#: to go that is visibly *owed* rather than waived -- which is the whole
+#: distinction this pair of baselines exists to draw. Deleting it would
+#: leave only the waiver list, and a new real miss would then have to be
+#: argued into the wrong one.
+#:
+#: And `f1591` is a floor confirmed: its clause names **three** powers and
+#: one resolved, so the other two are absent from the index or not uniquely
+#: owned. The gate will say so if they ever become either.
 #:
 #: Shrinks, never grows, and unlike the waivers above **every entry here is
-#: work**. #340 holds the list and the reasoning.
-POSITION_OWED: frozenset[tuple[str, str, str]] = frozenset({
-    ("feat", "f2269", "x8_323"),
-    ("item_block", "i2693x1", "b:c128-3"),
-    ("terrain", "x2_55", "x2_56"),
-})
+#: work**. #340 holds the reasoning.
+POSITION_OWED: frozenset[tuple[str, str, str]] = frozenset()
 
 
 def _resolved_positions(index: dict[str, list[str]]) -> int:
@@ -1839,6 +1838,10 @@ def _resolved_positions(index: dict[str, list[str]]) -> int:
     print(f"no NEW spec prints a two-word name where the scrub resolves a "
           f"ref ({len(POSITION_BASELINE)} coincidences read and waived, see "
           f"POSITION_BASELINE)")
+    if not POSITION_OWED:
+        print("  0 real misses owed -- all 34 are swapped or read and "
+              "waived (#340)")
+        return 0
     print(f"  {len(POSITION_OWED)} real miss(es) still owed, each wanting a "
           f"position nothing reads yet -- see POSITION_OWED, #340:")
     for table, ref, owner in sorted(POSITION_OWED):

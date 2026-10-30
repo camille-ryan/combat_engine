@@ -3951,8 +3951,28 @@ _SUB_OPTION = re.compile(r"rt:r\d+-s\d+|cf:[a-z0-9-]+-f\d+(?:c\d+)?s\d+")
 #:
 #: Shrinks when a rule can be shown to cover an entry, never grows without
 #: the sentence being read. #506.
-_HAND_SWAPS: dict[str, tuple[str, ...]] = {
-    "f1411": ("w3670", "w3666"),
+#: **Keyed `(table, ref)`, because the three `#340` entries are in three
+#: different tables.** #506 needed one and `feat` was hardcoded; widening it
+#: once is cheaper than a second list with the same argument behind it.
+_HAND_SWAPS: dict[tuple[str, str], tuple[str, ...]] = {
+    ("feat", "f1411"): ("w3670", "w3666"),
+    # **`#340`'s last three**, each read in its own sentence and each one a
+    # position no test can decide. They are what is left after six citing
+    # positions landed, and the reason they are a list is measured:
+    #
+    #   a phrase before a parenthesised *see* looks like the most generally
+    #   useful position in the corpus and is **6 of 8** -- and the two wrong
+    #   ones read "(see below)" exactly as two of the right ones do. What
+    #   separates them is whether the thing described below has a ref of its
+    #   own, which is not a question about position.
+    #
+    # So: hand-read, with the sentence quoted on `#340` rather than here,
+    # because quoting it here would print the name of a ref this entry
+    # cites -- which is what `--cited` reds on and what it caught in the
+    # note above.
+    ("terrain", "x2_55"): ("x2_56",),
+    ("item_block", "i2693x1"): ("b:c128-3",),
+    ("feat", "f2269"): ("x8_323",),
 }
 
 
@@ -3973,15 +3993,20 @@ def _hand_swaps(
     from .sanitise import scrub
 
     swapped = 0
-    for ref, owners in _HAND_SWAPS.items():
+    for (table, ref), owners in _HAND_SWAPS.items():
+        if table not in SPEC_TABLES:
+            raise AssertionError(
+                f"_HAND_SWAPS names table {table!r}, which is not one of the "
+                f"{len(SPEC_TABLES)} registered spec tables."
+            )
         row = out.execute(
-            "SELECT spec FROM feat WHERE ref = ?", (ref,)
+            f"SELECT spec FROM {table} WHERE ref = ?", (ref,)
         ).fetchone()
         if row is None:
             raise AssertionError(
-                f"_HAND_SWAPS names {ref}, which this build has no feat row "
-                f"for. The list is stale -- read the card and fix it, never "
-                f"drop the entry to make this pass."
+                f"_HAND_SWAPS names {table}.{ref}, which this build has no "
+                f"row for. The list is stale -- read the card and fix it, "
+                f"never drop the entry to make this pass."
             )
         spec = row[0] or ""
         mapping = {}
@@ -4011,7 +4036,8 @@ def _hand_swaps(
         fixed = scrub(spec, mapping)
         if fixed != spec:
             out.execute(
-                "UPDATE feat SET spec = ? WHERE ref = ?", (fixed, ref)
+                f"UPDATE {table} SET spec = ? WHERE ref = ?",
+                (fixed, ref),
             )
             swapped += len(mapping)
     return swapped
