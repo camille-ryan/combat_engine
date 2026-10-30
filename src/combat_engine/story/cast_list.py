@@ -57,9 +57,9 @@ from random import Random
 from combat_engine.content import loader
 from combat_engine.db import game, localisation
 
-from . import BAND, SIDE, WORTH, budget
-from .module import FoeSpec, Scene
-from .reflavour import Dressed, Reflavour, themed
+from . import BAND, SIDE, WORTH, budget, ceiling
+from .module import DIFFICULTY, FoeSpec, Scene
+from .reflavour import Dressed, Reflavour, Wave, themed
 
 #: How far past the budget a scene may go before a creature is skipped. The
 #: same 10% `_compose` allows, for the same reason: the last creature taken is
@@ -241,9 +241,222 @@ def _rank(
     return sorted(ordered, key=key)
 
 
+def _for_party_size(
+    out: Dressed, scene: Scene, party_level: int,
+    party_size: int, stated_size: int,
+) -> None:
+    """The adventure's own rule for a table that is not the size it assumes.
+
+    **It is a rule, not a table, which is what #798 had wrong.** The issue
+    is titled "adjusts each encounter for party size *by name*" and the
+    page does nothing of the kind. Every chapter prints the same two
+    paragraphs, and where an encounter does mention a specific creature it
+    is illustrating the rule rather than specifying anything.
+
+    Paraphrased below, deliberately -- those two paragraphs are the
+    adventure's prose and belong in git-ignored `modules/`, and quoting
+    them here is what `leaks.py --modules` caught me doing:
+
+    * **short a character** (four where the module assumes five): take one
+      creature off the field, picked from the weakest or the least
+      consequential, and never a minion.
+    * **one over** (six): add a creature, the least complicated of the
+      kinds already fielded, preferring whichever sits nearest the
+      encounter's own level.
+
+    So it needs no authoring at all, which is why it is built now rather
+    than waiting for the trigger the issue set: a general rule over the
+    fielded list costs one function, where a per-encounter table would
+    have cost a schema field and a pass over every converted scene.
+
+    **One adjustment, not one per missing character.** The page says "a
+    weak party" and "remove one", and says nothing about a party of three.
+    Scaling it per head would be our curve again, which is the thing the
+    stated XP figure is trusted over.
+
+    **"Least important" is not modelled**, because nothing on a stat block
+    says it. Lowest level is the half that is measurable and is what the
+    page names first; the note says so rather than implying the pick was
+    the adventure's.
+    """
+    if not out.refs or not scene.xp:
+        return
+    if int(party_size) == int(stated_size) or not stated_size:
+        return
+
+    # `_facts` already carries the rank, cached -- a second loader call
+    # per ref would be the same answer at more cost.
+    bulk = [(ref, _facts(ref)[1]) for ref in out.refs
+            if _facts(ref)[4] != "minion"]
+    if not bulk:
+        out.notes.append(
+            f"{scene.id}: the party is {int(party_size)} against the "
+            f"module's {int(stated_size)}, and the adventure's rule only "
+            "moves non-minions -- this fight is all minions, so it is "
+            "fielded as printed"
+        )
+        return
+
+    if int(party_size) < int(stated_size):
+        drop = min(bulk, key=lambda pair: (pair[1], out.refs.index(pair[0])))
+        if len(out.refs) <= 1:
+            out.notes.append(
+                f"{scene.id}: the party is {int(party_size)} against the "
+                f"module's {int(stated_size)}, and the only creature in "
+                "this fight is the one the rule would remove -- fielded "
+                "as printed instead"
+            )
+            return
+        # **By index, because `flavours` runs parallel to `refs`.** A bare
+        # `refs.remove` leaves the two lists one apart and every creature
+        # after the removed one is dressed as its neighbour.
+        gone = out.refs.index(drop[0])
+        del out.refs[gone]
+        if gone < len(out.flavours):
+            del out.flavours[gone]
+        out.notes.append(
+            f"{scene.id}: a weak party ({int(party_size)} against the "
+            f"module's {int(stated_size)}), so the adventure's rule drops "
+            f"one non-minion -- {drop[0]}, the lowest level at {drop[1]}. "
+            "'Least important' is the page's other word for it and is not "
+            "modelled"
+        )
+        return
+
+    add = min(bulk, key=lambda pair: (abs(pair[1] - party_level), pair[1],
+                                      out.refs.index(pair[0])))
+    # The copy is dressed exactly as the creature it is a second of --
+    # the page says "another guard drake", not a differently flavoured one.
+    twin = out.refs.index(add[0])
+    out.refs.append(add[0])
+    if twin < len(out.flavours):
+        out.flavours.append(out.flavours[twin])
+    out.notes.append(
+        f"{scene.id}: a strong party ({int(party_size)} against the "
+        f"module's {int(stated_size)}), so the adventure's rule adds one "
+        f"more of a non-minion already here -- {add[0]}, level {add[1]}, "
+        f"nearest the party's {party_level}"
+    )
+
+
+def _stepped(scene: Scene) -> tuple[float, str]:
+    """The scene's share of the budget, moved one band by its objective.
+
+    An objective changes what a fight costs to build: a party that has to hold
+    a line, or get something out, is doing two things at once and the printed
+    advice everywhere is to ease the opposition back for it -- or to tighten it
+    when the objective makes the fight shorter. One **band**, not a free
+    multiplier, so an objective can only ever buy what a module could have
+    asked for by writing a different `difficulty`.
+
+    Returns the share and a note, because `CLAUDE.md` is explicit that a cap
+    the reader is not told about *"reads as 'covered everything' when it did
+    not"* -- and a budget that silently moved is the same fault. The note is
+    empty when nothing moved.
+
+    **A stated `xp` figure still wins**, which `resolve` enforces by never
+    consulting the share in that branch. That is deliberate and is the same
+    call `#798` made for party size: a module that prints its own number for
+    its own encounter is more trustworthy than our curve, so an objective
+    cannot quietly re-price a fight the page already priced. A scene that
+    wants both says so by dropping the `xp`.
+    """
+    aim = scene.objective
+    if aim is None or not (aim.harder or aim.easier):
+        return scene.share, ""
+    ladder = sorted(DIFFICULTY, key=lambda name: DIFFICULTY[name])
+    try:
+        at = ladder.index(scene.difficulty)
+    except ValueError:                      # a band the loader would refuse
+        return scene.share, ""
+    to = at + 1 if aim.harder else at - 1
+    if not 0 <= to < len(ladder):
+        # Already at the end of the ladder. Reported rather than clamped
+        # silently: an author who wrote `harder` on a `deadly` scene asked for
+        # something the ladder cannot express and should hear so.
+        return scene.share, (
+            f"{scene.id}: the {aim.kind} objective asks for a "
+            f"{'harder' if aim.harder else 'easier'} fight and "
+            f"{scene.difficulty} is already the end of the ladder, so the "
+            "budget is unchanged"
+        )
+    moved = ladder[to]
+    return DIFFICULTY[moved], (
+        f"{scene.id}: the {aim.kind} objective makes this "
+        f"{'harder' if aim.harder else 'easier'}, so the budget is built "
+        f"as {moved} rather than {scene.difficulty}"
+    )
+
+
+def _draw_for(
+    spec: FoeSpec, scene: Scene, party_level: int, draw: Random | None,
+    out: Dressed,
+) -> tuple[list[str], Reflavour]:
+    """Which rows one module line could be, and how to dress them.
+
+    **Lifted out of the foes loop so an ally draws the same way a foe
+    does.** #961 wants a module's printed ally roster on the PC side, and
+    an ally resolved by a second, similar-looking path is a second set of
+    tiers to keep in step -- which is the duplication `table.characters`
+    already records as a cost it could not avoid. Here it could.
+
+    Returns an empty pool when nothing fits, having said so in `notes`.
+    """
+    named = find_by_name(spec.name) if spec.name else ""
+    tier = ""
+    pool: list[str] = []
+
+    if named and usable(named) and in_tier(named, party_level):
+        tier, pool = BY_NAME, [named]
+    elif named and usable(named):
+        out.notes.append(
+            f"{scene.id}: the creature written for {spec.name!r} is level "
+            f"{_facts(named)[1]}, outside the party's tier -- fielding "
+            "something of the right shape instead"
+        )
+    elif named:
+        out.notes.append(
+            f"{scene.id}: {spec.name!r} resolves to {named}, which is not "
+            "written yet -- fielding something of the right shape instead"
+        )
+
+    if not pool:
+        candidates = _pool(spec, party_level)
+        if spec.words:
+            matching = [
+                r for r in candidates if set(spec.words) & _facts(r)[2]
+            ]
+            if matching:
+                tier, pool = BY_THEME, _rank(
+                    matching, spec, party_level, draw)
+        if not pool and candidates:
+            tier, pool = BY_SHAPE, _rank(
+                candidates, spec, party_level, draw)
+
+    if not pool:
+        out.notes.append(
+            f"{scene.id}: nothing written fits {spec.count}x "
+            f"{spec.rank} {spec.role or 'any role'} near level "
+            f"{party_level} -- that line is not fielded"
+        )
+        return [], Reflavour()
+
+    # A reflavour is only mechanical when the shape tier had to dress
+    # something; a creature found by name or theme already *is* the thing,
+    # and bending it further would be inventing rules the module did not
+    # ask for. All three tiers carry the module's own name for display.
+    flavour = (
+        themed(spec.words, party_level, name=spec.name)
+        if tier == BY_SHAPE
+        else Reflavour(name=spec.name)
+    )
+    return pool, flavour
+
+
 def resolve(
     scene: Scene, *, party_level: int, draw: Random | None = None,
     party_size: int = SIDE, stated_size: int = SIDE,
+    pitch: float = 1.0,
 ) -> Dressed:
     """The creatures a combat scene fields, and how each one is dressed.
 
@@ -260,9 +473,30 @@ def resolve(
         return out
 
     per_head = max(1, int(party_size)) / SIDE
+    share, stepped = _stepped(scene)
+    if stepped:
+        out.notes.append(stepped)
+    # **The budget's own clamp, said out loud.** `story.budget` returned 0
+    # above the database's ceiling and every division downstream guards
+    # itself with `max(aim, 1.0)`, so a module validated for a paragon party
+    # fielded nobody and raised nothing -- which reads as a `cast_list` bug.
+    # The budget clamps now; this is the half that makes the clamp visible,
+    # the same way a deferred creature and a cut count are already printed.
+    # #963.
+    top = ceiling()
+    if party_level > top:
+        out.notes.append(
+            f"party_level {party_level} is above the highest level this "
+            f"database can field a standard monster at ({top}), so the "
+            f"budget is level {top}'s and the creatures will be too"
+        )
+    # **The reactive scale, and only where the module said nothing.** A
+    # printed `xp` figure overrides the headcount already, so a dynamic
+    # scale has to sit outside it or a published encounter stops being the
+    # encounter the page describes. #977.
     want = (
         float(scene.xp) if scene.xp
-        else budget(party_level) * scene.share * per_head
+        else budget(party_level) * share * per_head * pitch
     )
     # **A stated XP figure overrides the headcount, silently until now.**
     # When a scene prints its own number -- which every fight in the one
@@ -281,10 +515,15 @@ def resolve(
     # adventure -- and said nothing to a party of four, which is the one
     # playing a fight built for somebody else.
     if scene.xp and int(party_size) != int(stated_size):
+        # **The budget is still not rescaled**, and that is deliberate: a
+        # module that printed a figure for its own party is more
+        # trustworthy than our curve. What changed is that the adventure's
+        # own creature rule is applied afterwards, so this no longer says
+        # the fight is unscaled -- `_for_party_size` reports what it did.
         out.notes.append(
             f"{scene.id}: the module states {scene.xp} XP for a party of "
-            f"{int(stated_size)}, so it is used as printed -- this fight "
-            f"is NOT scaled for the {int(party_size)} playing it"
+            f"{int(stated_size)}, so the figure is used as printed rather "
+            f"than rescaled for the {int(party_size)} playing it"
         )
     if want <= 0:
         out.notes.append(
@@ -292,57 +531,58 @@ def resolve(
             "budget cannot be worked out -- fielding the module's own counts"
         )
         want = float("inf")
+    # **The allies, before a penny of the budget is spent**, because the
+    # printed rule is to build the encounter for the party *including*
+    # them -- so their worth is added to what the opposition may cost. #961.
+    helped = _allies(out, scene, party_level, draw)
+    if helped and want != float("inf"):
+        want += helped
+        out.notes.append(
+            f"{scene.id}: the opposition's budget is topped up by "
+            f"{helped:.0f} XP for them, so the fight is built to challenge "
+            "the party that includes them"
+        )
     spent = 0.0
 
     for spec in scene.foes:
-        named = find_by_name(spec.name) if spec.name else ""
-        tier = ""
-        pool: list[str] = []
-
-        if named and usable(named) and in_tier(named, party_level):
-            tier, pool = BY_NAME, [named]
-        elif named and usable(named):
-            out.notes.append(
-                f"{scene.id}: the creature written for {spec.name!r} is level "
-                f"{_facts(named)[1]}, outside the party's tier -- fielding "
-                "something of the right shape instead"
-            )
-        elif named:
-            out.notes.append(
-                f"{scene.id}: {spec.name!r} resolves to {named}, which is not "
-                "written yet -- fielding something of the right shape instead"
-            )
-
+        pool, flavour = _draw_for(spec, scene, party_level, draw, out)
         if not pool:
-            candidates = _pool(spec, party_level)
-            if spec.words:
-                matching = [
-                    r for r in candidates if set(spec.words) & _facts(r)[2]
-                ]
-                if matching:
-                    tier, pool = BY_THEME, _rank(
-                        matching, spec, party_level, draw)
-            if not pool and candidates:
-                tier, pool = BY_SHAPE, _rank(
-                    candidates, spec, party_level, draw)
-
-        if not pool:
-            out.notes.append(
-                f"{scene.id}: nothing written fits {spec.count}x "
-                f"{spec.rank} {spec.role or 'any role'} near level "
-                f"{party_level} -- that line is not fielded"
-            )
             continue
 
-        # A reflavour is only mechanical when the shape tier had to dress
-        # something; a creature found by name or theme already *is* the thing,
-        # and bending it further would be inventing rules the module did not
-        # ask for. All three tiers carry the module's own name for display.
-        flavour = (
-            themed(spec.words, party_level, name=spec.name)
-            if tier == BY_SHAPE
-            else Reflavour(name=spec.name)
-        )
+        # **A line that walks on later is a wave, not part of the board.**
+        # The module's wave encounter imported as a flat cast with every
+        # reinforcement standing there at round 1, which is a different
+        # fight: the party faces the whole roster at once with no reason
+        # to hurry and no escalation. #962.
+        if spec.arrives:
+            picked = tuple(pool[i % len(pool)] for i in range(spec.count))
+            out.waves.append(Wave(
+                at=spec.at, every=spec.every, until=spec.until,
+                refs=picked, flavour=flavour, worth=spec.worth,
+                name=spec.name))
+            unpaid = sum(float(_facts(r)[0]) for r in picked)
+            if spec.worth:
+                # A wave that earns XP is paid for out of the budget, the
+                # same as anything else on the board.
+                spent += unpaid
+            else:
+                # **Said out loud rather than quietly free.** This is
+                # #958's finding in a second place: difficulty that costs
+                # the budget nothing is difficulty nobody priced. The
+                # module states the rule, so it is followed and reported
+                # rather than overridden.
+                out.notes.append(
+                    f"{scene.id}: a wave of {spec.count} arrives from round "
+                    f"{spec.at} and is worth no XP by the module's own rule, "
+                    f"so {unpaid:.0f} XP of threat is unpriced (#958)"
+                )
+            out.notes.append(
+                f"{scene.id}: {spec.count} arrive at the start of round "
+                f"{spec.at}"
+                + (f" and every {spec.every} round(s) to {spec.until}"
+                   if spec.every else "")
+            )
+            continue
 
         taken = 0
         for i in range(spec.count):
@@ -361,4 +601,93 @@ def resolve(
                 f"({spent:.0f} of {want:.0f} XP spent)"
             )
 
+    _for_party_size(out, scene, party_level, party_size, stated_size)
+    out.traps = _trap_allowance(out, party_level, want, spent)
     return out
+
+
+#: A board never gets more than this many traps however much budget is
+#: spare. `terrain.dress`'s own reason, kept: *"a floor with several of
+#: them stops the two sides meeting rather than making the crossing cost
+#: something"* -- which is a board-shape argument and not a budget one, so
+#: the budget may only ever reduce it.
+MOST_TRAPS = 2
+
+
+def _trap_allowance(
+    out: Dressed, party_level: int, want: float, spent: float,
+) -> int:
+    """How many traps this board can still afford. #958.
+
+    `terrain.dress` armed nought to two traps from a fixed draw **after**
+    `cast_list` had already spent the whole budget, so a trap walked past
+    the ceiling every creature is held to, silently, because it is added
+    by a function that was never told there is a budget.
+
+    **A dressed trap is priced as a minion**, which is DMG2's rule and a
+    correction to this issue's body: *"Single-shot traps should be
+    considered minions"*, and every trap this engine arms is single-shot
+    by construction -- `terrain.arm` sets `sprung` on the first body across
+    the square and never resets it. So one trap is 6.25% of a board rather
+    than the 25% the body assumed, which makes this a bookkeeping fault
+    rather than a balance emergency: one trap lands **inside**
+    `OVER = 1.1` and two land just outside.
+
+    An unspendable budget (`inf`, when no XP is written for the level)
+    allows the full `MOST_TRAPS`, because there is nothing to overspend.
+    """
+    if want == float("inf"):
+        return MOST_TRAPS
+    each = _slot_cost(party_level, "minion")
+    spare = want * OVER - spent
+    allowed = max(0, min(MOST_TRAPS, int(spare // each)))
+    if allowed < MOST_TRAPS:
+        out.notes.append(
+            f"traps: the budget pays for {allowed} of up to {MOST_TRAPS} "
+            f"({spare:.0f} XP spare, {each:.0f} each as a single-shot "
+            "trap is priced like a minion)"
+        )
+    return allowed
+
+
+def _allies(
+    out: Dressed, scene: Scene, party_level: int, draw: Random | None,
+) -> float:
+    """Draw the module's own ally roster, on the party's side. #961.
+
+    **After the foes and after the party-size scaling**, deliberately: an
+    ally is not part of the opposition's budget and must not be able to
+    push a creature off it. What it *does* do is make the fight easier, and
+    the printed rule says to pay for that --
+
+    > *When a nonplayer character participates in an encounter, that
+    > character earns an equal share of experience points. You should build
+    > encounters to challenge the party that includes the ally.*
+
+    -- so the opposition is topped up by what the allies are worth. **Each
+    ally's own XP, not a standard monster each**: the module's allies are
+    minions, worth a quarter, and crediting each with a full standard
+    monster would double a four-character fight for six guards who die to
+    one hit. DMG2's exact *"add the experience value of a standard monster
+    of the companion character's level"* is written for a **companion**,
+    which is a full party member and is #1015.
+    """
+    if scene.kind != "combat" or not scene.allies:
+        return 0.0
+    paid = 0.0
+    for spec in scene.allies:
+        pool, flavour = _draw_for(spec, scene, party_level, draw, out)
+        if not pool:
+            continue
+        for i in range(spec.count):
+            ref = pool[i % len(pool)]
+            out.allies.append(ref)
+            out.ally_flavours.append(flavour)
+            paid += float(_facts(ref)[0])
+    if not out.allies:
+        return 0.0
+    out.notes.append(
+        f"{scene.id}: {len(out.allies)} ally/allies fight alongside the "
+        f"party, worth {paid:.0f} XP"
+    )
+    return paid

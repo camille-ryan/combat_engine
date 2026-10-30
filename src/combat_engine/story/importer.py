@@ -53,6 +53,8 @@ from pathlib import Path
 from combat_engine.db import ROOT
 
 from .module import COMPLEXITY, DIFFICULTY, KINDS, RANKS, ROLES
+from .objective import KINDS as OBJECTIVES
+from .objective import POSITIONS
 
 #: Where an imported module lives. Git-ignored.
 MODULES = ROOT / "modules"
@@ -572,6 +574,59 @@ Also set `difficulty` ({difficulty}) from how the page pitches the fight, or
 `xp` if it states a number outright. `terrain` takes only: {terrain}.
 `tactics` is the page's own guidance and is carried for the DM to read.
 
+**`objective`, only when the page states a goal other than winning the
+fight.** Leave it out otherwise -- most fights have none, and a scene with no
+objective is judged exactly as it always was. `kind` takes only:
+{objectives}.
+
+* `diminish` -- the page says the enemy breaks or routs rather than dying to
+  the last. `share` is what fraction of their numbers is left, 0 to 1.
+* `defeat_foe` -- the page names a leader whose death ends it. `foes` is the
+  **module's own word** for that creature, exactly as written in the `foes`
+  list above, and it must be one of them.
+* `survive` -- the party has to last. `rounds` is how many.
+* `hold` -- the party defends somewhere. `rounds` and, if the page says which
+  way the enemy comes from, `position` from: {positions}.
+
+Add `harder` or `easier` (never both) when the page says the objective makes
+the fight tougher or lets the party off lighter -- it moves the budget one
+band. `says` is the page's own phrasing of the goal, printed to the player.
+
+**`cast`, at the top of the module: the people who appear more than once.**
+Each entry is `{{"name": ..., "wants": ..., "voice": ..., "looks": ...}}`.
+A scene naming one of them inherits all three, so write them **once** here
+rather than in every scene -- and a scene that contradicts the cast is
+refused rather than quietly preferring one, which is how a recurring
+character used to drift between appearances.
+
+What stays on the scene is what depends on where you meet them: `knows`,
+`hides` and `unseen`. Somebody who appears in one scene only needs no cast
+entry.
+
+**`details`, for a roleplay scene: the sensory notes a scene can spend.**
+A list of short lines -- a sound, a smell, something moving at the edge of
+the room. The scene's own text is read to the DM **once**, on the opening
+beat; after that it draws one of these per beat and each is used at most
+once.
+
+So put a one-time thing in `details` rather than in `sets`: an offer
+written into the scene text was being re-made every beat, because the text
+was in every prompt. This is the book's own shape -- *"you don't need to
+pile atmospheric details into your very first description [...] break them
+out to add some flair to your narratives as the adventure progresses."*
+
+**`grants`, whenever the page hands the party a thing.** Any kind of scene
+may carry one -- an NPC offering a consumable in conversation, a chapter's
+treasure line after a fight, something found over a night's rest. Each entry
+is `{{"what": ..., "count": N}}`, where `what` is the **page's own name for
+the thing** and `count` defaults to 1.
+
+Write it even when you are unsure the item exists in the database. An entry
+nothing resolves is **reported when the scene plays** rather than refused at
+validation, so a stated grant is always better than a dropped one -- the
+fault this exists to fix is a thing the prose handed over and nothing
+recorded. Nothing can spend an item yet; this makes it visible and durable.
+
 **A skill challenge** -- `complexity` {complexity_lo}-{complexity_hi}, and
 `primary`/`secondary` from the skills the page lists. Only these are skills:
 
@@ -751,6 +806,8 @@ def write_brief(into: Path, module_id: str, pages: int, scenes: int,
         scenes=scenes,
         dropped=_dropped_note(dropped or []),
         difficulty=", ".join(sorted(DIFFICULTY)),
+        objectives=", ".join(OBJECTIVES),
+        positions=", ".join(POSITIONS),
         terrain=", ".join(sorted(TERRAIN_WORDS)),
         complexity_lo=min(COMPLEXITY),
         complexity_hi=max(COMPLEXITY),

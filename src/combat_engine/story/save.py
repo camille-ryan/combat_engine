@@ -131,6 +131,94 @@ class Campaign:
     #: human. One field rather than two flows, so the loop cannot drift the
     #: way encounter setup did when it existed twice (#229).
     control: list[str] = field(default_factory=list)
+    #: Encounters completed since the last extended rest, **weighted by the
+    #: printed rule** rather than counted flat -- see `Scene.counts_toward`.
+    #: Two of these is a milestone and an action point.
+    #:
+    #: On the campaign rather than on `Party`, because it is a fact about
+    #: the day and not about any character, and because an extended rest
+    #: has to reset it from `run.step`, which is where the rest happens.
+    encounters: int = 0
+    #: Extended rests taken. The second of the two units a timeline entry
+    #: can be due in; scenes played is `len(visited)` and needs no field.
+    rests: int = 0
+    #: Timeline entries already fired or cancelled, by `<when><unit>:<scene>`.
+    #: **Without this an entry fires every transition once its tick passes**,
+    #: because "due" is a comparison against a counter that only goes up.
+    fired: list[str] = field(default_factory=list)
+    #: What each scene's fight killed, by scene id -> ref -> how many.
+    #:
+    #: **The DMG states this as a rule twice** -- *"when the characters kill a
+    #: monster, it stays dead"*, and again that a revisited site *"shouldn't
+    #: just reset to the state it was in the first time around"*. A scene the
+    #: module routes back to was fielding its whole cast again, so the party
+    #: walked into a room it had cleared and the dead were standing up.
+    #:
+    #: A **count per ref**, not a set: a scene fielding four of the same
+    #: creature that lost three of them must field one on a revisit, and a
+    #: set cannot say that. Accumulated across revisits.
+    #:
+    #: On the campaign for the same reason `recalled` is -- `Playing` is
+    #: rebuilt every time a scene is entered, so anything tracked there is
+    #: re-decided by walking back into the room. #970.
+    cleared: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: The party's standing marching order: a band per slot, and how far
+    #: apart. Empty means the single column placement has always used, so
+    #: a campaign saved before this plays exactly as it did. #994.
+    #:
+    #: On the campaign rather than the scene because the rules call it a
+    #: *standing* arrangement a player sets once and may change at any
+    #: time, not something a module re-authors per fight.
+    #: The outcome of each decided scene, oldest first. Read by
+    #: `tension.footing` to pitch the next scene, and **bounded** -- only
+    #: the last few matter, which is what keeps the loop from converging on
+    #: a game nobody can lose. #977.
+    #: The next short rest is denied, because a scene was lost and said
+    #: that was the cost. Cleared by the rest it denies. #975.
+    denied: bool = False
+    #: Quest id -> one of `module.QUEST_STATES`. **A state per quest, not
+    #: a boolean**, because quests can conflict: completing one must be
+    #: able to fail another, which a set of flags cannot express. #940.
+    quests: dict[str, str] = field(default_factory=dict)
+    record: list[str] = field(default_factory=list)
+    formation: list[str] = field(default_factory=list)
+    spread: int = 2
+    #: Party indices already told they have enough XP, so the line is said
+    #: once rather than every scene from then on. Indices and not sheets,
+    #: the same position-matching `harvest` uses. #967.
+    #: How many of the level's six monetary parcels the party has found.
+    #: #969.
+    parcels: int = 0
+    advanced: list[int] = field(default_factory=list)
+    #: Pay DMG2's drama reward. **Off by default and per campaign**, which
+    #: is the book's own framing: *"you should grant drama rewards for
+    #: vignettes only if you rely on them in any given session."* #967.
+    drama: bool = False
+    #: How the last fight went, one phrase from `beat.FIGHTS`, waiting for
+    #: the next conversation's DM to narrate from. Spent on read. #943.
+    aftermath: str = ""
+
+    @property
+    def clock(self) -> dict[str, int]:
+        """What a timeline entry is compared against.
+
+        Scenes played and extended rests taken. Deliberately not a real
+        clock -- the book's own units are days and sessions, and a tick per
+        scene transition is the coarsest thing that expresses any of its
+        examples.
+        """
+        return {"scene": len(self.visited), "rest": self.rests}
+
+    @property
+    def milestones(self) -> int:
+        """Milestones reached since the last extended rest.
+
+        Camille's ruling on #666: *"an adventuring day consists of 4-5
+        encounters, and a milestone is every two encounters."* So this is
+        `encounters // 2`, over the weighted count -- `day.milestones` is
+        the same arithmetic over the legs of an arcade day.
+        """
+        return self.encounters // 2
 
     def persona(self, slot: int) -> Persona:
         """Who slot N is, falling back to a default by class."""
@@ -182,6 +270,24 @@ def to_dict(campaign: Campaign) -> dict:
         "party": [asdict(s) for s in campaign.party.sheets],
         "personas": [asdict(p) for p in campaign.personas],
         "control": list(campaign.control),
+        # **`Campaign` is hand-serialised, unlike `Sheet`.** A new field here
+        # has to be written in both directions or it silently resets on
+        # every load -- which is what happened to `encounters` until a
+        # driver asked, reading 0 where the campaign held 2. `Sheet` gets
+        # this for free through `asdict` and `_sheet`'s tolerant filter.
+        "encounters": campaign.encounters,
+        "rests": campaign.rests,
+        "fired": list(campaign.fired),
+        "cleared": {k: dict(v) for k, v in campaign.cleared.items()},
+        "denied": campaign.denied,
+        "quests": dict(campaign.quests),
+        "advanced": list(campaign.advanced),
+        "parcels": int(campaign.parcels),
+        "drama": bool(campaign.drama),
+        "aftermath": str(campaign.aftermath),
+        "record": list(campaign.record),
+        "formation": list(campaign.formation),
+        "spread": campaign.spread,
     }
 
 
@@ -208,6 +314,26 @@ def from_dict(raw: dict) -> Campaign:
             for p in raw.get("personas", ())
         ],
         control=[str(c) for c in raw.get("control", ())],
+        # Defaults to 0, so a save written before milestones existed reads
+        # as "no encounters since the last extended rest" -- which is the
+        # safe direction and needs no `VERSION` bump to refuse the file.
+        encounters=int(raw.get("encounters", 0) or 0),
+        rests=int(raw.get("rests", 0) or 0),
+        fired=[str(k) for k in raw.get("fired", ())],
+        cleared={
+            str(k): {str(r): int(n) for r, n in (v or {}).items()}
+            for k, v in (raw.get("cleared") or {}).items()
+        },
+        denied=bool(raw.get("denied", False)),
+        quests={str(k): str(v)
+                for k, v in (raw.get("quests") or {}).items()},
+        advanced=[int(i) for i in (raw.get("advanced") or [])],
+        parcels=int(raw.get("parcels", 0) or 0),
+        drama=bool(raw.get("drama", False)),
+        aftermath=str(raw.get("aftermath", "")),
+        record=[str(o) for o in raw.get("record", ())],
+        formation=[str(b) for b in raw.get("formation", ())],
+        spread=int(raw.get("spread", 2) or 2),
     )
 
 

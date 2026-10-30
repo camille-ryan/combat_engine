@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -107,6 +107,70 @@ class Intent:
         said = f'"{self.speech}"' if self.speech else ""
         does = f"({self.doing})" if self.doing else ""
         return f"{self.name}: {' '.join(x for x in (said, does) if x)}".strip()
+
+
+#: How close a check was, as a word rather than a number. The DMG names the
+#: failure this exists to fix -- *"You know you've fallen into this trap when
+#: the table chatter is: 'That's 26 against AC,' 'You hit, now roll damage,'
+#: '31 points'"* -- and prescribes using the numbers as narration material
+#: instead: *"If 26 is barely a hit [...] say: 'You swing wildly, and the
+#: dragonborn brings his shield up just a second too late.'"*
+#:
+#: **A closed set, like every other model input here.** The DM is given the
+#: manner and never the arithmetic: a margin is not a truth claim, so this is
+#: the one thing about a roll the model may colour. The fact itself stays the
+#: module's. #943.
+MARGINS = ("barely", "clearly", "nowhere near")
+
+#: Within this many either way is "barely". Three is a quarter of a d20's
+#: spread and the width of a single ability modifier, so it is the band where
+#: a reader would accept "only just" -- wider and a comfortable success reads
+#: as a near miss.
+CLOSE = 3
+
+
+def margin(total: int, dc: int) -> str:
+    """How close this check came, as one of `MARGINS`.
+
+    Derived rather than asked of the model, which is the whole discipline:
+    the engine already produced the numbers and a word computed from them
+    cannot be wrong in the way a model's guess can.
+    """
+    gap = total - dc
+    if abs(gap) <= CLOSE:
+        return "barely"
+    return "clearly" if gap > 0 else "nowhere near"
+
+
+#: How a fight went, as one phrase from a closed set. The combat half of
+#: #943, and the same discipline as `MARGINS` one definition up: derived
+#: from what the engine already produced, handed to the DM as narration
+#: material, and never a number.
+#:
+#: A story fight printed `Won in 4 rounds` and sent the blow-by-blow to a
+#: transcript file nobody reads during play -- *"there is a whole encounter
+#: of this material and none of it is narrated"*.
+FIGHTS = ("a rout", "hard-won", "a near thing", "a defeat")
+
+
+def aftermath(won: bool, bloodied: int, down: int) -> str:
+    """How the fight went, as one of `FIGHTS`.
+
+    **Read off two printed states and nothing else.** *Bloodied* is the
+    game's own word for half hit points and *down* is nought or less, so
+    neither is a threshold invented here -- which was the alternative, and
+    a round count would have been one: "short" has no printed definition.
+
+    Ordered worst-first among the wins, because the worst thing that
+    happened to the party is what a narrator leads with.
+    """
+    if not won:
+        return "a defeat"
+    if down:
+        return "a near thing"
+    if bloodied:
+        return "hard-won"
+    return "a rout"
 
 
 @dataclass(frozen=True)
@@ -202,6 +266,11 @@ class Playing:
     beats: list[Beat] = field(default_factory=list)
     #: Affordance ids already taken, for the `once` rule.
     spent: set[str] = field(default_factory=set)
+    #: What happened just before this scene, for the DM to narrate from.
+    #: Carries the last fight's `aftermath` into the conversation after it,
+    #: which is the only reader the combat half of #943 has -- a derived
+    #: phrase nothing reads is the same as no phrase.
+    carried: str = ""
     #: Facts the party has learnt, which later beats may refer back to.
     learnt: list[str] = field(default_factory=list)
     #: What the adventure's pages say, built by `scripts/ingest.py`. Read
@@ -505,6 +574,17 @@ class Standing:
     #: `well`, `vaguely` or `not at all` -- how well the speaker would
     #: know, which sets the register rather than permitting or forbidding.
     knows: str = "vaguely"
+    #: Names one hop out along the graph's edges. Context, not permission:
+    #: it tells the DM what this thing is tied to so an invention lands in
+    #: the right part of the world. Empty until #934 drew any edges -- the
+    #: graph had 99 entities and 0 links, so this was always empty and
+    #: nothing read it.
+    near: tuple[str, ...] = ()
+    #: This standing is about **two** things and how they connect. The
+    #: message is different in kind: a speaker can know both perfectly
+    #: well and there still be nothing on record tying them together,
+    #: which the `not at all` register would state as ignorance.
+    pair: bool = False
 
     def __str__(self) -> str:
         """The line the DM is handed. The three cases read differently.
@@ -515,9 +595,18 @@ class Standing:
         just said this person has never heard of it -- which is the
         licence the guard exists to withhold.
         """
+        hop = (f"\n    (connected to: {', '.join(self.near)})"
+               if self.near else "")
         if self.facts:
             return (f"{self.about} -- already true, do not contradict:\n"
-                    + "\n".join(f"    - {f}" for f in self.facts))
+                    + "\n".join(f"    - {f}" for f in self.facts) + hop)
+        if self.pair:
+            # **Camille's complaint, answered in the negative case.** The
+            # pair question returning silence is what opened #934; saying
+            # nothing connects them is an answer and improvising a
+            # connection is not.
+            return (f"{self.about} -- nothing on record connects them. Say "
+                    "so if asked; do not invent a tie between them." + hop)
         if self.knows == "not at all":
             return (f"{self.about} -- this speaker has never heard of it. "
                     "Have them say so plainly. Do not invent an answer.")
@@ -525,6 +614,90 @@ class Standing:
         return (f"{self.about} -- nothing is on record. This speaker would "
                 f"know it {self.knows}{hedge}. What they say about it "
                 "becomes true, so keep it small and keep it consistent.")
+
+
+#: How many one-hop neighbours go in a `Standing`. A hub has 33 of them in
+#: the one converted module, and a prompt listing all 33 is noise that
+#: crowds out the facts the line exists to carry.
+NEAR = 6
+
+#: Capitalised words that are not somebody's name. Short, because the cost
+#: of a miss is small -- an extra "nobody here has heard of that" line -- and
+#: the cost of over-filtering is the bug this exists to fix.
+NOT_A_NAME = frozenset({
+    "i", "a", "an", "the", "and", "or", "but", "if", "so", "then", "than",
+    "that", "this", "these", "those", "there", "here", "what", "when",
+    "where", "who", "whom", "whose", "why", "how", "which", "he", "she",
+    "it", "we", "they", "you", "me", "him", "her", "us", "them", "my",
+    "your", "his", "our", "their", "its", "is", "are", "was", "were", "be",
+    "been", "being", "do", "does", "did", "have", "has", "had", "can",
+    "could", "will", "would", "shall", "should", "may", "might", "must",
+    "let", "yes", "no", "not", "never", "always", "one", "two", "three",
+    "four", "five", "six", "seven", "eight", "nine", "ten", "mr", "mrs",
+    "ms", "sir", "lady", "lord", "god", "gods",
+})
+
+#: A capitalised word of at least three letters, with any possessive
+#: dropped, **and not at the start of a sentence**.
+#:
+#: English capitalises a sentence opener, so a capital in that position
+#: carries no evidence of being a name -- and taking it anyway is what made
+#: *"Tell me about your brass compass."* produce a standing about `Tell`,
+#: breaking an assertion a previous session wrote on purpose. The cost is
+#: that a player who opens with a bare name (*"Khellis, who is he?"*) is
+#: missed; the benefit is that ordinary typing does not produce noise.
+_PROPER = re.compile(r"(?<![\w'])([A-Z][a-z]{2,})(?:'s)?(?![\w'])")
+
+#: What ends a sentence, so the capital after it is an opener.
+_ENDS = ".!?\n"
+
+
+def unresolved(text: str, known: Iterable[str]) -> list[str]:
+    """Proper nouns in a line the graph could not account for.
+
+    Camille, playing 2026-10-29:
+
+    > *"I asked about the relationship between Khellis and Orveth and got no
+    > answer, not even an 'I don't know'."*
+
+    **A name the graph has never heard of produced no `Standing` at all**,
+    so `would_know` never ran and its `not at all` branch -- *"say so
+    plainly rather than improvise"* -- could not fire. That branch worked
+    only for an entity that *exists* and has no facts, which is the one
+    case where the player needs it least. `mentions()` finding nothing for
+    a noun the player clearly named is itself information, and this is
+    what turns it into some.
+
+    `known` is every name already accounted for -- resolved by the graph
+    or already given a `Standing` this beat. **One dedupe layer rather than
+    two**: `one_beat` kept its own list of what the graph had matched, and
+    a plant that emptied that list stayed green because the caller's `seen`
+    set was doing the same job one line later. Dead bookkeeping no plant
+    can redden is dead bookkeeping.
+
+    **A capitalisation heuristic rather than a model call**, deliberately:
+    `check.py` runs the whole loop with no model, so an extractor that
+    needed one would be untested on the path that matters. The failure
+    mode is mild and in the right direction -- a false positive costs one
+    "nobody here has heard of that", a false negative is the silence this
+    is fixing.
+    """
+    said = text or ""
+    taken = " ".join(known).lower()
+    out: list[str] = []
+    for hit in _PROPER.finditer(said):
+        word = hit.group(1)
+        # A sentence opener is capitalised by grammar, not by being a name.
+        # `finditer` rather than `findall` because the only way to know is
+        # the offset: the first word of the line, or the first after `.!?`.
+        before = said[:hit.start()].rstrip()
+        if not before or before[-1] in _ENDS:
+            continue
+        low = word.lower()
+        if low in NOT_A_NAME or low in taken or word in out:
+            continue
+        out.append(word)
+    return out
 
 
 def standing(playing: Playing, mention: str, *, speaker: str,
@@ -539,18 +712,56 @@ def standing(playing: Playing, mention: str, *, speaker: str,
     """
 
     facts: list[str] = []
+    near: list[str] = []
     for layer in (playing.canon, playing.told):
         if layer is None:
             continue
         found = layer.find(mention)
         if found is not None:
             facts += [f.text for f in found.facts]
+            # **One hop out, which is what the edges are for.** `around`
+            # returned nothing at all until #934, so this is the first
+            # thing in the tree that reads an edge.
+            near += [other.name for other in layer.around(found)]
     if facts:
         return Standing(about=mention, facts=tuple(dict.fromkeys(facts)),
-                        knows="well")
+                        knows="well",
+                        near=tuple(dict.fromkeys(near))[:NEAR])
     return Standing(about=mention,
+                    near=tuple(dict.fromkeys(near))[:NEAR],
                     knows=director.would_know(speaker, mention, looks=looks,
                                               wants=wants))
+
+
+def linking(playing: Playing, one: str, two: str) -> Standing:
+    """How two things the player named in one line are connected. #934.
+
+    Camille, playing 2026-10-29:
+
+    > *"I asked about the relationship between Khellis and Orveth and got
+    > no answer, not even an 'I don't know'."*
+
+    #933 fixed the half where a name the graph had never heard of produced
+    no `Standing`. **This is the other half**: both names resolving and the
+    answer still being two separate fact lists, because `mentions` looks
+    each one up independently and nothing asked about the pair.
+
+    `Graph.between` is the lookup, and what it returns is the **sentence**
+    that names both rather than a relation word -- which is the thing a DM
+    can actually read out. When it returns nothing, the standing says
+    nothing connects them, which is an answer.
+    """
+    facts: list[str] = []
+    for layer in (playing.canon, playing.told):
+        if layer is None:
+            continue
+        first, second = layer.find(one), layer.find(two)
+        if first is None or second is None:
+            continue
+        facts += [f.text for f in layer.between(first, second)]
+    return Standing(about=f"{one} and {two}", pair=True,
+                    facts=tuple(dict.fromkeys(facts)),
+                    knows="well" if facts else "vaguely")
 
 
 @dataclass
@@ -850,7 +1061,34 @@ class Director:
         # reading the module reads. What the DM needs to stay in character --
         # who is here, what they want, what they may say -- is below, and is
         # written for exactly that.
-        told = [f"THE SCENE: {scene.seen}"]
+        # **The scene's text on the opening beat only, and a detail after
+        # that.** Camille, playing: *"I'm still seeing some repetition ...
+        # [the host] said (again) that I can ask around about his
+        # reputation."* The block was in every beat's prompt, so a
+        # one-time offer written into the prose was re-read by the model
+        # every beat with nothing recording that it had been made.
+        #
+        # Measured on the finished chapter, verbatim repetition was
+        # essentially zero -- 0 four-word phrases across three or more
+        # replies -- so this is **topic recurrence**, and the cause is
+        # structural rather than the model failing. The book's own model
+        # is an opening description plus a pool consumed as the scene
+        # runs, so a spent detail *leaves the prompt* and a one-time offer
+        # stops being re-made because it is not there to read.
+        #
+        # `recent()` carries the situation after beat one, which is what
+        # the text was standing in for. #936.
+        opening = not playing.beats
+        told = [f"THE SCENE: {scene.seen}"] if opening else []
+        if not opening:
+            spare = next(
+                (d for d in scene.details
+                 if f"detail:{d}" not in playing.spent), "")
+            if spare:
+                playing.spent.add(f"detail:{spare}")
+                told.append(
+                    "ONE DETAIL to work in, if it fits -- it will not be "
+                    f"offered again:\n{spare}")
         if who:
             told.append("WHO IS HERE:\n" + "\n".join(who))
         # **An intent that matched nothing changes nothing**, and the DM
@@ -957,13 +1195,29 @@ class Director:
         # and an action for a party member, which the prompt forbids in as
         # many words. A fact is a thing that is now true, not a thing
         # somebody did.
-        facts = [r.fact for r in rulings if r.fact and not r.exit]
+        # **The manner, beside the fact.** The DMG's complaint is that a
+        # table describing events in rules terms has thrown away narration
+        # material the dice already produced -- so a ruling that was close
+        # says so, in one word from `MARGINS`, and the model has something
+        # to write *how* from. The arithmetic itself is still withheld: a
+        # margin is not a truth claim, a d20 is not either, and handing
+        # over "total=25 vs 12" invites the model to quote it back. #943.
+        facts = [
+            f"{r.fact} ({margin(r.roll.total, r.dc)})"
+            if r.rolled and r.roll is not None and r.dc
+            else r.fact
+            for r in rulings if r.fact and not r.exit
+        ]
         told.append(
             "WHAT IS NOW TRUE. **The player has already been shown these "
             "in plain words.** Do not restate them and do not explain "
             "them. Write what the people here say and do in the light of "
             "them -- a reaction, a change of manner, what somebody does "
-            "next. Add nothing beyond them:\n"
+            "next. Add nothing beyond them.\n"
+            "A word in brackets is **how narrowly it went**, not something "
+            "anybody said: write that margin into the picture -- a hand "
+            "that almost closed, a guard who nearly did not look up -- and "
+            "never print the bracketed word itself:\n"
             + "\n".join(f"- {f}" for f in facts)
             if facts else
             "NOTHING NEW IS TRUE. Nobody learnt anything; react only."
@@ -991,6 +1245,12 @@ def one_beat(
     situation = (
         playing.beats[-1].reaction if playing.beats else scene.seen
     ) or scene.seen
+    # **On the first beat only**, and before the scene's own text: it is
+    # what the party walks in carrying. After beat one the situation is the
+    # last reaction, and repeating the fight there would have the DM
+    # narrating a battle three exchanges into the conversation after it.
+    if not playing.beats and playing.carried:
+        situation = f"{playing.carried}\n\n{situation}".strip()
     beat = Beat(n=len(playing.beats) + 1, situation=situation)
 
     # -- what the party already knows. First beat only: this is "what do you
@@ -1115,16 +1375,24 @@ def one_beat(
     # feed the model its own output back as a thing to be consistent with
     # -- which is not consistency, it is a loop.
     if playing.canon is not None or playing.told is not None:
+        recorded = any(
+            getattr(layer, "entities", None)
+            for layer in (playing.canon, playing.told) if layer is not None
+        )
         speaker = scene.npcs[0] if scene.npcs else None
         seen: set[str] = set()
         for intent in beat.intents:
             if intent.played:
                 continue
             said = f"{intent.speech} {intent.doing}".strip()
+            here: list[str] = []
             for layer in (playing.canon, playing.told):
                 if layer is None:
                     continue
                 for found in layer.mentions(said):
+                    if found.name in here:
+                        continue
+                    here.append(found.name)
                     if found.name in seen:
                         continue
                     seen.add(found.name)
@@ -1133,6 +1401,41 @@ def one_beat(
                         else "somebody here", director=director,
                         looks=speaker.looks if speaker else "",
                         wants=speaker.wants if speaker else ""))
+            # **Two names in one line is a question about the pair**, and
+            # it is the question that opened #934: both resolved, and the
+            # answer was two separate fact lists with nothing about how
+            # they connect. Only the first pair -- a line naming four
+            # things would otherwise produce six standings and bury the
+            # scene.
+            #
+            # `here` rather than `seen`: `seen` carries every name from
+            # every earlier intent in the beat, so pairing off it would
+            # tie together two things nobody mentioned together.
+            if len(here) > 1:
+                link = linking(playing, here[0], here[1])
+                if link.about not in seen:
+                    seen.add(link.about)
+                    beat.standing.append(link)
+            # **A name the graph does not hold still gets a `Standing`.**
+            # It falls through `standing()` to `would_know`, which is where
+            # the "not at all" register lives -- so the DM is told nobody
+            # here has heard of it and can say so, instead of being handed
+            # nothing about a subject the player plainly asked about. #933.
+            #
+            # **Only against a record that holds something.** An empty
+            # graph means nothing has been ingested, not that the world is
+            # empty, so a campaign with no graph behind it must not answer
+            # every name with "nobody has heard of that" -- which is what
+            # the `with_canon=False` control in `graph_administration`
+            # caught this doing. Ignorance is only meaningful against a
+            # record.
+            for name in (unresolved(said, seen) if recorded else ()):
+                seen.add(name)
+                beat.standing.append(standing(
+                    playing, name, speaker=speaker.name if speaker
+                    else "somebody here", director=director,
+                    looks=speaker.looks if speaker else "",
+                    wants=speaker.wants if speaker else ""))
 
     playing.learnt += [r.fact for r in beat.rulings if r.won and r.fact]
     # Won, not merely attempted: a failed Perception reveals nobody.
@@ -1206,6 +1509,7 @@ def play_scene(
     asked: set[str] | None = None,
     canon: Any = None,
     told: Any = None,
+    carried: str = "",
 ) -> Playing:
     """Run a roleplay scene to its end.
 
@@ -1216,7 +1520,7 @@ def play_scene(
     lines, not their own roll, not the reply. Four prompts into a
     conversation that has not visibly started.
     """
-    playing = Playing(scene=scene, asked=set(asked or ()),
+    playing = Playing(scene=scene, asked=set(asked or ()), carried=carried,
                       canon=canon, told=told)
     while not playing.over:
         made = one_beat(playing, table, actors, director,

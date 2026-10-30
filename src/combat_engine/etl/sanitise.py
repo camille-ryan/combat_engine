@@ -962,6 +962,21 @@ def vocabulary() -> set[str]:
                 if isinstance(item.value, str):
                     out.add(item.value.lower().replace("_", " "))
                 out.add(item.name.lower().replace("_", " "))
+    # **The skills, which are an enumeration in substance and a plain list
+    # in type** -- so the `dir(types)` walk above never reached them, and
+    # the clause this docstring makes about "the engine's own enumerations"
+    # was true of every enum and false of the one list.
+    #
+    # Measured: 16 of the 17 are ordinary English and were covered by the
+    # dictionary anyway. The seventeenth is not a word in any dictionary,
+    # and `identifies` was therefore calling it a **proper name** -- 2
+    # occurrences in monster specs, which is 1 of the 13 runs `#929`'s
+    # blast-radius measurement turned up. A skill is mechanical vocabulary
+    # by the same argument every other source here rests on.
+    with contextlib.suppress(Exception):
+        from combat_engine.engine.skills import SKILLS
+
+        out.update(s.lower() for s in SKILLS)
     return out
 
 #: Every name a race holds, lowercased.

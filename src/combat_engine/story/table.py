@@ -158,6 +158,53 @@ class Table:
             sheet.spent = kept
 
 
+def characters(world: World) -> list[int]:
+    """The party's own entities on a board, in the order the sheets are in.
+
+    **Only the characters, not everything on their side.** A familiar is a
+    `Team.PC` creature with `Health`, so a side can hold six entities for a
+    party of five. `chargen.spawn` gives every character `c:<class>`; a
+    summon, a companion or a conjuration never does.
+
+    **This repeats the rule `harvest` uses, deliberately and unhappily.**
+    The two cannot share one definition: `harvest` lives in
+    `story/__init__.py`, which is arcade mode's and which this component
+    imports and does not edit, and this module already imports from it --
+    so the dependency cannot run the other way. The duplication is the
+    cost of that seam, and `drivers.py borrowed_board` is what keeps the
+    two from drifting: it puts a familiar on a board ahead of a character
+    and asserts both pick the same entities. #797 is what the rule is for
+    and why getting it wrong is quiet -- a character's hit points written
+    from a summon's, and the summon's written nowhere.
+    """
+    from combat_engine.engine.components import Ident, Side, Team
+
+    return [
+        eid for eid, side in world.each(Side)
+        if side.team == Team.PC
+        and (ident := world.get(eid, Ident)) is not None
+        and ident.ref.startswith("c:")
+    ]
+
+
+def borrow(world: World, encounter: Encounter, party: Party) -> Table:
+    """A `Table` over a board somebody else built -- a fight's.
+
+    **So a challenge and a fight can be the same board.** `lay` exists
+    because a conversation had no fight to borrow; a printed encounter
+    that runs a challenge *while* the party fights has one, and the two
+    buses were different objects, so a trait firing when the challenge
+    ends had nowhere to publish. #911.
+
+    The party's entities are found rather than remembered, because the
+    caller spawned them and this did not. On the fight's board that is
+    also the more correct half: the checks go through the real party's
+    entities instead of `lay`'s copies.
+    """
+    return Table(world=world, encounter=encounter, party=party,
+                 eids=characters(world))
+
+
 def lay(party: Party, *, seed: int = 0) -> Table:
     """Stand the party up somewhere they can roll dice.
 
@@ -166,14 +213,18 @@ def lay(party: Party, *, seed: int = 0) -> Table:
     changing a conversation change the battle after it, which is the drift
     `field_encounter` already keeps its monster draw out of `world.rng` to
     avoid.
+
+    **One caller of `borrow` rather than a second way to build a `Table`.**
+    It knows the entity ids outright, having just spawned them, and hands
+    them back anyway so that `characters` is on every path -- a derivation
+    used by one caller in one mode is a derivation nobody notices is
+    wrong.
     """
     world = World(Grid(WIDTH, HEIGHT), Rng(seed), Bus())
     world.scaling = PRESETS["full"]
-    eids: list[int] = []
     for i, sheet in enumerate(party.sheets):
         eid = chargen.spawn(world, sheet.character, (AT[0], AT[1] + i * SPACING))
         _wear(world, eid, sheet)
-        eids.append(eid)
     encounter = Encounter(world)
     encounter.start()
-    return Table(world=world, encounter=encounter, party=party, eids=eids)
+    return borrow(world, encounter, party)

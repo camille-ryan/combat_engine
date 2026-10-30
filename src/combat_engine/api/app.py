@@ -25,9 +25,15 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from combat_engine.story import beat as beat_mod
+from combat_engine.story import llm
+from combat_engine.story.module import ModuleError
+
 from . import day as day_mode
 from . import dto, render, replay
+from . import story as story_mode
 from .session import SESSIONS, Session
+from .story import STORIES
 from .wire import names_enabled
 
 WEB = Path(__file__).resolve().parents[3] / "web"
@@ -488,6 +494,79 @@ async def add_note(name: str, body: Note) -> dict:
     if not replay.note(name, body.model_dump()):
         raise HTTPException(404, f"no recording {name}")
     return {"ok": True}
+
+
+class NewStory(BaseModel):
+    """A campaign to open. Blank means the fixture, as elsewhere here.
+
+    `module` is a path the person running the server chose, and it is
+    **their own file** -- `modules/` is git-ignored and nothing ships one.
+    The fixture is the default so the page is playable out of the box and
+    so `browser.py` has something to click that is ours.
+    """
+
+    module: str = "scripts/fixtures/modules/sunken-mill.json"
+    seed: int = 0
+    #: The party wins every fight without one being played. A settings
+    #: toggle on the page. It must stay visible: `story/CLAUDE.md` says god
+    #: mode hands over every fight and says so every time, which is why the
+    #: banner arrives as a `note` line rather than being swallowed here.
+    god: bool = False
+    #: No model at all -- canned answers, the path `check.py` runs. The
+    #: page offers it so a machine with no ollama can still be played.
+    scripted: bool = False
+
+
+class Said(BaseModel):
+    """What the person's character says and does this beat."""
+
+    speech: str = ""
+    doing: str = ""
+
+
+def _story(story_id: str) -> story_mode.Story:
+    found = STORIES.get(story_id)
+    if found is None:
+        raise HTTPException(404, f"no story {story_id}")
+    return found
+
+
+def _director(made: story_mode.Story) -> beat_mod.Director:
+    """Scripted or live, decided once when the campaign opens."""
+    return (beat_mod.Director(scripted=True) if made.scripted
+            else beat_mod.Director(roles=llm.roles_for(made.module.id)))
+
+
+@app.post("/api/story")
+def create_story(body: NewStory | None = None) -> dict:
+    ask = body or NewStory()
+    try:
+        made = story_mode.start(ask.module, seed=ask.seed, god=ask.god)
+    except (OSError, ModuleError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    made.scripted = ask.scripted
+    return story_mode.state(made)
+
+
+@app.get("/api/story/{story_id}")
+def read_story(story_id: str) -> dict:
+    return story_mode.state(_story(story_id))
+
+
+@app.post("/api/story/{story_id}/advance")
+def advance_story(story_id: str) -> dict:
+    made = _story(story_id)
+    story_mode.advance(made, director=_director(made))
+    return story_mode.state(made)
+
+
+@app.post("/api/story/{story_id}/say")
+def say_story(story_id: str, body: Said) -> dict:
+    made = _story(story_id)
+    if made.gate.question is None:
+        raise HTTPException(409, "nothing is waiting for a line")
+    story_mode.say(made, body.speech, body.doing)
+    return story_mode.state(made)
 
 
 if WEB.exists():

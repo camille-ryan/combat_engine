@@ -41,18 +41,44 @@ from pathlib import Path
 from random import Random
 
 from combat_engine.engine import Ident, Side, Team
+from combat_engine.engine.components import Condition, Conditions, Position, Trap
 from combat_engine.engine.ecs import World
+from combat_engine.engine.query import alive
 from combat_engine.engine.turns import Encounter
 from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
 
-from . import PARTY, Party, field_encounter, harvest
+from . import (
+    FLOOR,
+    PARTY,
+    Party,
+    Shape,
+    arrival_squares,
+    bands_of,
+    field_encounter,
+    harvest,
+    line_up,
+    loot,
+    tension,
+    treasure,
+)
 from . import beat as beat_mod
+from . import formation as formation_mod
 from . import table as table_mod
+from . import xp as xp_mod
 from .cast_list import resolve
 from .challenge import Chooser
 from .challenge import play as play_challenge
-from .module import Module, Scene
+from .module import (
+    CAUGHT,
+    DANGERS,
+    EXPOSURE_HOURS,
+    SHELTERED,
+    Module,
+    Scene,
+)
+from .objective import watcher
+from .reflavour import Dressed
 from .reflavour import apply as apply_flavour
 from .save import Campaign
 
@@ -88,8 +114,14 @@ def record_scene(campaign: Campaign, made: Step) -> str:
         "kind": made.scene.kind,
         "name": made.scene.name,
         "outcome": made.outcome,
+        # What the fight was judged on, so a log reads as a session rather
+        # than as a list of wins. `""` for a scene that stated no objective.
+        "objective": made.objective,
+        "clean": made.clean,
         "next": made.next_id,
         "rounds": made.rounds,
+        "surprised": made.surprised,
+        "stood": made.stood,
         "enemies": made.enemies,
         "transcript": made.transcript,
         "notes": made.notes,
@@ -105,6 +137,43 @@ def record_scene(campaign: Campaign, made: Step) -> str:
     return str(where)
 
 
+#: What wrote a line, so a reader can tell canon from dice from invention.
+#:
+#: **The split is the same one the graph draws between `page`, `earned`
+#: and `invented`**, and it is not decoration: who wrote a line governs
+#: how much it should be trusted. The adventure's prose is canon, a roll
+#: is a fact the dice produced, and the DM's paragraph is a model's
+#: invention that is allowed to be wrong. A reader shown all three in one
+#: voice cannot tell them apart, which is the thing this whole component
+#: spends its effort on. #930.
+KINDS = ("scene", "recall", "roll", "mine", "dm", "note", "exit")
+
+
+class Line(str):
+    """A printed line that remembers what kind of thing it is.
+
+    **A `str` subclass rather than a dataclass, deliberately.** `lines`
+    is read in a dozen places that do `" ".join(...)`, `ln.strip()` and
+    `print(ln)` -- in `play.py`, `dm.py`, the campaign log and nine
+    drivers -- and every one of them keeps working unchanged against a
+    string that happens to carry an attribute. A dataclass would have
+    meant touching all of them to gain nothing a reader of the CLI can
+    see.
+
+    **The sharp edge, stated because it will bite somebody:** any
+    transformation returns a plain `str` and drops the kind.
+    `line.strip()` is text, not a `Line`. Carry the object until the last
+    moment and read `.kind` off the original.
+    """
+
+    kind: str
+
+    def __new__(cls, text: str, kind: str = "scene") -> Line:
+        made = super().__new__(cls, text)
+        made.kind = kind if kind in KINDS else "scene"
+        return made
+
+
 @dataclass
 class Step:
     """What one scene did."""
@@ -116,12 +185,69 @@ class Step:
     #: Where play goes next. Empty ends the module.
     next_id: str = ""
     #: Human-readable lines about what happened. The caller prints them.
-    lines: list[str] = field(default_factory=list)
+    lines: list[Line] = field(default_factory=list)
     #: Things the reader should know that are not the story -- a budget clamp,
     #: a creature deferred, terrain not yet applied.
     notes: list[str] = field(default_factory=list)
     rounds: int = 0
     enemies: list[str] = field(default_factory=list)
+    #: The objective kind this fight was judged on, or `""` when the scene
+    #: stated none and the old win condition decided it.
+    objective: str = ""
+    #: The objective was met and nobody went down doing it. Recorded and not
+    #: yet spent: the thing that would pay for it is the XP award, which does
+    #: not exist (#967). Here now so that award has something to read.
+    clean: bool = False
+    #: Where the party actually stood when the fight began, in party
+    #: order, read off the board after it was fielded.
+    #:
+    #: **Recorded because the wiring is otherwise invisible**: a driver can
+    #: call `field_encounter(squares=)` directly and prove the squares
+    #: work while `_fight` quietly passes none, which is exactly what a
+    #: green plant showed. #994.
+    stood: list[tuple[int, int]] = field(default_factory=list)
+    #: How many of the opposition **actually carried SURPRISED** after
+    #: `start`, counted off the board rather than from the list handed to
+    #: it.
+    #:
+    #: **Recorded because the effect is otherwise unobservable**, which is
+    #: this component's own rule: the condition lives on a board that does
+    #: not outlive the fight, and all four readiness states finished the
+    #: fixture fight in the same number of rounds -- so a driver asserting
+    #: on the outcome could not tell a surprise round from none. #945.
+    surprised: int = 0
+    #: The board this fight was actually built on, as `(width, height)`.
+    #:
+    #: **Recorded because the board does not outlive the fight**, which is
+    #: the same rule as `stood`, `surprised` and `traps`: two plants --
+    #: never passing the scene's room on, and laying the formation from
+    #: the standard floor's corner -- both left the party on perfectly
+    #: legal squares, because every square of a 6x8 chamber is also a
+    #: square of a 16x12 one. #974.
+    room: tuple[int, int] = (0, 0)
+    #: How many traps were actually armed on this board, counted after
+    #: `start()` rather than taken from the allowance handed in.
+    #:
+    #: **Recorded because the effect is otherwise unobservable**, which is
+    #: this component's own rule and the reason `stood` and `surprised`
+    #: exist: the board does not outlive the fight, so a plant that made
+    #: `_fight` pass no allowance at all stayed green against a driver
+    #: that could only see the outcome. #958.
+    traps: int = 0
+    #: Creatures fielded **on the party's side**, by ref. Not in
+    #: `enemies`, and not characters -- they carry no sheet and take no
+    #: wear out of the fight. #961.
+    allies: list[str] = field(default_factory=list)
+    #: Creatures that walked on after the fight started, in arrival order.
+    #: **Not in `enemies`**, which is the opening board -- `cleared`
+    #: bookkeeping and the "Against:" line are both written against that,
+    #: and a reinforcement is neither. #962.
+    arrived: list[str] = field(default_factory=list)
+    #: The subset of `arrived` that earns XP, by the module's own rule.
+    arrived_worth: list[str] = field(default_factory=list)
+    #: How the fight went, one phrase from `beat.FIGHTS`. Empty for any
+    #: scene that is not a fight. #943.
+    aftermath: str = ""
     #: Where the blow-by-blow went, for a combat scene. Empty otherwise.
     transcript: str = ""
     #: The beats, for a roleplay scene that had any. Empty otherwise.
@@ -139,12 +265,13 @@ class Step:
     #: Set this and every line is out the moment it exists. `play.py` sets
     #: it when there is a terminal and nothing else does, so `check.py` and
     #: the drivers keep the batched behaviour they assert on.
-    echo: Callable[[str], None] | None = None
+    echo: Callable[[Line], None] | None = None
 
-    def say(self, line: str) -> None:
-        self.lines.append(line)
+    def say(self, line: str, kind: str = "scene") -> None:
+        made = Line(line, kind)
+        self.lines.append(made)
         if self.echo is not None:
-            self.echo(line)
+            self.echo(made)
 
 
 #: Who joins when a module wants more than the standard four, in order.
@@ -250,7 +377,8 @@ def _win(scene: Scene, step: Step) -> None:
     step.outcome = "won"
     step.rounds = 0
     called = sum(f.count for f in scene.foes)
-    step.say(f"God mode: {called} foe(s) not fielded. The party wins.")
+    step.say(f"God mode: {called} foe(s) not fielded. The party wins.",
+             "note")
     step.notes.append(
         f"{scene.id}: GOD MODE -- the fight was skipped, not played. "
         "No damage, no powers spent, no surges. Nothing here is evidence "
@@ -272,26 +400,141 @@ def _fight(
     broken, did not give the same fight twice.
     """
     draw = _stream(campaign, scene, "cast")
+    rested = rested_since_the_last_fight(campaign, module)
+    pitch = tension.pitch(campaign.record, rested=rested)
     dressed = resolve(
         scene, party_level=module.party_level, draw=draw,
         party_size=len(campaign.party.sheets),
         stated_size=module.party_size,
+        pitch=pitch,
     )
+    if pitch != 1.0 and not scene.xp:
+        for line in (tension.says(campaign.record, fight=True),
+                     tension.why(campaign.record, rested=rested)):
+            if line:
+                step.say(line, "note")
+    elif pitch != 1.0 and scene.xp:
+        step.say(
+            "The party's record would have moved this fight's size, but "
+            "the module states its XP outright, so it is left alone.",
+            "note",
+        )
     step.notes += dressed.notes
+    # **The dead stay dead on a revisit.** `Campaign.cleared` holds what this
+    # scene's fight killed last time, per ref, and those creatures come off
+    # the roster before anything is spawned. Without it a scene the module
+    # routes back to fielded its whole cast again and the party walked into a
+    # room it had cleared. #970.
+    #
+    # Subtracted in step across `refs` *and* `flavours`, which run parallel
+    # and are zipped together twice below -- dropping a ref without its
+    # flavour would reflavour the survivors as whatever died.
+    standing = campaign.cleared.get(scene.id) or {}
+    if standing:
+        keep_refs, keep_flavours, gone = survivors(
+            dressed.refs, dressed.flavours, standing)
+        if gone:
+            dressed.refs = keep_refs
+            dressed.flavours = keep_flavours
+            step.say(
+                f"Already cleared: {len(gone)} creature(s) killed here "
+                "before and not fielded again.",
+                "note",
+            )
     if not dressed.refs:
         step.outcome = "skipped"
-        step.say("Nothing written could be fielded for this scene.")
+        step.say(
+            "Nothing left to field here -- the party cleared this scene."
+            if standing
+            else "Nothing written could be fielded for this scene.",
+            "note",
+        )
         return
 
 
     board_seed = seed_for(campaign, scene, "fight")
+    # **Where the party is standing, which nobody could choose before.**
+    # Empty `formation` resolves to the single column the placement has
+    # always used, so a campaign that says nothing is unchanged. #994.
+    # **From the room's own corner, not the standard floor's.** The
+    # formation is laid out from `PARTY_AT`, which is where the column has
+    # always begun -- and on a chamber smaller than 16x12 that walks a
+    # character off the map. #974.
+    room = Shape(*scene.room) if scene.room else FLOOR
+    corner, _ = bands_of(room)
+    wanted = formation_mod.squares(
+        len(campaign.party.sheets), corner,
+        formation_mod.Formation(
+            bands=tuple(campaign.formation), spread=campaign.spread),
+    )
+    standing = [
+        spot for spot in wanted
+        if 0 <= spot[0] < room.width and 0 <= spot[1] < room.height
+    ]
+    # **Whoever does not fit is lined up instead, and it is said.** This
+    # found a real bug rather than guarding against a hypothetical one: a
+    # spread of 3 puts the fourth of four characters on row 12 of a
+    # **12-row** board, so `formation.squares` was handing `_fight` an
+    # off-board square and `#994`'s own driver asserted it. The others
+    # keep the arrangement the player chose; only the overflow moves.
+    if len(standing) < len(wanted):
+        taken = set(standing)
+        for spot in line_up(corner, len(wanted), room, inward=1):
+            if len(standing) >= len(wanted):
+                break
+            if spot not in taken:
+                taken.add(spot)
+                standing.append(spot)
+        step.say(
+            f"{len(wanted) - len(set(wanted) & set(standing))} of the "
+            f"party did not fit the marching order in a "
+            f"{room.width}x{room.height} room and lined up instead.",
+            "note",
+        )
     fielded = field_encounter(
         board_seed,
         module.party_level,
         enemies=dressed.refs,
         party=campaign.party,
+        squares=standing,
+        # **What the budget has left for traps.** `dress` arms nought to
+        # two from its own draw, after `cast_list` has spent the budget,
+        # so a trap walked past the ceiling every creature is held to.
+        # #958.
+        traps=dressed.traps,
+        # **The room the module states, if it states one.** Every board
+        # was 16x12 whatever the page described, so a corridor and a
+        # great hall were the same floor. #974.
+        room=room,
     )
     world = fielded.world
+    # **The module's own allies, on the party's side. #961.**
+    #
+    # Spawned after the party and before the encounter, which is where the
+    # opposition's reflavouring happens too, and placed in the party's band
+    # rather than the opposition's -- an ally that walked on among the
+    # creatures it came to fight would be surrounded before it acted.
+    #
+    # `Side(team=Team.PC)` on a monster row is a thing the board already
+    # supports, and both `harvest` and `table.characters` filter on a
+    # `c:<class>` ref precisely so a PC-side non-character does not count
+    # as a sheet (#797). So an ally takes no wear out of the fight and
+    # cannot be mistaken for a character -- which is right for a per-scene
+    # roster and is the limit of what this does.
+    step.allies = field_allies(world, dressed)
+    if len(step.allies) < len(dressed.allies):
+        step.say(
+            f"Only {len(step.allies)} of {len(dressed.allies)} allies "
+            "found room to stand beside the party.",
+            "note",
+        )
+    # Off the board, not from the list handed in -- the same correction
+    # `surprised` needed, for the same reason.
+    step.stood = [
+        spot.square
+        for eid in sorted(e for e, s in world.each(Side) if s.team is Team.PC)
+        if (spot := world.get(eid, Position)) is not None
+    ]
 
     # **What sort of place the fight is in, which nothing ever said.**
     # `World.terrain` was initialised empty and never written to, so all
@@ -350,8 +593,106 @@ def _fight(
     encounter = Encounter(world)
     policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
-    encounter.start()
+    # Attached before `start()`, which is the same reason the transcript is:
+    # the watcher counts the opposition at the first round boundary and a
+    # trait armed at the top of round one can already have killed somebody.
+    # **The module's own word for each creature, which is what a
+    # `defeat_foe` objective is written against.** `Reflavour.name` is exactly
+    # that -- "what the module calls it" -- and it runs parallel to `refs`,
+    # which is the same pairing the flavour loop above relies on. Without this
+    # an author would have to know the draw answered `m258`, and could not.
+    #
+    # Handed over **before** the fight, because the watcher consults it at
+    # every round boundary to decide whether it is done.
+    named = {
+        ref: flavour.name
+        for ref, flavour in zip(dressed.refs, dressed.flavours, strict=False)
+        if flavour.name
+    }
+    watch = watcher(world, scene.objective, len(campaign.party.sheets),
+                    named=named)
+    # **How many milestones the party brings in.** A fact about the day, so
+    # a board that knows only its own fight cannot derive it -- which is why
+    # `c.milestone()` answered 0 in every story fight until now while arcade
+    # mode had it. Set before `encounter.start()` arms anything, the same
+    # placement and the same reason as `api/day.py`: a trait that reads it
+    # at arming has to get the right number. #968.
+    world.milestones = campaign.milestones
+    if world.milestones:
+        # **Said out loud, which is what makes it checkable.** The number is
+        # otherwise invisible: it is read by traits at arming, inside a world
+        # that does not outlive the fight, so nothing above could tell a
+        # board that got it from one that did not. This component's own rule
+        # is that an unobservable effect gets an event rather than a harness
+        # that diffs state. It is also a thing a player should be told -- an
+        # action point and any milestone trait are live this fight.
+        step.say(
+            f"The party brings in {world.milestones} milestone(s), so a "
+            "milestone trait is live this fight.",
+            "note",
+        )
+    # **Who did not see the party coming.** The engine has had the surprise
+    # round since `Encounter.start(surprised=)` -- `Condition.SURPRISED`
+    # grants combat advantage and stops the creature acting -- and nothing
+    # in `story/` or `api/` had ever passed it, so every campaign fight
+    # began with both sides equally ready and a module could not say
+    # otherwise. The adventure's own read-aloud describes a creature dozing
+    # by a fire. #945.
+    #
+    # **A free round is a real swing in a fight the budget sized for a fair
+    # start**, so it is printed rather than applied quietly: this is a
+    # balance lever as much as a narrative one.
+    caught = (
+        [eid for eid in _enemy_eids(world)]
+        if scene.readiness in CAUGHT else []
+    )
+    encounter.start(surprised=caught)
+    # **Counted off the board after `start`, not from the list before it.**
+    # Recording `len(caught)` was recording what this function *meant* to
+    # do: a plant that computed the list and then called `start()` with no
+    # argument left the count at 3 and every assertion green. So this asks
+    # the creatures, which is the only version that can tell an intention
+    # from an effect. #945.
+    step.surprised = sum(
+        1 for eid in caught
+        if (held := world.get(eid, Conditions)) is not None
+        and held.has(Condition.SURPRISED)
+    )
+    if step.surprised:
+        step.say(
+            f"The opposition is {scene.readiness}: {step.surprised} "
+            "creature(s) are surprised and lose the first round.",
+            "note",
+        )
+    # **Reinforcements, at the top of each round.** A wave encounter
+    # imported as a flat cast with every arrival standing on the board at
+    # round 1, which is a different fight: the party faced the whole
+    # roster at once with no reason to hurry and no escalation. #962.
+    #
+    # Driven off `world.round` changing rather than a `RoundEnd`
+    # subscription, because round 1's arrivals have to be on the board
+    # *before* the first turn and there is no round boundary before it.
+    walked_on = 0
+    arrived_in: int | None = None
     while not encounter.finished and world.round <= MAX_ROUNDS:
+        if dressed.waves and arrived_in != world.round:
+            arrived_in = world.round
+            for ref, worth in reinforce(
+                    world, encounter, dressed.waves, world.round):
+                step.arrived.append(ref)
+                if worth:
+                    step.arrived_worth.append(ref)
+                walked_on += 1
+        if watch is not None and watch.resolved:
+            # **The third exit from the loop.** A fight has always ended when
+            # a side was wiped or the round cap ran out; an objective with a
+            # duration, or one that is satisfied with the opposition still
+            # standing, has to end the moment it is decided. Checked at the
+            # top rather than in the `while` condition so that a watcher
+            # resolving mid-round still finishes the round it is in -- the
+            # watcher only ever updates on `RoundEnd`, so this is the first
+            # moment after it.
+            break
         actor = world.turn
         if actor is None:
             break
@@ -361,17 +702,114 @@ def _fight(
     if written is not None:
         written.flush()
     harvest(world, campaign.party)
-    step.rounds = world.round
+    # **Record what this fight killed, so a revisit does not raise it.**
+    # Read off the board rather than from the bus log: the question is which
+    # creatures are down *now*, which is a state, and `query.alive` is the
+    # engine's own answer to it -- `hp > dying_at`, with the character floor
+    # the same reader uses everywhere else.
+    #
+    # Counted per ref and accumulated, because a scene fielding four of the
+    # same creature that lost three must field one next time. #970.
+    fallen: dict[str, int] = {}
+    for eid in _enemy_eids(world):
+        who = world.get(eid, Ident)
+        if who is not None and not alive(world, eid):
+            fallen[who.ref] = fallen.get(who.ref, 0) + 1
+    record_fallen(campaign.cleared, scene.id, fallen)
+    # **The round the fight stopped in, and for an objective that is not the
+    # same number.** `world.round` has already rolled over by the time the
+    # loop head sees `watch.resolved`, so a `survive` objective for two rounds
+    # reported `rounds=3` beside a verdict line reading "2 of 2" -- two
+    # numbers for one fight, which is how a reader loses faith in both. The
+    # watcher's own count is the authority when there is one.
+    step.rounds = watch.rounds if watch is not None and watch.resolved \
+        else world.round
     step.enemies = list(dressed.refs)
-    won = encounter.winner is Team.PC if encounter.winner is not None else False
-    step.outcome = "won" if won else "lost"
+    step.traps = len(list(world.each(Trap)))
+    step.room = (world.grid.width, world.grid.height)
+    objective_line = ""
+    if watch is None:
+        # **Bit for bit what this did before objectives existed**, which is
+        # the whole of the compatibility story: a module that states no
+        # objective never builds a watcher and never reaches the branch
+        # below. `drivers.py no_objective` is the control for it.
+        won = encounter.winner is Team.PC if encounter.winner is not None else False
+        step.outcome = "won" if won else "lost"
+    else:
+        verdict = watch.verdict(
+            winner=encounter.winner, fielded=tuple(dressed.refs))
+        step.objective = scene.objective.kind if scene.objective else ""
+        step.clean = verdict.clean
+        step.outcome = "won" if verdict.met else "lost"
+        asked = (scene.objective.says if scene.objective else "") or step.objective
+        # Held, not said, so it can be printed **after** the cast and the
+        # result. Said here it came out above "Against:" -- the verdict on a
+        # fight before the fight, which reads backwards.
+        objective_line = f"Objective -- {asked}: {verdict.why}."
 
     shown = []
     for eid, flavour in zip(_enemy_eids(world), dressed.flavours, strict=False):
         ident = world.get(eid, Ident)
         shown.append(flavour.name or (ident.ref if ident else "?"))
-    step.say(f"Against: {', '.join(shown)}")
-    step.say(f"{step.outcome.title()} in {step.rounds} rounds.")
+    step.say(f"Against: {', '.join(shown)}", "note")
+    if step.arrived:
+        step.say(
+            f"Reinforcements: {len(step.arrived)} walked on after the fight "
+            f"started, {len(step.arrived_worth)} of them worth XP.",
+            "note",
+        )
+    # **How it went, in one phrase from a closed set.** The fight reported
+    # `Won in 4 rounds` and sent the blow-by-blow to a transcript nobody
+    # reads during play, so a whole encounter of narration material went
+    # nowhere. Derived off two printed states -- bloodied, and down -- and
+    # read from the sheets, which `harvest` has already written. #943.
+    # The `0 <` keeps somebody face-down out of the bloodied count, which
+    # **no plant can redden** and is kept anyway: `aftermath` ranks down
+    # above bloodied, so a character counted as both cannot change the
+    # phrase today. It is the count being a correct count, and the thing
+    # that would silently go wrong if that ranking were ever reordered.
+    bloodied = sum(
+        1 for sheet in campaign.party.sheets
+        if sheet.hp is not None and sheet.max_hp
+        and 0 < sheet.hp <= sheet.max_hp // 2)
+    floored = sum(
+        1 for sheet in campaign.party.sheets
+        if sheet.hp is not None and sheet.hp <= 0)
+    step.aftermath = beat_mod.aftermath(
+        step.outcome == "won", bloodied, floored)
+    step.say(
+        f"{step.outcome.title()} in {step.rounds} rounds -- "
+        f"{step.aftermath}.",
+        "note",
+    )
+    # **Handed to the next conversation's DM**, which is the only reader it
+    # has: a derived phrase nothing reads is the same as no phrase, which
+    # is what #934 found `Known.near` doing for the whole of its life.
+    # Spent on use, like `campaign.denied`, so it colours the scene after
+    # the fight and not every scene after that.
+    campaign.aftermath = step.aftermath
+    if objective_line:
+        step.say(objective_line, "note")
+
+
+def _carried(campaign: Campaign) -> str:
+    """What the party walks into this conversation carrying, and spend it.
+
+    **Spent on read, like `campaign.denied`**, and read at the top of
+    every roleplay scene rather than where the beats start -- a scene with
+    nothing to play returns early, and holding the phrase past it would
+    have the DM opening on a battle two scenes back. A flag nothing clears
+    is this component's own recorded failure shape.
+    """
+    held = campaign.aftermath
+    campaign.aftermath = ""
+    if not held:
+        return ""
+    return (
+        f"The fight just before this was {held}. Use it for the mood and "
+        "for how people carry themselves; it is not something anybody "
+        "announces."
+    )
 
 
 def actors_for(campaign: Campaign) -> list[beat_mod.Actor]:
@@ -462,12 +900,18 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
     lines against 3. It did not bite only because the one converted module
     puts all 8 of its lore rows on a scene that has NPCs. #918.
     """
+    # **Read before the early return, so it is spent either way.** The
+    # phrase is about the fight immediately before this scene; held past a
+    # scene with nothing to play it would have the DM opening on a battle
+    # two scenes back. A scene nobody narrates drops it, which is right --
+    # nobody was asked.
+    carried = _carried(campaign)
     if not (scene.affordances or scene.npcs or scene.lore):
         return
     # Said once, at the top of the scene, so a character who never speaks
     # reads as down rather than as broken.
     if (out := down(campaign)):
-        step.say(f"  ({', '.join(out)} cannot speak.)")
+        step.say(f"  ({', '.join(out)} cannot speak.)", "note")
     seed = seed_for(campaign, scene, "beats")
     table = table_mod.lay(campaign.party, seed=seed)
     def tell(made: beat_mod.Beat) -> None:
@@ -512,16 +956,16 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         delivered = [knew for knew in made.recalled if knew.knew]
         if len(delivered) > 1:
             step.say(f"  Between you, {len(delivered)} things are already "
-                     f"known -- common talk first:")
+                     f"known -- common talk first:", "recall")
         for knew in sorted(delivered, key=lambda r: r.dc):
             # **Only one knower is said out loud**, because that is the
             # fact a reader should weigh: it took the one character who is
             # good at this, and on a reread it is why they are in the party.
             alone = len(knew.knew) == 1
             if knew.mine and alone:
-                step.say(f"    Only you know: {knew.fact}")
+                step.say(f"    Only you know: {knew.fact}", "recall")
             elif knew.mine:
-                step.say(f"    You know: {knew.fact}")
+                step.say(f"    You know: {knew.fact}", "recall")
             # **A companion's recall is printed too, attributed.** It
             # still goes to the DM, which says it in their voice -- but
             # the DM was the only path and it drops roughly a quarter
@@ -529,9 +973,9 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
             # reaching nobody is the one loss a player is never owed,
             # and a restatement is the cheap failure to prefer.
             elif alone:
-                step.say(f"    Only {knew.knew[0][1]} knows: {knew.fact}")
+                step.say(f"    Only {knew.knew[0][1]} knows: {knew.fact}", "recall")
             else:
-                step.say(f"    {knew.knew[0][1]} knows: {knew.fact}")
+                step.say(f"    {knew.knew[0][1]} knows: {knew.fact}", "recall")
         # **A companion's intent is not printed.** It goes to the DM, which
         # writes it into the paragraph below -- so what a reader sees is one
         # piece of prose in which those things happened, not four captioned
@@ -539,9 +983,9 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         # printed because they typed it and it is theirs.
         for intent in made.intents:
             if not intent.played:
-                step.say(f"  {intent}")
+                step.say(f"  {intent}", "mine")
         if made.reaction:
-            step.say(f"  {made.reaction}")
+            step.say(f"  {made.reaction}", "dm")
         # The dice after the prose, not before it: a roll is the result of
         # the moment and reads as one. Before, it pre-announced the outcome
         # of a paragraph nobody had read yet.
@@ -563,13 +1007,13 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         # becomes a harmless restatement instead of a lost payoff.
         for ruling in made.rulings:
             if ruling.affordance != "none":
-                step.say(str(ruling))
+                step.say(str(ruling), "roll")
                 if ruling.fact and not ruling.exit:
-                    step.say(f"    {ruling.fact}")
+                    step.say(f"    {ruling.fact}", "dm")
         # After the reaction, because it is the scene closing rather than
         # anybody answering. The DM is not given it -- #807.
         if made.exit_line:
-            step.say(f"  {made.exit_line}")
+            step.say(f"  {made.exit_line}", "exit")
 
     # Said as each beat lands rather than after the scene, so a person
     # playing sees beat 1 before being asked about beat 2. With no echo set
@@ -581,6 +1025,7 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         ask_human=ask_human, party_level=module.party_level,
         after=tell, asked=set(campaign.recalled),
         canon=_canon(module), told=_told(campaign),
+        carried=carried,
     )
     # Back onto the campaign, so a `once` row stays rolled across a revisit
     # and across a save. `Playing` does not survive the scene.
@@ -662,12 +1107,690 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
     seed = _stream(campaign, scene, "challenge").randrange(1 << 30)
     table = table_mod.lay(campaign.party, seed=seed)
     run = play_challenge(
-        scene, table, party_level=module.party_level, choose=choose)
+        scene, table, party_level=module.party_level, choose=choose,
+        record=campaign.record)
     table.strike()
+    if tension.footing(campaign.record):
+        step.say(tension.says(campaign.record), "note")
+    meant_already: set[str] = set()
     for made in run.attempts:
-        step.say(f"  {made}")
-    step.say(run.tally)
+        step.say(f"  {made}", "roll")
+        # **What the roll meant, when the module said.** The challenge
+        # printed five mechanical lines and a tally and nothing else: the
+        # fires were never described going out or spreading. #932.
+        #
+        # Only for a roll that counted -- a refused skill did not happen,
+        # so neither its success nor its failure text is true.
+        #
+        # **And each sentence once.** The text is a *fact* -- what is now
+        # true because the roll went that way -- and a fact does not
+        # become true again on the second success with the same skill. The
+        # probe printed one brazier toppling into the sand three times,
+        # which reads as three braziers.
+        if made.rolled:
+            meant = scene.means(made.skill, won=made.success)
+            if meant and meant not in meant_already:
+                meant_already.add(meant)
+                step.say(f"    {meant}", "scene")
+    step.say(run.tally, "note")
     step.outcome = "won" if run.won else "lost"
+
+
+def field_allies(world: World, dressed: Dressed) -> list[str]:
+    """Put the module's own allies on the party's side. #961.
+
+    **A named function rather than six lines inside `_fight`, and the
+    reason is the one `Step.stood` already records**: a driver that spawns
+    an ally itself proves the spawn works while `_fight` quietly does
+    something else, which is exactly what five green plants showed here.
+    Through this, "on the PC side", "in the party's band" and "dressed the
+    way the module asked" are all assertable against the code that runs.
+
+    Returns the refs that **actually** stood up, which may be fewer than
+    asked for: the party's band fills like any other.
+
+    Placed in the party's band rather than the opposition's -- an ally
+    that walked on among the creatures it came to fight would be
+    surrounded before it acted.
+
+    `Side(team=Team.PC)` on a monster row is a thing the board already
+    supports, and both `harvest` and `table.characters` filter on a
+    `c:<class>` ref so a PC-side non-character does not count as a sheet
+    (#797). So an ally takes no wear out of the fight and cannot be
+    mistaken for a character.
+    """
+    from combat_engine.content import loader
+
+    stood: list[str] = []
+    if not dressed.allies:
+        return stood
+    spots = arrival_squares(world, len(dressed.allies), party=True)
+    for ref, flavour, square in zip(
+            dressed.allies, dressed.ally_flavours, spots, strict=False):
+        eid = loader.spawn(world, ref, square, team=Team.PC)
+        apply_flavour(world, eid, flavour)
+        stood.append(ref)
+    return stood
+
+
+def reinforce(
+    world: World, encounter: Encounter, waves: list, round_now: int,
+) -> list[tuple[str, bool]]:
+    """Walk every wave due this round onto the board. #962.
+
+    Returns `(ref, worth)` per creature that actually arrived, which is not
+    always every creature the wave names -- the module only lets them in
+    where there is room, and a full board turns an arrival away.
+
+    **Three things have to happen or an arrival is scenery.** `loader.spawn`
+    alone makes an entity that is not in the initiative order, so it stands
+    there and never acts -- the lesson `Cast.summon`'s docstring already
+    records. The flavour has to be applied or the module's own word for the
+    creature is lost on everything after round 1. And `join(beside=)` is
+    the module's *"act on the same turn as the others"*: given an existing
+    creature's slot the count is copied rather than rolled, so a wave does
+    not arrive in a different part of the round each time.
+
+    `beside` is the **first** enemy still in the order rather than any of
+    them, so the whole wave lands on one count and two creatures of the
+    same kind do not act half a round apart.
+    """
+    from combat_engine.content import loader
+
+    arrived: list[tuple[str, bool]] = []
+    due = [wave for wave in waves if wave.due(round_now)]
+    if not due:
+        return arrived
+    beside = next(iter(_enemy_eids(world)), None)
+    for wave in due:
+        squares = arrival_squares(world, len(wave.refs))
+        for ref, square in zip(wave.refs, squares, strict=False):
+            eid = loader.spawn(world, ref, square, team=Team.ENEMY)
+            apply_flavour(world, eid, wave.flavour)
+            encounter.join(eid, beside=beside)
+            arrived.append((ref, wave.worth))
+    return arrived
+
+
+def survivors(
+    refs: list[str], flavours: list, cleared: dict[str, int],
+) -> tuple[list[str], list, list[str]]:
+    """Take the already-dead off a roster. Returns `(refs, flavours, gone)`.
+
+    **A named function rather than six lines inside `_fight`, and the
+    reason is that the six lines were untestable.** `cast_list` never
+    returns the same ref twice for a generated roster -- measured across
+    five seeds -- so through `_fight` the count-per-ref behaviour is
+    indistinguishable from a set of cleared scenes, and a plant that
+    replaced the decrement with nothing stayed green. The distinction is
+    the whole point of the field: a scene fielding three of one creature
+    that lost two must field **one**, which "this scene is cleared" cannot
+    say. #970.
+
+    `refs` and `flavours` run parallel and are zipped together twice
+    downstream, so both are filtered in step -- dropping a ref without its
+    flavour would dress a survivor as whatever died.
+    """
+    budget = dict(cleared)
+    keep_refs: list[str] = []
+    keep_flavours: list = []
+    gone: list[str] = []
+    for ref, flavour in zip(refs, flavours, strict=False):
+        if budget.get(ref, 0) > 0:
+            budget[ref] -= 1
+            gone.append(ref)
+        else:
+            keep_refs.append(ref)
+            keep_flavours.append(flavour)
+    return keep_refs, keep_flavours, gone
+
+
+def record_fallen(
+    cleared: dict[str, dict[str, int]], scene_id: str, fallen: dict[str, int],
+) -> None:
+    """Add a fight's dead to what this scene has already lost.
+
+    **Accumulated, not replaced**, so a scene cleared over two visits stays
+    clear. Named for the same reason `survivors` is: through `_fight` no ref
+    dies twice, so a plant that overwrote the tally could not be caught.
+    """
+    if not fallen:
+        return
+    book = cleared.setdefault(scene_id, {})
+    for ref, count in fallen.items():
+        book[ref] = book.get(ref, 0) + count
+
+
+def quests(campaign: Campaign, module: Module, scene: Scene,
+           made: Step) -> None:
+    """Offer, complete and fail the module's quests. #940.
+
+    The DMG lists quests first among what an adventure is made of and the
+    converted adventure prints two; nothing carried either, so both
+    awarded nothing and nothing recorded whether the party had done them.
+
+    Three things happen here, in this order:
+
+    * a quest whose `offered_by` is this scene becomes **open**, which may
+      be any kind of scene -- the module grants one mid-combat, so keying
+      this on a roleplay scene would miss it;
+    * an **open** quest whose `done_when` matches this scene, or an
+      affordance the party won in it, becomes done;
+    * every quest that one `fails` becomes failed, which is why a quest
+      has a state rather than a flag.
+
+    **Said out loud**, because the point of carrying a quest is that the
+    player can see it: *"don't be shy about letting the players know what
+    their quests are [...] that avoids searching for the fun."*
+
+    The XP is **not** awarded: `Sheet` has no XP field and nothing in the
+    story engine advances a character. That is #967, and the figure is
+    carried so the award has something to read.
+    """
+    if not module.quests:
+        return
+    won = {r.affordance for r in (made.played.beats[-1].rulings
+                                  if made.played and made.played.beats
+                                  else []) if r.won}
+    if made.played is not None:
+        won |= set(made.played.found)
+
+    for quest in module.quests:
+        state = campaign.quests.get(quest.id, "")
+        if not state and quest.offered_by == scene.id:
+            campaign.quests[quest.id] = state = "open"
+            made.say(
+                quest.says or f"New {quest.kind} quest: {quest.id}.",
+                "note",
+            )
+        elif not state and not quest.offered_by:
+            # A quest the party starts with is open from the first scene
+            # it could be finished in, which keeps a module that states no
+            # `offered_by` working without a separate "start" hook.
+            campaign.quests[quest.id] = state = "open"
+
+        if state != "open":
+            continue
+        if quest.done_when != scene.id and quest.done_when not in won:
+            continue
+        campaign.quests[quest.id] = "done"
+        # **The module's own figure wins, and divides by its kind.** An
+        # adventure prints a quest's XP, so a stated number is better
+        # evidence than the printed rate -- but *how* it divides is the
+        # rule's to decide, not the module's: a major quest pays each
+        # character the stated figure whatever the party's size, and a
+        # minor one is split. #967.
+        paid = xp_mod.for_quest(quest.kind, scene.level or module.party_level)
+        if quest.xp:
+            paid = xp_mod.Award(
+                "quest",
+                each=quest.xp if quest.kind == "major" else 0,
+                total=quest.xp,
+                why=f"the module's own figure for {quest.id}",
+            )
+        got = xp_mod.pay(campaign.party.sheets, paid)
+        made.say(
+            f"Quest done: {quest.id} ({got.each} XP each -- {paid.why}).",
+            "note",
+        )
+        for other in quest.fails:
+            if campaign.quests.get(other) == "open":
+                campaign.quests[other] = "failed"
+                made.say(
+                    f"Quest failed: {other} -- finishing {quest.id} ruled "
+                    "it out.",
+                    "note",
+                )
+
+
+def reward(campaign: Campaign, module: Module, scene: Scene,
+           made: Step) -> None:
+    """Pay what the scene was worth, and say when somebody is ready. #967.
+
+    > *Experience points (XP) are the fundamental reward of the game, just
+    > as encounters are the building blocks of adventures and campaigns.
+    > Every encounter comes with an experience reward to match its
+    > difficulty.*
+
+    Three sources pay here -- a combat encounter, a skill challenge, and
+    DMG2's drama reward -- and the fourth, a quest, pays in `quests` above
+    because that is where a quest is completed.
+
+    **An encounter has to be overcome, and overcoming is not killing.**
+    *"Killing, routing, or capturing"* all count, so this reads
+    `made.outcome` rather than who was left standing: #964 put the scene's
+    objective behind that word, and hanging the award off a wiped board
+    would refuse XP to a party that achieved exactly what the module asked
+    for.
+
+    **And a risk of failure is what makes something an encounter at all**:
+
+    > *Remember that an encounter, by definition, has a risk of failure. If
+    > that risk isn't present, it's not an encounter, and the characters
+    > don't earn XP.*
+
+    Which is why god mode pays **nothing**: `_win` fields no creatures and
+    rolls nothing, so there is no opposition to be worth anything and no
+    risk to have run. That falls out of `made.enemies` being empty rather
+    than being special-cased, and it is the right answer rather than a
+    convenient one.
+
+    **`Step.clean` is deliberately not read.** #964 recorded it saying the
+    thing that would pay for it is this award -- and nothing printed pays
+    more for a clean win. An encounter is worth its monsters whether or not
+    anybody went down. Inventing a bonus here would be this component's own
+    warned-against failure, so the field stays unspent and this paragraph
+    is why.
+    """
+    level = scene.level or module.party_level
+    earned: list[xp_mod.Award] = []
+
+    if scene.kind == "combat" and made.outcome == "won" and made.enemies:
+        # **Reinforcements the module says are worth something, and only
+        # those.** The adventure states its own cutoff, counting only
+        # its earliest waves toward the reward, and that is what keeps a
+        # ten-round wave fight from being worth an arbitrary amount. #962.
+        fought = made.enemies + made.arrived_worth
+        total = xp_mod.for_creatures(fought)
+        earned.append(xp_mod.Award(
+            "encounter", each=0, total=total,
+            why=f"{len(fought)} creatures overcome"
+                + (f", {len(made.arrived_worth)} of them reinforcements"
+                   if made.arrived_worth else ""),
+        ))
+    elif scene.kind == "skill_challenge" and made.outcome == "won":
+        # **A lost challenge pays nothing, which is a reading and not a
+        # quotation.** The page prices a challenge as monsters of its level
+        # and says an encounter with no risk of failure earns nothing; it
+        # does not print what a *failed* challenge is worth. Camille's
+        # ruling that a lost challenge must not stop the plot is honoured
+        # by `charge` -- the party moves on and pays a cost -- and paying
+        # full XP for losing would make the cost the only difference
+        # between winning and not.
+        earned.append(xp_mod.Award(
+            "challenge", each=0,
+            total=xp_mod.for_challenge(level, scene.complexity),
+            why=f"complexity {scene.complexity} at level {level}",
+        ))
+    if campaign.drama and made.played is not None:
+        drama = xp_mod.drama(made.played, level)
+        if drama is not None:
+            earned.append(drama)
+
+    # **An ally takes a share.** *"When a nonplayer character participates
+    # in an encounter, that character earns an equal share of experience
+    # points"* -- so four characters with two allies divide by six, and
+    # the two shares the allies earn are paid to nobody. #961.
+    heads = len(campaign.party.sheets) + len(made.allies)
+    for award in earned:
+        if award.total <= 0:
+            continue
+        got = xp_mod.pay(campaign.party.sheets, award, heads=heads)
+        made.say(
+            f"{award.source.capitalize()}: {got.each} XP each "
+            f"({award.why}).",
+            "note",
+        )
+
+    # **Said once, when it is crossed, and never applied.** A line every
+    # scene from here on would be noise, and applying a level is #1013 --
+    # re-dealing a pinned hand is `chargen`'s to own.
+    for i, sheet in enumerate(campaign.party.sheets):
+        if not xp_mod.ready(sheet) or i in campaign.advanced:
+            continue
+        campaign.advanced.append(i)
+        made.say(
+            f"{sheet.cls} has {sheet.xp} XP and needs "
+            f"{xp_mod.to_advance(sheet.level)} for level {sheet.level + 1} "
+            "-- advancement is not implemented (#1013), so the character "
+            "keeps playing at this level.",
+            "note",
+        )
+
+
+def hoard(campaign: Campaign, module: Module, scene: Scene,
+          made: Step) -> None:
+    """Hand the party the next monetary parcel. #969.
+
+    No treasure was awarded anywhere -- a party finished a module with
+    what `chargen` dealt it and nothing else.
+
+    **One parcel per fight overcome, and six per level, which is where
+    the printed distribution falls out rather than being rolled.** The
+    page says: *"over the course of eight to ten encounters, use one
+    treasure hoard of three parcels, two treasures of two parcels each,
+    and three treasures with a single parcel. That leaves two to four
+    encounters with no treasure reward."* Six of the ten parcels are
+    monetary, so six fights carry money and the rest carry none -- not
+    because a die said so, but because the level's treasure is spent.
+    That is the same shape the page describes with no roll invented.
+
+    **Only the monetary half.** The four item parcels are not awarded:
+    found items are party level +1 to +4, which is **above**
+    `band(level)`, and `band` is what monster defences are set against.
+    Items off that curve owe `winrate` both ways. Coins change no number
+    on any board.
+
+    Nothing resets `parcels`, because nothing levels up (#1013). So six
+    parcels is the module's lot, and that is stated rather than hidden.
+    """
+    if scene.kind != "combat" or made.outcome != "won":
+        return
+    level = scene.level or module.party_level
+    purse = treasure.shares(level)
+    if not purse:
+        made.say(
+            f"No treasure can be worked out for level {level} -- no "
+            "priced item is written there.",
+            "note",
+        )
+        return
+    if campaign.parcels >= len(purse):
+        return
+    parcel = purse[campaign.parcels]
+    campaign.parcels += 1
+    each = treasure.per_head(parcel, len(campaign.party.sheets))
+    for sheet in campaign.party.sheets:
+        sheet.coins += each
+    made.say(
+        f"Treasure: {parcel} gp, {each} each "
+        f"(parcel {campaign.parcels} of {len(purse)} for level {level}).",
+        "note",
+    )
+
+
+def charge(campaign: Campaign, scene: Scene, made: Step) -> None:
+    """Charge what losing this scene cost, with the exit unchanged. #975.
+
+    Camille's ruling -- *"skill challenges should never prevent the plot
+    from progressing"* -- was honoured, and that was the whole problem: a
+    lost challenge progressed **identically** to a won one. `on_failure`
+    is a scene id, so a module could branch or say nothing, and the
+    imported one does not branch.
+
+    DMG2's answer is the same scene and a worse party:
+
+    > *On either a success or a failure, the characters will move on to the
+    > same obstacle. However, on a failure, they move on at a significant
+    > disadvantage.*
+
+    **Charged on a loss of any kind of scene**, not on a challenge, which
+    is #975's own comment's recommendation: DMG2's taxonomy names *"fewer
+    healing surges or daily powers"* for a costly **combat** win and the
+    body proposes the same list for a lost challenge, so keying this on
+    `Scene.kind` would build it twice.
+
+    A `rest` cost is the one that is not a number: it denies the *next*
+    short rest rather than taking something now, which is why it sets a
+    flag on the campaign instead of touching a sheet.
+    """
+    # No `or not scene.cost`: the loop below is empty for a scene
+    # that declares none, so the extra test was dead -- a plant that
+    # removed it changed nothing, which is how I found out.
+    if made.outcome != "lost":
+        return
+    for item in scene.cost:
+        if item.what == "rest":
+            campaign.denied = True
+            made.say(
+                "Lost: the party presses on without the chance to catch "
+                "their breath -- the next short rest is denied.",
+                "note",
+            )
+            continue
+        for sheet in campaign.party.sheets:
+            if item.what == "surge":
+                have = sheet.surges
+                if have is None or have <= 0:
+                    continue
+                sheet.surges = max(0, have - item.each)
+            elif item.what == "action point":
+                sheet.action_points = max(
+                    0, sheet.action_points - item.each)
+        made.say(
+            f"Lost: {item.each} {item.what}"
+            f"{'s' if item.each != 1 else ''} each -- the party moves on "
+            "to the same obstacle at a disadvantage.",
+            "note",
+        )
+
+
+def stake(scene: Scene, made: Step) -> None:
+    """Say what losing will cost, **before** it is played. #975.
+
+    DMG2's framing advice is to *"build tension by showing players the
+    negative consequences of failure"*. A cost discovered afterwards is a
+    punishment; one stated beforehand is a stake, and that is the whole
+    difference between the two.
+    """
+    for item in scene.cost:
+        if item.says:
+            made.say(item.says, "note")
+        elif item.what == "rest":
+            # Not per character, so not "1 rest(s) each" -- a denied rest
+            # is one thing the party loses together.
+            made.say("Losing this will cost the party their next rest.",
+                     "note")
+        else:
+            made.say(
+                f"Losing this will cost {item.each} {item.what}"
+                f"{'s' if item.each != 1 else ''} each.",
+                "note",
+            )
+
+
+def weather(campaign: Campaign, module: Module, scene: Scene,
+            made: Step) -> None:
+    """Spend the party's surges on the hours they stood in the cold. #971.
+
+    **A healing surge could only be lost to a fight**, and the printed rules
+    have another way to spend one. Six content rows across six files already
+    say so in their own docstrings -- a racial trait that is wholly inert, a
+    level-4 daily with an empty body, a marked item power, and two monster
+    traits that note there is no rule for them to switch off.
+
+    > *Every eight hours within an area of environmental danger, the
+    > character must succeed on an Endurance check. Each time a character
+    > fails, he loses one healing surge. If a character has no healing
+    > surges left when he fails a check, he loses hit points equal to his
+    > level.*
+
+    Three things the printed text decides and this follows:
+
+    * **One check per danger**, not one per scene: *"if two or more
+      environmental dangers apply at the same time (such as climbing a
+      mountain in a snowstorm), characters make Endurance checks against
+      each danger."*
+    * **A check every eight hours**, so the hours are what the module
+      states and the number of checks falls out of them.
+    * **+2 while sheltered**, because an extended rest is *"resting and not
+      exerting himself"* -- which makes a cold night cheaper than a cold
+      day's march, and is the only reason the rest kind is consulted here.
+
+    **Not deprivation.** The rule of three -- three weeks without food,
+    three days without water, three minutes without air -- is the other half
+    of #971 and is left there, because it needs a surge pool that remembers
+    *why* a surge went: one lost to deprivation does not come back until the
+    character eats, drinks or breathes, and `Sheet.surges` is a single
+    integer that cannot say that.
+    """
+    if not scene.exposure or scene.hours <= 0:
+        return
+    spells = scene.hours // EXPOSURE_HOURS
+    if spells <= 0:
+        made.say(
+            f"{scene.hours}h of {', '.join(scene.exposure)}: under "
+            f"{EXPOSURE_HOURS}h, so no Endurance check falls due.",
+            "note",
+        )
+        return
+    eased = SHELTERED if scene.kind == "rest" else 0
+
+    # **Rolled on the board, applied after it is struck.** `Table.strike`
+    # calls `harvest`, which writes the board's `Health.surges` back onto
+    # every sheet -- so a surge subtracted while the board was live would be
+    # overwritten by the board that never knew about it. Collect, strike,
+    # then spend. Finding that out first saved a silent no-op.
+    failures: list[tuple[int, str, int]] = []
+    board = table_mod.lay(campaign.party, seed=seed_for(campaign, scene, "cold"))
+    try:
+        for danger in scene.exposure:
+            target = DANGERS[danger] - eased
+            for _ in range(spells):
+                for slot in range(len(campaign.party.sheets)):
+                    if not board.check(slot, "endurance", target):
+                        failures.append((slot, danger, target))
+    finally:
+        board.strike()
+
+    # **The total, not the per-danger count.** One check every eight hours
+    # *against each danger*, so a party on a mountain in a snowstorm rolls
+    # twice as often as one on a still mountain -- and stating the product
+    # is what makes that observable. A note saying only `spells` passed a
+    # plant that rolled against the first danger and ignored the rest.
+    told = (f"{scene.hours}h of {', '.join(scene.exposure)}: "
+            f"{spells * len(scene.exposure)} Endurance check(s) each")
+    made.say(told + (f", +{eased} while sheltered." if eased else "."), "note")
+    for slot, danger, target in failures:
+        sheet = campaign.party.sheets[slot]
+        left = sheet.surges or 0
+        if left > 0:
+            sheet.surges = left - 1
+            made.say(
+                f"{sheet.cls} fails Endurance {target} against {danger} "
+                "and spends a healing surge.",
+                "note",
+            )
+        else:
+            # Damage equal to level, which is the printed consequence of
+            # having nothing left to spend.
+            hurt = sheet.level
+            sheet.hp = (sheet.max_hp if sheet.hp is None else sheet.hp) - hurt
+            made.say(
+                f"{sheet.cls} fails Endurance {target} against {danger} "
+                f"with no surges left and takes {hurt} damage.",
+                "note",
+            )
+
+
+def rested_since_the_last_fight(campaign: Campaign, module: Module) -> bool:
+    """Has the party had a rest since their last fight? #947.
+
+    Walks back through `visited` and answers on whichever comes first: a
+    rest means yes, a fight means no. Neither means this is their first
+    fight and they arrived fresh.
+
+    **Short or extended, both count.** The sidebar's phrase is *"the
+    benefit of a short rest"* and an extended rest is strictly more, so
+    distinguishing them here would make a night's sleep count for less
+    than five minutes.
+
+    Needs no new bookkeeping, which is what the issue noticed: `visited`
+    already holds the sequence and the module already knows each kind.
+    """
+    for scene_id in reversed(campaign.visited):
+        scene = module.scenes.get(scene_id)
+        if scene is None:
+            continue
+        if scene.kind == "rest":
+            return True
+        if scene.kind == "combat":
+            return False
+    return True
+
+
+def _already_rested(campaign: Campaign, module: Module) -> bool:
+    """Has an extended rest happened with nothing since? #993.
+
+    An extended rest is **once per day** with a printed lockout -- *"After
+    you finish an extended rest, you have to wait 12 hours before you can
+    begin another one"* -- and nothing bounded it, so a campaign of three
+    consecutive rest scenes took all three in silence.
+
+    **Scenes, not hours.** `Campaign.clock` counts scenes played and rests
+    taken and is deliberately not a real clock (#965), so the literal
+    twelve hours cannot be expressed. This is the coarser rule the issue
+    proposed instead: a second extended rest waits until *something has
+    happened*. It catches the only shape a module is likely to produce and
+    it is what keeps the milestone counter from being reset at will.
+
+    **A short rest does not unlock one**, which is why this walks past a
+    `rest` scene rather than stopping at it: a short rest is five minutes
+    and the lockout is twelve hours, so a party cannot launder an extended
+    rest through one.
+
+    Derived from `visited` rather than counted into a field. There is
+    exactly one source of truth that way, and the alternative -- a
+    `since_rest` counter -- is another number to keep in step with the
+    thing it describes.
+    """
+    for scene_id in reversed(campaign.visited):
+        scene = module.scenes.get(scene_id)
+        if scene is None:
+            continue
+        if scene.kind == "rest":
+            if scene.extended:
+                return True
+            continue
+        return False
+    return False
+
+
+def _due(campaign: Campaign, module: Module, made: Step) -> str:
+    """The timeline scene that fires now, or `""`. #965.
+
+    Checked at a scene transition, **ahead of the scene's own exit**: an
+    event on the clock happens *to* the party, so a scene the module would
+    have gone to next waits its turn rather than being skipped. The entry
+    is marked fired either way, so a timed event lands once.
+
+    Three things this gets right and a simpler version would not:
+
+    * **`unless` is read before `when`.** An entry the party has already
+      prevented is retired without ever being due, so cancelling a thing
+      early does not leave it pending for the rest of the campaign.
+    * **A cancelled entry is announced too.** *"The ritual never happens --
+      you saw to that"* is the payoff for having prevented it, and a
+      silent cancellation is indistinguishable from an entry that was
+      never written.
+    * **The earliest due entry wins**, not the first in the file, so a
+      module's timeline can be written in any order.
+    """
+    clock = campaign.clock
+    ready: list[tuple[int, int, object]] = []
+    for i, entry in enumerate(module.timeline):
+        key = f"{entry.when}{entry.unit}:{entry.scene}"
+        if key in campaign.fired:
+            continue
+        # Prevented: a scene the party played, or a flag they moved.
+        stopped = (
+            entry.unless
+            and (entry.unless in campaign.visited
+                 or campaign.flags.get(entry.unless, 0))
+        )
+        if stopped:
+            campaign.fired.append(key)
+            made.say(
+                f"Prevented: {entry.scene} will not happen -- "
+                f"{entry.unless} saw to that.",
+                "note",
+            )
+            continue
+        if clock.get(entry.unit, 0) >= entry.when:
+            ready.append((entry.when, i, entry))
+    if not ready:
+        return ""
+    ready.sort(key=lambda row: (row[0], row[1]))
+    entry = ready[0][2]
+    campaign.fired.append(f"{entry.when}{entry.unit}:{entry.scene}")
+    if entry.says:
+        made.say(entry.says, "note")
+    made.say(
+        f"On the clock: {entry.scene} happens now ({entry.when} "
+        f"{entry.unit}{'' if entry.when == 1 else 's'} in).",
+        "note",
+    )
+    return entry.scene
 
 
 def step(
@@ -675,7 +1798,7 @@ def step(
     choice: str = "", choose: Chooser | None = None, record: bool = True,
     director: beat_mod.Director | None = None,
     ask_human: beat_mod.AskHuman = beat_mod.silent,
-    narrate: Callable[[str], None] | None = None,
+    narrate: Callable[[Line], None] | None = None,
     god: bool = False,
 ) -> Step:
     """Play the scene the campaign is on and advance it.
@@ -695,7 +1818,9 @@ def step(
     # indented block and loses the indent for everything after it.
     for paragraph in scene.seen.split("\n\n"):
         if paragraph.strip():
-            made.say(paragraph.strip())
+            made.say(paragraph.strip(), "scene")
+
+    stake(scene, made)
 
     if scene.kind == "roleplay":
         _roleplay(campaign, module, scene, made, director, ask_human)
@@ -707,12 +1832,94 @@ def step(
     elif scene.kind == "skill_challenge":
         _challenge(campaign, module, scene, made, choose)
     elif scene.kind == "rest":
-        campaign.party.rest(extended=scene.extended)
+        # **An extended rest the lockout refuses becomes a short one, and
+        # says so.** The printed rule stops another extended rest beginning;
+        # it says nothing against the five minutes of a short one, and a
+        # party that stopped to rest getting *nothing* would be inventing a
+        # harsher rule than the page. Refusing outright is the other
+        # defensible reading -- what is not defensible is doing it silently,
+        # which is how three rests in a row passed unremarked. #993.
+        refused = scene.extended and _already_rested(campaign, module)
+        # **A rest a lost scene denied.** The flag is spent here rather
+        # than lingering: one rest is forfeited, not every rest after it.
+        # A flag nothing clears is a party that never rests again. #975.
+        denied = campaign.denied
+        campaign.denied = False
+        if denied:
+            made.say(
+                "Refused: the scene the party lost cost them this rest, "
+                "so nothing comes back.",
+                "note",
+            )
+        else:
+            campaign.party.rest(extended=scene.extended and not refused)
+        if denied:
+            pass
+        elif refused:
+            made.say(
+                "Refused: an extended rest is once per day and the party "
+                "has had one with nothing since, so this is a short rest "
+                "-- encounter powers back, surges spent to heal.",
+                "note",
+            )
+        elif scene.extended:
+            # **The reset, which is the half that makes the counter mean
+            # anything.** The printed rule counts encounters *between*
+            # extended rests, and `Party.rest` already drops unspent action
+            # points back to one -- so without this the count would run for
+            # the whole module and every later fight would claim milestones
+            # the party had rested away. #968.
+            campaign.encounters = 0
+            #: The other unit a timeline entry can be due in. Counted here
+            #: rather than derived from `visited`, because deriving it would
+            #: need the module to ask which of those scenes were extended.
+            campaign.rests += 1
+        if not refused and not denied:
+            # The refusal note above already says what the party got, so
+            # this would otherwise print "Extended rest: everything back"
+            # directly underneath a line saying they did not get one.
+            made.say(
+                "Extended rest: everything back."
+                if scene.extended
+                else "Short rest: encounter powers back, surges spent to heal.",
+                "note",
+            )
+
+    # **Count the encounter and pay the milestone, after the scene played.**
+    # Weighted by the printed rule rather than flat -- see
+    # `Scene.counts_toward`. Counted whatever the outcome: the page says
+    # "encounters the characters complete", a fight they lost ends the
+    # campaign anyway, and crediting only wins would make a hard-won draw
+    # worth less than a walkover. #968.
+    before = campaign.milestones
+    campaign.encounters += scene.counts_toward(module.party_level)
+    if campaign.milestones > before:
+        for sheet in campaign.party.sheets:
+            sheet.action_points += campaign.milestones - before
         made.say(
-            "Extended rest: everything back."
-            if scene.extended
-            else "Short rest: encounter powers back, surges spent to heal."
+            f"Milestone {campaign.milestones}: an action point each, "
+            f"{campaign.encounters} encounters since the last extended rest.",
+            "note",
         )
+
+    quests(campaign, module, scene, made)
+    reward(campaign, module, scene, made)
+    hoard(campaign, module, scene, made)
+    charge(campaign, scene, made)
+
+    # **The hours the scene took, before the grant and after the body.**
+    # A scene that spends a surge on the weather has to do it whatever kind
+    # of scene it is -- a conversation on a mountainside is as cold as a
+    # fight on one -- so this sits outside the kind dispatch. #971.
+    weather(campaign, module, scene, made)
+
+    # **After the body, so a fight's grant is a reward rather than a loan.**
+    # Unconditional on the outcome, which is the smallest honest version:
+    # the page hands the poultice over in the conversation itself, and
+    # making it depend on winning would be inventing a rule the module does
+    # not print. #935.
+    for note in loot.hand_over(campaign.party.sheets, scene.grants):
+        made.say(note, "note")
 
     # Where next. A challenge routes on its result when the module says so;
     # everything else takes the named exit or the first one.
@@ -726,7 +1933,26 @@ def step(
     else:
         made.next_id = module.next_of(scene, choice)
 
+    # **The record the next scene is pitched from.** Appended after the
+    # scene is decided and before the next one is chosen, so a campaign
+    # reloaded mid-module pitches from the same history. #977.
+    if made.outcome in tension.DECIDED:
+        campaign.record.append(made.outcome)
     campaign.visited.append(scene.id)
+    # **The timeline, after the tick and instead of the scene's own exit.**
+    # `visited` is appended first because the scene just played is part of
+    # the count an entry is due against.
+    #
+    # The override **replaces** the exit rather than deferring it, and that
+    # is a real limitation worth stating rather than discovering: a timed
+    # scene has to carry its own `exits`, and a module that wants to return
+    # to the interrupted thread says so by exiting back to it. Remembering
+    # the displaced exit would need another piece of campaign state and a
+    # rule for what happens when the timed scene has exits of its own,
+    # which is more than the first version of this should decide. #965.
+    timed = _due(campaign, module, made)
+    if timed:
+        made.next_id = timed
     campaign.scene = made.next_id
     if record:
         record_scene(campaign, made)
@@ -744,5 +1970,10 @@ def party_line(campaign: Campaign) -> str:
         hp = "full" if sheet.hp is None else str(sheet.hp)
         surges = "full" if sheet.surges is None else str(sheet.surges)
         flag = " DOWN" if sheet.down else ""
-        bits.append(f"{sheet.cls} {hp}hp/{surges}s{flag}")
+        # Carried items, as a count rather than a list of refs: the line is
+        # read between scenes to spot a number that moved when nothing
+        # should have moved it, and four refs in it would bury the hp.
+        held = sum(sheet.carried.values())
+        bag = f"/{held}i" if held else ""
+        bits.append(f"{sheet.cls} {hp}hp/{surges}s{bag}{flag}")
     return "   ".join(bits)

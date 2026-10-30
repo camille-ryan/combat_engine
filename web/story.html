@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Story</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="story-body">
+
+<header class="story-head">
+  <h1 id="module-name">Story</h1>
+  <div id="scene-line" class="scene-line"></div>
+  <div id="party-line" class="party-line"></div>
+  <button id="settings-open" class="settings-open" type="button">Settings</button>
+</header>
+
+<!-- Settings. `dnd4e.godmode` and `dnd4e.scripted` live in localStorage
+     beside the fight page's `dnd4e.freeform` and `dnd4e.speed`. -->
+<div id="settings" class="settings-panel" hidden>
+  <h2>Settings</h2>
+  <label><input type="checkbox" id="opt-god">
+    God mode &mdash; the party wins every fight without one being played
+  </label>
+  <p class="settings-note">
+    No board is built. Nothing a god-mode run shows is evidence about
+    combat, and each skipped fight says so in the transcript.
+  </p>
+  <label><input type="checkbox" id="opt-scripted">
+    No model &mdash; canned answers, no ollama needed
+  </label>
+  <label>Seed <input type="number" id="opt-seed" value="0" min="0"></label>
+  <label>Module <input type="text" id="opt-module"
+      value="scripts/fixtures/modules/sunken-mill.json"></label>
+  <div class="settings-buttons">
+    <button id="start" type="button">Start a new campaign</button>
+    <button id="settings-close" type="button">Close</button>
+  </div>
+</div>
+
+<main>
+  <div id="transcript" class="transcript" aria-live="polite"></div>
+
+  <div id="asking" class="asking" hidden>
+    <label for="speech">What would you like to do?</label>
+    <input type="text" id="speech" autocomplete="off"
+           placeholder="say something, or describe what you do">
+    <button id="send" type="button">Send</button>
+  </div>
+
+  <div id="waiting" class="waiting" hidden>thinking&hellip;</div>
+
+  <button id="advance" class="advance" type="button" hidden>Continue</button>
+  <div id="over" class="over" hidden>The adventure is over.</div>
+</main>
+
+<script type="module" src="./story.js"></script>
+</body>
+</html>

@@ -100,7 +100,13 @@
           "leads_to": "wheelhouse"
         }
       ],
-      "max_beats": 4
+      "max_beats": 4,
+      "grants": [
+        {
+          "what": "i1551",
+          "count": 2
+        }
+      ]
     },
     {
       "id": "wheelhouse",
@@ -243,7 +249,15 @@
         }
       ],
       "tactics": "The elite stays beyond the lantern and spends its minions to keep the ladder head crowded.",
-      "exits": []
+      "exits": [],
+      "objective": {
+        "kind": "defeat_foe",
+        "foes": [
+          "the hoarder"
+        ],
+        "easier": true,
+        "says": "cut the hoarder down and the rest will scatter"
+      }
     }
   ]
 }

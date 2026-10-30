@@ -61,6 +61,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from . import tension
+from .dc import BANDS
 from .dc import dc as dc_for
 from .module import SECONDARY_BONUS, Scene
 from .table import Table
@@ -112,6 +114,9 @@ class Running:
     level: int
     needs: int
     bands: tuple[str, ...] = ()
+    #: The campaign's recent decided outcomes, for `tension.band`. Empty
+    #: for a challenge run outside a campaign, which pitches nothing.
+    record: list[str] = field(default_factory=list)
     successes: int = 0
     failures: int = 0
     #: How many primary checks have been rolled, which is the index into
@@ -123,6 +128,11 @@ class Running:
     attempts: list[Attempt] = field(default_factory=list)
     #: Secondary skills already spent, so the once-each cap can be enforced.
     spent: set[str] = field(default_factory=set)
+    #: Successes each primary skill has contributed, for `Scene.cap_for`.
+    #: DMG2's ground rule 2 is entirely about the bottleneck this stops:
+    #: *"if only one skill does the heavy lifting for the challenge, you
+    #: need to rethink the challenge."* #984.
+    won_with: dict[str, int] = field(default_factory=dict)
 
     @property
     def over(self) -> bool:
@@ -147,13 +157,20 @@ class Running:
         )
 
 
-def open_challenge(scene: Scene, *, party_level: int = 1) -> Running:
-    """Start counting. `scene.level` wins over the party's when it is set."""
+def open_challenge(scene: Scene, *, party_level: int = 1,
+                   record: list[str] | None = None) -> Running:
+    """Start counting. `scene.level` wins over the party's when it is set.
+
+    `record` is the campaign's recent decided outcomes, which pitch the
+    primary band one rung either way. Omitted outside a campaign, where
+    there is no record and nothing to react to.
+    """
     return Running(
         scene=scene,
         level=scene.level or party_level,
         needs=scene.needs,
         bands=scene.bands,
+        record=list(record or []),
     )
 
 
@@ -192,8 +209,20 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
         return refuse("not a listed skill")
     if is_secondary and skill in run.spent:
         return refuse("secondary already used")
+    # **A primary that has given all it can.** Refused before the roll,
+    # like every other refusal here, so a capped skill does not spend a
+    # draw from the scene's stream and move every roll after it.
+    cap = run.scene.cap_for(skill) if is_primary else 0
+    if cap and run.won_with.get(skill, 0) >= cap:
+        return refuse("skill capped")
 
     band = run.band_now if is_primary else "easy"
+    # **The reactive band, and only on a primary check.** A secondary is
+    # already pitched easy by design, so moving it would turn the helping
+    # roll into the challenge. The module's own complexity still decides
+    # the sequence of bands -- this moves which rung it lands on, never how
+    # many rungs there are. #977.
+    band = tension.band(band, run.record, BANDS) if is_primary else band
     target = dc_for(run.level, band)
     carried = run.pending_bonus if is_primary else 0
     rolled = table.check(slot, skill, target - carried if carried else target)
@@ -213,6 +242,7 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
         counted = "success" if success else "failure"
         if success:
             run.successes += 1
+            run.won_with[skill] = run.won_with.get(skill, 0) + 1
         else:
             run.failures += 1
     elif success:
@@ -264,7 +294,21 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
             taken[made.slot] += 1
     slot = min(order, key=lambda i: (taken[i], i))
 
-    options: list[tuple[str, str]] = [(s, run.band_now) for s in run.scene.primary]
+    # **A capped skill is not an option.** The chooser would otherwise
+    # keep naming one that can no longer count, burning `play`'s attempt
+    # limit without progressing -- measured at 33 refusals in one
+    # challenge, which turned a win into a loss. A cap that makes the
+    # default chooser spin is a cap that broke the challenge. #984.
+    options: list[tuple[str, str]] = [
+        (s, run.band_now) for s in run.scene.primary
+        if not (cap := run.scene.cap_for(s))
+        or run.won_with.get(s, 0) < cap
+    ]
+    if not options:
+        # Every primary has given all it can. Nothing left to roll, so say
+        # so rather than spinning: `play`'s loop ends on a refusal it
+        # cannot act on.
+        return slot, next(iter(run.scene.primary), "")
     # **No second secondary while a +2 is already banked.** The bonus is spent
     # by the next primary check and does not stack, so a chooser that takes the
     # easy roll whenever it has the best margin opens by burning every
@@ -303,6 +347,7 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
 def play(
     scene: Scene, table: Table, *, party_level: int = 1,
     choose: Chooser | None = None, limit: int = 40,
+    record: list[str] | None = None,
 ) -> Running:
     """Run a whole challenge and return the finished tally.
 
@@ -311,7 +356,8 @@ def play(
     challenge that stops early. Hitting it is the caller's to report rather
     than swallow.
     """
-    run = open_challenge(scene, party_level=party_level)
+    run = open_challenge(scene, party_level=party_level,
+                         record=record)
     picker = choose or taking_turns
     for _ in range(limit):
         if run.over:

@@ -1503,3 +1503,58 @@ main {
   gap: 0.5rem;
   padding: 0.25rem 0;
 }
+
+/* -- the story page ------------------------------------------------------
+   A line's kind says who wrote it, which is the same split the story graph
+   draws between `page`, `earned` and `invented`. The adventure's prose is
+   canon, a roll is a fact the dice produced, and the DM's paragraph is a
+   model's invention that is allowed to be wrong -- so they must not read
+   as one voice. `browser.py` asserts these class names. */
+
+.story-body { max-width: 52rem; margin: 0 auto; padding: 1rem; }
+.story-head { border-bottom: 1px solid #333; padding-bottom: .5rem; }
+.scene-line { opacity: .75; font-size: .9rem; }
+.party-line { opacity: .6; font-size: .8rem; font-family: monospace; }
+
+.transcript { margin: 1rem 0; max-height: 60vh; overflow-y: auto; }
+.line { white-space: pre-wrap; margin: .35rem 0; line-height: 1.45; }
+
+/* The adventure's own words. The baseline everything else is read against. */
+.line-scene { }
+
+/* What the model wrote. Set apart because it is the one voice here that
+   may be wrong. */
+.line-dm { border-left: 2px solid #4a6fa5; padding-left: .6rem; }
+
+/* What the person typed. Theirs, and never rewritten by the DM. */
+.line-mine { color: #9ecbff; }
+
+/* The dice: a knowledge roll the party already made, and a check. Both are
+   facts rather than prose, so both are quieter and monospaced. */
+.line-recall { color: #b7d7a8; font-style: italic; }
+.line-roll { font-family: monospace; font-size: .85rem; opacity: .8; }
+
+/* Out of story: a clamp, a creature deferred, the god-mode banner. It must
+   not read as narration -- a god-mode run that looks played is the thing
+   `story/CLAUDE.md` warns about. */
+.line-note { color: #d9a441; font-size: .85rem; }
+
+/* The scene closing. The adventure's words again, but narration. */
+.line-exit { font-style: italic; opacity: .85; }
+
+/* **`[hidden]` has to win.** `.asking` sets `display: flex`, and a class
+   rule beats the user-agent's `[hidden] { display: none }` -- so the input
+   row stayed on screen with the attribute set, the page kept offering a
+   question nobody had asked, and the server answered 409. Scoped to this
+   page's own elements rather than set globally, so nothing on the fight
+   page changes. */
+.story-body [hidden] { display: none !important; }
+
+.asking { display: flex; gap: .5rem; align-items: center; margin: .5rem 0; }
+.asking input { flex: 1; padding: .4rem; }
+.waiting { opacity: .6; font-style: italic; margin: .5rem 0; }
+.over { font-weight: bold; margin: .5rem 0; }
+.settings-panel { border: 1px solid #444; padding: 1rem; margin: 1rem 0; }
+.settings-panel label { display: block; margin: .4rem 0; }
+.settings-note { opacity: .7; font-size: .8rem; margin: .2rem 0 .8rem 1.4rem; }
+.settings-buttons { margin-top: .8rem; display: flex; gap: .5rem; }

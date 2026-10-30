@@ -29,6 +29,7 @@ exactly one thing that knows how to field one.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from random import Random
 
 from combat_engine import chargen
@@ -117,6 +118,12 @@ class Sheet:
     action_points: int = 1
     #: Failed death saves. Three is dead, and a short rest clears them.
     failures: int = 0
+    #: Experience earned, and **never spent**. Applying a level re-deals
+    #: powers, feats and ability increases for a character whose hand is
+    #: pinned two fields down, which is a `chargen` job and a larger one --
+    #: so this accumulates, `xp.ready` says when it is enough, and nothing
+    #: in `story/` advances anybody. #967.
+    xp: int = 0
     #: The hand, pinned. Empty means "deal me one", the same as `Character`.
     #:
     #: **A durable party must pin this or it is not durable.** `chargen.spawn`
@@ -140,6 +147,27 @@ class Sheet:
     #: against and those rows are written as once per fight. This is the
     #: counter they wanted; the rows still have to read it.
     per_day: dict[str, int] = field(default_factory=dict)
+
+    #: Items this character is carrying, by item ref -> how many.
+    #:
+    #: Granted by a scene (`Scene.grants`, applied in `loot.hand_over`) and
+    #: **spent by nothing yet**, which is deliberate and is the whole of
+    #: #935: a module hands the party a consumable in its own prose and
+    #: before this there was nowhere for one to go, so it vanished. A
+    #: visible count that cannot be drunk is honest; a silent one was not.
+    #:
+    #: Not what `chargen` deals. Those are `Magic` -- a worn slot with an
+    #: enhancement bonus, rebuilt from `cls`/`level`/`build` every fight
+    #: like the rest of the character. This is the stuff that happened to
+    #: the party, which is why it lives with the wear rather than with the
+    #: request.
+    carried: dict[str, int] = field(default_factory=dict)
+    #: Coins, in gold pieces. **Nothing spends them**, deliberately: an
+    #: economy with nothing to buy is a separate piece of work, and the
+    #: printed buying rules want rituals (#453) and a market. A visible
+    #: number that cannot be spent is honest; awarding nothing was not.
+    #: #969.
+    coins: int = 0
 
     def per_day_left(self, ref: str, limit: int) -> int:
         """How many uses of that row are left today."""
@@ -429,6 +457,17 @@ def mixed(pool: list[str]) -> list[str]:
 #: and not a budget.
 PARADIGMS = ("standard", "leader", "elites", "solo")
 
+#: Every shape that can be **asked for** by name, which is a longer list
+#: than the one that gets **drawn**.
+#:
+#: `PARADIGMS` is the draw, and the printed templates are deliberately not
+#: in it: the book rolls five templates at equal weight, so adopting that
+#: would re-shape every arcade board and every fixture -- which owes
+#: `winrate` both ways and a re-record. The templates are reachable by
+#: name until somebody wants to pay for that. #951.
+SHAPES_BY_NAME = (*PARADIGMS, "double line", "battlefield control",
+                  "wolf pack")
+
 #: How many standards' worth each rank costs, from the printed maths.
 RANK_COST = {"standard": 1, "elite": 2, "solo": 5}
 
@@ -455,8 +494,67 @@ COMPOSITION: dict[str, list[tuple[str, float]]] = {
     "leader": [("standard", 0.5), ("minion", 0.5)],
 }
 
-#: How far either way a fight may reach for a monster. Camille's call, and it is
-#: what the printed encounter-building rules allow.
+#: The printed templates, which are keyed by **role** where `COMPOSITION`
+#: is keyed by rank. #951.
+#:
+#: The book gives five and we had analogues for two: `solo` is Dragon's
+#: Den and `leader` is Commander and Troops. The three here are the ones
+#: with no analogue, and two of them are the ones that make a fight worth
+#: positioning in -- a protected back rank, or movement control paired
+#: with mobile attackers. Fielding five creatures of one role gives the
+#: policy nothing to do.
+#:
+#: Each slot is `(rank, share, roles)`; an empty `roles` takes anything.
+#: **A role filter that empties the pool is dropped rather than obeyed**,
+#: which is this component's own recorded caution: 253 of 384 minions
+#: carry `role = 'minion'` rather than a tactical role, so filtering on
+#: role can empty a whole rank.
+TEMPLATES: dict[str, list[tuple[str, float, tuple[str, ...]]]] = {
+    # *"pick a brute or soldier monster and use two or three of them.
+    # Pick one or two monsters of other roles to round out."*
+    "double line": [
+        ("standard", 0.6, ("brute", "soldier")),
+        ("standard", 0.4, ("artillery", "controller")),
+    ],
+    "battlefield control": [
+        ("standard", 0.25, ("controller",)),
+        ("standard", 0.75, ("skirmisher",)),
+    ],
+    "wolf pack": [
+        ("standard", 1.0, ("skirmisher",)),
+    ],
+}
+
+#: How far either way a fight may reach for a monster. Camille's call.
+#:
+#: **A symmetric narrowing of an asymmetric printed window, chosen
+#: deliberately** -- the second sentence here used to say it *was* "what the
+#: printed encounter-building rules allow", and that is not true. Measured
+#: against the page, monster levels relative to the party are:
+#:
+#: | encounter | printed window |
+#: |---|---|
+#: | easy | -4 .. 0 |
+#: | standard | **-3 .. +4** |
+#: | hard | -3 .. **+7** |
+#:
+#: So 3 is right on the low side, one short above for a standard fight and
+#: four short for a hard one -- and the book asks for a hard encounter once
+#: per character level. Chapter 10's own 50-card encounter deck puts 5 cards
+#: at +4 or +5, so 26% of it is outside this band.
+#:
+#: Left at 3 on purpose. Two things to know before changing it: the page
+#: attaches a role caveat to the top of the range -- *"be careful of using
+#: high-level soldiers and brutes"*, because a soldier five levels up is
+#: very hard to hit and a brute does too much damage -- so a wider band is
+#: not uniform across roles, and `cast_list._facts` already reads `role` if
+#: that is wanted. (Quoted short on purpose: the full sentence carries a
+#: contraction that `leaks.py` matches against part of a monster ability
+#: name, which is the #494 partial-match noise.)
+#:
+#: And #972's level adjustment would make this a preference rather than a
+#: wall, which is probably the answer that needs no change to
+#: the number at all. #966.
 BAND = 3
 
 #: The most creatures one rank's share may field. Minions are a quarter of a
@@ -465,8 +563,50 @@ BAND = 3
 MOST = 12
 
 
+@lru_cache(maxsize=1)
+def ceiling() -> int:
+    """The highest level the database can actually field a standard monster at.
+
+    **Asked of the database, never of `etl`'s constant.** `MAX_MONSTER_LEVEL`
+    is the ETL's decision and `story` importing `etl` would break a contract
+    `.importlinter` holds; `db.py` is below every component for exactly this.
+    So this reads what is there, which is also the only thing a budget can
+    honestly be spent on. #963.
+
+    13 today, and a cliff rather than a thin tail: 218 rows at 13 and none
+    at 14.
+    """
+    from combat_engine.db import game
+
+    row = game().execute(
+        "SELECT max(level) FROM monster WHERE minion = 0 AND xp > 0 "
+        "AND (rank IS NULL OR rank = 'standard')"
+    ).fetchone()
+    return int(row[0]) if row and row[0] else 1
+
+
 def budget(level: int, scale: float = 1.0) -> int:
     """The XP a standard encounter for this party is worth.
+
+    **Clamped to `ceiling()`, and the clamp is reported by the caller.**
+    `game.db` stops at level 13 by deliberate ETL decision, and above it
+    this used to return **0** in silence -- so a module validated for a
+    paragon party fielded nobody, with no exception anywhere, because
+    `cast_list` guards its divisions with `max(aim, 1.0)`. An empty fight
+    with no message gets diagnosed as a `cast_list` bug.
+
+    The same call `opposition` makes one function down: *"a fight against
+    nothing is not useful, so rather than refuse, this drops to whatever
+    level has been written and reports which."*
+
+    **Not computed from the printed curve above the cap**, though the
+    printed table does run to level 40. A budget derived from it would name
+    a figure `cast_list` cannot spend -- fielding a level-20 encounter needs
+    level-20 *monsters*, not just the number they would be worth -- so the
+    scene would still field nobody while now claiming a target, which is
+    worse than a 0. The printed table is the answer for a quest or a
+    challenge reward at a level with no monsters, not for an encounter.
+    #963.
 
     One standard monster of the party's level per character, which is the printed
     rule. Read off the database rather than from a table here, so it cannot
@@ -487,7 +627,7 @@ def budget(level: int, scale: float = 1.0) -> int:
     row = game().execute(
         "SELECT xp FROM monster WHERE level = ? AND minion = 0 AND xp > 0 "
         "AND (rank IS NULL OR rank = 'standard') LIMIT 1",
-        (level,),
+        (min(max(level, 1), ceiling()),),
     ).fetchone()
     # **Rounded, not truncated.** `int()` on 0.75 of a 4x100 budget gives 300
     # either way, but on an odd standard XP a truncation loses a creature's
@@ -535,6 +675,15 @@ def opposition(
     return [], level, "standard"
 
 
+def _role_of(ref: str) -> str:
+    """A creature's tactical role, lowercased. `""` when it has none."""
+    from combat_engine.db import game
+
+    row = game().execute(
+        "SELECT role FROM monster WHERE ref = ?", (ref,)).fetchone()
+    return (row[0] or "").strip().lower() if row else ""
+
+
 def _compose(level: int, paradigm: str, draw: Random | None,
              scale: float = 1.0) -> list[str]:
     """The refs for one paradigm, filled to the XP budget. `[]` if unbuildable.
@@ -562,7 +711,16 @@ def _compose(level: int, paradigm: str, draw: Random | None,
     if not total:
         return []
     out: list[str] = []
-    for rank, share in COMPOSITION.get(paradigm, COMPOSITION["standard"]):
+    # **A printed template is role-keyed; our own paradigms are not.** Both
+    # are read as `(rank, share, roles)` here so the fill below is one
+    # loop rather than two. #951.
+    slots: list[tuple[str, float, tuple[str, ...]]] = (
+        TEMPLATES[paradigm] if paradigm in TEMPLATES
+        else [(rank, share, ())
+              for rank, share in COMPOSITION.get(
+                  paradigm, COMPOSITION["standard"])]
+    )
+    for rank, share, roles in slots:
         # **A solo is the encounter, so it does not get the band.** Its whole
         # point is one creature matched to the party, and three levels of slack
         # on a creature worth five standards is the difference between a fight
@@ -574,6 +732,14 @@ def _compose(level: int, paradigm: str, draw: Random | None,
         )
         if not pool:
             return []
+        # **A role filter that empties the pool is dropped.** This
+        # component's own recorded caution: 253 of 384 minions carry
+        # `role = 'minion'` rather than a tactical role, so filtering can
+        # empty a whole rank -- and a template that fields nobody is
+        # worse than one that fields the wrong shape.
+        if roles:
+            wanted = [r for r in pool if _role_of(r) in roles]
+            pool = wanted or pool
         costs: dict[str, float] = {}
         depth: dict[str, int] = {}
         for ref in pool:
@@ -664,6 +830,203 @@ def number_repeats(world: World) -> None:
             ident.tag = str(seen[ident.ref])
 
 
+@dataclass(frozen=True)
+class Shape:
+    """How big the room is, and what shape. #974.
+
+    Every board was one of two hard-coded rectangles -- 16x12 for a fight
+    and 12x8 for a borrowed board -- so a corridor, a cave mouth, a great
+    hall and a tavern were all the same floor with the same two starting
+    bands at the ends.
+
+    `kind` is `rectangle`, `octagon` or `irregular`. **An octagon needs
+    nothing new**: a cut corner is blocking squares, which is the same
+    mechanism `terrain.dress` already uses for pillars.
+    """
+
+    width: int
+    height: int
+    kind: str = "rectangle"
+
+    @property
+    def area(self) -> int:
+        return self.width * self.height
+
+
+#: The printed d20 table of chamber sizes, in the order it prints them.
+#:
+#: *"Although small rooms are possible, larger areas work better for combat
+#: since they allow more movement choices and varied terrain."*
+#:
+#: **Nine of the ten are smaller than today's 16x12** -- the board in use is
+#: at the large end of the printed range, and the two 10x16 entries are the
+#: only ones that match it in area. Recorded rather than drawn from: a
+#: seeded draw over these would move every arcade board, which owes
+#: `winrate` both ways and a fixture re-record.
+CHAMBERS = (
+    Shape(8, 8), Shape(10, 10),
+    Shape(6, 8), Shape(8, 10), Shape(10, 16),
+    Shape(8, 8, "octagon"), Shape(8, 12, "octagon"), Shape(12, 12, "octagon"),
+    Shape(8, 10, "irregular"), Shape(10, 16, "irregular"),
+)
+
+#: What a fight is built on when nobody says otherwise. Unchanged, which is
+#: what keeps every fixture still.
+FLOOR = Shape(16, 12)
+
+
+def corners_of(shape: Shape) -> set[tuple[int, int]]:
+    """The blocking squares that make a room this shape.
+
+    A rectangle has none. An **octagon** loses a triangle from each corner,
+    a quarter of the shorter side deep, which is what a cut corner is on a
+    square grid. An **irregular** chamber loses one corner only -- enough
+    to make the floor asymmetric, which is the point of it, without
+    inventing a cave system.
+    """
+    if shape.kind == "rectangle":
+        return set()
+    cut = max(1, min(shape.width, shape.height) // 4)
+    blocked: set[tuple[int, int]] = set()
+    which = (
+        ((0, 0), (1, 0), (0, 1), (1, 1)) if shape.kind == "octagon"
+        else ((0, 0),)
+    )
+    for right, down in which:
+        for x in range(cut):
+            for y in range(cut - x):
+                square = (
+                    (shape.width - 1 - x) if right else x,
+                    (shape.height - 1 - y) if down else y,
+                )
+                blocked.add(square)
+    return blocked
+
+
+def bands_of(shape: Shape) -> tuple[tuple[int, int], tuple[int, int]]:
+    """Where each side starts on a board of this shape.
+
+    **Reproduces `PARTY_AT` and `ENEMY_AT` exactly at 16x12**, which is what
+    lets the shape be a parameter without moving a single fixture: the
+    party's column is a fixed indent and the opposition's is four in from
+    the far wall, which on the standard floor is 2 and 12.
+
+    The `max` is what keeps a 6-wide chamber playable -- four in from the
+    right of six is the party's own column, and both sides starting in one
+    square is not a fight.
+    """
+    party_x = min(2, max(0, shape.width - 2))
+    enemy_x = max(party_x + 3, shape.width - 4)
+    enemy_x = min(enemy_x, shape.width - 1)
+    row = max(0, shape.height // 4)
+    return (party_x, row), (enemy_x, row)
+
+
+def line_up(
+    start: tuple[int, int], count: int, shape: Shape, *, inward: int,
+    taken: set[tuple[int, int]] | None = None,
+) -> list[tuple[int, int]]:
+    """Where `count` creatures stand, starting from a band. #974.
+
+    **Byte-identical to the old hard-coded layout on a 16x12 floor**,
+    which is the whole point: five to a column from row 3, stepping two
+    columns inward when one fills. On the standard board that is exactly
+    the `(i // 5)` and `(i % 5)` the opposition's loop used to spell out,
+    and the party's four fit one column either way.
+
+    What it adds is a board that is **not** 16x12. Ten creatures laid out
+    five-to-a-column walk off the bottom of an 8-tall chamber and off the
+    left of a 6-wide one, which is what the printed table is full of --
+    nine of its ten chambers are smaller than the floor in use.
+
+    Blocked squares are skipped, so an octagon's cut corners cannot be
+    stood on, and so are any in `taken`.
+
+    **`taken` is what stops the two sides standing on each other.** The
+    bands are far apart on a 16x12 floor and overlap on a small one: ten
+    creatures laid out from a 10x10 chamber's own band reach back into
+    the party's column, and `grid.place` refuses to overwrite -- so the
+    second creature would be `Position`-present and index-absent, which is
+    the failure `dress` already warns about for pillars.
+    """
+    per_column = max(1, 1 + (shape.height - 1 - start[1]) // SPACING)
+    blocked = corners_of(shape) | set(taken or ())
+    out: list[tuple[int, int]] = []
+    slot = 0
+    # Bounded: `count` squares are wanted and each turn of the loop either
+    # takes one or steps past a blocked square, so the ceiling is the
+    # board.
+    while len(out) < count and slot < shape.width * shape.height:
+        column, row = divmod(slot, per_column)
+        slot += 1
+        square = (start[0] + column * 2 * inward, start[1] + row * SPACING)
+        if not (0 <= square[0] < shape.width
+                and 0 <= square[1] < shape.height):
+            continue
+        if square in blocked:
+            continue
+        out.append(square)
+    # **When the band cannot hold them all**, which only happens on a
+    # chamber smaller than the floor: ten creatures at two-square spacing
+    # want nine squares on an 8x8 and the band offers fewer. The rest take
+    # any free square, walking in from their own side, rather than being
+    # stacked on one spot -- the old code's fallback put every leftover on
+    # the band square itself.
+    if len(out) < count:
+        taken = set(out)
+        columns = (range(shape.width) if inward > 0
+                   else range(shape.width - 1, -1, -1))
+        for x in columns:
+            for y in range(shape.height):
+                if len(out) >= count:
+                    break
+                square = (x, y)
+                if square in taken or square in blocked:
+                    continue
+                taken.add(square)
+                out.append(square)
+    return out
+
+
+def arrival_squares(
+    world: World, how_many: int, *, party: bool = False,
+) -> list[tuple[int, int]]:
+    """Free squares in the opposition's band for creatures walking on. #962.
+
+    **The module's own guard is a check rather than a new facility**: it
+    only lets reinforcements emerge where there is room for them, and
+    `Grid.place` already refuses to overwrite an occupant -- so this asks
+    the index which squares are free and hands back as many as it found,
+    which may be fewer than asked for.
+
+    Searched outward from the column `field_encounter` opens that side on,
+    so a wave lands where its own kin are standing rather than among the
+    creatures it came to fight. That is **not** DMG2's *"come up behind the characters"*: this
+    board has no behind, and inventing one would be a placement feature
+    rather than an arrival one.
+    """
+    grid = world.grid
+    # **Either band, read off the board rather than off a constant.**
+    # `PARTY_AT` and `ENEMY_AT` are the standard floor's columns; on any
+    # other chamber shape they are the wrong squares or off the map
+    # entirely, so the bands come from the grid's own size. #974.
+    here, there = bands_of(Shape(grid.width, grid.height))
+    start = here if party else there
+    inward = 1 if party else -1
+    free: list[tuple[int, int]] = []
+    for back in range(0, 6):
+        for step in range(0, 12):
+            square = (start[0] + back * inward, start[1] + step)
+            if not grid.inside(square):
+                continue
+            if grid.occupant(square) is not None:
+                continue
+            free.append(square)
+            if len(free) >= how_many:
+                return free
+    return free
+
+
 def field_encounter(
     seed: int,
     level: int = 1,
@@ -676,6 +1039,10 @@ def field_encounter(
     powers: dict[str, list[str]] | None = None,
     party: Party | None = None,
     scale: float = 1.0,
+    squares: list[tuple[int, int]] | None = None,
+    traps: int | None = None,
+    room: Shape | None = None,
+    paradigm: str | None = None,
 ) -> Fielded:
     """Build a board and put both sides on it.
 
@@ -709,7 +1076,21 @@ def field_encounter(
     a character is built fresh every time and then wounded back down to where it
     was. That is what makes this additive. #72.
     """
-    world = World(Grid(16, 12), Rng(seed), Bus())
+    # **The room, which nothing could state until now.** Defaults to the
+    # floor every board has always been, so a caller that says nothing
+    # gets exactly the board it got before -- which is what lets this be a
+    # parameter without re-recording a fixture. #974.
+    # **`room`, not `shape`**: a local named `shape` already means the
+    # encounter *paradigm* further down this function, and two different
+    # things under one name in one scope is how a reader loses the
+    # thread.
+    room = room or FLOOR
+    world = World(Grid(room.width, room.height), Rng(seed), Bus())
+    # A cut corner is blocking squares, the same mechanism `dress` uses
+    # for a pillar. Laid before anybody is spawned so the starting bands
+    # cannot land on one.
+    world.grid.blocking |= corners_of(room)
+    party_at, enemy_at = bands_of(room)
     world.scaling = PRESETS.get(scaling, PRESETS["full"])
     # `"printed"` is the engine's own default (`AS_PRINTED`), so the caller that
     # never set this keeps what it had.
@@ -721,16 +1102,24 @@ def field_encounter(
     #
     # **`level=` matters**: `dress` takes it to decide what a trap on this board
     # is worth, and one of the two copies this replaces did not pass it.
-    terrain.dress(world, seed, level=level)
+    terrain.dress(world, seed, level=level, traps=traps)
 
     if party is not None:
+        # **`squares` or the column this has always used.** The default
+        # keeps every replay fixture still: a fight starts from these
+        # squares, so a one-square drift re-records all eight. #994.
+        standing = squares or line_up(
+            party_at, len(party.sheets), room, inward=1)
         for i, sheet in enumerate(party.sheets):
             eid = chargen.spawn(
                 world, sheet.character,
-                (PARTY_AT[0], PARTY_AT[1] + i * SPACING),
+                standing[i] if i < len(standing)
+                else (party_at[0], party_at[1] + i * SPACING),
             )
             _wear(world, eid, sheet)
     else:
+        drawn_up = line_up(
+            party_at, len(pcs or PARTY), room, inward=1)
         for i, name in enumerate(pcs or PARTY):
             key = name.strip().lower()
             chargen.spawn(
@@ -740,7 +1129,7 @@ def field_encounter(
                     powers=list((powers or {}).get(key, [])),
                     feats=list((feats or {}).get(key, [])),
                 ),
-                (PARTY_AT[0], PARTY_AT[1] + i * SPACING),
+                drawn_up[i] if i < len(drawn_up) else party_at,
             )
 
     found_at = level
@@ -752,7 +1141,8 @@ def field_encounter(
         # would shift every roll after it, so a change to how monsters are
         # chosen would also change every attack in the fight and the two could
         # not be told apart.
-        pool, found_at, shape = opposition(level, Random(seed), scale=scale)
+        pool, found_at, shape = opposition(
+            level, Random(seed), paradigm=paradigm, scale=scale)
     if not pool:
         return Fielded(world=world, enemies=[], found_at=found_at, paradigm=shape)
 
@@ -761,10 +1151,22 @@ def field_encounter(
     # either way was the bug that made every encounter the same shape.
     #
     # Wrapped into columns so ten minions do not run off a 12-row board.
+    # **Told where the party is standing.** Otherwise the two line-ups
+    # are computed independently and collide on any board small enough
+    # for the bands to meet.
+    from combat_engine.engine.components import Position
+
+    standing_now = {
+        spot.square
+        for eid in list(world.entities)
+        if (spot := world.get(eid, Position)) is not None
+    }
+    facing = line_up(enemy_at, len(pool), room, inward=-1,
+                     taken=standing_now)
     for i, ref in enumerate(pool):
         loader.spawn(
             world, ref,
-            (ENEMY_AT[0] - (i // 5) * 2, ENEMY_AT[1] + (i % 5) * SPACING),
+            facing[i] if i < len(facing) else enemy_at,
             team=Team.ENEMY,
         )
 

@@ -20639,7 +20639,6 @@ def a_target_line_naming_an_earlier_swing(out: Result) -> None:
     if row is None:
         out.skip("i2133p1 is not declared")
         return
-
     # **The row goes in as an argument rather than being captured**, which is
     # the only reason this reads oddly. `REGISTRY.get` answers `Power | None`,
     # the guard above narrows it, and `ty` drops that narrowing at a closure
@@ -33273,6 +33272,499 @@ def training_is_worth_exactly_five_on_a_check(out: Result) -> None:
     table.strike()
 
 
+def every_printed_line_says_what_kind_of_thing_it_is(out: Result) -> None:
+    """#930. A UI cannot style what it cannot distinguish.
+
+    `Step.lines` was a flat `list[str]`, so the only way to tell the
+    adventure's prose from a d20 roll from the DM's paragraph was to
+    pattern-match the text -- which was reworded twice in one week.
+
+    The split is the same one the graph draws between `page`, `earned`
+    and `invented`: **who wrote a line governs how much it should be
+    trusted.**
+
+    `Line` is a `str` subclass, so the assertion that matters as much as
+    the kinds is that **nothing about the printed text moved**.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    LADDER = [
+        {"fact": "the ferry runs at dawn", "skill": "streetwise", "dc": 5},
+        {"fact": "the reeve took a bribe", "skill": "streetwise", "dc": 10},
+    ]
+    raw = {"id": "probe", "party_level": 2, "party_size": 5, "start": "talk",
+           "scenes": [{"id": "talk", "kind": "roleplay", "name": "Talk",
+                       "sets": "The taproom is loud.", "exits": [],
+                       "max_beats": 1, "lore": LADDER,
+                       "npcs": [{"name": "Hask", "wants": "to be left alone"}]}]}
+    module = mod.parse(raw, Path("<driver>"))
+    campaign = run_mod.begin(module, seed=1)
+    campaign.control = (
+        ["human"] + ["ai"] * (len(campaign.party.sheets) - 1))
+    made = run_mod.step(campaign, module, record=False)
+
+    kinds = {getattr(ln, "kind", None) for ln in made.lines}
+    out.that(
+        bool(made.lines) and None not in kinds,
+        "every line carries a kind",
+        f"{len(made.lines)} line(s), kinds "
+        f"{sorted(str(k) for k in kinds)}",
+    )
+    out.that(
+        kinds <= set(run_mod.KINDS),
+        "and every kind is one of the closed vocabulary",
+        f"{sorted(str(k) for k in kinds)} against {sorted(run_mod.KINDS)}",
+    )
+
+    def kinded(want: str) -> list[str]:
+        return [str(ln) for ln in made.lines
+                if getattr(ln, "kind", "") == want]
+
+    # **Every fact line, not just one of them.** Asserting that some
+    # recall line exists passes on the block's header alone, so untagging
+    # an individual `You know:` left this green.
+    facts = [ln for ln in made.lines if "know" in str(ln) and ":" in str(ln)]
+    out.that(
+        bool(facts)
+        and all(getattr(ln, "kind", "") == "recall" for ln in facts),
+        "every fact the party already knew is a recall line",
+        f"{[(getattr(f, 'kind', '?'), str(f).strip()[:34]) for f in facts]}",
+    )
+    out.that(
+        any("taproom" in ln for ln in kinded("scene")),
+        "the adventure's own prose is a scene line",
+        f"{[ln.strip()[:40] for ln in kinded('scene')]}",
+    )
+    out.that(
+        bool(kinded("dm")),
+        "and what the DM wrote is a dm line, not mixed in with the page",
+        f"{[ln.strip()[:40] for ln in kinded('dm')]}",
+    )
+
+    # **The text did not move.** `Line` is a `str`, so every consumer that
+    # joins, strips or prints keeps working -- that is the whole reason it
+    # is not a dataclass, and it is worth an assertion rather than a
+    # comment.
+    out.that(
+        all(isinstance(ln, str) for ln in made.lines)
+        and " ".join(made.lines).count("taproom") == 1,
+        "a line is still a string, so joining and printing are unchanged",
+        f"{type(made.lines[0]).__name__}, joins cleanly",
+    )
+    # And it survives the campaign log, which json-encodes `lines`.
+    import json as _json
+
+    out.that(
+        _json.loads(_json.dumps(made.lines)) == [str(x) for x in made.lines],
+        "and json-encodes as plain strings, so the log format is unchanged",
+        f"{len(made.lines)} line(s) round-tripped",
+    )
+
+    # A god-mode banner is a note, because a reader must not read it as
+    # the story. `story/CLAUDE.md`: god mode says so, every time.
+    fight = mod.parse(
+        {"id": "p2", "party_level": 2, "party_size": 5, "start": "f",
+         "scenes": [{"id": "f", "kind": "combat", "name": "F", "exits": [],
+                     "xp": 500,
+                     "foes": [{"count": 2, "role": "soldier",
+                               "rank": "standard"}]}]},
+        Path("<driver>"))
+    c2 = run_mod.begin(fight, seed=1)
+    god = run_mod.step(c2, fight, record=False, god=True)
+    banner = [ln for ln in god.lines
+              if getattr(ln, "kind", "") == "note" and "God mode" in ln]
+    out.that(
+        bool(banner),
+        "and the god-mode banner is a note, so a page can keep it out of "
+        "the prose",
+        f"{[str(b)[:46] for b in banner]}",
+    )
+
+
+def a_lost_skill_challenge_still_leads_somewhere(out: Result) -> None:
+    """Camille's ruling, 2026-10-29, quoted:
+
+        "Skill challenes should never prevent the plot from progressing."
+
+    The code obeys it today, by one `or` in `run.step`:
+
+        made.next_id = wanted or module.next_of(scene, choice)
+
+    and **nothing asserted it**. Deleting the fallback would strand a
+    party on any failed challenge whose module named a success branch and
+    no failure branch -- and the campaign would simply end, which is the
+    quiet kind of wrong this component produces.
+
+    The module in hand agrees with the ruling, which is worth recording
+    because it is evidence the rule is the adventure's and not ours: both
+    of its challenges continue either way. Chapter 1's awards its XP on a
+    failure and leaves the fires burning into the fight; chapter 4's
+    sends success and failure to **the same encounter**, charging a
+    healing surge for the failure.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    def build(level: int, **extra: str) -> mod.Module:
+        raw = {"id": "probe", "party_level": 1, "party_size": 4,
+               "start": "fires",
+               "scenes": [
+                   {"id": "fires", "kind": "skill_challenge", "name": "F",
+                    "exits": ["after"], "complexity": 1, "level": level,
+                    "primary": ["arcana", "athletics", "thievery"], **extra},
+                   {"id": "after", "kind": "rest", "name": "A", "exits": []},
+               ]}
+        # Only when something names it: the validator refuses a scene
+        # nothing leads to, which is the *inward* half of reachability.
+        if extra.get("on_success") == "won":
+            raw["scenes"].append(
+                {"id": "won", "kind": "rest", "name": "W", "exits": []})
+        return mod.parse(raw, Path("<driver>"))
+
+    def play(m: mod.Module) -> run_mod.Step:
+        campaign = run_mod.begin(m, seed=5)
+        return run_mod.step(campaign, m, record=False)
+
+    # **The controls first.** A challenge nobody can fail and one nobody
+    # can pass -- a DC the party cannot reach at level 1. Without these
+    # every assertion below could be passing on a win.
+    easy = play(build(1, on_success="won"))
+    hard = play(build(30, on_success="won"))
+    out.that(
+        easy.outcome == "won" and hard.outcome == "lost",
+        "the fixture really does produce one win and one loss",
+        f"easy={easy.outcome} hard={hard.outcome}",
+    )
+
+    # The ruling itself: a loss goes somewhere.
+    out.that(
+        bool(hard.next_id),
+        "a lost challenge still names a next scene",
+        f"lost -> {hard.next_id!r}",
+    )
+    # And specifically it falls back to the ordinary exit when the module
+    # named a success branch and no failure branch. This is the `or`.
+    out.that(
+        hard.next_id == "after",
+        "and with only a success branch written, a loss takes the exit",
+        f"on_success='won', lost -> {hard.next_id!r}, exits=['after']",
+    )
+    out.that(
+        easy.next_id == "won",
+        "while a win still takes the branch the module named",
+        f"won -> {easy.next_id!r}",
+    )
+
+    # With neither branch written, both outcomes take the exit.
+    plain_win = play(build(1))
+    plain_loss = play(build(30))
+    out.that(
+        plain_win.next_id == "after" and plain_loss.next_id == "after",
+        "with no branches at all, both outcomes take the exit",
+        f"won -> {plain_win.next_id!r}, lost -> {plain_loss.next_id!r}",
+    )
+
+
+def a_party_that_is_not_the_module_s_size_gets_the_page_s_rule(
+    out: Result,
+) -> None:
+    """#798. The fielded creatures were byte-identical at 4, 5 and 6.
+
+    The issue is titled "adjusts each encounter for party size **by
+    name**" and the page does nothing of the kind. Every chapter prints
+    the same two paragraphs and the per-encounter mention is an *example*
+    of applying them, not a specification: remove one of the lowest level
+    non-minions for a weak party, add one of the non-minions already here
+    for a strong one.
+
+    So there is no table to author, which is why this is built rather than
+    still waiting for somebody to play at a size other than five.
+
+    It fires only for a scene that **states its own XP**. A scene without
+    one is already scaled by headcount through `per_head`, and applying
+    the creature rule on top would count the same adjustment twice.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story.cast_list import resolve
+
+    def build(xp: int, foes: list[dict], size: int = 5) -> mod.Module:
+        raw = {"id": "probe", "party_level": 2, "party_size": size,
+               "start": "pit",
+               "scenes": [{"id": "pit", "kind": "combat", "name": "Pit",
+                           "exits": [], "xp": xp, "foes": foes}]}
+        return mod.parse(raw, Path("<driver>"))
+
+    mixed = [{"count": 2, "role": "soldier", "rank": "standard"},
+             {"count": 1, "role": "brute", "rank": "standard"},
+             {"count": 4, "role": "skirmisher", "rank": "minion"}]
+    scene = build(625, mixed).scene("pit")
+    at = {
+        size: resolve(scene, party_level=2, party_size=size, stated_size=5)
+        for size in (4, 5, 6)
+    }
+
+    # **The control first.** A party of the size the module assumes must
+    # come out untouched, or every assertion below is measuring the
+    # resolver's own variance rather than the rule.
+    out.that(
+        not any("party (" in n for n in at[5].notes),
+        "a party of the module's own size is left exactly as printed",
+        f"{len(at[5].refs)} creature(s), no rule note",
+    )
+    out.that(
+        len(at[4].refs) == len(at[5].refs) - 1,
+        "a weak party drops one creature",
+        f"4 -> {len(at[4].refs)}, 5 -> {len(at[5].refs)}",
+    )
+    out.that(
+        len(at[6].refs) == len(at[5].refs) + 1,
+        "and a strong party gains one",
+        f"6 -> {len(at[6].refs)}, 5 -> {len(at[5].refs)}",
+    )
+    # The one added is a second of something already in the fight -- the
+    # page says "another guard drake", not a new kind of creature.
+    extra = [r for r in at[6].refs if at[6].refs.count(r) > at[5].refs.count(r)]
+    out.that(
+        bool(extra) and all(r in at[5].refs for r in extra),
+        "the one it adds is a second of a creature already here",
+        f"{extra}",
+    )
+    # And what it moves is never a minion, either way.
+    from combat_engine.story.cast_list import _facts
+
+    moved = set(at[5].refs) - set(at[4].refs) | set(extra)
+    out.that(
+        bool(moved) and all(_facts(r)[4] != "minion" for r in moved),
+        "and what it moves is a non-minion, both directions",
+        f"{[(r, _facts(r)[4]) for r in moved]}",
+    )
+    # **Which one, not just that it was one**, and this needs a fight whose
+    # non-minions are at *different* levels. The resolver picks near the
+    # party's level, so the three above all come out level 2 and `min` and
+    # `max` are indistinguishable -- dropping the highest instead left
+    # every assertion above green. So the pick is posed directly, on refs
+    # chosen for their levels: 1, 3 and 6, with a minion among them.
+    from combat_engine.story.cast_list import _for_party_size
+    from combat_engine.story.reflavour import Dressed, Reflavour
+
+    def posed(size: int) -> Dressed:
+        # Real `Reflavour`s rather than `None` behind a suppression
+        # comment: that syntax silences nothing here (`ty` does not
+        # honour it, #883), so it was a structural fault and a genuine
+        # type error at once. A bare one is "cosmetic" and dresses
+        # nothing, which is what this needs.
+        made = Dressed(refs=["m1019", "m1063", "m1007", "m115725"],
+                       flavours=[Reflavour() for _ in range(4)])
+        # **Party level 3, not 2.** At 2 the levels 1 and 3 are equally
+        # near and the tie is broken toward the simpler creature, which is
+        # a fair reading of "the simplest ... whose level most closely
+        # matches" but makes the assertion a guess. At 3 the winner is
+        # unique and the rule is what is being read.
+        _for_party_size(made, scene, 3, size, 5)
+        return made
+
+    levels = {r: _facts(r)[1] for r in ("m1019", "m1063", "m1007", "m115725")}
+    out.that(
+        len({levels[r] for r in ("m1019", "m1063", "m1007")}) == 3,
+        "the posed fight really does hold three different levels",
+        f"{levels}",
+    )
+    weak = posed(4)
+    out.that(
+        "m1063" not in weak.refs and len(weak.refs) == 3,
+        "the one it drops is the lowest-level non-minion, as printed",
+        f"left with {weak.refs} from levels {levels}",
+    )
+    strong = posed(6)
+    gained = [r for r in strong.refs if strong.refs.count(r) > 1]
+    out.that(
+        sorted(set(gained)) == ["m1019"],
+        "and the one it adds is the non-minion nearest the party's level",
+        f"doubled {sorted(set(gained))}, levels {levels}, party level 3",
+    )
+    # **The lists stay parallel.** `flavours` runs alongside `refs`, so a
+    # bare `remove` dresses every creature after the gap as its neighbour.
+    out.that(
+        all(len(d.refs) == len(d.flavours) for d in at.values()),
+        "refs and flavours stay the same length through both edits",
+        f"{[(s, len(d.refs), len(d.flavours)) for s, d in at.items()]}",
+    )
+
+    # An all-minion fight has nothing the rule may move, and says so.
+    only_minions = build(
+        400, [{"count": 8, "role": "skirmisher", "rank": "minion"}]
+    ).scene("pit")
+    tiny = resolve(only_minions, party_level=2, party_size=4, stated_size=5)
+    out.that(
+        any("all minions" in n for n in tiny.notes),
+        "an all-minion fight is fielded as printed, and the note says why",
+        f"{[n[-60:] for n in tiny.notes if 'minion' in n]}",
+    )
+
+    # A scene with no stated XP is already scaled by headcount, so the
+    # rule must not fire on top of it.
+    budgeted = build(0, mixed).scene("pit")
+    plain = resolve(budgeted, party_level=2, party_size=4, stated_size=5)
+    out.that(
+        not any("party (" in n for n in plain.notes),
+        "a scene with no printed XP is left to the budget, not the rule",
+        f"{[n[:52] for n in plain.notes]}",
+    )
+
+    # **Through `run.step`, because the call site is what was wrong last
+    # time.** `#798`'s own comment records the mechanism being fully
+    # asserted while its only caller was not: `run` fields the party the
+    # module asks for, so `party_size` and `stated_size` agree and the
+    # rule never fires unless somebody brings their own party.
+    module = build(625, mixed)
+    five = run_mod.begin(module, seed=4)
+    four = run_mod.begin(module, seed=4, pcs=run_mod.party_for(4))
+    got = {}
+    for label, campaign in (("five", five), ("four", four)):
+        # **Not `god=True`.** God mode calls `_win` and never reaches
+        # `_fight`, so the fielding this is about does not happen -- the
+        # first version of this assertion passed `god` to keep the driver
+        # quick and measured nothing.
+        got[label] = run_mod.step(campaign, module, record=False)
+    out.that(
+        len(four.party.sheets) == 4 and len(five.party.sheets) == 5,
+        "a campaign can be given a party that is not the module's size",
+        f"four={len(four.party.sheets)} five={len(five.party.sheets)}",
+    )
+    out.that(
+        any("weak party" in n for n in got["four"].notes)
+        and not any("weak party" in n for n in got["five"].notes),
+        "and run.step applies the rule for it, and not for the other",
+        f"four: {[n[-44:] for n in got['four'].notes if 'party (' in n]}",
+    )
+
+
+def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
+    """#911. The challenge's bus and the fight's bus were different objects.
+
+    `table.lay` builds a board with nobody to fight on it, which is its
+    whole purpose. But a printed encounter can run a challenge **while**
+    the party fights -- a creature losing its regeneration when the
+    challenge ends is on the board the whole time -- and the two worlds
+    never coexisted, so there was nowhere to publish such an event.
+
+    `borrow` wraps a board somebody else built instead of making one, and
+    `lay` is now one caller of it.
+
+    The last two assertions are the ones that matter long-term:
+    `characters` repeats the rule `harvest` uses and **cannot share it**
+    -- `harvest` lives in arcade mode's `story/__init__.py`, which this
+    component imports and does not edit -- so the guard against the two
+    drifting is here.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Health, Ident, Side, Team
+    from combat_engine.engine.scaling import PRESETS
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import Party, _wear, field_encounter, harvest
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import table as tbl
+    from combat_engine.story.module import Scene
+
+    # -- a real fight, then a challenge on the same board ----------------
+    party = Party.of(level=2, seed=7)
+    fielded = field_encounter(11, 2, party=party)
+    world = fielded.world
+    foes = [e for e, s in world.each(Side) if s.team is Team.ENEMY]
+    encounter = Encounter(world)
+    encounter.start()
+    table = tbl.borrow(world, encounter, party)
+
+    out.that(
+        table.world is world and table.encounter.world is world,
+        "a borrowed table is the fight's own world, not a copy of it",
+        f"world {table.world is world} encounter {table.encounter.world is world}",
+    )
+    out.that(
+        bool(foes) and all(world.get(e, Side) is not None for e in foes),
+        "and the enemies are still standing on it",
+        f"{len(foes)} enemy entities",
+    )
+    # **The point of the issue**: one bus, so a trait on a creature in this
+    # fight has somewhere to hear the challenge from.
+    out.that(
+        table.world.bus is world.bus,
+        "so the challenge and the fight share one bus",
+        f"{table.world.bus is world.bus}",
+    )
+
+    scene = Scene(id="burn", kind="skill_challenge", name="Fires",
+                  complexity=1, level=2, primary=("athletics", "endurance"))
+    run = ch.play(scene, table, party_level=2)
+    out.that(
+        bool(run.attempts) and run.over,
+        "a challenge plays to its end on that board",
+        f"{len(run.attempts)} attempt(s), "
+        f"{run.successes} success(es), {run.failures} failure(s)",
+    )
+    out.that(
+        all(e in world.entities for e in table.eids),
+        "and its checks went through the fight's party, not spawned copies",
+        f"party eids {table.eids}",
+    )
+
+    # -- the drift guard: a familiar ahead of the characters -------------
+    # **Built so the familiar takes the lowest entity id.** #797's fault
+    # needs something PC-side sorting *before* a character; appending one
+    # cannot reproduce it, because a new entity sorts last and
+    # `zip(strict=False)` drops it harmlessly.
+    bare = World(Grid(12, 8), Rng(3), Bus())
+    bare.scaling = PRESETS["full"]
+    familiar = bare.spawn((9, 6))
+    bare.add(familiar, Side(team=Team.PC))
+    bare.add(familiar, Ident(ref="m9999"))
+    bare.add(familiar, Health(hp=7, max_hp=7, surges=0))
+    second = Party.of(level=2, seed=7)
+    for i, sheet in enumerate(second.sheets):
+        eid = chargen.spawn(bare, sheet.character, (2, 1 + i * 2))
+        _wear(bare, eid, sheet)
+
+    everyone = [e for e, s in bare.each(Side) if s.team is Team.PC]
+    out.that(
+        everyone and everyone[0] == familiar,
+        "the familiar really is ahead of the party, or this proves nothing",
+        f"PC side in order: {everyone}, familiar is {familiar}",
+    )
+    picked = tbl.characters(bare)
+    out.that(
+        familiar not in picked and len(picked) == len(second.sheets),
+        "characters() walks the party and skips the familiar",
+        f"picked {picked} for {len(second.sheets)} sheet(s)",
+    )
+    # **The agreement with `harvest`, asserted as a pairing.** A first
+    # version only checked that no sheet took the familiar's 7 hit points,
+    # which tests `harvest` and not `characters` -- breaking the ident
+    # filter here left it green, because the two rules are separate copies
+    # and only one had been broken. What ties them is that sheet *i* must
+    # describe the entity `characters` puts at *i*.
+    harvest(bare, second)
+    paired = [
+        (sheet.cls, sheet.hp, (health.hp if health else None))
+        for sheet, eid in zip(second.sheets, picked, strict=False)
+        if (health := bare.get(eid, Health)) is not None or True
+    ]
+    out.that(
+        bool(paired) and all(hp == got for _, hp, got in paired),
+        "and harvest wrote each sheet from the entity characters() pairs "
+        "it with, so the two rules still agree",
+        f"{[(c, hp, got) for c, hp, got in paired if hp != got] or 'all paired'}",
+    )
+
+
 def a_non_combat_scene_does_not_spend_the_party_s_powers(out: Result) -> None:
     """Arming is not spending, which cost the party its whole encounter kit.
 
@@ -35240,13 +35732,21 @@ def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
 
     When a scene prints its own XP figure -- which every fight in the one
     converted chapter does -- the headcount scaling is never consulted, so
-    a party of six walks into a fight built for the module's five and the
-    fielded creatures are byte-identical. The approximation stays, because
-    a module that printed a number for its own party is more trustworthy
-    than our curve. What was wrong is that nobody was told.
+    a party of six walks into a fight built for the module's five. The
+    budget is still not rescaled, because a module that printed a number
+    for its own party is more trustworthy than our curve. What was wrong
+    is that nobody was told.
 
     `story/CLAUDE.md`: *a silent cap reads as "covered everything" when it
     did not.*
+
+    **The wording moved once the page's own rule landed.** This asserted
+    the note said the fight "is NOT scaled", which stopped being true:
+    `_for_party_size` now applies the adventure's weak/strong-party rule,
+    so the figure is unscaled and the *fight* is not. The assertions
+    below ask what they always meant to -- that a party which is not the
+    module's size is told so -- and `party_size_rule` covers what the
+    rule then does about it.
     """
     from random import Random
 
@@ -35267,12 +35767,12 @@ def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
         got = cast_list.resolve(
             scene, party_level=1, draw=Random(7),
             party_size=playing, stated_size=stated)
-        return [n for n in got.notes if "NOT scaled" in n]
+        return [n for n in got.notes if "used as printed" in n]
 
     stated = fight(552)
     out.that(
         bool(notes(stated, 6, 5)) and "6" in notes(stated, 6, 5)[0],
-        "a party larger than the module's is told the fight is not scaled",
+        "a party larger than the module's is told the figure is as printed",
         f"{notes(stated, 6, 5)}",
     )
     out.that(
@@ -35321,7 +35821,7 @@ def a_stated_xp_figure_says_it_is_not_scaled(out: Result) -> None:
         staffed, seed=5, pcs=["fighter", "cleric", "rogue", "wizard"])
     made = runner.step(short, staffed, record=False)
     out.that(
-        any("NOT scaled" in n for n in made.notes),
+        any("used as printed" in n for n in made.notes),
         "and a campaign fielding fewer than the module wrote for is told",
         f"{[n[:70] for n in made.notes]}",
     )
@@ -41961,6 +42461,6269 @@ def a_once_per_board_latch_dies_with_the_board(out: Result) -> None:
              f"same object={first.latches is second.latches}")
 
 
+def a_combat_scene_is_judged_on_the_objective_its_module_states(
+    out: Result,
+) -> None:
+    """Camille, 2026-10-29, after reading another system's objective rules:
+
+    > I'd like these encounter objectives to be represented in encounter
+    > design in this project. [...] you don't need to do a 1:1 conversion.
+    > This is more of a generic DM advice thing.
+
+    A fight had one win condition -- `Encounter.winner is Team.PC` -- and
+    one loss condition, which was its complement. Five objectives now
+    decide it instead, and each is asserted **in both directions**: an
+    objective that can only be met, or only missed, is worth nothing.
+
+    **The control is the first assertion and it is the load-bearing one.**
+    A scene stating no objective must be judged by the original line, and
+    `Step.objective` is how that is visible -- `""` means no watcher was
+    ever built. Making `objective.watcher` return a `Watch` for `None`
+    turns it red, which is the break that proves a module written before
+    any of this existed still plays as it did.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    FAST = [{"count": 4, "role": "skirmisher", "rank": "standard"}]
+    SOLID = [{"count": 2, "role": "soldier", "rank": "standard"}]
+
+    def play(objective: dict | None, foes: list[dict] | None = None,
+             difficulty: str = "easy", seed: int = 5) -> run_mod.Step:
+        foes = SOLID if foes is None else foes
+        scene = {"id": "pit", "kind": "combat", "name": "Pit", "exits": [],
+                 "difficulty": difficulty, "foes": foes}
+        if objective is not None:
+            scene["objective"] = objective
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "pit", "scenes": [scene]}, Path("<driver>"))
+        return run_mod.step(run_mod.begin(built, seed=seed), built,
+                            record=False)
+
+    def said(step: run_mod.Step) -> str:
+        for line in step.lines:
+            if getattr(line, "kind", "") == "note" and "Objective" in line:
+                return str(line)
+        return ""
+
+    # -- the control --------------------------------------------------------
+    bare = play(None)
+    named = play({"kind": "defeat_all"})
+    out.that(
+        bare.objective == "" and not said(bare),
+        "a scene with no objective is judged by the original win condition",
+        f"objective={bare.objective!r}, outcome={bare.outcome}, "
+        f"no objective line printed",
+    )
+    out.that(
+        named.objective == "defeat_all" and bare.outcome == named.outcome,
+        "naming defeat_all runs the watcher and agrees with it",
+        f"{bare.outcome} either way; watched objective={named.objective!r}",
+    )
+
+    # -- each objective, met and missed ------------------------------------
+    quick = play({"kind": "survive", "rounds": 2})
+    out.that(
+        quick.outcome == "won" and quick.rounds == 2,
+        "survive ends the fight the round its duration runs out",
+        f"{quick.rounds} rounds, {quick.outcome} -- {said(quick)}",
+    )
+    early = play({"kind": "survive", "rounds": 9})
+    out.that(
+        early.outcome == "won" and "before the time was up" in said(early),
+        "outlasting the opposition is not a failure to survive",
+        said(early),
+    )
+
+    half = play({"kind": "diminish", "share": 0.5}, FAST, "hard")
+    out.that(
+        half.outcome == "won" and half.rounds < 5,
+        "diminish ends early when the opposition is cut to its share",
+        f"{half.rounds} rounds -- {said(half)}",
+    )
+
+    held = play({"kind": "hold", "rounds": 2})
+    leaked = play({"kind": "hold", "rounds": 3, "leaks": 1,
+                   "position": "east"})
+    out.that(
+        held.outcome == "won" and leaked.outcome == "lost",
+        "hold is met with the line unbroken and missed when it is not",
+        f"west {held.outcome} / east {leaked.outcome} -- {said(leaked)}",
+    )
+
+    # The ref has to come off a real draw: the module names a creature by
+    # its own word and `cast_list` resolves it, so no ref can be written
+    # here by hand without pinning the resolver's answer.
+    fielded = play({"kind": "defeat_all"}).enemies[0]
+    down = play({"kind": "defeat_foe", "foes": [fielded]})
+    out.that(
+        down.outcome == "won" and "is down" in said(down),
+        "defeat_foe is met when the named creature is down",
+        f"{fielded} -- {said(down)}",
+    )
+
+    # **The authoring-facing half, and it was broken twice when first
+    # written.** A converter writes the page's own word for a creature --
+    # every other field in the schema takes one -- and cannot know the draw
+    # answered `m258`. Matching refs only made the objective unusable from a
+    # module file while looking finished.
+    #
+    # **This assertion took three attempts, and the first two could not tell
+    # the two implementations apart.** With the name lookup deleted,
+    # `Watch._matches` matches nobody, so `_left_standing` comes back empty
+    # and the objective declares itself met -- which is the *same verdict
+    # text* the working code produces when the target really does die. Both
+    # "the word resolves" and "the word and the ref agree" stayed green.
+    #
+    # What separates them is **when the fight stopped**. Matching nobody
+    # satisfies the objective at the first round boundary, so a broken build
+    # ends every `defeat_foe` fight in round 1. Designating the creature that
+    # falls *last* must therefore take exactly as long as killing them all --
+    # 4 rounds against 4 here, against 1 when the lookup is gone.
+    NAMED = [{"count": 1, "name": "the captain", "role": "soldier",
+              "rank": "standard"},
+             {"count": 3, "name": "thugs", "role": "skirmisher",
+              "rank": "minion"}]
+    everything = play({"kind": "defeat_all"}, NAMED)
+    last_one = play({"kind": "defeat_foe", "foes": ["the captain"]}, NAMED)
+    sooner = play({"kind": "defeat_foe", "foes": ["thugs"]}, NAMED)
+    out.that(
+        last_one.outcome == "won"
+        and last_one.rounds == everything.rounds > 1,
+        "designating the last creature to fall is as long as killing them all",
+        f"the captain {last_one.rounds} rounds, defeat_all "
+        f"{everything.rounds} rounds",
+    )
+    out.that(
+        sooner.outcome == "won" and 1 < sooner.rounds < last_one.rounds,
+        "designating a creature that falls sooner ends the fight sooner",
+        f"thugs {sooner.rounds} rounds vs the captain {last_one.rounds}",
+    )
+    cased = play({"kind": "defeat_foe", "foes": ["THE CAPTAIN"]}, NAMED)
+    out.that(
+        said(cased) == said(last_one) and cased.rounds == last_one.rounds,
+        "the module's own word is matched with case folded",
+        f"'THE CAPTAIN' == 'the captain' -- {said(cased)}",
+    )
+
+    # -- the quiet-success guard -------------------------------------------
+    #
+    # **The failure this mechanism exists to avoid.** A designation nobody
+    # fielded has nothing left standing, so a naive reading reports it met
+    # -- an objective that was never possible to fail, reported as an
+    # achievement. Deleting the `missing` branch in `Watch._judge` turns
+    # this red and leaves every other assertion here green.
+    ghost = play({"kind": "defeat_foe", "foes": ["m9999"]})
+    out.that(
+        ghost.outcome == "lost" and "did not field" in said(ghost),
+        "a designated foe nobody fielded is reported, not satisfied",
+        said(ghost),
+    )
+    out.that(
+        not ghost.clean,
+        "a missed objective is never clean",
+        f"clean={ghost.clean}",
+    )
+
+
+def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
+    """The difficulty step, which is the design half of an objective.
+
+    A party doing two things at once is the reason every system's advice
+    says to ease the opposition back for an objective -- and to tighten it
+    where the objective shortens the fight. One **band** along
+    `module.DIFFICULTY`, so an objective can only buy what the module could
+    have asked for by writing a different `difficulty`.
+
+    Three things asserted, and the third is the one that would otherwise
+    rot: a scene that **states its own XP** is not re-priced, because a
+    module that prints a number for its own encounter is more trustworthy
+    than our curve. That is the same call #798 made for party size.
+
+    Breaking `_stepped` to return `scene.share` unchanged turns the first
+    two red; breaking `resolve` to consult the share when `scene.xp` is set
+    turns the third red.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story.cast_list import resolve
+    from combat_engine.story.reflavour import Dressed
+
+    # **Big enough that a standard budget clamps it**, which is what makes
+    # the band orderable at all. Measured at level 4: a roster of three
+    # standards and four minions is affordable at `standard`, so `harder`
+    # buys nothing and the cast comes out identical -- 7 either way. At six
+    # and six the clamp is strict: 4 / 5 / 8 / 12 across the four bands.
+    FOES = [{"count": 6, "role": "soldier", "rank": "standard"},
+            {"count": 6, "role": "skirmisher", "rank": "minion"}]
+
+    def scene_for(objective: dict | None = None,
+                  difficulty: str = "standard", xp: int = 0) -> mod.Scene:
+        scene = {"id": "pit", "kind": "combat", "name": "Pit", "exits": [],
+                 "difficulty": difficulty, "foes": FOES}
+        if objective is not None:
+            scene["objective"] = objective
+        if xp:
+            scene["xp"] = xp
+        built = mod.parse(
+            {"id": "probe", "party_level": 4, "party_size": 4,
+             "start": "pit", "scenes": [scene]}, Path("<driver>"))
+        return built.scene("pit")
+
+    def spend(scene: mod.Scene) -> Dressed:
+        return resolve(scene, party_level=4, party_size=4, stated_size=4)
+
+    flat = spend(scene_for())
+    up = spend(scene_for({"kind": "survive", "harder": True}))
+    down = spend(scene_for({"kind": "survive", "easier": True}))
+
+    out.that(
+        not any("objective" in n for n in flat.notes),
+        "an objective that asks for no step leaves the budget alone",
+        f"{len(flat.refs)} creature(s), no step note",
+    )
+    out.that(
+        len(up.refs) > len(flat.refs) > len(down.refs),
+        "harder and easier each move the cast one band",
+        f"easier {len(down.refs)} < standard {len(flat.refs)} "
+        f"< harder {len(up.refs)}",
+    )
+    out.that(
+        any("rather than standard" in n for n in up.notes)
+        and any("rather than standard" in n for n in down.notes),
+        "the step is printed, never silent",
+        next(n for n in up.notes if "objective" in n),
+    )
+
+    # A stated figure wins. Same cast at both ends of the ladder.
+    priced_up = spend(scene_for({"kind": "survive", "harder": True}, xp=900))
+    priced_down = spend(scene_for({"kind": "survive", "easier": True}, xp=900))
+    out.that(
+        list(priced_up.refs) == list(priced_down.refs),
+        "a scene that states its own XP is not re-priced by its objective",
+        f"{len(priced_up.refs)} creature(s), identical both ways",
+    )
+
+    # The end of the ladder is reported rather than clamped in silence.
+    capped = spend(scene_for({"kind": "survive", "harder": True},
+                             difficulty="deadly"))
+    out.that(
+        any("end of the ladder" in n for n in capped.notes),
+        "asking past the end of the ladder says so",
+        next((n for n in capped.notes if "ladder" in n), "no note"),
+    )
+
+
+def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
+    """No treasure was awarded anywhere. #969.
+
+    A party finished a module with the equipment `chargen` dealt it and
+    nothing else -- no coins, no gems, no record of any.
+
+    **The monetary half only, and that line is the point.** The printed
+    system is ten parcels per level: four magic items at party level +1 to
+    +4, and six monetary. The item half is left alone because found items
+    sit **above** `band(level)`, and `band` is exactly what monster
+    defences are set against -- items off that curve owe `winrate` both
+    ways. Coins change no number on any board, so they owe nothing.
+
+    **Nothing is written down that the database already holds.** The curve
+    is `2 x market_price(level)`, computed, and it is exact against the
+    book's own Total Monetary Treasure line -- 720 at level 1, 3,600 at 6,
+    10,000 at 10.
+
+    And the distribution falls out rather than being rolled: *"use one
+    treasure hoard of three parcels, two treasures of two parcels each,
+    and three treasures with a single parcel. That leaves two to four
+    encounters with no treasure reward."* Six of the ten parcels are
+    monetary, so six fights carry money and the rest carry none --
+    because the level's treasure is spent, not because a die said so.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+    from combat_engine.story import treasure as tr
+
+    # -- the curve, against the printed table ------------------------------
+    PRINTED = {1: 720, 2: 1040, 4: 1680, 5: 2000, 6: 3600,
+               7: 5200, 8: 6800, 9: 8400, 10: 10000}
+    got = {level: tr.monetary(level) for level in PRINTED}
+    out.that(
+        got == PRINTED,
+        "the whole heroic monetary curve comes out of `item_step` and "
+        "matches the printed Total Monetary Treasure line to the gold "
+        "piece, so nothing is written down here to go stale",
+        f"{ {k: v for k, v in got.items() if v != PRINTED[k]} or 'all exact'}",
+    )
+    out.that(
+        tr.monetary(3) == 1360,
+        "including level 3, where the book prints 1,355 -- the computed "
+        "figure is off by **5 gp** and that is the one level of ten that "
+        "does not agree. Recorded rather than special-cased",
+        f"{tr.monetary(3)} against the printed 1,355",
+    )
+    out.that(
+        tr.market_price(8) == 3400 and tr.monetary(8) == 6800,
+        "and the price is the **mode** of the level's rungs, not the "
+        "first row nor the mean -- 440 of 497 rows at level 8 carry it. "
+        "Same reasoning and same trap as `xp.standard`, #1014",
+        f"{tr.market_price(8)}",
+    )
+
+    # -- the six parcels ---------------------------------------------------
+    for level in (1, 5, 6, 10):
+        purse = tr.shares(level)
+        out.that(
+            len(purse) == 6 and sum(purse) == tr.monetary(level),
+            f"the six parcels at level {level} sum to **exactly** what the "
+            "level is owed -- the printed proportions come to 1.005, so "
+            "the remainder goes on the largest parcel rather than leaving "
+            "the total a rounding",
+            f"{purse} sums to {sum(purse)} of {tr.monetary(level)}",
+        )
+    purse = tr.shares(5)
+    out.that(
+        list(purse) == sorted(purse, reverse=True),
+        "and they descend, which is the order the page prints them in",
+        f"{purse}",
+    )
+    bare = [int(tr.monetary(5) * share) for share in tr.PARCELS]
+    out.that(
+        purse[0] == bare[0] + (tr.monetary(5) - sum(bare))
+        and purse[1:] == tuple(bare[1:])
+        and sum(bare) > tr.monetary(5),
+        "with the adjustment on the **largest** parcel and nowhere else. "
+        "It is a **subtraction**: the printed proportions sum to 1.005, "
+        "so the bare shares over-run the level's total by 10 gp at level "
+        "5 and the overshoot comes off the biggest parcel, where it is "
+        "proportionally smallest",
+        f"bare {bare} sums to {sum(bare)} against {tr.monetary(5)}; "
+        f"paid {purse}",
+    )
+    out.that(
+        (tr.market_price(0) == tr.market_price(1) and tr.shares(99) == ())
+        or tr.shares(99) != (),
+        "a level below 1 is read as 1, and a level the database prices "
+        "nothing at yields no parcels rather than a nonsense figure",
+        f"level 0 -> {tr.market_price(0)}, level 99 -> {tr.shares(99)}",
+    )
+
+    # -- and through a module of fights ------------------------------------
+    def nine_fights(level: int = 5, seed: int = 3) -> tuple:
+        scenes = [
+            {"id": f"f{i}", "kind": "combat", "name": "F",
+             "difficulty": "easy",
+             "exits": [f"f{i + 1}"] if i < 8 else [],
+             "foes": [{"count": 1, "role": "soldier", "rank": "standard"}]}
+            for i in range(9)
+        ]
+        built = mod.parse(
+            {"id": "probe", "party_level": level, "party_size": 4,
+             "start": "f0", "scenes": scenes}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        found: list[int] = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, built, record=False)
+            said = [str(x) for x in made.lines if "Treasure:" in str(x)]
+            found.append(len(said))
+        return campaign, found
+
+    campaign, found = nine_fights()
+    out.that(
+        sum(found) == 6 and found[:6] == [1] * 6 and found[6:] == [0] * 3,
+        "six fights carry treasure and the rest carry none -- which is "
+        "the printed distribution without a roll: the level's parcels are "
+        "simply spent",
+        f"{found}",
+    )
+    out.that(
+        campaign.parcels == 6,
+        "and the campaign knows how many it has found",
+        f"{campaign.parcels}",
+    )
+    coins = [sheet.coins for sheet in campaign.party.sheets]
+    out.that(
+        len(set(coins)) == 1 and coins[0] > 0,
+        "every character ends with the same coins, because a parcel is "
+        "the party's and is split evenly",
+        f"{coins}",
+    )
+    heads = len(campaign.party.sheets)
+    out.that(
+        0 <= tr.monetary(5) - sum(coins) <= 6 * (heads - 1),
+        "and the party holds the level's whole treasure bar the flooring "
+        "-- at most three gold per parcel is dropped rather than handed "
+        "to somebody, which is `xp.share`'s rule and its reason",
+        f"{sum(coins)} of {tr.monetary(5)}, "
+        f"lost {tr.monetary(5) - sum(coins)}",
+    )
+    out.that(
+        all(not sheet.carried for sheet in campaign.party.sheets),
+        "**and nobody is carrying an item**, which is the scope line: the "
+        "four item parcels are not awarded, because an item above "
+        "`band(level)` moves the party off the curve monster defences are "
+        "set against",
+        f"{[sheet.carried for sheet in campaign.party.sheets]}",
+    )
+
+    # -- what does not pay --------------------------------------------------
+    TALK = {"id": "t", "kind": "roleplay", "name": "T", "exits": []}
+    built = mod.parse(
+        {"id": "probe", "party_level": 5, "party_size": 4, "start": "t",
+         "scenes": [TALK]}, Path("<driver>"))
+    quiet = run_mod.begin(built, seed=3)
+    made = run_mod.step(quiet, built, record=False)
+    out.that(
+        quiet.parcels == 0
+        and not any("Treasure:" in str(x) for x in made.lines),
+        "a scene that is not a fight finds nothing, so treasure always "
+        "answers a fight that was overcome",
+        f"{quiet.parcels}",
+    )
+
+    # **A combat scene the party lost**, which is the case the outcome
+    # check is for. The first draft handed `hoard` a *roleplay* scene with
+    # a losing outcome, so it was the `kind` test that refused it -- and a
+    # plant dropping the outcome test stayed green.
+    FOUGHT = {"id": "f", "kind": "combat", "name": "F",
+              "difficulty": "easy", "exits": [],
+              "foes": [{"count": 1, "role": "soldier",
+                        "rank": "standard"}]}
+    fought = mod.parse(
+        {"id": "probe", "party_level": 5, "party_size": 4, "start": "f",
+         "scenes": [FOUGHT]}, Path("<driver>"))
+    lost = run_mod.Step(scene=fought.scene("f"))
+    lost.outcome = "lost"
+    beaten = run_mod.begin(fought, seed=3)
+    run_mod.hoard(beaten, fought, fought.scene("f"), lost)
+    won = run_mod.Step(scene=fought.scene("f"))
+    won.outcome = "won"
+    winners = run_mod.begin(fought, seed=3)
+    run_mod.hoard(winners, fought, fought.scene("f"), won)
+    out.that(
+        beaten.parcels == 0 and winners.parcels == 1,
+        "a **fight** the party did not overcome finds nothing, where the "
+        "same fight won finds a parcel -- posed by handing `hoard` the "
+        "step each outcome produces, because the probe's party wins every "
+        "fight the seed gives it",
+        f"lost {beaten.parcels}, won {winners.parcels}",
+    )
+
+    # -- and it survives a save --------------------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(campaign))
+    out.that(
+        back.parcels == campaign.parcels == 6
+        and [s.coins for s in back.party.sheets] == coins,
+        "the coins and the count of parcels found both survive a save, so "
+        "reloading is not a way to find the level's treasure twice",
+        f"{back.parcels}, {[s.coins for s in back.party.sheets]}",
+    )
+
+
+def one_skill_cannot_carry_a_whole_challenge(out: Result) -> None:
+    """A challenge had no per-skill success cap at all. #984.
+
+    DMG2's ground rule 2 is entirely about the bottleneck that allows:
+
+    > *If your potential skill challenge has a similar bottleneck -- in
+    > which only one skill does the heavy lifting for the challenge --
+    > you need to rethink the challenge.*
+
+    and its remedy comes with a number: *"limiting the number of
+    successes that any particular skill can contribute. A good maximum is
+    equal to the complexity of the challenge."* So the default needs no
+    authoring -- it is a field `Scene` already has.
+
+    **The default withholds itself when it would make a challenge
+    unwinnable**, which is not a hypothetical: the one converted
+    challenge is complexity 1 with **three** primary skills and wants
+    **four** successes, so a cap of one each allows three. A default that
+    makes a printed challenge impossible is wrong.
+
+    **The default is a small, measured difficulty increase**, not a free
+    rail: over 150 seeds at complexity 3 with four skills the party wins
+    **21.3% capped against 25.3% uncapped**. That is the rule working --
+    forcing the weaker skills in is the whole point -- and it is worth
+    stating because the first measurement of it, taken before the
+    chooser learned to skip a capped skill, said the cap cost nothing.
+    It did; the wasted attempts were hiding it.
+    """
+    import collections
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    FOUR = ["arcana", "athletics", "thievery", "endurance"]
+
+    def scene_of(complexity: int = 3, primary: list[str] | None = None,
+                 caps: dict | None = None,
+                 kind: str = "skill_challenge") -> dict:
+        got = {"id": "c", "kind": kind, "name": "C", "exits": [],
+               "complexity": complexity, "primary": primary or FOUR}
+        if caps is not None:
+            got["caps"] = caps
+        return got
+
+    def parsed(**kw) -> mod.Scene:  # noqa: ANN003
+        return mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "c", "scenes": [scene_of(**kw)]},
+            Path("<driver>")).scene("c")
+
+    def refused(**kw) -> str:  # noqa: ANN003
+        try:
+            parsed(**kw)
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the default is the complexity, when it can be ---------------------
+    roomy = parsed()
+    out.that(
+        roomy.capped and roomy.cap_for("arcana") == 3 == roomy.complexity,
+        "a challenge with skills to spare caps each at its complexity, "
+        "which is the printed figure and needs no authoring",
+        f"capped={roomy.capped}, cap={roomy.cap_for('arcana')}",
+    )
+    tight = parsed(complexity=1,
+                   primary=["arcana", "athletics", "thievery"])
+    out.that(
+        not tight.capped and tight.cap_for("arcana") == 0
+        and tight.needs == 4 and len(tight.primary) == 3,
+        "and one that could not be won under it is **not** capped -- the "
+        "converted challenge is complexity 1 with three skills and wants "
+        "four successes, so a cap of one each allows three",
+        f"needs {tight.needs} from {len(tight.primary)} skills, "
+        f"capped={tight.capped}",
+    )
+    out.that(
+        parsed(caps={"arcana": 1}).cap_for("arcana") == 1
+        and parsed(caps={"arcana": 1}).cap_for("thievery") == 3,
+        "a module's own figure wins for the skill it names and leaves the "
+        "others on the default -- DMG2's samples print one per skill",
+        f"{parsed(caps={'arcana': 1}).caps}",
+    )
+    stated_on_tight = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "c",
+         "scenes": [scene_of(complexity=1,
+                             primary=["arcana", "athletics", "thievery"],
+                             caps={"arcana": 1})]},
+        Path("<driver>")).scene("c")
+    out.that(
+        stated_on_tight.cap_for("arcana") == 1
+        and stated_on_tight.cap_for("thievery") == 0,
+        "and a stated cap applies even where the **default** withheld "
+        "itself: the module asked for it, so it is not second-guessed",
+        f"arcana {stated_on_tight.cap_for('arcana')}, "
+        f"thievery {stated_on_tight.cap_for('thievery')}",
+    )
+
+    # -- the refusals ------------------------------------------------------
+    out.that(
+        "does not list" in refused(caps={"haggling": 1}),
+        "a cap on a skill the challenge does not list is refused, rather "
+        "than silently capping nothing",
+        refused(caps={"haggling": 1})[:80] or "accepted",
+    )
+    out.that(
+        "positive integer" in refused(caps={"arcana": 0}),
+        "and a cap of nought is refused -- it would mean the skill may "
+        "never count, which is deleting it from the challenge",
+        refused(caps={"arcana": 0})[:80] or "accepted",
+    )
+    every_one = refused(caps=dict.fromkeys(FOUR, 1))
+    out.that(
+        "could never be won" in every_one,
+        "caps that together allow fewer successes than the challenge "
+        "wants are refused: the default withholds itself in that case, so "
+        "trusting a stated figure without the same check is a hole",
+        every_one[:90] or "accepted",
+    )
+    out.that(
+        refused(caps=dict.fromkeys(FOUR, 2)) == ""
+        and refused(caps={"arcana": 1}) == "",
+        "while caps that exactly reach it are fine, and one capped skill "
+        "among four free ones is fine -- an uncapped skill can carry the "
+        "rest",
+        "accepted both",
+    )
+    out.that(
+        "only a skill_challenge" in refused(caps={"arcana": 1},
+                                            kind="combat"),
+        "and a scene that rolls no skills may not cap one",
+        refused(caps={"arcana": 1}, kind="combat")[:80] or "accepted",
+    )
+
+    # -- and it binds on a played challenge --------------------------------
+    def play(caps: dict | None = None, complexity: int = 3,
+             primary: list[str] | None = None, seed: int = 4) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "c",
+             "scenes": [scene_of(complexity, primary, caps)]},
+            Path("<driver>"))
+        made = run_mod.step(
+            run_mod.begin(built, seed=seed), built, record=False)
+        rolls = [str(x) for x in made.lines
+                 if getattr(x, "kind", "") == "roll"]
+        wins = collections.Counter(
+            line.split()[2] for line in rolls
+            if line.strip().startswith("+"))
+        return made, dict(wins), sum("skill capped" in r for r in rolls)
+
+    _, free_wins, _ = play(caps=dict.fromkeys(FOUR, 99))
+    _, held_wins, spun = play(caps={"arcana": 1})
+    out.that(
+        held_wins.get("arcana", 0) <= 1,
+        "a capped skill contributes no more than its cap, counted off the "
+        "rolls the challenge printed",
+        f"capped run {held_wins}, uncapped {free_wins}",
+    )
+    out.that(
+        spun == 0,
+        "**and the chooser stops offering it**, rather than naming a "
+        "skill that can no longer count. Measured before this: 33 refused "
+        "attempts in one challenge, which burned `play`'s attempt limit "
+        "and turned a win into a loss -- a cap that makes the default "
+        "chooser spin is a cap that broke the challenge",
+        f"{spun} wasted attempts",
+    )
+    out.that(
+        sum(held_wins.values()) > 1 and len(held_wins) > 1,
+        "and the challenge goes on with the other skills, which is the "
+        "whole point of the bottleneck rule",
+        f"{held_wins}",
+    )
+
+    # **A chooser that insists on a capped skill.** The default one stops
+    # offering it, so `attempt`'s own refusal is never reached through
+    # `taking_turns` -- two plants (deleting that refusal, and never
+    # counting a skill's successes) both stayed green until this. The
+    # case the refusal is for is a chooser that does not know about caps:
+    # a model, or anything passed as `choose`.
+    def insists(skill: str):  # noqa: ANN202
+        def chooser(run, table) -> tuple[int, str]:  # noqa: ANN001
+            return 0, skill
+        return chooser
+
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "c",
+         "scenes": [scene_of(3, FOUR, {"arcana": 1})]}, Path("<driver>"))
+    stubborn = run_mod.step(
+        run_mod.begin(built, seed=4), built, record=False,
+        choose=insists("arcana"))
+    lines = [str(x) for x in stubborn.lines
+             if getattr(x, "kind", "") == "roll"]
+    arcana_wins = sum(
+        1 for line in lines
+        if line.strip().startswith("+") and " arcana " in line)
+    out.that(
+        arcana_wins <= 1 and any("skill capped" in x for x in lines),
+        "a chooser that keeps naming a capped skill is **refused at the "
+        "attempt**, not merely un-offered: the default chooser filters, "
+        "so this is the only path that reaches the guard, and a model "
+        "knows nothing about caps",
+        f"{arcana_wins} arcana successes, "
+        f"{sum('skill capped' in x for x in lines)} refusals",
+    )
+
+    # -- the default is a rail, not a balance change -----------------------
+    def rate(caps: dict | None, seeds: int) -> int:
+        won = 0
+        for seed in range(1, seeds + 1):
+            made, _, _ = play(caps=caps, seed=seed)
+            won += made.outcome == "won"
+        return won
+
+    with_cap = rate(None, seeds=60)
+    without = rate(dict.fromkeys(FOUR, 99), seeds=60)
+    out.that(
+        0 < with_cap <= without,
+        "the default cap makes a challenge **harder and still winnable** "
+        "-- which is the bottleneck rule doing what it says, since "
+        "forcing the weaker skills in is the point. Measured over 150 "
+        "seeds at complexity 3 with four skills: **21.3% capped against "
+        "25.3% uncapped**, a four-point drop. Asserted as a direction "
+        "rather than a figure, because a rate from 60 seeds is noisy and "
+        "pinning one would flake",
+        f"with the default {with_cap}/60, with it off {without}/60",
+    )
+
+
+def the_printed_encounter_templates_can_be_fielded(out: Result) -> None:
+    """Four paradigms keyed by rank, where the book gives five by role. #951.
+
+    `PARADIGMS` is `standard`, `leader`, `elites`, `solo` -- and `solo`
+    maps to the printed Dragon's Den, `leader` to Commander and Troops.
+    **There was no analogue for Double Line, Battlefield Control or Wolf
+    Pack**, and the first two are the ones that make a fight worth
+    positioning in: a protected back rank, or movement control paired
+    with mobile attackers. Fielding five creatures of one role gives the
+    policy nothing to do, which is the standing complaint this is half of.
+
+    The printed shape, which the composer did not state:
+
+    > *pick a brute or soldier monster and use two or three of them. Pick
+    > one or two monsters of other roles to round out the encounter.*
+
+    **The draw is deliberately unchanged.** The book rolls five templates
+    at equal weight; adopting that would re-shape every arcade board and
+    every fixture, which owes `winrate` both ways and a re-record.
+    `PARADIGMS` is still the four that get drawn and `SHAPES_BY_NAME` is
+    the longer list that can be **asked for** -- `fight.py --paradigm` is
+    what asks.
+    """
+    import collections
+    from random import Random
+
+    from combat_engine.story import (
+        COMPOSITION,
+        PARADIGMS,
+        SHAPES_BY_NAME,
+        TEMPLATES,
+        _role_of,
+        field_encounter,
+        opposition,
+    )
+
+    # -- the draw is the draw it was ---------------------------------------
+    out.that(
+        PARADIGMS == ("standard", "leader", "elites", "solo"),
+        "the four paradigms that get **drawn** are unchanged, so no "
+        "arcade board moves -- the printed templates are askable and not "
+        "rollable until somebody pays for the re-record",
+        f"{PARADIGMS}",
+    )
+    out.that(
+        set(SHAPES_BY_NAME) == set(PARADIGMS) | set(TEMPLATES)
+        and len(SHAPES_BY_NAME) == 7,
+        "and everything that can be asked for by name is the four plus "
+        "the three printed templates",
+        f"{SHAPES_BY_NAME}",
+    )
+    out.that(
+        set(TEMPLATES) == {"double line", "battlefield control",
+                           "wolf pack"},
+        "the three with no analogue are the ones added: `solo` was "
+        "already Dragon's Den and `leader` already Commander and Troops",
+        f"{sorted(TEMPLATES)}",
+    )
+
+    # -- each printed template fields its printed shape --------------------
+    def roles_of(name: str, level: int = 5, seed: int = 7) -> dict:
+        refs, _, _ = opposition(level, Random(seed), paradigm=name)
+        return dict(collections.Counter(_role_of(r) for r in refs))
+
+    line = roles_of("double line")
+    out.that(
+        line and set(line) <= {"brute", "soldier", "artillery",
+                               "controller"}
+        and sum(line.get(r, 0) for r in ("brute", "soldier")) >= 2
+        and sum(line.get(r, 0) for r in ("artillery", "controller")) >= 1,
+        "a double line fields a brute-and-soldier front and an "
+        "artillery-and-controller rear, and **nothing else** -- which is "
+        "the whole of the template",
+        f"{line}",
+    )
+    control = roles_of("battlefield control")
+    out.that(
+        control and set(control) <= {"controller", "skirmisher"}
+        and control.get("controller", 0) >= 1
+        and control.get("skirmisher", 0) > control.get("controller", 0),
+        "battlefield control fields one controller and more skirmishers "
+        "than controllers, which is the printed 1-and-6 scaled to the "
+        "budget rather than copied",
+        f"{control}",
+    )
+    pack = roles_of("wolf pack")
+    out.that(
+        pack and set(pack) == {"skirmisher"},
+        "and a wolf pack is skirmishers and nothing else",
+        f"{pack}",
+    )
+
+    # -- the control: the old four are untouched ---------------------------
+    plain = roles_of("standard")
+    out.that(
+        len(plain) > 1,
+        "a `standard` encounter still mixes roles freely, because it "
+        "names none -- the control for the filter, and the reason the "
+        "existing four could not express a line",
+        f"{plain}",
+    )
+    out.that(
+        all(len(slots) == len(COMPOSITION[name])
+            for name, slots in COMPOSITION.items()),
+        "and `COMPOSITION` is unchanged in shape: a rank-keyed paradigm "
+        "is read as a role-keyed one with no roles, so the fill is one "
+        "loop rather than two",
+        f"{ {k: len(v) for k, v in COMPOSITION.items()} }",
+    )
+
+    # -- a role filter that would empty the pool is dropped ----------------
+    # This component's own caution: 253 of 384 minions carry
+    # `role = 'minion'`, so filtering can empty a whole rank. Posed at a
+    # level where the wanted role is thin.
+    thin = [
+        (level, roles_of("wolf pack", level=level))
+        for level in (1, 2, 3, 11, 12, 13)
+    ]
+    out.that(
+        all(got for _, got in thin),
+        "every level fields somebody under a role filter, from 1 to 13",
+        f"{[(lvl, sum(got.values())) for lvl, got in thin]}",
+    )
+    # **Posed with a role no creature has**, because the real data cannot
+    # show it: measured, every tactical role exists at every level in the
+    # standard rank, so no printed template can empty its own pool. The
+    # guard is for the recorded caution -- 253 of 384 minions carry
+    # `role = 'minion'` -- and a plant obeying an empty filter stayed
+    # green until this.
+    TEMPLATES["probe-nonesuch"] = [("standard", 1.0, ("nonesuch",))]
+    try:
+        impossible, _, fielded_as = opposition(
+            5, Random(7), paradigm="probe-nonesuch")
+    finally:
+        del TEMPLATES["probe-nonesuch"]
+    out.that(
+        impossible and fielded_as == "probe-nonesuch",
+        "a template asking for a role nothing has still fields somebody, "
+        "**and is still that template**. `opposition` would otherwise "
+        "fall back to `standard` -- a different shape under the same "
+        "request -- so asserting only that somebody was fielded left the "
+        "plant green",
+        f"{len(impossible)} creatures as {fielded_as!r}",
+    )
+
+    # -- and it reaches a board --------------------------------------------
+    fielded = field_encounter(5, 5, paradigm="double line")
+    out.that(
+        fielded.paradigm == "double line" and fielded.enemies,
+        "`field_encounter` fields a named template and says which it "
+        "fielded, which is what `fight.py --paradigm` asks for -- a shape "
+        "nothing can select is the same as no shape",
+        f"{fielded.paradigm}, {len(fielded.enemies)} creatures",
+    )
+    drawn = field_encounter(5, 5)
+    out.that(
+        drawn.paradigm in PARADIGMS,
+        "and a board that asks for nothing still draws from the four, so "
+        "the default path is untouched",
+        f"{drawn.paradigm}",
+    )
+
+
+def a_scene_can_say_how_big_the_room_is(out: Result) -> None:
+    """Every board was one of two hard-coded rectangles. #974.
+
+    `World(Grid(16, 12), ...)` for every fight and `12 x 8` for every
+    borrowed board, so a corridor, a cave mouth, a great hall and a tavern
+    were the same floor with the same two four-square bands at the ends.
+    `field_encounter` took a seed, a level, both sides, a scaling preset
+    and a maths preset, and **no shape**.
+
+    The printed d20 table gives ten chambers, and **nine of them are
+    smaller than the floor in use** -- the board in play sits at the large
+    end of the printed range. An octagon and an irregular chamber need
+    nothing new: a cut corner is blocking squares, which is the same
+    mechanism a pillar already uses.
+
+    **The default does not move, and that is what makes this safe.** The
+    issue says this owes `winrate` both ways and a fixture re-record;
+    neither is true of what landed, because `FLOOR` is the board every
+    fight has always used and `bands_of(FLOOR)` reproduces `PARTY_AT` and
+    `ENEMY_AT` exactly. What is *not* here is the seeded draw over the ten
+    chambers for the arcade path -- that would move every board, and it is
+    the part that owes the measurement.
+    """
+    from pathlib import Path
+
+    from combat_engine.engine import Side
+    from combat_engine.engine.components import Position
+    from combat_engine.story import (
+        CHAMBERS,
+        ENEMY_AT,
+        FLOOR,
+        PARTY_AT,
+        Shape,
+        bands_of,
+        corners_of,
+        field_encounter,
+        line_up,
+    )
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    # -- the default is the board it always was ----------------------------
+    out.that(
+        (FLOOR.width, FLOOR.height) == (16, 12)
+        and bands_of(FLOOR) == (PARTY_AT, ENEMY_AT),
+        "the default room is the floor every fight has used, and its bands "
+        "are the two constants the placement has always started from -- "
+        "which is what lets the shape become a parameter without moving a "
+        "single fixture",
+        f"{FLOOR}, {bands_of(FLOOR)}",
+    )
+    out.that(
+        line_up(PARTY_AT, 4, FLOOR, inward=1)
+        == [(2, 3), (2, 5), (2, 7), (2, 9)]
+        and line_up(ENEMY_AT, 10, FLOOR, inward=-1)
+        == [(12, 3), (12, 5), (12, 7), (12, 9), (12, 11),
+            (10, 3), (10, 5), (10, 7), (10, 9), (10, 11)],
+        "and the shared line-up is **byte-identical** to the hard-coded "
+        "expressions it replaces, on both sides -- five to a column, "
+        "stepping two columns inward, which is what `(i // 5)` and "
+        "`(i % 5)` spelled out",
+        f"{line_up(ENEMY_AT, 10, FLOOR, inward=-1)}",
+    )
+    out.that(
+        corners_of(FLOOR) == set(),
+        "a rectangle cuts no corners, so the default board gains no "
+        "blocking square it did not have",
+        f"{corners_of(FLOOR)}",
+    )
+
+    # -- the ten printed chambers ------------------------------------------
+    out.that(
+        len(CHAMBERS) == 10
+        and all(c.area < FLOOR.area for c in CHAMBERS)
+        and max(c.area for c in CHAMBERS) == 160,
+        "**all ten** printed chambers are smaller than the floor in use, "
+        "and the largest is 160 squares against its 192. The issue says "
+        "nine, and that the two 10x16 entries 'match it in area' -- by "
+        "area they do not; they are the closest. The direction of the "
+        "finding stands and is sharper: the board in play is larger than "
+        "anything the table rolls",
+        f"floor {FLOOR.area}, chambers "
+        f"{sorted({c.area for c in CHAMBERS})}",
+    )
+    out.that(
+        sum(1 for c in CHAMBERS if c.height > FLOOR.height) == 2,
+        "two of them are **taller** than it even so, which is why the "
+        "line-up had to generalise in both directions rather than only "
+        "shrink",
+        f"{[(c.width, c.height) for c in CHAMBERS if c.height > FLOOR.height]}",
+    )
+    out.that(
+        {c.kind for c in CHAMBERS} == {"rectangle", "octagon", "irregular"},
+        "and all three printed kinds are there",
+        f"{sorted({c.kind for c in CHAMBERS})}",
+    )
+    out.that(
+        all(corners_of(c) for c in CHAMBERS if c.kind != "rectangle")
+        and not any(corners_of(c) for c in CHAMBERS
+                    if c.kind == "rectangle"),
+        "an octagon and an irregular chamber cut corners and a rectangle "
+        "does not -- the shape **is** the blocking squares, so nothing new "
+        "was needed to hold one",
+        f"{[(c.kind, len(corners_of(c))) for c in CHAMBERS]}",
+    )
+    eight = Shape(8, 8, "octagon")
+    out.that(
+        len(corners_of(eight)) == 4 * len(
+            corners_of(Shape(8, 8, "irregular"))),
+        "an octagon cuts all four corners and an irregular chamber cuts "
+        "one, which is what makes its floor asymmetric without inventing "
+        "a cave system",
+        f"octagon {len(corners_of(eight))}, irregular "
+        f"{len(corners_of(Shape(8, 8, 'irregular')))}",
+    )
+
+    # -- everybody fits, on every one of them ------------------------------
+    def fielded_on(room: Shape) -> tuple[int, int, int]:
+        got = field_encounter(3, 2, room=room)
+        world = got.world
+        sizes.append((room, world.grid.width, world.grid.height))
+        rocks.append((room, corners_of(room) <= world.grid.blocking))
+        def square_of(eid: int) -> tuple[int, int] | None:
+            spot = world.get(eid, Position)
+            return spot.square if spot is not None else None
+
+        spots = [
+            spot for spot in (square_of(eid) for eid, _ in world.each(Side))
+            if spot is not None
+        ]
+        off = [s for s in spots if not world.grid.inside(s)]
+        on_rock = [s for s in spots if s in corners_of(room)]
+        return len(spots), len(off), len(on_rock)
+
+    sizes: list[tuple[Shape, int, int]] = []
+    rocks: list[tuple[Shape, bool]] = []
+    results = {c: fielded_on(c) for c in CHAMBERS}
+    out.that(
+        all(room.width == w and room.height == h for room, w, h in sizes),
+        "**the board is the size the room says**, which is the assertion "
+        "everything else here leans on -- a plant that ignored the room "
+        "and built the standard floor passed every placement check, "
+        "because a creature placed for a 6x8 chamber is perfectly legal "
+        "on a 16x12 one",
+        f"{[r.kind for r, w, h in sizes if (r.width, r.height) != (w, h)] or 'all match'}",
+    )
+    out.that(
+        all(laid for _, laid in rocks),
+        "and the cut corners are **on** the board as blocking squares, "
+        "not merely computable -- a plant that never laid them changed "
+        "nothing a placement check could see",
+        f"{[r.kind for r, laid in rocks if not laid] or 'all laid'}",
+    )
+    strayed = [(f"{c.width}x{c.height}", off)
+               for c, (_, off, _) in results.items() if off]
+    on_rock = [(c.kind, rock)
+               for c, (_, _, rock) in results.items() if rock]
+    out.that(
+        all(off == 0 for _, off, _ in results.values()),
+        "every creature stands **on the board** in all ten chambers -- ten "
+        "foes laid five to a column walk off the bottom of an 8-tall room "
+        "and off the side of a 6-wide one, which is most of the printed "
+        "table",
+        f"{strayed or 'none off-board'}",
+    )
+    out.that(
+        all(rock == 0 for _, _, rock in results.values()),
+        "and nobody stands on a cut corner, which `dress` already warns "
+        "about for pillars -- a creature on a blocking square is "
+        "Position-present and index-absent",
+        f"{on_rock or 'none on rock'}",
+    )
+    # **Nobody shares a square**, which is what the fallback sweep is for.
+    # Dropping it left the leftovers stacked on the band square itself --
+    # perfectly on the board, and two creatures deep.
+    def crowded(room: Shape) -> int:
+        got = field_encounter(3, 2, room=room)
+        world = got.world
+        def where(eid: int) -> tuple[int, int] | None:
+            spot = world.get(eid, Position)
+            return spot.square if spot is not None else None
+
+        spots = [
+            spot for spot in (where(eid) for eid, _ in world.each(Side))
+            if spot is not None
+        ]
+        return len(spots) - len(set(spots))
+
+    doubled = {f"{c.width}x{c.height}": crowded(c) for c in CHAMBERS
+               if crowded(c)}
+    out.that(
+        not doubled,
+        "and no two creatures share a square on any of them -- a board "
+        "too small for the band has to put the overflow somewhere, and "
+        "the answer is any free square rather than the band's own",
+        f"{doubled or 'none doubled up'}",
+    )
+
+    # **The exact layout on a small board**, which pins how many fit in a
+    # column. Asserting only that everybody is on the board left a plant
+    # fixing the column at five green: the bounds check dropped the
+    # overflow and the fallback quietly put it back somewhere legal.
+    out.that(
+        line_up((2, 2), 6, Shape(8, 8), inward=1)
+        == [(2, 2), (2, 4), (2, 6), (4, 2), (4, 4), (4, 6)],
+        "an 8x8 chamber takes three to a column from row 2 and then steps "
+        "across, rather than the five a 12-row floor takes",
+        f"{line_up((2, 2), 6, Shape(8, 8), inward=1)}",
+    )
+    # **A room taller than the floor**, which is what makes the column
+    # height posable at all: on a shorter board the bounds filter drops
+    # the overflow and a wrong `per_column` produces the same squares.
+    tall = Shape(10, 16)
+    out.that(
+        line_up((2, 4), 7, tall, inward=1)
+        == [(2, 4), (2, 6), (2, 8), (2, 10), (2, 12), (2, 14), (4, 4)],
+        "a 16-row chamber takes six to a column before stepping across, "
+        "not the five a 12-row floor takes -- the column is read off the "
+        "board rather than fixed",
+        f"{line_up((2, 4), 7, tall, inward=1)}",
+    )
+
+    cut = Shape(8, 8, "octagon")
+    out.that(
+        not (set(line_up((0, 0), 12, cut, inward=1)) & corners_of(cut)),
+        "and a line-up that starts in a cut corner steps over it -- posed "
+        "from (0, 0), which is the one square an octagon definitely does "
+        "not have, because the bands never reach a corner on their own",
+        f"{sorted(set(line_up((0, 0), 12, cut, inward=1)) & corners_of(cut))}",
+    )
+
+    out.that(
+        all(count == results[FLOOR][0] if FLOOR in results else count > 0
+            for count, _, _ in results.values()),
+        "and the same cast is fielded whatever the room, so a smaller "
+        "chamber is a tighter fight rather than a shorter one",
+        f"{sorted({count for count, _, _ in results.values()})}",
+    )
+
+    # -- a module can say it -----------------------------------------------
+    def scene_of(room: dict | None, kind: str = "combat") -> dict:
+        got = {"id": "fight", "kind": kind, "name": "F", "exits": [],
+               "difficulty": "standard",
+               "foes": [{"count": 3, "role": "soldier", "rank": "standard"}]}
+        if room is not None:
+            got["room"] = room
+        return got
+
+    def refused(room: dict) -> str:
+        try:
+            mod.parse({"id": "probe", "party_level": 2, "party_size": 4,
+                       "start": "fight", "scenes": [scene_of(room)]},
+                      Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    plain = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "fight",
+         "scenes": [scene_of(None)]}, Path("<driver>")).scene("fight")
+    stated = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "fight",
+         "scenes": [scene_of({"width": 10, "height": 16,
+                              "kind": "octagon"})]},
+        Path("<driver>")).scene("fight")
+    out.that(
+        plain.room == () and stated.room == (10, 16, "octagon"),
+        "a scene can state its room and one that does not carries none, "
+        "which is every scene written so far",
+        f"{plain.room}, {stated.room}",
+    )
+    out.that(
+        "between 5 and 24" in refused({"width": 2, "height": 8}),
+        "a room too small to fight in is refused",
+        refused({"width": 2, "height": 8})[:80] or "accepted",
+    )
+    out.that(
+        "is not one of" in refused({"width": 10, "height": 10,
+                                    "kind": "cave"}),
+        "and a shape the engine cannot build is refused rather than "
+        "quietly becoming a rectangle",
+        refused({"width": 10, "height": 10, "kind": "cave"})[:80]
+        or "accepted",
+    )
+
+    # -- and it reaches the fight -------------------------------------------
+    def play(room: dict | None, seed: int = 5) -> run_mod.Step:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "fight", "scenes": [scene_of(room)]},
+            Path("<driver>"))
+        return run_mod.step(
+            run_mod.begin(built, seed=seed), built, record=False)
+
+    default = play(None)
+    tight = play({"width": 6, "height": 8})
+    out.that(
+        default.stood == [(2, 3), (2, 5), (2, 7), (2, 9)],
+        "a fight in no stated room starts from exactly the squares it "
+        "always did",
+        f"{default.stood}",
+    )
+    out.that(
+        tight.stood != default.stood
+        and all(0 <= x < 6 and 0 <= y < 8 for x, y in tight.stood),
+        "and a fight in a stated room starts **inside it** -- the party's "
+        "column is laid from the room's own corner, not the standard "
+        "floor's, which on a 6x8 chamber is otherwise off the map",
+        f"{tight.stood}",
+    )
+    out.that(
+        tight.outcome in ("won", "lost") and tight.rounds > 0,
+        "and the fight plays",
+        f"{tight.outcome} in {tight.rounds}",
+    )
+
+    # **The board `_fight` actually built**, read back through the scene's
+    # own room rather than inferred from where anybody stood. Two plants
+    # -- never passing the room on, and laying the formation from the
+    # standard corner -- both left the party on legal squares, because
+    # every square of a 6x8 chamber is also a square of a 16x12 floor.
+    room_of = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "fight",
+         "scenes": [scene_of({"width": 6, "height": 8})]},
+        Path("<driver>")).scene("fight")
+    out.that(
+        room_of.room == (6, 8, "rectangle")
+        and tight.room == (6, 8) and default.room == (16, 12),
+        "the board `_fight` built **is** the room the scene stated, read "
+        "back off it. Two plants -- never passing the room on, and laying "
+        "the formation from the standard corner -- both left the party on "
+        "legal squares, because every square of a 6x8 chamber is also a "
+        "square of a 16x12 floor",
+        f"stated {room_of.room}, built {tight.room}, "
+        f"default {default.room}",
+    )
+    out.that(
+        max(x for x, _ in tight.stood) < 6
+        and max(y for _, y in tight.stood) < 8
+        and max(y for _, y in default.stood) == 9,
+        "and the party stands inside it, where the standard floor's own "
+        "column reaches row 9",
+        f"tight {tight.stood}, default {default.stood}",
+    )
+    out.that(
+        tight.stood[0] == bands_of(Shape(6, 8))[0]
+        and default.stood[0] == bands_of(FLOOR)[0],
+        "and it starts on the **room's own** band square -- a 6x8 chamber "
+        "opens on row 2 where the standard floor opens on row 3. Both are "
+        "inside a 6x8 room, so only the square itself tells a formation "
+        "laid from the room from one laid from the floor",
+        f"tight {tight.stood[0]} wants {bands_of(Shape(6, 8))[0]}, "
+        f"default {default.stood[0]} wants {bands_of(FLOOR)[0]}",
+    )
+
+
+def a_dressed_trap_is_paid_for_out_of_the_budget(out: Result) -> None:
+    """A trap was armed after the budget was spent. #958.
+
+    `cast_list.resolve` spends the whole encounter budget on creatures and
+    holds every one of them to `OVER = 1.1`; then `terrain.dress` armed
+    nought to two traps from a fixed draw, **after**, because it is a
+    different function that was never told there is a budget.
+
+    **A dressed trap is priced as a minion**, which is DMG2's rule and a
+    correction this issue's own comment makes to its body:
+
+    > *Single-shot traps should be considered minions.*
+
+    and every trap this engine arms is single-shot by construction --
+    `terrain.arm` sets `sprung` on the first body across the square and
+    never resets it. So one trap is **6.25%** of a board rather than the
+    25% the body assumed: one lands **inside** the ceiling and two land
+    just outside. A bookkeeping fault, not a balance emergency, and the
+    body's closing claim that boards were fought at 1.5x is wrong.
+
+    **Arcade mode is deliberately unchanged**, and that is asserted rather
+    than assumed: `fight.build` and `api` reach `field_encounter` without
+    a cap, so `dress` keeps its own draw there. The `winrate` run this
+    issue asks for would therefore measure nothing, and `replay`'s
+    fixtures are the standing proof that those boards did not move.
+    """
+    import collections
+    from pathlib import Path
+    from random import Random
+
+    from combat_engine.engine.components import Trap
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import cast_list, field_encounter
+    from combat_engine.story import module as mod
+    from combat_engine.story import reflavour as refl
+    from combat_engine.story import run as run_mod
+
+    def scene_of(foes: int) -> dict:
+        return {"id": "fight", "kind": "combat", "name": "F", "exits": [],
+                "difficulty": "standard",
+                "foes": [{"count": foes, "role": "soldier",
+                          "rank": "standard"}]}
+
+    def dressed(foes: int) -> refl.Dressed:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "fight", "scenes": [scene_of(foes)]},
+            Path("<driver>"))
+        return cast_list.resolve(built.scene("fight"), party_level=2,
+                                 draw=Random(5), party_size=4)
+
+    # -- the allowance tracks what is left ---------------------------------
+    light = dressed(1)
+    full = dressed(8)
+    # `Dressed.traps` is `int | None` -- None means nobody worked it out,
+    # which `resolve` never leaves it as.
+    spare_traps = light.traps if light.traps is not None else -1
+    spent_traps = full.traps if full.traps is not None else -1
+    out.that(
+        spare_traps == cast_list.MOST_TRAPS and spent_traps < spare_traps,
+        "a board with budget to spare affords the full two traps and a "
+        "board spent to its ceiling affords fewer -- the allowance is "
+        "what is left, not a constant",
+        f"1 foe -> {spare_traps} traps, 8 foes -> {len(full.refs)} foes "
+        f"and {spent_traps} traps",
+    )
+    out.that(
+        spent_traps == 1,
+        "and a board spent to the ceiling still affords **one**, because "
+        "a single-shot trap is a minion at 6.25% and `OVER` is 10% -- "
+        "which is this issue's corrected arithmetic, not its body's",
+        f"{spent_traps}",
+    )
+    out.that(
+        any("priced like a minion" in n for n in full.notes)
+        and not any("priced like a minion" in n for n in light.notes),
+        "the cut is said out loud when it bites and silent when it does "
+        "not, which is the same rule the budget's other clamps follow",
+        f"{[n for n in full.notes if 'trap' in n]}",
+    )
+
+    out.that(
+        cast_list._trap_allowance(
+            light, 2, float("inf"), 0.0) == cast_list.MOST_TRAPS,
+        "a budget nobody could work out allows the full two, because "
+        "there is nothing to overspend. **Posed against the helper**: no "
+        "scene reaches that branch today, since `budget` clamps to the "
+        "database's ceiling rather than returning nothing",
+        f"{cast_list._trap_allowance(light, 2, float('inf'), 0.0)}",
+    )
+
+    # -- the cap reaches the board -----------------------------------------
+    def armed(seed: int, cap: int | None) -> int:
+        fielded = field_encounter(seed, 2, traps=cap)
+        Encounter(fielded.world).start()
+        return len(list(fielded.world.each(Trap)))
+
+    # Twenty is enough to see nought/one/two across the draw and keeps
+    # this driver -- and therefore every plant against it -- quick.
+    SEEDS = range(1, 21)
+    loose = collections.Counter(armed(s, None) for s in SEEDS)
+    none = collections.Counter(armed(s, 0) for s in SEEDS)
+    one = collections.Counter(armed(s, 1) for s in SEEDS)
+    two = collections.Counter(armed(s, 2) for s in SEEDS)
+    out.that(
+        set(loose) == {0, 1, 2} and loose[1] > loose[2],
+        "uncapped, the dresser's own draw still arms nought to two across "
+        "twenty boards, which is the behaviour being bounded rather than "
+        "replaced",
+        f"{dict(sorted(loose.items()))}",
+    )
+    out.that(
+        set(none) == {0},
+        "a cap of none arms none",
+        f"{dict(sorted(none.items()))}",
+    )
+    out.that(
+        set(one) <= {0, 1} and one[1] == loose[1] + loose[2],
+        "a cap of one turns every two-trap board into a one-trap board "
+        "and leaves the rest alone -- it is a cut, not a redraw",
+        f"{dict(sorted(one.items()))} against {dict(sorted(loose.items()))}",
+    )
+    out.that(
+        two == loose,
+        "and a cap of two changes nothing, because the dresser never "
+        "armed more than two anyway. **The control**",
+        f"{dict(sorted(two.items()))}",
+    )
+
+    # -- the cap must not move the rest of the board -----------------------
+    # The draw happens either way and is cut afterwards, because skipping
+    # it would move every `pick` call after it -- so two boards differing
+    # only in budget would differ in their rough ground too.
+    def floor_of(seed: int, cap: int | None) -> tuple:
+        world = field_encounter(seed, 2, traps=cap).world
+        return (tuple(sorted(world.grid.blocking)),
+                tuple(sorted(world.grid.difficult.items())))
+
+    same = [floor_of(s, None) == floor_of(s, 0) for s in range(1, 11)]
+    out.that(
+        all(same),
+        "capping the traps leaves the rough ground and the pillars "
+        "identical, so a board's floor does not depend on how much budget "
+        "was spare. **It holds because the scatter is drawn first**, and "
+        "this is the guard against anybody reordering it -- a plant that "
+        "skipped the trap draw entirely stayed green, since nothing after "
+        "it consumes the stream once the count is nought",
+        f"{sum(same)} of {len(same)} boards unchanged",
+    )
+
+    # **The dresser's own default**, which `field_encounter` never
+    # exercises because it always passes the keyword. A plant changing it
+    # to 0 stayed green until this.
+    import inspect
+
+    from combat_engine.content import terrain
+
+    out.that(
+        inspect.signature(terrain.dress).parameters["traps"].default is None,
+        "`dress` defaults its cap to **None**, meaning 'nobody worked it "
+        "out' rather than 'none' -- a default of 0 would silently disarm "
+        "every board that does not go through `cast_list`",
+        f"{inspect.signature(terrain.dress).parameters['traps'].default}",
+    )
+
+    # -- arcade is untouched, by construction ------------------------------
+    out.that(
+        inspect.signature(field_encounter).parameters["traps"].default
+        is None,
+        "`field_encounter` defaults the cap to **None**, so every caller "
+        "that does not know about budgets -- `fight.build`, `api`, "
+        "`winrate` -- keeps the dresser's own draw",
+        f"{inspect.signature(field_encounter).parameters['traps'].default}",
+    )
+    out.that(
+        collections.Counter(armed(s, None) for s in SEEDS) == loose,
+        "and an uncapped board is bit for bit the board it was, which is "
+        "why the `winrate` run this issue asks for would measure nothing "
+        "-- `replay`'s fixtures are the standing proof",
+        f"{dict(sorted(loose.items()))}",
+    )
+
+    # -- and through a real story fight ------------------------------------
+    def story_traps(foes: int) -> collections.Counter:
+        got: collections.Counter = collections.Counter()
+        for seed in range(1, 9):
+            built = mod.parse(
+                {"id": "probe", "party_level": 2, "party_size": 4,
+                 "start": "fight", "scenes": [scene_of(foes)]},
+                Path("<driver>"))
+            campaign = run_mod.begin(built, seed=seed)
+            got[run_mod.step(campaign, built, record=False).traps] += 1
+        return got
+
+    spare_board = story_traps(1)
+    spent_board = story_traps(8)
+    out.that(
+        2 in spare_board and 2 not in spent_board,
+        "**through a real fight**: a board with budget to spare arms two "
+        "traps across eight seeds and a board spent to its ceiling never "
+        "does. Counted off the board after `start()`, because a plant "
+        "that made `_fight` hand over no allowance at all stayed green "
+        "against an assertion that could only see the outcome",
+        f"1 foe {dict(sorted(spare_board.items()))}, "
+        f"8 foes {dict(sorted(spent_board.items()))}",
+    )
+    out.that(
+        sum(spent_board.values()) == 8 and set(spent_board) <= {0, 1},
+        "and every one of those fights played, so the cut is a cut rather "
+        "than a crash",
+        f"{dict(sorted(spent_board.items()))}",
+    )
+
+
+def a_scene_can_field_allies_on_the_party_side(out: Result) -> None:
+    """`Scene` had `foes` and nothing on the other side. #961.
+
+    Every creature the story engine fielded was either a party member
+    (`chargen.spawn`, ref `c:<class>`) or an enemy. A module could not say
+    that a handful of guards are fighting alongside the party -- and the
+    imported adventure's encounter chapter is **built on that**: it says
+    each of its encounters includes one or more allies, controlled by the
+    players, and prints a roster for every one of them. Four of its
+    encounters cannot be fielded as written without this.
+
+    **The engine could already hold them; `story` could not ask.** A
+    PC-side creature that is not a character is a thing the board supports
+    and is careful about: both `harvest` and `table.characters` filter on
+    a `c:<class>` ref precisely so a familiar does not count as a sheet
+    (#797). So this is a field, a resolver and a spawn, not a new kind of
+    entity -- and the assertions below are mostly about the **three
+    consequences**: the budget, the XP share, and an ally not becoming a
+    character.
+
+    **Not a companion character.** DMG2's companion is a party member
+    built from formulas, and it rules out the minions this fields --
+    *"minions are too weak to help out the party"*. That is #1015, split
+    out of this issue.
+    """
+    from pathlib import Path
+    from random import Random
+
+    from combat_engine.engine import Side, Team
+    from combat_engine.engine.components import Defences, Position
+    from combat_engine.story import PARTY_AT, arrival_squares, cast_list, xp
+    from combat_engine.story import module as mod
+    from combat_engine.story import reflavour as refl
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import table as tbl
+
+    GUARDS = [{"count": 2, "rank": "minion", "role": "soldier"}]
+
+    def scene_of(allies: list[dict] | None = None, foes: int = 2,
+                 kind: str = "combat") -> dict:
+        got = {"id": "fight", "kind": kind, "name": "F", "exits": [],
+               "difficulty": "standard",
+               "foes": [{"count": foes, "role": "soldier",
+                         "rank": "standard"}]}
+        if allies is not None:
+            got["allies"] = allies
+        return got
+
+    def parsed(scene: dict) -> mod.Module:
+        return mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "fight", "scenes": [scene]}, Path("<driver>"))
+
+    def refused(scene: dict) -> str:
+        try:
+            parsed(scene)
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the field ---------------------------------------------------------
+    plain = parsed(scene_of()).scene("fight")
+    withal = parsed(scene_of(GUARDS)).scene("fight")
+    out.that(
+        plain.allies == () and len(withal.allies) == 1
+        and withal.allies[0].count == 2
+        and withal.allies[0].rank == "minion",
+        "a scene can state a roster of allies, and one that does not has "
+        "none -- which is every scene written before this",
+        f"{plain.allies}, {[(a.count, a.rank) for a in withal.allies]}",
+    )
+    out.that(
+        "only a combat scene fields anybody" in refused(
+            scene_of(GUARDS, kind="roleplay")),
+        "a scene that does not field anybody is refused an ally roster, "
+        "rather than carrying one nothing will ever spawn",
+        refused(scene_of(GUARDS, kind="roleplay"))[:90] or "accepted",
+    )
+    out.that(
+        "is not one of" in refused(scene_of(
+            [{"count": 1, "role": "nonsense"}])),
+        "and an ally is validated the way a foe is, because it **is** a "
+        "`FoeSpec` -- a second near-identical spec type would be a second "
+        "set of rules to keep in step",
+        refused(scene_of([{"count": 1, "role": "nonsense"}]))[:80]
+        or "accepted",
+    )
+
+    # -- resolved onto their own side of the Dressed -----------------------
+    def dressed(allies: list[dict] | None, foes: int = 2) -> refl.Dressed:
+        return cast_list.resolve(
+            parsed(scene_of(allies, foes)).scene("fight"),
+            party_level=2, draw=Random(5), party_size=4)
+
+    bare = dressed(None)
+    helped = dressed(GUARDS)
+    out.that(
+        not bare.allies and len(helped.allies) == 2
+        and len(helped.ally_flavours) == 2,
+        "the allies resolve onto their own list, drawn by the same tiers a "
+        "foe is",
+        f"{helped.allies}",
+    )
+    out.that(
+        not set(helped.allies) & set(helped.refs)
+        or all(helped.refs.count(r) == bare.refs.count(r)
+               for r in set(helped.allies) & set(helped.refs)),
+        "and they are **not** in `refs`: that is what the XP award and the "
+        "`cleared` tally are written against, and an ally is neither "
+        "something the party overcame nor something it killed",
+        f"refs {len(helped.refs)}, allies {len(helped.allies)}",
+    )
+
+    # -- the printed budget consequence ------------------------------------
+    # *"You should build encounters to challenge the party that includes
+    # the ally."* Posed with allies worth enough to buy another creature,
+    # because two minions are not.
+    BIG = [{"count": 3, "rank": "standard", "role": "soldier"}]
+    many = dressed(BIG, foes=8)
+    none = dressed(None, foes=8)
+    out.that(
+        len(many.refs) > len(none.refs),
+        "the opposition is topped up by what the allies are worth, so a "
+        "fight with help on the party's side is a bigger fight -- "
+        "otherwise a scene with six allies is trivial",
+        f"{len(none.refs)} foes alone, {len(many.refs)} with "
+        f"{len(many.allies)} allies",
+    )
+    worth = xp.for_creatures(many.allies)
+    out.that(
+        any(f"topped up by {worth:.0f} XP" in n for n in many.notes)
+        and any(f"worth {worth:.0f} XP" in n for n in many.notes),
+        "and the top-up is **what the allies are worth**, not a standard "
+        "monster each: the module's allies are minions worth a quarter, "
+        "and crediting each with a full monster would double a fight for "
+        "guards who die to one hit. A plant multiplying it by twenty left "
+        "`more foes than before` true, so the figure is asserted",
+        f"allies worth {worth:.0f}, "
+        f"notes {[n for n in many.notes if 'topped up' in n]}",
+    )
+    out.that(
+        not any("topped up by" in n for n in none.notes),
+        "while a scene with no allies says nothing about them, which is "
+        "the control for the note",
+        f"{[n for n in none.notes if 'ally' in n or 'topped' in n]}",
+    )
+
+    # -- and now on a board ------------------------------------------------
+    def play(allies: list[dict] | None, foes: int = 2,
+             seed: int = 9) -> tuple:
+        built = parsed(scene_of(allies, foes))
+        campaign = run_mod.begin(built, seed=seed)
+        made = run_mod.step(campaign, built, record=False)
+        return campaign, made
+
+    alone_c, alone = play(None)
+    with_c, withem = play(GUARDS)
+    out.that(
+        alone.allies == [] and len(withem.allies) == 2,
+        "the allies reach the board",
+        f"{withem.allies}",
+    )
+    out.that(
+        alone.outcome == withem.outcome == "won",
+        "and both fights are fightable, so the comparisons below are "
+        "between two finished fights rather than one and a wipe",
+        f"{alone.outcome}, {withem.outcome}",
+    )
+
+    # **The three consequences.**
+    out.that(
+        len(with_c.party.sheets) == len(alone_c.party.sheets) == 4,
+        "an ally does not become a character: the party still holds four "
+        "sheets, because `harvest` filters on a `c:<class>` ref and an "
+        "ally has a monster's",
+        f"{len(with_c.party.sheets)} sheets",
+    )
+    out.that(
+        with_c.party.sheets[0].xp == xp.share(
+            xp.for_creatures(withem.enemies), 6)
+        and with_c.party.sheets[0].xp < alone_c.party.sheets[0].xp,
+        "an ally takes an **equal share** of the XP -- *\"when a nonplayer "
+        "character participates in an encounter, that character earns an "
+        "equal share\"* -- so four characters with two allies divide by "
+        "six, and the two shares are paid to nobody",
+        f"alone {alone_c.party.sheets[0].xp}, "
+        f"with two allies {with_c.party.sheets[0].xp}, "
+        f"expected {xp.share(xp.for_creatures(withem.enemies), 6)}",
+    )
+    with_allies_counted = xp.for_creatures(withem.enemies + withem.allies)
+    out.that(
+        with_allies_counted > xp.for_creatures(withem.enemies)
+        and with_c.party.sheets[0].xp != xp.share(with_allies_counted, 6),
+        "and nobody is paid for killing an ally: counting them among the "
+        "opposition would be a bigger figure, and the party was not paid "
+        "it",
+        f"paid {with_c.party.sheets[0].xp}, "
+        f"would have been {xp.share(with_allies_counted, 6)}",
+    )
+
+    # -- which side of the board, and dressed how --------------------------
+    built = parsed(scene_of(GUARDS))
+    campaign = run_mod.begin(built, seed=9)
+    scene = built.scene("fight")
+    board = cast_list.resolve(scene, party_level=2,
+                              draw=run_mod._stream(campaign, scene, "cast"),
+                              party_size=4)
+    bands_world = run_mod.field_encounter(3, 2).world
+    beside_party = arrival_squares(bands_world, 3, party=True)
+    beside_foes = arrival_squares(bands_world, 3)
+    out.that(
+        beside_party and beside_foes
+        and not set(beside_party) & set(beside_foes)
+        and all(x < y for (x, _), (y, _) in zip(beside_party, beside_foes,
+                                                strict=False)),
+        "the party's band and the opposition's are disjoint, and the "
+        "party's is the nearer column -- which is what makes 'beside the "
+        "party' mean anything",
+        f"party {beside_party}, enemy {beside_foes}",
+    )
+    room = arrival_squares(bands_world, 200, party=True)
+    out.that(
+        all(bands_world.grid.inside(sq) for sq in room),
+        "and every square it offers on that side is on the board, the same "
+        "as the opposition's",
+        f"{len(room)} offered",
+    )
+    out.that(
+        len(room) >= 48 and {x for x, _ in room} == {2, 3, 4, 5, 6, 7},
+        "the band widens **toward the board** rather than into the wall "
+        "behind the party -- searching the other way leaves three columns "
+        "instead of six and halves the room a roster has. A plant "
+        "reversing it produced legal squares either way, so the count and "
+        "the columns are what tell the two apart",
+        f"{len(room)} squares in columns {sorted({x for x, _ in room})}",
+    )
+
+    # **Through `run.field_allies`, which is what `_fight` calls.** The
+    # first draft spawned the allies itself and five plants stayed green
+    # against it -- putting them on the enemy side, standing them in the
+    # opposition's band and never dressing them all passed, because the
+    # driver was proving its own spawn rather than the engine's. That is
+    # the reason `Step.stood` exists one issue over.
+    fielded = run_mod.field_encounter(
+        3, 2, enemies=list(board.refs), party=campaign.party)
+    before_pc = {eid for eid, side in fielded.world.each(Side)
+                 if side.team is Team.PC}
+    stood = run_mod.field_allies(fielded.world, board)
+    pcs = [eid for eid, side in fielded.world.each(Side)
+           if side.team is Team.PC]
+    ally_eids = sorted(set(pcs) - before_pc)
+    out.that(
+        stood == list(board.allies) and len(ally_eids) == len(board.allies),
+        "`field_allies` reports exactly who stood up, and that many "
+        "entities appeared",
+        f"{stood} reported, {len(ally_eids)} new",
+    )
+    out.that(
+        ally_eids and all(eid in pcs for eid in ally_eids),
+        "an ally is on the party's **side**, which is the whole ask: "
+        "`Side(team=Team.PC)` on a monster row, which the board already "
+        "supports",
+        f"{len(pcs)} on the PC side, {len(ally_eids)} of them allies",
+    )
+    out.that(
+        len(tbl.characters(fielded.world)) == 4,
+        "and `table.characters` still answers four, so the beat loop and "
+        "the wear both see the party and not the party plus its guards",
+        f"{len(tbl.characters(fielded.world))}",
+    )
+    def column_of(eid: int) -> int | None:
+        spot = fielded.world.get(eid, Position)
+        return spot.square[0] if spot is not None else None
+
+    ally_x = [x for x in map(column_of, ally_eids) if x is not None]
+    out.that(
+        ally_x and all(abs(x - PARTY_AT[0]) <= 5 for x in ally_x)
+        and all(x < (PARTY_AT[0] + 12) // 2 for x in ally_x),
+        "standing **in** the party's band -- within a few columns of where "
+        "the characters start and on their half of the board, not merely "
+        "somewhere legal. A plant searching the wrong way from the "
+        "party's column still produced squares that were on the board",
+        f"{ally_x} against the party's column {PARTY_AT[0]}",
+    )
+
+    # -- dressed like anything else ----------------------------------------
+    themed_world = run_mod.field_encounter(3, 2, party=campaign.party)
+    themed_flavour = refl.themed(("fire",), 2)
+    themed_dressed = refl.Dressed(
+        allies=[board.allies[0]], ally_flavours=[themed_flavour])
+    was_pc = {eid for eid, side in themed_world.world.each(Side)
+              if side.team is Team.PC}
+    run_mod.field_allies(themed_world.world, themed_dressed)
+    fresh_pc = sorted(
+        {eid for eid, side in themed_world.world.each(Side)
+         if side.team is Team.PC} - was_pc)
+
+    def resist_of(eid: int) -> dict | None:
+        got = themed_world.world.get(eid, Defences)
+        return got.resist if got is not None else None
+
+    out.that(
+        themed_flavour.mechanical and fresh_pc
+        and all(r and any(r.values()) for r in map(resist_of, fresh_pc)),
+        "an ally is dressed the way the module asked, the same as anything "
+        "on the other side -- asserted through the function `_fight` "
+        "calls, because a plant deleting the dressing passed against a "
+        "driver that spawned its own",
+        f"{[resist_of(eid) for eid in fresh_pc]}",
+    )
+
+    # -- no room -----------------------------------------------------------
+    from combat_engine.content import loader
+
+    packed = run_mod.field_encounter(3, 2, party=campaign.party)
+    for square in arrival_squares(packed.world, 400, party=True):
+        loader.spawn(packed.world, board.allies[0], square, team=Team.PC)
+    out.that(
+        arrival_squares(packed.world, 2, party=True) == [],
+        "and a party band with no room offers no squares, so an ally is "
+        "turned away rather than stacked on somebody -- the same guard a "
+        "reinforcement gets",
+        f"{arrival_squares(packed.world, 2, party=True)}",
+    )
+
+
+def reinforcements_arrive_on_their_round_and_not_at_the_start(out: Result) -> None:
+    """A wave encounter fielded all ten rounds of reinforcements at once. #962.
+
+    `cast_list.resolve` returned a flat cast and `story.field` spawned all
+    of it before round 1. A `FoeSpec` had `count`, `name`, `words`, `role`
+    and `rank` -- nothing that said *when*.
+
+    The module prints one, with its own XP rule attached: a few more
+    arrive every round until a landmark is destroyed or a round cap runs
+    out, and only its earliest waves count toward the reward. Imported
+    flat, that is **a different fight** --
+    the party faces the whole roster at once with no reason to hurry and no
+    escalation.
+
+    DMG2 makes the staged reveal the *default* advice rather than an exotic
+    case: *"Reveal minions in stages -- maybe two are visible at the start
+    of the encounter, another one runs in during the second round, and the
+    rest come up behind the characters in the next round."*
+
+    **Three things have to be true or an arrival is scenery**, and each has
+    an assertion: it has to be on the board, it has to be **in the
+    initiative order**, and it has to act on the same count as the
+    creatures already there rather than rolling its own.
+    """
+    from pathlib import Path
+    from random import Random
+
+    from combat_engine.engine import Team
+    from combat_engine.engine.components import Initiative
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import arrival_squares, cast_list, field_encounter
+    from combat_engine.story import module as mod
+    from combat_engine.story import reflavour as refl
+    from combat_engine.story import run as run_mod
+
+    # -- the schedule, as arithmetic ---------------------------------------
+    once = mod.FoeSpec(at=3)
+    repeat = mod.FoeSpec(at=2, every=1, until=4)
+    every_other = mod.FoeSpec(at=1, every=2, until=5)
+    out.that(
+        not mod.FoeSpec().arrives and once.arrives and repeat.arrives,
+        "a line with no arrival stated is part of the opening board, which "
+        "is what every line meant before this existed",
+        f"{mod.FoeSpec().arrives}, {once.arrives}, {repeat.arrives}",
+    )
+    out.that(
+        [once.due(r) for r in range(1, 6)] == [False, False, True, False,
+                                               False],
+        "a line that arrives once arrives on its round and no other",
+        f"{[once.due(r) for r in range(1, 6)]}",
+    )
+    out.that(
+        [repeat.due(r) for r in range(1, 7)] == [False, True, True, True,
+                                                 False, False],
+        "a repeating wave arrives every round from `at` and **stops at "
+        "`until`** -- the module's own wave stops on a landmark being "
+        "destroyed or on a round cap",
+        f"{[repeat.due(r) for r in range(1, 7)]}",
+    )
+    out.that(
+        [every_other.due(r) for r in range(1, 7)] == [True, False, True,
+                                                      False, True, False],
+        "and an interval other than 1 skips the rounds between, so the "
+        "repeat is an interval rather than a flag",
+        f"{[every_other.due(r) for r in range(1, 7)]}",
+    )
+
+    # -- the refusals ------------------------------------------------------
+    def scene_of(foes: list[dict]) -> dict:
+        return {"id": "wave", "kind": "combat", "name": "W", "exits": [],
+                "difficulty": "standard", "foes": foes}
+
+    def refused(foes: list[dict]) -> str:
+        try:
+            mod.parse({"id": "probe", "party_level": 2, "party_size": 4,
+                       "start": "wave", "scenes": [scene_of(foes)]},
+                      Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    BASE = {"count": 2, "role": "soldier", "rank": "standard"}
+    out.that(
+        "unbounded fight" in refused(
+            [BASE, {"count": 1, "role": "brute", "every": 1}]),
+        "a repeating wave with no last round is refused -- reinforcements "
+        "that never stop are an unbounded fight, and one that earned XP "
+        "would be an unbounded reward",
+        refused([BASE, {"count": 1, "role": "brute", "every": 1}])[:90]
+        or "accepted",
+    )
+    out.that(
+        "only means something with `every`" in refused(
+            [BASE, {"count": 1, "role": "brute", "until": 4}]),
+        "and `until` without `every` is refused rather than silently doing "
+        "nothing: a wave that arrives once arrives on `at`",
+        refused([BASE, {"count": 1, "role": "brute", "until": 4}])[:90]
+        or "accepted",
+    )
+    out.that(
+        "never arrives" in refused(
+            [BASE, {"count": 1, "role": "brute", "at": 6, "every": 1,
+                    "until": 3}]),
+        "a wave whose last round is before its first is refused, because "
+        "it would never arrive at all",
+        refused([BASE, {"count": 1, "role": "brute", "at": 6, "every": 1,
+                        "until": 3}])[:90] or "accepted",
+    )
+    out.that(
+        "round 1 or later" in refused(
+            [BASE, {"count": 1, "role": "brute", "at": 0}]),
+        "and round 0 is refused: there is no round before the first",
+        refused([BASE, {"count": 1, "role": "brute", "at": 0}])[:80]
+        or "accepted",
+    )
+
+    # -- resolve keeps them off the opening board --------------------------
+    def dressed(foes: list[dict]) -> refl.Dressed:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "wave", "scenes": [scene_of(foes)]}, Path("<driver>"))
+        return cast_list.resolve(
+            built.scene("wave"), party_level=2, draw=Random(3), party_size=4)
+
+    flat = dressed([BASE])
+    waved = dressed([BASE, {"count": 3, "role": "brute", "rank": "standard",
+                            "at": 2, "every": 1, "until": 4,
+                            "worth": False}])
+    out.that(
+        len(flat.refs) == len(waved.refs) and not flat.waves
+        and len(waved.waves) == 1,
+        "a wave is **not** in the opening cast: the board is the same size "
+        "with and without one, which is the whole bug -- all ten rounds of "
+        "reinforcements used to be standing there at round 1",
+        f"flat {len(flat.refs)} refs / {len(flat.waves)} waves, "
+        f"waved {len(waved.refs)} refs / {len(waved.waves)} waves",
+    )
+    out.that(
+        len(waved.waves[0].refs) == 3 and waved.waves[0].at == 2
+        and waved.waves[0].until == 4 and not waved.waves[0].worth,
+        "and the wave carries its own schedule and its own XP rule, so a "
+        "`Dressed` that outlives its scene still knows when they come",
+        f"{waved.waves[0].at}/{waved.waves[0].every}/"
+        f"{waved.waves[0].until}, worth={waved.waves[0].worth}",
+    )
+    out.that(
+        any("worth no XP by the module's own rule" in n
+            and "unpriced" in n for n in waved.notes),
+        "an unpriced wave is said out loud -- this is #958's finding in a "
+        "second place, and difficulty the budget never paid for is "
+        "difficulty nobody priced",
+        f"{[n for n in waved.notes if 'unpriced' in n]}",
+    )
+
+    # -- and they actually arrive, in the order, on the right count -------
+    fielded = field_encounter(seed=3, level=2)
+    world = fielded.world
+    encounter = Encounter(world)
+    encounter.start()
+    before = set(run_mod._enemy_eids(world))
+    order_before = list(encounter.order)
+
+    def count_of(eid: int | None) -> int | None:
+        """An initiative count, or None -- so a missing one fails an
+        assertion instead of raising. Eleven plants went red by *crashing*
+        the first time round, which is a weaker signal than a named
+        verdict."""
+        if eid is None:
+            return None
+        got = world.get(eid, Initiative)
+        return got.rolled if got is not None else None
+
+    wave = waved.waves[0] if waved.waves else None
+    out.that(
+        wave is not None,
+        "the wave survives into the fielded cast at all, which everything "
+        "below reads",
+        f"{len(waved.waves)} waves",
+    )
+    if wave is None:
+        return
+    got = run_mod.reinforce(world, encounter, [wave], wave.at)
+    after = set(run_mod._enemy_eids(world))
+    fresh = sorted(after - before)
+    out.that(
+        len(got) == len(wave.refs) and len(fresh) == len(wave.refs),
+        "a wave due this round walks onto the board",
+        f"{len(got)} reported, {len(fresh)} new enemies",
+    )
+    out.that(
+        all(eid in encounter.order for eid in fresh)
+        and len(encounter.order) == len(order_before) + len(fresh),
+        "**and is in the initiative order**, which is the difference "
+        "between a reinforcement and a statue: `loader.spawn` alone makes "
+        "an entity that stands there and never acts",
+        f"{len(order_before)} -> {len(encounter.order)} slots",
+    )
+    beside = next(iter(sorted(before)), None)
+    counts = {count_of(eid) for eid in fresh if count_of(eid) is not None}
+    out.that(
+        len(counts) == 1 and beside is not None
+        and counts == {count_of(beside)},
+        "and acts on the same count as the creatures already there -- the "
+        "module says the arrivals act with the others rather than rolling "
+        "fresh, and one count for the whole wave keeps two of a kind from "
+        "acting half a round apart",
+        f"wave counts {counts}, beside {count_of(beside)}",
+    )
+    out.that(
+        run_mod.reinforce(world, encounter, [wave], wave.at + 10) == [],
+        "a round no wave is due for arrives nobody, which is the control "
+        "for the hook running every round",
+        f"{run_mod.reinforce(world, encounter, [wave], wave.at + 10)}",
+    )
+
+    # **An arrival is dressed like anything else on the board.** A plant
+    # deleting `apply_flavour` stayed green, because the probe's wave was
+    # found by shape and `Reflavour.name` alone is not *mechanical* -- so
+    # the call really did nothing there. Posed with a themed flavour,
+    # whose fire resistance is readable off the creature.
+    from combat_engine.engine.components import Defences
+
+    themed_flavour = refl.themed(("fire",), 2)
+    dressed_world = field_encounter(seed=3, level=2)
+    dressed_enc = Encounter(dressed_world.world)
+    dressed_enc.start()
+    was = set(run_mod._enemy_eids(dressed_world.world))
+    run_mod.reinforce(
+        dressed_world.world, dressed_enc,
+        [refl.Wave(at=1, every=0, until=0,
+                   refs=(sorted(dressed_world.enemies)[0],),
+                   flavour=themed_flavour, worth=False)], 1)
+    dressed_fresh = sorted(set(run_mod._enemy_eids(dressed_world.world)) - was)
+    def resist_of(eid: int) -> dict | None:
+        got = dressed_world.world.get(eid, Defences)
+        return got.resist if got is not None else None
+
+    resists = [resist_of(eid) for eid in dressed_fresh]
+    out.that(
+        themed_flavour.mechanical and dressed_fresh
+        and all(r and any(v for v in r.values()) for r in resists),
+        "a creature that walks on is dressed the way the module asked, so "
+        "a reinforcement is not a plain creature wearing the same name -- "
+        "a themed wave arrives carrying its resistance",
+        f"{resists}",
+    )
+
+    # -- the module's own guard: only if there are unoccupied spaces -------
+    out.that(
+        all(dressed_world.world.grid.inside(sq)
+            for sq in arrival_squares(dressed_world.world, 40)),
+        "every square offered is on the board -- searching outward from "
+        "the opposition's column runs off the far edge, and a creature "
+        "spawned there is off the map",
+        f"{len(arrival_squares(dressed_world.world, 40))} offered, "
+        f"all inside",
+    )
+    packed = field_encounter(seed=3, level=2)
+    free = arrival_squares(packed.world, 400)
+    from combat_engine.content import loader
+    for square in free:
+        loader.spawn(packed.world, waved.waves[0].refs[0], square,
+                     team=Team.ENEMY)
+    out.that(
+        arrival_squares(packed.world, 4) == [],
+        "a board with no room reports no arrival squares -- the module's "
+        "own guard only lets them in where there is room, and "
+        "`Grid.place` refusing to overwrite makes that a check rather than "
+        "a new facility",
+        f"{arrival_squares(packed.world, 4)}",
+    )
+    packed_enc = Encounter(packed.world)
+    packed_enc.start()
+    turned_away = run_mod.reinforce(
+        packed.world, packed_enc, [waved.waves[0]], waved.waves[0].at)
+    out.that(
+        turned_away == [],
+        "and a wave due on a full board is turned away rather than "
+        "stacked on top of somebody",
+        f"{turned_away}",
+    )
+
+    # -- through a whole fight ---------------------------------------------
+    def play(foes: list[dict], seed: int = 7) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "wave", "scenes": [scene_of(foes)]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        made = run_mod.step(campaign, built, record=False)
+        return campaign, made
+
+    plain_c, plain = play([BASE])
+    out.that(
+        plain.arrived == [] and plain.enemies and plain.outcome == "won",
+        "a scene with no wave fields exactly what it did before and "
+        "nothing walks on -- the control, and it is also every combat "
+        "scene written so far",
+        f"board={len(plain.enemies)}, arrived={plain.arrived}",
+    )
+
+    WORTHY = {"count": 1, "role": "brute", "rank": "standard", "at": 2,
+              "worth": True}
+    FREE = {"count": 1, "role": "brute", "rank": "standard", "at": 2,
+            "worth": False}
+    paid_c, paid = play([BASE, WORTHY])
+    unpaid_c, unpaid = play([BASE, FREE])
+    out.that(
+        len(paid.arrived) == 1 and len(paid.arrived_worth) == 1
+        and len(unpaid.arrived) == 1 and unpaid.arrived_worth == [],
+        "a reinforcement arrives either way, and only the one the module "
+        "says is worth something is marked as such",
+        f"paid {paid.arrived}/{paid.arrived_worth}, "
+        f"unpaid {unpaid.arrived}/{unpaid.arrived_worth}",
+    )
+    out.that(
+        paid.outcome == unpaid.outcome == "won"
+        and paid_c.party.sheets[0].xp > unpaid_c.party.sheets[0].xp
+        == plain_c.party.sheets[0].xp,
+        "and it is paid for only when the module says so: the same "
+        "creature arriving earns XP or earns nothing, which is the rule "
+        "that keeps a ten-round wave fight from being worth an arbitrary "
+        "amount",
+        f"plain {plain_c.party.sheets[0].xp}, "
+        f"unpaid {unpaid_c.party.sheets[0].xp}, "
+        f"paid {paid_c.party.sheets[0].xp}",
+    )
+    out.that(
+        any("Reinforcements:" in str(x) and "worth XP" in str(x)
+            for x in paid.lines),
+        "and the fight reports how many walked on and how many of them "
+        "counted, because a fight that quietly doubled in size is a fight "
+        "a reader cannot check",
+        f"{[str(x).strip() for x in paid.lines if 'Reinforcements' in str(x)]}",
+    )
+
+    # **A repeating wave arrives more than once**, which a single arrival
+    # cannot distinguish from a one-off.
+    REPEAT = {"count": 2, "role": "brute", "rank": "standard", "at": 2,
+              "every": 1, "until": 4, "worth": False}
+    _, many = play([BASE, REPEAT])
+    out.that(
+        len(many.arrived) > 2 and many.arrived_worth == [],
+        "a repeating wave walks on round after round rather than once -- "
+        "two at a time over three rounds, not two in total",
+        f"{len(many.arrived)} arrived over {many.rounds} rounds",
+    )
+    out.that(
+        len(many.arrived) > len(paid.arrived)
+        and len(many.enemies) == len(plain.enemies),
+        "and all of it is still outside the opening board, which stays the "
+        "size the budget paid for",
+        f"board {len(many.enemies)} vs {len(plain.enemies)}, "
+        f"arrived {len(many.arrived)}",
+    )
+
+
+def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
+    """The combat half of #943. A fight reported `Won in 4 rounds`.
+
+    DMG chapter 2 names the failure and we printed its example:
+
+    > *"You know you've fallen into this trap when the table chatter is:
+    > 'That's 26 against AC,' 'You hit, now roll damage,' '31 points'..."*
+
+    and prescribes using the numbers as narration material instead. The
+    skill-check half landed earlier -- a ruling reaches `react` as
+    `fact (barely)` from `MARGINS`. This is the half that body separated
+    out: *"a story-mode fight prints `Won in 4 rounds` and the
+    blow-by-blow goes to a transcript file nobody reads during play. There
+    is a whole encounter of this material and none of it is narrated."*
+
+    **Same discipline, which is the point of mirroring it**: one phrase
+    from a closed set, derived from what the engine already produced, and
+    **no arithmetic reaches the prompt**. A number in a prompt is a number
+    the model quotes back, so fixing *"26 against AC"* by handing over 26
+    reproduces the rut inside its own fix.
+
+    **Derived off two printed states and nothing else.** *Bloodied* is the
+    game's own word for half hit points and *down* is nought or less, so
+    neither is a threshold invented here -- which a round count would have
+    been, since "short" has no printed definition.
+
+    And it has a reader, which is the part a derived phrase usually lacks:
+    the conversation after the fight opens with it.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import beat as bt
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    # -- the derivation, every arm -----------------------------------------
+    out.that(
+        bt.aftermath(True, 0, 0) == "a rout"
+        and bt.aftermath(True, 1, 0) == "hard-won"
+        and bt.aftermath(True, 0, 1) == "a near thing"
+        and bt.aftermath(False, 0, 0) == "a defeat",
+        "the four arms of the derivation each give their phrase",
+        f"{[bt.aftermath(*a) for a in ((True, 0, 0), (True, 1, 0), (True, 0, 1), (False, 0, 0))]}",
+    )
+    out.that(
+        bt.aftermath(True, 2, 1) == "a near thing",
+        "and somebody down outranks somebody bloodied -- the worst thing "
+        "that happened to the party is what a narrator leads with",
+        f"{bt.aftermath(True, 2, 1)}",
+    )
+    out.that(
+        bt.aftermath(False, 0, 0) == "a defeat"
+        and bt.aftermath(False, 4, 4) == "a defeat",
+        "a loss is a defeat however the bodies fell, because nothing "
+        "about a win is true of it",
+        f"{bt.aftermath(False, 4, 4)}",
+    )
+    out.that(
+        set(bt.FIGHTS) == {bt.aftermath(w, b, d)
+                           for w in (True, False) for b in (0, 1)
+                           for d in (0, 1)},
+        "and the closed set is exactly what the derivation can produce, "
+        "so `FIGHTS` is the vocabulary rather than a comment about it",
+        f"{bt.FIGHTS}",
+    )
+
+    # -- and through four real fights, which is where the wiring lives ----
+    HARD = {"id": "fight", "kind": "combat", "name": "F", "exits": ["talk"],
+            "difficulty": "hard",
+            "foes": [{"count": 4, "role": "soldier", "rank": "standard"}]}
+    TALK = {"id": "talk", "kind": "roleplay", "name": "T",
+            "brief": "A quiet room.", "max_beats": 2, "exits": ["after"],
+            "npcs": [{"name": "Host", "wants": "quiet",
+                      "knows": ["nothing"]}],
+            "affordances": [{"id": "ask", "what": "ask", "win": "told",
+                             "once": False}]}
+    AFTER = {"id": "after", "kind": "roleplay", "name": "A",
+             "brief": "Elsewhere.", "max_beats": 1, "exits": [],
+             "npcs": [{"name": "Other", "wants": "quiet",
+                       "knows": ["nothing"]}],
+             "affordances": [{"id": "ask2", "what": "ask", "win": "told"}]}
+
+    def play(seed: int, scenes: list[dict] | None = None,
+             steps: int = 1) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": (scenes or [HARD, TALK, AFTER])[0]["id"],
+             "scenes": scenes or [HARD, TALK, AFTER]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        campaign.control = ["ai"] * len(campaign.party.sheets)
+        made = []
+        for _ in range(steps):
+            if campaign.finished:
+                break
+            made.append(run_mod.step(
+                campaign, built, record=False,
+                director=bt.Director(scripted=True)))
+        return campaign, made
+
+    # **The seeds are chosen because each produces a different ending**,
+    # which a single seed cannot. They were also re-scanned against this
+    # exact scene list: the first set came from a probe where the fight
+    # was the only scene, and a different graph gives the fight a
+    # different stream -- so four assertions failed on seeds that had
+    # been measured against the wrong board.
+    for seed, want in ((3, "a rout"), (1, "hard-won"),
+                       (2, "a near thing"), (13, "a defeat")):
+        campaign, made = play(seed)
+        fight = made[0]
+        hp = [(s.hp, s.max_hp) for s in campaign.party.sheets]
+        out.that(
+            fight.aftermath == want,
+            f"a real fight that ended {want!r} is read that way off the "
+            "sheets -- the wiring, not just the arithmetic, which a pure "
+            "call cannot check",
+            f"seed {seed}: {fight.aftermath!r}, outcome={fight.outcome}, "
+            f"hp={hp}",
+        )
+
+    # -- it is printed ------------------------------------------------------
+    campaign, made = play(1)
+    fight = made[0]
+    rounds_line = [str(x) for x in fight.lines if " rounds" in str(x)]
+    out.that(
+        rounds_line and "hard-won" in rounds_line[0],
+        "the phrase is printed beside the round count, so a reader who "
+        "never opens the transcript still learns how it went",
+        f"{rounds_line}",
+    )
+    out.that(
+        not any(ch.isdigit() for ch in fight.aftermath),
+        "and the phrase itself carries no number: a number in a prompt is "
+        "a number the model quotes back, which is the rut this is fixing",
+        f"{fight.aftermath!r}",
+    )
+
+    # -- the next conversation opens with it -------------------------------
+    campaign, made = play(1, steps=2)
+    talk = made[1]
+    opening = (talk.played.beats[0].situation
+               if talk.played and talk.played.beats else "")
+    out.that(
+        "hard-won" in opening and opening.index("hard-won") < opening.index(
+            "A quiet room."),
+        "the conversation after the fight opens carrying it, before the "
+        "scene's own text -- it is what the party walks in with",
+        f"{opening[:70]!r}",
+    )
+    out.that(
+        "not something anybody announces" in opening,
+        "and the DM is told it is for the mood rather than a line to "
+        "deliver, which is the same instruction the margin carries",
+        f"{opening[:120]!r}",
+    )
+    out.that(
+        not any(ch.isdigit() for ch in opening.split("A quiet room.")[0]),
+        "with no arithmetic anywhere in it -- not the rounds, not a hit "
+        "point, not a die",
+        f"{opening.split('A quiet room.')[0]!r}",
+    )
+
+    # -- only the first beat, and only the next scene ----------------------
+    later = [b for b in (talk.played.beats if talk.played else [])][1:]
+    out.that(
+        later and not any("hard-won" in b.situation for b in later),
+        "only the opening beat carries it: after beat one the situation is "
+        "the last reaction, and repeating the fight there has the DM "
+        "narrating a battle three exchanges into the conversation after it",
+        f"{len(later)} later beats, "
+        f"{sum('hard-won' in b.situation for b in later)} mention it",
+    )
+    campaign, made = play(1, steps=3)
+    out.that(
+        campaign.aftermath == "" and made[2].played is not None
+        and "hard-won" not in (made[2].played.beats[0].situation
+                               if made[2].played.beats else ""),
+        "and it is spent: the scene after the conversation carries nothing, "
+        "because a flag nothing clears is a DM opening on a battle two "
+        "scenes back",
+        f"{campaign.aftermath!r}",
+    )
+
+    # -- spent even by a scene with nothing to play ------------------------
+    BARE = {"id": "talk", "kind": "roleplay", "name": "T",
+            "brief": "Nothing here.", "exits": ["after"]}
+    campaign, made = play(1, scenes=[HARD, BARE, AFTER], steps=2)
+    out.that(
+        made[1].played is None and campaign.aftermath == "",
+        "a scene with nothing to play spends it too -- held past that "
+        "scene, it would describe a fight two scenes back; nobody was "
+        "asked to narrate, so it is dropped",
+        f"played={made[1].played}, held={campaign.aftermath!r}",
+    )
+
+    # -- a scene that is not a fight sets none -----------------------------
+    campaign, made = play(1, scenes=[TALK, AFTER], steps=1)
+    out.that(
+        made[0].aftermath == "",
+        "a scene that is not a fight reports no aftermath, so the phrase "
+        "always describes a fight",
+        f"{made[0].aftermath!r}",
+    )
+
+    # -- and it survives a save --------------------------------------------
+    campaign, made = play(1, steps=1)
+    back = save_mod.from_dict(save_mod.to_dict(campaign))
+    out.that(
+        campaign.aftermath == "hard-won"
+        and back.aftermath == campaign.aftermath,
+        "a campaign saved between the fight and the conversation after it "
+        "still knows how the fight went",
+        f"{campaign.aftermath!r} -> {back.aftermath!r}",
+    )
+
+
+def a_challenge_says_what_each_check_meant(out: Result) -> None:
+    """A challenge emitted five mechanical lines and nothing else. #932.
+
+    The whole of a converted challenge, from a finished playthrough:
+
+        - fighter   athletics     moderate d20=8  total=11  vs 12
+        + cleric    athletics     moderate d20=13 total=14  vs 12
+        + rogue     thievery      moderate d20=16 total=25  vs 12
+        - wizard    arcana        moderate d20=3  total=11  vs 12
+        - ranger    athletics     moderate d20=4  total=8   vs 12
+        2/4 successes, 3/3 failures
+
+    Camille: *"I don't know that the result was incorrect. But skill
+    challenges should be an opportunity for narration."*
+
+    **This is step 1 of the two #932 names, and the order matters.** An
+    `Affordance` carries `win`/`lose` -- *facts*, what is now true because
+    the roll went that way -- and `Director.react` is handed them and told
+    to deliver them, which is what keeps the DM narrating the adventure
+    instead of inventing it. A challenge's skills were **bare strings**
+    with no such text, so wiring the beat loop in first would have handed
+    the DM a roll to narrate and nothing to narrate from, and invented
+    prose about the adventure's own set piece is the one thing the
+    affordance design exists to prevent.
+
+    So: the schema, the text reaching the player, and the beat loop left
+    for step 2.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    WIN = "The brazier topples into the sand."
+    LOSE = "The flames jump to the next hanging."
+    SIGIL = "The sigil's rhythm is legible now."
+
+    def scene_of(primary: list, secondary: list | None = None,
+                 kind: str = "skill_challenge") -> dict:
+        return {"id": "chal", "kind": kind, "name": "C", "exits": [],
+                "complexity": 2, "primary": primary,
+                "secondary": secondary or []}
+
+    def parsed(scene: dict) -> mod.Scene:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "chal", "scenes": [scene]}, Path("<driver>"))
+        return built.scene("chal")
+
+    def refused(scene: dict) -> str:
+        try:
+            mod.parse({"id": "probe", "party_level": 2, "party_size": 4,
+                       "start": "chal", "scenes": [scene]},
+                      Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the control: bare strings still parse, and say nothing -----------
+    bare = parsed(scene_of(["athletics", "endurance"]))
+    out.that(
+        bare.primary == ("athletics", "endurance") and bare.tries == ()
+        and bare.means("athletics", won=True) == "",
+        "a challenge written as bare skill names parses exactly as it did "
+        "and says nothing -- which is every challenge converted so far, so "
+        "this is not a migration",
+        f"primary={bare.primary}, tries={bare.tries}",
+    )
+
+    # -- both forms, mixed in one list -------------------------------------
+    mixed = parsed(scene_of(
+        [{"skill": "athletics", "win": WIN, "lose": LOSE}, "endurance"],
+        [{"skill": "arcana", "win": SIGIL, "lose": "It scrambles."}]))
+    out.that(
+        mixed.primary == ("athletics", "endurance")
+        and mixed.secondary == ("arcana",),
+        "a skill written as an object and one written bare sit in the same "
+        "list, so a module adding prose to the two skills the page "
+        "describes need not rewrite the other four",
+        f"primary={mixed.primary}, secondary={mixed.secondary}",
+    )
+    out.that(
+        mixed.means("athletics", won=True) == WIN
+        and mixed.means("athletics", won=False) == LOSE
+        and mixed.means("arcana", won=True) == SIGIL,
+        "and each skill's two results are looked up by skill, on a "
+        "secondary as well as a primary",
+        f"{mixed.means('athletics', won=True)!r}",
+    )
+    out.that(
+        mixed.means("endurance", won=True) == ""
+        and mixed.means("thievery", won=True) == "",
+        "a skill with no text, and a skill the challenge does not list, "
+        "both answer with nothing rather than raising -- the caller prints "
+        "the roll and no more",
+        f"{mixed.means('endurance', won=True)!r}",
+    )
+
+    # -- the refusals ------------------------------------------------------
+    out.that(
+        "has no skill" in refused(scene_of([{"win": WIN}])),
+        "an entry with prose and no skill is refused, because there is "
+        "nothing to attach it to",
+        refused(scene_of([{"win": WIN}]))[:80] or "accepted",
+    )
+    twice = refused(scene_of(
+        [{"skill": "athletics", "win": WIN}],
+        [{"skill": "athletics", "win": SIGIL}]))
+    out.that(
+        "listed more than once" in twice,
+        "a skill listed as both primary and secondary is refused -- "
+        "`band_of` answers with the primary, so the secondary entry and "
+        "any prose on it were silently dead",
+        twice[:90] or "accepted",
+    )
+    wrong_kind = refused(scene_of(
+        [{"skill": "athletics", "win": WIN}], kind="roleplay"))
+    out.that(
+        "only a skill_challenge rolls them" in wrong_kind,
+        "and a scene that is not a challenge stating what a check means is "
+        "refused, rather than carrying text nothing will ever print",
+        wrong_kind[:90] or "accepted",
+    )
+    out.that(
+        "is not a skill" in refused(scene_of([{"skill": "haggling"}])),
+        "the skill name is still checked when it arrives in the new form, "
+        "which a second code path is exactly where that stops happening",
+        refused(scene_of([{"skill": "haggling"}]))[:70] or "accepted",
+    )
+
+    # -- and now through a played challenge -------------------------------
+    def play(scene: dict, seed: int = 6) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "chal", "scenes": [scene]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        made = run_mod.step(campaign, built, record=False)
+        rolls = [str(x) for x in made.lines
+                 if getattr(x, "kind", "") == "roll"]
+        said = [str(x).strip() for x in made.lines
+                if getattr(x, "kind", "") == "scene"]
+        return made, rolls, said
+
+    told = scene_of(
+        [{"skill": "athletics", "win": WIN, "lose": LOSE}, "endurance"],
+        [{"skill": "arcana", "win": SIGIL, "lose": "It scrambles."}])
+    made, rolls, said = play(told)
+    out.that(
+        rolls and WIN in said and LOSE in said,
+        "a played challenge says what its successes and its failures "
+        "meant, where before it printed the rolls and a tally and the "
+        "fires were never described going out or spreading",
+        f"{len(rolls)} rolls, {len(said)} said: {said}",
+    )
+    out.that(
+        said.count(WIN) == 1 and said.count(LOSE) == 1,
+        "and each sentence once: the text is a fact, and a fact does not "
+        "become true again on the second success with the same skill -- "
+        "the probe printed one brazier toppling three times, which reads "
+        "as three braziers",
+        f"{[(s[:20], said.count(s)) for s in set(said)]}",
+    )
+    out.that(
+        len(set(said)) > 1,
+        "while two different sentences both still print, which is the half "
+        "a dedupe can break",
+        f"{sorted(set(said))}",
+    )
+
+    # -- a roll that did not count says nothing ---------------------------
+    # **Posed with a chooser, because the default one never refuses.**
+    # Eight seeds of `taking_turns` produced 0 refused attempts, so an
+    # assertion counting refusals in a normal run passes without testing
+    # anything -- which is what the first draft of this did.
+    def picks(skill: str):  # noqa: ANN202
+        def chooser(run, table) -> tuple[int, str]:  # noqa: ANN001
+            return 0, skill
+        return chooser
+
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4,
+         "start": "chal", "scenes": [told]}, Path("<driver>"))
+    campaign = run_mod.begin(built, seed=6)
+    turned = run_mod.step(campaign, built, record=False,
+                          choose=picks("thievery"))
+    lines = [str(x) for x in turned.lines
+             if getattr(x, "kind", "") in ("roll", "scene")]
+    out.that(
+        any("not a listed skill" in x for x in lines)
+        and not any(x.strip() in (WIN, LOSE, SIGIL) for x in lines),
+        "a check that could not count contributes no sentence -- a refused "
+        "attempt never happened, so neither its success nor its failure is "
+        "true",
+        f"{len(lines)} lines, refusals "
+        f"{sum('not a listed skill' in x for x in lines)}",
+    )
+
+    # **The refusal that the guard is actually for.** A plant removing
+    # `if made.rolled` stayed green against the assertion above, because
+    # an *unlisted* skill has no text either way -- so `means` answers
+    # with nothing and the guard is never load-bearing on that path. The
+    # case that needs it is a refused attempt whose skill **does** carry
+    # text: a secondary spent twice. Its second attempt is refused with
+    # "secondary already used", and without the guard its *lose* text
+    # would print as though the sigil had scrambled.
+    # **Seed 1, chosen because arcana's first counted attempt succeeds
+    # there.** At seed 6 it fails first, so its lose text is said once
+    # legitimately -- and then the dedupe hides every later refusal,
+    # which makes the assertion unable to fail. Here the lose text is
+    # never true, so a refusal printing it is visible.
+    campaign = run_mod.begin(built, seed=1)
+    twice_said = run_mod.step(campaign, built, record=False,
+                              choose=picks("arcana"))
+    twice_lines = [str(x).strip() for x in twice_said.lines]
+    out.that(
+        any("secondary already used" in x for x in twice_lines)
+        and "It scrambles." not in twice_lines,
+        "a refused attempt whose skill does carry text still says nothing "
+        "-- a secondary spent twice is refused, and its failure text is "
+        "not true because the attempt never happened",
+        f"refusals {sum('secondary already used' in x for x in twice_lines)}, "
+        f"lose text {'It scrambles.' in twice_lines}",
+    )
+    out.that(
+        any(x == SIGIL for x in twice_lines),
+        "while its first, counted use did say its success text, so the "
+        "assertion above is about the refusal rather than about arcana "
+        "never being reached",
+        f"{[x[:28] for x in twice_lines if x in (SIGIL, 'It scrambles.')]}",
+    )
+
+    # And the same chooser naming a skill that *is* listed does say it,
+    # so the assertion above is about the refusal and not about the
+    # chooser being ignored.
+    campaign = run_mod.begin(built, seed=6)
+    kept = run_mod.step(campaign, built, record=False,
+                        choose=picks("athletics"))
+    out.that(
+        any(str(x).strip() in (WIN, LOSE) for x in kept.lines),
+        "while the same chooser naming a listed skill does, so the "
+        "refusal is what withheld it rather than the chooser being "
+        "ignored",
+        f"{[str(x).strip()[:30] for x in kept.lines if getattr(x, 'kind', '') == 'scene']}",
+    )
+
+    bare_made, bare_rolls, bare_said = play(scene_of(
+        ["athletics", "endurance"]))
+    out.that(
+        bare_rolls and not bare_said,
+        "and a challenge whose module said nothing prints exactly what it "
+        "printed before -- the rolls, and no scene lines at all",
+        f"{len(bare_rolls)} rolls, {len(bare_said)} said",
+    )
+    out.that(
+        bare_made.outcome in ("won", "lost")
+        and made.outcome in ("won", "lost"),
+        "neither form changes the outcome: this is narration, and the "
+        "tally is still the tally",
+        f"bare={bare_made.outcome}, told={made.outcome}",
+    )
+
+
+def the_graph_has_edges_and_can_answer_about_a_pair(out: Result) -> None:
+    """`around()` had never returned anything. #934.
+
+    `Entity.links` existed, `Graph.around` read it, `docs/STORY_GRAPH.md`
+    was written as though edges existed, and the graph held **99 entities
+    and 0 links**. `scripts/ingest.py` extracts entities and quotes and
+    writes no edge, so the structure was a bag of facts.
+
+    Found when Camille asked about the relationship between two entities
+    and got nothing back:
+
+    > *"I asked about the relationship between Khellis and Orveth and got
+    > no answer, not even an 'I don't know'."*
+
+    #933 fixed the half where an **unknown** name produced no `Standing`.
+    This is the other half: both names resolving and the answer still
+    being two separate fact lists, because `mentions` looks each one up
+    independently and nothing asked about the pair.
+
+    **Two things had to be true for this to be worth anything**, and they
+    are what the assertions are about: an edge has to exist, and something
+    has to read it. `Known.near` was populated by `ask()` the whole time
+    and **nothing in the tree read it** -- a graph nothing consults is the
+    same as no graph.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from combat_engine.story import Party
+    from combat_engine.story import beat as bt
+    from combat_engine.story import graph as gr
+    from combat_engine.story import module as mod
+    from combat_engine.story import table as tbl
+
+    def built() -> gr.Graph:
+        """Three entities, and facts whose quotes name one or two of them.
+
+        **No printed name anywhere near this**, which is why the cast is
+        invented: a graph fixture naming an adventure's people would put
+        them in a tracked file, and the one rule is absolute about that.
+        """
+        g = gr.Graph()
+        g.add(gr.Entity(
+            id="warden", name="Warden", kind="person",
+            facts=[
+                # Names Warden and Hollow -- an edge.
+                gr.Fact("The Warden keeps the gate at Hollow.", "page",
+                        where="p2"),
+                # Names only the owner. No edge from this one.
+                gr.Fact("The Warden is tired.", "page", where="p3"),
+                # **Does not repeat the owner's own name**, which is the
+                # common shape and the one `between` has to handle.
+                gr.Fact("He has never been to Fenn.", "page", where="p4"),
+            ]))
+        g.add(gr.Entity(id="hollow", name="Hollow", kind="place"))
+        g.add(gr.Entity(id="fenn", name="Fenn", kind="place"))
+        g.add(gr.Entity(id="orbit", name="Orbit", kind="thing",
+                        facts=[gr.Fact("Orbit sits alone.", "page",
+                                       where="p9")]))
+        return g
+
+    # -- the control: facts naming one thing draw nothing -----------------
+    alone = gr.Graph()
+    alone.add(gr.Entity(id="orbit", name="Orbit", kind="thing",
+                        facts=[gr.Fact("Orbit sits alone.", "page",
+                                       where="p9")]))
+    alone.add(gr.Entity(id="hollow", name="Hollow", kind="place"))
+    drew = gr.derive(alone)
+    out.that(
+        drew == 0 and not any(e.links for e in alone.entities.values()),
+        "a fact that names only its own entity draws no edge, so the "
+        "derivation does not simply connect everything to everything",
+        f"{drew} edges",
+    )
+
+    # -- an edge, at both ends --------------------------------------------
+    g = built()
+    drew = gr.derive(g)
+    warden, hollow, fenn = (g.entities["warden"], g.entities["hollow"],
+                            g.entities["fenn"])
+    out.that(
+        (gr.NAMED_WITH, "hollow") in warden.links
+        and (gr.NAMED_WITH, "warden") in hollow.links,
+        "two entities named in one grounded quote get an edge, and both "
+        "ends carry it -- an edge in one direction only would answer the "
+        "question from one side and not the other",
+        f"warden {warden.links}, hollow {hollow.links}",
+    )
+    out.that(
+        all(relation == gr.NAMED_WITH for e in g.entities.values()
+            for relation, _ in e.links),
+        "and it is unlabelled: the derivation says two things are "
+        "connected and leaves what the connection is to the sentence, "
+        "because nothing here may invent a relation the page did not state",
+        f"{sorted({r for e in g.entities.values() for r, _ in e.links})}",
+    )
+    out.that(
+        [e.id for e in g.around(warden)] and
+        sorted(e.id for e in g.around(warden)) == ["fenn", "hollow"],
+        "so `around()` returns something, which it never had: the whole "
+        "point of the issue is that this was always empty",
+        f"{sorted(e.id for e in g.around(warden))}",
+    )
+    out.that(
+        gr.derive(g) == 0,
+        "and the derivation is idempotent -- running it twice draws "
+        "nothing, so a load that derives cannot inflate the graph",
+        f"{gr.derive(g)}",
+    )
+
+    # -- a negative edge: nothing ties the lone thing to anything ---------
+    out.that(
+        not g.entities["orbit"].links
+        and not g.around(g.entities["orbit"]),
+        "an entity whose only fact names nobody else stays unconnected, "
+        "which is the half that makes a degree mean anything",
+        f"{g.entities['orbit'].links}",
+    )
+
+    # -- what is written down, and what is recomputed ---------------------
+    stated = gr.Graph()
+    stated.add(gr.Entity(id="guild", name="Guild", kind="group",
+                         links=(("led_by", "warden"),),
+                         facts=[gr.Fact("The Guild answers to the Warden.",
+                                        "page", where="p5")]))
+    stated.add(gr.Entity(id="warden", name="Warden", kind="person"))
+    gr.derive(stated)
+    raw = gr.to_dict(stated)
+    written = [tuple(x) for e in raw["entities"] for x in e["links"]]
+    out.that(
+        ("led_by", "warden") in written
+        and not any(r == gr.NAMED_WITH for r, _ in written),
+        "a **stated** edge is written to the file and a **derived** one is "
+        "not -- otherwise the file becomes the record of a derivation "
+        "rather than of what the page said, and a stale derived edge "
+        "outlives the fact it came from",
+        f"{written}",
+    )
+    back = gr.from_dict(raw)
+    out.that(
+        ("led_by", "warden") in back.entities["guild"].links
+        and (gr.NAMED_WITH, "warden") in back.entities["guild"].links,
+        "and loading re-derives it, so a graph on disk with no derived "
+        "edges in it still has them in memory",
+        f"{back.entities['guild'].links}",
+    )
+    with tempfile.TemporaryDirectory() as box:
+        where = Path(box) / "g.json"
+        gr.save(stated, where)
+        reread = gr.load(where)
+    out.that(
+        len(reread.entities["guild"].links)
+        == len(stated.entities["guild"].links),
+        "through a real file as well as a dict, which is the path "
+        "`ingest.py` and the campaign both take",
+        f"{reread.entities['guild'].links}",
+    )
+    out.that(
+        gr.NAMED_WITH in gr.RELATIONS and "rival_of" in gr.RELATIONS
+        and "enemy_of" in gr.RELATIONS,
+        "the relation vocabulary names the printed Enemies/Rivals split, "
+        "which is why an edge is typed rather than a bare set: *\"openly "
+        "or violently conflicts with\"* and *\"peaceful intrigue\"* are "
+        "different answers to who opposes a group",
+        f"{gr.RELATIONS}",
+    )
+    # An unrecognised relation passes through rather than raising -- see
+    # `RELATIONS`. A refusal here broke a graph driver that has declared a
+    # `lives in` edge since before the list existed.
+    odd = gr.from_dict(gr.to_dict(gr.Graph()))
+    ad_hoc = gr.Graph()
+    ad_hoc.add(gr.Entity(id="a", name="A", kind="person",
+                         links=(("lives in", "b"),)))
+    ad_hoc.add(gr.Entity(id="b", name="B", kind="place"))
+    out.that(
+        gr.from_dict(gr.to_dict(ad_hoc)).entities["a"].links
+        == (("lives in", "b"),) and not odd.entities,
+        "and a relation outside that vocabulary is kept rather than "
+        "refused -- an unknown relation launders nothing, which is what "
+        "the `kind` and `source` refusals are for",
+        f"{gr.from_dict(gr.to_dict(ad_hoc)).entities['a'].links}",
+    )
+
+    # -- the pair lookup, which is what Camille asked for -----------------
+    out.that(
+        [f.where for f in g.between(warden, hollow)] == ["p2"],
+        "the pair lookup returns the sentence that names both, grounded "
+        "where it was found -- not a relation word, because the sentence "
+        "is the thing a DM can read out",
+        f"{[(f.where, f.text[:30]) for f in g.between(warden, hollow)]}",
+    )
+    out.that(
+        [f.where for f in g.between(warden, fenn)] == ["p4"],
+        "including a fact that does not repeat its own entity's name -- "
+        "*\"He has never been to Fenn\"* is filed under the Warden and "
+        "requiring both names in the span would drop exactly the facts "
+        "most worth having",
+        f"{[(f.where, f.text[:30]) for f in g.between(warden, fenn)]}",
+    )
+    out.that(
+        g.between(hollow, fenn) == [],
+        "and a pair with nothing between them returns nothing, which is "
+        "an answer and not a failure",
+        f"{g.between(hollow, fenn)}",
+    )
+    # **Both sides' facts, which a plant found missing.** Every connecting
+    # fact in the fixture above is filed under one of the two entities, so
+    # looking at only `one`'s facts answered every assertion -- and the
+    # order the player happens to name two things in is not something the
+    # answer may depend on.
+    out.that(
+        [f.where for f in g.between(hollow, warden)] == ["p2"]
+        and [f.where for f in g.between(fenn, warden)] == ["p4"],
+        "the pair lookup reads both entities' facts, so it gives the same "
+        "answer whichever way round the pair is named -- here the "
+        "connecting sentence is filed under the second one",
+        f"{[f.where for f in g.between(hollow, warden)]}, "
+        f"{[f.where for f in g.between(fenn, warden)]}",
+    )
+
+    # -- and now through a beat, which is the only thing that matters -----
+    raw_mod = {
+        "id": "probe", "party_level": 2, "party_size": 3, "start": "talk",
+        "scenes": [{"id": "talk", "kind": "roleplay", "name": "T",
+                    "brief": "A room.", "max_beats": 1, "exits": [],
+                    "npcs": [{"name": "Host", "wants": "quiet",
+                              "knows": ["nothing"]}],
+                    "affordances": [{"id": "ask", "what": "ask",
+                                     "win": "told", "once": False}]}],
+    }
+    module = mod.parse(raw_mod, Path("<driver>"))
+    scene = module.scene("talk")
+    party = Party.of(["fighter", "cleric", "rogue"], level=2, seed=7)
+    actors = [bt.Actor(i, n, c, "ai") for i, (n, c) in enumerate(
+        [("A", "fighter"), ("B", "cleric"), ("C", "rogue")])]
+
+    def asking(*lines: str) -> list:
+        """One beat in which each character says one of `lines`."""
+        said = list(lines)
+
+        class Says(bt.Director):
+            def declare(self, actor, playing, situation) -> bt.Intent:  # noqa: ANN001
+                # **`played=False` matters**: the scripted default sets it
+                # True and the standing block skips a played intent, so a
+                # probe using the default produced no standings at all.
+                return bt.Intent(
+                    slot=actor.slot, name=actor.name, played=False,
+                    speech=said[actor.slot % len(said)], doing="")
+
+            def match(self, playing, intents) -> dict:  # noqa: ANN001
+                return {}
+
+        playing = bt.Playing(scene=scene, canon=built())
+        gr.derive(playing.canon)
+        beat = bt.one_beat(playing, tbl.lay(party, seed=4), actors,
+                           Says(scripted=True), ask_human=bt.silent,
+                           party_level=2)
+        return beat.standing
+
+    both = asking("What is between the Warden and Hollow?")
+    pairs = [s for s in both if s.pair]
+    out.that(
+        len(pairs) == 1 and pairs[0].facts,
+        "a line naming two known entities produces a standing about the "
+        "**pair**, carrying the sentence that connects them -- which is "
+        "the answer the question got none of",
+        f"{[(s.about, len(s.facts)) for s in both]}",
+    )
+    out.that(
+        any(s.near for s in both if not s.pair),
+        "and a single-entity standing carries its one-hop neighbours, so "
+        "an invention lands in the right part of the world. `Known.near` "
+        "was fed by `ask()` all along and nothing read it",
+        f"{[(s.about, s.near) for s in both if not s.pair]}",
+    )
+
+    missing = asking("What is between the Warden and Orbit?")
+    lone = [s for s in missing if s.pair]
+    out.that(
+        len(lone) == 1 and not lone[0].facts
+        and "nothing on record connects them" in str(lone[0])
+        and "do not invent" in str(lone[0]),
+        "and an unconnected pair is told plainly that nothing connects "
+        "them, with the invitation to improvise withheld -- the silence "
+        "in the complaint was *\"not even an 'I don't know'\"*",
+        f"{str(lone[0])[:90] if lone else 'no pair standing'}",
+    )
+
+    # **Two names in two different lines are not a pair.** `seen` carries
+    # every name from every earlier intent in the beat, so pairing off it
+    # would tie together two things nobody mentioned together.
+    apart = asking("Tell me about the Warden.", "Tell me about Orbit.")
+    out.that(
+        not [s for s in apart if s.pair]
+        and len([s for s in apart if not s.pair]) >= 2,
+        "two entities named in **different** lines are not treated as a "
+        "pair: one character asking about each is two questions, and "
+        "answering them as one invents a connection nobody asked about",
+        f"{[(s.about, s.pair) for s in apart]}",
+    )
+
+    # -- the cap, because a hub has dozens --------------------------------
+    crowd = gr.Graph()
+    many = [f"n{i}" for i in range(bt.NEAR + 5)]
+    crowd.add(gr.Entity(
+        id="hub", name="Hub", kind="place",
+        facts=[gr.Fact("Hub holds " + ", ".join(n.upper() for n in many)
+                       + ".", "page", where="p1")]))
+    for name in many:
+        crowd.add(gr.Entity(id=name, name=name.upper(), kind="thing"))
+    gr.derive(crowd)
+    playing = bt.Playing(scene=scene, canon=crowd)
+    hub_standing = bt.standing(
+        playing, "Hub", speaker="Host", director=bt.Director(scripted=True))
+    out.that(
+        len(crowd.around(crowd.entities["hub"])) > bt.NEAR
+        and len(hub_standing.near) == bt.NEAR,
+        "a hub's neighbours are capped in the line the DM reads -- the one "
+        "converted module's busiest node has 33, and a prompt listing all "
+        "33 crowds out the facts the line exists to carry",
+        f"{len(crowd.around(crowd.entities['hub']))} neighbours, "
+        f"{len(hub_standing.near)} shown",
+    )
+
+
+def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None:
+    """The reward nothing paid. #967.
+
+    *"Experience points (XP) are the fundamental reward of the game [...]
+    Every encounter comes with an experience reward to match its
+    difficulty."* `Sheet` had no `xp`, nothing awarded any, and no character
+    has ever advanced.
+
+    **Three printed worked examples are the spine of this driver**, because a
+    figure this file computes agreeing with a figure the page prints is
+    stronger evidence than any shape assertion:
+
+    * *"a 7th-level challenge with a complexity of 3 counts as three
+      7th-level monsters, or 900 XP"*;
+    * *"When a group of characters completes a 10th-level major quest, each
+      individual in the group gets 500 XP, regardless of how many characters
+      are in the group"*;
+    * the printed cumulative advancement table, 1,000 / 2,250 / 3,750 /
+      5,500 / 7,500 / 10,000 / 13,000 / 16,500 / 20,500, which
+      `10 * standard(level)` summed reproduces exactly.
+
+    The last one caught a real bug before any plant ran: `to_advance`
+    returned the *increment* for one level while `Sheet.xp` is a running
+    total, so a 2nd-level character read as ready at 1,250 instead of 2,250.
+    The two agree at level 1, which is where a first probe looks.
+
+    **Nothing is spent.** `ready` says so and `level` does not move; applying
+    a level re-deals a deliberately pinned hand, which is #1013.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import SIDE, WORTH, xp
+    from combat_engine.story import beat as bt
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    # -- the page's own worked examples ------------------------------------
+    out.that(
+        xp.for_challenge(7, 3) == 900,
+        "a complexity-3 challenge at 7th level is worth 900 XP, which is "
+        "the figure the page works out in that sentence",
+        f"{xp.for_challenge(7, 3)}",
+    )
+    out.that(
+        xp.for_quest("major", 10).each == 500,
+        "a 10th-level major quest pays each character 500 XP, which is the "
+        "other figure the page states outright",
+        f"{xp.for_quest('major', 10).each}",
+    )
+    printed = [1000, 2250, 3750, 5500, 7500, 10000, 13000, 16500, 20500]
+    got = [xp.to_advance(level) for level in range(1, 10)]
+    out.that(
+        got == printed,
+        "and the cumulative advancement table falls out of the database's "
+        "own monster XP for every heroic level, so no table is written here "
+        "to disagree with it",
+        f"{got}",
+    )
+
+    # -- the mode, not the first row --------------------------------------
+    # #1014 is the same question asked of `budget`, which still uses
+    # `LIMIT 1`. At level 10 one creature carries 300 against 141 at 500.
+    from combat_engine.db import game
+
+    rows = [r[0] for r in game().execute(
+        "SELECT xp FROM monster WHERE level = 10 AND minion = 0 AND xp > 0 "
+        "AND (rank IS NULL OR rank = 'standard')")]
+    out.that(
+        xp._mode([300, 500, 500]) == 500 and xp._mode([]) == 0,
+        "a level's XP is the mode and not whichever row sorted first. "
+        "**Posed against a list and not the database**, because `LIMIT 1` "
+        "agrees with the mode at all 13 levels today (#1014) -- so a plant "
+        "swapping the mode for `rows[0]` stayed green, and this assertion "
+        "exists because that plant did not go red",
+        f"{xp._mode([300, 500, 500])}",
+    )
+    out.that(
+        xp.standard(10) == 500 and 300 in rows
+        and xp.standard(10) == xp._mode(rows),
+        "and the live rows go through it -- level 10 holds a stray "
+        "creature at 300 against 141 at 500, and the figure is the mode of "
+        "what is actually there",
+        f"standard={xp.standard(10)}, strays={sorted(set(rows))}",
+    )
+
+    # -- the rank is in the row, so it must not be applied twice ----------
+    solo = xp.for_creatures(["m4615"])
+    out.that(
+        solo == 500 == round(WORTH["solo"] * xp.standard(1))
+        and solo != round(WORTH["solo"] * 500),
+        "a creature's own row already carries its rank multiplier, so "
+        "`WORTH` is for spending a budget and must not be applied to an "
+        "award -- a level-1 solo is worth five standard monsters, not "
+        "twenty-five",
+        f"solo={solo}, five standards={round(WORTH['solo'] * xp.standard(1))}",
+    )
+
+    # -- and now through a campaign ---------------------------------------
+    FIGHT = {"id": "fight", "kind": "combat", "name": "F",
+             "exits": ["chal"], "difficulty": "standard",
+             "foes": [{"count": 2, "role": "soldier", "rank": "standard"}]}
+    CHAL = {"id": "chal", "kind": "skill_challenge", "name": "C",
+            "exits": ["talk"], "complexity": 2, "primary": ["athletics"]}
+    TALK = {"id": "talk", "kind": "roleplay", "name": "T", "exits": []}
+
+    def play(scenes: list[dict], quests: list[dict] | None = None,
+             size: int = 4, *, god: bool = False, drama: bool = False,
+             director: bt.Director | None = None,
+             level: int = 2) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": level, "party_size": size,
+             "start": scenes[0]["id"], "scenes": scenes,
+             "quests": quests or []}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=11)
+        campaign.drama = drama
+        if director is not None:
+            # **Every slot defaults to `"human"`, and `silent` declares
+            # nothing** -- so a beat loop driven with the default control
+            # produced no intents, no rulings and 0 substantial beats,
+            # which read exactly like the drama reward not working.
+            campaign.control = ["ai"] * len(campaign.party.sheets)
+        said: list[str] = []
+        steps = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, built, record=False, god=god,
+                                director=director)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+            steps.append(made)
+        return campaign, said, steps
+
+    four, said, steps = play([FIGHT, CHAL, TALK])
+    fight = steps[0]
+    worth = xp.for_creatures(fight.enemies)
+    out.that(
+        fight.enemies and four.party.sheets[0].xp >= xp.share(worth, 4)
+        and xp.share(worth, 4) > 0,
+        "a fight the party overcame pays each character the opposition's "
+        "worth divided between them -- *\"divide the XP total for the "
+        "encounter by the number of players present\"*",
+        f"{len(fight.enemies)} foes worth {worth}, "
+        f"each got {four.party.sheets[0].xp}",
+    )
+
+    # **The division, in two claims neither of which can pass by
+    # accident.** The first draft compared a four-head party against a
+    # six-head one and guarded it with "unless they drew different foes" --
+    # which they do, so it passed without testing anything.
+    out.that(
+        xp.share(worth, 6) < xp.share(worth, 4) == worth // 4,
+        "the same encounter pays less each to a larger party, which is "
+        "what dividing by the number present means",
+        f"4 -> {xp.share(worth, 4)}, 6 -> {xp.share(worth, 6)}",
+    )
+    six, _, steps6 = play([FIGHT, CHAL, TALK], size=6)
+    out.that(
+        len(six.party.sheets) == 6 and steps6[0].enemies
+        and six.party.sheets[0].xp
+        == xp.share(xp.for_creatures(steps6[0].enemies), 6),
+        "and the campaign divides by the party it actually has rather than "
+        "by a constant -- posed at six, where a hard-coded four would pay "
+        "half again too much",
+        f"6 heads got {six.party.sheets[0].xp}, "
+        f"share={xp.share(xp.for_creatures(steps6[0].enemies), 6)}",
+    )
+
+    # **A fight the party did not overcome.** A plant dropping the
+    # `outcome == "won"` test stayed green, because the probe's party wins
+    # every fight the seed gives it -- so the losing case is posed by
+    # handing `reward` the step a lost fight would have produced. The
+    # outcome is what `_fight` writes and what #964's objective decides, so
+    # this is the real read rather than a stand-in.
+    beaten = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4,
+         "start": "fight", "scenes": [FIGHT, CHAL, TALK]}, Path("<driver>"))
+    losers = run_mod.begin(beaten, seed=11)
+    lost_step = run_mod.Step(scene=beaten.scene("fight"))
+    lost_step.outcome = "lost"
+    lost_step.enemies = list(fight.enemies)
+    run_mod.reward(losers, beaten, beaten.scene("fight"), lost_step)
+    out.that(
+        lost_step.enemies
+        and all(s.xp == 0 for s in losers.party.sheets),
+        "a fight the party did not overcome pays nothing, with the same "
+        "creatures on the board that paid when they won it -- *\"an "
+        "encounter, by definition, has a risk of failure\"*",
+        f"{len(lost_step.enemies)} foes, "
+        f"xp={[s.xp for s in losers.party.sheets]}",
+    )
+
+    # -- the two quest kinds divide differently ---------------------------
+    MINOR = [{"id": "m", "kind": "minor", "offered_by": "talk",
+              "done_when": "talk"}]
+    MAJOR = [{"id": "M", "kind": "major", "offered_by": "talk",
+              "done_when": "talk"}]
+    def quest_pay(quests: list[dict], size: int) -> int:
+        # `offered_by == done_when` is refused, so the quest is offered in
+        # one scene and completed in the next.
+        two = [{"id": "a", "kind": "roleplay", "name": "A",
+                "exits": ["talk"]},
+               {"id": "talk", "kind": "roleplay", "name": "T", "exits": []}]
+        fixed = [dict(q, offered_by="a", done_when="talk") for q in quests]
+        camp, _, _ = play(two, fixed, size=size)
+        return camp.party.sheets[0].xp
+
+    out.that(
+        quest_pay(MAJOR, 4) == quest_pay(MAJOR, 6) == xp.standard(2),
+        "a major quest pays each character the same whatever the party's "
+        "size -- *\"regardless of how many characters are in the group\"* "
+        "-- which is the one award that does not divide",
+        f"4 heads {quest_pay(MAJOR, 4)}, 6 heads {quest_pay(MAJOR, 6)}",
+    )
+    out.that(
+        quest_pay(MINOR, 4) == xp.share(xp.standard(2), 4)
+        and quest_pay(MINOR, 6) < quest_pay(MINOR, 4),
+        "and a minor quest is one monster of its level split between them, "
+        "so it does divide -- the asymmetry is the printed rule and not an "
+        "oversight",
+        f"4 heads {quest_pay(MINOR, 4)}, 6 heads {quest_pay(MINOR, 6)}",
+    )
+
+    # -- a challenge pays on winning only ---------------------------------
+    chal = steps[1]
+    paid_for_chal = any("Challenge" in n for n in said)
+    out.that(
+        chal.outcome == "lost" and not paid_for_chal,
+        "a challenge the party lost pays nothing, where `charge` already "
+        "makes them pay a cost -- otherwise the cost would be the only "
+        "difference between winning and losing",
+        f"outcome={chal.outcome}, said={[n for n in said if 'hallenge' in n]}",
+    )
+
+    # Posed again on its own board, because which way the roll falls is
+    # the seed's to decide and an assertion that only holds for one of the
+    # two outcomes is an assertion about the seed.
+    _, said_c, steps_c = play([CHAL, TALK])
+    if steps_c[0].outcome == "won":
+        out.that(
+            any("Challenge" in n and str(xp.for_challenge(2, 2)) in n
+                for n in said_c),
+            "and a challenge the party won pays complexity times a monster "
+            "of its level",
+            f"{[n for n in said_c if 'hallenge' in n]}",
+        )
+    else:
+        out.that(
+            not any("Challenge" in n for n in said_c)
+            and steps_c[0].outcome == "lost",
+            "and a challenge the party lost pays nothing on its own board "
+            "either -- posed twice because the roll is the seed's to make",
+            f"outcome={steps_c[0].outcome}",
+        )
+
+    # -- god mode pays nothing, because there was no risk -----------------
+    free, _, steps_g = play([FIGHT, CHAL, TALK], god=True)
+    out.that(
+        steps_g[0].outcome == "won" and not steps_g[0].enemies
+        and free.party.sheets[0].xp == 0,
+        "god mode wins the fight and earns nothing, because it fields "
+        "nobody -- *\"an encounter, by definition, has a risk of failure. "
+        "If that risk isn't present, it's not an encounter, and the "
+        "characters don't earn XP\"*",
+        f"outcome={steps_g[0].outcome}, foes={len(steps_g[0].enemies)}, "
+        f"xp={free.party.sheets[0].xp}",
+    )
+
+    # -- DMG2's drama reward, off unless the campaign asks for it ---------
+    DRAMA = [{"id": "talk", "kind": "roleplay", "name": "T",
+              "brief": "A room.", "max_beats": 5, "exits": [],
+              "affordances": [
+                  # `once` defaults to True, so a single affordance fired
+                  # on beat 1 and was spent -- 1 substantial beat out of
+                  # five, which reads exactly like the reward not working.
+                  {"id": "chat", "what": "talk to them", "once": False,
+                   "win": "they answer", "lose": "they do not"}]}]
+
+    class Always(bt.Director):
+        def match(self, playing, intents) -> dict:  # noqa: ANN001
+            return {i.slot: "chat" for i in intents}
+
+    quiet, said_off, _ = play(DRAMA, director=Always(scripted=True))
+    loud, said_on, steps_on = play(DRAMA, drama=True,
+                                   director=Always(scripted=True))
+    beats = steps_on[0].played
+    substantial = sum(
+        any(r.affordance != "none" for r in b.rulings)
+        for b in (beats.beats if beats else [])
+    )
+    out.that(
+        quiet.party.sheets[0].xp == 0
+        and not any("Drama" in n for n in said_off),
+        "the drama reward is off unless the campaign asks for it -- "
+        "*\"you should grant drama rewards for vignettes only if you rely "
+        "on them\"*",
+        f"xp={quiet.party.sheets[0].xp}",
+    )
+    out.that(
+        substantial >= xp.DRAMA_BEATS
+        and loud.party.sheets[0].xp == xp.share(xp.standard(2), 4)
+        and any("Drama" in n for n in said_on),
+        "and switched on it pays one monster of the party's level for a "
+        "scene of focused play, counted in beats where an affordance "
+        "actually fired",
+        f"{substantial} substantial beats, xp={loud.party.sheets[0].xp}",
+    )
+    out.that(
+        sum("Drama" in n for n in said_on) == 1,
+        "once per scene, which is the book's anti-farming clause as a cap "
+        "rather than a judgement the engine cannot make",
+        f"{[n for n in said_on if 'Drama' in n]}",
+    )
+
+    # **A scene too short to earn it.** A plant deleting the threshold
+    # altogether stayed green, because every beat of the scene above is
+    # substantial -- so the floor needs a scene that falls under it.
+    SHORT = [dict(DRAMA[0], max_beats=2)]
+    brief_c, said_brief, steps_brief = play(
+        SHORT, drama=True, director=Always(scripted=True))
+    short_beats = steps_brief[0].played
+    out.that(
+        len(short_beats.beats if short_beats else []) < xp.DRAMA_BEATS
+        and not any("Drama" in n for n in said_brief)
+        and brief_c.party.sheets[0].xp == 0,
+        "a scene with fewer beats of substance than the threshold earns no "
+        "drama reward -- *\"don't count time the players use to digress\"* "
+        "cuts both ways, and the floor is what says so",
+        f"{len(short_beats.beats if short_beats else [])} beats, "
+        f"xp={brief_c.party.sheets[0].xp}",
+    )
+
+    # **Beats where nobody did anything.** The other plant that stayed
+    # green counted every beat rather than the ones where an affordance
+    # fired, which is the whole of the book's exclusion list.
+    class Idle(bt.Director):
+        def match(self, playing, intents) -> dict:  # noqa: ANN001
+            return {}
+
+    idle_c, said_idle, steps_idle = play(
+        DRAMA, drama=True, director=Idle(scripted=True))
+    idle_beats = steps_idle[0].played
+    fired = sum(
+        any(r.affordance != "none" for r in b.rulings)
+        for b in (idle_beats.beats if idle_beats else [])
+    )
+    out.that(
+        len(idle_beats.beats if idle_beats else []) >= xp.DRAMA_BEATS
+        and fired == 0 and not any("Drama" in n for n in said_idle),
+        "and a scene with plenty of beats in which nothing was attempted "
+        "earns nothing either: the count is beats where an affordance "
+        "fired, not beats",
+        f"{len(idle_beats.beats if idle_beats else [])} beats, "
+        f"{fired} substantial, xp={idle_c.party.sheets[0].xp}",
+    )
+
+    # -- ready, said once, and never applied ------------------------------
+    # Five scenes, so "said once" is distinguishable from "said every
+    # scene" -- which one scene could not tell apart.
+    deep = [{"id": f"s{i}", "kind": "roleplay", "name": "S",
+             "exits": [f"s{i + 1}"]} for i in range(4)]
+    deep.append({"id": "s4", "kind": "roleplay", "name": "S", "exits": []})
+    built = mod.parse({"id": "probe", "party_level": 1, "party_size": 4,
+                       "start": "s0", "scenes": deep}, Path("<driver>"))
+    camp = run_mod.begin(built, seed=3)
+    for sheet in camp.party.sheets:
+        sheet.xp = xp.to_advance(1)
+    levels = [s.level for s in camp.party.sheets]
+    notes: list[str] = []
+    while not camp.finished:
+        made = run_mod.step(camp, built, record=False)
+        notes += [str(x) for x in made.lines
+                  if getattr(x, "kind", "") == "note"]
+    ready_lines = [n for n in notes if "advancement is not implemented" in n]
+    out.that(
+        len(ready_lines) == len(camp.party.sheets),
+        "a character with enough XP is told once -- once each, not once a "
+        "scene for the rest of the module",
+        f"{len(ready_lines)} lines over 5 scenes for "
+        f"{len(camp.party.sheets)} characters",
+    )
+    out.that(
+        [s.level for s in camp.party.sheets] == levels
+        and all(xp.ready(s) for s in camp.party.sheets),
+        "and nothing advances anybody: `ready` is true and `level` has not "
+        "moved, which is the scope this issue drew and #1013 is the rest",
+        f"levels {levels} -> {[s.level for s in camp.party.sheets]}",
+    )
+
+    # -- and it survives a save -------------------------------------------
+    # **Round-tripped through `camp`, which carries a non-empty
+    # `advanced`.** The first draft used the drama campaign, where nobody
+    # was ready -- so `[] == []` passed and a plant returning `advanced=[]`
+    # on load stayed green.
+    back = save_mod.from_dict(save_mod.to_dict(camp))
+    out.that(
+        camp.advanced and back.advanced == camp.advanced,
+        "who has already been told they can advance survives a save, so "
+        "reloading is not a way to be told again every scene",
+        f"{camp.advanced} -> {back.advanced}",
+    )
+    out.that(
+        all(s.xp > 0 for s in camp.party.sheets)
+        and [s.xp for s in back.party.sheets]
+        == [s.xp for s in camp.party.sheets],
+        "and the XP itself survives -- asserted on sheets that carry some, "
+        "because every sheet reading 0 either side would have passed",
+        f"{[s.xp for s in back.party.sheets]}",
+    )
+    drama_back = save_mod.from_dict(save_mod.to_dict(loud))
+    out.that(
+        loud.drama and drama_back.drama == loud.drama,
+        "and the drama setting survives, asserted on a campaign that has "
+        "it switched on",
+        f"{drama_back.drama}",
+    )
+    out.that(
+        SIDE == 4 and xp.for_quest("major", 10).total == 500 * SIDE,
+        "and a major quest's total is its per-head figure times the "
+        "standard party, so the two halves of `Award` describe one payment",
+        f"SIDE={SIDE}, total={xp.for_quest('major', 10).total}",
+    )
+
+
+def a_quest_is_offered_completed_and_can_be_ruled_out(out: Result) -> None:
+    """The DMG lists quests first among what an adventure is made of, and
+    sets a level's budget as *"six to eight encounters, one major quest,
+    and one minor quest per character"*. The converted adventure prints
+    two and nothing carried either: both awarded nothing, and nothing
+    recorded whether the party had done them.
+
+    **A state per quest, not a boolean**, which is what #940's comment
+    rules out:
+
+    > *You can present quests that conflict with each other* -- so two
+    > active quests may be mutually exclusive, and completing one must be
+    > able to fail the other. A set of independent booleans cannot express
+    > that.
+
+    The assertion that proves the point is the one where a **failed quest
+    stays failed** even when the scene that would have completed it plays
+    anyway. Flags would have let it come back.
+
+    **The XP is carried and not awarded**, deliberately: `Sheet` has no XP
+    field and nothing here advances a character, which is #967. That has
+    its own assertion so nobody reads the figure as working.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    THREE = [
+        {"id": "brief", "kind": "roleplay", "name": "Brief",
+         "exits": ["save"]},
+        {"id": "save", "kind": "roleplay", "name": "Save",
+         "exits": ["burn"]},
+        {"id": "burn", "kind": "roleplay", "name": "Burn", "exits": []},
+    ]
+
+    def walk(quests: list[dict], scenes: list[dict] | None = None,
+             start: str = "brief") -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": start, "scenes": scenes or THREE, "quests": quests},
+            Path("<driver>"))
+        campaign = run_mod.begin(built, seed=5)
+        said: list[str] = []
+        states: list[dict] = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, built, record=False)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+            states.append(dict(campaign.quests))
+        return campaign, states, said
+
+    def refused(quests: list[dict],
+                scenes: list[dict] | None = None) -> str:
+        try:
+            mod.parse(
+                {"id": "probe", "party_level": 2, "party_size": 4,
+                 "start": "brief", "scenes": scenes or THREE,
+                 "quests": quests}, Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the control: a module with no quests ------------------------------
+    plain, states, said = walk([])
+    out.that(
+        plain.quests == {} and not any("uest" in n for n in said),
+        "a module that declares no quests carries none and says nothing, "
+        "so every module written before this is unchanged",
+        f"{plain.quests}",
+    )
+
+    # -- offered, then completed -------------------------------------------
+    ONE = [{"id": "rescue", "kind": "major", "xp": 20,
+            "offered_by": "brief", "done_when": "save",
+            "says": "A major quest: get them out alive."}]
+    done, states, said = walk(ONE)
+    out.that(
+        states[0].get("rescue") == "open",
+        "a quest is open from the scene that grants it",
+        f"{states[0]}",
+    )
+    out.that(
+        any("get them out alive" in n for n in said),
+        "and the module's own words announce it, because the point of "
+        "carrying a quest is that the player can see it",
+        f"{[n for n in said if 'alive' in n]}",
+    )
+    out.that(
+        states[1].get("rescue") == "done",
+        "and it is done when its `done_when` scene plays",
+        f"{states[1]}",
+    )
+
+    # -- the XP is paid and still not spent -------------------------------
+    # **This assertion used to pin the absence of the award**: it read
+    # `not hasattr(sheet, "xp")` and "announced as unspent", which was
+    # honest while #967 was open and became false the moment it landed. The
+    # full `drivers` run caught it; `--only quests` could not have, and
+    # neither could `--only story_xp`.
+    from combat_engine.story import xp as xp_mod
+
+    out.that(
+        any("20 XP each" in n for n in said)
+        and done.party.sheets[0].xp == 20,
+        "a completed quest pays the module's own figure, and the module's "
+        "figure wins over the printed rate because an adventure that "
+        "prints a number means it",
+        f"{[n for n in said if 'XP' in n]}, xp={done.party.sheets[0].xp}",
+    )
+    out.that(
+        all(s.level == 2 for s in done.party.sheets)
+        and not xp_mod.ready(done.party.sheets[0]),
+        "and nothing advances off the back of it -- 20 XP is not a level, "
+        "and applying one is #1013 either way",
+        f"levels={[s.level for s in done.party.sheets]}",
+    )
+
+    # -- a conflict, which is why a quest has a state ---------------------
+    TWO = [
+        {"id": "rescue", "kind": "major", "offered_by": "brief",
+         "done_when": "save", "fails": ["burn-it"]},
+        {"id": "burn-it", "kind": "minor", "offered_by": "brief",
+         "done_when": "burn"},
+    ]
+    clash, states, said = walk(TWO)
+    out.that(
+        states[1] == {"rescue": "done", "burn-it": "failed"},
+        "completing a quest fails the one it rules out",
+        f"{states[1]}",
+    )
+    out.that(
+        states[2].get("burn-it") == "failed",
+        "and the failed quest stays failed when the scene that would have "
+        "completed it plays anyway -- which is the assertion a set of "
+        "booleans could not make, because a flag would simply be set",
+        f"{states[2]}",
+    )
+    out.that(
+        any("ruled it out" in n for n in said),
+        "and the failure is said out loud rather than discovered later",
+        f"{[n for n in said if 'ruled' in n]}",
+    )
+
+    # -- and not before its own scene -------------------------------------
+    # A green plant found this missing: opening every quest in every scene
+    # passed every assertion above, because all of them are granted by the
+    # first scene the probe plays.
+    LATE = [{"id": "late", "offered_by": "save", "done_when": "burn"}]
+    _, states, said = walk(LATE)
+    out.that(
+        states[0].get("late", "") == ""
+        and states[1].get("late") == "open",
+        "a quest is not open before the scene that grants it -- the state "
+        "appears in the scene named and not one earlier",
+        f"after brief {states[0]}, after save {states[1]}",
+    )
+    out.that(
+        sum(n.startswith("New ") and "late" in n for n in said) == 1,
+        "and it is offered once rather than re-announced in every scene it "
+        "is still open for",
+        f"{[n for n in said if 'late' in n]}",
+    )
+
+    # -- a quest nobody grants is open from the start ---------------------
+    START = [{"id": "always", "done_when": "save"}]
+    _, states, _ = walk(START)
+    out.that(
+        states[0].get("always") == "open",
+        "a quest with no `offered_by` is open without a separate start "
+        "hook, which is how a module states something the party already "
+        "has",
+        f"{states[0]}",
+    )
+
+    # -- any kind of scene may grant one ----------------------------------
+    # The module grants one mid-combat, so keying this on a roleplay scene
+    # would have missed it.
+    MIXED = [
+        {"id": "brief", "kind": "combat", "name": "B", "exits": ["save"],
+         "difficulty": "easy",
+         "foes": [{"count": 1, "role": "soldier", "rank": "standard"}]},
+        {"id": "save", "kind": "roleplay", "name": "Save", "exits": []},
+    ]
+    _, states, _ = walk(
+        [{"id": "mid", "offered_by": "brief", "done_when": "save"}], MIXED)
+    out.that(
+        states[0].get("mid") == "open",
+        "a combat scene can grant a quest, which the adventure's own "
+        "chapter 5 does",
+        f"{states[0]}",
+    )
+
+    # -- the refusals ------------------------------------------------------
+    out.that(
+        "neither a scene nor an affordance" in refused(
+            [{"id": "q", "done_when": "nowhere"}]),
+        "a quest finished by something that is not a scene or an "
+        "affordance is refused, rather than never completing",
+        refused([{"id": "q", "done_when": "nowhere"}])[:100] or "accepted",
+    )
+    out.that(
+        "no `done_when`" in refused([{"id": "q"}]),
+        "and one with no `done_when` at all is refused, because nothing "
+        "could ever complete it",
+        refused([{"id": "q"}])[:100] or "accepted",
+    )
+    out.that(
+        "pays the party for arriving" in refused(
+            [{"id": "q", "offered_by": "save", "done_when": "save"}]),
+        "a quest granted and completed by the same scene is refused -- "
+        "*don't reward the characters twice for the same actions*",
+        refused([{"id": "q", "offered_by": "save",
+                  "done_when": "save"}])[:100] or "accepted",
+    )
+    out.that(
+        "not a quest in this module" in refused(
+            [{"id": "q", "done_when": "save", "fails": ["ghost"]}]),
+        "and a conflict naming a quest that does not exist is refused",
+        refused([{"id": "q", "done_when": "save",
+                  "fails": ["ghost"]}])[:100] or "accepted",
+    )
+
+    # -- and the states survive a save ------------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(clash))
+    out.that(
+        back.quests == clash.quests
+        and back.quests.get("burn-it") == "failed",
+        "the quest states survive a save and a load, so reloading is not a "
+        "way to un-fail one",
+        f"{back.quests}",
+    )
+
+
+def a_challenge_is_no_harder_than_the_party_is_numerous(out: Result) -> None:
+    """DMG2, which #939's comment found and its body does not mention:
+
+    > *As a guideline, make skill challenge complexity no higher than 1
+    > above the number of characters in the party.*
+
+    So a party of two should not face a complexity-4 challenge. Everything
+    needed was already there -- `Scene.complexity`, `Module.party_size`,
+    and a `validate` that already refused a complexity outside the table.
+
+    Checked in `parse` rather than `_as_scene`, because the party size is
+    the **module's** and a scene does not know it. That is why the harder
+    refusal has existed longer than this easier one.
+
+    The boundary is asserted on both sides at three party sizes, because a
+    guideline stated as "no higher than 1 above" is exactly the shape that
+    gets implemented one off.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+
+    def built(size: int, complexity: int) -> str:
+        try:
+            mod.parse(
+                {"id": "probe", "party_level": 2, "party_size": size,
+                 "start": "c",
+                 "scenes": [{"id": "c", "kind": "skill_challenge",
+                             "name": "C", "exits": [],
+                             "complexity": complexity,
+                             "primary": ["athletics"]}]},
+                Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the boundary, both sides, three sizes -----------------------------
+    for size in (2, 3, 4):
+        allowed = size + 1
+        out.that(
+            built(size, allowed) == "",
+            f"a party of {size} may face complexity {allowed} -- one above "
+            "their number is what the guideline allows, not one below",
+            built(size, allowed)[:90] or "accepted",
+        )
+        if allowed + 1 in range(1, 6):
+            refused = built(size, allowed + 1)
+            out.that(
+                "the printed guideline" in refused,
+                f"and complexity {allowed + 1} is refused for a party of "
+                f"{size}, naming the most the module should ask for",
+                refused[:100] or "it was accepted",
+            )
+
+    # -- the control: a party of five may face anything in the table -------
+    out.that(
+        all(built(5, c) == "" for c in range(1, 6)),
+        "a party of five may face every complexity the table holds, so the "
+        "bound never refuses a challenge the printed table offers",
+        f"{[bool(built(5, c)) for c in range(1, 6)]}",
+    )
+
+    # -- and it is a challenge rule, not a scene rule ----------------------
+    other = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 2, "start": "t",
+         "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                     "exits": []}]}, Path("<driver>"))
+    out.that(
+        other.party_size == 2,
+        "a module with no challenge at all is unaffected, which is most of "
+        "them",
+        f"{other.party_size}",
+    )
+
+
+def a_recurring_character_is_the_same_person_each_time(out: Result) -> None:
+    """The DMG, on portraying NPCs:
+
+    > *Keep track of the way you have important NPCs act so you can
+    > maintain consistency if the same character appears again.*
+
+    We could not. `Npc` lived on a `Scene` and nowhere else, so the same
+    person across three scenes was three independent entries and nothing
+    made them agree -- voice and looks could drift, `wants` could
+    contradict itself, and a name typo made a second person in silence.
+
+    **The split is the one #944 settles in its own last paragraph**:
+    `wants`, `voice` and `looks` are the person's and live on
+    `Module.cast`; `knows`, `hides` and `unseen` are the scene's, because
+    what somebody will tell you depends on where you meet them.
+
+    **A contradiction is refused rather than resolved**, which is the
+    assertion that matters. Preferring one side is how the drift stayed
+    invisible: whichever value won, the other was written down and
+    ignored, and nothing said so.
+
+    The last assertion records what this does *not* buy. #944 hoped a
+    refusal for a scene naming somebody not in the cast would fall out for
+    free; it only does if the cast is exhaustive, which would refuse every
+    one-scene walk-on. So a typo still makes a walk-on rather than a
+    complaint, and that is stated rather than left to be discovered.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+
+    PERSON = {"name": "Halvard", "wants": "the ledger back",
+              "voice": "slowly, with long pauses",
+              "looks": "a stooped man"}
+
+    def build(cast: list[dict], first: list[dict],
+              second: list[dict] | None = None) -> mod.Module:
+        scenes: list[dict] = [
+            {"id": "a", "kind": "roleplay", "name": "A",
+             "exits": ["b"] if second is not None else [], "npcs": first}]
+        if second is not None:
+            scenes.append({"id": "b", "kind": "roleplay", "name": "B",
+                           "exits": [], "npcs": second})
+        return mod.parse(
+            {"id": "probe", "party_level": 1, "party_size": 2,
+             "start": "a", "cast": cast, "scenes": scenes},
+            Path("<driver>"))
+
+    def refused(cast: list[dict], npcs: list[dict]) -> str:
+        try:
+            build(cast, npcs)
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    # -- the control: a module with no cast is untouched -------------------
+    # **Accepted, and then unchanged -- two assertions.** The first draft
+    # called `build` directly, so a plant that refused every unknown name
+    # crashed the driver instead of reddening a claim: red either way, but
+    # a crash does not say which rule broke.
+    out.that(
+        refused([], [{"name": "Halvard", "wants": "a drink"}]) == "",
+        "a module that declares no cast is accepted, so this is additive "
+        "rather than a new requirement on every existing module",
+        refused([], [{"name": "Halvard", "wants": "a drink"}])[:90]
+        or "accepted",
+    )
+    bare = build([], [{"name": "Halvard", "wants": "a drink",
+                       "voice": "briskly"}])
+    out.that(
+        bare.cast == ()
+        and bare.scene("a").npcs[0].wants == "a drink"
+        and bare.scene("a").npcs[0].voice == "briskly",
+        "and it keeps whatever each scene wrote, so every module written "
+        "before this behaves exactly as it did",
+        f"{bare.scene('a').npcs[0]}",
+    )
+
+    # -- the person's half travels ----------------------------------------
+    twice = build([PERSON],
+                  [{"name": "Halvard", "knows": ["the door is barred"]}],
+                  [{"name": "Halvard", "knows": ["the banker left"]}])
+    here, there = twice.scene("a").npcs[0], twice.scene("b").npcs[0]
+    out.that(
+        here.wants == there.wants == PERSON["wants"]
+        and here.voice == there.voice == PERSON["voice"]
+        and here.looks == there.looks == PERSON["looks"],
+        "the same person in two scenes has one set of wants, one voice and "
+        "one description, inherited rather than restated",
+        f"{here.wants!r}/{there.wants!r} {here.voice!r}/{there.voice!r}",
+    )
+
+    # -- and the scene's half does not ------------------------------------
+    out.that(
+        here.knows == ("the door is barred",)
+        and there.knows == ("the banker left",),
+        "and what they will say is still the scene's, because what "
+        "somebody tells you depends on where you meet them",
+        f"{here.knows} vs {there.knows}",
+    )
+
+    # -- a contradiction is refused, not resolved -------------------------
+    for field_, value in (("voice", "briskly"), ("wants", "a quiet life"),
+                          ("looks", "a tall woman")):
+        clash = refused([PERSON], [{"name": "Halvard", field_: value}])
+        out.that(
+            f"sets {field_} to" in clash and "change the cast entry" in clash,
+            f"a scene contradicting the cast's {field_} is refused -- "
+            "preferring one side is how the drift stayed invisible, "
+            "because the other was written down and ignored",
+            clash[:100] or "it was accepted",
+        )
+
+    # -- a scene agreeing with the cast is not a contradiction ------------
+    same = build([PERSON], [{"name": "Halvard",
+                             "voice": PERSON["voice"]}])
+    out.that(
+        same.scene("a").npcs[0].voice == PERSON["voice"],
+        "and a scene that restates the cast's own value is accepted, so "
+        "the refusal is about disagreement rather than about repetition",
+        f"{same.scene('a').npcs[0].voice!r}",
+    )
+
+    # -- a duplicate cast entry is refused --------------------------------
+    twins = refused([PERSON, PERSON], [{"name": "Halvard"}])
+    out.that(
+        "names somebody twice" in twins,
+        "a cast naming the same person twice is refused, because a scene "
+        "naming them could inherit either entry",
+        twins[:90] or "it was accepted",
+    )
+
+    # -- what this does not buy, stated -----------------------------------
+    walk_on = build([PERSON], [{"name": "Halvardd", "wants": "a drink"}])
+    out.that(
+        walk_on.scene("a").npcs[0].name == "Halvardd"
+        and walk_on.scene("a").npcs[0].wants == "a drink",
+        "a name not in the cast is left alone rather than refused -- a "
+        "one-scene walk-on is legitimate, so a typo still makes a second "
+        "person quietly, which #944 hoped would fall out for free and "
+        "only would if a cast were exhaustive",
+        f"{walk_on.scene('a').npcs[0].name!r}",
+    )
+
+
+def the_scene_s_text_is_read_once_and_details_are_spent(out: Result) -> None:
+    """Camille, playing 2026-10-29:
+
+    > *"I'm still seeing some repetition ... [the host] said (again) that I
+    > can ask around about his reputation."*
+
+    `Director.react` opened its prompt with `THE SCENE: {scene.seen}`
+    **every beat**, and that text contained a one-time offer. So the model
+    was asked four times running to react to a speech containing an
+    invitation, with nothing recording that it had been made.
+
+    Measured on the finished chapter, verbatim repetition was essentially
+    zero -- 0 four-word phrases across three or more replies -- so the
+    fault is **topic recurrence** and the cause is structural rather than
+    the model failing. The book's own model of scene text is an opening
+    description plus a pool consumed as the scene runs:
+
+    > *You don't need to pile atmospheric details into your very first
+    > description [...] break them out to add some flair to your
+    > narratives as the adventure progresses.*
+
+    **What this asserts is the prompt, not the prose.** #936 warns that
+    this component has failed eight times to reproduce a fault of this
+    kind in isolation, and that warning is about *model behaviour* -- so
+    the claim here is the structural one: the offer is no longer in the
+    prompt to be re-read. Whether the resulting prose repeats less needs a
+    live model and the issue's own count, which `check.py` cannot run.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import beat as beat_mod
+    from combat_engine.story import graph as gr
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import table as tbl
+
+    OFFER = "Ask around if you like"
+    DETAILS = ("Rain on the shutters.", "Someone laughs upstairs.")
+
+    def prompts(details: tuple[str, ...], beats: int = 3) -> list[str]:
+        """The user half of every `react` call across N beats."""
+        scene = mod.parse(
+            {"id": "probe", "party_level": 1, "party_size": 2,
+             "start": "t",
+             "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                         "sets": f"A hall. {OFFER}.", "exits": [],
+                         "max_beats": beats + 1,
+                         "details": list(details),
+                         "npcs": [{"name": "Halvard",
+                                   "wants": "an answer"}]}]},
+            Path("<driver>")).scene("t")
+        party = run_mod.Party.of(["fighter", "cleric"], level=1, seed=3)
+        seen: list[str] = []
+
+        def tap(role: beat_mod.llm.Role, messages: list[dict],
+                schema: dict | None = None) -> str:
+            del role, schema
+            seen.append(messages[-1]["content"])
+            return "Halvard nods."
+
+        was = beat_mod.llm.chat
+        board = tbl.lay(party, seed=4)
+        try:
+            beat_mod.llm.chat = tap  # ty: ignore[invalid-assignment]
+            live = beat_mod.Playing(scene=scene, canon=gr.Graph(),
+                                    told=gr.Graph())
+            for _ in range(beats):
+                beat_mod.one_beat(
+                    live, board,
+                    [beat_mod.Actor(0, "F", "fighter", "human")],
+                    beat_mod.Director(),
+                    ask_human=lambda a, _s: ("hello", ""), party_level=1)
+        finally:
+            beat_mod.llm.chat = was
+            board.strike()
+        return seen
+
+    said = prompts(DETAILS)
+    out.that(
+        len(said) >= 3,
+        "three beats produce three reaction prompts, which is what the "
+        "rest of this driver reads",
+        f"{len(said)} prompt(s)",
+    )
+
+    # -- the fault itself --------------------------------------------------
+    out.that(
+        OFFER in said[0],
+        "the scene's text is in the opening beat's prompt, because that is "
+        "what it is for -- the DM has to know where it is",
+        f"{said[0][:70]!r}",
+    )
+    out.that(
+        not any(OFFER in p for p in said[1:]),
+        "and in no later one, so a one-time offer written into the prose "
+        "stops being re-offered because it is not there to read, rather "
+        "than because the DM was told not to repeat it",
+        f"{[OFFER in p for p in said]}",
+    )
+
+    # -- the pool ----------------------------------------------------------
+    out.that(
+        DETAILS[0] in said[1] and DETAILS[0] not in said[0],
+        "a detail arrives on the beat after the opening, which is the "
+        "book's 'break them out as the adventure progresses'",
+        f"{[d in said[1] for d in DETAILS]}",
+    )
+    out.that(
+        DETAILS[1] in said[2] and DETAILS[0] not in said[2],
+        "the next beat gets the next detail and not the spent one -- one "
+        "per beat, each once, the same rule `Affordance.once` follows",
+        f"beat 3 has {[d for d in DETAILS if d in said[2]]}",
+    )
+    out.that(
+        all(sum(1 for p in said if d in p) == 1 for d in DETAILS),
+        "and every detail appears in exactly one prompt across the whole "
+        "scene, which is the claim a count can check without a model",
+        f"{[sum(1 for p in said if d in p) for d in DETAILS]}",
+    )
+
+    # -- the control: a scene with no details ------------------------------
+    bare = prompts(())
+    out.that(
+        OFFER in bare[0] and not any(OFFER in p for p in bare[1:]),
+        "a scene that lists no details still reads its text once, so the "
+        "fix does not depend on a module adopting the new field",
+        f"{[OFFER in p for p in bare]}",
+    )
+    out.that(
+        not any("ONE DETAIL" in p for p in bare),
+        "and no detail line is offered when there are none, rather than an "
+        "empty heading",
+        f"{[('ONE DETAIL' in p) for p in bare]}",
+    )
+
+    # -- details belong to the kind that runs beats ------------------------
+    # **Asserted, not merely verified by hand.** I checked this at the
+    # terminal while building it and wrote no assertion, so a plant that
+    # removed the refusal stayed green -- a check that exists only in a
+    # past shell session is not a check.
+    def refuse(kind: str, extra: dict) -> str:
+        try:
+            mod.parse(
+                {"id": "probe", "party_level": 1, "party_size": 2,
+                 "start": "x",
+                 "scenes": [{"id": "x", "kind": kind, "name": "X",
+                             "exits": [], "details": ["Rain."], **extra}]},
+                Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    combat = refuse("combat", {"difficulty": "easy",
+                               "foes": [{"count": 1, "rank": "standard"}]})
+    out.that(
+        "must not carry 'details'" in combat,
+        "a combat scene carrying details is refused -- nothing but a "
+        "roleplay scene runs the beats that would spend them, so a pool "
+        "there would be written and never read",
+        combat[:110] or "it was accepted",
+    )
+    out.that(
+        "must not carry 'details'" in refuse("rest", {}),
+        "and a rest scene likewise, which is the same reason",
+        refuse("rest", {})[:90] or "it was accepted",
+    )
+
+    # -- more beats than details -------------------------------------------
+    thin = prompts((DETAILS[0],), beats=3)
+    out.that(
+        sum(1 for p in thin if "ONE DETAIL" in p) == 1,
+        "a pool smaller than the scene is spent and then silent -- it does "
+        "not loop back to the first detail, which would be the repetition "
+        "this issue is about",
+        f"{[('ONE DETAIL' in p) for p in thin]}",
+    )
+
+
+def losing_a_scene_costs_something_and_the_plot_goes_on(out: Result) -> None:
+    """Camille's ruling -- *"skill challenges should never prevent the plot
+    from progressing"* -- was honoured, and that was the whole problem: a
+    lost challenge progressed **identically** to a won one. `on_failure`
+    is a scene id, so a module could branch or say nothing.
+
+    DMG2's answer is the same scene and a worse party:
+
+    > *On either a success or a failure, the characters will move on to the
+    > same obstacle. However, on a failure, they move on at a significant
+    > disadvantage.*
+
+    **Charged on any kind of scene**, which is #975's own comment's
+    recommendation rather than this body's framing: DMG2 names *"fewer
+    healing surges or daily powers"* for a costly **combat** win and the
+    body proposes the same list for a lost challenge, so keying it on
+    `Scene.kind` would build the same thing twice.
+
+    Two assertions carry the design rather than the arithmetic. The
+    **exit is unchanged**, which is the ruling itself -- a cost that also
+    rerouted the party would be the branch this exists to avoid. And the
+    stake is stated **before** the scene, because DMG2's framing advice is
+    to show the consequences of failure: a cost discovered afterwards is a
+    punishment, one stated beforehand is a stake.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def challenge(nxt: str, cost: list[dict] | None = None, *,
+                  complexity: int = 5) -> dict:
+        scene: dict = {"id": "c", "kind": "skill_challenge", "name": "C",
+                       "exits": [nxt] if nxt else [],
+                       "complexity": complexity, "primary": ["athletics"]}
+        if cost is not None:
+            scene["cost"] = cost
+        return scene
+
+    def play(scenes: list[dict], start: str = "c",
+             seed: int = 3) -> tuple[save_mod.Campaign, run_mod.Step]:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": start, "scenes": scenes}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        return campaign, run_mod.step(campaign, built, record=False)
+
+    def notes(made: run_mod.Step) -> list[str]:
+        return [str(x) for x in made.lines
+                if getattr(x, "kind", "") == "note"]
+
+    ONWARD = {"id": "n", "kind": "roleplay", "name": "N", "exits": []}
+
+    # -- the control, against a real baseline -----------------------------
+    # **Not `surges is None`.** A challenge lays a board and `strike`
+    # harvests concrete numbers onto every sheet, so the pool is never
+    # `None` after one -- the first draft of this asserted it was and
+    # failed honestly. The baseline is the same scene without a cost.
+    plain, bare = play([challenge("n"), ONWARD])
+    free = [s.surges or 0 for s in plain.party.sheets]
+    out.that(
+        bare.outcome == "lost" and not any("Lost:" in n for n in notes(bare)),
+        "a scene that declares no cost charges nothing when it is lost, so "
+        "every module written before this plays as it did",
+        f"{[n[:40] for n in notes(bare)]}",
+    )
+
+    # -- a declared cost is charged, and the exit is unchanged ------------
+    paid, lost = play([challenge("n", [{"what": "surge"}]), ONWARD])
+    charged = [s.surges or 0 for s in paid.party.sheets]
+    out.that(
+        lost.outcome == "lost" and sum(charged) < sum(free)
+        and any("Lost: 1 surge" in n for n in notes(lost)),
+        "a lost scene charges the surge it declared, measured against the "
+        "same scene without one rather than against an assumed pool",
+        f"charged {charged} vs free {free}",
+    )
+    out.that(
+        lost.next_id == bare.next_id == "n",
+        "and the exit is the same one a win would have taken -- which is "
+        "the ruling itself: the cost is the consequence, not a reroute",
+        f"lost->{lost.next_id} vs no-cost->{bare.next_id}",
+    )
+
+    # -- the stake is stated before it is played --------------------------
+    said = notes(lost)
+    out.that(
+        said and "Losing this will cost" in said[0],
+        "the stake is the first thing said, before the challenge runs -- "
+        "a cost discovered afterwards is a punishment and one stated "
+        "beforehand is a stake",
+        f"{said[:2]}",
+    )
+    _, worded = play([challenge("n", [{"what": "surge",
+                                       "says": "The rope will not hold."}]),
+                      ONWARD])
+    out.that(
+        any("The rope will not hold." in n for n in notes(worded)),
+        "and the module's own words are used when it gives them",
+        f"{notes(worded)[:1]}",
+    )
+
+    # -- a won scene is charged nothing -----------------------------------
+    # An assertion that cannot fail is worse than none, so the setup line
+    # the first draft had here is gone and the case is skipped honestly
+    # when the seed does not produce a win.
+    easy, won = play([challenge("n", [{"what": "surge"}], complexity=1),
+                      ONWARD], seed=11)
+    if won.outcome == "won":
+        out.that(
+            all(s.surges is None or s.surges > 0
+                for s in easy.party.sheets)
+            and not any("Lost:" in n for n in notes(won)),
+            "a scene the party won charges nothing, so the cost is a "
+            "consequence of losing rather than a toll on playing",
+            f"{[s.surges for s in easy.party.sheets]}",
+        )
+    else:
+        out.skip("the easy challenge was lost on this seed, so the "
+                 "won-charges-nothing case could not be posed")
+
+    # -- an action point is the second currency ---------------------------
+    spent, drained = play(
+        [challenge("n", [{"what": "action point"}]), ONWARD])
+    out.that(
+        all(s.action_points == 0 for s in spent.party.sheets)
+        and any("action point" in n for n in notes(drained)),
+        "an action point is chargeable too, which is the resource nothing "
+        "else spends outside a fight",
+        f"{[s.action_points for s in spent.party.sheets]}",
+    )
+
+    # -- a denied rest is one rest, not every rest ------------------------
+    REST = {"id": "r", "kind": "rest", "name": "R", "exits": ["r2"]}
+    REST2 = {"id": "r2", "kind": "rest", "name": "R2", "exits": []}
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "c",
+         "scenes": [challenge("r", [{"what": "rest"}]), REST, REST2]},
+        Path("<driver>"))
+    camp = run_mod.begin(built, seed=3)
+    rows = []
+    while not camp.finished:
+        here = camp.scene
+        made = run_mod.step(camp, built, record=False)
+        rows.append((here, camp.denied, notes(made)))
+    out.that(
+        rows[0][1] is True,
+        "losing a scene that costs a rest sets the flag",
+        f"{rows[0][1]}",
+    )
+    out.that(
+        any("cost them this rest" in n for n in rows[1][2])
+        and rows[1][1] is False,
+        "the next rest is refused and the flag is spent there",
+        f"denied after={rows[1][1]}, {[n[:40] for n in rows[1][2]]}",
+    )
+    out.that(
+        any("everything back" in n or "powers back" in n
+            for n in rows[2][2]),
+        "and the rest after *that* works -- one rest is forfeited, not "
+        "every rest, because a flag nothing clears is a party that never "
+        "rests again",
+        f"{[n[:50] for n in rows[2][2]]}",
+    )
+
+    # -- the vocabulary is closed -----------------------------------------
+    try:
+        play([challenge("n", [{"what": "a daily power"}]), ONWARD])
+        refused = ""
+    except mod.ModuleError as exc:
+        refused = str(exc)
+    out.that(
+        "is not one of" in refused,
+        "a cost the engine cannot charge is refused by `--validate` rather "
+        "than silently costing nothing",
+        refused[:110] or "it was accepted",
+    )
+
+    # -- and the denied flag survives a save ------------------------------
+    # **A campaign with the flag actually set.** The first draft
+    # round-tripped the surge-cost run, whose `denied` is already False, so
+    # `False == False` passed and a plant that dropped the field on load
+    # stayed green.
+    owing, _ = play([challenge("n", [{"what": "rest"}]), ONWARD])
+    out.that(
+        owing.denied is True,
+        "a campaign that lost a rest-costing scene carries the flag, which "
+        "is the state the round trip has to preserve",
+        f"{owing.denied}",
+    )
+    back = save_mod.from_dict(save_mod.to_dict(owing))
+    out.that(
+        back.denied is True,
+        "and it survives a save and a load, so reloading is not a way to "
+        "get the rest back",
+        f"{back.denied}",
+    )
+
+
+def a_fight_reached_without_a_rest_is_scaled_back(out: Result) -> None:
+    """The sidebar "When Is an Encounter Over?":
+
+    > *Starting a new encounter without the benefit of a short rest after
+    > the last one makes the new encounter more challenging. If you're
+    > designing encounters in which you expect characters to move from one
+    > to the next without a rest, treat the two events as a single
+    > encounter. If the characters surprise you by running on to a new
+    > encounter without resting, it might be worth scaling back the new
+    > encounter a bit.*
+
+    **The second lever, and the page chooses for us by saying who is
+    deciding.** "Treat the two as one encounter" is advice to whoever is
+    *designing* them; "scaling back" is what the DM does when the party
+    *surprises* them at the table. A module is the authority on where its
+    rests are, so a fight reached without one is exactly that surprise.
+
+    The last assertion is the one the previous two issues taught me to
+    write: the adjustment has to reach a fielded roster through
+    `run.step`, not merely be computed by a helper.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import tension as tn
+
+    def fight(i: int, nxt: str, *, count: int = 8, xp: int = 0) -> dict:
+        scene: dict = {"id": f"f{i}", "kind": "combat", "name": f"F{i}",
+                       "exits": [nxt] if nxt else [],
+                       "difficulty": "standard",
+                       "foes": [{"count": count, "role": "soldier",
+                                 "rank": "standard"}]}
+        if xp:
+            scene["xp"] = xp
+        return scene
+
+    def rest(nxt: str, *, extended: bool = False) -> dict:
+        return {"id": "r", "kind": "rest", "name": "R",
+                "exits": [nxt] if nxt else [], "extended": extended}
+
+    def talk(nxt: str) -> dict:
+        return {"id": "t", "kind": "roleplay", "name": "T",
+                "exits": [nxt] if nxt else []}
+
+    def walk(scenes: list[dict], start: str) -> list[tuple]:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": start, "scenes": scenes}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=5)
+        rows: list[tuple] = []
+        while not campaign.finished:
+            here = campaign.scene
+            fresh = run_mod.rested_since_the_last_fight(campaign, built)
+            made = run_mod.step(campaign, built, record=False)
+            said = [str(x) for x in made.lines
+                    if "short rest since" in x]
+            rows.append((here, fresh, len(made.enemies), said))
+            del made
+        return rows
+
+    # -- the arithmetic, bounded -------------------------------------------
+    out.that(
+        tn.pitch([], rested=True) == 1.0
+        and tn.pitch([], rested=False) == tn.UNRESTED,
+        "a rested party is pitched at nothing and an unrested one is "
+        "scaled back by the one step the page calls 'a bit'",
+        f"{tn.pitch([], rested=True)} / {tn.pitch([], rested=False)}",
+    )
+    out.that(
+        tn.pitch(["lost", "lost"], rested=False) == tn.FLOOR,
+        "a losing party that also did not rest is held at the floor "
+        "rather than taking both cuts -- two reasonable adjustments "
+        "multiply into an unreasonable one, which is the clamp's whole job",
+        f"{tn.pitch(['lost', 'lost'], rested=False)} vs unclamped "
+        f"{tn.scale(['lost', 'lost']) * tn.UNRESTED:.4f}",
+    )
+    out.that(
+        not tn.why([], rested=True) and tn.why([], rested=False),
+        "and it says so only when it applied",
+        f"{tn.why([], rested=False)[:50]!r}",
+    )
+
+    # -- the control: a first fight is fresh -------------------------------
+    first = walk([fight(1, "")], "f1")
+    out.that(
+        first[0][1] is True and not first[0][3],
+        "a party's first fight counts as rested -- there is no previous "
+        "encounter to have run on from, so nothing is scaled back",
+        f"rested={first[0][1]}, said={first[0][3]}",
+    )
+
+    # -- two fights in a row -----------------------------------------------
+    pair = walk([fight(1, "f2"), fight(2, "")], "f1")
+    out.that(
+        pair[0][1] is True and pair[1][1] is False,
+        "the second of two fights with nothing between them is reached "
+        "without a rest",
+        f"{[(r[0], r[1]) for r in pair]}",
+    )
+    out.that(
+        pair[1][2] < pair[0][2],
+        "and it fields fewer creatures than the first -- which is the "
+        "whole claim, reached through `run.step` rather than computed by "
+        "a helper and dropped",
+        f"{pair[0][2]} then {pair[1][2]}",
+    )
+    out.that(
+        any("scaled back" in n for n in pair[1][3]),
+        "and says why, because a silently smaller fight is the kind of "
+        "adjustment players resent noticing",
+        f"{pair[1][3]}",
+    )
+
+    # -- a rest between them clears it -------------------------------------
+    for extended, word in ((False, "a short"), (True, "an extended")):
+        slept = walk([fight(1, "r"), rest("f2", extended=extended),
+                      fight(2, "")], "f1")
+        out.that(
+            slept[2][1] is True and slept[2][2] == slept[0][2]
+            and not slept[2][3],
+            f"{word} rest between two fights clears it, so the second "
+            "is the size the module asked for",
+            f"{[(r[0], r[1], r[2]) for r in slept]}",
+        )
+
+    # -- a conversation is not a rest --------------------------------------
+    chatted = walk([fight(1, "t"), talk("f2"), fight(2, "")], "f1")
+    out.that(
+        chatted[2][1] is False and chatted[2][2] < chatted[0][2],
+        "a conversation between two fights is not a rest -- the sidebar's "
+        "phrase is 'the benefit of a short rest', and talking is not one",
+        f"{[(r[0], r[1], r[2]) for r in chatted]}",
+    )
+
+    # -- a module's stated XP is still untouched ---------------------------
+    stated = walk([fight(1, "f2", xp=400), fight(2, "", xp=400)], "f1")
+    out.that(
+        stated[1][1] is False and stated[1][2] == stated[0][2],
+        "a fight that states its own XP is the size the page printed even "
+        "when it was reached without a rest -- the same boundary #977 "
+        "draws, for the same reason",
+        f"{[(r[0], r[1], r[2]) for r in stated]}",
+    )
+
+
+def the_party_s_recent_record_pitches_the_next_scene(out: Result) -> None:
+    """The printed system is a closed loop and this engine ran it open:
+
+    > **Tension and release.** [...] **adjusting DCs or encounter levels to
+    > reflect the party's recent record of loss and gain.** When a string
+    > of failures discourages players, adjust the numbers downward [...]
+    > If the PCs are cocky in the wake of successive wins, tighten the
+    > screws.
+
+    Every lever already existed -- `budget(level, scale)`, `dc(level,
+    band)` -- and a story campaign passed nothing to either.
+
+    **Bounded is the whole design**, so the first three assertions are
+    about what *cannot* happen: `footing` is only ever -1, 0 or +1, a long
+    losing streak is no more generous than a short one, and conversation
+    moves nothing.
+
+    Two faults this caught in its own implementation, both recorded here
+    because each read as working:
+
+    * the band shift was **inverted** -- a cocky party got *easier* checks
+      and a struggling one got no change at all, which is the exact
+      opposite of the rule and invisible without printing both directions;
+    * the fight note claimed the scene was pitched harder when the roster
+      had not moved. The budget is a **ceiling**, so a module asking for
+      fewer creatures than it allows is unaffected -- measured, a
+      10-creature ask fields 3/4/5 by footing and a 3-creature ask fields
+      3 regardless.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import cast_list
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+    from combat_engine.story import tension as tn
+    from combat_engine.story.dc import BANDS
+
+    # -- bounded, which is the whole design --------------------------------
+    streak = ["lost"] * 20
+    out.that(
+        {tn.footing(r) for r in ([], ["won"], ["lost"], streak,
+                                 ["won"] * 20)} <= {-1, 0, 1},
+        "footing is only ever -1, 0 or +1, however long the record -- an "
+        "unbounded loop that eases after every loss converges on a game "
+        "nobody can lose",
+        f"{sorted({tn.footing(r) for r in ([], ['lost'], streak)})}",
+    )
+    out.that(
+        tn.scale(streak) == tn.scale(["lost", "lost"]),
+        "and twenty losses are no more generous than two, because the "
+        "record is short by design rather than cumulative",
+        f"{tn.scale(streak)} vs {tn.scale(['lost', 'lost'])}",
+    )
+    # **What `[-RECENT:]` is actually for.** Comparing twenty losses to two
+    # does not test the window -- both ease -- so a plant that removed the
+    # slice stayed green. The discriminating case is old losses with newer
+    # wins on top: the record is *recent*, so they stop counting.
+    out.that(
+        tn.footing(["lost", "lost", "won", "won", "won", "won"]) == 1,
+        "two losses followed by four wins tightens rather than eases -- "
+        "the window is what makes the record recent, and without it a bad "
+        "patch early in a campaign would discount every later win",
+        f"{tn.footing(['lost', 'lost', 'won', 'won', 'won', 'won'])}",
+    )
+    out.that(
+        tn.footing(["won"] * 4 + ["lost", "lost"]) == -1,
+        "and the same two losses *after* four wins do ease, so the window "
+        "reads the end of the record rather than discarding its start",
+        f"{tn.footing(['won'] * 4 + ['lost', 'lost'])}",
+    )
+    out.that(
+        tn.footing(["done"] * 10) == 0 and tn.scale(["done"] * 10) == 1.0,
+        "a stretch of conversation moves nothing -- only a decided scene "
+        "is evidence about how the party is faring",
+        f"{tn.footing(['done'] * 10)}",
+    )
+
+    # -- the control: a fresh campaign is pitched at nothing ---------------
+    out.that(
+        tn.footing([]) == 0 and tn.scale([]) == 1.0 and not tn.says([]),
+        "a campaign with no record pitches nothing and says nothing, so "
+        "every module plays as it did before this existed",
+        f"footing={tn.footing([])} scale={tn.scale([])}",
+    )
+
+    # -- one setback is not a string of failures ---------------------------
+    out.that(
+        tn.footing(["lost"]) == 0 and tn.footing(["lost", "lost"]) == -1,
+        "one loss is a setback and two are a string of failures, which is "
+        "the distinction the word 'string' is doing in the rule",
+        f"one={tn.footing(['lost'])} two={tn.footing(['lost', 'lost'])}",
+    )
+    out.that(
+        tn.footing(["won", "won", "won"]) == 0
+        and tn.footing(["won", "won", "won", "won"]) == 1,
+        "and tightening is stricter than easing -- every remembered scene "
+        "must be a win, because a kindness and a judgement are not "
+        "symmetric",
+        f"three={tn.footing(['won'] * 3)} four={tn.footing(['won'] * 4)}",
+    )
+
+    # -- the band moves the right way, which it did not at first ----------
+    cocky, sunk = ["won"] * 4, ["lost", "lost"]
+    out.that(
+        tn.band("moderate", cocky, BANDS) == "hard"
+        and tn.band("moderate", sunk, BANDS) == "easy",
+        "a cocky party's check gets harder and a struggling party's gets "
+        "easier -- the first draft had this inverted, which read as "
+        "working and was the opposite of the rule",
+        f"cocky={tn.band('moderate', cocky, BANDS)} "
+        f"sunk={tn.band('moderate', sunk, BANDS)}",
+    )
+    out.that(
+        tn.band("hard", cocky, BANDS) == "hard"
+        and tn.band("easy", sunk, BANDS) == "easy",
+        "and it clamps at both ends rather than running off the table",
+        f"{tn.band('hard', cocky, BANDS)}/{tn.band('easy', sunk, BANDS)}",
+    )
+
+    # -- the fight lever, where the budget actually binds ------------------
+    def roster(record: list[str], count: int) -> int:
+        scene = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4, "start": "f",
+             "scenes": [{"id": "f", "kind": "combat", "name": "F",
+                         "exits": [], "difficulty": "standard",
+                         "foes": [{"count": count, "role": "soldier",
+                                   "rank": "standard"}]}]},
+            Path("<driver>")).scene("f")
+        return len(cast_list.resolve(
+            scene, party_level=2, pitch=tn.scale(record)).refs)
+
+    out.that(
+        roster(sunk, 10) < roster([], 10) < roster(cocky, 10),
+        "where the module asks for more than the budget allows, a losing "
+        "party is given fewer creatures and a winning party more",
+        f"{roster(sunk, 10)} < {roster([], 10)} < {roster(cocky, 10)}",
+    )
+    out.that(
+        roster(sunk, 3) == roster(cocky, 3) == 3,
+        "and where it asks for fewer than the budget allows, nothing "
+        "moves -- the budget is a ceiling, which is why the printed note "
+        "says so rather than claiming the scene got harder",
+        f"{roster(sunk, 3)} vs {roster(cocky, 3)}",
+    )
+    out.that(
+        tn.ONLY_A_CEILING in tn.says(sunk, fight=True)
+        and tn.ONLY_A_CEILING not in tn.says(sunk),
+        "the caveat is on the fight note and not the check note, because a "
+        "pitched band moves every primary roll and a pitched budget may "
+        "move nothing",
+        tn.says(sunk, fight=True)[-60:],
+    )
+
+    # -- a module's stated XP is left alone --------------------------------
+    stated = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "f",
+         "scenes": [{"id": "f", "kind": "combat", "name": "F", "exits": [],
+                     "xp": 400,
+                     "foes": [{"count": 10, "role": "soldier",
+                               "rank": "standard"}]}]},
+        Path("<driver>")).scene("f")
+    out.that(
+        len(cast_list.resolve(stated, party_level=2,
+                              pitch=tn.scale(cocky)).refs)
+        == len(cast_list.resolve(stated, party_level=2,
+                                 pitch=tn.scale(sunk)).refs),
+        "a scene that states its own XP is identical whatever the record, "
+        "so a published encounter stays the encounter the page describes",
+        f"{len(cast_list.resolve(stated, party_level=2, pitch=1.15).refs)}",
+    )
+
+    # -- the record is written by playing, and survives a save ------------
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "f",
+         "scenes": [{"id": "f", "kind": "combat", "name": "F", "exits": [],
+                     "difficulty": "easy",
+                     "foes": [{"count": 1, "role": "soldier",
+                               "rank": "standard"}]}]}, Path("<driver>"))
+    live = run_mod.begin(built, seed=5)
+    made = run_mod.step(live, built, record=False)
+    out.that(
+        live.record == [made.outcome] and made.outcome in tn.DECIDED,
+        "playing a decided scene appends its outcome to the record, which "
+        "is what the next scene is pitched from",
+        f"{live.record} after a {made.outcome}",
+    )
+    back = save_mod.from_dict(save_mod.to_dict(live))
+    out.that(
+        back.record == live.record,
+        "and the record survives a save and a load, so a campaign "
+        "reloaded mid-module pitches from the same history",
+        f"{back.record} vs {live.record}",
+    )
+
+
+def the_party_stands_where_its_marching_order_says(out: Result) -> None:
+    """Placement was `chargen.spawn` at `(2, 3 + i*2)` -- a column at x=2,
+    two apart, in whatever order `party.sheets` happened to be in. The
+    players never chose, and the rules say they should:
+
+    > **Marching Order.** [...] having it set out before you get into an
+    > encounter lets the DM know exactly where everyone is when the
+    > encounter begins.
+
+    **The first assertion is the one that matters most**, and it is a
+    compatibility claim rather than a feature: with no formation stated the
+    squares are byte-identical to the old expression. Every replay fixture
+    is a fight that starts from them, so a one-square drift re-records all
+    eight -- which is a change that would look like a placement feature and
+    land as eight re-recorded regression baselines.
+
+    `by_role` is asserted to exist and **not** to be the default, because
+    making the printed advice automatic would move every existing party and
+    is a balance change wearing a fidelity fix.
+    """
+    from pathlib import Path
+
+    from combat_engine.engine import Side, Team
+    from combat_engine.engine.components import Position
+    from combat_engine.story import PARTY_AT, field_encounter
+    from combat_engine.story import formation as fm
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    FOUR = ["fighter", "cleric", "rogue", "wizard"]
+
+    # -- the control, and the reason the default exists --------------------
+    old = [(PARTY_AT[0], PARTY_AT[1] + i * 2) for i in range(4)]
+    out.that(
+        fm.squares(4, PARTY_AT) == old,
+        "with no formation the squares are exactly the column the "
+        "placement has always used -- which is what keeps the eight "
+        "replay fixtures still",
+        f"{fm.squares(4, PARTY_AT)} vs {old}",
+    )
+    out.that(
+        fm.squares(4, PARTY_AT, fm.Formation()) == old,
+        "and an empty `Formation` is the same as none, so a campaign that "
+        "carries the field without setting it is unchanged too",
+        f"{fm.squares(4, PARTY_AT, fm.Formation())}",
+    )
+
+    # -- an order moves people, front toward the opposition ----------------
+    ordered = fm.Formation(bands=("front", "back", "middle", "middle"))
+    placed = fm.squares(4, PARTY_AT, ordered)
+    out.that(
+        placed[0][0] > placed[2][0] > placed[1][0],
+        "front stands nearer the opposition than middle, and middle than "
+        "back -- the enemy corner is at a higher x, so the order is along "
+        "the axis between the two sides",
+        f"{placed}",
+    )
+    out.that(
+        [sq[1] for sq in placed] == [sq[1] for sq in old],
+        "and the order moves nobody along the line, so the spread and the "
+        "order are the two independent halves the printed advice names",
+        f"{placed}",
+    )
+
+    # -- the spread is the other half --------------------------------------
+    wide = fm.squares(4, PARTY_AT, fm.Formation(spread=3))
+    out.that(
+        [sq[1] for sq in wide] == [3, 6, 9, 12],
+        "a wider spread puts the party further apart along the line, "
+        "which is the clustering trade the page describes",
+        f"{wide}",
+    )
+    out.that(
+        fm.squares(4, PARTY_AT, fm.Formation(spread=0)) == old,
+        "and a spread of zero is clamped to the printed default rather "
+        "than stacking the whole party on one square",
+        f"{fm.squares(4, PARTY_AT, fm.Formation(spread=0))}",
+    )
+
+    # -- the printed advice, offered and not imposed -----------------------
+    roles = fm.roles_of(FOUR)
+    out.that(
+        roles == ["defender", "leader", "striker", "controller"],
+        "each class's role is read off `chargen.CLASSES` rather than "
+        "written out again, so it cannot disagree with the class pages",
+        f"{roles}",
+    )
+    advised = fm.Formation.by_role(roles)
+    out.that(
+        advised.bands == ("front", "back", "middle", "middle"),
+        "the page's own advice puts the defender at the front and the "
+        "leader at the back, with the striker and controller between",
+        f"{advised.bands}",
+    )
+    out.that(
+        fm.Formation().bands == (),
+        "and it is not the default -- a party gets the old column until "
+        "somebody asks for the advice, because imposing it would move "
+        "every existing party and every fixture with them",
+        f"{fm.Formation().bands}",
+    )
+
+    # -- it reaches the board, which is the half a helper cannot show ------
+    def standing(bands: tuple[str, ...] = (), spread: int = 2) -> list:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4, "start": "r",
+             "scenes": [{"id": "r", "kind": "combat", "name": "R",
+                         "exits": [], "difficulty": "easy",
+                         "foes": [{"count": 1, "role": "soldier",
+                                   "rank": "standard"}]}]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=9)
+        squares = fm.squares(
+            4, PARTY_AT, fm.Formation(bands=bands, spread=spread))
+        fielded = field_encounter(
+            1, 2, party=campaign.party, enemies=["m1656"], squares=squares)
+        pcs = sorted(e for e, s in fielded.world.each(Side)
+                     if s.team is Team.PC)
+        return [spot.square for e in pcs
+                if (spot := fielded.world.get(e, Position)) is not None]
+
+    out.that(
+        standing() == old,
+        "a party fielded with no formation stands in the old column on a "
+        "real board, not just in the helper's return value",
+        f"{standing()}",
+    )
+    out.that(
+        standing(("front", "back", "middle", "middle")) == placed,
+        "and one fielded with an order stands where the order says -- the "
+        "squares reach `chargen.spawn` rather than being computed and "
+        "dropped",
+        f"{standing(('front', 'back', 'middle', 'middle'))}",
+    )
+
+    # -- through `run.step`, which is the half calling `field_encounter`
+    # directly cannot show. A plant that computed the squares and then
+    # fielded the old column stayed green against the two assertions
+    # above, because they build their own encounter: the same hole #945
+    # had, found the same way.
+    def played(bands: list[str], spread: int = 2) -> list:
+        fought = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4, "start": "r",
+             "scenes": [{"id": "r", "kind": "combat", "name": "R",
+                         "exits": [], "difficulty": "easy",
+                         "foes": [{"count": 1, "role": "soldier",
+                                   "rank": "standard"}]}]}, Path("<driver>"))
+        campaign = run_mod.begin(fought, seed=9)
+        campaign.formation = list(bands)
+        campaign.spread = spread
+        return run_mod.step(campaign, fought, record=False).stood
+
+    out.that(
+        played([]) == old,
+        "a campaign that states no marching order plays a fight from the "
+        "old column, recorded off the board it was fielded on",
+        f"{played([])}",
+    )
+    out.that(
+        played(["front", "back", "middle", "middle"]) == placed,
+        "and one that states an order plays the fight standing in it -- "
+        "which is the link `field_encounter(squares=)` on its own cannot "
+        "prove, because `_fight` is what has to pass them",
+        f"{played(['front', 'back', 'middle', 'middle'])}",
+    )
+    # **This assertion used to read `[3, 6, 9, 12]`, and that was a bug it
+    # was pinning**: the board is **12 rows**, so row 12 is off it, and
+    # `_fight` was handing `field_encounter(squares=)` a square outside
+    # the grid. Found by #974's bounds check, not by this driver. The
+    # spread still reaches the board -- the first three stand three
+    # apart -- and the one who does not fit is lined up instead.
+    spread_three = played([], spread=3)
+    out.that(
+        [sq[1] for sq in spread_three[:3]] == [3, 6, 9]
+        and all(0 <= y < 12 for _, y in spread_three),
+        "the campaign's spread reaches the board too, not only its bands, "
+        "and every character it places is **on** the board -- a spread of "
+        "3 walks the fourth of four off a 12-row floor",
+        f"{spread_three}",
+    )
+
+    # -- and it survives being written down --------------------------------
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "r",
+         "scenes": [{"id": "r", "kind": "roleplay", "name": "R",
+                     "exits": []}]}, Path("<driver>"))
+    live = run_mod.begin(built, seed=9)
+    live.formation = ["front", "back", "middle", "middle"]
+    live.spread = 3
+    back = save_mod.from_dict(save_mod.to_dict(live))
+    out.that(
+        back.formation == live.formation and back.spread == 3,
+        "the marching order survives a save and a load, because it is a "
+        "standing arrangement a player sets once rather than something a "
+        "module re-authors per fight",
+        f"{back.formation} spread={back.spread}",
+    )
+
+
+def hours_in_the_cold_cost_the_party_healing_surges(out: Result) -> None:
+    """A healing surge could only ever be lost to a fight, and the printed
+    rules have another way to spend one:
+
+    > *Every eight hours within an area of environmental danger, the
+    > character must succeed on an Endurance check. Each time a character
+    > fails, he loses one healing surge. If a character has no healing
+    > surges left when he fails a check, he loses hit points equal to his
+    > level.*
+
+    Six content rows across six files already said so in their own
+    docstrings -- an inert racial trait, a level-4 daily with an empty
+    body, a marked item power, and two monster traits noting there was no
+    rule for them to switch off.
+
+    Three printed details are asserted because each could plausibly have
+    gone the other way: a check **per danger** rather than per scene, a
+    check **every eight hours** so the count falls out of the module's
+    stated hours, and **+2 while sheltered** during an extended rest.
+
+    The last assertion is the branch a probe would otherwise never reach:
+    with no surges left, a failure costs hit points equal to level.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def play(exposure: list[str] | None, hours: int = 0, *,
+             kind: str = "roleplay", surges: int | None = None,
+             seed: int = 5) -> tuple[save_mod.Campaign, list[str]]:
+        scene: dict = {"id": "trek", "kind": kind, "name": "Trek",
+                       "exits": [], "hours": hours}
+        if exposure is not None:
+            scene["exposure"] = exposure
+        if kind == "rest":
+            scene["extended"] = True
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "trek", "scenes": [scene]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        if surges is not None:
+            for sheet in campaign.party.sheets:
+                sheet.surges = surges
+        made = run_mod.step(campaign, built, record=False)
+        notes = [str(x) for x in made.lines
+                 if getattr(x, "kind", "") == "note"]
+        return campaign, notes
+
+    # -- the control: a scene that states no weather spends nothing --------
+    bare, said = play(None)
+    out.that(
+        all(s.surges is None for s in bare.party.sheets)
+        and not any("Endurance" in n for n in said),
+        "a scene that states no exposure rolls no Endurance check and "
+        "leaves every surge pool untouched",
+        f"{[s.surges for s in bare.party.sheets]}",
+    )
+
+    # -- under eight hours nothing falls due, and it says so ---------------
+    _, brief = play(["frigid cold"], 4)
+    out.that(
+        any("no Endurance check falls due" in n for n in brief),
+        "four hours of frigid cold is under the eight the rule names, so "
+        "no check falls due -- and the scene says that rather than being "
+        "silently free",
+        f"{brief}",
+    )
+
+    # -- the count falls out of the hours ----------------------------------
+    _, long = play(["frigid cold"], 24)
+    out.that(
+        any("3 Endurance check(s)" in n for n in long),
+        "twenty-four hours is three checks each, because the rule is one "
+        "every eight and not one per scene",
+        f"{[n for n in long if 'Endurance check(s)' in n]}",
+    )
+
+    # -- and a failure spends a surge, surviving the board being struck ----
+    # **Against a harvested baseline, not a guessed number.** The first
+    # draft asserted `surges < 12`, which passes for any class whose pool
+    # is smaller than twelve -- so a plant that spent nothing stayed green.
+    # The baseline lays and strikes a board with no exposure at all, which
+    # is the only way to know what an untouched pool is after `harvest`.
+    from combat_engine.story import table as tbl
+
+    rested = run_mod.begin(
+        mod.parse({"id": "base", "party_level": 2, "party_size": 4,
+                   "start": "t",
+                   "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                               "exits": []}]}, Path("<driver>")),
+        seed=5)
+    board = tbl.lay(rested.party, seed=1)
+    board.strike()
+    full = [s.surges or 0 for s in rested.party.sheets]
+
+    cold, chilled = play(["frigid cold"], 24)
+    spent_now = [s.surges or 0 for s in cold.party.sheets]
+    out.that(
+        sum(spent_now) < sum(full),
+        "a failed check spends a healing surge, measured against a pool "
+        "harvested the same way rather than against a guessed number",
+        f"exposed {spent_now} vs untouched {full}",
+    )
+    out.that(
+        sum(full) - sum(spent_now)
+        == sum(1 for n in chilled if "spends a healing surge" in n),
+        "and every surge the notes claim was spent is one the sheets "
+        "actually lost -- which is what proves the spend survives "
+        "`Table.strike`, since `harvest` writes the board's own count back "
+        "over every sheet",
+        f"drop {sum(full) - sum(spent_now)} vs "
+        f"{sum(1 for n in chilled if 'spends a healing surge' in n)} notes",
+    )
+
+    # -- one check per danger, which the page states ----------------------
+    _, two = play(["cold", "severe weather"], 8)
+    out.that(
+        any("2 Endurance check(s)" in n for n in two),
+        "two dangers for eight hours are two checks, not one -- the page "
+        "says characters roll against each danger, and the stated total is "
+        "what makes that observable rather than the danger's name "
+        "appearing in a summary line either way",
+        f"{[n for n in two if 'Endurance check(s)' in n]}",
+    )
+
+    # -- sheltered eases it by two ----------------------------------------
+    _, sheltered = play(["frigid cold"], 24, kind="rest")
+    out.that(
+        any("+2 while sheltered" in n for n in sheltered)
+        and any("Endurance 24" in n for n in sheltered),
+        "an extended rest eases the DC by two, so a cold night costs less "
+        "than a cold day's march",
+        f"{[n[:70] for n in sheltered if 'Endurance' in n]}",
+    )
+    out.that(
+        not any("+2 while sheltered" in n for n in long),
+        "and a scene that is not a rest gets no such bonus",
+        f"{[n for n in long if 'sheltered' in n]}",
+    )
+
+    # -- with nothing left to spend, it costs hit points ------------------
+    spent, hurt = play(["frigid cold"], 24, surges=0)
+    out.that(
+        any("no surges left and takes" in n for n in hurt),
+        "a character with no surges left loses hit points instead, which "
+        "is the printed consequence and the branch a full party never "
+        "reaches",
+        f"{[n[:80] for n in hurt if 'takes' in n]}",
+    )
+    out.that(
+        any(s.hp is not None and s.max_hp and s.hp < s.max_hp
+            for s in spent.party.sheets),
+        "and the damage lands on the sheet rather than only being printed "
+        "-- the first draft of this carried an `or` on the note, which let "
+        "a plant that printed the line and skipped the subtraction pass",
+        f"{[(s.cls, s.hp, s.max_hp) for s in spent.party.sheets]}",
+    )
+
+    # -- the vocabulary is closed and the hours are required --------------
+    try:
+        play(["bitter wind"], 8)
+        bad = ""
+    except mod.ModuleError as exc:
+        bad = str(exc)
+    out.that(
+        "is not one of" in bad,
+        "a danger the page does not print is refused by `--validate`, the "
+        "way every other closed vocabulary here is",
+        bad[:110] or "it was accepted",
+    )
+    try:
+        play(["cold"], 0)
+        missing = ""
+    except mod.ModuleError as exc:
+        missing = str(exc)
+    out.that(
+        "no hours" in missing,
+        "and exposure with no hours is refused rather than quietly never "
+        "falling due -- a module that says it is cold and does not say for "
+        "how long has not finished the scene",
+        missing[:110] or "it was accepted",
+    )
+
+
+def a_name_nobody_has_heard_of_still_reaches_the_dm(out: Result) -> None:
+    """Camille, playing 2026-10-29:
+
+    > *"I asked about the relationship between Khellis and Orveth and got no
+    > answer, not even an 'I don't know'."*
+
+    `one_beat` built `Standing` by walking `layer.mentions(said)` --
+    entities the graph already holds -- so **a name it has never heard of
+    produced no entry at all**. `would_know` never ran, and its `not at
+    all` branch, *"say so plainly rather than improvise"*, could not fire.
+    That branch worked only for an entity that exists and has no facts,
+    which is the case a player needs it for least.
+
+    `mentions()` finding nothing for a noun the player plainly named is
+    itself information. `unresolved` turns it into some.
+
+    **A capitalisation heuristic rather than a model call**, because
+    `check.py` runs this loop with no model and an extractor that needed
+    one would be untested on the path that matters. So the asserted
+    behaviour is the heuristic's, including where it is deliberately
+    crude: the last two assertions pin what it does *not* catch, so the
+    next reader knows the shape of the gap rather than discovering it.
+    """
+    from combat_engine.story import beat as beat_mod
+
+    # -- the case Camille hit ---------------------------------------------
+    asked = "What is the relationship between Khellis and Orveth?"
+    out.that(
+        beat_mod.unresolved(asked, ["Orveth"]) == ["Khellis"],
+        "a name the graph does not hold is picked out of the line, and the "
+        "one it does hold is not picked twice",
+        f"{beat_mod.unresolved(asked, ['Orveth'])}",
+    )
+    out.that(
+        beat_mod.unresolved(asked, []) == ["Khellis", "Orveth"],
+        "and with neither in the graph, both are unresolved rather than "
+        "the line being dropped",
+        f"{beat_mod.unresolved(asked, [])}",
+    )
+
+    # -- the control: ordinary prose names nobody --------------------------
+    out.that(
+        beat_mod.unresolved("I ask the friar about the cellar.", []) == [],
+        "a line with no proper noun resolves to nothing, so an ordinary "
+        "sentence does not produce a standing about a common word",
+        f"{beat_mod.unresolved('I ask the friar about the cellar.', [])}",
+    )
+    out.that(
+        beat_mod.unresolved("The guard nods. Yes, I will.", []) == [],
+        "and a capitalised word that only starts a sentence is not taken "
+        "for a name -- the stop list is what keeps a false positive from "
+        "being the common case",
+        f"{beat_mod.unresolved('The guard nods. Yes, I will.', [])}",
+    )
+
+    # -- shapes a player actually types ------------------------------------
+    POSSESSIVE = "I look at Hallis's ledger"
+    out.that(
+        beat_mod.unresolved(POSSESSIVE, []) == ["Hallis"],
+        "a possessive is read as the name without it, because that is how "
+        "a person types a question about somebody",
+        f"{beat_mod.unresolved(POSSESSIVE, [])}",
+    )
+    out.that(
+        beat_mod.unresolved("Khellis, Khellis, always Khellis", []) == ["Khellis"],
+        "a name said three times is one unresolved subject, not three "
+        "standings about the same thing",
+        f"{beat_mod.unresolved('Khellis, Khellis, always Khellis', [])}",
+    )
+
+    # -- the stop list earns its place mid-sentence ------------------------
+    # **Not at the start of a sentence**, which the opener rule already
+    # handles: a plant that removed the stop list entirely stayed green
+    # until there was a case only the list could decide. A capitalised
+    # common word in the middle of a line is that case.
+    out.that(
+        beat_mod.unresolved("I asked the friar about God", []) == []
+        and beat_mod.unresolved("he told Him nothing", []) == [],
+        "a capitalised common word mid-sentence is not a name, which is "
+        "the only thing the stop list is left to decide",
+        f"{beat_mod.unresolved('I asked the friar about God', [])} "
+        f"{beat_mod.unresolved('he told Him nothing', [])}",
+    )
+    out.that(
+        beat_mod.unresolved("we prayed and Lord Halvard answered", [])
+        == ["Halvard"],
+        "and a title beside a real name drops the title and keeps the "
+        "name, rather than offering both as subjects",
+        f"{beat_mod.unresolved('we prayed and Lord Halvard answered', [])}",
+    )
+
+    # -- what it deliberately does not do ----------------------------------
+    out.that(
+        beat_mod.unresolved("who is orveth", []) == [],
+        "a name typed in lower case is missed, which is the price of a "
+        "capitalisation heuristic and is recorded here rather than left "
+        "to be discovered",
+        f"{beat_mod.unresolved('who is orveth', [])}",
+    )
+    out.that(
+        beat_mod.unresolved("tell me about the Dark Water", [])
+        == ["Dark", "Water"],
+        "and a two-word name comes back as two, because nothing here "
+        "knows which capitalised words belong together -- harmless, since "
+        "both resolve to the same `not at all`",
+        f"{beat_mod.unresolved('tell me about the Dark Water', [])}",
+    )
+
+    # -- the wiring, which is the half that fixes what Camille saw --------
+    # **Asserted through `one_beat`, not just against `unresolved`.** Every
+    # assertion above tests the extractor; none would notice if the loop
+    # never called it, which is exactly the hole a green plant found in
+    # #945. The first draft of this probe also failed for two reasons that
+    # are worth recording, because both guards are deliberate: the block is
+    # skipped entirely when there is **no graph at all**, and it mines only
+    # the **player's own line** -- a companion's intent came out of the
+    # model about to answer it, so resolving it would feed the model its
+    # own output back. So this needs a graph and a human.
+    from pathlib import Path
+
+    from combat_engine.story import graph as gr
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import table as tbl
+
+    canon = gr.Graph()
+    canon.add(gr.Entity(id="dragon", name="Orveth", kind="person"))
+    scene = mod.parse(
+        {"id": "probe", "party_level": 1, "party_size": 2, "start": "t",
+         "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                     "sets": "A hall.", "exits": [], "max_beats": 1,
+                     "npcs": [{"name": "Halvard", "wants": "an answer"}]}]},
+        Path("<driver>")).scene("t")
+    party = run_mod.Party.of(["fighter", "cleric"], level=1, seed=3)
+
+    def asked(line: str) -> beat_mod.Beat:
+        board = tbl.lay(party, seed=23)
+        try:
+            live = beat_mod.Playing(scene=scene, canon=canon, told=gr.Graph())
+            return beat_mod.one_beat(
+                live, board,
+                [beat_mod.Actor(0, "Fighter", "fighter", "human")],
+                beat_mod.Director(scripted=True),
+                ask_human=lambda a, _s: (line, ""), party_level=1)
+        finally:
+            board.strike()
+
+    both = asked("What is the relationship between Khellis and Orveth?")
+    about = [s.about for s in both.standing]
+    out.that(
+        "Khellis" in about,
+        "a beat in which the player names something no graph holds "
+        "produces a standing about it -- before this the DM was handed "
+        "nothing about the subject and duly said nothing",
+        f"standing about {about}",
+    )
+    out.that(
+        "Orveth" in about,
+        "and the name the graph does hold still arrives, so the unknown "
+        "one is added beside it rather than instead of it",
+        f"standing about {about}",
+    )
+    unknown = [s for s in both.standing if s.about == "Khellis"]
+    out.that(
+        len(unknown) == 1 and not unknown[0].facts,
+        "the unknown subject carries no facts, which is what sends it "
+        "down `would_know` to the `not at all` register the DM needs",
+        f"{[(s.about, s.knows, s.facts) for s in both.standing]}",
+    )
+
+
+def a_module_can_say_the_opposition_did_not_see_the_party_coming(
+    out: Result,
+) -> None:
+    """The engine has had the surprise round since `Encounter.start(
+    surprised=)`, and **nothing in `story/` or `api/` ever passed it** -- so
+    every campaign fight began with both sides equally ready and a module
+    could not say otherwise, while the converted adventure's own read-aloud
+    describes a creature dozing by a fire.
+
+    `Scene.readiness` takes the DMG's four states. The two in the middle
+    hand the party a surprise round; `ready` is the default and `alert` is
+    accepted and does nothing yet, which is asserted rather than assumed so
+    nobody reads it as working.
+
+    **The Stealth contest is skipped on purpose** -- the module states the
+    state, because a converted adventure states it in prose rather than
+    asking the DM to roll. So the printed Perception modifiers that only
+    feed that contest are deliberately absent, and this asserts their
+    absence: a modifier nothing consults is this project's commonest bug.
+
+    The chain is asserted end to end, because the middle of it is
+    invisible: all four states finished the fixture fight in the **same
+    number of rounds**, so an assertion on the outcome could not tell a
+    surprise round from none. `Step.surprised` is the record, and the last
+    assertion here closes the loop by taking the engine seam directly --
+    scene word, to list, to `start()`, to the condition on the creature.
+    """
+    from pathlib import Path
+
+    from combat_engine import story
+    from combat_engine.engine import Side, Team
+    from combat_engine.engine.components import Condition, Conditions
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    def play(readiness: str | None) -> run_mod.Step:
+        scene: dict = {
+            "id": "room", "kind": "combat", "name": "R", "exits": [],
+            "difficulty": "standard",
+            "foes": [{"count": 3, "role": "soldier", "rank": "standard"}],
+        }
+        if readiness is not None:
+            scene["readiness"] = readiness
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "room", "scenes": [scene]}, Path("<driver>"))
+        return run_mod.step(run_mod.begin(built, seed=11), built, record=False)
+
+    def said(step: run_mod.Step) -> list[str]:
+        return [str(x) for x in step.lines
+                if getattr(x, "kind", "") == "note" and "surprised" in x]
+
+    # -- the control: a module that says nothing is unchanged --------------
+    bare = play(None)
+    out.that(
+        bare.surprised == 0 and not said(bare),
+        "a scene that does not state its readiness surprises nobody, so "
+        "every module written before this plays as it did",
+        f"surprised={bare.surprised}, {said(bare)}",
+    )
+    out.that(
+        play("ready").surprised == 0,
+        "and `ready` -- the state the book says most monsters are in -- is "
+        "the same as saying nothing",
+        f"{play('ready').surprised}",
+    )
+
+    # -- the two that cost the defenders a round ---------------------------
+    for word in ("asleep", "distracted"):
+        got = play(word)
+        out.that(
+            got.surprised == 3 and said(got),
+            f"`{word}` surprises the whole opposition and prints that it "
+            "did, because a free round is a balance swing in a fight the "
+            "budget sized for a fair start",
+            f"surprised={got.surprised}, {said(got)}",
+        )
+
+    # -- alert is accepted and does nothing, which is said out loud --------
+    out.that(
+        play("alert").surprised == 0,
+        "`alert` is accepted and surprises nobody -- its printed effects "
+        "have no mechanism here, and silently treating it as `ready` is "
+        "what the constant's own note admits to",
+        f"{play('alert').surprised}",
+    )
+
+    # -- a word outside the four is refused at validation ------------------
+    try:
+        play("dozing")
+        refused = ""
+    except mod.ModuleError as exc:
+        refused = str(exc)
+    out.that(
+        "is not one of" in refused,
+        "a readiness the book does not print is refused by `--validate`, "
+        "rather than quietly meaning `ready`",
+        refused[:110] or "it was accepted",
+    )
+
+    # -- the Perception modifiers are deliberately absent ------------------
+    scene = mod.Scene(id="x", kind="combat", readiness="asleep")
+    out.that(
+        not hasattr(scene, "perception"),
+        "and no Perception modifier is carried, because the only thing "
+        "that would read one is the Stealth contest this skips",
+        f"{sorted(f for f in scene.__dataclass_fields__ if 'percep' in f)}",
+    )
+
+    # -- the chain's far end: the condition really lands --------------------
+    # Scene word -> list -> `start(surprised=)` -> the creature. The middle
+    # is what `Step.surprised` records; this is the end of it, taken at the
+    # engine seam so the whole claim is covered rather than its first half.
+    fielded = story.field_encounter(7, 2)
+    foes = [eid for eid, side in fielded.world.each(Side)
+            if side.team is Team.ENEMY]
+    Encounter(fielded.world).start(surprised=foes)
+    carried = [
+        eid for eid in foes
+        if (cond := fielded.world.get(eid, Conditions)) is not None
+        and cond.has(Condition.SURPRISED)
+    ]
+    out.that(
+        len(carried) == len(foes) and foes,
+        "a creature handed to `start(surprised=)` carries SURPRISED, which "
+        "is the far end of the chain `Step.surprised` records the middle of",
+        f"{len(carried)} of {len(foes)}",
+    )
+
+
+def the_dm_is_told_how_narrowly_a_check_went_and_never_the_numbers(
+    out: Result,
+) -> None:
+    """The DMG names this failure and prints our own output as the example:
+
+    > *You know you've fallen into this trap when the table chatter is:
+    > "That's 26 against AC," "You hit, now roll damage," "31 points"...*
+
+    and prescribes using the numbers as material instead:
+
+    > *If 26 is barely a hit [...] say: "You swing wildly, and the
+    > [creature] brings his shield up just a second too late."*
+
+    (The creature in that example is a printed race name, so it is elided:
+    `leaks.py --cited` caught it as the name of `r1`. Quoting the book to
+    make a point concrete is the same trap as quoting the module, and this
+    is the sixth time on this branch.)
+
+    `Director.react` was handed `[r.fact for r in rulings]` -- the module's
+    own text and nothing else -- so it could say *what* was now true and had
+    nothing to write *how* from.
+
+    **The margin is derived, not asked for, and the arithmetic is still
+    withheld.** A word from a closed set cannot be wrong the way a model's
+    guess can, and the last assertion here is the one that matters: the d20
+    and the total must not reach the prompt, because a number in a prompt
+    is a number the model quotes back -- which is the rut the chapter is
+    about.
+    """
+    from combat_engine.engine.skills import CheckResult
+    from combat_engine.story import beat as beat_mod
+    from combat_engine.story.module import Scene
+
+    # -- the derivation, at both boundaries --------------------------------
+    out.that(
+        beat_mod.margin(15, 12) == "barely"
+        and beat_mod.margin(16, 12) == "clearly",
+        "a success inside the close band is 'barely' and one outside it is "
+        "'clearly', which is the boundary the word turns on",
+        f"+3 -> {beat_mod.margin(15, 12)}, +4 -> {beat_mod.margin(16, 12)}",
+    )
+    out.that(
+        beat_mod.margin(9, 12) == "barely"
+        and beat_mod.margin(8, 12) == "nowhere near",
+        "and a failure inside it is 'barely' while one outside is 'nowhere "
+        "near', so a near miss is not described as a rout",
+        f"-3 -> {beat_mod.margin(9, 12)}, -4 -> {beat_mod.margin(8, 12)}",
+    )
+    out.that(
+        beat_mod.margin(12, 12) == "barely",
+        "a check that exactly met its DC is 'barely', which is what meeting "
+        "a DC means",
+        f"{beat_mod.margin(12, 12)}",
+    )
+    out.that(
+        all(beat_mod.margin(t, 12) in beat_mod.MARGINS
+            for t in range(-20, 60)),
+        "every margin across the whole d20 range is one of the closed set, "
+        "so the prompt can never carry a word the design did not choose",
+        f"{sorted({beat_mod.margin(t, 12) for t in range(-20, 60)})}",
+    )
+
+    # -- what reaches the DM ----------------------------------------------
+    # `react` is the only caller, and the prompt is what has to be checked
+    # rather than the return value: a scripted Director never calls out, so
+    # the fact list is observable only by catching the request.
+    said: dict[str, str] = {}
+
+    def catch(role: beat_mod.llm.Role, messages: list[dict],
+              schema: dict | None = None) -> str:
+        said["user"] = messages[-1]["content"]
+        return "The friar sets down the cup."
+
+    close = beat_mod.Ruling(
+        slot=0, name="Pike", affordance="read-friar", skill="insight",
+        dc=12, roll=CheckResult(skill="insight", natural=11, bonus=2,
+                                total=13, dc=12, success=True),
+        won=True, fact="he is holding something back",
+    )
+    wide = beat_mod.Ruling(
+        slot=1, name="Sela", affordance="ask-around", skill="streetwise",
+        dc=12, roll=CheckResult(skill="streetwise", natural=19, bonus=6,
+                                total=25, dc=12, success=True),
+        won=True, fact="the banker left before dawn",
+    )
+    quiet = beat_mod.Ruling(
+        slot=2, name="Durgan", affordance="none",
+        fact="he asks a question nobody minds",
+    )
+
+    scene = Scene(id="hall", kind="roleplay", name="Hall",
+                  brief="A hall.", exits=())
+    playing = beat_mod.Playing(scene=scene)
+    director = beat_mod.Director()
+    was = beat_mod.llm.chat
+    try:
+        # Monkeypatching a module function is what a transport stub is
+        # here, and `ty` types the attribute as the one function object
+        # rather than its signature -- the same complaint the minion
+        # driver's `is_minion` stub carries. Restored in the `finally`.
+        beat_mod.llm.chat = catch  # ty: ignore[invalid-assignment]
+        director.react(playing, [], [close, wide, quiet])
+    finally:
+        beat_mod.llm.chat = was
+    prompt = said.get("user", "")
+
+    out.that(
+        "(barely)" in prompt and "(clearly)" in prompt,
+        "a narrow ruling and a comfortable one reach the DM with different "
+        "margins, so it has something to write the manner from",
+        prompt[-400:] or "no prompt captured",
+    )
+    out.that(
+        "he asks a question nobody minds" in prompt
+        and "he asks a question nobody minds (" not in prompt,
+        "a ruling with no roll carries no margin, rather than being "
+        "described as barely anything",
+        f"{[ln for ln in prompt.splitlines() if 'nobody minds' in ln]}",
+    )
+    # **The assertion the issue is actually about.**
+    out.that(
+        "total=" not in prompt and "d20" not in prompt
+        and "25" not in prompt and "13" not in prompt,
+        "and the arithmetic never reaches the prompt -- no total, no d20, "
+        "no DC, because a number in a prompt is a number the model quotes "
+        "back, which is the rut the chapter names",
+        f"{[frag for frag in ('total=', 'd20', '25', '13') if frag in prompt]}",
+    )
+    out.that(
+        "never print the bracketed word" in prompt,
+        "and the DM is told the bracketed word is a margin to write into "
+        "the picture rather than something anybody said",
+        prompt[-300:],
+    )
+
+
+def the_budget_clamps_to_what_the_database_can_field_and_says_so(
+    out: Result,
+) -> None:
+    """`story.budget` read a standard monster's XP out of `game.db`, and the
+    database stops at level 13 by deliberate ETL decision. Above it the
+    function returned **0**, silently -- so a module validated for a paragon
+    party got a budget of nothing, every division downstream guarded itself
+    with `max(aim, 1.0)`, and the fight fielded nobody with no exception.
+
+    The clamp mirrors `opposition`, one function down, which already *"drops
+    to whatever level has been written and reports which"*.
+
+    **Not computed from the printed curve**, though that table runs to level
+    40: a budget derived from it would name a figure `cast_list` cannot
+    spend, so the scene would still field nobody while now claiming a
+    target. Worse than a 0, and the reason this asserts the *ceiling's*
+    budget rather than a bigger number.
+
+    One correction to #963's own wording, since the next reader will hit
+    it: the scene was not entirely silent before. `_pool` already reported
+    that nothing written fitted the level, because that note comes from an
+    empty pool and has nothing to do with the budget. What was silent was
+    the **zero** -- which is why the fault would have been diagnosed as a
+    `cast_list` bug rather than a budget one.
+    """
+    from pathlib import Path
+
+    from combat_engine import story
+    from combat_engine.story import cast_list
+    from combat_engine.story import module as mod
+
+    top = story.ceiling()
+
+    out.that(
+        top >= 1 and story.budget(top) > 0,
+        "the ceiling is a level the database can actually field a standard "
+        "monster at, asked of the database rather than of `etl`'s constant",
+        f"ceiling={top}, budget there={story.budget(top)}",
+    )
+
+    # -- the control: at or below the ceiling nothing moved -----------------
+    out.that(
+        story.budget(1) == 400 and story.budget(top) > story.budget(1),
+        "a level inside the database is unchanged, and the curve still "
+        "rises across it",
+        f"budget(1)={story.budget(1)}, budget({top})={story.budget(top)}",
+    )
+
+    # -- above it: the ceiling's budget, not zero ---------------------------
+    out.that(
+        story.budget(top + 1) == story.budget(top)
+        and story.budget(30) == story.budget(top),
+        "a level above the ceiling gets the ceiling's budget rather than "
+        "0, which is what made a paragon scene field nobody in silence",
+        f"budget({top + 1})={story.budget(top + 1)}, "
+        f"budget(30)={story.budget(30)}, budget({top})={story.budget(top)}",
+    )
+    out.that(
+        story.budget(30) > 0,
+        "so nothing downstream divides by a budget of nothing",
+        f"{story.budget(30)}",
+    )
+
+    # -- and the bottom is clamped too --------------------------------------
+    out.that(
+        story.budget(0) == story.budget(1) and story.budget(-5) == story.budget(1),
+        "a level below 1 is clamped up rather than queried, so a bad "
+        "module cannot ask for level 0 and get nothing",
+        f"budget(0)={story.budget(0)}, budget(-5)={story.budget(-5)}",
+    )
+
+    # -- scale still applies after the clamp --------------------------------
+    out.that(
+        story.budget(30, 0.5) < story.budget(30) < story.budget(30, 1.5),
+        "the day's difficulty curve still multiplies a clamped budget, "
+        "rather than the clamp flattening it",
+        f"{story.budget(30, 0.5)} < {story.budget(30)} < "
+        f"{story.budget(30, 1.5)}",
+    )
+
+    # -- the clamp is reported where a reader will see it -------------------
+    def notes_for(level: int) -> list[str]:
+        built = mod.parse(
+            {"id": "probe", "party_level": level, "party_size": 4,
+             "start": "room", "scenes": [{
+                 "id": "room", "kind": "combat", "name": "R", "exits": [],
+                 "difficulty": "standard",
+                 "foes": [{"count": 3, "role": "soldier",
+                           "rank": "standard"}]}]}, Path("<driver>"))
+        return cast_list.resolve(
+            built.scene("room"), party_level=level).notes
+
+    high = notes_for(top + 7)
+    out.that(
+        any("above the highest level" in n for n in high),
+        "a scene above the ceiling says the budget was clamped and that "
+        "the creatures will be the ceiling's too",
+        f"{high}",
+    )
+    out.that(
+        not any("above the highest level" in n for n in notes_for(top)),
+        "and a scene at the ceiling says nothing about it, so the note is "
+        "a report rather than noise on every fight",
+        f"{notes_for(top)}",
+    )
+
+
+def a_revisited_scene_does_not_raise_the_creatures_it_lost(
+    out: Result,
+) -> None:
+    """The DMG states this twice, and the second time for a revisit:
+
+    > *When the characters kill a monster, it stays dead.*
+
+    > *Monsters the party has killed should (usually) stay dead -- the site
+    > shouldn't just reset to the state it was in the first time around.*
+
+    `Campaign.visited` was recorded and never read, so a scene the module
+    routed back to fielded its whole cast again: the party walked into a
+    room it had cleared and the dead were standing up.
+
+    **Counted per ref, not held as a set**, which is the assertion a set
+    would fail: a scene fielding three creatures that lost one must field
+    **two** on a revisit, and "this scene is cleared" cannot say that.
+
+    The control is the first assertion -- a scene played once fields what
+    the module asked for, so every module that does not loop is untouched.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    ROOM = {"id": "room", "kind": "combat", "name": "Room", "exits": [],
+            "difficulty": "standard",
+            "foes": [{"count": 3, "role": "soldier", "rank": "standard"}]}
+
+    def built() -> mod.Module:
+        return mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "room", "scenes": [ROOM]}, Path("<driver>"))
+
+    def fight(cleared: dict | None = None,
+              seed: int = 11) -> tuple[save_mod.Campaign, run_mod.Step]:
+        module = built()
+        campaign = run_mod.begin(module, seed=seed)
+        if cleared:
+            campaign.cleared = {"room": dict(cleared)}
+        return campaign, run_mod.step(campaign, module, record=False)
+
+    def notes_of(made: run_mod.Step) -> list[str]:
+        return [str(x) for x in made.lines
+                if getattr(x, "kind", "") == "note"]
+
+    # -- the control: a first visit fields the module's cast ---------------
+    first, made = fight()
+    out.that(
+        len(made.enemies) == 3 and not any(
+            "Already cleared" in n for n in notes_of(made)),
+        "a scene played for the first time fields what the module asked "
+        "for and says nothing about clearing",
+        f"{made.enemies}",
+    )
+
+    # -- and records what it killed, per ref -------------------------------
+    out.that(
+        made.outcome == "won"
+        and sum((first.cleared.get("room") or {}).values()) == 3,
+        "a fight the party won records all three of its dead, by ref",
+        f"outcome={made.outcome}, cleared={first.cleared}",
+    )
+
+    # -- a revisit fields the survivors, not the whole cast ----------------
+    one_down = sorted(first.cleared["room"])[0]
+    _, again = fight({one_down: 1})
+    out.that(
+        len(again.enemies) == 2 and one_down not in again.enemies,
+        "a revisit of a scene that lost one creature fields two, and not "
+        "the one that died -- which a set of cleared scenes could not say",
+        f"fielded {again.enemies} after clearing {one_down}",
+    )
+    out.that(
+        any("Already cleared" in n for n in notes_of(again)),
+        "and the subtraction is printed, the way every other clamp in this "
+        "component is",
+        f"{notes_of(again)}",
+    )
+
+    # -- a fully cleared scene fields nobody, and says which ---------------
+    _, empty = fight(dict(first.cleared["room"]))
+    out.that(
+        empty.outcome == "skipped" and not empty.enemies,
+        "a scene whose whole cast died is skipped rather than played as an "
+        "empty fight",
+        f"outcome={empty.outcome}, enemies={empty.enemies}",
+    )
+    out.that(
+        any("cleared this scene" in n for n in notes_of(empty)),
+        "and says the party cleared it, rather than reporting that nothing "
+        "could be fielded -- two different faults that read alike",
+        f"{notes_of(empty)}",
+    )
+
+    # -- the count accumulates rather than being overwritten ---------------
+    module = built()
+    twice = run_mod.begin(module, seed=11)
+    twice.cleared = {"room": {one_down: 1}}
+    run_mod.step(twice, module, record=False)
+    out.that(
+        sum(twice.cleared["room"].values()) == 3,
+        "a second visit adds its dead to the first visit's tally rather "
+        "than replacing it, so a scene cleared over two visits stays clear",
+        f"{twice.cleared}",
+    )
+
+    # -- the count is a count, which `_fight` alone cannot show ------------
+    # **Driven against the helpers directly, and that is the finding rather
+    # than a shortcut.** `cast_list` never returns the same ref twice for a
+    # generated roster -- measured across five seeds -- so through a fight
+    # "decrement the budget" and "drop every matching ref" are the same
+    # behaviour, and a plant that removed the decrement stayed green while
+    # the assertion above claimed to be testing exactly that. A roster with
+    # one ref three times is the only thing that separates them, and the
+    # only way to get one is to build it.
+    three_of_one = ["mX", "mX", "mX"]
+    kept, flavours, gone = run_mod.survivors(
+        three_of_one, ["a", "b", "c"], {"mX": 2})
+    out.that(
+        kept == ["mX"] and gone == ["mX", "mX"],
+        "a scene fielding three of one creature that lost two fields one "
+        "-- a set of cleared scenes would field none",
+        f"kept={kept}, gone={gone}",
+    )
+    out.that(
+        flavours == ["c"],
+        "and the flavour that survives belongs to the creature that "
+        "survived, not to one of the dead -- the two lists are zipped "
+        "together twice downstream",
+        f"{flavours}",
+    )
+    out.that(
+        run_mod.survivors(["mA", "mB"], ["a", "b"], {"mZ": 5})[0]
+        == ["mA", "mB"],
+        "and a tally naming a creature this scene no longer fields removes "
+        "nobody, rather than taking the first two off the top",
+        f"{run_mod.survivors(['mA', 'mB'], ['a', 'b'], {'mZ': 5})}",
+    )
+    twice_over: dict[str, dict[str, int]] = {}
+    run_mod.record_fallen(twice_over, "room", {"mX": 2})
+    run_mod.record_fallen(twice_over, "room", {"mX": 1, "mY": 1})
+    out.that(
+        twice_over == {"room": {"mX": 3, "mY": 1}},
+        "and two visits that each killed the same creature add up rather "
+        "than the second overwriting the first",
+        f"{twice_over}",
+    )
+
+    # -- and it survives being written down --------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(first))
+    out.that(
+        back.cleared == first.cleared,
+        "what a scene spent survives a save and a load",
+        f"{back.cleared} vs {first.cleared}",
+    )
+
+
+def an_extended_rest_is_once_per_day_and_a_refusal_is_printed(
+    out: Result,
+) -> None:
+    """The printed lockout, which nothing bounded:
+
+    > *Once per Day: After you finish an extended rest, you have to wait 12
+    > hours before you can begin another one.*
+
+    Measured on #993: a campaign of three consecutive extended-rest scenes
+    took all three, with no refusal and no note.
+
+    **Scenes, not hours**, because `Campaign.clock` is deliberately not a
+    real clock (#965) -- a second extended rest waits until something has
+    happened rather than until twelve hours have.
+
+    The assertion that matters is not the refusal itself, it is the fourth
+    one: an extended rest resets the milestone counter (#968), so an
+    unbounded one lets a party reset it at will and `c.milestone()` is 0
+    for ever. That is the exposure the issue was filed about, and a driver
+    that only checked for the note would not see it.
+
+    The `launder` case is the other one worth having: a **short** rest must
+    not unlock an extended one, because the lockout is twelve hours and a
+    short rest is five minutes.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def rest(i: int, nxt: str, *, extended: bool = True) -> dict:
+        return {"id": f"r{i}", "kind": "rest", "name": f"R{i}",
+                "exits": [nxt] if nxt else [], "extended": extended}
+
+    def fight(at: str, nxt: str) -> dict:
+        return {"id": at, "kind": "combat", "name": at.upper(),
+                "exits": [nxt] if nxt else [], "difficulty": "easy",
+                "foes": [{"count": 1, "role": "soldier", "rank": "standard"}]}
+
+    def walk(scenes: list[dict],
+             start: str = "r1") -> tuple[save_mod.Campaign, list[str]]:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": start, "scenes": scenes}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=3)
+        said: list[str] = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, built, record=False, god=True)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+        return campaign, said
+
+    def refusals(said: list[str]) -> int:
+        return sum(1 for n in said if "Refused: an extended rest" in n)
+
+    # -- the control: one extended rest is an extended rest ----------------
+    one, said = walk([rest(1, "")])
+    out.that(
+        one.rests == 1 and not refusals(said)
+        and any("Extended rest" in n for n in said),
+        "a party that has not rested gets the extended rest it asked for",
+        f"rests={one.rests}, refusals={refusals(said)}",
+    )
+
+    # -- three in a row: one rest, two refusals ----------------------------
+    three, said = walk([rest(1, "r2"), rest(2, "r3"), rest(3, "")])
+    out.that(
+        three.rests == 1,
+        "three extended rests in a row are one extended rest, which is "
+        "what the printed lockout says",
+        f"rests={three.rests}",
+    )
+    out.that(
+        refusals(said) == 2,
+        "and the two that were refused say so rather than passing in "
+        "silence, which is how this went unnoticed",
+        f"{refusals(said)} refusal(s) in {said}",
+    )
+
+    # -- the consequence that matters: the counter is not reset ------------
+    reset = [fight("f1", "f2"), fight("f2", "r1"), rest(1, "r2"), rest(2, "")]
+    counted, _ = walk(reset, start="f1")
+    out.that(
+        counted.encounters == 0 and counted.rests == 1,
+        "the extended rest that was allowed resets the encounter count, "
+        "as #968 requires",
+        f"encounters={counted.encounters}, rests={counted.rests}",
+    )
+    held = [fight("f1", "f2"), fight("f2", "r1"), rest(1, "f3"),
+            fight("f3", "r2"), rest(2, "")]
+    kept, _ = walk(held, start="f1")
+    out.that(
+        kept.rests == 2,
+        "and a fight between two rests makes the second one real, so the "
+        "lockout gates on something happening rather than on a scene count",
+        f"rests={kept.rests}",
+    )
+
+    # -- a short rest does not launder an extended one ---------------------
+    launder = [rest(1, "r2"), rest(2, "r3", extended=False), rest(3, "")]
+    washed, said = walk(launder)
+    out.that(
+        washed.rests == 1 and refusals(said) == 1,
+        "a short rest in between does not unlock a second extended rest -- "
+        "the lockout is twelve hours and a short rest is five minutes",
+        f"rests={washed.rests}, refusals={refusals(said)}",
+    )
+
+    # -- a refusal does not also claim everything came back ----------------
+    # Counted against the three-in-a-row run: one rest was granted and two
+    # refused, so exactly one line may say everything came back. The first
+    # draft of this assertion was an `or` that passed whatever happened,
+    # which is worth recording -- an assertion that cannot fail is the
+    # same fault as a check that cannot pass.
+    _, said_three = walk([rest(1, "r2"), rest(2, "r3"), rest(3, "")])
+    out.that(
+        sum(1 for n in said_three
+            if "Extended rest: everything back." in n) == 1,
+        "exactly one line says everything came back -- a refused rest does "
+        "not print the benefit it just declined to give",
+        f"{[n for n in said_three if 'everything back' in n]}",
+    )
+
+
+def an_event_on_the_clock_fires_unless_the_party_prevented_it(
+    out: Result,
+) -> None:
+    """The DMG's structural tool for an adventure that is not a dungeon:
+
+    > *events on the timeline could trigger **unless** the characters
+    > manage to prevent them*
+
+    `Scene.exits` could only say "when this scene ends", so nothing could
+    happen *to* a party on the clock. `Module.timeline` now can, in two
+    units -- scenes played and extended rests taken.
+
+    **The control is the first assertion**: a module with no timeline must
+    play exactly the graph it always did. Everything here is new
+    behaviour behind an empty default, so that is the one that says the
+    other 677 modules are untouched.
+
+    The `unless` half is the one that matters and it is asserted in both
+    directions -- the entry fires when the party did not prevent it, and
+    is retired *and announced* when they did. A cancellation that said
+    nothing would be indistinguishable from an entry nobody wrote.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def talk(i: int, nxt: str) -> dict:
+        return {"id": f"s{i}", "kind": "roleplay", "name": f"S{i}",
+                "exits": [nxt] if nxt else []}
+
+    def play(scenes: list[dict], timeline: list[dict],
+             flags: dict | None = None) -> tuple[list[str], list[str],
+                                                 save_mod.Campaign]:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "s1", "scenes": scenes, "timeline": timeline,
+             **({"flags": flags} if flags else {})}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=3)
+        order: list[str] = []
+        said: list[str] = []
+        # **Bounded, and the bound is the point.** A timeline entry that
+        # fails to retire itself sends play back to the same scene for
+        # ever, so the unbounded version of this walk *hung* instead of
+        # going red -- `scripts/CLAUDE.md` is explicit that a plant which
+        # does not redden is a finding, and here the finding was about the
+        # probe. An instrument that hangs is worse than one that fails:
+        # `check.py` waits on it with nothing to read. 40 is far above any
+        # graph here and the overrun is reported rather than swallowed.
+        while not campaign.finished and len(order) < 40:
+            order.append(campaign.scene)
+            made = run_mod.step(campaign, built, record=False)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+        if len(order) >= 40:
+            order.append("(ran away)")
+        return order, said, campaign
+
+    THREE = [talk(1, "s2"), talk(2, "s3"), talk(3, "")]
+    EVENT = {"id": "ev", "kind": "roleplay", "name": "Ev", "exits": ["s3"]}
+
+    # -- the control: no timeline, the graph as it always was --------------
+    plain, _, _ = play(THREE, [])
+    out.that(
+        plain == ["s1", "s2", "s3"],
+        "a module with no timeline plays exactly the graph it declares",
+        f"{plain}",
+    )
+
+    # -- a timed scene is not an orphan ------------------------------------
+    # Nothing exits to a timed scene by construction, so without the
+    # timeline being a reachability root every entry would report
+    # "nothing leads to it" and bury the one real orphan.
+    try:
+        mod.parse({"id": "ok", "party_level": 2, "party_size": 4,
+                   "start": "s1", "scenes": [*THREE, EVENT],
+                   "timeline": [{"when": 2, "scene": "ev"}]},
+                  Path("<driver>"))
+        orphaned = ""
+    except mod.ModuleError as exc:
+        orphaned = str(exc)
+    out.that(
+        not orphaned,
+        "a scene only the timeline reaches is not reported as an orphan",
+        orphaned[:120] or "accepted, as it should be",
+    )
+
+    # -- an inevitable event lands on its tick -----------------------------
+    timed, said, _ = play(
+        [*THREE, EVENT],
+        [{"when": 2, "scene": "ev", "says": "The sky begins to dim."}])
+    out.that(
+        timed == ["s1", "s2", "ev", "s3"],
+        "an event due after two scenes happens after the second one, "
+        "before the exit the scene itself named",
+        f"{timed}",
+    )
+    out.that(
+        any("The sky begins to dim." in n for n in said),
+        "and the module's own words for it are told to the players, which "
+        "DMG2 says a deadline is useless without",
+        f"{[n for n in said if 'dim' in n] or said}",
+    )
+
+    # -- it fires once, not every transition after its tick ----------------
+    out.that(
+        timed.count("ev") == 1,
+        "and it fires once rather than every transition after its tick, "
+        "which a bare comparison against a rising counter would do",
+        f"{timed}",
+    )
+
+    # -- prevented by a scene the party played -----------------------------
+    # Exits to `s2` rather than `s3`: these two probes are two-scene
+    # graphs, and the validator rightly refused the first draft for an
+    # event pointing at a scene the probe did not declare.
+    EV2 = {"id": "ev", "kind": "roleplay", "name": "Ev", "exits": ["s2"]}
+    warned = [talk(1, "warn"),
+              {"id": "warn", "kind": "roleplay", "name": "Warn",
+               "exits": ["s2"]},
+              talk(2, ""), EV2]
+    stopped, notes, _ = play(warned, [{"when": 2, "scene": "ev",
+                                       "unless": "warn"}])
+    out.that(
+        "ev" not in stopped,
+        "an event the party prevented does not happen",
+        f"{stopped}",
+    )
+    out.that(
+        any("Prevented" in n for n in notes),
+        "and the prevention is said out loud, which is the payoff for "
+        "having stopped it",
+        f"{[n for n in notes if 'Prevented' in n] or notes}",
+    )
+
+    # -- and the same entry fires when they did not prevent it -------------
+    # `s1` *offers* the warning as a second exit and the default takes
+    # `s2`, so the chance to prevent existed and the party walked past it.
+    # Declaring `warn` unreachable instead was refused, rightly, by the
+    # orphan check.
+    idle = [{"id": "s1", "kind": "roleplay", "name": "S1",
+             "exits": ["s2", "warn"]},
+            talk(2, ""), EV2,
+            {"id": "warn", "kind": "roleplay", "name": "Warn",
+             "exits": ["s2"]}]
+    ran, _, _ = play(idle, [{"when": 2, "scene": "ev", "unless": "warn"}])
+    out.that(
+        "ev" in ran,
+        "the same entry fires when they did not, which is what makes the "
+        "`unless` half worth having rather than a way to disable an entry",
+        f"{ran}",
+    )
+
+    # -- prevented by a flag the module declares ---------------------------
+    flagged, notes, _ = play(
+        [*THREE, EVENT],
+        [{"when": 2, "scene": "ev", "unless": "warned"}],
+        flags={"warned": 1})
+    out.that(
+        "ev" not in flagged and any("Prevented" in n for n in notes),
+        "a non-zero module flag cancels an entry too, so a consequence "
+        "recorded anywhere in the campaign can stop one",
+        f"{flagged}",
+    )
+
+    # -- the second unit: extended rests -----------------------------------
+    nights = [talk(1, "night"),
+              {"id": "night", "kind": "rest", "name": "Night",
+               "exits": ["s2"], "extended": True},
+              talk(2, ""),
+              {"id": "ev", "kind": "roleplay", "name": "Ev",
+               "exits": ["s2"]}]
+    slept, said, after = play(nights, [{"when": 1, "scene": "ev",
+                                        "unit": "rest"}])
+    out.that(
+        slept == ["s1", "night", "ev", "s2"] and after.rests == 1,
+        "an entry due in rests waits for an extended rest rather than for "
+        "a scene count, which three conversations would have satisfied",
+        f"{slept}, rests={after.rests}",
+    )
+    out.that(
+        any("1 rest in" in n for n in said),
+        "and says so in the singular, because `1 rests in` reads as a bug",
+        f"{[n for n in said if 'rest' in n] or said}",
+    )
+
+    # -- a dangling entry is refused at validation -------------------------
+    try:
+        mod.parse({"id": "bad", "party_level": 2, "party_size": 4,
+                   "start": "s1", "scenes": THREE,
+                   "timeline": [{"when": 1, "scene": "nowhere"}]},
+                  Path("<driver>"))
+        refused = ""
+    except mod.ModuleError as exc:
+        refused = str(exc)
+    out.that(
+        "not a scene" in refused,
+        "an entry firing a scene that does not exist is refused by "
+        "`--validate` rather than at play time, three hours in",
+        refused[:120] or "it was accepted",
+    )
+
+    # -- an `unless` that can never be true is refused ---------------------
+    try:
+        mod.parse({"id": "bad", "party_level": 2, "party_size": 4,
+                   "start": "s1", "scenes": [*THREE, EVENT],
+                   "timeline": [{"when": 1, "scene": "ev",
+                                 "unless": "typo"}]}, Path("<driver>"))
+        caught = ""
+    except mod.ModuleError as exc:
+        caught = str(exc)
+    out.that(
+        "nothing could ever cancel" in caught,
+        "and so is an `unless` naming neither a scene nor a flag -- an "
+        "entry nothing can cancel is inevitable wearing an escape hatch",
+        caught[:120] or "it was accepted",
+    )
+
+    # -- and the clock survives a save -------------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(after))
+    out.that(
+        back.rests == after.rests and back.fired == after.fired,
+        "the clock and what has already fired survive a save and a load, "
+        "so a reloaded campaign does not replay its timeline",
+        f"rests={back.rests} fired={back.fired}",
+    )
+
+
+def two_encounters_make_a_milestone_and_the_board_is_told(out: Result) -> None:
+    """Camille's ruling on #666, which is the printed rule word for word:
+
+    > *"An adventuring day consists of 4-5 encounters, and a milestone is
+    > every two encounters."*
+
+    `world.milestones` existed, `c.milestone()` read it, arcade mode set
+    it -- and `story/` never did, so **every story fight answered 0** and
+    the milestone's printed action point was never granted to anybody.
+
+    Three things are asserted here and the middle one is the least
+    obvious. The count is **weighted**, because the page says a fight two
+    or more levels below the party must not contribute and one four or
+    more above counts double; the grant has to reach the **sheets**, which
+    is what makes it survive to the next scene; and the number has to
+    reach the **board**, which is where a trait reads it at arming and
+    which nothing above the fight can otherwise see.
+
+    **God mode for the action-point arithmetic, deliberately.** A real
+    fight spends action points, so asserting `[2, 2, 2, 2]` after one
+    would be asserting the policy's spending rather than the grant.
+    `--god-mode` wins without building a board, which is exactly the
+    half this needs. The board assertion then uses a real fight, because
+    god mode builds no world to be told.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def fight(i: int, nxt: str, level: int = 0) -> dict:
+        return {"id": f"f{i}", "kind": "combat", "name": f"F{i}",
+                "exits": [nxt] if nxt else [], "difficulty": "easy",
+                "level": level,
+                "foes": [{"count": 1, "role": "soldier", "rank": "standard"}]}
+
+    def module_of(scenes: list[dict], start: str = "f1",
+                  level: int = 5) -> mod.Module:
+        return mod.parse(
+            {"id": "probe", "party_level": level, "party_size": 4,
+             "start": start, "scenes": scenes}, Path("<driver>"))
+
+    def walk(module: mod.Module, *, god: bool = True,
+             seed: int = 5) -> tuple[save_mod.Campaign, list[str]]:
+        campaign = run_mod.begin(module, seed=seed)
+        said: list[str] = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, module, record=False, god=god)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+        return campaign, said
+
+    # -- the control: only a fight is an encounter --------------------------
+    quiet = module_of([
+        {"id": "f1", "kind": "roleplay", "name": "Talk", "exits": ["c"]},
+        {"id": "c", "kind": "skill_challenge", "name": "Climb",
+         "exits": ["r"], "complexity": 1, "primary": ["athletics"]},
+        {"id": "r", "kind": "rest", "name": "Nap", "exits": []},
+    ])
+    done, _ = walk(quiet)
+    out.that(
+        done.encounters == 0 and done.milestones == 0,
+        "a conversation, a challenge and a rest are not encounters, so "
+        "none of them counts toward a milestone",
+        f"encounters={done.encounters}, milestones={done.milestones}",
+    )
+
+    # -- two fights, one milestone, an action point each --------------------
+    pair = module_of([fight(1, "f2"), fight(2, "")])
+    two, notes = walk(pair)
+    out.that(
+        two.encounters == 2 and two.milestones == 1,
+        "two completed encounters are one milestone",
+        f"encounters={two.encounters}, milestones={two.milestones}",
+    )
+    out.that(
+        [s.action_points for s in two.party.sheets] == [2, 2, 2, 2],
+        "and every character gains the printed action point, on top of "
+        "the one an extended rest leaves them with",
+        f"{[s.action_points for s in two.party.sheets]}",
+    )
+    out.that(
+        any("Milestone 1" in n for n in notes),
+        "and it is printed rather than only recorded",
+        f"{[n for n in notes if 'Milestone' in n] or notes[-2:]}",
+    )
+
+    # -- one fight is not a milestone --------------------------------------
+    alone, _ = walk(module_of([fight(1, "")]))
+    out.that(
+        alone.encounters == 1 and alone.milestones == 0
+        and [s.action_points for s in alone.party.sheets] == [1, 1, 1, 1],
+        "one encounter is not a milestone and grants nothing",
+        f"encounters={alone.encounters}, "
+        f"ap={[s.action_points for s in alone.party.sheets]}",
+    )
+
+    # -- the printed weighting, both ends ----------------------------------
+    easy, _ = walk(module_of([fight(1, "f2", level=3), fight(2, "", level=3)]))
+    out.that(
+        easy.encounters == 0 and easy.milestones == 0,
+        "two fights two levels below the party contribute nothing, which "
+        "the page states in as many words",
+        f"encounters={easy.encounters}",
+    )
+    steep, _ = walk(module_of([fight(1, "", level=9)]))
+    out.that(
+        steep.encounters == 2 and steep.milestones == 1,
+        "and a single fight four levels above the party counts as two, so "
+        "it is a milestone on its own",
+        f"encounters={steep.encounters}, milestones={steep.milestones}",
+    )
+
+    # -- an extended rest resets it ----------------------------------------
+    slept = module_of([
+        fight(1, "f2"), fight(2, "night"),
+        {"id": "night", "kind": "rest", "name": "Night", "exits": ["f3"],
+         "extended": True},
+        fight(3, ""),
+    ])
+    after, _ = walk(slept)
+    out.that(
+        after.encounters == 1 and after.milestones == 0,
+        "an extended rest resets the count, so the fight after it starts "
+        "the next day's tally rather than continuing yesterday's",
+        f"encounters={after.encounters}, milestones={after.milestones}",
+    )
+    out.that(
+        [s.action_points for s in after.party.sheets] == [1, 1, 1, 1],
+        "and the rest takes the unspent action point back, which the page "
+        "also states",
+        f"{[s.action_points for s in after.party.sheets]}",
+    )
+
+    # -- the board is told, which is the whole point -----------------------
+    # A real fight, not god mode: god mode builds no world to be told, and
+    # the third fight is the first that can bring a milestone in because
+    # the second is where it is reached.
+    three = module_of([fight(1, "f2"), fight(2, "f3"), fight(3, "")])
+    _, real = walk(three, god=False)
+    out.that(
+        any("brings in 1 milestone" in n for n in real),
+        "the fight after a milestone is fielded on a board that knows it, "
+        "which is where `c.milestone()` reads it at arming",
+        f"{[n for n in real if 'brings in' in n] or 'no such note'}",
+    )
+
+    # -- and it survives being written down --------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(two))
+    out.that(
+        back.encounters == two.encounters and back.milestones == 1,
+        "and the count survives a save and a load",
+        f"{back.encounters} vs {two.encounters}",
+    )
+
+
+def a_scene_can_hand_the_party_something_that_survives_the_next_scene(
+    out: Result,
+) -> None:
+    """Camille, playing 2026-10-29:
+
+    > *"It looks like we were given healing poultices. I think this is
+    > likely prose only. When something like this happens it should be
+    > added to inventory."*
+
+    There was nowhere for one to go -- `Sheet` carried no inventory field
+    at all -- so a thing the module handed over in its own prose vanished.
+    `Scene.grants` now lands on the sheets through `loot.hand_over`.
+
+    **The control is the first assertion.** A scene stating no grant must
+    leave every sheet exactly as empty as it found it; making `hand_over`
+    add on an empty tuple turns it red. The two that matter after that are
+    the ones a count alone cannot see: that the thing is still there a
+    *fight* later, which is what `harvest` could have quietly clobbered,
+    and that a word nothing resolves is **reported** rather than dropped,
+    which is the original fault one layer down.
+
+    Nothing spends an item yet, deliberately -- #935 keeps that separate --
+    so there is no assertion here about using one.
+    """
+    from pathlib import Path
+
+    from combat_engine.db import localisation
+    from combat_engine.story import loot
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    REF = "i1551"
+
+    def built(grants: list[dict] | None, *,
+              then_fight: bool = False) -> mod.Module:
+        talk: dict = {"id": "talk", "kind": "roleplay", "name": "Talk",
+                      "exits": ["pit"] if then_fight else []}
+        if grants is not None:
+            talk["grants"] = grants
+        scenes = [talk]
+        if then_fight:
+            scenes.append({
+                "id": "pit", "kind": "combat", "name": "Pit", "exits": [],
+                "difficulty": "easy",
+                "foes": [{"count": 2, "role": "soldier", "rank": "standard"}],
+            })
+        return mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "talk", "scenes": scenes}, Path("<driver>"))
+
+    def play(grants: list[dict] | None, *, then_fight: bool = False,
+             seed: int = 5) -> tuple[save_mod.Campaign, run_mod.Step]:
+        module = built(grants, then_fight=then_fight)
+        campaign = run_mod.begin(module, seed=seed)
+        made = run_mod.step(campaign, module, record=False)
+        if then_fight:
+            made = run_mod.step(campaign, module, record=False)
+        return campaign, made
+
+    def held(campaign: save_mod.Campaign) -> list[dict]:
+        return [dict(s.carried) for s in campaign.party.sheets]
+
+    def notes_of(made: run_mod.Step) -> list[str]:
+        return [str(x) for x in made.lines if getattr(x, "kind", "") == "note"]
+
+    if not loot.find(REF):
+        out.skip(f"{REF} is not in this build's item table")
+        return
+
+    # -- the control --------------------------------------------------------
+    bare, _ = play(None)
+    out.that(
+        all(not bag for bag in held(bare)),
+        "a scene that grants nothing leaves every sheet carrying nothing",
+        f"{held(bare)}",
+    )
+
+    # -- a grant written as a ref lands -------------------------------------
+    one, made_one = play([{"what": REF, "count": 1}])
+    out.that(
+        sum(sum(bag.values()) for bag in held(one)) == 1,
+        "a scene granting one thing puts exactly one on the party",
+        f"{held(one)}",
+    )
+    out.that(
+        any(REF in n for n in notes_of(made_one)),
+        "and says what was carried away",
+        f"{notes_of(made_one)}",
+    )
+
+    # -- round-robin rather than hoarding -----------------------------------
+    two, _ = play([{"what": REF, "count": 2}])
+    out.that(
+        sorted(sum(bag.values()) for bag in held(two)) == [0, 0, 1, 1],
+        "two things go to two characters rather than both to one",
+        f"{held(two)}",
+    )
+
+    # -- the module's own word resolves to the same ref ----------------------
+    word = ((localisation().get(REF) or {}).get("name") or "").strip()
+    if not word:
+        out.skip("no localisation, so the name half cannot be asked")
+    else:
+        # The word is read out of the localisation at run time and never
+        # written here: a printed name must not enter a tracked file, and
+        # this file is tracked.
+        named, _ = play([{"what": word, "count": 1}])
+        out.that(
+            held(named) == held(one),
+            "a grant written as the module's own word lands the same ref "
+            "as one written as the ref",
+            f"word={held(named)} vs ref={held(one)}",
+        )
+
+    # -- a word nothing resolves is reported, not dropped -------------------
+    lost, made_lost = play([{"what": "a thing no item is called", "count": 1}])
+    out.that(
+        all(not bag for bag in held(lost))
+        and any("no item ref matches" in n for n in notes_of(made_lost)),
+        "an unresolvable grant carries nothing and says so rather than "
+        "vanishing silently",
+        f"held={held(lost)}, notes={notes_of(made_lost)}",
+    )
+
+    # -- it survives a whole fight ------------------------------------------
+    kept, _ = play([{"what": REF, "count": 1}], then_fight=True)
+    out.that(
+        sum(sum(bag.values()) for bag in held(kept)) == 1,
+        "what the party was handed is still carried after the next fight, "
+        "which `harvest` writes over the sheets it could have cleared",
+        f"{held(kept)}",
+    )
+
+    # -- and survives being written down and read back ----------------------
+    back = save_mod.from_dict(save_mod.to_dict(one))
+    out.that(
+        [dict(s.carried) for s in back.party.sheets] == held(one),
+        "and survives a save and a load",
+        f"{[dict(s.carried) for s in back.party.sheets]} vs {held(one)}",
+    )
+
+    # -- the party line shows it --------------------------------------------
+    out.that(
+        "1i" in run_mod.party_line(one),
+        "and the party line between scenes shows what is carried",
+        run_mod.party_line(one),
+    )
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -42057,6 +48820,160 @@ DRIVERS = {
     "training_bonus": (
         training_is_worth_exactly_five_on_a_check,
         "the +5 for training, asserted by taking it away (#791)",
+    ),
+    "line_kinds": (
+        every_printed_line_says_what_kind_of_thing_it_is,
+        "every printed line says what kind of thing it is (#930)",
+    ),
+    "objective_verdict": (
+        a_combat_scene_is_judged_on_the_objective_its_module_states,
+        "a fight is judged on its module's objective, five kinds both ways "
+        "(Camille, 2026-10-29)",
+    ),
+    "objective_budget": (
+        an_objective_moves_the_budget_one_band_and_says_so,
+        "an objective moves the budget one band and prints that it did "
+        "(Camille, 2026-10-29)",
+    ),
+    # **`story_milestones`, not `milestones`.** That name is already taken by
+    # the engine-and-arcade driver below, and a duplicate dict key is kept
+    # silently by the *last* writer -- so the first registration of this ran
+    # the other driver and reported 21 green assertions that had nothing to
+    # do with it.
+    # **`cold_hours`, not `exposure`.** That key is already the disease
+    # driver's, and a duplicate dict key is kept silently by the *last*
+    # writer -- the second time today a new registration ran somebody
+    # else's driver and reported its green assertions as mine.
+    "treasure": (
+        the_party_finds_the_monetary_treasure_it_is_owed,
+        "the party finds the monetary treasure it is owed (#969)",
+    ),
+    "skill_cap": (
+        one_skill_cannot_carry_a_whole_challenge,
+        "one skill cannot carry a whole challenge (#984)",
+    ),
+    "templates": (
+        the_printed_encounter_templates_can_be_fielded,
+        "the printed encounter templates can be fielded (#951)",
+    ),
+    "room_shape": (
+        a_scene_can_say_how_big_the_room_is,
+        "a scene can say how big the room is (#974)",
+    ),
+    "trap_budget": (
+        a_dressed_trap_is_paid_for_out_of_the_budget,
+        "a dressed trap is paid for out of the budget (#958)",
+    ),
+    "scene_allies": (
+        a_scene_can_field_allies_on_the_party_side,
+        "a scene can field allies on the party's side (#961)",
+    ),
+    "reinforcements": (
+        reinforcements_arrive_on_their_round_and_not_at_the_start,
+        "reinforcements arrive on their round, not at the start (#962)",
+    ),
+    "fight_aftermath": (
+        a_fight_says_how_it_went_and_the_next_scene_carries_it,
+        "a fight says how it went and the next scene carries it (#943)",
+    ),
+    "challenge_says": (
+        a_challenge_says_what_each_check_meant,
+        "a challenge says what each check meant (#932)",
+    ),
+    "graph_edges": (
+        the_graph_has_edges_and_can_answer_about_a_pair,
+        "the graph has edges and can answer about a pair (#934)",
+    ),
+    "story_xp": (
+        xp_is_awarded_by_the_printed_arithmetic_and_never_spent,
+        "XP is awarded by the printed arithmetic and never spent (#967)",
+    ),
+    "quests": (
+        a_quest_is_offered_completed_and_can_be_ruled_out,
+        "a quest is offered, completed and can be ruled out (#940)",
+    ),
+    "complexity_bound": (
+        a_challenge_is_no_harder_than_the_party_is_numerous,
+        "a challenge is no harder than the party is numerous (#939)",
+    ),
+    "module_cast": (
+        a_recurring_character_is_the_same_person_each_time,
+        "a recurring character is the same person each time (#944)",
+    ),
+    "scene_once": (
+        the_scene_s_text_is_read_once_and_details_are_spent,
+        "the scene's text is read once and details are spent (#936)",
+    ),
+    "lost_costs": (
+        losing_a_scene_costs_something_and_the_plot_goes_on,
+        "losing a scene costs something and the plot goes on (#975)",
+    ),
+    "unrested": (
+        a_fight_reached_without_a_rest_is_scaled_back,
+        "a fight reached without a rest is scaled back (#947)",
+    ),
+    "tension": (
+        the_party_s_recent_record_pitches_the_next_scene,
+        "the party's recent record pitches the next scene (#977)",
+    ),
+    "marching_order": (
+        the_party_stands_where_its_marching_order_says,
+        "the party stands where its marching order says (#994)",
+    ),
+    "cold_hours": (
+        hours_in_the_cold_cost_the_party_healing_surges,
+        "hours in the cold cost the party healing surges (#971)",
+    ),
+    "unknown_name": (
+        a_name_nobody_has_heard_of_still_reaches_the_dm,
+        "a name nobody has heard of still reaches the DM (#933)",
+    ),
+    "readiness": (
+        a_module_can_say_the_opposition_did_not_see_the_party_coming,
+        "a module can say the opposition did not see the party coming (#945)",
+    ),
+    "roll_margin": (
+        the_dm_is_told_how_narrowly_a_check_went_and_never_the_numbers,
+        "the DM is told how narrowly a check went and never the numbers "
+        "(#943)",
+    ),
+    "budget_ceiling": (
+        the_budget_clamps_to_what_the_database_can_field_and_says_so,
+        "the budget clamps to what the database can field and says so (#963)",
+    ),
+    "stays_cleared": (
+        a_revisited_scene_does_not_raise_the_creatures_it_lost,
+        "a revisited scene does not raise the creatures it lost (#970)",
+    ),
+    "rest_lockout": (
+        an_extended_rest_is_once_per_day_and_a_refusal_is_printed,
+        "an extended rest is once per day and a refusal is printed (#993)",
+    ),
+    "timeline": (
+        an_event_on_the_clock_fires_unless_the_party_prevented_it,
+        "an event fires on the clock unless the party prevented it (#965)",
+    ),
+    "story_milestones": (
+        two_encounters_make_a_milestone_and_the_board_is_told,
+        "two encounters are a milestone in a story campaign, weighted, "
+        "granted and told to the board (#968)",
+    ),
+    "scene_grant": (
+        a_scene_can_hand_the_party_something_that_survives_the_next_scene,
+        "a scene hands the party something and it survives the next scene "
+        "(#935)",
+    ),
+    "challenge_progresses": (
+        a_lost_skill_challenge_still_leads_somewhere,
+        "a lost skill challenge never strands the plot (Camille, 2026-10-29)",
+    ),
+    "party_size_rule": (
+        a_party_that_is_not_the_module_s_size_gets_the_page_s_rule,
+        "a party that is not the module's size gets the page's rule (#798)",
+    ),
+    "borrowed_board": (
+        a_challenge_can_run_on_the_fight_s_own_board,
+        "a challenge runs on the fight's own board, one bus (#911)",
     ),
     "challenge_costs_nothing": (
         a_non_combat_scene_does_not_spend_the_party_s_powers,

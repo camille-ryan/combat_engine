@@ -326,6 +326,45 @@ def level_of(world: World, eid: int) -> int:
     return stats.level if stats else 1
 
 
+@dataclass(frozen=True)
+class Wave:
+    """Creatures that walk on after the fight has started. #962.
+
+    One per module line rather than one per arrival, because the schedule
+    is what the module states -- a fixed number joining at the start of
+    every round -- and expanding it into a list of rounds up front would
+    have to guess how long the fight runs.
+
+    `worth` is the module's own XP rule and the reason this is not just a
+    count: the module counts only its earliest waves toward the reward.
+    """
+
+    at: int
+    every: int
+    until: int
+    refs: tuple[str, ...]
+    flavour: Reflavour
+    worth: bool = True
+    name: str = ""
+
+    def due(self, round_now: int) -> bool:
+        """Does this wave walk on at the start of `round_now`.
+
+        The same arithmetic `module.FoeSpec.due` states, kept here because
+        a `Dressed` outlives the scene it came from and the schedule has
+        to survive with it.
+        """
+        if round_now < self.at:
+            return False
+        if round_now == self.at:
+            return True
+        if not self.every:
+            return False
+        if self.until and round_now > self.until:
+            return False
+        return (round_now - self.at) % self.every == 0
+
+
 @dataclass
 class Dressed:
     """What a scene's opposition came out as, creature by creature."""
@@ -334,6 +373,21 @@ class Dressed:
     flavours: list[Reflavour] = field(default_factory=list)
     #: Lines the caller should print -- a clamp applied, a creature deferred.
     notes: list[str] = field(default_factory=list)
+    #: Reinforcements, which are **not** in `refs`: those are the creatures
+    #: standing on the board before the first turn. #962.
+    waves: list[Wave] = field(default_factory=list)
+    #: Creatures on the **party's** side, and their dressing, running
+    #: parallel the way `refs` and `flavours` do. Not in `refs` for the
+    #: obvious reason and for a second one: `refs` is what the XP award and
+    #: the `cleared` tally are written against, and an ally is neither
+    #: something the party overcame nor something it killed. #961.
+    allies: list[str] = field(default_factory=list)
+    ally_flavours: list[Reflavour] = field(default_factory=list)
+    #: How many traps this board's budget can still afford, for
+    #: `terrain.dress`. **`None` means nobody worked it out** and the
+    #: dresser keeps its own draw -- which is arcade mode, where there is
+    #: no encounter budget to overspend. #958.
+    traps: int | None = None
 
     def __len__(self) -> int:
         return len(self.refs)

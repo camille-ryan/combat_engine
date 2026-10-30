@@ -49,7 +49,7 @@ would field a fight with no terrain and look exactly like one that worked.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +57,10 @@ from combat_engine.engine.cast import TERRAIN_WORDS
 from combat_engine.engine.skills import SKILLS
 
 from .dc import BANDS
+from .objective import KINDS as OBJECTIVES
+from .objective import POSITIONS, Objective
+from .objective import ROUNDS as OBJECTIVE_ROUNDS
+from .objective import SHARE as OBJECTIVE_SHARE
 
 #: What sort of thing a scene is. Four, and they are the four the module in
 #: `modules/` is made of -- its outline has a heading for each.
@@ -65,6 +69,16 @@ from .dc import BANDS
 #: module says where the party may rest and that is a decision with a position
 #: in the story. `turns.short_rest` and `Party.rest` are what it runs.
 KINDS = ("roleplay", "skill_challenge", "combat", "rest")
+
+#: What shape a stated room may be. An octagon and an irregular chamber
+#: need nothing new -- a cut corner is blocking squares, the same
+#: mechanism a pillar already uses. #974.
+ROOM_KINDS = ("rectangle", "octagon", "irregular")
+
+#: The smallest room worth fighting in, and the largest the engine will
+#: build. The printed table runs 6x8 to 10x16; the floor in use is 16x12,
+#: so the ceiling is set by what exists rather than by the table.
+ROOM_MIN, ROOM_MAX = 5, 24
 
 #: How hard a fight is, as a multiplier on `story.budget(level)` -- which is
 #: itself one standard monster per character, read off the database rather than
@@ -150,6 +164,242 @@ class FoeSpec:
     words: tuple[str, ...] = ()
     role: str = ""
     rank: str = "standard"
+    #: The round this line walks on. 1 is on the board before the first
+    #: turn, which is what every line meant before arrivals existed. #962.
+    at: int = 1
+    #: Repeat every this many rounds from `at`. 0 is "once".
+    #:
+    #: The module's own wave prints *"at the start of each round, three
+    #: more emerge"*, so a repeat is the shape it needs rather than a list
+    #: of rounds.
+    every: int = 0
+    #: The last round a repeat may arrive on. **Required with `every`**, and
+    #: refused without it: *"they keep coming until the building is
+    #: a round cap, and unbounded reinforcements are an unbounded fight.
+    until: int = 0
+    #: Does this line earn XP. The module states its own cutoff -- only
+    #: its earliest waves count toward the reward -- which is also what
+    #: keeps a ten-round fight from being worth an arbitrary amount.
+    worth: bool = True
+
+    @property
+    def arrives(self) -> bool:
+        """Is this line a reinforcement rather than part of the opening board."""
+        return self.at > 1 or bool(self.every)
+
+    def due(self, round_now: int) -> bool:
+        """Does this line walk on at the start of `round_now`."""
+        if round_now < self.at:
+            return False
+        if round_now == self.at:
+            return True
+        if not self.every:
+            return False
+        if self.until and round_now > self.until:
+            return False
+        return (round_now - self.at) % self.every == 0
+
+
+#: What a quest is, and what it is worth saying about one.
+#:
+#: The DMG lists quests first among what an adventure is made of, and sets a
+#: level's budget as *"six to eight encounters, one major quest, and one
+#: minor quest per character"* -- so a quest is a third of the level's XP
+#: structure rather than decoration. The converted adventure prints two and
+#: nothing carried either.
+#:
+#: > **Major quests** [...] are the main story arc. **Minor quests** are the
+#: > subplots [...] Often, minor quests matter primarily to a particular
+#: > character or perhaps a subset of the party.
+QUEST_KINDS = ("major", "minor")
+
+#: The states a quest moves through. **Not a boolean per quest**, which is
+#: what #940's comment rules out:
+#:
+#: > *You can present quests that conflict with each other* -- so two active
+#: > quests may be mutually exclusive, and completing one must be able to
+#: > fail the other. A set of independent booleans cannot express that.
+#:
+#: `""` is a quest the module declares and has not offered yet, which is the
+#: mid-combat grant the same comment names: *"the characters gain a minor
+#: quest"* in a scene that is not a roleplay scene.
+QUEST_STATES = ("", "open", "done", "failed")
+
+#: What a scene may charge the party for losing it.
+#:
+#: Camille's ruling -- *"skill challenges should never prevent the plot from
+#: progressing"* -- is DMG2's printed rule, and DMG2 answers the obvious
+#: follow-up:
+#:
+#: > *focus the challenge on what the PCs' necessary victory costs them,
+#: > rather than on winning or losing. On either a success or a failure, the
+#: > characters will move on to the same obstacle. However, on a failure,
+#: > they move on at a significant disadvantage.*
+#:
+#: So a loss costs something and the exit is unchanged. `on_failure` is still
+#: there for the modules that branch; this is the option for the ones that
+#: should not have to.
+#:
+#: **One mechanism for every kind, not one for challenges.** #975's own
+#: comment makes the case: DMG2's three-position taxonomy -- clean, at a
+#: cost, failed -- names *"fewer healing surges or daily powers"* for a
+#: costly **combat** win and this body proposes the same list for a lost
+#: challenge. Keying it on `Scene.kind` would build it twice.
+COSTS = ("surge", "action point", "rest")
+
+#: Environmental dangers and the Endurance DC each one imposes, printed.
+#:
+#: **Fixed numbers, not a level band.** `dc.py`'s table scales with level
+#: because a skill challenge is pitched at the party; weather is not, and the
+#: page prints one DC per condition. Reading these off `dc(level, band)`
+#: would have made frigid cold easier for a stronger party, which is the
+#: opposite of what the rule says.
+#:
+#: A separate vocabulary from `TERRAIN_WORDS`, which is what a *board* is
+#: made of -- ice, snow, aquatic. A snowstorm a party walks through for eight
+#: hours and a patch of ice they fight on are different facts. #971.
+DANGERS = {
+    "severe weather": 20,
+    "high altitude": 21,
+    "cold": 22,
+    "heat": 22,
+    "extreme altitude": 26,
+    "frigid cold": 26,
+    "stifling heat": 26,
+}
+
+#: *"Every eight hours within an area of environmental danger, the character
+#: must succeed on an Endurance check."*
+EXPOSURE_HOURS = 8
+
+#: *"During the six hours that include extended rest, the character gets a
+#: +2 bonus to Endurance checks because he's resting and not exerting
+#: himself."*
+SHELTERED = 2
+
+
+#: How ready the opposition is when the party arrives. The DMG's four
+#: monster-readiness states, and the two in the middle are the ones with a
+#: consequence here: asleep or distracted and the defenders are **surprised**,
+#: which is a free round for the party.
+#:
+#: **The Stealth contest is deliberately skipped.** The book offers it as the
+#: fuller version -- the party member with the lowest Stealth rolls once for
+#: the group, against passive Perception -- but a converted adventure *states*
+#: in its prose that a creature is dozing by a fire rather than asking the DM
+#: to roll for it. So the module says, and the printed modifiers that only
+#: feed that contest (-5 asleep, -2 distracted) are **not** carried: a
+#: modifier nothing consults is this project's commonest bug.
+#:
+#: `alert` is accepted and does nothing yet, which is said out loud rather
+#: than implied -- its printed effects are active Perception each round,
+#: prepared defences and the best positions, and none of those has a
+#: mechanism here. #945.
+READINESS = ("ready", "asleep", "distracted", "alert")
+
+#: The states that hand the party a surprise round.
+CAUGHT = ("asleep", "distracted")
+
+#: What a timeline entry counts in. Scenes played and extended rests taken
+#: are the two units the book's own examples use -- *"a festival day"*, *"the
+#: night of the full moon"* -- and a tick per scene transition is the coarsest
+#: thing that can express any of them. Deliberately **not** a real clock.
+UNITS = ("scene", "rest")
+
+
+@dataclass(frozen=True)
+class Quest:
+    """Why the party is doing any of this, and what finishes it.
+
+    `done_when` is a **scene id or an affordance id**, both of which the
+    module already names, so nothing new has to be invented for a quest to
+    know when it is over.
+
+    `offered_by` is the scene that grants it, for a quest the party does
+    not start with. Any kind of scene may grant one.
+
+    `fails` names other quests this one's completion ends -- the conflict
+    case, which is why a quest has a state rather than a flag.
+
+    `xp` is carried and **spent by nothing**: `Sheet` has no XP field and
+    nothing in the story engine advances a character, which is #967. The
+    figure is recorded so that award has something to read, the same way
+    `Step.clean` waits for it.
+    """
+
+    id: str
+    kind: str = "major"
+    xp: int = 0
+    done_when: str = ""
+    offered_by: str = ""
+    fails: tuple[str, ...] = ()
+    says: str = ""
+
+
+@dataclass(frozen=True)
+class Cost:
+    """What losing this scene costs, applied with the exit unchanged.
+
+    `says` is shown **before** the scene runs, because DMG2's framing
+    advice is to *"build tension by showing players the negative
+    consequences of failure"* -- a cost discovered afterwards is a
+    punishment, and one stated beforehand is a stake.
+    """
+
+    what: str = "surge"
+    #: How many, per character.
+    each: int = 1
+    says: str = ""
+
+
+@dataclass(frozen=True)
+class Timed:
+    """One timeline entry: a scene that happens *to* the party, on the clock.
+
+    The DMG's structural tool for an adventure that is not a dungeon --
+    events that fire whether or not the party went looking, and the half
+    that makes it not railroading:
+
+    > *events on the timeline could trigger **unless** the characters
+    > manage to prevent them*
+
+    So an entry carries both halves. `when` and `unit` are when it is due;
+    `unless` is what cancels it, and is either a scene id the party has
+    already played or a module flag that is non-zero. An entry with no
+    `unless` is inevitable, which the book also allows -- a solar eclipse
+    is nobody's fault.
+
+    `says` is told to the players when the entry is announced, because
+    DMG2 is explicit that a deadline is no use as pacing if it is a
+    secret: *"Tell the players up front."*
+    """
+
+    when: int = 0
+    scene: str = ""
+    unit: str = "scene"
+    #: A scene id already played, or a flag that is non-zero. Either
+    #: cancels the entry for good.
+    unless: str = ""
+    says: str = ""
+
+
+@dataclass(frozen=True)
+class Grant:
+    """Something the scene hands the party.
+
+    `what` is the module's own word for it **or** the item ref, and
+    `loot.find` takes either -- the same dual shape `Objective.foes` has.
+    A converted module writes what the page printed; the tracked fixture
+    writes the ref, because a name must not enter a tracked file.
+
+    Any kind of scene may carry one. An adventure hands things over in a
+    conversation, at the end of a fight and over a night's rest, so this
+    is in no kind's `unused` list.
+    """
+
+    #: The module's word for the thing, or its item ref.
+    what: str = ""
+    count: int = 1
 
 
 #: How many beats a roleplay scene runs before it gives up and takes its first
@@ -157,6 +407,20 @@ class FoeSpec:
 #: exchanges is a scene the module did not finish writing, and a loop with no
 #: bound is worse than an early exit.
 MAX_BEATS = 6
+
+
+@dataclass(frozen=True)
+class Try:
+    """One of a challenge's skills, and what either result means.
+
+    The challenge-side twin of an `Affordance`'s `win`/`lose`. Both are
+    **facts** -- what is true because the roll went that way -- not
+    narration: the DM is handed them to deliver, and may not state more.
+    """
+
+    skill: str
+    win: str = ""
+    lose: str = ""
 
 
 @dataclass(frozen=True)
@@ -303,6 +567,34 @@ class Lore:
 
 
 @dataclass(frozen=True)
+class Person:
+    """Somebody the module has, as opposed to somebody in one scene.
+
+    > *Keep track of the way you have important NPCs act so you can
+    > maintain consistency if the same character appears again.*
+
+    We could not: `Npc` lived on a `Scene` and nowhere else, so the same
+    person across three scenes was three independent entries and nothing
+    made them agree. Voice and looks drifted, `wants` could contradict
+    itself, and a name typo made a second person in silence.
+
+    **The split is the one #944 settles in its own last paragraph**:
+    `wants`, `voice` and `looks` are the person's and live here;
+    `knows`, `hides` and `unseen` are the scene's and stay on `Npc`,
+    because what somebody will tell you depends on where you meet them.
+
+    This is also the half `story/graph.py` deliberately does not carry: a
+    graph records what is *true* about a person, and how they are *played*
+    is a presentation property rather than a fact.
+    """
+
+    name: str
+    wants: str = ""
+    voice: str = ""
+    looks: str = ""
+
+
+@dataclass(frozen=True)
 class Npc:
     """Somebody in the scene for the model to play.
 
@@ -407,6 +699,18 @@ class Scene:
     #: Scene ids this one may lead to. The first is the default. An empty tuple
     #: ends the module.
     exits: tuple[str, ...] = ()
+    #: What this scene hands the party, applied when it plays. Any kind may
+    #: carry one -- see `Grant` and `loot.hand_over`.
+    grants: tuple[Grant, ...] = ()
+    #: Environmental dangers the party is exposed to while this scene
+    #: happens, from `DANGERS`. Any kind may carry them: a conversation on
+    #: a mountainside is as cold as a fight on one.
+    exposure: tuple[str, ...] = ()
+    #: How long the scene takes, in hours. Only read when `exposure` is
+    #: stated -- an Endurance check falls due every `EXPOSURE_HOURS`.
+    hours: int = 0
+    #: What losing this scene costs. Any kind may carry one -- see `Cost`.
+    cost: tuple[Cost, ...] = ()
 
     # -- roleplay ------------------------------------------------------------
     #: Who is here to be talked to.
@@ -414,6 +718,22 @@ class Scene:
     #: What can be tried. An empty list makes the scene a read-aloud that
     #: advances, which is what every scene was before this existed.
     affordances: tuple[Affordance, ...] = ()
+    #: Sensory details the DM may spend, **one per beat, each once**.
+    #:
+    #: The book's own model of scene text is an opening description plus a
+    #: pool consumed as the scene runs, not one block re-presented every
+    #: beat:
+    #:
+    #: > *You don't need to pile atmospheric details into your very first
+    #: > description [...] listing a variety of details that might appear
+    #: > to every sense, and break them out to add some flair to your
+    #: > narratives as the adventure progresses.*
+    #:
+    #: Same shape as `Affordance.once` and `Playing.spent`, and the point
+    #: is that a spent detail **leaves the prompt** -- so anything
+    #: one-time stops being re-offered because it is no longer there to
+    #: read, rather than because the DM was told not to repeat it. #936.
+    details: tuple[str, ...] = ()
     #: What a character may already know, rolled for when the scene opens.
     lore: tuple[Lore, ...] = ()
     max_beats: int = MAX_BEATS
@@ -425,13 +745,67 @@ class Scene:
     terrain: tuple[str, ...] = ()
     foes: tuple[FoeSpec, ...] = ()
     tactics: str = ""
+    #: How ready the opposition is -- see `READINESS`. `asleep` or
+    #: `distracted` gives the party a surprise round.
+    readiness: str = "ready"
+    #: What the fight is *for*, when it is for something other than killing
+    #: everything. `None` is the overwhelming majority and means the scene is
+    #: fielded, played and judged exactly as it was before objectives existed
+    #: -- see `story/objective.py` and `run._fight`.
+    objective: Objective | None = None
+
+    #: How big the room is, and what shape: `(width, height, kind)`, with
+    #: `kind` one of `ROOM_KINDS`. Empty leaves the board the floor every
+    #: fight has always been. #974.
+    #:
+    #: The printed table rolls one of ten chambers and **nine of them are
+    #: smaller than that floor**, so a module that states its room is
+    #: usually asking for a tighter fight than the default -- which is the
+    #: point: a 6x8 chamber and a 10x16 hall are different fights with the
+    #: same cast.
+    room: tuple[int, int, str] = ()  # type: ignore[assignment]
+
+    #: Creatures fighting **on the party's side**. #961.
+    #:
+    #: The imported adventure's encounter chapter is built on these: it
+    #: says each of its encounters includes one or more allies, controlled
+    #: by the players, and then prints a roster for every one of them --
+    #: typically a handful of minion guards with map positions. Four of its
+    #: encounters cannot be fielded as written without this.
+    #:
+    #: A `FoeSpec` on the other side, deliberately: the same `count`,
+    #: `name`, `words`, `role` and `rank`, drawn by the same tiers, and
+    #: arriving on the same schedule if the module says so. A second
+    #: near-identical spec type would be a second set of rules to keep in
+    #: step.
+    #:
+    #: **Not a companion character.** DMG2's companion is a party member
+    #: built from formulas and it explicitly rules out the minions this
+    #: fields -- *"minions are too weak to help out the party"*. That is
+    #: #1015.
+    allies: tuple[FoeSpec, ...] = ()
 
     # -- skill challenge ----------------------------------------------------
     complexity: int = 0
+    #: Per-skill prose: what is now true because a check went that way.
+    #: **The gap that blocked the beat loop on a challenge** (#932): an
+    #: `Affordance` carries `win`/`lose` and `Director.react` is handed
+    #: them and told to deliver them, which is what keeps the DM narrating
+    #: the adventure rather than inventing it. A challenge's skills were
+    #: bare strings with no text at all, so wiring the loop in would have
+    #: given the DM a roll to narrate and nothing to narrate from.
+    #:
+    #: `primary` and `secondary` stay tuples of names, so every reader of
+    #: them is unchanged; this sits alongside and is looked up by skill.
+    tries: tuple[Try, ...] = ()
     #: The level the DCs are read at. Defaults to the party's when 0.
     level: int = 0
     primary: tuple[str, ...] = ()
     secondary: tuple[str, ...] = ()
+    #: How many successes one primary skill may contribute, by skill.
+    #: A skill not named here takes the default -- see `Scene.cap_for`.
+    #: #984.
+    caps: tuple[tuple[str, int], ...] = ()
     #: `"bonus"` or `"success"` -- see `SECONDARY_GRANTS`.
     secondary_grants: str = "bonus"
     #: Where success and failure lead. Both fall back to `exits` when empty,
@@ -461,10 +835,81 @@ class Scene:
         """What fraction of a standard encounter's budget this fight is worth."""
         return DIFFICULTY.get(self.difficulty, 1.0)
 
+    def means(self, skill: str, *, won: bool) -> str:
+        """What a check with this skill turning out that way means.
+
+        Empty when the module said nothing, which is every challenge
+        converted so far -- so a caller prints the roll and no more, which
+        is exactly what it did before. #932.
+        """
+        for said in self.tries:
+            if said.skill == skill.lower():
+                return said.win if won else said.lose
+        return ""
+
+    def counts_toward(self, party_level: int) -> int:
+        """How many encounters this scene is worth toward a milestone.
+
+        The printed rule weights the count by level difference rather than
+        taking every fight as one, and says so in as many words: an
+        encounter **two or more levels lower** than the characters "is
+        really easy, and it shouldn't contribute toward a milestone", while
+        one **four or more levels higher** "should count as two
+        encounters".
+
+        So: 0, 1 or 2, and only a `combat` scene counts at all. The same
+        page is explicit that a quest does not -- *"don't count a quest as
+        an encounter for the purposes of earning action points"* -- and a
+        conversation or a challenge is not an encounter either, which is
+        what makes the `kind` test the rule rather than a shortcut.
+
+        `level` falls back to the party's, which is the overwhelming
+        majority of scenes and weighs 1.
+        """
+        if self.kind != "combat":
+            return 0
+        gap = (self.level or party_level) - party_level
+        if gap <= -2:
+            return 0
+        return 2 if gap >= 4 else 1
+
     @property
     def needs(self) -> int:
         """Successes this challenge wants before three failures."""
         return COMPLEXITY.get(self.complexity, (0, 0, 0))[0]
+
+    @property
+    def capped(self) -> bool:
+        """Can a per-skill cap apply here at all. #984.
+
+        DMG2: *"limiting the number of successes that any particular
+        skill can contribute. A good maximum is equal to the complexity
+        of the challenge."* That is the bottleneck rule -- *"if only one
+        skill does the heavy lifting, you need to rethink the
+        challenge"* -- and it needs enough skills to go round.
+
+        **It does not go round in the one converted challenge**, which is
+        complexity 1 with three primary skills and wants four successes:
+        a cap of one each allows three, so the party could not win at
+        all. A default that makes a printed challenge unwinnable is
+        wrong, so the cap is withheld rather than applied, and
+        `_challenge` says so.
+        """
+        if not self.primary or self.complexity < 1:
+            return False
+        return len(self.primary) * self.complexity >= self.needs
+
+    def cap_for(self, skill: str) -> int:
+        """How many successes this skill may contribute. 0 means no cap.
+
+        A module's own figure wins -- DMG2's samples print one (*"this
+        skill can be used to gain 1 success in this challenge"*) -- and
+        is applied whether or not the default would have been.
+        """
+        for named, most in self.caps:
+            if named == skill.lower():
+                return most
+        return self.complexity if self.capped else 0
 
     @property
     def bands(self) -> tuple[str, ...]:
@@ -496,6 +941,19 @@ class Module:
     #: a reputation score, a body count, a door left unlocked. The module in
     #: `modules/` counts one of these and spends it on rewards.
     flags: dict[str, int] = field(default_factory=dict)
+    #: The people this module has, by name -- their `wants`, `voice` and
+    #: `looks`, which travel between scenes. A scene naming one of them
+    #: inherits those, and a scene that **contradicts** one is refused.
+    #: Empty for every module written before this, which then behaves
+    #: exactly as it did. #944.
+    cast: tuple[Person, ...] = ()
+    #: Why the party is doing any of this. Empty for every module written
+    #: before this. #940.
+    quests: tuple[Quest, ...] = ()
+    #: Events that fire on the clock rather than on what the party did.
+    #: Empty for every module converted so far, which is why nothing plays
+    #: differently until one states an entry. See `Timed` and `run._due`.
+    timeline: tuple[Timed, ...] = ()
 
     def scene(self, scene_id: str) -> Scene:
         return self.scenes[scene_id]
@@ -510,6 +968,100 @@ class Module:
         if chose and chose in scene.exits:
             return chose
         return scene.exits[0] if scene.exits else ""
+
+
+def _as_objective(raw: Any, where: str,
+                  problems: list[str]) -> Objective | None:
+    """What the fight is for, or `None` when the scene does not say.
+
+    **`None` and `{"kind": "defeat_all"}` are different answers** and both are
+    legal. The first means no watcher is built and `_fight` keeps its original
+    win condition; the second means the watcher runs and has to agree with it.
+    Collapsing them would have made the no-objective control in `drivers.py`
+    untestable, because there would be no way to field a fight that did *not*
+    go through the new code.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        problems.append(
+            f"{where}: an objective must be an object, got {type(raw).__name__}")
+        return None
+    kind = str(raw.get("kind", "defeat_all")).strip().lower()
+    if kind not in OBJECTIVES:
+        problems.append(
+            f"{where}: objective {kind!r} is not one of {', '.join(OBJECTIVES)}")
+        return None
+    position = str(raw.get("position", "")).strip().lower()
+    if kind == "hold":
+        if not position:
+            # Defaulted rather than refused: the party spawns in the west, so
+            # it defends its own end. `objective.py` explains the placement.
+            position = "west"
+        if position not in POSITIONS:
+            problems.append(
+                f"{where}: position {position!r} is not one of "
+                f"{', '.join(POSITIONS)}")
+            position = ""
+    elif position:
+        problems.append(f"{where}: objective {kind!r} takes no position")
+    rounds = raw.get("rounds", OBJECTIVE_ROUNDS)
+    if not isinstance(rounds, int) or rounds < 1:
+        problems.append(f"{where}: objective rounds must be a positive integer")
+        rounds = OBJECTIVE_ROUNDS
+    share = raw.get("share", OBJECTIVE_SHARE)
+    if not isinstance(share, int | float) or not 0 < float(share) < 1:
+        problems.append(f"{where}: objective share must be between 0 and 1")
+        share = OBJECTIVE_SHARE
+    harder, easier = bool(raw.get("harder")), bool(raw.get("easier"))
+    if harder and easier:
+        # Refused rather than cancelled out, because an author who wrote both
+        # meant one of them and a silent no-op hides which.
+        problems.append(f"{where}: an objective cannot be both harder and easier")
+        harder = easier = False
+    foes = tuple(str(f).strip() for f in raw.get("foes", ()) if str(f).strip())
+    if kind == "defeat_foe" and not foes:
+        problems.append(f"{where}: defeat_foe needs at least one ref in foes")
+    elif kind != "defeat_foe" and foes:
+        problems.append(f"{where}: objective {kind!r} takes no foes")
+    leaks = raw.get("leaks", 0)
+    if not isinstance(leaks, int) or leaks < 0:
+        problems.append(f"{where}: objective leaks must be a whole number")
+        leaks = 0
+    return Objective(
+        kind=kind, foes=foes, share=float(share), rounds=rounds,
+        position=position, leaks=leaks, harder=harder, easier=easier,
+        says=str(raw.get("says", "")).strip(),
+    )
+
+
+def _as_room(
+    raw: Any, where: str, problems: list[str],
+) -> tuple[int, int, str]:
+    """A stated chamber, or `()` for the floor every fight has used. #974."""
+    if raw is None:
+        return ()  # type: ignore[return-value]
+    if not isinstance(raw, dict):
+        problems.append(
+            f"{where}: a room must be an object with width and height, got "
+            f"{type(raw).__name__}")
+        return ()  # type: ignore[return-value]
+    size = []
+    for side in ("width", "height"):
+        got = raw.get(side)
+        if not isinstance(got, int) or not ROOM_MIN <= got <= ROOM_MAX:
+            problems.append(
+                f"{where}: room {side} must be an integer between "
+                f"{ROOM_MIN} and {ROOM_MAX}, got {got!r}")
+            return ()  # type: ignore[return-value]
+        size.append(got)
+    kind = str(raw.get("kind", "rectangle")).strip().lower()
+    if kind not in ROOM_KINDS:
+        problems.append(
+            f"{where}: room kind {kind!r} is not one of "
+            f"{', '.join(ROOM_KINDS)}")
+        return ()  # type: ignore[return-value]
+    return (size[0], size[1], kind)
 
 
 def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
@@ -528,10 +1080,225 @@ def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
         problems.append(f"{where}: rank {rank!r} is not one of {', '.join(RANKS)}")
         rank = "standard"
     words = tuple(str(w).strip().lower() for w in raw.get("words", ()) if str(w).strip())
+
+    def whole(key: str, floor: int = 0) -> int:
+        got = raw.get(key, 0)
+        if not isinstance(got, int) or got < floor:
+            problems.append(
+                f"{where}: {key} must be an integer of at least {floor}, "
+                f"got {got!r}")
+            return 0
+        return got
+
+    at = whole("at") or 1
+    if "at" in raw and (not isinstance(raw["at"], int) or raw["at"] < 1):
+        problems.append(f"{where}: at must be round 1 or later, got {raw['at']!r}")
+        at = 1
+    every = whole("every")
+    until = whole("until")
+    # **A repeat must be capped.** The module's own wave stops on either a
+    # landmark being destroyed or a round cap -- the round cap is the half
+    # this can express, and without it a wave fields a creature every round until
+    # `MAX_ROUNDS`, which is an unbounded fight and, if it earned XP, an
+    # unbounded reward.
+    if every and not until:
+        problems.append(
+            f"{where}: a repeating wave needs `until` -- reinforcements with "
+            "no last round are an unbounded fight")
+    if until and not every:
+        problems.append(
+            f"{where}: `until` only means something with `every`; a wave "
+            "that arrives once arrives on `at`")
+    if until and every and until < at:
+        problems.append(
+            f"{where}: until {until} is before at {at}, so this wave never "
+            "arrives")
     return FoeSpec(
         count=count, name=str(raw.get("name", "")).strip(),
         words=words, role=role, rank=rank,
+        at=at, every=every, until=until,
+        worth=bool(raw.get("worth", True)),
     )
+
+
+def _as_quest(raw: Any, where: str, problems: list[str]) -> Quest | None:
+    """One quest. Its scene and affordance ids are checked in `parse`."""
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a quest must be an object")
+        return None
+    ident = str(raw.get("id", "")).strip()
+    if not ident:
+        problems.append(f"{where}: a quest needs an id")
+        return None
+    kind = str(raw.get("kind", "major")).strip().lower() or "major"
+    if kind not in QUEST_KINDS:
+        problems.append(
+            f"{where}: quest {ident!r} is {kind!r}; it must be one of "
+            f"{', '.join(QUEST_KINDS)}"
+        )
+        kind = "major"
+    xp = raw.get("xp", 0)
+    if not isinstance(xp, int) or isinstance(xp, bool) or xp < 0:
+        problems.append(
+            f"{where}: quest {ident!r} has xp {xp!r}; it must be a "
+            "non-negative integer"
+        )
+        xp = 0
+    done = str(raw.get("done_when", "")).strip()
+    if not done:
+        problems.append(
+            f"{where}: quest {ident!r} has no `done_when`, so nothing could "
+            "ever complete it -- name the scene or affordance that does"
+        )
+        return None
+    return Quest(
+        id=ident, kind=kind, xp=xp, done_when=done,
+        offered_by=str(raw.get("offered_by", "")).strip(),
+        fails=tuple(str(f).strip() for f in raw.get("fails", ())
+                    if str(f).strip()),
+        says=str(raw.get("says", "")).strip(),
+    )
+
+
+def _as_cost(raw: Any, where: str, problems: list[str]) -> Cost | None:
+    """One `cost` entry. The vocabulary is closed, like every other here."""
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a cost must be an object")
+        return None
+    what = str(raw.get("what", "")).strip().lower()
+    if what not in COSTS:
+        problems.append(
+            f"{where}: cost {what!r} is not one of {', '.join(COSTS)}"
+        )
+        return None
+    each = raw.get("each", 1)
+    if not isinstance(each, int) or isinstance(each, bool) or each < 1:
+        problems.append(
+            f"{where}: cost {what!r} has each {each!r}; it is how many per "
+            "character and must be a positive integer"
+        )
+        each = 1
+    return Cost(what=what, each=each,
+                says=str(raw.get("says", "")).strip())
+
+
+def _as_timed(raw: Any, where: str, problems: list[str]) -> Timed | None:
+    """One timeline entry. Its `scene` and `unless` are checked in `parse`,
+    which is the only place that knows every scene id and flag."""
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a timeline entry must be an object")
+        return None
+    scene = str(raw.get("scene", "")).strip()
+    if not scene:
+        problems.append(f"{where}: a timeline entry needs a 'scene' to fire")
+        return None
+    when = raw.get("when", 0)
+    if not isinstance(when, int) or isinstance(when, bool) or when < 1:
+        problems.append(
+            f"{where}: when is {when!r}; it is which tick the entry is due "
+            "on and must be a positive integer"
+        )
+        return None
+    unit = str(raw.get("unit", "scene")).strip().lower()
+    if unit not in UNITS:
+        problems.append(
+            f"{where}: unit {unit!r} is not one of {', '.join(UNITS)}"
+        )
+        unit = "scene"
+    return Timed(
+        when=when, scene=scene, unit=unit,
+        unless=str(raw.get("unless", "")).strip(),
+        says=str(raw.get("says", "")).strip(),
+    )
+
+
+def _as_grant(raw: Any, where: str, problems: list[str]) -> Grant | None:
+    """One `grants` entry.
+
+    Deliberately **not** resolved here. `_as_scene` runs at validation time
+    and must work with no database -- `--validate` is the one command a
+    converter runs before anything is built -- so whether the word matches
+    an item is `loot.find`'s question at grant time, and an unmatched one
+    is reported there rather than refused here.
+    """
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a grant must be an object")
+        return None
+    what = str(raw.get("what", "")).strip()
+    if not what:
+        problems.append(f"{where}: a grant needs a 'what' -- an item ref, or "
+                        "the module's own word for the thing")
+        return None
+    count = raw.get("count", 1)
+    if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+        problems.append(
+            f"{where}: grant {what!r} has count {count!r}; it must be a "
+            "positive integer"
+        )
+        count = 1
+    return Grant(what=what, count=count)
+
+
+def _as_person(raw: Any, where: str, problems: list[str]) -> Person | None:
+    """One cast entry: the half of a character that travels."""
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a cast entry must be an object")
+        return None
+    name = str(raw.get("name", "")).strip()
+    if not name:
+        problems.append(f"{where}: a cast entry needs a name")
+        return None
+    return Person(
+        name=name,
+        wants=str(raw.get("wants", "")).strip(),
+        voice=str(raw.get("voice", "")).strip(),
+        looks=str(raw.get("looks", "")).strip(),
+    )
+
+
+def _agree(scene_id: str, npcs: tuple[Npc, ...], cast: dict[str, Person],
+           problems: list[str]) -> tuple[Npc, ...]:
+    """Fill a scene's npcs from the cast, and refuse a contradiction.
+
+    **Inherit when the scene is silent, refuse when it disagrees.** The
+    alternative -- preferring one side -- is how the drift in #944 stayed
+    invisible: whichever value won, the other was written down and
+    ignored, and nothing said so. A module that means to change somebody
+    changes the cast entry.
+
+    A name not in the cast is left alone rather than refused, because a
+    walk-on who appears once is legitimate and a cast is not required to
+    be exhaustive. What that costs is the typo case: a misspelling makes a
+    walk-on rather than a complaint. Said out loud here because #944 hoped
+    the refusal would fall out for free, and it only does if the cast is
+    exhaustive -- which would refuse every one-scene character.
+    """
+    # No `if not cast` fast path: with an empty cast every npc takes the
+    # walk-on branch and comes back unchanged, so the guard changed
+    # nothing -- a plant that removed it stayed green. Fifth dead guard of
+    # this shape on this branch.
+    out: list[Npc] = []
+    for who in npcs:
+        known = cast.get(who.name)
+        if known is None:
+            out.append(who)
+            continue
+        for field_ in ("wants", "voice", "looks"):
+            mine = getattr(who, field_)
+            theirs = getattr(known, field_)
+            if mine and theirs and mine != theirs:
+                problems.append(
+                    f"scene {scene_id!r}: npc {who.name!r} sets {field_} to "
+                    f"{mine!r} and the cast says {theirs!r} -- change the "
+                    "cast entry rather than contradicting it here"
+                )
+        out.append(replace(
+            who,
+            wants=who.wants or known.wants,
+            voice=who.voice or known.voice,
+            looks=who.looks or known.looks,
+        ))
+    return tuple(out)
 
 
 def _as_npc(raw: Any, where: str, problems: list[str]) -> Npc | None:
@@ -690,15 +1457,48 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         )
         difficulty = "standard"
 
-    primary = tuple(str(s).strip().lower() for s in raw.get("primary", ()) if str(s).strip())
-    secondary = tuple(
-        str(s).strip().lower() for s in raw.get("secondary", ()) if str(s).strip()
-    )
+    # **Both forms accepted**: a bare skill name, which is what every
+    # converted scene holds, or an object carrying what either result
+    # means. Mixing them in one list is fine -- a module adding prose to
+    # the two skills the page describes should not have to rewrite the
+    # other four.
+    def _skills(key: str) -> tuple[tuple[str, ...], list[Try]]:
+        names: list[str] = []
+        said: list[Try] = []
+        for item in raw.get(key, ()):
+            if isinstance(item, dict):
+                skill = str(item.get("skill", "")).strip().lower()
+                if not skill:
+                    problems.append(
+                        f"{where}: a {key} entry has no skill: {item!r}")
+                    continue
+                names.append(skill)
+                said.append(Try(
+                    skill=skill,
+                    win=str(item.get("win", "")).strip(),
+                    lose=str(item.get("lose", "")).strip()))
+                continue
+            if str(item).strip():
+                names.append(str(item).strip().lower())
+        return tuple(names), said
+
+    primary, primary_says = _skills("primary")
+    secondary, secondary_says = _skills("secondary")
+    tries = tuple(primary_says + secondary_says)
     for skill in (*primary, *secondary):
         if skill not in SKILLS:
             problems.append(
                 f"{where}: {skill!r} is not a skill. Known: {', '.join(sorted(SKILLS))}"
             )
+    seen_twice = {s for s in (*primary, *secondary)
+                  if (primary + secondary).count(s) > 1}
+    if seen_twice:
+        # A skill listed twice is two different DCs for one skill, and
+        # `band_of` answers with the primary -- so the secondary entry is
+        # silently dead, along with any prose on it.
+        problems.append(
+            f"{where}: {', '.join(sorted(seen_twice))} listed more than "
+            "once across primary and secondary")
 
     complexity = raw.get("complexity", 0)
     if not isinstance(complexity, int) or complexity < 0:
@@ -711,6 +1511,43 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         )
     if kind == "skill_challenge" and not primary:
         problems.append(f"{where}: a skill challenge needs at least one primary skill")
+    if tries and kind != "skill_challenge":
+        problems.append(
+            f"{where}: a {kind} scene states what a skill check means, but "
+            "only a skill_challenge rolls them")
+
+    caps: list[tuple[str, int]] = []
+    for skill, most in dict(raw.get("caps") or {}).items():
+        name = str(skill).strip().lower()
+        if name not in (*primary, *secondary):
+            problems.append(
+                f"{where}: a cap names {name!r}, which this challenge does "
+                "not list")
+            continue
+        if not isinstance(most, int) or most < 1:
+            problems.append(
+                f"{where}: the cap on {name!r} must be a positive integer, "
+                f"got {most!r}")
+            continue
+        caps.append((name, most))
+    if caps and kind != "skill_challenge":
+        problems.append(
+            f"{where}: a {kind} scene caps a skill, but only a "
+            "skill_challenge rolls them")
+    # **A stated cap may not make the challenge unwinnable.** The default
+    # withholds itself when it would (`Scene.capped`); a module's own
+    # figure is trusted over the default, so it needs the same check or
+    # the trust is a hole. Only when *every* primary is capped -- one
+    # uncapped skill can carry the rest.
+    if caps and kind == "skill_challenge" and primary:
+        stated = dict(caps)
+        if all(s in stated for s in primary):
+            most = sum(stated[s] for s in primary)
+            needs = COMPLEXITY.get(complexity, (0, 0, 0))[0]
+            if most < needs:
+                problems.append(
+                    f"{where}: the caps allow {most} success(es) and the "
+                    f"challenge wants {needs}, so it could never be won")
 
     grants = str(raw.get("secondary_grants", "bonus")).strip().lower()
     if grants not in SECONDARY_GRANTS:
@@ -729,6 +1566,18 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     foes = tuple(
         _as_foe(f, where, problems) for f in raw.get("foes", ())
     )
+    allies = tuple(
+        _as_foe(a, where, problems) for a in raw.get("allies", ())
+    )
+    room = _as_room(raw.get("room"), where, problems)
+    if room and kind != "combat":
+        problems.append(
+            f"{where}: a {kind} scene states a room, but only a combat "
+            "scene builds a board")
+    if allies and kind != "combat":
+        problems.append(
+            f"{where}: a {kind} scene lists allies, but only a combat scene "
+            "fields anybody")
     npcs = tuple(
         n for n in (_as_npc(x, where, problems) for x in raw.get("npcs", ()))
         if n is not None
@@ -768,10 +1617,55 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                 f"{where}: npc {person.name!r} is unseen until "
                 f"{person.unseen!r}, which is not an affordance here"
             )
+    details = tuple(
+        str(d).strip() for d in raw.get("details", ()) or () if str(d).strip()
+    )
     beats = raw.get("max_beats", MAX_BEATS)
     if not isinstance(beats, int) or beats < 1:
         problems.append(f"{where}: max_beats must be a positive integer")
         beats = MAX_BEATS
+    exposure = tuple(
+        str(w).strip().lower() for w in raw.get("exposure", ()) or ()
+        if str(w).strip()
+    )
+    for word in exposure:
+        if word not in DANGERS:
+            problems.append(
+                f"{where}: exposure {word!r} is not one of "
+                f"{', '.join(sorted(DANGERS))}"
+            )
+    hours = raw.get("hours", 0)
+    if not isinstance(hours, int) or isinstance(hours, bool) or hours < 0:
+        problems.append(
+            f"{where}: hours is {hours!r}; it is how long the scene takes "
+            "and must be a non-negative integer"
+        )
+        hours = 0
+    if exposure and not hours:
+        problems.append(
+            f"{where}: states exposure {list(exposure)} and no hours, so no "
+            "Endurance check would ever fall due -- say how long it takes"
+        )
+    cost = tuple(
+        c for c in (
+            _as_cost(r, f"{where} cost {i + 1}", problems)
+            for i, r in enumerate(raw.get("cost", ()) or ())
+        ) if c is not None
+    )
+    readiness = str(raw.get("readiness", "ready")).strip().lower() or "ready"
+    if readiness not in READINESS:
+        problems.append(
+            f"{where}: readiness {readiness!r} is not one of "
+            f"{', '.join(READINESS)}"
+        )
+        readiness = "ready"
+    objective = _as_objective(raw.get("objective"), where, problems)
+    grants = tuple(
+        g for g in (
+            _as_grant(r, f"{where} grant {i + 1}", problems)
+            for i, r in enumerate(raw.get("grants", ()) or ())
+        ) if g is not None
+    )
     if kind == "combat" and not foes:
         problems.append(f"{where}: a combat scene needs at least one foe line")
 
@@ -780,11 +1674,16 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     # fight; a roleplay scene carrying a complexity never counts a success.
     # Both read exactly like a scene that works, which is why they are refused.
     unused = {
-        "roleplay": ("foes", "terrain", "complexity", "primary", "secondary"),
-        "skill_challenge": ("foes", "terrain", "affordances"),
-        "combat": ("complexity", "primary", "secondary", "affordances"),
+        "roleplay": ("foes", "terrain", "complexity", "primary", "secondary",
+                     "objective", "readiness"),
+        # `details` is roleplay-only: nothing else runs beats to spend them.
+        "skill_challenge": ("foes", "terrain", "affordances", "objective",
+                            "readiness", "details"),
+        "combat": ("complexity", "primary", "secondary", "affordances",
+                   "details"),
         "rest": ("foes", "terrain", "complexity", "primary", "secondary",
-                 "affordances", "npcs", "lore"),
+                 "affordances", "npcs", "lore", "objective", "readiness",
+                 "details"),
     }[kind]
     for name in unused:
         if raw.get(name):
@@ -797,19 +1696,30 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         sets=str(raw.get("sets", "")),
         chapter=str(raw.get("chapter", "")).strip(),
         exits=tuple(str(e).strip() for e in raw.get("exits", ()) if str(e).strip()),
+        grants=grants,
+        exposure=exposure,
+        hours=hours,
+        cost=cost,
         npcs=npcs,
         affordances=affordances,
+        details=details,
         lore=lore,
         max_beats=beats,
         difficulty=difficulty,
         xp=int(raw.get("xp", 0) or 0),
         terrain=terrain,
         foes=foes,
+        allies=allies,
+        room=room,
         tactics=str(raw.get("tactics", "")),
+        readiness=readiness,
+        objective=objective,
         complexity=complexity,
         level=int(raw.get("level", 0) or 0),
         primary=primary,
         secondary=secondary,
+        tries=tries,
+        caps=tuple(caps),
         secondary_grants=grants,
         on_success=str(raw.get("on_success", "")).strip(),
         on_failure=str(raw.get("on_failure", "")).strip(),
@@ -824,12 +1734,28 @@ def parse(raw: dict, path: Path) -> Module:
     if not module_id:
         problems.append("the module needs an id")
 
+    cast_list = tuple(
+        c for c in (
+            _as_person(r, f"cast entry {i + 1}", problems)
+            for i, r in enumerate(raw.get("cast", ()) or ())
+        ) if c is not None
+    )
+    cast = {c.name: c for c in cast_list}
+    if len(cast) != len(cast_list):
+        problems.append(
+            "the cast names somebody twice, so a scene naming them could "
+            "inherit either entry"
+        )
+
     scenes: dict[str, Scene] = {}
     order: list[str] = []
     for i, raw_scene in enumerate(raw.get("scenes", ())):
         scene = _as_scene(raw_scene, i, problems)
         if scene is None:
             continue
+        if scene.npcs:
+            scene = replace(
+                scene, npcs=_agree(scene.id, scene.npcs, cast, problems))
         if scene.id in scenes:
             problems.append(f"scene {scene.id!r}: declared twice")
             continue
@@ -853,11 +1779,44 @@ def parse(raw: dict, path: Path) -> Module:
             if exit_id and exit_id not in scenes:
                 problems.append(f"scene {scene.id!r}: exit {exit_id!r} is not a scene")
 
+    flags = {
+        str(k): int(v) for k, v in (raw.get("flags") or {}).items()
+        if isinstance(v, int)
+    }
+
+    timeline = tuple(
+        t for t in (
+            _as_timed(r, f"timeline entry {i + 1}", problems)
+            for i, r in enumerate(raw.get("timeline", ()) or ())
+        ) if t is not None
+    )
+    for i, entry in enumerate(timeline):
+        where = f"timeline entry {i + 1}"
+        if entry.scene not in scenes:
+            problems.append(
+                f"{where}: fires {entry.scene!r}, which is not a scene"
+            )
+        # **`unless` is a scene id or a flag, and a typo in it is the worst
+        # kind of mistake here**: an entry whose cancel condition can never
+        # be true is an inevitable event wearing an escape hatch, and it
+        # would play as though the party simply never managed to stop it.
+        if entry.unless and entry.unless not in scenes and entry.unless not in flags:
+            problems.append(
+                f"{where}: unless {entry.unless!r} is neither a scene nor a "
+                "declared flag, so nothing could ever cancel this entry"
+            )
+
     # Unreachable scenes are reported, not refused: a converter working through
     # a long module has half a graph for a while, and `--validate` is the tool
     # that should tell them which half.
+    #
+    # **A timeline's own scenes are roots.** Nothing exits to them by
+    # construction -- that is what being on the clock means -- so without
+    # this every timed event reported "nothing leads to it" and the one
+    # genuine orphan would be lost among them.
     if start in scenes:
-        seen, stack = {start}, [start]
+        roots = [start, *(t.scene for t in timeline if t.scene in scenes)]
+        seen, stack = set(roots), list(roots)
         while stack:
             here = scenes[stack.pop()]
             onward = [*here.exits, here.on_success, here.on_failure]
@@ -870,24 +1829,93 @@ def parse(raw: dict, path: Path) -> Module:
             if orphan not in seen:
                 problems.append(f"scene {orphan!r}: nothing leads to it")
 
+    # **A challenge no harder than the party is numerous.** DMG2:
+    #
+    # > *As a guideline, make skill challenge complexity no higher than 1
+    # > above the number of characters in the party.*
+    #
+    # So a party of two should not face a complexity-4 challenge. Checked
+    # here rather than in `_as_scene` because the party size is the
+    # module's and a scene does not know it -- which is why the harder
+    # refusal (a complexity outside the table) has existed for longer than
+    # this easier one. #939.
+    quests = tuple(
+        q for q in (
+            _as_quest(r, f"quest {i + 1}", problems)
+            for i, r in enumerate(raw.get("quests", ()) or ())
+        ) if q is not None
+    )
+    by_id = {q.id: q for q in quests}
+    if len(by_id) != len(quests):
+        problems.append("the module names the same quest twice")
+    affordances = {
+        a.id for s in scenes.values() for a in s.affordances
+    }
+    for quest in quests:
+        where = f"quest {quest.id!r}"
+        if quest.done_when not in scenes and quest.done_when not in affordances:
+            problems.append(
+                f"{where}: `done_when` is {quest.done_when!r}, which is "
+                "neither a scene nor an affordance in this module"
+            )
+        if quest.offered_by and quest.offered_by not in scenes:
+            problems.append(
+                f"{where}: `offered_by` is {quest.offered_by!r}, which is "
+                "not a scene in this module"
+            )
+        # **The trivially redundant case.** DMG2: *"don't reward the
+        # characters twice for the same actions [...] 'defeat ten
+        # encounters of your level' isn't a quest."* A quest finished by
+        # the very scene that grants it is paid for arriving, which is the
+        # clearest instance and the only one checkable without walking
+        # every path. The general case -- a goal the scenes it spans
+        # satisfy anyway -- is a reachability question and is left on the
+        # issue.
+        if quest.offered_by and quest.offered_by == quest.done_when:
+            problems.append(
+                f"{where}: granted and completed by the same scene "
+                f"{quest.done_when!r}, so it pays the party for arriving"
+            )
+        for other in quest.fails:
+            if other not in by_id:
+                problems.append(
+                    f"{where}: fails {other!r}, which is not a quest in "
+                    "this module"
+                )
+            elif other == quest.id:
+                problems.append(f"{where}: fails itself")
+
+    size = int(raw.get("party_size", 4) or 4)
+    for scene in scenes.values():
+        # No `kind != "skill_challenge"` guard: `complexity` is in every
+        # other kind's `unused` list, so a non-challenge scene is refused
+        # for carrying one at all and always has 0 here. A plant that
+        # removed the guard changed nothing -- sixth dead guard of this
+        # shape on this branch.
+        if scene.complexity > size + 1:
+            problems.append(
+                f"scene {scene.id!r}: complexity {scene.complexity} for a "
+                f"party of {size} -- the printed guideline is no higher "
+                f"than one above the party's number, so {size + 1} is the "
+                "most this module should ask for"
+            )
+
     level = raw.get("party_level", 1)
     if not isinstance(level, int) or not 1 <= level <= 30:
         problems.append(f"party_level must be 1-30, got {level!r}")
         level = 1
-
-    flags = {
-        str(k): int(v) for k, v in (raw.get("flags") or {}).items()
-        if isinstance(v, int)
-    }
 
     if problems:
         raise ModuleError(path, problems)
     return Module(
         id=module_id, scenes=scenes, start=start,
         party_level=level,
-        party_size=int(raw.get("party_size", 4) or 4),
+        party_size=size,
         edition=str(raw.get("edition", "")).strip(),
         flags=flags,
+        cast=cast_list,
+        quests=quests,
+        timeline=timeline,
     )
 
 

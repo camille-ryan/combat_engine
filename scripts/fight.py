@@ -116,6 +116,11 @@ def main() -> int:
     ap.add_argument("--level", type=int, default=1)
     ap.add_argument("--scaling", choices=sorted(PRESETS), default="full")
     ap.add_argument(
+        "--paradigm", choices=sorted(story.SHAPES_BY_NAME), default=None,
+        help="field a named encounter shape instead of drawing one. "
+             "The printed templates -- double line, battlefield control, "
+             "wolf pack -- are askable but never drawn (#951)")
+    ap.add_argument(
         "--monster-math",
         choices=sorted(MATHS),
         default="printed",
@@ -226,7 +231,7 @@ def _a_day(args: argparse.Namespace) -> int:
     for n in range(1, args.fights + 1):
         fielded = story.field_encounter(
             args.seed + n, args.level, scaling=args.scaling,
-            math=args.monster_math, party=party,
+            math=args.monster_math, party=party, paradigm=args.paradigm,
         )
         world = fielded.world
         if not fielded.enemies:
