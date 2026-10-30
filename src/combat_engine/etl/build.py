@@ -671,6 +671,45 @@ CREATE TABLE trap (
   -- Arcana 17, Religion 6, Nature 2, Streetwise 1, Perception 1. A reader
   -- assuming Thievery would be wrong one time in five. #955.
   disable_skill TEXT, disable_dc INTEGER,
+  -- **The hit points of a trap printed as an object with its own stat
+  -- line**, which is the only one of three different printed hit-point
+  -- numbers that belongs to the trap *entity*. Camille's ruling, #955:
+  --
+  --   > "keep parity with the rules. If the entities have hp, then
+  --   > implement it"
+  --
+  -- **"204 rows print hit points" is true and is not a count of attackable
+  -- traps**, which is the measurement that stops this column modelling the
+  -- wrong thing. Those 204 split three ways: a countermeasure sentence
+  -- giving hit points to a destructible *part* (a turret, the spears in one
+  -- square), a loose `(Defenses 5; hp 100)` with no AC, and the trap's own
+  -- object stat line. Only the last is the entity, so only the last is
+  -- here; whether a trap's turret is a thing on the board is a separate
+  -- question and not this column's.
+  --
+  --   597 blocks print a stat-line header
+  --    67 of those print an `HP n` inside the line  -> stored
+  --     2 print one 950+ characters later           -> not stored, that is
+  --       a component's hit points in a countermeasure sentence
+  --
+  -- **The level is a cross-check rather than a count**, and it is what says
+  -- this reading picks up the right line: `trap.level` is already filled by
+  -- a different parse, and the stat line's level agrees with it **67 of 67**.
+  -- A regression shows up as that number falling rather than as prose that
+  -- quietly stopped matching, which is the same argument `_links_resolve`
+  -- is built on.
+  hp INTEGER,
+  -- **`hp` is not always a total, and a reader must not assume it is.**
+  -- Eight of the 67 qualify it -- `per square`, `per spear`, `in each of
+  -- six`, `per square of the wall` -- so the number is per-part and the
+  -- trap has no single pool. NULL means the page printed a plain total.
+  --
+  -- Stored as the printed words rather than parsed into a count, because
+  -- the qualifiers are a long tail of seven shapes over eight rows and
+  -- deriving a multiplier from "per square of tentacles" would be the
+  -- fabrication `perception_dc`'s note warns about. Whatever models these
+  -- needs the sentence, not a number.
+  hp_each TEXT,
   -- Which of the two layouts the page used. `monster` has carried this since
   -- it was written and the component rule says to record it for every dialect
   -- pair; traps did not, and without it nothing can tell a trap that *prints*
@@ -845,6 +884,12 @@ class Report:
     #: supplies. Measured, and not the same thing as the table's row count,
     #: which is what `#1018`'s body first claimed.
     census: int = 0
+    #: Traps printed as an object with their own hit points, and how many of
+    #: those agree with `trap.level`. The second is the cross-check, so the
+    #: two are reported together and a reader can see at a glance whether a
+    #: shrinking count is the corpus or the parse. #955.
+    trap_hp: int = 0
+    trap_hp_level: int = 0
     disable_one: int = 0
     disable_many: int = 0
     disable_none: int = 0
@@ -914,6 +959,11 @@ class Report:
             f"(skill + DC pairs a trap prints, across 16 of 17 skills)",
             f"unindexed     {self.unindexed:6d}  "
             f"(proper names with no ref anywhere, given an opaque token)",
+            f"trap hp       {self.trap_hp:6d}  "
+            f"(printed as an object with its own stat line; "
+            f"{self.trap_hp_level} of them agree with `trap.level`, which is "
+            f"the cross-check -- the other hit points in the corpus belong to "
+            f"a destructible part, not the trap)",
             f"census seen   {self.census:6d}  "
             f"(`common_word` rows the sanitiser could read mid-build; "
             f"0 means `identifies` ran without the game's own vocabulary "
@@ -1040,6 +1090,7 @@ def build() -> Report:
         "SELECT COUNT(*) FROM trap WHERE disable_dc IS NOT NULL"
     ).fetchone()[0]
     report.disable_none, report.disable_many = _disable_split(out)
+    report.trap_hp, report.trap_hp_level = _object_stat_lines(out)
     report.poisons = _poisons(source, out, names)
     report.diseases = _diseases(source, out, names)
     report.build_powers = _build_powers(source, out, names)
@@ -3038,8 +3089,17 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
         dialect = "old" if 'class="flavor"' in (raw or "") else "new"
         prose = classed_prose(page, "flavor") if dialect == "old" else ""
         out.execute(
-            "INSERT OR REPLACE INTO trap VALUES "
-            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            # **Columns named, because a positional insert here broke the
+            # moment a column was added in the middle of the table.** `hp`
+            # and `hp_each` went in beside `disable_dc`, which is where they
+            # belong for a reader, and the 15 `?` below then wrote `dialect`
+            # into `hp`. Naming them costs two lines and makes the next
+            # column a one-line change instead of a silent mis-assignment.
+            "INSERT OR REPLACE INTO trap "
+            "(ref, id, level, rank, role, kind, perception_dc, attack, "
+            " defence, damage, spec, initiative, disable_skill, disable_dc, "
+            " dialect) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 ref,
                 tid,
@@ -3775,6 +3835,81 @@ _VOCABULARY_CATEGORIES = ("Rules", "Powers", "Weapons")
 #: a reader to find the first one.
 _RULES_DC_ENTRY = "Skill Check Difficulty Class"
 _RULES_COMPLEXITY_ENTRY = "Skill Challenge Complexity"
+
+
+#: A trap printed as an object: the leading word, the level, the rank term
+#: and the XP value, in that order.
+#:
+#: **Every part of the vocabulary was read off the corpus rather than
+#: guessed**, and that is not a style preference -- a first attempt that
+#: took `Object ... Trap` literally found 52 of 69, and the 17 it missed are
+#: what named the real alternatives. The leading word is one of four and the
+#: rank term is eight things, including three that are a monster's role
+#: rather than a trap's rank.
+_OBJECT_STAT = re.compile(
+    r"\b(Object|Trap|Terrain|Hazard)\s+Level\s+(\d+)\s*([A-Za-z ]{0,24}?)\s*"
+    r"XP\s+([\d,]+)"
+)
+
+#: `HP n`, with the qualifier that says the number is not a total.
+#:
+#: The negative lookahead is load-bearing: without it the qualifier capture
+#: runs straight into the defence run that follows, and `HP 5 per square`
+#: stores its qualifier as `per square ac 5` -- the defence number pulled
+#: into a text column, where nothing would ever look for it. Measured: 4 of
+#: the 8 qualified rows read that way before the lookahead was added.
+_OBJECT_HP = re.compile(
+    r"\bHP\s+(\d+)"
+    r"((?:\s+(?:per|in each of|for each))"
+    r"(?:\s+(?!AC\b|Fortitude\b|Reflex\b|Will\b)[A-Za-z]+)+)?",
+    re.I,
+)
+
+#: How far after the header an `HP` still belongs to the stat line.
+#:
+#: **The bound is what separates the entity from its parts**, so it is a
+#: measurement and not a guess: of the 69 blocks printing an `HP` anywhere
+#: after the header, 67 are within 100 characters and the other two are 950
+#: and 1,400 away -- in a countermeasure sentence, giving hit points to a
+#: destructible component. An unbounded search stores a turret's hit points
+#: as the trap's, which is exactly the conflation `#955` spent a comment
+#: taking apart.
+_STAT_LINE_WINDOW = 120
+
+
+def _object_stat_lines(out: sqlite3.Connection) -> tuple[int, int]:
+    """Hit points for the traps the page prints as objects. #955.
+
+    Returns `(stored, level_agreements)`. The second is the control: the
+    stat line's printed level against `trap.level`, which a different parse
+    already filled, so a reading that drifts onto the wrong line shows up as
+    that number falling rather than as a count that merely gets smaller.
+
+    **A post-pass because it reads `trap.spec`**, which `_traps` has to have
+    written first, and the same reason `_disable_split` below is one.
+    """
+    stored = agree = 0
+    rows = out.execute(
+        "SELECT ref, level, spec FROM trap WHERE spec IS NOT NULL"
+    ).fetchall()
+    for ref, level, spec in rows:
+        head = _OBJECT_STAT.search(spec or "")
+        if head is None:
+            continue
+        found = _OBJECT_HP.search(
+            spec[head.end():head.end() + _STAT_LINE_WINDOW]
+        )
+        if found is None:
+            continue
+        each = " ".join((found.group(2) or "").split()) or None
+        out.execute(
+            "UPDATE trap SET hp = ?, hp_each = ? WHERE ref = ?",
+            (int(found.group(1)), each, ref),
+        )
+        stored += 1
+        if level is not None and int(head.group(2)) == level:
+            agree += 1
+    return stored, agree
 
 
 def _disable_split(out: sqlite3.Connection) -> tuple[int, int]:
