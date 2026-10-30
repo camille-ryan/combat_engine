@@ -60,6 +60,7 @@ from . import (
     line_up,
     loot,
     tension,
+    treasure,
 )
 from . import beat as beat_mod
 from . import formation as formation_mod
@@ -1447,6 +1448,57 @@ def reward(campaign: Campaign, module: Module, scene: Scene,
         )
 
 
+def hoard(campaign: Campaign, module: Module, scene: Scene,
+          made: Step) -> None:
+    """Hand the party the next monetary parcel. #969.
+
+    No treasure was awarded anywhere -- a party finished a module with
+    what `chargen` dealt it and nothing else.
+
+    **One parcel per fight overcome, and six per level, which is where
+    the printed distribution falls out rather than being rolled.** The
+    page says: *"over the course of eight to ten encounters, use one
+    treasure hoard of three parcels, two treasures of two parcels each,
+    and three treasures with a single parcel. That leaves two to four
+    encounters with no treasure reward."* Six of the ten parcels are
+    monetary, so six fights carry money and the rest carry none -- not
+    because a die said so, but because the level's treasure is spent.
+    That is the same shape the page describes with no roll invented.
+
+    **Only the monetary half.** The four item parcels are not awarded:
+    found items are party level +1 to +4, which is **above**
+    `band(level)`, and `band` is what monster defences are set against.
+    Items off that curve owe `winrate` both ways. Coins change no number
+    on any board.
+
+    Nothing resets `parcels`, because nothing levels up (#1013). So six
+    parcels is the module's lot, and that is stated rather than hidden.
+    """
+    if scene.kind != "combat" or made.outcome != "won":
+        return
+    level = scene.level or module.party_level
+    purse = treasure.shares(level)
+    if not purse:
+        made.say(
+            f"No treasure can be worked out for level {level} -- no "
+            "priced item is written there.",
+            "note",
+        )
+        return
+    if campaign.parcels >= len(purse):
+        return
+    parcel = purse[campaign.parcels]
+    campaign.parcels += 1
+    each = treasure.per_head(parcel, len(campaign.party.sheets))
+    for sheet in campaign.party.sheets:
+        sheet.coins += each
+    made.say(
+        f"Treasure: {parcel} gp, {each} each "
+        f"(parcel {campaign.parcels} of {len(purse)} for level {level}).",
+        "note",
+    )
+
+
 def charge(campaign: Campaign, scene: Scene, made: Step) -> None:
     """Charge what losing this scene cost, with the exit unchanged. #975.
 
@@ -1852,6 +1904,7 @@ def step(
 
     quests(campaign, module, scene, made)
     reward(campaign, module, scene, made)
+    hoard(campaign, module, scene, made)
     charge(campaign, scene, made)
 
     # **The hours the scene took, before the grant and after the body.**

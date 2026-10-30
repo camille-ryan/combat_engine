@@ -1575,11 +1575,12 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
     graph_edges challenge_says fight_aftermath reinforcements \
-    scene_allies trap_budget room_shape templates skill_cap
+    scene_allies trap_budget room_shape templates skill_cap \
+    treasure
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 49 drivers and prints 591 assertions**, and **each was
+**The command above is 50 drivers and prints 609 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -2308,3 +2309,46 @@ easy secondary rolls), and **no converted scene sets it** — measured, the one
 challenge in `modules/` uses `bonus`. Retiring it is a one-line deletion plus
 three sites in `challenge.py`; left for a decision rather than taken, because
 removing an authoring option is not a thing to do silently.
+
+## The party finds the money it is owed (#969, the monetary half)
+
+No treasure was awarded anywhere: a party finished a module with the equipment
+`chargen` dealt it and nothing else.
+
+**The monetary half only, and the line is the point.** The printed system is
+ten parcels per level — four magic items at party level +1 to +4, and six
+monetary. The item half is left alone because a found item sits **above**
+`band(level)`, and `band` is exactly what monster defences are set against, so
+items off that curve owe `winrate` both ways. **Coins change no number on any
+board**, so they owe nothing — which is what makes this the half worth landing
+first.
+
+**Nothing is written down that the database already holds.** The curve is
+`2 x market_price(level)`, computed from the mode of `item_step.cost`, and it
+is exact against the book's Total Monetary Treasure line: 720 at level 1,
+3,600 at 6, 10,000 at 10. Nine of ten heroic levels agree to the gold piece;
+**level 3 is off by 5** (1,360 computed against 1,355 printed) and that has its
+own assertion rather than a special case.
+
+The mode, not the first row — 440 of 497 rows at level 8 carry it. Same
+reasoning and same trap as `xp.standard`, #1014.
+
+**`shares` sums to the level's total exactly.** The printed proportions come
+to **1.005**, so the bare shares over-run by 10 gp at level 5 and the
+overshoot comes **off** the largest parcel. That direction was asserted
+backwards first — the adjustment is a subtraction, not a remainder.
+
+**The distribution falls out rather than being rolled.** *"One treasure hoard
+of three parcels, two treasures of two parcels each, and three treasures with
+a single parcel. That leaves two to four encounters with no treasure reward."*
+Six of the ten parcels are monetary, so six fights carry money in descending
+parcels and the rest carry none — because the level's treasure is spent, not
+because a die said so. Measured over nine fights at level 5: 550, 500, 340,
+340, 160, 110, then nothing, and the party holds **1,996 of 2,000** with the
+4 gp lost to the per-head flooring.
+
+Nothing resets the count, because nothing levels up (#1013) — so six parcels
+is the module's lot, and `hoard`'s docstring says so.
+
+**Nothing spends the coins.** An economy wants rituals (#453) and a market; a
+visible number that cannot be spent is honest, awarding nothing was not.

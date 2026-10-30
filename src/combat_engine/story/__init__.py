@@ -162,6 +162,12 @@ class Sheet:
     #: the party, which is why it lives with the wear rather than with the
     #: request.
     carried: dict[str, int] = field(default_factory=dict)
+    #: Coins, in gold pieces. **Nothing spends them**, deliberately: an
+    #: economy with nothing to buy is a separate piece of work, and the
+    #: printed buying rules want rituals (#453) and a market. A visible
+    #: number that cannot be spent is honest; awarding nothing was not.
+    #: #969.
+    coins: int = 0
 
     def per_day_left(self, ref: str, limit: int) -> int:
         """How many uses of that row are left today."""

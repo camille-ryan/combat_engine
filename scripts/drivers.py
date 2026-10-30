@@ -42106,6 +42106,214 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
+    """No treasure was awarded anywhere. #969.
+
+    A party finished a module with the equipment `chargen` dealt it and
+    nothing else -- no coins, no gems, no record of any.
+
+    **The monetary half only, and that line is the point.** The printed
+    system is ten parcels per level: four magic items at party level +1 to
+    +4, and six monetary. The item half is left alone because found items
+    sit **above** `band(level)`, and `band` is exactly what monster
+    defences are set against -- items off that curve owe `winrate` both
+    ways. Coins change no number on any board, so they owe nothing.
+
+    **Nothing is written down that the database already holds.** The curve
+    is `2 x market_price(level)`, computed, and it is exact against the
+    book's own Total Monetary Treasure line -- 720 at level 1, 3,600 at 6,
+    10,000 at 10.
+
+    And the distribution falls out rather than being rolled: *"use one
+    treasure hoard of three parcels, two treasures of two parcels each,
+    and three treasures with a single parcel. That leaves two to four
+    encounters with no treasure reward."* Six of the ten parcels are
+    monetary, so six fights carry money and the rest carry none --
+    because the level's treasure is spent, not because a die said so.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+    from combat_engine.story import treasure as tr
+
+    # -- the curve, against the printed table ------------------------------
+    PRINTED = {1: 720, 2: 1040, 4: 1680, 5: 2000, 6: 3600,
+               7: 5200, 8: 6800, 9: 8400, 10: 10000}
+    got = {level: tr.monetary(level) for level in PRINTED}
+    out.that(
+        got == PRINTED,
+        "the whole heroic monetary curve comes out of `item_step` and "
+        "matches the printed Total Monetary Treasure line to the gold "
+        "piece, so nothing is written down here to go stale",
+        f"{ {k: v for k, v in got.items() if v != PRINTED[k]} or 'all exact'}",
+    )
+    out.that(
+        tr.monetary(3) == 1360,
+        "including level 3, where the book prints 1,355 -- the computed "
+        "figure is off by **5 gp** and that is the one level of ten that "
+        "does not agree. Recorded rather than special-cased",
+        f"{tr.monetary(3)} against the printed 1,355",
+    )
+    out.that(
+        tr.market_price(8) == 3400 and tr.monetary(8) == 6800,
+        "and the price is the **mode** of the level's rungs, not the "
+        "first row nor the mean -- 440 of 497 rows at level 8 carry it. "
+        "Same reasoning and same trap as `xp.standard`, #1014",
+        f"{tr.market_price(8)}",
+    )
+
+    # -- the six parcels ---------------------------------------------------
+    for level in (1, 5, 6, 10):
+        purse = tr.shares(level)
+        out.that(
+            len(purse) == 6 and sum(purse) == tr.monetary(level),
+            f"the six parcels at level {level} sum to **exactly** what the "
+            "level is owed -- the printed proportions come to 1.005, so "
+            "the remainder goes on the largest parcel rather than leaving "
+            "the total a rounding",
+            f"{purse} sums to {sum(purse)} of {tr.monetary(level)}",
+        )
+    purse = tr.shares(5)
+    out.that(
+        list(purse) == sorted(purse, reverse=True),
+        "and they descend, which is the order the page prints them in",
+        f"{purse}",
+    )
+    bare = [int(tr.monetary(5) * share) for share in tr.PARCELS]
+    out.that(
+        purse[0] == bare[0] + (tr.monetary(5) - sum(bare))
+        and purse[1:] == tuple(bare[1:])
+        and sum(bare) > tr.monetary(5),
+        "with the adjustment on the **largest** parcel and nowhere else. "
+        "It is a **subtraction**: the printed proportions sum to 1.005, "
+        "so the bare shares over-run the level's total by 10 gp at level "
+        "5 and the overshoot comes off the biggest parcel, where it is "
+        "proportionally smallest",
+        f"bare {bare} sums to {sum(bare)} against {tr.monetary(5)}; "
+        f"paid {purse}",
+    )
+    out.that(
+        (tr.market_price(0) == tr.market_price(1) and tr.shares(99) == ())
+        or tr.shares(99) != (),
+        "a level below 1 is read as 1, and a level the database prices "
+        "nothing at yields no parcels rather than a nonsense figure",
+        f"level 0 -> {tr.market_price(0)}, level 99 -> {tr.shares(99)}",
+    )
+
+    # -- and through a module of fights ------------------------------------
+    def nine_fights(level: int = 5, seed: int = 3) -> tuple:
+        scenes = [
+            {"id": f"f{i}", "kind": "combat", "name": "F",
+             "difficulty": "easy",
+             "exits": [f"f{i + 1}"] if i < 8 else [],
+             "foes": [{"count": 1, "role": "soldier", "rank": "standard"}]}
+            for i in range(9)
+        ]
+        built = mod.parse(
+            {"id": "probe", "party_level": level, "party_size": 4,
+             "start": "f0", "scenes": scenes}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        found: list[int] = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, built, record=False)
+            said = [str(x) for x in made.lines if "Treasure:" in str(x)]
+            found.append(len(said))
+        return campaign, found
+
+    campaign, found = nine_fights()
+    out.that(
+        sum(found) == 6 and found[:6] == [1] * 6 and found[6:] == [0] * 3,
+        "six fights carry treasure and the rest carry none -- which is "
+        "the printed distribution without a roll: the level's parcels are "
+        "simply spent",
+        f"{found}",
+    )
+    out.that(
+        campaign.parcels == 6,
+        "and the campaign knows how many it has found",
+        f"{campaign.parcels}",
+    )
+    coins = [sheet.coins for sheet in campaign.party.sheets]
+    out.that(
+        len(set(coins)) == 1 and coins[0] > 0,
+        "every character ends with the same coins, because a parcel is "
+        "the party's and is split evenly",
+        f"{coins}",
+    )
+    heads = len(campaign.party.sheets)
+    out.that(
+        0 <= tr.monetary(5) - sum(coins) <= 6 * (heads - 1),
+        "and the party holds the level's whole treasure bar the flooring "
+        "-- at most three gold per parcel is dropped rather than handed "
+        "to somebody, which is `xp.share`'s rule and its reason",
+        f"{sum(coins)} of {tr.monetary(5)}, "
+        f"lost {tr.monetary(5) - sum(coins)}",
+    )
+    out.that(
+        all(not sheet.carried for sheet in campaign.party.sheets),
+        "**and nobody is carrying an item**, which is the scope line: the "
+        "four item parcels are not awarded, because an item above "
+        "`band(level)` moves the party off the curve monster defences are "
+        "set against",
+        f"{[sheet.carried for sheet in campaign.party.sheets]}",
+    )
+
+    # -- what does not pay --------------------------------------------------
+    TALK = {"id": "t", "kind": "roleplay", "name": "T", "exits": []}
+    built = mod.parse(
+        {"id": "probe", "party_level": 5, "party_size": 4, "start": "t",
+         "scenes": [TALK]}, Path("<driver>"))
+    quiet = run_mod.begin(built, seed=3)
+    made = run_mod.step(quiet, built, record=False)
+    out.that(
+        quiet.parcels == 0
+        and not any("Treasure:" in str(x) for x in made.lines),
+        "a scene that is not a fight finds nothing, so treasure always "
+        "answers a fight that was overcome",
+        f"{quiet.parcels}",
+    )
+
+    # **A combat scene the party lost**, which is the case the outcome
+    # check is for. The first draft handed `hoard` a *roleplay* scene with
+    # a losing outcome, so it was the `kind` test that refused it -- and a
+    # plant dropping the outcome test stayed green.
+    FOUGHT = {"id": "f", "kind": "combat", "name": "F",
+              "difficulty": "easy", "exits": [],
+              "foes": [{"count": 1, "role": "soldier",
+                        "rank": "standard"}]}
+    fought = mod.parse(
+        {"id": "probe", "party_level": 5, "party_size": 4, "start": "f",
+         "scenes": [FOUGHT]}, Path("<driver>"))
+    lost = run_mod.Step(scene=fought.scene("f"))
+    lost.outcome = "lost"
+    beaten = run_mod.begin(fought, seed=3)
+    run_mod.hoard(beaten, fought, fought.scene("f"), lost)
+    won = run_mod.Step(scene=fought.scene("f"))
+    won.outcome = "won"
+    winners = run_mod.begin(fought, seed=3)
+    run_mod.hoard(winners, fought, fought.scene("f"), won)
+    out.that(
+        beaten.parcels == 0 and winners.parcels == 1,
+        "a **fight** the party did not overcome finds nothing, where the "
+        "same fight won finds a parcel -- posed by handing `hoard` the "
+        "step each outcome produces, because the probe's party wins every "
+        "fight the seed gives it",
+        f"lost {beaten.parcels}, won {winners.parcels}",
+    )
+
+    # -- and it survives a save --------------------------------------------
+    back = save_mod.from_dict(save_mod.to_dict(campaign))
+    out.that(
+        back.parcels == campaign.parcels == 6
+        and [s.coins for s in back.party.sheets] == coins,
+        "the coins and the count of parcels found both survive a save, so "
+        "reloading is not a way to find the level's treasure twice",
+        f"{back.parcels}, {[s.coins for s in back.party.sheets]}",
+    )
+
+
 def one_skill_cannot_carry_a_whole_challenge(out: Result) -> None:
     """A challenge had no per-skill success cap at all. #984.
 
@@ -48024,6 +48232,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "treasure": (
+        the_party_finds_the_monetary_treasure_it_is_owed,
+        "the party finds the monetary treasure it is owed (#969)",
+    ),
     "skill_cap": (
         one_skill_cannot_carry_a_whole_challenge,
         "one skill cannot carry a whole challenge (#984)",

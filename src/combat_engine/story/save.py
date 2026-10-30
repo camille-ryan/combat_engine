@@ -186,6 +186,9 @@ class Campaign:
     #: Party indices already told they have enough XP, so the line is said
     #: once rather than every scene from then on. Indices and not sheets,
     #: the same position-matching `harvest` uses. #967.
+    #: How many of the level's six monetary parcels the party has found.
+    #: #969.
+    parcels: int = 0
     advanced: list[int] = field(default_factory=list)
     #: Pay DMG2's drama reward. **Off by default and per campaign**, which
     #: is the book's own framing: *"you should grant drama rewards for
@@ -279,6 +282,7 @@ def to_dict(campaign: Campaign) -> dict:
         "denied": campaign.denied,
         "quests": dict(campaign.quests),
         "advanced": list(campaign.advanced),
+        "parcels": int(campaign.parcels),
         "drama": bool(campaign.drama),
         "aftermath": str(campaign.aftermath),
         "record": list(campaign.record),
@@ -324,6 +328,7 @@ def from_dict(raw: dict) -> Campaign:
         quests={str(k): str(v)
                 for k, v in (raw.get("quests") or {}).items()},
         advanced=[int(i) for i in (raw.get("advanced") or [])],
+        parcels=int(raw.get("parcels", 0) or 0),
         drama=bool(raw.get("drama", False)),
         aftermath=str(raw.get("aftermath", "")),
         record=[str(o) for o in raw.get("record", ())],
