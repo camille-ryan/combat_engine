@@ -49,12 +49,15 @@ from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
 
 from . import (
+    FLOOR,
     PARTY,
-    PARTY_AT,
     Party,
+    Shape,
     arrival_squares,
+    bands_of,
     field_encounter,
     harvest,
+    line_up,
     loot,
     tension,
 )
@@ -212,6 +215,15 @@ class Step:
     #: fixture fight in the same number of rounds -- so a driver asserting
     #: on the outcome could not tell a surprise round from none. #945.
     surprised: int = 0
+    #: The board this fight was actually built on, as `(width, height)`.
+    #:
+    #: **Recorded because the board does not outlive the fight**, which is
+    #: the same rule as `stood`, `surprised` and `traps`: two plants --
+    #: never passing the scene's room on, and laying the formation from
+    #: the standard floor's corner -- both left the party on perfectly
+    #: legal squares, because every square of a 6x8 chamber is also a
+    #: square of a 16x12 one. #974.
+    room: tuple[int, int] = (0, 0)
     #: How many traps were actually armed on this board, counted after
     #: `start()` rather than taken from the allowance handed in.
     #:
@@ -443,11 +455,41 @@ def _fight(
     # **Where the party is standing, which nobody could choose before.**
     # Empty `formation` resolves to the single column the placement has
     # always used, so a campaign that says nothing is unchanged. #994.
-    standing = formation_mod.squares(
-        len(campaign.party.sheets), PARTY_AT,
+    # **From the room's own corner, not the standard floor's.** The
+    # formation is laid out from `PARTY_AT`, which is where the column has
+    # always begun -- and on a chamber smaller than 16x12 that walks a
+    # character off the map. #974.
+    room = Shape(*scene.room) if scene.room else FLOOR
+    corner, _ = bands_of(room)
+    wanted = formation_mod.squares(
+        len(campaign.party.sheets), corner,
         formation_mod.Formation(
             bands=tuple(campaign.formation), spread=campaign.spread),
     )
+    standing = [
+        spot for spot in wanted
+        if 0 <= spot[0] < room.width and 0 <= spot[1] < room.height
+    ]
+    # **Whoever does not fit is lined up instead, and it is said.** This
+    # found a real bug rather than guarding against a hypothetical one: a
+    # spread of 3 puts the fourth of four characters on row 12 of a
+    # **12-row** board, so `formation.squares` was handing `_fight` an
+    # off-board square and `#994`'s own driver asserted it. The others
+    # keep the arrangement the player chose; only the overflow moves.
+    if len(standing) < len(wanted):
+        taken = set(standing)
+        for spot in line_up(corner, len(wanted), room, inward=1):
+            if len(standing) >= len(wanted):
+                break
+            if spot not in taken:
+                taken.add(spot)
+                standing.append(spot)
+        step.say(
+            f"{len(wanted) - len(set(wanted) & set(standing))} of the "
+            f"party did not fit the marching order in a "
+            f"{room.width}x{room.height} room and lined up instead.",
+            "note",
+        )
     fielded = field_encounter(
         board_seed,
         module.party_level,
@@ -459,6 +501,10 @@ def _fight(
         # so a trap walked past the ceiling every creature is held to.
         # #958.
         traps=dressed.traps,
+        # **The room the module states, if it states one.** Every board
+        # was 16x12 whatever the page described, so a corridor and a
+        # great hall were the same floor. #974.
+        room=room,
     )
     world = fielded.world
     # **The module's own allies, on the party's side. #961.**
@@ -679,6 +725,7 @@ def _fight(
         else world.round
     step.enemies = list(dressed.refs)
     step.traps = len(list(world.each(Trap)))
+    step.room = (world.grid.width, world.grid.height)
     objective_line = ""
     if watch is None:
         # **Bit for bit what this did before objectives existed**, which is
@@ -1116,7 +1163,7 @@ def field_allies(world: World, dressed: Dressed) -> list[str]:
     stood: list[str] = []
     if not dressed.allies:
         return stood
-    spots = arrival_squares(world, len(dressed.allies), band=PARTY_AT)
+    spots = arrival_squares(world, len(dressed.allies), party=True)
     for ref, flavour, square in zip(
             dressed.allies, dressed.ally_flavours, spots, strict=False):
         eid = loader.spawn(world, ref, square, team=Team.PC)

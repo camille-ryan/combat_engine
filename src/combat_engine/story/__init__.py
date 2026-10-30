@@ -756,8 +756,166 @@ def number_repeats(world: World) -> None:
             ident.tag = str(seen[ident.ref])
 
 
+@dataclass(frozen=True)
+class Shape:
+    """How big the room is, and what shape. #974.
+
+    Every board was one of two hard-coded rectangles -- 16x12 for a fight
+    and 12x8 for a borrowed board -- so a corridor, a cave mouth, a great
+    hall and a tavern were all the same floor with the same two starting
+    bands at the ends.
+
+    `kind` is `rectangle`, `octagon` or `irregular`. **An octagon needs
+    nothing new**: a cut corner is blocking squares, which is the same
+    mechanism `terrain.dress` already uses for pillars.
+    """
+
+    width: int
+    height: int
+    kind: str = "rectangle"
+
+    @property
+    def area(self) -> int:
+        return self.width * self.height
+
+
+#: The printed d20 table of chamber sizes, in the order it prints them.
+#:
+#: *"Although small rooms are possible, larger areas work better for combat
+#: since they allow more movement choices and varied terrain."*
+#:
+#: **Nine of the ten are smaller than today's 16x12** -- the board in use is
+#: at the large end of the printed range, and the two 10x16 entries are the
+#: only ones that match it in area. Recorded rather than drawn from: a
+#: seeded draw over these would move every arcade board, which owes
+#: `winrate` both ways and a fixture re-record.
+CHAMBERS = (
+    Shape(8, 8), Shape(10, 10),
+    Shape(6, 8), Shape(8, 10), Shape(10, 16),
+    Shape(8, 8, "octagon"), Shape(8, 12, "octagon"), Shape(12, 12, "octagon"),
+    Shape(8, 10, "irregular"), Shape(10, 16, "irregular"),
+)
+
+#: What a fight is built on when nobody says otherwise. Unchanged, which is
+#: what keeps every fixture still.
+FLOOR = Shape(16, 12)
+
+
+def corners_of(shape: Shape) -> set[tuple[int, int]]:
+    """The blocking squares that make a room this shape.
+
+    A rectangle has none. An **octagon** loses a triangle from each corner,
+    a quarter of the shorter side deep, which is what a cut corner is on a
+    square grid. An **irregular** chamber loses one corner only -- enough
+    to make the floor asymmetric, which is the point of it, without
+    inventing a cave system.
+    """
+    if shape.kind == "rectangle":
+        return set()
+    cut = max(1, min(shape.width, shape.height) // 4)
+    blocked: set[tuple[int, int]] = set()
+    which = (
+        ((0, 0), (1, 0), (0, 1), (1, 1)) if shape.kind == "octagon"
+        else ((0, 0),)
+    )
+    for right, down in which:
+        for x in range(cut):
+            for y in range(cut - x):
+                square = (
+                    (shape.width - 1 - x) if right else x,
+                    (shape.height - 1 - y) if down else y,
+                )
+                blocked.add(square)
+    return blocked
+
+
+def bands_of(shape: Shape) -> tuple[tuple[int, int], tuple[int, int]]:
+    """Where each side starts on a board of this shape.
+
+    **Reproduces `PARTY_AT` and `ENEMY_AT` exactly at 16x12**, which is what
+    lets the shape be a parameter without moving a single fixture: the
+    party's column is a fixed indent and the opposition's is four in from
+    the far wall, which on the standard floor is 2 and 12.
+
+    The `max` is what keeps a 6-wide chamber playable -- four in from the
+    right of six is the party's own column, and both sides starting in one
+    square is not a fight.
+    """
+    party_x = min(2, max(0, shape.width - 2))
+    enemy_x = max(party_x + 3, shape.width - 4)
+    enemy_x = min(enemy_x, shape.width - 1)
+    row = max(0, shape.height // 4)
+    return (party_x, row), (enemy_x, row)
+
+
+def line_up(
+    start: tuple[int, int], count: int, shape: Shape, *, inward: int,
+    taken: set[tuple[int, int]] | None = None,
+) -> list[tuple[int, int]]:
+    """Where `count` creatures stand, starting from a band. #974.
+
+    **Byte-identical to the old hard-coded layout on a 16x12 floor**,
+    which is the whole point: five to a column from row 3, stepping two
+    columns inward when one fills. On the standard board that is exactly
+    the `(i // 5)` and `(i % 5)` the opposition's loop used to spell out,
+    and the party's four fit one column either way.
+
+    What it adds is a board that is **not** 16x12. Ten creatures laid out
+    five-to-a-column walk off the bottom of an 8-tall chamber and off the
+    left of a 6-wide one, which is what the printed table is full of --
+    nine of its ten chambers are smaller than the floor in use.
+
+    Blocked squares are skipped, so an octagon's cut corners cannot be
+    stood on, and so are any in `taken`.
+
+    **`taken` is what stops the two sides standing on each other.** The
+    bands are far apart on a 16x12 floor and overlap on a small one: ten
+    creatures laid out from a 10x10 chamber's own band reach back into
+    the party's column, and `grid.place` refuses to overwrite -- so the
+    second creature would be `Position`-present and index-absent, which is
+    the failure `dress` already warns about for pillars.
+    """
+    per_column = max(1, 1 + (shape.height - 1 - start[1]) // SPACING)
+    blocked = corners_of(shape) | set(taken or ())
+    out: list[tuple[int, int]] = []
+    slot = 0
+    # Bounded: `count` squares are wanted and each turn of the loop either
+    # takes one or steps past a blocked square, so the ceiling is the
+    # board.
+    while len(out) < count and slot < shape.width * shape.height:
+        column, row = divmod(slot, per_column)
+        slot += 1
+        square = (start[0] + column * 2 * inward, start[1] + row * SPACING)
+        if not (0 <= square[0] < shape.width
+                and 0 <= square[1] < shape.height):
+            continue
+        if square in blocked:
+            continue
+        out.append(square)
+    # **When the band cannot hold them all**, which only happens on a
+    # chamber smaller than the floor: ten creatures at two-square spacing
+    # want nine squares on an 8x8 and the band offers fewer. The rest take
+    # any free square, walking in from their own side, rather than being
+    # stacked on one spot -- the old code's fallback put every leftover on
+    # the band square itself.
+    if len(out) < count:
+        taken = set(out)
+        columns = (range(shape.width) if inward > 0
+                   else range(shape.width - 1, -1, -1))
+        for x in columns:
+            for y in range(shape.height):
+                if len(out) >= count:
+                    break
+                square = (x, y)
+                if square in taken or square in blocked:
+                    continue
+                taken.add(square)
+                out.append(square)
+    return out
+
+
 def arrival_squares(
-    world: World, how_many: int, *, band: tuple[int, int] | None = None,
+    world: World, how_many: int, *, party: bool = False,
 ) -> list[tuple[int, int]]:
     """Free squares in the opposition's band for creatures walking on. #962.
 
@@ -774,11 +932,13 @@ def arrival_squares(
     rather than an arrival one.
     """
     grid = world.grid
-    # **Either band.** The opposition's by default, and the party's for an
-    # ally, which walks on beside the characters rather than among the
-    # creatures it is there to fight. #961.
-    start = band or ENEMY_AT
-    inward = 1 if start[0] < ENEMY_AT[0] else -1
+    # **Either band, read off the board rather than off a constant.**
+    # `PARTY_AT` and `ENEMY_AT` are the standard floor's columns; on any
+    # other chamber shape they are the wrong squares or off the map
+    # entirely, so the bands come from the grid's own size. #974.
+    here, there = bands_of(Shape(grid.width, grid.height))
+    start = here if party else there
+    inward = 1 if party else -1
     free: list[tuple[int, int]] = []
     for back in range(0, 6):
         for step in range(0, 12):
@@ -807,6 +967,7 @@ def field_encounter(
     scale: float = 1.0,
     squares: list[tuple[int, int]] | None = None,
     traps: int | None = None,
+    room: Shape | None = None,
 ) -> Fielded:
     """Build a board and put both sides on it.
 
@@ -840,7 +1001,21 @@ def field_encounter(
     a character is built fresh every time and then wounded back down to where it
     was. That is what makes this additive. #72.
     """
-    world = World(Grid(16, 12), Rng(seed), Bus())
+    # **The room, which nothing could state until now.** Defaults to the
+    # floor every board has always been, so a caller that says nothing
+    # gets exactly the board it got before -- which is what lets this be a
+    # parameter without re-recording a fixture. #974.
+    # **`room`, not `shape`**: a local named `shape` already means the
+    # encounter *paradigm* further down this function, and two different
+    # things under one name in one scope is how a reader loses the
+    # thread.
+    room = room or FLOOR
+    world = World(Grid(room.width, room.height), Rng(seed), Bus())
+    # A cut corner is blocking squares, the same mechanism `dress` uses
+    # for a pillar. Laid before anybody is spawned so the starting bands
+    # cannot land on one.
+    world.grid.blocking |= corners_of(room)
+    party_at, enemy_at = bands_of(room)
     world.scaling = PRESETS.get(scaling, PRESETS["full"])
     # `"printed"` is the engine's own default (`AS_PRINTED`), so the caller that
     # never set this keeps what it had.
@@ -858,18 +1033,18 @@ def field_encounter(
         # **`squares` or the column this has always used.** The default
         # keeps every replay fixture still: a fight starts from these
         # squares, so a one-square drift re-records all eight. #994.
-        standing = squares or [
-            (PARTY_AT[0], PARTY_AT[1] + i * SPACING)
-            for i in range(len(party.sheets))
-        ]
+        standing = squares or line_up(
+            party_at, len(party.sheets), room, inward=1)
         for i, sheet in enumerate(party.sheets):
             eid = chargen.spawn(
                 world, sheet.character,
                 standing[i] if i < len(standing)
-                else (PARTY_AT[0], PARTY_AT[1] + i * SPACING),
+                else (party_at[0], party_at[1] + i * SPACING),
             )
             _wear(world, eid, sheet)
     else:
+        drawn_up = line_up(
+            party_at, len(pcs or PARTY), room, inward=1)
         for i, name in enumerate(pcs or PARTY):
             key = name.strip().lower()
             chargen.spawn(
@@ -879,7 +1054,7 @@ def field_encounter(
                     powers=list((powers or {}).get(key, [])),
                     feats=list((feats or {}).get(key, [])),
                 ),
-                (PARTY_AT[0], PARTY_AT[1] + i * SPACING),
+                drawn_up[i] if i < len(drawn_up) else party_at,
             )
 
     found_at = level
@@ -900,10 +1075,22 @@ def field_encounter(
     # either way was the bug that made every encounter the same shape.
     #
     # Wrapped into columns so ten minions do not run off a 12-row board.
+    # **Told where the party is standing.** Otherwise the two line-ups
+    # are computed independently and collide on any board small enough
+    # for the bands to meet.
+    from combat_engine.engine.components import Position
+
+    standing_now = {
+        spot.square
+        for eid in list(world.entities)
+        if (spot := world.get(eid, Position)) is not None
+    }
+    facing = line_up(enemy_at, len(pool), room, inward=-1,
+                     taken=standing_now)
     for i, ref in enumerate(pool):
         loader.spawn(
             world, ref,
-            (ENEMY_AT[0] - (i // 5) * 2, ENEMY_AT[1] + (i % 5) * SPACING),
+            facing[i] if i < len(facing) else enemy_at,
             team=Team.ENEMY,
         )
 

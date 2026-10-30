@@ -1575,11 +1575,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
     graph_edges challenge_says fight_aftermath reinforcements \
-    scene_allies trap_budget
+    scene_allies trap_budget room_shape
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 46 drivers and prints 539 assertions**, and **each was
+**The command above is 47 drivers and prints 565 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -2161,3 +2161,63 @@ driver could see rather than on what the code does.**
 * **the unspendable-budget branch** is unreachable through `resolve` today,
   since `budget` clamps to the database's ceiling. Posed against the helper,
   and said so in the assertion.
+
+## A scene can say how big the room is (#974)
+
+Every board was one of two hard-coded rectangles — `Grid(16, 12)` for a fight,
+`12 x 8` for a borrowed board — so a corridor, a cave mouth, a great hall and
+a tavern were the same floor with the same two bands at the ends.
+`field_encounter` took a seed, a level, both sides, a scaling preset and a
+maths preset, and **no shape**.
+
+`Shape`, `CHAMBERS` (the printed ten), `corners_of`, `bands_of`, `line_up`,
+`field_encounter(room=)` and `Scene.room`. An octagon and an irregular
+chamber needed nothing new: **a cut corner is blocking squares**, the same
+mechanism a pillar already uses.
+
+**The default does not move, and that is the whole safety argument.**
+`bands_of(FLOOR)` reproduces `PARTY_AT` and `ENEMY_AT` exactly, and `line_up`
+is byte-identical to the hard-coded `(i // 5)` / `(i % 5)` expressions it
+replaces. All eight replay fixtures pass unchanged — so the re-record and the
+`winrate` run the issue asks for are **not owed by what landed**. What would
+owe them is the seeded draw over the ten chambers for the arcade path, which
+is deliberately not here.
+
+**One correction to the issue's own figures**: by area **all ten** printed
+chambers are smaller than 16x12, not nine, and the two 10x16 entries do not
+"match it in area" — 160 against 192. They are the closest, and two of the ten
+are *taller*, which is why `line_up` had to generalise in both directions.
+
+### Two real bugs this found
+
+* **`formation.squares(spread=3)` put the fourth of four characters on row
+  12 of a 12-row board.** `_fight` handed that straight to
+  `field_encounter(squares=)`, so a character was spawned off the grid — and
+  **#994's own driver asserted it**, expecting rows `[3, 6, 9, 12]`. The
+  overflow is now lined up instead and said out loud; the others keep the
+  arrangement the player chose.
+* **the two sides were lined up independently and collided.** On a 10x10
+  chamber the opposition's column reaches back into the party's, and
+  `grid.place` refuses to overwrite — so the second creature would be
+  `Position`-present and index-absent, the failure `dress` already warns
+  about. `line_up(taken=)` is what stops it.
+
+### What the plants settled
+
+Twenty-two plants, twenty-one red. The pattern worth remembering: **six
+plants survived because every square of a small chamber is also a square of
+the standard floor.** Placement checks cannot tell a board that shrank from
+one that did not, so the assertions had to be:
+
+* the fielded world's **grid size** is the stated room's;
+* the cut corners are **on** the board as blocking squares, not merely
+  computable;
+* **no two creatures share a square**;
+* the party's first square **is** `bands_of(room)[0]`, since a formation laid
+  from the floor's corner also lands inside a 6x8 room;
+* and `Step.room` records the board, because it does not outlive the fight —
+  the same reason as `stood`, `surprised` and `traps`.
+
+A seventh needed a room **taller** than the floor: on a shorter board the
+bounds filter drops the overflow, so a wrong column height produces the same
+squares. `Shape(10, 16)` is where six-to-a-column and five-to-a-column differ.

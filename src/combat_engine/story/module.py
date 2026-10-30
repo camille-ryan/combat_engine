@@ -70,6 +70,16 @@ from .objective import SHARE as OBJECTIVE_SHARE
 #: in the story. `turns.short_rest` and `Party.rest` are what it runs.
 KINDS = ("roleplay", "skill_challenge", "combat", "rest")
 
+#: What shape a stated room may be. An octagon and an irregular chamber
+#: need nothing new -- a cut corner is blocking squares, the same
+#: mechanism a pillar already uses. #974.
+ROOM_KINDS = ("rectangle", "octagon", "irregular")
+
+#: The smallest room worth fighting in, and the largest the engine will
+#: build. The printed table runs 6x8 to 10x16; the floor in use is 16x12,
+#: so the ceiling is set by what exists rather than by the table.
+ROOM_MIN, ROOM_MAX = 5, 24
+
 #: How hard a fight is, as a multiplier on `story.budget(level)` -- which is
 #: itself one standard monster per character, read off the database rather than
 #: from a table here.
@@ -744,6 +754,17 @@ class Scene:
     #: -- see `story/objective.py` and `run._fight`.
     objective: Objective | None = None
 
+    #: How big the room is, and what shape: `(width, height, kind)`, with
+    #: `kind` one of `ROOM_KINDS`. Empty leaves the board the floor every
+    #: fight has always been. #974.
+    #:
+    #: The printed table rolls one of ten chambers and **nine of them are
+    #: smaller than that floor**, so a module that states its room is
+    #: usually asking for a tighter fight than the default -- which is the
+    #: point: a 6x8 chamber and a 10x16 hall are different fights with the
+    #: same cast.
+    room: tuple[int, int, str] = ()  # type: ignore[assignment]
+
     #: Creatures fighting **on the party's side**. #961.
     #:
     #: The imported adventure's encounter chapter is built on these: it
@@ -975,6 +996,35 @@ def _as_objective(raw: Any, where: str,
         position=position, leaks=leaks, harder=harder, easier=easier,
         says=str(raw.get("says", "")).strip(),
     )
+
+
+def _as_room(
+    raw: Any, where: str, problems: list[str],
+) -> tuple[int, int, str]:
+    """A stated chamber, or `()` for the floor every fight has used. #974."""
+    if raw is None:
+        return ()  # type: ignore[return-value]
+    if not isinstance(raw, dict):
+        problems.append(
+            f"{where}: a room must be an object with width and height, got "
+            f"{type(raw).__name__}")
+        return ()  # type: ignore[return-value]
+    size = []
+    for side in ("width", "height"):
+        got = raw.get(side)
+        if not isinstance(got, int) or not ROOM_MIN <= got <= ROOM_MAX:
+            problems.append(
+                f"{where}: room {side} must be an integer between "
+                f"{ROOM_MIN} and {ROOM_MAX}, got {got!r}")
+            return ()  # type: ignore[return-value]
+        size.append(got)
+    kind = str(raw.get("kind", "rectangle")).strip().lower()
+    if kind not in ROOM_KINDS:
+        problems.append(
+            f"{where}: room kind {kind!r} is not one of "
+            f"{', '.join(ROOM_KINDS)}")
+        return ()  # type: ignore[return-value]
+    return (size[0], size[1], kind)
 
 
 def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
@@ -1449,6 +1499,11 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     allies = tuple(
         _as_foe(a, where, problems) for a in raw.get("allies", ())
     )
+    room = _as_room(raw.get("room"), where, problems)
+    if room and kind != "combat":
+        problems.append(
+            f"{where}: a {kind} scene states a room, but only a combat "
+            "scene builds a board")
     if allies and kind != "combat":
         problems.append(
             f"{where}: a {kind} scene lists allies, but only a combat scene "
@@ -1585,6 +1640,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         terrain=terrain,
         foes=foes,
         allies=allies,
+        room=room,
         tactics=str(raw.get("tactics", "")),
         readiness=readiness,
         objective=objective,

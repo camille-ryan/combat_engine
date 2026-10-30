@@ -42106,6 +42106,362 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_scene_can_say_how_big_the_room_is(out: Result) -> None:
+    """Every board was one of two hard-coded rectangles. #974.
+
+    `World(Grid(16, 12), ...)` for every fight and `12 x 8` for every
+    borrowed board, so a corridor, a cave mouth, a great hall and a tavern
+    were the same floor with the same two four-square bands at the ends.
+    `field_encounter` took a seed, a level, both sides, a scaling preset
+    and a maths preset, and **no shape**.
+
+    The printed d20 table gives ten chambers, and **nine of them are
+    smaller than the floor in use** -- the board in play sits at the large
+    end of the printed range. An octagon and an irregular chamber need
+    nothing new: a cut corner is blocking squares, which is the same
+    mechanism a pillar already uses.
+
+    **The default does not move, and that is what makes this safe.** The
+    issue says this owes `winrate` both ways and a fixture re-record;
+    neither is true of what landed, because `FLOOR` is the board every
+    fight has always used and `bands_of(FLOOR)` reproduces `PARTY_AT` and
+    `ENEMY_AT` exactly. What is *not* here is the seeded draw over the ten
+    chambers for the arcade path -- that would move every board, and it is
+    the part that owes the measurement.
+    """
+    from pathlib import Path
+
+    from combat_engine.engine import Side
+    from combat_engine.engine.components import Position
+    from combat_engine.story import (
+        CHAMBERS,
+        ENEMY_AT,
+        FLOOR,
+        PARTY_AT,
+        Shape,
+        bands_of,
+        corners_of,
+        field_encounter,
+        line_up,
+    )
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    # -- the default is the board it always was ----------------------------
+    out.that(
+        (FLOOR.width, FLOOR.height) == (16, 12)
+        and bands_of(FLOOR) == (PARTY_AT, ENEMY_AT),
+        "the default room is the floor every fight has used, and its bands "
+        "are the two constants the placement has always started from -- "
+        "which is what lets the shape become a parameter without moving a "
+        "single fixture",
+        f"{FLOOR}, {bands_of(FLOOR)}",
+    )
+    out.that(
+        line_up(PARTY_AT, 4, FLOOR, inward=1)
+        == [(2, 3), (2, 5), (2, 7), (2, 9)]
+        and line_up(ENEMY_AT, 10, FLOOR, inward=-1)
+        == [(12, 3), (12, 5), (12, 7), (12, 9), (12, 11),
+            (10, 3), (10, 5), (10, 7), (10, 9), (10, 11)],
+        "and the shared line-up is **byte-identical** to the hard-coded "
+        "expressions it replaces, on both sides -- five to a column, "
+        "stepping two columns inward, which is what `(i // 5)` and "
+        "`(i % 5)` spelled out",
+        f"{line_up(ENEMY_AT, 10, FLOOR, inward=-1)}",
+    )
+    out.that(
+        corners_of(FLOOR) == set(),
+        "a rectangle cuts no corners, so the default board gains no "
+        "blocking square it did not have",
+        f"{corners_of(FLOOR)}",
+    )
+
+    # -- the ten printed chambers ------------------------------------------
+    out.that(
+        len(CHAMBERS) == 10
+        and all(c.area < FLOOR.area for c in CHAMBERS)
+        and max(c.area for c in CHAMBERS) == 160,
+        "**all ten** printed chambers are smaller than the floor in use, "
+        "and the largest is 160 squares against its 192. The issue says "
+        "nine, and that the two 10x16 entries 'match it in area' -- by "
+        "area they do not; they are the closest. The direction of the "
+        "finding stands and is sharper: the board in play is larger than "
+        "anything the table rolls",
+        f"floor {FLOOR.area}, chambers "
+        f"{sorted({c.area for c in CHAMBERS})}",
+    )
+    out.that(
+        sum(1 for c in CHAMBERS if c.height > FLOOR.height) == 2,
+        "two of them are **taller** than it even so, which is why the "
+        "line-up had to generalise in both directions rather than only "
+        "shrink",
+        f"{[(c.width, c.height) for c in CHAMBERS if c.height > FLOOR.height]}",
+    )
+    out.that(
+        {c.kind for c in CHAMBERS} == {"rectangle", "octagon", "irregular"},
+        "and all three printed kinds are there",
+        f"{sorted({c.kind for c in CHAMBERS})}",
+    )
+    out.that(
+        all(corners_of(c) for c in CHAMBERS if c.kind != "rectangle")
+        and not any(corners_of(c) for c in CHAMBERS
+                    if c.kind == "rectangle"),
+        "an octagon and an irregular chamber cut corners and a rectangle "
+        "does not -- the shape **is** the blocking squares, so nothing new "
+        "was needed to hold one",
+        f"{[(c.kind, len(corners_of(c))) for c in CHAMBERS]}",
+    )
+    eight = Shape(8, 8, "octagon")
+    out.that(
+        len(corners_of(eight)) == 4 * len(
+            corners_of(Shape(8, 8, "irregular"))),
+        "an octagon cuts all four corners and an irregular chamber cuts "
+        "one, which is what makes its floor asymmetric without inventing "
+        "a cave system",
+        f"octagon {len(corners_of(eight))}, irregular "
+        f"{len(corners_of(Shape(8, 8, 'irregular')))}",
+    )
+
+    # -- everybody fits, on every one of them ------------------------------
+    def fielded_on(room: Shape) -> tuple[int, int, int]:
+        got = field_encounter(3, 2, room=room)
+        world = got.world
+        sizes.append((room, world.grid.width, world.grid.height))
+        rocks.append((room, corners_of(room) <= world.grid.blocking))
+        def square_of(eid: int) -> tuple[int, int] | None:
+            spot = world.get(eid, Position)
+            return spot.square if spot is not None else None
+
+        spots = [
+            spot for spot in (square_of(eid) for eid, _ in world.each(Side))
+            if spot is not None
+        ]
+        off = [s for s in spots if not world.grid.inside(s)]
+        on_rock = [s for s in spots if s in corners_of(room)]
+        return len(spots), len(off), len(on_rock)
+
+    sizes: list[tuple[Shape, int, int]] = []
+    rocks: list[tuple[Shape, bool]] = []
+    results = {c: fielded_on(c) for c in CHAMBERS}
+    out.that(
+        all(room.width == w and room.height == h for room, w, h in sizes),
+        "**the board is the size the room says**, which is the assertion "
+        "everything else here leans on -- a plant that ignored the room "
+        "and built the standard floor passed every placement check, "
+        "because a creature placed for a 6x8 chamber is perfectly legal "
+        "on a 16x12 one",
+        f"{[r.kind for r, w, h in sizes if (r.width, r.height) != (w, h)] or 'all match'}",
+    )
+    out.that(
+        all(laid for _, laid in rocks),
+        "and the cut corners are **on** the board as blocking squares, "
+        "not merely computable -- a plant that never laid them changed "
+        "nothing a placement check could see",
+        f"{[r.kind for r, laid in rocks if not laid] or 'all laid'}",
+    )
+    strayed = [(f"{c.width}x{c.height}", off)
+               for c, (_, off, _) in results.items() if off]
+    on_rock = [(c.kind, rock)
+               for c, (_, _, rock) in results.items() if rock]
+    out.that(
+        all(off == 0 for _, off, _ in results.values()),
+        "every creature stands **on the board** in all ten chambers -- ten "
+        "foes laid five to a column walk off the bottom of an 8-tall room "
+        "and off the side of a 6-wide one, which is most of the printed "
+        "table",
+        f"{strayed or 'none off-board'}",
+    )
+    out.that(
+        all(rock == 0 for _, _, rock in results.values()),
+        "and nobody stands on a cut corner, which `dress` already warns "
+        "about for pillars -- a creature on a blocking square is "
+        "Position-present and index-absent",
+        f"{on_rock or 'none on rock'}",
+    )
+    # **Nobody shares a square**, which is what the fallback sweep is for.
+    # Dropping it left the leftovers stacked on the band square itself --
+    # perfectly on the board, and two creatures deep.
+    def crowded(room: Shape) -> int:
+        got = field_encounter(3, 2, room=room)
+        world = got.world
+        def where(eid: int) -> tuple[int, int] | None:
+            spot = world.get(eid, Position)
+            return spot.square if spot is not None else None
+
+        spots = [
+            spot for spot in (where(eid) for eid, _ in world.each(Side))
+            if spot is not None
+        ]
+        return len(spots) - len(set(spots))
+
+    doubled = {f"{c.width}x{c.height}": crowded(c) for c in CHAMBERS
+               if crowded(c)}
+    out.that(
+        not doubled,
+        "and no two creatures share a square on any of them -- a board "
+        "too small for the band has to put the overflow somewhere, and "
+        "the answer is any free square rather than the band's own",
+        f"{doubled or 'none doubled up'}",
+    )
+
+    # **The exact layout on a small board**, which pins how many fit in a
+    # column. Asserting only that everybody is on the board left a plant
+    # fixing the column at five green: the bounds check dropped the
+    # overflow and the fallback quietly put it back somewhere legal.
+    out.that(
+        line_up((2, 2), 6, Shape(8, 8), inward=1)
+        == [(2, 2), (2, 4), (2, 6), (4, 2), (4, 4), (4, 6)],
+        "an 8x8 chamber takes three to a column from row 2 and then steps "
+        "across, rather than the five a 12-row floor takes",
+        f"{line_up((2, 2), 6, Shape(8, 8), inward=1)}",
+    )
+    # **A room taller than the floor**, which is what makes the column
+    # height posable at all: on a shorter board the bounds filter drops
+    # the overflow and a wrong `per_column` produces the same squares.
+    tall = Shape(10, 16)
+    out.that(
+        line_up((2, 4), 7, tall, inward=1)
+        == [(2, 4), (2, 6), (2, 8), (2, 10), (2, 12), (2, 14), (4, 4)],
+        "a 16-row chamber takes six to a column before stepping across, "
+        "not the five a 12-row floor takes -- the column is read off the "
+        "board rather than fixed",
+        f"{line_up((2, 4), 7, tall, inward=1)}",
+    )
+
+    cut = Shape(8, 8, "octagon")
+    out.that(
+        not (set(line_up((0, 0), 12, cut, inward=1)) & corners_of(cut)),
+        "and a line-up that starts in a cut corner steps over it -- posed "
+        "from (0, 0), which is the one square an octagon definitely does "
+        "not have, because the bands never reach a corner on their own",
+        f"{sorted(set(line_up((0, 0), 12, cut, inward=1)) & corners_of(cut))}",
+    )
+
+    out.that(
+        all(count == results[FLOOR][0] if FLOOR in results else count > 0
+            for count, _, _ in results.values()),
+        "and the same cast is fielded whatever the room, so a smaller "
+        "chamber is a tighter fight rather than a shorter one",
+        f"{sorted({count for count, _, _ in results.values()})}",
+    )
+
+    # -- a module can say it -----------------------------------------------
+    def scene_of(room: dict | None, kind: str = "combat") -> dict:
+        got = {"id": "fight", "kind": kind, "name": "F", "exits": [],
+               "difficulty": "standard",
+               "foes": [{"count": 3, "role": "soldier", "rank": "standard"}]}
+        if room is not None:
+            got["room"] = room
+        return got
+
+    def refused(room: dict) -> str:
+        try:
+            mod.parse({"id": "probe", "party_level": 2, "party_size": 4,
+                       "start": "fight", "scenes": [scene_of(room)]},
+                      Path("<driver>"))
+            return ""
+        except mod.ModuleError as exc:
+            return str(exc)
+
+    plain = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "fight",
+         "scenes": [scene_of(None)]}, Path("<driver>")).scene("fight")
+    stated = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "fight",
+         "scenes": [scene_of({"width": 10, "height": 16,
+                              "kind": "octagon"})]},
+        Path("<driver>")).scene("fight")
+    out.that(
+        plain.room == () and stated.room == (10, 16, "octagon"),
+        "a scene can state its room and one that does not carries none, "
+        "which is every scene written so far",
+        f"{plain.room}, {stated.room}",
+    )
+    out.that(
+        "between 5 and 24" in refused({"width": 2, "height": 8}),
+        "a room too small to fight in is refused",
+        refused({"width": 2, "height": 8})[:80] or "accepted",
+    )
+    out.that(
+        "is not one of" in refused({"width": 10, "height": 10,
+                                    "kind": "cave"}),
+        "and a shape the engine cannot build is refused rather than "
+        "quietly becoming a rectangle",
+        refused({"width": 10, "height": 10, "kind": "cave"})[:80]
+        or "accepted",
+    )
+
+    # -- and it reaches the fight -------------------------------------------
+    def play(room: dict | None, seed: int = 5) -> run_mod.Step:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "fight", "scenes": [scene_of(room)]},
+            Path("<driver>"))
+        return run_mod.step(
+            run_mod.begin(built, seed=seed), built, record=False)
+
+    default = play(None)
+    tight = play({"width": 6, "height": 8})
+    out.that(
+        default.stood == [(2, 3), (2, 5), (2, 7), (2, 9)],
+        "a fight in no stated room starts from exactly the squares it "
+        "always did",
+        f"{default.stood}",
+    )
+    out.that(
+        tight.stood != default.stood
+        and all(0 <= x < 6 and 0 <= y < 8 for x, y in tight.stood),
+        "and a fight in a stated room starts **inside it** -- the party's "
+        "column is laid from the room's own corner, not the standard "
+        "floor's, which on a 6x8 chamber is otherwise off the map",
+        f"{tight.stood}",
+    )
+    out.that(
+        tight.outcome in ("won", "lost") and tight.rounds > 0,
+        "and the fight plays",
+        f"{tight.outcome} in {tight.rounds}",
+    )
+
+    # **The board `_fight` actually built**, read back through the scene's
+    # own room rather than inferred from where anybody stood. Two plants
+    # -- never passing the room on, and laying the formation from the
+    # standard corner -- both left the party on legal squares, because
+    # every square of a 6x8 chamber is also a square of a 16x12 floor.
+    room_of = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "fight",
+         "scenes": [scene_of({"width": 6, "height": 8})]},
+        Path("<driver>")).scene("fight")
+    out.that(
+        room_of.room == (6, 8, "rectangle")
+        and tight.room == (6, 8) and default.room == (16, 12),
+        "the board `_fight` built **is** the room the scene stated, read "
+        "back off it. Two plants -- never passing the room on, and laying "
+        "the formation from the standard corner -- both left the party on "
+        "legal squares, because every square of a 6x8 chamber is also a "
+        "square of a 16x12 floor",
+        f"stated {room_of.room}, built {tight.room}, "
+        f"default {default.room}",
+    )
+    out.that(
+        max(x for x, _ in tight.stood) < 6
+        and max(y for _, y in tight.stood) < 8
+        and max(y for _, y in default.stood) == 9,
+        "and the party stands inside it, where the standard floor's own "
+        "column reaches row 9",
+        f"tight {tight.stood}, default {default.stood}",
+    )
+    out.that(
+        tight.stood[0] == bands_of(Shape(6, 8))[0]
+        and default.stood[0] == bands_of(FLOOR)[0],
+        "and it starts on the **room's own** band square -- a 6x8 chamber "
+        "opens on row 2 where the standard floor opens on row 3. Both are "
+        "inside a 6x8 room, so only the square itself tells a formation "
+        "laid from the room from one laid from the floor",
+        f"tight {tight.stood[0]} wants {bands_of(Shape(6, 8))[0]}, "
+        f"default {default.stood[0]} wants {bands_of(FLOOR)[0]}",
+    )
+
+
 def a_dressed_trap_is_paid_for_out_of_the_budget(out: Result) -> None:
     """A trap was armed after the budget was spent. #958.
 
@@ -42528,7 +42884,7 @@ def a_scene_can_field_allies_on_the_party_side(out: Result) -> None:
                               draw=run_mod._stream(campaign, scene, "cast"),
                               party_size=4)
     bands_world = run_mod.field_encounter(3, 2).world
-    beside_party = arrival_squares(bands_world, 3, band=PARTY_AT)
+    beside_party = arrival_squares(bands_world, 3, party=True)
     beside_foes = arrival_squares(bands_world, 3)
     out.that(
         beside_party and beside_foes
@@ -42540,7 +42896,7 @@ def a_scene_can_field_allies_on_the_party_side(out: Result) -> None:
         "party' mean anything",
         f"party {beside_party}, enemy {beside_foes}",
     )
-    room = arrival_squares(bands_world, 200, band=PARTY_AT)
+    room = arrival_squares(bands_world, 200, party=True)
     out.that(
         all(bands_world.grid.inside(sq) for sq in room),
         "and every square it offers on that side is on the board, the same "
@@ -42635,14 +42991,14 @@ def a_scene_can_field_allies_on_the_party_side(out: Result) -> None:
     from combat_engine.content import loader
 
     packed = run_mod.field_encounter(3, 2, party=campaign.party)
-    for square in arrival_squares(packed.world, 400, band=PARTY_AT):
+    for square in arrival_squares(packed.world, 400, party=True):
         loader.spawn(packed.world, board.allies[0], square, team=Team.PC)
     out.that(
-        arrival_squares(packed.world, 2, band=PARTY_AT) == [],
+        arrival_squares(packed.world, 2, party=True) == [],
         "and a party band with no room offers no squares, so an ally is "
         "turned away rather than stacked on somebody -- the same guard a "
         "reinforcement gets",
-        f"{arrival_squares(packed.world, 2, band=PARTY_AT)}",
+        f"{arrival_squares(packed.world, 2, party=True)}",
     )
 
 
@@ -45568,11 +45924,20 @@ def the_party_stands_where_its_marching_order_says(out: Result) -> None:
         "prove, because `_fight` is what has to pass them",
         f"{played(['front', 'back', 'middle', 'middle'])}",
     )
+    # **This assertion used to read `[3, 6, 9, 12]`, and that was a bug it
+    # was pinning**: the board is **12 rows**, so row 12 is off it, and
+    # `_fight` was handing `field_encounter(squares=)` a square outside
+    # the grid. Found by #974's bounds check, not by this driver. The
+    # spread still reaches the board -- the first three stand three
+    # apart -- and the one who does not fit is lined up instead.
+    spread_three = played([], spread=3)
     out.that(
-        [sq[1] for sq in played([], spread=3)] == [3, 6, 9, 12],
-        "and the campaign's spread reaches the board too, not only its "
-        "bands",
-        f"{played([], spread=3)}",
+        [sq[1] for sq in spread_three[:3]] == [3, 6, 9]
+        and all(0 <= y < 12 for _, y in spread_three),
+        "the campaign's spread reaches the board too, not only its bands, "
+        "and every character it places is **on** the board -- a spread of "
+        "3 walks the fourth of four off a 12-row floor",
+        f"{spread_three}",
     )
 
     # -- and it survives being written down --------------------------------
@@ -47265,6 +47630,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "room_shape": (
+        a_scene_can_say_how_big_the_room_is,
+        "a scene can say how big the room is (#974)",
+    ),
     "trap_budget": (
         a_dressed_trap_is_paid_for_out_of_the_budget,
         "a dressed trap is paid for out of the budget (#958)",
