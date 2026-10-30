@@ -1758,7 +1758,23 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             # a successful payout, not on being invoked: measured, a foe
             # stepping through three out-of-reach squares leaves the hold
             # live, and only the step into reach consumes it.
-            use(world, actor, held, targets=[mover], opportunity=True)
+            # **Marked as readied, which is what lets a row ride it.**
+            # Two monster traits are a bonus on a *readied* attack
+            # (`m855a2`, `m933a2`) and their note says the absence exactly:
+            # "there is no attack for the bonus to sit on and no way to
+            # recognise one". `opportunity=True` is not enough -- it does
+            # not tell a readied attack from any other reaction -- so the
+            # kind travels in `granted_via`, which rows already read both
+            # ways (`ev.granted_via`, `ctx.get("granted_via")`).
+            #
+            # **Deliberately the action kind and not a ref**, against that
+            # field's usual convention: a readied action is an entry in the
+            # menu rather than a row, so there is no ref to name. A new
+            # `Cast` field would have been the alternative and is the more
+            # expensive one -- a field on a repr-carrying dataclass is a
+            # fixture re-record.
+            use(world, actor, held, targets=[mover], opportunity=True,
+                granted_via="ready")
 
         # **`SONT` and `once` together are the printed spend rule.**
         # *"If the trigger doesn't occur or you choose to ignore it, you

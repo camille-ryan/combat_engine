@@ -16426,7 +16426,10 @@ def a_readied_attack_waits_for_reach_and_is_spent_either_way(out: Result) -> Non
              f"holds: {_holds(world, me)}")
 
     seen: list[int] = []
+    via: list[str] = []
     world.bus.on(AttackDeclared, lambda ev: seen.append(ev.attacker))
+    world.bus.on(AttackDeclared,
+                 lambda ev: via.append(str(getattr(ev, "granted_via", ""))))
 
     step(world, foe, (mine[0] + 3, mine[1]))
     step(world, foe, (mine[0] + 2, mine[1]))
@@ -16452,6 +16455,12 @@ def a_readied_attack_waits_for_reach_and_is_spent_either_way(out: Result) -> Non
     out.that(seen[:1] == [me],
              "swung by the holder, not by somebody else",
              f"attacker(s): {seen}")
+    out.that(via[:1] == ["ready"],
+             "and the swing is marked `granted_via='ready'`, which is what"
+             " lets a row ride a readied attack -- `opportunity=True` alone"
+             " cannot tell one from any other reaction, and two monster"
+             " traits (m855a2, m933a2) are a bonus on exactly this",
+             f"granted_via: {via}")
 
     # **A second enemy has to be walked out and back in, and the step has to
     # be asserted.** The obvious version of this control -- step another foe
