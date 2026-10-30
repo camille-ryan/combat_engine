@@ -2479,12 +2479,28 @@ _TRAP_DAMAGE = re.compile(r"(\d+d\d+(?:\s*\+\s*\d+)?)\s+damage", re.I)
 #:
 #: `check` is optional because both spellings are printed, and the DC
 #: spelling is matched case-insensitively for the handful printing `dc`.
-#: Measured: 567 blocks, 1,477 pairs, DCs 5 to 41. #989.
+#: Measured: 567 blocks, 1,543 pairs, DCs 5 to 41. #989.
+#:
+#: **And a parenthetical may stand between the skill and its DC**, which
+#: this missed for its whole life: the commonest shape of it is a printed
+#: condition on the check, and `\s*` cannot cross the brackets. 66 pairs,
+#: every one of them an alternative DC for the *same* skill in the same
+#: sentence -- so the block printed two numbers, the easy one and the hard
+#: one, and only the easy one was stored. A countermeasure table missing the
+#: harder half of a choice is worse than one missing both, because nothing
+#: looks absent.
+#:
+#: Bounded to 60 characters and to one bracket pair, so it widens the gap
+#: between a skill and its own DC and cannot bridge a sentence. #955.
 def _countermeasure_pattern() -> re.Pattern[str]:
     from combat_engine.engine.skills import SKILLS
 
     alt = "|".join(re.escape(s) for s in sorted(SKILLS, key=len, reverse=True))
-    return re.compile(rf"\b({alt})\b\s*(?:check\s*)?DC\s*(\d+)", re.I)
+    return re.compile(
+        rf"\b({alt})\b\s*(?:check\s*)?(?:\([^)]{{0,60}}\)\s*)?"
+        rf"(?:check\s*)?DC\s*(\d+)",
+        re.I,
+    )
 
 
 #: `Initiative +6`, off the block's own Initiative field.
