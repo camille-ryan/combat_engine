@@ -10,10 +10,25 @@ here.
 
 ## Every change here is expensive, so know why before making one
 
-`scripts/audit.py`'s `WIDE` list widens `--changed` back to **all 12,197
-rows** the moment anything under `engine/` is touched. That is correct — an
-engine change moves every row at once, so a narrowed run would not be narrow,
-it would be wrong — and it costs about ten minutes.
+`scripts/audit.py`'s `WIDE` list widens `--changed` back to **all 23,061
+declared rows** the moment anything under `engine/` is touched. That is
+correct — an engine change moves every row at once, so a narrowed run would
+not be narrow, it would be wrong — and the wide audit costs **about 21 to 25
+minutes**: 1,237s, 1,303s and 1,482s on three runs measured 2026-10-30.
+
+**Both of those numbers were stale and the second one by more than
+twice.** This said "12,197 rows" and "about ten minutes", and the row count
+is the one that matters: a reader pricing an engine change off 12,197 is
+pricing half the corpus. Measured off `dsl.REGISTRY`, which is what
+`audit.py` walks.
+
+**And the narrowing this paragraph does not mention now exists.**
+`scripts/impact.py` holds a recorded map of which rows execute which engine
+function and `check.py` consults it with no flag, so an edit inside one
+`cast.py` method audits the rows observed to run it rather than all 23,061 —
+71 rows and 73s against 1,304s on the measured case. It fails open to WIDE
+on nine conditions and names which. So "an engine change has no narrow
+option" is no longer true, and the root `CLAUDE.md` has the full account.
 
 That cost **has been measured and cannot be tuned away.** Read `_changed`'s
 docstring before trying: worker counts and chunk sizes were benchmarked and
@@ -67,7 +82,7 @@ predicate walk catches some of this; it is not a substitute for reading.
   `grep -n "def thing" cast.py` and `uv run scripts/vocab.py --brief`. Of
   roughly 21 verbs wanted across one issue and five comments, **15 already
   existed**.
-* `cast.py` is 7,500 lines and many agents edit it at once. `lint.py` walks
+* `cast.py` is **17,672 lines** and many agents edit it at once. `lint.py` walks
   it for a duplicate `def` in a class for exactly that reason.
 
 ## The cross-cutting modules
@@ -76,16 +91,27 @@ Changing one of these reaches most of the tree. Importer counts:
 
 | Module | Importers |
 |---|---:|
-| `query.py` | 325 |
-| `events.py` | 247 |
-| `triggers.py` | 93 |
-| `dsl.py` | 87 |
-| `components.py` | 81 |
-| `grid.py` | 76 |
-| `types.py` | 54 |
+| `query.py` | 456 |
+| `events.py` | 373 |
+| `triggers.py` | 193 |
+| `dsl.py` | 131 |
+| `components.py` | 149 |
+| `grid.py` | 102 |
+| `types.py` | 77 |
 
-`cast.py` has only 9 direct importers and that badly understates it — it is
-reached as the `Cast` passed into every power body, not by import.
+**Every one of these was stale, measured 2026-10-30, and `triggers.py` had
+more than doubled.** The old figures were 325 / 247 / 93 / 87 / 81 / 76 / 54.
+Counted as a real import of that engine module -- `from .X import`,
+`from combat_engine.engine.X import` and the relative spellings -- across
+`src/combat_engine/`, which is the counting the table has always meant.
+
+`cast.py` has **25** direct importers, and that still badly understates it —
+it is reached as the `Cast` passed into every power body, not by import.
+
+This said **9**, which was the stale number making the strongest version of
+the argument. 25 does not weaken the point: 745 content modules import from
+this component and 25 import `cast` itself, so the ratio the sentence is
+about is intact and the figure is now checkable.
 
 ## AI Policy has moved out
 
@@ -96,7 +122,7 @@ allow, which is a different job from everything in this directory. #228.
 What that buys, and it is the reason the move was worth doing: `audit.py`'s
 `WIDE` list widens `--changed` to every row for anything under `engine/`, and a
 policy change cannot break a row. There used to be a `NARROW` exemption naming
-`policy.py` to spare it the ten minutes — but `doctrine.py` and `threat.py` were
+`policy.py` to spare it the wide run — but `doctrine.py` and `threat.py` were
 never in that list, so every change to either of them paid in full. Outside
 `engine/`, the exemption deletes itself.
 
@@ -137,5 +163,5 @@ this list used to carry.
   constants are a printed table, not behaviour, so they moved to
   `combat_engine/armour.py`, below every component. The edge is gone rather
   than allow-listed. #852.
-* 638 of 677 content modules import from here, so a signature change here is
+* **745 of 783** content modules import from here (it said 638 of 677), so a signature change here is
   a content-wide change. Say so in the commit.

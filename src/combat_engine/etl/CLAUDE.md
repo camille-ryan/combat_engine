@@ -77,10 +77,17 @@ list would itself have been the leak.
 
 * **`etl` → `content` is zero imports**, and must stay zero. Content reads
   the built database; ETL knows nothing about rows.
-* `etl` → `engine` is six function-local imports, all pulling enums
-  (`DamageType`, `Ability`, `Keyword`, `SKILLS`). Keep them function-local:
-  `feat.py` records that a top-level import "pulls in the whole rules
-  kernel".
+* `etl` → `engine` is **14** function-local imports, all pulling enums or
+  tables (`DamageType`, `Ability`, `Keyword`, `SKILLS`). Keep them
+  function-local: `feat.py` records that a top-level import "pulls in the
+  whole rules kernel".
+
+  **This said six.** Measured 2026-10-30 at 14 -- `build.py` 1498, 2426,
+  2602, 3587; `sanitise.py` 218, 944, 977; `monster.py` 587 and the rest --
+  and one of the 14 is mine from the same day, so it was 13 before this
+  count was taken. The rule the sentence states is intact and only the
+  figure had drifted, which is the usual way a number in one of these files
+  goes wrong.
 * **Nothing imports ETL to *read* the database any more.** `game()` and
   `localisation()` live in `src/combat_engine/db.py`, below every component,
   and ETL imports them like everybody else. So this file used to warn that
