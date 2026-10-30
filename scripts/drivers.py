@@ -46979,6 +46979,280 @@ def losing_a_scene_costs_something_and_the_plot_goes_on(out: Result) -> None:
     )
 
 
+def the_dead_leave_the_party_and_the_dying_are_stood_up(out: Result) -> None:
+    """What a character who ended a fight below zero carries into the next.
+
+    `story._wear` did `health.hp = max(0, min(sheet.hp, max_hp))`, so a
+    sheet recorded at **-26** -- below `Health.dying_at` -- was fielded at 0
+    and came out `alive`, `conscious` and **able to act**. Not a dying
+    character revived, which is what #923 and #927 both say: a dead one
+    fighting at full capability.
+
+    Camille's two rulings, 2026-10-30, verbatim as the options read:
+
+        The rest stabilises them
+        A scene boundary brings a dying character to 1 HP. No balance
+        change, every fight starts full-strength, and nothing else is
+        needed. A house rule, not the printed one.
+
+        They leave the party
+        The character is out of the campaign. The party plays on
+        short-handed, and chargen can deal a replacement later.
+
+    So the two states get different answers and the line between them is
+    `Sheet.down`, the death floor. Collapsing them would either resurrect
+    somebody or delete somebody who could have been healed.
+    """
+    from pathlib import Path
+
+    from combat_engine import story
+    from combat_engine.engine import query
+    from combat_engine.engine.components import Health
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+    from combat_engine.story import table
+
+    MAX = 43                      # the floor is -21
+    FLOOR = -(MAX // 2)
+
+    def party_of(hp: int | None, surges: int = 0) -> story.Party:
+        p = story.Party.of(["fighter", "cleric", "rogue", "wizard"],
+                           level=3, seed=7)
+        for s in p.sheets:        # what `harvest` writes after a fight
+            s.max_hp, s.hp, s.surges = MAX, MAX, 4
+        p.sheets[0].hp, p.sheets[0].surges = hp, surges
+        return p
+
+    def camp_of(hp: int | None, surges: int = 0) -> save_mod.Campaign:
+        p = party_of(hp, surges)
+        return save_mod.Campaign(
+            module="probe", party=p,
+            personas=[save_mod.Persona(name=s.cls.upper()) for s in p.sheets],
+            control=[s.cls for s in p.sheets],
+            formation=[f"band-{i}" for i in range(len(p.sheets))],
+        )
+
+    # -- dead leaves, dying does not ---------------------------------------
+    dead = camp_of(FLOOR - 5)
+    left = dead.bury()
+    out.that(
+        len(dead.party.sheets) == 3 and len(left) == 1,
+        "a character recorded below the death floor leaves the party, "
+        "which is Camille's ruling -- the party plays on short-handed",
+        f"{len(dead.party.sheets)} remain, left={left}",
+    )
+    dying = camp_of(FLOOR + 5)
+    out.that(
+        not dying.bury() and len(dying.party.sheets) == 4,
+        "and one **above** the floor does not -- dying and dead are "
+        "different answers, and the line between them is `Sheet.down`",
+        f"{len(dying.party.sheets)} remain, down={dying.party.sheets[0].down}",
+    )
+    exact = camp_of(FLOOR)
+    out.that(
+        len(exact.bury()) == 1,
+        "the floor itself is dead, not dying -- `query.alive` is "
+        "`hp > dying_at`, so equality is the dead side of it and this is "
+        "the boundary a reader gets wrong",
+        f"hp={FLOOR}, down={exact.party.sheets[0].down}",
+    )
+
+    # -- the three parallel lists drop the same slot -----------------------
+    # **The hazard this method exists for.** `personas`, `control` and
+    # `formation` are indexed by slot, so dropping a sheet alone hands a
+    # dead character's name, controller and marching position to whoever
+    # was behind them -- and every aggregate (lengths, totals) agrees
+    # either way. Asserted as ordered pairs, never as counts.
+    aligned = camp_of(FLOOR - 5)
+    before = [(s.cls, aligned.persona(i).name, aligned.controls(i),
+               aligned.formation[i])
+              for i, s in enumerate(aligned.party.sheets)][1:]
+    aligned.bury()
+    after = [(s.cls, aligned.persona(i).name, aligned.controls(i),
+              aligned.formation[i])
+             for i, s in enumerate(aligned.party.sheets)]
+    out.that(
+        before == after,
+        "and the survivors keep their own name, controller and marching "
+        "band -- `personas`, `control` and `formation` run parallel to "
+        "`sheets` by index, so each drops the same slot. Asserted as "
+        "ordered tuples: every count agrees whether or not they shifted",
+        f"before={before}\n              after={after}",
+    )
+
+    # -- two dead at once, which is the only case the order matters in ----
+    # **Every single-death assertion above passes whether the removal runs
+    # back to front or front to back**, which two plants showed by staying
+    # green. With one doomed slot there is nothing after it to shift. With
+    # slots 0 and 2 gone, a front-to-back `del` takes slot 0 and then the
+    # *wrong* second sheet -- so this is the assertion that makes the
+    # `reversed()` in both `bury`s load-bearing.
+    two = camp_of(None)
+    for slot in (0, 2):
+        two.party.sheets[slot].hp = FLOOR - 1
+    kept = [(s.cls, two.persona(i).name, two.controls(i), two.formation[i])
+            for i, s in enumerate(two.party.sheets) if i in (1, 3)]
+    names = two.bury()
+    after_two = [(s.cls, two.persona(i).name, two.controls(i),
+                  two.formation[i])
+                 for i, s in enumerate(two.party.sheets)]
+    out.that(
+        len(names) == 2 and kept == after_two,
+        "two dead at once leave together and the two survivors keep their "
+        "own name, controller and band -- the case that makes the "
+        "back-to-front removal load-bearing, since with one death there is "
+        "nothing after it to shift",
+        f"left={names}\n              kept={kept}\n              "
+        f"after={after_two}",
+    )
+
+    # -- the guard inside `stabilise`, posed directly ----------------------
+    # Unreachable through a rest, because `bury` has already taken the dead
+    # sheet out of the party -- which is why a plant removing it stayed
+    # green. Posed on the sheet itself: the guard is what stops the two
+    # rulings collapsing into one, and it should be a correct guard whether
+    # or not today's call order needs it.
+    corpse = story.Sheet(cls="fighter", level=3)
+    corpse.max_hp, corpse.hp, corpse.surges = MAX, FLOOR - 5, 0
+    corpse.stabilise()
+    out.that(
+        corpse.hp == FLOOR - 5,
+        "`stabilise` leaves a dead sheet exactly where it is -- posed on "
+        "the sheet because `bury` removes it before any rest, so a plant "
+        "through the rest cannot redden this. It is what keeps the two "
+        "rulings from collapsing into one",
+        f"hp={corpse.hp}",
+    )
+
+    # -- the rest stands a dying character up ------------------------------
+    broke = party_of(-10, 0)
+    broke.rest()
+    out.that(
+        broke.sheets[0].hp == 1,
+        "a dying character the surges could not reach is stabilised at 1 "
+        "by the rest, which is the ruling -- it was left at -10 and then "
+        "fielded at 0 by the clamp, fighting at full capability",
+        f"hp={broke.sheets[0].hp}",
+    )
+    # **The control, and it is the one that says this changed nothing that
+    # worked.** A dying character *with* surges was already healed from a
+    # negative total, so stabilising must not touch that path.
+    spare = party_of(-10, 3)
+    spare.rest()
+    out.that(
+        spare.sheets[0].hp == 20 and spare.sheets[0].surges == 0,
+        "while one with surges left is healed exactly as before -- "
+        "`stabilise` runs after `heal`, so the case that already worked "
+        "is untouched and this is a no-op for it",
+        f"hp={spare.sheets[0].hp}, surges={spare.sheets[0].surges}",
+    )
+    fresh = party_of(None)
+    fresh.rest()
+    out.that(
+        fresh.sheets[0].hp is None,
+        "and an untouched sheet stays `None` rather than being stood up "
+        "to 1 -- `None` means 'whatever a fresh one has', and standing it "
+        "up would pin every replay fixture's party at one hit point",
+        f"hp={fresh.sheets[0].hp}",
+    )
+    well = party_of(30, 0)
+    well.rest()
+    out.that(
+        well.sheets[0].hp == 30,
+        "and somebody merely hurt is not touched either",
+        f"hp={well.sheets[0].hp}",
+    )
+
+    # -- what reaches a board ----------------------------------------------
+    stood = party_of(-10, 0)
+    stood.rest()
+    made = story.field_encounter(seed=7, level=3, party=stood)
+    mine = table.characters(made.world)[0]
+    health = made.world.get(mine, Health)
+    out.that(
+        health is not None and health.hp == 1 and not made.clamped
+        and query.can_act(made.world, mine),
+        "so the board gets 1 and the floor never fires -- which is the "
+        "whole fix: `_wear`'s clamp is unreachable through a rest rather "
+        "than being what stands the character up",
+        f"hp={getattr(health, 'hp', None)}, clamped={made.clamped}",
+    )
+
+    # -- and the one case the ruling does not cover is printed -------------
+    # Two fights back to back with no rest between (#947). The ruling is
+    # about the rest, so this character really is still dying -- and a
+    # clamp that happens in silence is exactly what let #923 live for a
+    # month. Printed rather than corrected: inventing a rest the module
+    # did not write is the quiet kind of fix this component is told not
+    # to make.
+    unrested = party_of(-10, 0)
+    loud = story.field_encounter(seed=7, level=3, party=unrested)
+    out.that(
+        len(loud.clamped) == 1 and "-10" in loud.clamped[0],
+        "a sheet that reaches a board below zero -- which only happens "
+        "with no rest between two fights -- is **said**, naming the total "
+        "it was recorded at. A silent clamp is the bug this issue was",
+        f"{loud.clamped}",
+    )
+    out.that(
+        not story.field_encounter(
+            seed=7, level=3, party=party_of(30, 0)).clamped,
+        "and an ordinary board says nothing, so a caller printing it "
+        "unconditionally prints nothing",
+        "clamped is empty",
+    )
+
+    # -- the ordering, which nothing else can enforce ----------------------
+    # An extended rest sets `hp = None`, so resting first erases the very
+    # number that says somebody died. Posed rather than argued.
+    backwards = camp_of(FLOOR - 5)
+    backwards.party.rest(extended=True)
+    out.that(
+        not backwards.bury() and len(backwards.party.sheets) == 4,
+        "resting before burying loses the death outright -- an extended "
+        "rest sets `hp = None` and erases the number. Posed because the "
+        "order is a comment that nothing else could check",
+        f"hp after the rest={backwards.party.sheets[0].hp}",
+    )
+
+    # -- and `run.step` is what calls it -----------------------------------
+    # **Through the caller, not the helper.** Posing a real PC death needs
+    # a seed where the board kills one, which is the pinning that broke
+    # `fight_aftermath` twice. Recording the call instead asks the one
+    # question a plant can answer: does a fight reach this at all, and
+    # before anything can hide the number.
+    called: list[str] = []
+    WHICH = "bury"
+    was = getattr(save_mod.Campaign, WHICH)
+
+    def recorder(self):  # noqa: ANN001, ANN202
+        called.append(self.scene)
+        return was(self)
+
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "f1",
+         "scenes": [{"id": "f1", "kind": "combat", "name": "F",
+                     "exits": [], "difficulty": "standard",
+                     "foes": [{"count": 3, "role": "soldier",
+                               "rank": "standard"}]}]},
+        Path("<driver>"))
+    try:
+        setattr(save_mod.Campaign, WHICH, recorder)
+        camp = run_mod.begin(built, seed=5)
+        run_mod.step(camp, built, record=False)
+    finally:
+        setattr(save_mod.Campaign, WHICH, was)
+    out.that(
+        called == ["f1"],
+        "and a fight calls it, once, for the scene it fought -- recorded "
+        "rather than posed with a real death, because a seed where the "
+        "board kills a character is the pinning that broke "
+        "`fight_aftermath` twice",
+        f"called for {called}",
+    )
+
+
 def a_fight_reached_without_a_rest_is_scaled_back(out: Result) -> None:
     """The sidebar "When Is an Encounter Over?":
 
@@ -49261,6 +49535,10 @@ DRIVERS = {
     "lost_costs": (
         losing_a_scene_costs_something_and_the_plot_goes_on,
         "losing a scene costs something and the plot goes on (#975)",
+    ),
+    "dead_and_dying": (
+        the_dead_leave_the_party_and_the_dying_are_stood_up,
+        "the dead leave the party and the dying are stood up (#923)",
     ),
     "unrested": (
         a_fight_reached_without_a_rest_is_scaled_back,

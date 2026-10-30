@@ -1595,6 +1595,106 @@ fires **only for a scene that states its own XP**, since a scene without
 one is already scaled through `per_head` and the rule on top would
 double-count.
 
+## The dead leave the party and the dying are stood up (#923, #927)
+
+`_wear` rebuilt a character from its class on every new board and put the
+carried wear back — but it could not put back *being down*, so it clamped:
+
+```python
+health.hp = max(0, min(sheet.hp, health.max_hp))
+```
+
+Measured through the real path, and it is a step worse than either issue
+records:
+
+```
+ sheet.hp | board hp  max  dying_at | alive  conscious  can_act
+      -26 |       0    43      -21  | True   True       True
+      -10 |       0    43      -21  | True   True       True
+```
+
+`-26` is **below the floor**. That is not a dying character revived, it is a
+**dead** one fielded as a functioning combatant — `query.alive` is
+`hp > dying_at`, `query.conscious` is `alive and not UNCONSCIOUS`, and
+`0 > -21`, so nothing in the chain notices.
+
+**Camille's two rulings, 2026-10-30, verbatim as the options read**, because
+the two states get different answers:
+
+> **The rest stabilises them.** A scene boundary brings a dying character to
+> 1 HP. No balance change, every fight starts full-strength, and nothing else
+> is needed. A house rule, not the printed one.
+
+> **They leave the party.** The character is out of the campaign. The party
+> plays on short-handed, and chargen can deal a replacement later.
+
+So the line between them is `Sheet.down`, the death floor, and collapsing the
+two would either resurrect somebody or delete somebody who could be healed.
+
+### What that cost, which is less than it looks
+
+* **`Sheet.stabilise`** brings a dying character to 1. It runs **after
+  `heal`, not instead of it** — a dying character *with* surges was already
+  healed from a negative total up to full and still is, so the only case this
+  reaches is the one the fixture produced: dying with **no surges left**,
+  where the rest bought nothing and the clamp did the reviving. Measured:
+  `-10` with 3 surges still ends at 20, unchanged.
+* **`Party.bury`** drops the dead sheets and returns the slots. On `Party`
+  rather than `Campaign` because `api/day.py` has a `Party` and no
+  `Campaign`.
+* **`Campaign.bury`** is the one that matters, and the reason is the hazard
+  rather than the removal: `personas`, `control` and `formation` run
+  **parallel to `sheets` by index**, so dropping a sheet alone hands a dead
+  character's name, controller and marching band to whoever was behind them —
+  and every count agrees either way. The assertion is ordered tuples, never a
+  length.
+* **Nothing else needed changing.** All three consequences Camille named fall
+  out of `len(party.sheets)`, which `cast_list.resolve(party_size=)`,
+  `xp.pay(heads=)` and `treasure.per_head` already read.
+
+**No `winrate` run is owed**, and that is the ruling's doing rather than
+luck: nobody is ever fielded down, a dying character comes back at 1 instead
+of at 0, and the only board that moves is one that was previously fielding a
+dead character at full strength. **#1022** — the engine having no way to put a
+creature *into* the dying or dead state except by damaging it into one — was
+filed before the ruling and is not needed by it.
+
+### The ordering is load-bearing and nothing else could check it
+
+`bury` must run **before** any rest: an extended rest sets `hp = None`, which
+erases the very number that says somebody died. So it is called in `_fight`
+immediately after `harvest` — the first moment the death is true and the last
+before anything can hide it — and `drivers.py` poses the wrong order rather
+than arguing for the right one: rest first and nobody leaves.
+
+### The one case the ruling does not reach is printed, not corrected
+
+Two fights back to back with no rest (#947) still field a dying character
+standing — measured, `-10` with no rest is still board hp 0, `alive`,
+`can_act`. The ruling is about the rest and there is no rest, so **#1023**
+carries it.
+
+What landed is that the clamp **announces itself**. `Fielded.clamped` names
+the total the sheet was recorded at and `run._fight` says it:
+
+```
+Fighter was recorded at -10 and is fielded at 0 -- no rest stood them up.
+```
+
+That is the difference between this and the month #923 survived. A clamp is
+printed — and the reason that bug lived is that this one was not.
+
+### #927 is the same chain from the other end
+
+Its body asks to check the third reading first — *"`run.py` already tests
+`sheet.hp <= 0`, so there may be an intended path"*. There is not: both sites
+are beat-loop participation, a character at or below 0 does not speak (#808)
+and is listed by `down()`. Nothing on the combat side asked at all.
+
+Its second point stands and is not fixed here: `api_smoke`'s carry check
+lives inside the per-leg loop, so a day that ends at leg 1 never compares the
+snapshots, and the gate is only reachable when the party wins leg 1.
+
 ## Seams
 
 * **`story/__init__.py` has now been edited twice**, and saying "one
@@ -1650,6 +1750,7 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
+    dead_and_dying \
     graph_edges challenge_says fight_aftermath reinforcements \
     scene_allies trap_budget room_shape templates skill_cap \
     treasure

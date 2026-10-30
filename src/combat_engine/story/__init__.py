@@ -70,6 +70,12 @@ class Fielded:
     #: Which shape of encounter this is -- see `PARADIGMS`. `"named"` when the
     #: caller named the monsters outright, which `replay.py` does.
     paradigm: str = ""
+    #: Anybody fielded above the total their sheet records -- which should be
+    #: nobody, and is the thing #923 was. Empty on every ordinary board, so
+    #: a caller printing it unconditionally prints nothing. A clamp is
+    #: printed: this component's rule, and the reason that bug survived a
+    #: month is that this one was not.
+    clamped: list[str] = field(default_factory=list)
 
 
 # -- what survives a fight --------------------------------------------------
@@ -218,6 +224,22 @@ class Sheet:
             left -= 1
         self.surges = left
 
+    def stabilise(self) -> None:
+        """Bring a dying character to 1, which a rest does when surges cannot.
+
+        **Dying only, never dead.** `down` is the death floor and a sheet
+        past it is removed from the party by `bury` rather than stood up --
+        the two answers Camille gave are different answers and collapsing
+        them would resurrect somebody. #923.
+
+        `hp is None` means untouched and is left alone: a party that has not
+        fought must land exactly as it did before any of this existed, which
+        is what keeps the replay fixtures pinning something.
+        """
+        if self.hp is None or self.down or self.hp > 0:
+            return
+        self.hp = 1
+
     @property
     def character(self) -> chargen.Character:
         """The build request this sheet is a record of."""
@@ -289,6 +311,51 @@ class Party:
             ))
         return cls(sheets=sheets)
 
+    def doomed(self) -> list[int]:
+        """Which slots hold a character the rules call dead.
+
+        **One definition, read by both `bury`s.** `Campaign.bury` needs the
+        slots *before* the removal, to read the names off while they still
+        describe who they describe -- and it first computed them itself,
+        which is two copies of one rule. Found by a plant: changing the test
+        in `Party.bury` left every assertion green, because `Campaign.bury`
+        short-circuited on its own answer and never reached it. The same
+        fault as #1014, and the same fix.
+        """
+        return [i for i, sheet in enumerate(self.sheets) if sheet.down]
+
+    def bury(self) -> list[int]:
+        """Take the dead out of the party. Returns the slots they held.
+
+        Camille's ruling, 2026-10-30, verbatim as the option read:
+
+            They leave the party
+            The character is out of the campaign. The party plays on
+            short-handed, and chargen can deal a replacement later.
+
+        **The slots are returned rather than the sheets**, because three
+        lists on `Campaign` run parallel to `sheets` by index -- `personas`,
+        `control` and `formation` -- and dropping a sheet without dropping
+        the same index from each silently hands a dead character's name and
+        marching position to whoever was behind them. `Campaign.bury` is the
+        caller that knows about those; this one is what arcade mode can
+        reach, since `api/day.py` has a `Party` and no `Campaign`.
+
+        **Dead, not dying.** `Sheet.down` is the death floor; a dying
+        character is stabilised by `rest` instead. Collapsing the two would
+        either resurrect somebody or delete somebody who could be healed.
+
+        **Called before any rest**, which is an ordering this cannot enforce
+        and the caller must keep: an extended rest sets `hp = None`, which
+        erases the very number that says somebody died.
+        """
+        gone = self.doomed()
+        # **Back to front**, or each removal shifts the indices of the ones
+        # after it and the second deletion takes the wrong sheet.
+        for i in reversed(gone):
+            del self.sheets[i]
+        return gone
+
     def rest(self, *, extended: bool = False) -> None:
         """Five minutes, or six hours.
 
@@ -306,9 +373,32 @@ class Party:
 
         Surges are spent one at a time up to full and no further, which is the
         obvious reading of "any number" for somebody who wants to keep fighting.
-        A character past `dying_at` is not healed at all: dying is not a thing
-        five minutes fixes, and quietly reviving one would make a wipe look like
-        a win.
+
+        **And a character the surges could not reach is stabilised at 1.**
+        This paragraph used to say the opposite -- *"a character past
+        `dying_at` is not healed at all: dying is not a thing five minutes
+        fixes, and quietly reviving one would make a wipe look like a win"* --
+        and it was half right. It is right about **dead**, which is what
+        `Sheet.down` and `dying_at` are: `bury` takes those sheets out of the
+        party and no rest touches them. It was wrong about **dying**, because
+        a dying character left at a negative total was then fielded at 0 by
+        `_wear`'s clamp and fought at full capability, which is a worse lie
+        than standing them up on purpose. #923.
+
+        Camille's ruling, 2026-10-30, choosing between fielding a dying
+        character down and stabilising one, verbatim as the option read:
+
+            The rest stabilises them
+            A scene boundary brings a dying character to 1 HP. No balance
+            change, every fight starts full-strength, and nothing else is
+            needed. A house rule, not the printed one.
+
+        **After `heal`, not instead of it**, which is what keeps it a no-op
+        for everything that already worked: a dying character *with* surges
+        was already healed from a negative total up to full and still is, so
+        the only case this reaches is the one the fixture actually produced --
+        dying with **no surges left**, where the rest previously bought
+        nothing and the clamp did the reviving silently.
         """
         from combat_engine.engine.dsl import get
         from combat_engine.engine.types import Usage
@@ -328,9 +418,10 @@ class Party:
                 if row is None or row.usage is not Usage.DAILY:
                     del sheet.spent[ref]
             sheet.heal()
+            sheet.stabilise()
 
 
-def _wear(world: World, eid: int, sheet: Sheet) -> None:
+def _wear(world: World, eid: int, sheet: Sheet) -> str:
     """Put a sheet's wear on a freshly built character.
 
     After `spawn` rather than instead of it, which is the whole shape of this:
@@ -340,12 +431,32 @@ def _wear(world: World, eid: int, sheet: Sheet) -> None:
     `None` means "whatever a fresh one has", so a party that has not fought
     lands exactly as it did before any of this existed -- which is what keeps
     the six replay fixtures still pinning something.
+
+    **Returns a sentence when the floor moved somebody**, and that is the
+    whole of #923's lesson rather than a nicety. `max(0, ...)` was fielding a
+    character recorded at -26 -- below the death floor -- as a conscious
+    combatant, and the reason it went unnoticed for a month is that it did it
+    in silence. `bury` and `stabilise` mean nothing recorded by a fight
+    reaches here below zero any more, so this should be unreachable; the one
+    way it is not is a module putting two fights back to back with no rest
+    between (#947), which Camille's ruling is not about. Measured: a sheet at
+    -10 with no rest is still fielded at 0, `alive` and `can_act`.
+
+    So it is printed rather than fixed here, because inventing a rest the
+    module did not write is the kind of quiet correction this component is
+    told not to make.
     """
     from combat_engine.engine.components import ActionPoints, Health, Powers
 
+    said = ""
     health = world.get(eid, Health)
     if health is not None:
         if sheet.hp is not None:
+            if sheet.hp < 0:
+                said = (
+                    f"{sheet.cls.title()} was recorded at {sheet.hp} and is "
+                    f"fielded at 0 -- no rest stood them up (#1023)."
+                )
             health.hp = max(0, min(sheet.hp, health.max_hp))
         if sheet.surges is not None:
             health.surges = max(0, min(sheet.surges, health.max_surges))
@@ -366,6 +477,7 @@ def _wear(world: World, eid: int, sheet: Sheet) -> None:
         # `powers.known` at all. Filtering it the way `spent` is filtered
         # would drop every one of them.
         powers.per_day = dict(sheet.per_day)
+    return said
 
 
 def harvest(world: World, party: Party) -> None:
@@ -1178,6 +1290,7 @@ def field_encounter(
     # is worth, and one of the two copies this replaces did not pass it.
     terrain.dress(world, seed, level=level, traps=traps)
 
+    clamped: list[str] = []
     if party is not None:
         # **`squares` or the column this has always used.** The default
         # keeps every replay fixture still: a fight starts from these
@@ -1190,7 +1303,8 @@ def field_encounter(
                 standing[i] if i < len(standing)
                 else (party_at[0], party_at[1] + i * SPACING),
             )
-            _wear(world, eid, sheet)
+            if (note := _wear(world, eid, sheet)):
+                clamped.append(note)
     else:
         drawn_up = line_up(
             party_at, len(pcs or PARTY), room, inward=1)
@@ -1218,7 +1332,8 @@ def field_encounter(
         pool, found_at, shape = opposition(
             level, Random(seed), paradigm=paradigm, scale=scale)
     if not pool:
-        return Fielded(world=world, enemies=[], found_at=found_at, paradigm=shape)
+        return Fielded(world=world, enemies=[], found_at=found_at,
+                       paradigm=shape, clamped=clamped)
 
     # **The paradigm decides how many, so this no longer takes `SIDE` of them.**
     # A solo is one creature and a leader-and-minions is ten, and taking four
@@ -1246,4 +1361,5 @@ def field_encounter(
 
     number_repeats(world)
     return Fielded(world=world, enemies=list(pool), found_at=found_at,
+                   clamped=clamped,
                    paradigm=shape)

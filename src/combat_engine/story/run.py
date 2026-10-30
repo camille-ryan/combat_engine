@@ -508,6 +508,15 @@ def _fight(
         room=room,
     )
     world = fielded.world
+    # **Anybody the floor stood up, said out loud.** Empty on an ordinary
+    # board: `bury` removes the dead and the rest stabilises the dying, so
+    # a sheet recorded below zero only reaches a board when the module put
+    # two fights back to back with no rest between (#947). That case is
+    # outside Camille's ruling, so it is printed rather than silently
+    # corrected -- inventing a rest the module did not write is the quiet
+    # kind of fix this component is told not to make. #923.
+    for note in fielded.clamped:
+        step.say(note, "note")
     # **The module's own allies, on the party's side. #961.**
     #
     # Spawned after the party and before the encounter, which is where the
@@ -702,6 +711,18 @@ def _fight(
     if written is not None:
         written.flush()
     harvest(world, campaign.party)
+    # **The party's own dead leave it, here and not at the rest.** Camille's
+    # ruling, 2026-10-30: a character past the death floor is out of the
+    # campaign, and the party plays on short-handed. It has to happen before
+    # any rest -- an extended rest sets `hp = None` and erases the number
+    # that says somebody died -- and `harvest` is where that number arrives,
+    # so this is the first moment it is true and the last one before
+    # anything can hide it. #923.
+    #
+    # `Campaign.bury` rather than `Party.bury`, because `personas`,
+    # `control` and `formation` run parallel to the sheets by index.
+    for who in campaign.bury():
+        step.say(f"{who} is dead and leaves the party.", "note")
     # **Record what this fight killed, so a revisit does not raise it.**
     # Read off the board rather than from the bus log: the question is which
     # creatures are down *now*, which is a state, and `query.alive` is the
