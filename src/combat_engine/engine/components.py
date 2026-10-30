@@ -1905,7 +1905,15 @@ class Gear:
         every implement was a plain one -- and the moment a magic implement
         has an enhancement bonus, that bonus is read off the mace instead.
         """
-        return next((w for w in self.held if w.group == "implement"), None)
+        born = next((w for w in self.held if w.group == "implement"), None)
+        if born is not None:
+            return born
+        # **A born implement wins, then a weapon serving as one.** The order
+        # matters for a creature holding both: a cleric with a mace and a
+        # holy symbol should still channel through the symbol. `as_implement`
+        # only answers when there is no proper implement in hand, which is
+        # the case the printed grant is for. #1009.
+        return next((w for w in self.held if w.as_implement), None)
 
     @property
     def off(self) -> Weapon | None:
@@ -1991,6 +1999,28 @@ class Weapon:
     #: so the numbers above stay the printed longsword's and this says which
     #: item's rows come with it.
     item: str = ""
+    #: **Also serving as an implement, while staying the weapon it is.**
+    #:
+    #: A role, not a kind, which is why it is separate from `group`.
+    #: `c.as_implement` answered the printed grant *"you can use this weapon
+    #: as an implement"* by **overwriting** `group` with `"implement"` and
+    #: pushing the real group into `properties` -- so the sword stopped
+    #: being a sword. `Gear.main` skips implements, correctly and for a
+    #: documented reason, so the holder could no longer make a melee basic
+    #: attack at all: `usable` refused `mba` and `Cast.basic` returned False
+    #: before it rolled, silently.
+    #:
+    #: Measured across 225 dealt characters -- every class, levels 1, 5 and
+    #: 10, three seeds -- **32 (14.2%) had lost their weapon that way**,
+    #: among them a fighter and a barbarian. A separate 18 hold nothing but
+    #: a born implement, which is the case `Gear.main`'s note is about and
+    #: is right.
+    #:
+    #: So `group` stays the printed group for ever, and the sites asking
+    #: "can this be swung" (`group != "implement"`) go on being correct
+    #: untouched. The ones asking "does this serve as an implement" read
+    #: `group == "implement" or as_implement`. #1009.
+    as_implement: bool = False
 
     @property
     def magic(self) -> bool:

@@ -5620,6 +5620,7 @@ def two_printed_triggers_on_one_row_are_two_watches(out: Result) -> None:
     """
     import combat_engine.content  # noqa: F401
     from audit import board as _posed
+    from combat_engine import chargen
     from combat_engine.content.feats.rogue_b import _holding
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Gear, Weapon
@@ -5700,10 +5701,27 @@ def two_printed_triggers_on_one_row_are_two_watches(out: Result) -> None:
     # all put a light blade in the holder's hand first. A plant that will not
     # go red is a finding about the rule, and this was one: the gate needed a
     # board where it is the only thing refusing.
+    # **The board is made to hold a mace rather than trusted to hold no
+    # light blade**, and that correction is `#1009`'s doing. This read
+    # `_posed(ref, 1)` and asserted the dealt gear held none -- which was
+    # true only because `c.as_implement` used to **overwrite** the weapon's
+    # group with `"implement"`, hiding a light blade that was there all
+    # along. `f2362`'s board deals `w3594`, printed group `light blade`, and
+    # the old code reported it as an implement.
+    #
+    # So this control was resting on the bug it shares a board with: the
+    # comment above records that it was written *because* a plant would not
+    # go red, and the board that made the plant red was a corrupted one.
+    # Stating the premise outright is stricter than asserting it -- it
+    # cannot drift when the draw changes either.
     world3, me3, _ = _posed(ref, 1)
+    gear3 = world3.need(me3, Gear)
+    gear3.weapons = [chargen.MACE]
+    gear3.wield(chargen.MACE)
     c3 = Cast(world=world3, me=me3, ref=ref)
     out.that(not _holding(c3, "light blade"),
-             "a holder left with the board's own gear holds no light blade")
+             "a holder holding a mace and nothing else holds no light blade",
+             f"{[(w.ref, w.group) for w in gear3.held]}")
     foe3 = next(iter(sorted(enemies(world3, me3))), 0)
     world3.turn = me3
     world3.bus.emit(Hit(attacker=me3, target=foe3, power=martial,

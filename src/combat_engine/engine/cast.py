@@ -3065,21 +3065,35 @@ class Cast:
             return bool(gear.shield)
         if prop in ("two-weapon", "two melee weapons"):
             return gear.two_weapon
-        weapon = gear.main
-        if weapon is None:
-            return False
-        if (
-            prop in weapon.properties
-            or weapon.group == prop
-            or weapon.category == prop
-        ):
-            return True
+        # **Every weapon in hand, not just `Gear.main`.** A printed
+        # *"you must be wielding a light blade"* is met by holding one --
+        # either hand -- and this asked only about the single weapon `main`
+        # picks, so a character holding a sword and a pick answered the
+        # question about the sword. Found through `#1009`: the driver
+        # assertion covering exactly that case was green only because
+        # `c.as_implement` had hidden the sword from `main`, making the pick
+        # main by accident. Remove that accident and the narrowness shows.
+        #
+        # `main` stays in the list as a fallback rather than being dropped:
+        # it has its own last resort (`weapons[0]`) that can answer with a
+        # **stowed** weapon, so iterating `held` alone would have been a
+        # narrowing for a creature with everything on its belt. This is a
+        # strict superset of what the single read answered. #1009.
+        arms = list(gear.held) or ([gear.main] if gear.main else [])
+        for weapon in arms:
+            if (
+                prop in weapon.properties
+                or weapon.group == prop
+                or weapon.category == prop
+            ):
+                return True
         # A feat may let what is in hand stand in for what the card asks
         # for. Checked after the printed test rather than folded into it,
         # so a character with no waiver takes exactly the path it always
         # did.
         return any(
             satisfies == prop and _weapon_is(weapon, holding)
+            for weapon in arms
             for holding, satisfies in gear.counts_as
         )
 
@@ -11841,12 +11855,20 @@ class Cast:
         if gear is None:
             return
         arm = gear.main
-        if arm is None or arm.group == "implement":
+        if arm is None or arm.group == "implement" or arm.as_implement:
             return
+        # **A flag, not a rewrite of `group`.** This was
+        # `replace(w, group="implement", properties=... | {arm.group})`, so
+        # the sword kept its real group only as a *property* and stopped
+        # being a sword: `Gear.main` skipped it and the holder could not make
+        # a melee basic attack. 32 of 225 dealt characters were in that
+        # state, a fighter and a barbarian among them, and nothing reported
+        # it because `Cast.basic` returns False before it rolls.
+        #
+        # The printed grant **adds** a capability; it does not trade one for
+        # the other. #1009.
         gear.weapons = [
-            replace(w, group="implement", properties=w.properties | {arm.group})
-            if w is arm
-            else w
+            replace(w, as_implement=True) if w is arm else w
             for w in gear.weapons
         ]
 
