@@ -2427,11 +2427,36 @@ def i1840x1(c: Cast) -> None:
     other way round: the card reads "while you're in a **guardian form**",
     which is a state, and nothing in the tree grants one.
 
-    `Keyword.GUARDIAN_FORM` exists now and **0 rows carry it**, because every
-    power that prints it is level 11+ and the tier filter cuts them before
-    they reach a row -- #484. So unlike its beast-form siblings, which the
-    keyword unblocked, this one is waiting on a form nothing can enter, and
-    `todo=` rather than `dropped=` is right: there is no payout to withhold.
+    `Keyword.GUARDIAN_FORM` exists and **0 rows carry it**. The reason given
+    here was that "every power that prints it is level 11+ and the tier
+    filter cuts them before they reach a row -- #484", and **that is false**.
+    Measured against the compendium, keyword line by keyword line:
+
+        guardian form, on a printed keyword line      0 powers, any level
+        beast form, the same question               107 powers
+
+    So the enum member has no printed basis at all and this is not a tier
+    casualty. 21 heroic powers do print the phrase -- which is what made the
+    old reading look right -- but they print it as **prose in their Effect
+    line**, "you assume the guardian form of <x>", and their keyword lines
+    read `Polymorph, Primal`.
+
+    **Those 21 are written and finished**, and they are what this card means.
+    They lay the form through one door, `warden.assume`, as
+    `c.stance(label=c.ref)` -- so a live guardian form is a stance labelled
+    with the *power's own ref* and nothing records that it belongs to a
+    family.
+
+    That is what the marker is waiting on, and the symbol is right even
+    though its reason was not: something has to ask whether the live stance
+    is one of a class's forms. `query.in_form` is **not** that reader and
+    must not be used here -- it answers **True when no shape is recorded**,
+    by a documented and correct convention, so a bare call would pay this
+    item out for every character who has never changed shape. That is the
+    wide-direction fault `i1093p1` was fixed for in the same issue.
+
+    `todo=` rather than `dropped=` stays right: there is no payout to
+    withhold until the question can be asked. #478.
     """
 
 
