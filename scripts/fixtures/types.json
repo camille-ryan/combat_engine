@@ -4,6 +4,7 @@
     "invalid-argument-type|Argument to function `_behind` is incorrect": 1,
     "invalid-argument-type|Argument to function `_since` is incorrect": 1,
     "invalid-argument-type|Argument to function `candidates` is incorrect": 1,
+    "invalid-argument-type|Argument to function `use` is incorrect": 30,
     "not-subscriptable|Cannot subscript object of type `object` with no `__getitem__` method": 1,
     "unresolved-attribute|Attribute `basic` is not defined on `None` in union `Powers | None`": 1,
     "unresolved-attribute|Attribute `cls` is not defined on `None` in union `Power | None`": 9,
