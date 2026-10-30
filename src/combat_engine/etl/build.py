@@ -832,6 +832,19 @@ class Report:
     #: copy. 12 runs, 28 occurrences -- and a 220x over-report before the
     #: capitalised run was confined to one line. #929.
     unindexed: int = 0
+    #: How many `common_word` rows `sanitise` could actually see while the
+    #: build was running. **Expected to be 0 today**, and that is the point:
+    #: `vocabulary()` reads the census back through its own connection, so it
+    #: sees an empty table for the whole build while the rows sit in the
+    #: writer's open transaction. Reported rather than warned about, because
+    #: it will read 0 on every build until `#1018`'s design call is made and
+    #: a warning that always fires is one nobody reads.
+    #:
+    #: It is a *number* rather than a flag so that the fix is visible when it
+    #: lands: 0 becomes 6,090, of which 1,695 are words no other source
+    #: supplies. Measured, and not the same thing as the table's row count,
+    #: which is what `#1018`'s body first claimed.
+    census: int = 0
     disable_one: int = 0
     disable_many: int = 0
     disable_none: int = 0
@@ -901,6 +914,10 @@ class Report:
             f"(skill + DC pairs a trap prints, across 16 of 17 skills)",
             f"unindexed     {self.unindexed:6d}  "
             f"(proper names with no ref anywhere, given an opaque token)",
+            f"census seen   {self.census:6d}  "
+            f"(`common_word` rows the sanitiser could read mid-build; "
+            f"0 means `identifies` ran without the game's own vocabulary "
+            f"-- see #1018)",
             f"disable       {self.disable_one:6d}  "
             f"(print one `disable` clause; {self.disable_many} print several "
             f"and are NULL, {self.disable_none} print none and cannot be "
@@ -1043,6 +1060,13 @@ def build() -> Report:
     feat.feats(source, out, report, names)
     # After both, because a feat's Special line names items and
     # a set's benefit names feats. Neither index exists earlier.
+    #
+    # **Measured here because here is where it matters**: the next line's
+    # `identifies` gate decides which names enter the substitution index at
+    # all, and it is the reader that loses the census. Taken through the same
+    # path `vocabulary()` uses, so the number is what that function sees and
+    # not what the table holds. #1018.
+    report.census = sum(1 for _ in _census_the_sanitiser_sees())
     report.crossed += _cross_reference_rest(out, names)
     # **After `feat.feats` and not beside `_build_powers`.** A leg's section
     # names the feature it takes, the feat it wants and the powers it opens
@@ -3997,6 +4021,34 @@ _HAND_SWAPS: dict[tuple[str, str], tuple[str, ...]] = {
 #: meeting the start of an attack line at 2,211. Confined to a line: 28.
 #: A 220x over-report from one `\s`. #929.
 _CAPS_RUN = re.compile(r"\b([A-Z][a-z']+(?:[ \t]+[A-Z][a-z']+)*)\b")
+
+
+def _census_the_sanitiser_sees() -> list[str]:
+    """The `common_word` rows `sanitise.vocabulary()` can read, right now.
+
+    **A deliberate duplicate of four lines in `sanitise.vocabulary()`**, which
+    normally would be the wrong thing to write. It is right here because the
+    question is *what does that function see*, and the only honest way to
+    answer it is to take the same route: its own `db.game()` connection,
+    which during a build is a second connection to a database whose rows are
+    still inside the writer's transaction.
+
+    Calling `vocabulary()` itself would answer a different question -- it
+    unions four sources and returns 234,574 words with the census absent, so
+    the number would move with the dictionary rather than with the thing
+    being measured. Asking the census arm alone is what makes `0` mean
+    something.
+
+    Returns a list rather than a set, so the count is of rows read and cannot
+    be flattened by two sources happening to agree. #1018.
+    """
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        from combat_engine.db import game
+
+        return [r["word"] for r in game().execute("SELECT word FROM common_word")]
+    return []
 
 
 def _unindexed_names(
