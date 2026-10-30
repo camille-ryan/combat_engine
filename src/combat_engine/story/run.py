@@ -41,7 +41,7 @@ from pathlib import Path
 from random import Random
 
 from combat_engine.engine import Ident, Side, Team
-from combat_engine.engine.components import Condition, Conditions, Position
+from combat_engine.engine.components import Condition, Conditions, Position, Trap
 from combat_engine.engine.ecs import World
 from combat_engine.engine.query import alive
 from combat_engine.engine.turns import Encounter
@@ -212,6 +212,15 @@ class Step:
     #: fixture fight in the same number of rounds -- so a driver asserting
     #: on the outcome could not tell a surprise round from none. #945.
     surprised: int = 0
+    #: How many traps were actually armed on this board, counted after
+    #: `start()` rather than taken from the allowance handed in.
+    #:
+    #: **Recorded because the effect is otherwise unobservable**, which is
+    #: this component's own rule and the reason `stood` and `surprised`
+    #: exist: the board does not outlive the fight, so a plant that made
+    #: `_fight` pass no allowance at all stayed green against a driver
+    #: that could only see the outcome. #958.
+    traps: int = 0
     #: Creatures fielded **on the party's side**, by ref. Not in
     #: `enemies`, and not characters -- they carry no sheet and take no
     #: wear out of the fight. #961.
@@ -445,6 +454,11 @@ def _fight(
         enemies=dressed.refs,
         party=campaign.party,
         squares=standing,
+        # **What the budget has left for traps.** `dress` arms nought to
+        # two from its own draw, after `cast_list` has spent the budget,
+        # so a trap walked past the ceiling every creature is held to.
+        # #958.
+        traps=dressed.traps,
     )
     world = fielded.world
     # **The module's own allies, on the party's side. #961.**
@@ -664,6 +678,7 @@ def _fight(
     step.rounds = watch.rounds if watch is not None and watch.resolved \
         else world.round
     step.enemies = list(dressed.refs)
+    step.traps = len(list(world.each(Trap)))
     objective_line = ""
     if watch is None:
         # **Bit for bit what this did before objectives existed**, which is

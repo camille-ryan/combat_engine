@@ -84,13 +84,21 @@ def printed_trap(level: int, pick: Random | None = None) -> dict | None:
     return dict(chosen)
 
 
-def dress(world: World, seed: int, *, density: float = 0.06, level: int = 1) -> None:
+def dress(
+    world: World, seed: int, *, density: float = 0.06, level: int = 1,
+    traps: int | None = None,
+) -> None:
     """Put pillars, rough ground and the odd trap on an empty floor.
 
     `density` is the share of squares that become something, split
     roughly two to one between rough going and hard cover. `level` is
     what a trap on this board is worth; boards are built before anybody
     is spawned, so nothing here can work it out for itself.
+
+    `traps` caps how many are armed, and the caller is `story.cast_list`,
+    which is the only thing that knows there is an **encounter budget**.
+    Left `None` -- arcade mode, where there is no budget -- the draw below
+    stands exactly as it did. #958.
     """
     pick = Random(seed ^ 0x7E44A1)
     width, height = world.grid.width, world.grid.height
@@ -113,7 +121,16 @@ def dress(world: World, seed: int, *, density: float = 0.06, level: int = 1) -> 
     # the same argument the scatter above makes about cover: a floor with
     # several of them stops the two sides meeting rather than making the
     # crossing cost something.
-    chosen = [_open(world, pick, spare) for _ in range(pick.choice((0, 1, 1, 2)))]
+    #
+    # **The draw happens either way**, even when the caller has capped it
+    # to nothing: it is one of this dresser's `pick` calls, and skipping
+    # it would move every random decision after it, so two boards that
+    # differ only in how much budget was left would differ in their rough
+    # ground too. Drawn, then cut.
+    how_many = pick.choice((0, 1, 1, 2))
+    if traps is not None:
+        how_many = min(how_many, max(0, traps))
+    chosen = [_open(world, pick, spare) for _ in range(how_many)]
 
     # Laid when the fight starts rather than here. A board is dressed
     # before anybody is standing on it -- which is why the occupancy check

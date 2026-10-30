@@ -383,6 +383,11 @@ class Dressed:
     #: something the party overcame nor something it killed. #961.
     allies: list[str] = field(default_factory=list)
     ally_flavours: list[Reflavour] = field(default_factory=list)
+    #: How many traps this board's budget can still afford, for
+    #: `terrain.dress`. **`None` means nobody worked it out** and the
+    #: dresser keeps its own draw -- which is arcade mode, where there is
+    #: no encounter budget to overspend. #958.
+    traps: int | None = None
 
     def __len__(self) -> int:
         return len(self.refs)

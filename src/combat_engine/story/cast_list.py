@@ -602,7 +602,52 @@ def resolve(
             )
 
     _for_party_size(out, scene, party_level, party_size, stated_size)
+    out.traps = _trap_allowance(out, party_level, want, spent)
     return out
+
+
+#: A board never gets more than this many traps however much budget is
+#: spare. `terrain.dress`'s own reason, kept: *"a floor with several of
+#: them stops the two sides meeting rather than making the crossing cost
+#: something"* -- which is a board-shape argument and not a budget one, so
+#: the budget may only ever reduce it.
+MOST_TRAPS = 2
+
+
+def _trap_allowance(
+    out: Dressed, party_level: int, want: float, spent: float,
+) -> int:
+    """How many traps this board can still afford. #958.
+
+    `terrain.dress` armed nought to two traps from a fixed draw **after**
+    `cast_list` had already spent the whole budget, so a trap walked past
+    the ceiling every creature is held to, silently, because it is added
+    by a function that was never told there is a budget.
+
+    **A dressed trap is priced as a minion**, which is DMG2's rule and a
+    correction to this issue's body: *"Single-shot traps should be
+    considered minions"*, and every trap this engine arms is single-shot
+    by construction -- `terrain.arm` sets `sprung` on the first body across
+    the square and never resets it. So one trap is 6.25% of a board rather
+    than the 25% the body assumed, which makes this a bookkeeping fault
+    rather than a balance emergency: one trap lands **inside**
+    `OVER = 1.1` and two land just outside.
+
+    An unspendable budget (`inf`, when no XP is written for the level)
+    allows the full `MOST_TRAPS`, because there is nothing to overspend.
+    """
+    if want == float("inf"):
+        return MOST_TRAPS
+    each = _slot_cost(party_level, "minion")
+    spare = want * OVER - spent
+    allowed = max(0, min(MOST_TRAPS, int(spare // each)))
+    if allowed < MOST_TRAPS:
+        out.notes.append(
+            f"traps: the budget pays for {allowed} of up to {MOST_TRAPS} "
+            f"({spare:.0f} XP spare, {each:.0f} each as a single-shot "
+            "trap is priced like a minion)"
+        )
+    return allowed
 
 
 def _allies(

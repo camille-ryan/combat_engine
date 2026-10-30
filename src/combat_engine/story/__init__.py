@@ -806,6 +806,7 @@ def field_encounter(
     party: Party | None = None,
     scale: float = 1.0,
     squares: list[tuple[int, int]] | None = None,
+    traps: int | None = None,
 ) -> Fielded:
     """Build a board and put both sides on it.
 
@@ -851,7 +852,7 @@ def field_encounter(
     #
     # **`level=` matters**: `dress` takes it to decide what a trap on this board
     # is worth, and one of the two copies this replaces did not pass it.
-    terrain.dress(world, seed, level=level)
+    terrain.dress(world, seed, level=level, traps=traps)
 
     if party is not None:
         # **`squares` or the column this has always used.** The default

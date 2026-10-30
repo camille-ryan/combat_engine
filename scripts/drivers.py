@@ -42106,6 +42106,220 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_dressed_trap_is_paid_for_out_of_the_budget(out: Result) -> None:
+    """A trap was armed after the budget was spent. #958.
+
+    `cast_list.resolve` spends the whole encounter budget on creatures and
+    holds every one of them to `OVER = 1.1`; then `terrain.dress` armed
+    nought to two traps from a fixed draw, **after**, because it is a
+    different function that was never told there is a budget.
+
+    **A dressed trap is priced as a minion**, which is DMG2's rule and a
+    correction this issue's own comment makes to its body:
+
+    > *Single-shot traps should be considered minions.*
+
+    and every trap this engine arms is single-shot by construction --
+    `terrain.arm` sets `sprung` on the first body across the square and
+    never resets it. So one trap is **6.25%** of a board rather than the
+    25% the body assumed: one lands **inside** the ceiling and two land
+    just outside. A bookkeeping fault, not a balance emergency, and the
+    body's closing claim that boards were fought at 1.5x is wrong.
+
+    **Arcade mode is deliberately unchanged**, and that is asserted rather
+    than assumed: `fight.build` and `api` reach `field_encounter` without
+    a cap, so `dress` keeps its own draw there. The `winrate` run this
+    issue asks for would therefore measure nothing, and `replay`'s
+    fixtures are the standing proof that those boards did not move.
+    """
+    import collections
+    from pathlib import Path
+    from random import Random
+
+    from combat_engine.engine.components import Trap
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import cast_list, field_encounter
+    from combat_engine.story import module as mod
+    from combat_engine.story import reflavour as refl
+    from combat_engine.story import run as run_mod
+
+    def scene_of(foes: int) -> dict:
+        return {"id": "fight", "kind": "combat", "name": "F", "exits": [],
+                "difficulty": "standard",
+                "foes": [{"count": foes, "role": "soldier",
+                          "rank": "standard"}]}
+
+    def dressed(foes: int) -> refl.Dressed:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "fight", "scenes": [scene_of(foes)]},
+            Path("<driver>"))
+        return cast_list.resolve(built.scene("fight"), party_level=2,
+                                 draw=Random(5), party_size=4)
+
+    # -- the allowance tracks what is left ---------------------------------
+    light = dressed(1)
+    full = dressed(8)
+    # `Dressed.traps` is `int | None` -- None means nobody worked it out,
+    # which `resolve` never leaves it as.
+    spare_traps = light.traps if light.traps is not None else -1
+    spent_traps = full.traps if full.traps is not None else -1
+    out.that(
+        spare_traps == cast_list.MOST_TRAPS and spent_traps < spare_traps,
+        "a board with budget to spare affords the full two traps and a "
+        "board spent to its ceiling affords fewer -- the allowance is "
+        "what is left, not a constant",
+        f"1 foe -> {spare_traps} traps, 8 foes -> {len(full.refs)} foes "
+        f"and {spent_traps} traps",
+    )
+    out.that(
+        spent_traps == 1,
+        "and a board spent to the ceiling still affords **one**, because "
+        "a single-shot trap is a minion at 6.25% and `OVER` is 10% -- "
+        "which is this issue's corrected arithmetic, not its body's",
+        f"{spent_traps}",
+    )
+    out.that(
+        any("priced like a minion" in n for n in full.notes)
+        and not any("priced like a minion" in n for n in light.notes),
+        "the cut is said out loud when it bites and silent when it does "
+        "not, which is the same rule the budget's other clamps follow",
+        f"{[n for n in full.notes if 'trap' in n]}",
+    )
+
+    out.that(
+        cast_list._trap_allowance(
+            light, 2, float("inf"), 0.0) == cast_list.MOST_TRAPS,
+        "a budget nobody could work out allows the full two, because "
+        "there is nothing to overspend. **Posed against the helper**: no "
+        "scene reaches that branch today, since `budget` clamps to the "
+        "database's ceiling rather than returning nothing",
+        f"{cast_list._trap_allowance(light, 2, float('inf'), 0.0)}",
+    )
+
+    # -- the cap reaches the board -----------------------------------------
+    def armed(seed: int, cap: int | None) -> int:
+        fielded = field_encounter(seed, 2, traps=cap)
+        Encounter(fielded.world).start()
+        return len(list(fielded.world.each(Trap)))
+
+    # Twenty is enough to see nought/one/two across the draw and keeps
+    # this driver -- and therefore every plant against it -- quick.
+    SEEDS = range(1, 21)
+    loose = collections.Counter(armed(s, None) for s in SEEDS)
+    none = collections.Counter(armed(s, 0) for s in SEEDS)
+    one = collections.Counter(armed(s, 1) for s in SEEDS)
+    two = collections.Counter(armed(s, 2) for s in SEEDS)
+    out.that(
+        set(loose) == {0, 1, 2} and loose[1] > loose[2],
+        "uncapped, the dresser's own draw still arms nought to two across "
+        "twenty boards, which is the behaviour being bounded rather than "
+        "replaced",
+        f"{dict(sorted(loose.items()))}",
+    )
+    out.that(
+        set(none) == {0},
+        "a cap of none arms none",
+        f"{dict(sorted(none.items()))}",
+    )
+    out.that(
+        set(one) <= {0, 1} and one[1] == loose[1] + loose[2],
+        "a cap of one turns every two-trap board into a one-trap board "
+        "and leaves the rest alone -- it is a cut, not a redraw",
+        f"{dict(sorted(one.items()))} against {dict(sorted(loose.items()))}",
+    )
+    out.that(
+        two == loose,
+        "and a cap of two changes nothing, because the dresser never "
+        "armed more than two anyway. **The control**",
+        f"{dict(sorted(two.items()))}",
+    )
+
+    # -- the cap must not move the rest of the board -----------------------
+    # The draw happens either way and is cut afterwards, because skipping
+    # it would move every `pick` call after it -- so two boards differing
+    # only in budget would differ in their rough ground too.
+    def floor_of(seed: int, cap: int | None) -> tuple:
+        world = field_encounter(seed, 2, traps=cap).world
+        return (tuple(sorted(world.grid.blocking)),
+                tuple(sorted(world.grid.difficult.items())))
+
+    same = [floor_of(s, None) == floor_of(s, 0) for s in range(1, 11)]
+    out.that(
+        all(same),
+        "capping the traps leaves the rough ground and the pillars "
+        "identical, so a board's floor does not depend on how much budget "
+        "was spare. **It holds because the scatter is drawn first**, and "
+        "this is the guard against anybody reordering it -- a plant that "
+        "skipped the trap draw entirely stayed green, since nothing after "
+        "it consumes the stream once the count is nought",
+        f"{sum(same)} of {len(same)} boards unchanged",
+    )
+
+    # **The dresser's own default**, which `field_encounter` never
+    # exercises because it always passes the keyword. A plant changing it
+    # to 0 stayed green until this.
+    import inspect
+
+    from combat_engine.content import terrain
+
+    out.that(
+        inspect.signature(terrain.dress).parameters["traps"].default is None,
+        "`dress` defaults its cap to **None**, meaning 'nobody worked it "
+        "out' rather than 'none' -- a default of 0 would silently disarm "
+        "every board that does not go through `cast_list`",
+        f"{inspect.signature(terrain.dress).parameters['traps'].default}",
+    )
+
+    # -- arcade is untouched, by construction ------------------------------
+    out.that(
+        inspect.signature(field_encounter).parameters["traps"].default
+        is None,
+        "`field_encounter` defaults the cap to **None**, so every caller "
+        "that does not know about budgets -- `fight.build`, `api`, "
+        "`winrate` -- keeps the dresser's own draw",
+        f"{inspect.signature(field_encounter).parameters['traps'].default}",
+    )
+    out.that(
+        collections.Counter(armed(s, None) for s in SEEDS) == loose,
+        "and an uncapped board is bit for bit the board it was, which is "
+        "why the `winrate` run this issue asks for would measure nothing "
+        "-- `replay`'s fixtures are the standing proof",
+        f"{dict(sorted(loose.items()))}",
+    )
+
+    # -- and through a real story fight ------------------------------------
+    def story_traps(foes: int) -> collections.Counter:
+        got: collections.Counter = collections.Counter()
+        for seed in range(1, 9):
+            built = mod.parse(
+                {"id": "probe", "party_level": 2, "party_size": 4,
+                 "start": "fight", "scenes": [scene_of(foes)]},
+                Path("<driver>"))
+            campaign = run_mod.begin(built, seed=seed)
+            got[run_mod.step(campaign, built, record=False).traps] += 1
+        return got
+
+    spare_board = story_traps(1)
+    spent_board = story_traps(8)
+    out.that(
+        2 in spare_board and 2 not in spent_board,
+        "**through a real fight**: a board with budget to spare arms two "
+        "traps across eight seeds and a board spent to its ceiling never "
+        "does. Counted off the board after `start()`, because a plant "
+        "that made `_fight` hand over no allowance at all stayed green "
+        "against an assertion that could only see the outcome",
+        f"1 foe {dict(sorted(spare_board.items()))}, "
+        f"8 foes {dict(sorted(spent_board.items()))}",
+    )
+    out.that(
+        sum(spent_board.values()) == 8 and set(spent_board) <= {0, 1},
+        "and every one of those fights played, so the cut is a cut rather "
+        "than a crash",
+        f"{dict(sorted(spent_board.items()))}",
+    )
+
+
 def a_scene_can_field_allies_on_the_party_side(out: Result) -> None:
     """`Scene` had `foes` and nothing on the other side. #961.
 
@@ -47051,6 +47265,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "trap_budget": (
+        a_dressed_trap_is_paid_for_out_of_the_budget,
+        "a dressed trap is paid for out of the budget (#958)",
+    ),
     "scene_allies": (
         a_scene_can_field_allies_on_the_party_side,
         "a scene can field allies on the party's side (#961)",

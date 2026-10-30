@@ -1575,11 +1575,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
     graph_edges challenge_says fight_aftermath reinforcements \
-    scene_allies
+    scene_allies trap_budget
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 45 drivers and prints 525 assertions**, and **each was
+**The command above is 46 drivers and prints 539 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -2110,3 +2110,54 @@ the module's *"survivors of the previous encounter"* is out of reach. Who
 plays them is unanswered; they are run by the same policy as everything else
 on the board. And DMG2's **companion character** — formulas, no items, an
 advancement table — is a different feature, split out as **#1015**.
+
+## A dressed trap is paid for out of the budget (#958)
+
+`cast_list.resolve` spends the whole encounter budget on creatures and holds
+every one of them to `OVER = 1.1`. Then `terrain.dress` armed nought to two
+traps from a fixed draw, **after** — because it is a different function that
+was never told there is a budget.
+
+**A dressed trap is priced as a minion**, which is DMG2's rule and a
+correction the issue's own comment makes to its body: *single-shot traps count
+as minions*, and every trap this engine arms is single-shot by construction
+(`terrain.arm` sets `sprung` on the first body across the square and never
+resets it). So one trap is **6.25%** of a board, not the 25% the body assumed:
+one lands **inside** the ceiling and two land just outside. A bookkeeping
+fault, not a balance emergency.
+
+`cast_list._trap_allowance` works out what is left, `Dressed.traps` carries
+it, and `field_encounter(traps=)` hands it to the dresser. Measured: a board
+asking for one creature affords two traps, a board spent to its ceiling
+affords one.
+
+**`None` means "nobody worked it out", not "none."** That is the whole of the
+compatibility story: `fight.build`, `api` and `winrate` reach
+`field_encounter` without a cap, so arcade boards keep the dresser's own draw
+and are bit for bit what they were. **The `winrate` run this issue asks for
+would therefore measure nothing** — and `replay`'s fixtures are the standing
+proof. Arcade's own budget is still unpriced for traps; changing that would
+move every winrate and scorecard baseline, which is a separate decision.
+
+**The draw is made and then cut** rather than skipped, so capping cannot move
+the rest of the board. Worth knowing honestly: a plant that skipped it stayed
+green, because nothing consumes the stream after the count once it is nought.
+The ordering is defensive, and the floor assertion is the guard against
+somebody reordering the scatter rather than proof the cut matters today.
+
+### What the plants found
+
+Fifteen plants, fourteen red. Four assertions exist only because one stayed
+green, and three of the four are the same mistake: **asserting on what the
+driver could see rather than on what the code does.**
+
+* **`_fight` handing over no allowance at all** passed, because the board does
+  not outlive the fight and the only visible thing was the outcome.
+  `Step.traps` now counts what was armed, read off the board after `start()`
+  — the same rule, and the same fix, as `Step.stood` and `Step.surprised`.
+* **`dress`'s own default** is never exercised by `field_encounter`, which
+  always passes the keyword, so a plant flipping it to 0 changed nothing.
+  Asserted directly on the signature.
+* **the unspendable-budget branch** is unreachable through `resolve` today,
+  since `budget` clamps to the database's ceiling. Posed against the helper,
+  and said so in the assertion.
