@@ -183,6 +183,14 @@ class Campaign:
     record: list[str] = field(default_factory=list)
     formation: list[str] = field(default_factory=list)
     spread: int = 2
+    #: Party indices already told they have enough XP, so the line is said
+    #: once rather than every scene from then on. Indices and not sheets,
+    #: the same position-matching `harvest` uses. #967.
+    advanced: list[int] = field(default_factory=list)
+    #: Pay DMG2's drama reward. **Off by default and per campaign**, which
+    #: is the book's own framing: *"you should grant drama rewards for
+    #: vignettes only if you rely on them in any given session."* #967.
+    drama: bool = False
 
     @property
     def clock(self) -> dict[str, int]:
@@ -267,6 +275,8 @@ def to_dict(campaign: Campaign) -> dict:
         "cleared": {k: dict(v) for k, v in campaign.cleared.items()},
         "denied": campaign.denied,
         "quests": dict(campaign.quests),
+        "advanced": list(campaign.advanced),
+        "drama": bool(campaign.drama),
         "record": list(campaign.record),
         "formation": list(campaign.formation),
         "spread": campaign.spread,
@@ -309,6 +319,8 @@ def from_dict(raw: dict) -> Campaign:
         denied=bool(raw.get("denied", False)),
         quests={str(k): str(v)
                 for k, v in (raw.get("quests") or {}).items()},
+        advanced=[int(i) for i in (raw.get("advanced") or [])],
+        drama=bool(raw.get("drama", False)),
         record=[str(o) for o in raw.get("record", ())],
         formation=[str(b) for b in raw.get("formation", ())],
         spread=int(raw.get("spread", 2) or 2),

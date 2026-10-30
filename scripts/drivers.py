@@ -42106,6 +42106,429 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None:
+    """The reward nothing paid. #967.
+
+    *"Experience points (XP) are the fundamental reward of the game [...]
+    Every encounter comes with an experience reward to match its
+    difficulty."* `Sheet` had no `xp`, nothing awarded any, and no character
+    has ever advanced.
+
+    **Three printed worked examples are the spine of this driver**, because a
+    figure this file computes agreeing with a figure the page prints is
+    stronger evidence than any shape assertion:
+
+    * *"a 7th-level challenge with a complexity of 3 counts as three
+      7th-level monsters, or 900 XP"*;
+    * *"When a group of characters completes a 10th-level major quest, each
+      individual in the group gets 500 XP, regardless of how many characters
+      are in the group"*;
+    * the printed cumulative advancement table, 1,000 / 2,250 / 3,750 /
+      5,500 / 7,500 / 10,000 / 13,000 / 16,500 / 20,500, which
+      `10 * standard(level)` summed reproduces exactly.
+
+    The last one caught a real bug before any plant ran: `to_advance`
+    returned the *increment* for one level while `Sheet.xp` is a running
+    total, so a 2nd-level character read as ready at 1,250 instead of 2,250.
+    The two agree at level 1, which is where a first probe looks.
+
+    **Nothing is spent.** `ready` says so and `level` does not move; applying
+    a level re-deals a deliberately pinned hand, which is #1013.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import SIDE, WORTH, xp
+    from combat_engine.story import beat as bt
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    # -- the page's own worked examples ------------------------------------
+    out.that(
+        xp.for_challenge(7, 3) == 900,
+        "a complexity-3 challenge at 7th level is worth 900 XP, which is "
+        "the figure the page works out in that sentence",
+        f"{xp.for_challenge(7, 3)}",
+    )
+    out.that(
+        xp.for_quest("major", 10).each == 500,
+        "a 10th-level major quest pays each character 500 XP, which is the "
+        "other figure the page states outright",
+        f"{xp.for_quest('major', 10).each}",
+    )
+    printed = [1000, 2250, 3750, 5500, 7500, 10000, 13000, 16500, 20500]
+    got = [xp.to_advance(level) for level in range(1, 10)]
+    out.that(
+        got == printed,
+        "and the cumulative advancement table falls out of the database's "
+        "own monster XP for every heroic level, so no table is written here "
+        "to disagree with it",
+        f"{got}",
+    )
+
+    # -- the mode, not the first row --------------------------------------
+    # #1014 is the same question asked of `budget`, which still uses
+    # `LIMIT 1`. At level 10 one creature carries 300 against 141 at 500.
+    from combat_engine.db import game
+
+    rows = [r[0] for r in game().execute(
+        "SELECT xp FROM monster WHERE level = 10 AND minion = 0 AND xp > 0 "
+        "AND (rank IS NULL OR rank = 'standard')")]
+    out.that(
+        xp._mode([300, 500, 500]) == 500 and xp._mode([]) == 0,
+        "a level's XP is the mode and not whichever row sorted first. "
+        "**Posed against a list and not the database**, because `LIMIT 1` "
+        "agrees with the mode at all 13 levels today (#1014) -- so a plant "
+        "swapping the mode for `rows[0]` stayed green, and this assertion "
+        "exists because that plant did not go red",
+        f"{xp._mode([300, 500, 500])}",
+    )
+    out.that(
+        xp.standard(10) == 500 and 300 in rows
+        and xp.standard(10) == xp._mode(rows),
+        "and the live rows go through it -- level 10 holds a stray "
+        "creature at 300 against 141 at 500, and the figure is the mode of "
+        "what is actually there",
+        f"standard={xp.standard(10)}, strays={sorted(set(rows))}",
+    )
+
+    # -- the rank is in the row, so it must not be applied twice ----------
+    solo = xp.for_creatures(["m4615"])
+    out.that(
+        solo == 500 == round(WORTH["solo"] * xp.standard(1))
+        and solo != round(WORTH["solo"] * 500),
+        "a creature's own row already carries its rank multiplier, so "
+        "`WORTH` is for spending a budget and must not be applied to an "
+        "award -- a level-1 solo is worth five standard monsters, not "
+        "twenty-five",
+        f"solo={solo}, five standards={round(WORTH['solo'] * xp.standard(1))}",
+    )
+
+    # -- and now through a campaign ---------------------------------------
+    FIGHT = {"id": "fight", "kind": "combat", "name": "F",
+             "exits": ["chal"], "difficulty": "standard",
+             "foes": [{"count": 2, "role": "soldier", "rank": "standard"}]}
+    CHAL = {"id": "chal", "kind": "skill_challenge", "name": "C",
+            "exits": ["talk"], "complexity": 2, "primary": ["athletics"]}
+    TALK = {"id": "talk", "kind": "roleplay", "name": "T", "exits": []}
+
+    def play(scenes: list[dict], quests: list[dict] | None = None,
+             size: int = 4, *, god: bool = False, drama: bool = False,
+             director: bt.Director | None = None,
+             level: int = 2) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": level, "party_size": size,
+             "start": scenes[0]["id"], "scenes": scenes,
+             "quests": quests or []}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=11)
+        campaign.drama = drama
+        if director is not None:
+            # **Every slot defaults to `"human"`, and `silent` declares
+            # nothing** -- so a beat loop driven with the default control
+            # produced no intents, no rulings and 0 substantial beats,
+            # which read exactly like the drama reward not working.
+            campaign.control = ["ai"] * len(campaign.party.sheets)
+        said: list[str] = []
+        steps = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, built, record=False, god=god,
+                                director=director)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+            steps.append(made)
+        return campaign, said, steps
+
+    four, said, steps = play([FIGHT, CHAL, TALK])
+    fight = steps[0]
+    worth = xp.for_creatures(fight.enemies)
+    out.that(
+        fight.enemies and four.party.sheets[0].xp >= xp.share(worth, 4)
+        and xp.share(worth, 4) > 0,
+        "a fight the party overcame pays each character the opposition's "
+        "worth divided between them -- *\"divide the XP total for the "
+        "encounter by the number of players present\"*",
+        f"{len(fight.enemies)} foes worth {worth}, "
+        f"each got {four.party.sheets[0].xp}",
+    )
+
+    # **The division, in two claims neither of which can pass by
+    # accident.** The first draft compared a four-head party against a
+    # six-head one and guarded it with "unless they drew different foes" --
+    # which they do, so it passed without testing anything.
+    out.that(
+        xp.share(worth, 6) < xp.share(worth, 4) == worth // 4,
+        "the same encounter pays less each to a larger party, which is "
+        "what dividing by the number present means",
+        f"4 -> {xp.share(worth, 4)}, 6 -> {xp.share(worth, 6)}",
+    )
+    six, _, steps6 = play([FIGHT, CHAL, TALK], size=6)
+    out.that(
+        len(six.party.sheets) == 6 and steps6[0].enemies
+        and six.party.sheets[0].xp
+        == xp.share(xp.for_creatures(steps6[0].enemies), 6),
+        "and the campaign divides by the party it actually has rather than "
+        "by a constant -- posed at six, where a hard-coded four would pay "
+        "half again too much",
+        f"6 heads got {six.party.sheets[0].xp}, "
+        f"share={xp.share(xp.for_creatures(steps6[0].enemies), 6)}",
+    )
+
+    # **A fight the party did not overcome.** A plant dropping the
+    # `outcome == "won"` test stayed green, because the probe's party wins
+    # every fight the seed gives it -- so the losing case is posed by
+    # handing `reward` the step a lost fight would have produced. The
+    # outcome is what `_fight` writes and what #964's objective decides, so
+    # this is the real read rather than a stand-in.
+    beaten = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4,
+         "start": "fight", "scenes": [FIGHT, CHAL, TALK]}, Path("<driver>"))
+    losers = run_mod.begin(beaten, seed=11)
+    lost_step = run_mod.Step(scene=beaten.scene("fight"))
+    lost_step.outcome = "lost"
+    lost_step.enemies = list(fight.enemies)
+    run_mod.reward(losers, beaten, beaten.scene("fight"), lost_step)
+    out.that(
+        lost_step.enemies
+        and all(s.xp == 0 for s in losers.party.sheets),
+        "a fight the party did not overcome pays nothing, with the same "
+        "creatures on the board that paid when they won it -- *\"an "
+        "encounter, by definition, has a risk of failure\"*",
+        f"{len(lost_step.enemies)} foes, "
+        f"xp={[s.xp for s in losers.party.sheets]}",
+    )
+
+    # -- the two quest kinds divide differently ---------------------------
+    MINOR = [{"id": "m", "kind": "minor", "offered_by": "talk",
+              "done_when": "talk"}]
+    MAJOR = [{"id": "M", "kind": "major", "offered_by": "talk",
+              "done_when": "talk"}]
+    def quest_pay(quests: list[dict], size: int) -> int:
+        # `offered_by == done_when` is refused, so the quest is offered in
+        # one scene and completed in the next.
+        two = [{"id": "a", "kind": "roleplay", "name": "A",
+                "exits": ["talk"]},
+               {"id": "talk", "kind": "roleplay", "name": "T", "exits": []}]
+        fixed = [dict(q, offered_by="a", done_when="talk") for q in quests]
+        camp, _, _ = play(two, fixed, size=size)
+        return camp.party.sheets[0].xp
+
+    out.that(
+        quest_pay(MAJOR, 4) == quest_pay(MAJOR, 6) == xp.standard(2),
+        "a major quest pays each character the same whatever the party's "
+        "size -- *\"regardless of how many characters are in the group\"* "
+        "-- which is the one award that does not divide",
+        f"4 heads {quest_pay(MAJOR, 4)}, 6 heads {quest_pay(MAJOR, 6)}",
+    )
+    out.that(
+        quest_pay(MINOR, 4) == xp.share(xp.standard(2), 4)
+        and quest_pay(MINOR, 6) < quest_pay(MINOR, 4),
+        "and a minor quest is one monster of its level split between them, "
+        "so it does divide -- the asymmetry is the printed rule and not an "
+        "oversight",
+        f"4 heads {quest_pay(MINOR, 4)}, 6 heads {quest_pay(MINOR, 6)}",
+    )
+
+    # -- a challenge pays on winning only ---------------------------------
+    chal = steps[1]
+    paid_for_chal = any("Challenge" in n for n in said)
+    out.that(
+        chal.outcome == "lost" and not paid_for_chal,
+        "a challenge the party lost pays nothing, where `charge` already "
+        "makes them pay a cost -- otherwise the cost would be the only "
+        "difference between winning and losing",
+        f"outcome={chal.outcome}, said={[n for n in said if 'hallenge' in n]}",
+    )
+
+    # Posed again on its own board, because which way the roll falls is
+    # the seed's to decide and an assertion that only holds for one of the
+    # two outcomes is an assertion about the seed.
+    _, said_c, steps_c = play([CHAL, TALK])
+    if steps_c[0].outcome == "won":
+        out.that(
+            any("Challenge" in n and str(xp.for_challenge(2, 2)) in n
+                for n in said_c),
+            "and a challenge the party won pays complexity times a monster "
+            "of its level",
+            f"{[n for n in said_c if 'hallenge' in n]}",
+        )
+    else:
+        out.that(
+            not any("Challenge" in n for n in said_c)
+            and steps_c[0].outcome == "lost",
+            "and a challenge the party lost pays nothing on its own board "
+            "either -- posed twice because the roll is the seed's to make",
+            f"outcome={steps_c[0].outcome}",
+        )
+
+    # -- god mode pays nothing, because there was no risk -----------------
+    free, _, steps_g = play([FIGHT, CHAL, TALK], god=True)
+    out.that(
+        steps_g[0].outcome == "won" and not steps_g[0].enemies
+        and free.party.sheets[0].xp == 0,
+        "god mode wins the fight and earns nothing, because it fields "
+        "nobody -- *\"an encounter, by definition, has a risk of failure. "
+        "If that risk isn't present, it's not an encounter, and the "
+        "characters don't earn XP\"*",
+        f"outcome={steps_g[0].outcome}, foes={len(steps_g[0].enemies)}, "
+        f"xp={free.party.sheets[0].xp}",
+    )
+
+    # -- DMG2's drama reward, off unless the campaign asks for it ---------
+    DRAMA = [{"id": "talk", "kind": "roleplay", "name": "T",
+              "brief": "A room.", "max_beats": 5, "exits": [],
+              "affordances": [
+                  # `once` defaults to True, so a single affordance fired
+                  # on beat 1 and was spent -- 1 substantial beat out of
+                  # five, which reads exactly like the reward not working.
+                  {"id": "chat", "what": "talk to them", "once": False,
+                   "win": "they answer", "lose": "they do not"}]}]
+
+    class Always(bt.Director):
+        def match(self, playing, intents) -> dict:  # noqa: ANN001
+            return {i.slot: "chat" for i in intents}
+
+    quiet, said_off, _ = play(DRAMA, director=Always(scripted=True))
+    loud, said_on, steps_on = play(DRAMA, drama=True,
+                                   director=Always(scripted=True))
+    beats = steps_on[0].played
+    substantial = sum(
+        any(r.affordance != "none" for r in b.rulings)
+        for b in (beats.beats if beats else [])
+    )
+    out.that(
+        quiet.party.sheets[0].xp == 0
+        and not any("Drama" in n for n in said_off),
+        "the drama reward is off unless the campaign asks for it -- "
+        "*\"you should grant drama rewards for vignettes only if you rely "
+        "on them\"*",
+        f"xp={quiet.party.sheets[0].xp}",
+    )
+    out.that(
+        substantial >= xp.DRAMA_BEATS
+        and loud.party.sheets[0].xp == xp.share(xp.standard(2), 4)
+        and any("Drama" in n for n in said_on),
+        "and switched on it pays one monster of the party's level for a "
+        "scene of focused play, counted in beats where an affordance "
+        "actually fired",
+        f"{substantial} substantial beats, xp={loud.party.sheets[0].xp}",
+    )
+    out.that(
+        sum("Drama" in n for n in said_on) == 1,
+        "once per scene, which is the book's anti-farming clause as a cap "
+        "rather than a judgement the engine cannot make",
+        f"{[n for n in said_on if 'Drama' in n]}",
+    )
+
+    # **A scene too short to earn it.** A plant deleting the threshold
+    # altogether stayed green, because every beat of the scene above is
+    # substantial -- so the floor needs a scene that falls under it.
+    SHORT = [dict(DRAMA[0], max_beats=2)]
+    brief_c, said_brief, steps_brief = play(
+        SHORT, drama=True, director=Always(scripted=True))
+    short_beats = steps_brief[0].played
+    out.that(
+        len(short_beats.beats if short_beats else []) < xp.DRAMA_BEATS
+        and not any("Drama" in n for n in said_brief)
+        and brief_c.party.sheets[0].xp == 0,
+        "a scene with fewer beats of substance than the threshold earns no "
+        "drama reward -- *\"don't count time the players use to digress\"* "
+        "cuts both ways, and the floor is what says so",
+        f"{len(short_beats.beats if short_beats else [])} beats, "
+        f"xp={brief_c.party.sheets[0].xp}",
+    )
+
+    # **Beats where nobody did anything.** The other plant that stayed
+    # green counted every beat rather than the ones where an affordance
+    # fired, which is the whole of the book's exclusion list.
+    class Idle(bt.Director):
+        def match(self, playing, intents) -> dict:  # noqa: ANN001
+            return {}
+
+    idle_c, said_idle, steps_idle = play(
+        DRAMA, drama=True, director=Idle(scripted=True))
+    idle_beats = steps_idle[0].played
+    fired = sum(
+        any(r.affordance != "none" for r in b.rulings)
+        for b in (idle_beats.beats if idle_beats else [])
+    )
+    out.that(
+        len(idle_beats.beats if idle_beats else []) >= xp.DRAMA_BEATS
+        and fired == 0 and not any("Drama" in n for n in said_idle),
+        "and a scene with plenty of beats in which nothing was attempted "
+        "earns nothing either: the count is beats where an affordance "
+        "fired, not beats",
+        f"{len(idle_beats.beats if idle_beats else [])} beats, "
+        f"{fired} substantial, xp={idle_c.party.sheets[0].xp}",
+    )
+
+    # -- ready, said once, and never applied ------------------------------
+    # Five scenes, so "said once" is distinguishable from "said every
+    # scene" -- which one scene could not tell apart.
+    deep = [{"id": f"s{i}", "kind": "roleplay", "name": "S",
+             "exits": [f"s{i + 1}"]} for i in range(4)]
+    deep.append({"id": "s4", "kind": "roleplay", "name": "S", "exits": []})
+    built = mod.parse({"id": "probe", "party_level": 1, "party_size": 4,
+                       "start": "s0", "scenes": deep}, Path("<driver>"))
+    camp = run_mod.begin(built, seed=3)
+    for sheet in camp.party.sheets:
+        sheet.xp = xp.to_advance(1)
+    levels = [s.level for s in camp.party.sheets]
+    notes: list[str] = []
+    while not camp.finished:
+        made = run_mod.step(camp, built, record=False)
+        notes += [str(x) for x in made.lines
+                  if getattr(x, "kind", "") == "note"]
+    ready_lines = [n for n in notes if "advancement is not implemented" in n]
+    out.that(
+        len(ready_lines) == len(camp.party.sheets),
+        "a character with enough XP is told once -- once each, not once a "
+        "scene for the rest of the module",
+        f"{len(ready_lines)} lines over 5 scenes for "
+        f"{len(camp.party.sheets)} characters",
+    )
+    out.that(
+        [s.level for s in camp.party.sheets] == levels
+        and all(xp.ready(s) for s in camp.party.sheets),
+        "and nothing advances anybody: `ready` is true and `level` has not "
+        "moved, which is the scope this issue drew and #1013 is the rest",
+        f"levels {levels} -> {[s.level for s in camp.party.sheets]}",
+    )
+
+    # -- and it survives a save -------------------------------------------
+    # **Round-tripped through `camp`, which carries a non-empty
+    # `advanced`.** The first draft used the drama campaign, where nobody
+    # was ready -- so `[] == []` passed and a plant returning `advanced=[]`
+    # on load stayed green.
+    back = save_mod.from_dict(save_mod.to_dict(camp))
+    out.that(
+        camp.advanced and back.advanced == camp.advanced,
+        "who has already been told they can advance survives a save, so "
+        "reloading is not a way to be told again every scene",
+        f"{camp.advanced} -> {back.advanced}",
+    )
+    out.that(
+        all(s.xp > 0 for s in camp.party.sheets)
+        and [s.xp for s in back.party.sheets]
+        == [s.xp for s in camp.party.sheets],
+        "and the XP itself survives -- asserted on sheets that carry some, "
+        "because every sheet reading 0 either side would have passed",
+        f"{[s.xp for s in back.party.sheets]}",
+    )
+    drama_back = save_mod.from_dict(save_mod.to_dict(loud))
+    out.that(
+        loud.drama and drama_back.drama == loud.drama,
+        "and the drama setting survives, asserted on a campaign that has "
+        "it switched on",
+        f"{drama_back.drama}",
+    )
+    out.that(
+        SIDE == 4 and xp.for_quest("major", 10).total == 500 * SIDE,
+        "and a major quest's total is its per-head figure times the "
+        "standard party, so the two halves of `Award` describe one payment",
+        f"SIDE={SIDE}, total={xp.for_quest('major', 10).total}",
+    )
+
+
 def a_quest_is_offered_completed_and_can_be_ruled_out(out: Result) -> None:
     """The DMG lists quests first among what an adventure is made of, and
     sets a level's budget as *"six to eight encounters, one major quest,
@@ -42201,13 +42624,28 @@ def a_quest_is_offered_completed_and_can_be_ruled_out(out: Result) -> None:
         f"{states[1]}",
     )
 
-    # -- the XP is carried and not awarded --------------------------------
+    # -- the XP is paid and still not spent -------------------------------
+    # **This assertion used to pin the absence of the award**: it read
+    # `not hasattr(sheet, "xp")` and "announced as unspent", which was
+    # honest while #967 was open and became false the moment it landed. The
+    # full `drivers` run caught it; `--only quests` could not have, and
+    # neither could `--only story_xp`.
+    from combat_engine.story import xp as xp_mod
+
     out.that(
-        any("unspent" in n for n in said)
-        and not hasattr(done.party.sheets[0], "xp"),
-        "the XP is announced as unspent and no sheet has an XP field at "
-        "all, so nobody reads the figure as working -- that is #967",
-        f"{[n for n in said if 'unspent' in n]}",
+        any("20 XP each" in n for n in said)
+        and done.party.sheets[0].xp == 20,
+        "a completed quest pays the module's own figure, and the module's "
+        "figure wins over the printed rate because an adventure that "
+        "prints a number means it",
+        f"{[n for n in said if 'XP' in n]}, xp={done.party.sheets[0].xp}",
+    )
+    out.that(
+        all(s.level == 2 for s in done.party.sheets)
+        and not xp_mod.ready(done.party.sheets[0]),
+        "and nothing advances off the back of it -- 20 XP is not a level, "
+        "and applying one is #1013 either way",
+        f"levels={[s.level for s in done.party.sheets]}",
     )
 
     # -- a conflict, which is why a quest has a state ---------------------
@@ -45128,6 +45566,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "story_xp": (
+        xp_is_awarded_by_the_printed_arithmetic_and_never_spent,
+        "XP is awarded by the printed arithmetic and never spent (#967)",
+    ),
     "quests": (
         a_quest_is_offered_completed_and_can_be_ruled_out,
         "a quest is offered, completed and can be ruled out (#940)",

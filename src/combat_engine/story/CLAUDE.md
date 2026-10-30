@@ -1573,11 +1573,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
-    scene_once module_cast complexity_bound quests
+    scene_once module_cast complexity_bound quests story_xp
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 39 drivers and prints 396 assertions**, and **each was
+**The command above is 40 drivers and prints 422 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -1676,3 +1676,88 @@ as working. The driver asserts both halves.
 because every quest in the probe is granted by the first scene it plays. The
 driver now asserts a quest offered by a **later** scene is absent until that
 scene, and is offered once rather than re-announced.
+
+## XP is awarded and never spent (#967)
+
+*"Experience points (XP) are the fundamental reward of the game, just as
+encounters are the building blocks of adventures and campaigns."* Nothing
+awarded any. `Sheet` had no `xp`, and a campaign played its whole module at
+the level `Party.of` was called with.
+
+`story/xp.py` holds the arithmetic and **every figure in it is read off
+`game.db`** rather than written down — the reason `budget` gives one function
+away: a table here can disagree with what the monsters are actually worth,
+and then two numbers describe one rule. Three printed worked examples are
+what the driver asserts against, because a computed figure matching a printed
+one is stronger evidence than any shape assertion:
+
+* a complexity-3 challenge at 7th level is **900 XP**;
+* a 10th-level major quest pays **500 each**, *"regardless of how many
+  characters are in the group"*;
+* the cumulative advancement table — 1,000 / 2,250 / 3,750 / 5,500 / 7,500 /
+  10,000 / 13,000 / 16,500 / 20,500 — which `10 * standard(level)` summed
+  reproduces exactly for every heroic level.
+
+**The two kinds of quest divide differently and that is printed, not an
+oversight.** A minor quest is one monster of its level *between them*; a
+major quest pays each character the same figure however many of them there
+are. Everything else is *"divide the XP total for the encounter by the number
+of players present"*.
+
+**`WORTH` must never touch an award.** A creature's own row already carries
+its rank multiplier — a level-1 solo is 500, which is five standard monsters
+— so `WORTH` is for *spending* a budget, and applying it to a reward pays
+five times over. There is an assertion pinned to that specific creature.
+
+**An encounter has to have been overcome, and overcoming is not killing.**
+The award reads `made.outcome`, which is where #964 put the scene's
+objective, so *"killing, routing, or capturing"* all pay. God mode therefore
+earns **nothing** — it fields nobody, so there was no risk and no opposition
+to be worth anything — and that falls out of `made.enemies` being empty
+rather than being special-cased.
+
+**`Step.clean` is deliberately not read.** #964 recorded it saying the thing
+that would pay for it is this award. Nothing printed pays more for a clean
+win, so the field stays unspent; inventing a bonus would be this component's
+own warned-against failure.
+
+DMG2's **drama reward** is here and **off by default**, which is the book's
+framing: *"you should grant drama rewards for vignettes only if you rely on
+them in any given session."* Its unit is a beat in which an affordance
+actually fired, because the book's exclusion list — digressing, idle chatter,
+repeating, wandering off topic — is almost exactly the set of beats where
+nothing was attempted. One award per scene, which is the anti-farming clause
+as a cap rather than a judgement the engine cannot make.
+
+**Nothing advances anybody.** `xp.ready` says a character has earned the next
+level, the line is said once each, and `level` does not move. Applying it
+re-deals a hand pinned on purpose, which is `chargen`'s and is **#1013**.
+
+### What the plants found, which is most of what this section is worth
+
+Twenty-one plants, nineteen red. Five assertions existed only because a plant
+stayed green:
+
+* **the mode** could not be posed at all. `standard()` takes the mode of a
+  level's rows rather than the first one, and `LIMIT 1` returns the same
+  answer at all 13 levels today — so a plant replacing the mode with
+  `rows[0]` ran green. The selection is now `_mode()` and asserted against a
+  list where the two differ. The plant *through* `standard` still cannot go
+  red, and that is the honest state of it: **#1014** is the same fragility in
+  `budget`, where a single stray row at level 10 would make an encounter 40%
+  light in silence.
+* **a lost fight** was never posed — the probe's party wins every fight the
+  seed gives it, so dropping the `outcome == "won"` test changed nothing.
+  Posed now by handing `reward` the step a lost fight produces.
+* **the drama floor** and **the fired-affordance filter** both survived
+  deletion, because every beat of the drama probe is substantial. Two scenes
+  were added: one too short to qualify, one with plenty of beats where
+  nothing is attempted.
+* **the save** was round-tripped on a campaign where nobody had advanced and
+  every sheet held 0 XP, so `[] == []` and `0 == 0` passed and two plants
+  returning empties stayed green. It now round-trips the campaign that
+  carries both.
+
+And a probe caught `to_advance` returning one level's *increment* against a
+cumulative `Sheet.xp` — ready at 1,250 instead of 2,250. The two agree at
+level 1, which is where a first probe looks.

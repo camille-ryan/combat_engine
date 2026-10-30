@@ -118,6 +118,12 @@ class Sheet:
     action_points: int = 1
     #: Failed death saves. Three is dead, and a short rest clears them.
     failures: int = 0
+    #: Experience earned, and **never spent**. Applying a level re-deals
+    #: powers, feats and ability increases for a character whose hand is
+    #: pinned two fields down, which is a `chargen` job and a larger one --
+    #: so this accumulates, `xp.ready` says when it is enough, and nothing
+    #: in `story/` advances anybody. #967.
+    xp: int = 0
     #: The hand, pinned. Empty means "deal me one", the same as `Character`.
     #:
     #: **A durable party must pin this or it is not durable.** `chargen.spawn`

@@ -52,6 +52,7 @@ from . import PARTY, PARTY_AT, Party, field_encounter, harvest, loot, tension
 from . import beat as beat_mod
 from . import formation as formation_mod
 from . import table as table_mod
+from . import xp as xp_mod
 from .cast_list import resolve
 from .challenge import Chooser
 from .challenge import play as play_challenge
@@ -1032,10 +1033,23 @@ def quests(campaign: Campaign, module: Module, scene: Scene,
         if quest.done_when != scene.id and quest.done_when not in won:
             continue
         campaign.quests[quest.id] = "done"
+        # **The module's own figure wins, and divides by its kind.** An
+        # adventure prints a quest's XP, so a stated number is better
+        # evidence than the printed rate -- but *how* it divides is the
+        # rule's to decide, not the module's: a major quest pays each
+        # character the stated figure whatever the party's size, and a
+        # minor one is split. #967.
+        paid = xp_mod.for_quest(quest.kind, scene.level or module.party_level)
+        if quest.xp:
+            paid = xp_mod.Award(
+                "quest",
+                each=quest.xp if quest.kind == "major" else 0,
+                total=quest.xp,
+                why=f"the module's own figure for {quest.id}",
+            )
+        got = xp_mod.pay(campaign.party.sheets, paid)
         made.say(
-            f"Quest done: {quest.id}"
-            + (f" ({quest.xp} XP, unspent -- see #967)" if quest.xp else "")
-            + ".",
+            f"Quest done: {quest.id} ({got.each} XP each -- {paid.why}).",
             "note",
         )
         for other in quest.fails:
@@ -1046,6 +1060,99 @@ def quests(campaign: Campaign, module: Module, scene: Scene,
                     "it out.",
                     "note",
                 )
+
+
+def reward(campaign: Campaign, module: Module, scene: Scene,
+           made: Step) -> None:
+    """Pay what the scene was worth, and say when somebody is ready. #967.
+
+    > *Experience points (XP) are the fundamental reward of the game, just
+    > as encounters are the building blocks of adventures and campaigns.
+    > Every encounter comes with an experience reward to match its
+    > difficulty.*
+
+    Three sources pay here -- a combat encounter, a skill challenge, and
+    DMG2's drama reward -- and the fourth, a quest, pays in `quests` above
+    because that is where a quest is completed.
+
+    **An encounter has to be overcome, and overcoming is not killing.**
+    *"Killing, routing, or capturing"* all count, so this reads
+    `made.outcome` rather than who was left standing: #964 put the scene's
+    objective behind that word, and hanging the award off a wiped board
+    would refuse XP to a party that achieved exactly what the module asked
+    for.
+
+    **And a risk of failure is what makes something an encounter at all**:
+
+    > *Remember that an encounter, by definition, has a risk of failure. If
+    > that risk isn't present, it's not an encounter, and the characters
+    > don't earn XP.*
+
+    Which is why god mode pays **nothing**: `_win` fields no creatures and
+    rolls nothing, so there is no opposition to be worth anything and no
+    risk to have run. That falls out of `made.enemies` being empty rather
+    than being special-cased, and it is the right answer rather than a
+    convenient one.
+
+    **`Step.clean` is deliberately not read.** #964 recorded it saying the
+    thing that would pay for it is this award -- and nothing printed pays
+    more for a clean win. An encounter is worth its monsters whether or not
+    anybody went down. Inventing a bonus here would be this component's own
+    warned-against failure, so the field stays unspent and this paragraph
+    is why.
+    """
+    level = scene.level or module.party_level
+    earned: list[xp_mod.Award] = []
+
+    if scene.kind == "combat" and made.outcome == "won" and made.enemies:
+        total = xp_mod.for_creatures(made.enemies)
+        earned.append(xp_mod.Award(
+            "encounter", each=0, total=total,
+            why=f"{len(made.enemies)} creatures overcome",
+        ))
+    elif scene.kind == "skill_challenge" and made.outcome == "won":
+        # **A lost challenge pays nothing, which is a reading and not a
+        # quotation.** The page prices a challenge as monsters of its level
+        # and says an encounter with no risk of failure earns nothing; it
+        # does not print what a *failed* challenge is worth. Camille's
+        # ruling that a lost challenge must not stop the plot is honoured
+        # by `charge` -- the party moves on and pays a cost -- and paying
+        # full XP for losing would make the cost the only difference
+        # between winning and not.
+        earned.append(xp_mod.Award(
+            "challenge", each=0,
+            total=xp_mod.for_challenge(level, scene.complexity),
+            why=f"complexity {scene.complexity} at level {level}",
+        ))
+    if campaign.drama and made.played is not None:
+        drama = xp_mod.drama(made.played, level)
+        if drama is not None:
+            earned.append(drama)
+
+    for award in earned:
+        if award.total <= 0:
+            continue
+        got = xp_mod.pay(campaign.party.sheets, award)
+        made.say(
+            f"{award.source.capitalize()}: {got.each} XP each "
+            f"({award.why}).",
+            "note",
+        )
+
+    # **Said once, when it is crossed, and never applied.** A line every
+    # scene from here on would be noise, and applying a level is #1013 --
+    # re-dealing a pinned hand is `chargen`'s to own.
+    for i, sheet in enumerate(campaign.party.sheets):
+        if not xp_mod.ready(sheet) or i in campaign.advanced:
+            continue
+        campaign.advanced.append(i)
+        made.say(
+            f"{sheet.cls} has {sheet.xp} XP and needs "
+            f"{xp_mod.to_advance(sheet.level)} for level {sheet.level + 1} "
+            "-- advancement is not implemented (#1013), so the character "
+            "keeps playing at this level.",
+            "note",
+        )
 
 
 def charge(campaign: Campaign, scene: Scene, made: Step) -> None:
@@ -1452,6 +1559,7 @@ def step(
         )
 
     quests(campaign, module, scene, made)
+    reward(campaign, module, scene, made)
     charge(campaign, scene, made)
 
     # **The hours the scene took, before the grant and after the body.**
