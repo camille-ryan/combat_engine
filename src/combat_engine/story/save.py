@@ -173,6 +173,9 @@ class Campaign:
     #: `tension.footing` to pitch the next scene, and **bounded** -- only
     #: the last few matter, which is what keeps the loop from converging on
     #: a game nobody can lose. #977.
+    #: The next short rest is denied, because a scene was lost and said
+    #: that was the cost. Cleared by the rest it denies. #975.
+    denied: bool = False
     record: list[str] = field(default_factory=list)
     formation: list[str] = field(default_factory=list)
     spread: int = 2
@@ -258,6 +261,7 @@ def to_dict(campaign: Campaign) -> dict:
         "rests": campaign.rests,
         "fired": list(campaign.fired),
         "cleared": {k: dict(v) for k, v in campaign.cleared.items()},
+        "denied": campaign.denied,
         "record": list(campaign.record),
         "formation": list(campaign.formation),
         "spread": campaign.spread,
@@ -297,6 +301,7 @@ def from_dict(raw: dict) -> Campaign:
             str(k): {str(r): int(n) for r, n in (v or {}).items()}
             for k, v in (raw.get("cleared") or {}).items()
         },
+        denied=bool(raw.get("denied", False)),
         record=[str(o) for o in raw.get("record", ())],
         formation=[str(b) for b in raw.get("formation", ())],
         spread=int(raw.get("spread", 2) or 2),

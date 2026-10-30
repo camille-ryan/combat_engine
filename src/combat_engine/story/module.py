@@ -156,6 +156,28 @@ class FoeSpec:
     rank: str = "standard"
 
 
+#: What a scene may charge the party for losing it.
+#:
+#: Camille's ruling -- *"skill challenges should never prevent the plot from
+#: progressing"* -- is DMG2's printed rule, and DMG2 answers the obvious
+#: follow-up:
+#:
+#: > *focus the challenge on what the PCs' necessary victory costs them,
+#: > rather than on winning or losing. On either a success or a failure, the
+#: > characters will move on to the same obstacle. However, on a failure,
+#: > they move on at a significant disadvantage.*
+#:
+#: So a loss costs something and the exit is unchanged. `on_failure` is still
+#: there for the modules that branch; this is the option for the ones that
+#: should not have to.
+#:
+#: **One mechanism for every kind, not one for challenges.** #975's own
+#: comment makes the case: DMG2's three-position taxonomy -- clean, at a
+#: cost, failed -- names *"fewer healing surges or daily powers"* for a
+#: costly **combat** win and this body proposes the same list for a lost
+#: challenge. Keying it on `Scene.kind` would build it twice.
+COSTS = ("surge", "action point", "rest")
+
 #: Environmental dangers and the Endurance DC each one imposes, printed.
 #:
 #: **Fixed numbers, not a level band.** `dc.py`'s table scales with level
@@ -214,6 +236,22 @@ CAUGHT = ("asleep", "distracted")
 #: night of the full moon"* -- and a tick per scene transition is the coarsest
 #: thing that can express any of them. Deliberately **not** a real clock.
 UNITS = ("scene", "rest")
+
+
+@dataclass(frozen=True)
+class Cost:
+    """What losing this scene costs, applied with the exit unchanged.
+
+    `says` is shown **before** the scene runs, because DMG2's framing
+    advice is to *"build tension by showing players the negative
+    consequences of failure"* -- a cost discovered afterwards is a
+    punishment, and one stated beforehand is a stake.
+    """
+
+    what: str = "surge"
+    #: How many, per character.
+    each: int = 1
+    says: str = ""
 
 
 @dataclass(frozen=True)
@@ -531,6 +569,8 @@ class Scene:
     #: How long the scene takes, in hours. Only read when `exposure` is
     #: stated -- an Endurance check falls due every `EXPOSURE_HOURS`.
     hours: int = 0
+    #: What losing this scene costs. Any kind may carry one -- see `Cost`.
+    cost: tuple[Cost, ...] = ()
 
     # -- roleplay ------------------------------------------------------------
     #: Who is here to be talked to.
@@ -759,6 +799,28 @@ def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
         count=count, name=str(raw.get("name", "")).strip(),
         words=words, role=role, rank=rank,
     )
+
+
+def _as_cost(raw: Any, where: str, problems: list[str]) -> Cost | None:
+    """One `cost` entry. The vocabulary is closed, like every other here."""
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a cost must be an object")
+        return None
+    what = str(raw.get("what", "")).strip().lower()
+    if what not in COSTS:
+        problems.append(
+            f"{where}: cost {what!r} is not one of {', '.join(COSTS)}"
+        )
+        return None
+    each = raw.get("each", 1)
+    if not isinstance(each, int) or isinstance(each, bool) or each < 1:
+        problems.append(
+            f"{where}: cost {what!r} has each {each!r}; it is how many per "
+            "character and must be a positive integer"
+        )
+        each = 1
+    return Cost(what=what, each=each,
+                says=str(raw.get("says", "")).strip())
 
 
 def _as_timed(raw: Any, where: str, problems: list[str]) -> Timed | None:
@@ -1078,6 +1140,12 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
             f"{where}: states exposure {list(exposure)} and no hours, so no "
             "Endurance check would ever fall due -- say how long it takes"
         )
+    cost = tuple(
+        c for c in (
+            _as_cost(r, f"{where} cost {i + 1}", problems)
+            for i, r in enumerate(raw.get("cost", ()) or ())
+        ) if c is not None
+    )
     readiness = str(raw.get("readiness", "ready")).strip().lower() or "ready"
     if readiness not in READINESS:
         problems.append(
@@ -1122,6 +1190,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         grants=grants,
         exposure=exposure,
         hours=hours,
+        cost=cost,
         npcs=npcs,
         affordances=affordances,
         lore=lore,

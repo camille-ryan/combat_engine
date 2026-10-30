@@ -817,6 +817,51 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## Losing a scene costs something, and the plot goes on
+
+Camille's ruling — *"skill challenges should never prevent the plot from
+progressing"* — was honoured, and that was the whole problem: a lost
+challenge progressed **identically** to a won one. `on_failure` is a scene
+id, so a module could branch or say nothing.
+
+DMG2's answer is the same scene and a worse party, and `Scene.cost` is
+that: a declared penalty charged on a loss with the **exit unchanged**.
+
+Four calls:
+
+* **Any kind of scene, not just a challenge.** #975's own comment makes
+  the case — DMG2 names *"fewer healing surges or daily powers"* for a
+  costly **combat** win and the body proposes the same list for a lost
+  challenge, so keying on `Scene.kind` would build it twice.
+* **The stake is said first.** DMG2's framing advice is to show the
+  consequences of failure, so the cost is stated before the scene runs: a
+  cost discovered afterwards is a punishment, one stated beforehand is a
+  stake.
+* **The exit is untouched**, asserted against the no-cost run's exit,
+  because that is the ruling itself.
+* **A `rest` cost is spent, not sticky.** It is the only cost that is not
+  a number, so it sets a campaign flag — and the flag is cleared by the
+  rest it denies. One rest is forfeited, not every rest; a flag nothing
+  clears is a party that never rests again.
+
+### Three green plants, three different mistakes of mine
+
+* **Dead code** — `if outcome != "lost" or not scene.cost` had a second
+  test that never mattered, because the loop below is empty when no cost
+  is declared. Fourth instance of this pattern in a day.
+* **A vacuous comparison** — the save round-trip used a campaign whose
+  `denied` was already `False`, so `False == False` passed while a plant
+  dropped the field on load. Same family as the `< 12` threshold in #971.
+* **A plant placed where it could not stick** — twice. First
+  `next_id = next_id`, which asserts nothing; then a real reroute set
+  *before* `run.step`'s "Where next" block, which promptly recomputed it.
+  A plant has to survive the code that runs after it.
+
+And one assertion I kept knowing no local plant reddens it: a control that
+surges stay `None` was wrong, because a challenge lays a board and
+`strike` harvests concrete numbers onto every sheet. The baseline is the
+same scene without a cost — which is a stronger claim anyway.
+
 ## A fight reached without a rest is scaled back
 
 The sidebar offers two levers and **the page chooses between them by
@@ -1416,11 +1461,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     line_kinds objective_verdict objective_budget scene_grant \
     story_milestones timeline rest_lockout stays_cleared \
     budget_ceiling roll_margin readiness unknown_name \
-    cold_hours marching_order tension unrested
+    cold_hours marching_order tension unrested lost_costs
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 34 drivers and prints 338 assertions**, and **each was
+**The command above is 35 drivers and prints 351 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

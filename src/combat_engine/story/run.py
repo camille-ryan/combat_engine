@@ -979,6 +979,86 @@ def record_fallen(
         book[ref] = book.get(ref, 0) + count
 
 
+def charge(campaign: Campaign, scene: Scene, made: Step) -> None:
+    """Charge what losing this scene cost, with the exit unchanged. #975.
+
+    Camille's ruling -- *"skill challenges should never prevent the plot
+    from progressing"* -- was honoured, and that was the whole problem: a
+    lost challenge progressed **identically** to a won one. `on_failure`
+    is a scene id, so a module could branch or say nothing, and the
+    imported one does not branch.
+
+    DMG2's answer is the same scene and a worse party:
+
+    > *On either a success or a failure, the characters will move on to the
+    > same obstacle. However, on a failure, they move on at a significant
+    > disadvantage.*
+
+    **Charged on a loss of any kind of scene**, not on a challenge, which
+    is #975's own comment's recommendation: DMG2's taxonomy names *"fewer
+    healing surges or daily powers"* for a costly **combat** win and the
+    body proposes the same list for a lost challenge, so keying this on
+    `Scene.kind` would build it twice.
+
+    A `rest` cost is the one that is not a number: it denies the *next*
+    short rest rather than taking something now, which is why it sets a
+    flag on the campaign instead of touching a sheet.
+    """
+    # No `or not scene.cost`: the loop below is empty for a scene
+    # that declares none, so the extra test was dead -- a plant that
+    # removed it changed nothing, which is how I found out.
+    if made.outcome != "lost":
+        return
+    for item in scene.cost:
+        if item.what == "rest":
+            campaign.denied = True
+            made.say(
+                "Lost: the party presses on without the chance to catch "
+                "their breath -- the next short rest is denied.",
+                "note",
+            )
+            continue
+        for sheet in campaign.party.sheets:
+            if item.what == "surge":
+                have = sheet.surges
+                if have is None or have <= 0:
+                    continue
+                sheet.surges = max(0, have - item.each)
+            elif item.what == "action point":
+                sheet.action_points = max(
+                    0, sheet.action_points - item.each)
+        made.say(
+            f"Lost: {item.each} {item.what}"
+            f"{'s' if item.each != 1 else ''} each -- the party moves on "
+            "to the same obstacle at a disadvantage.",
+            "note",
+        )
+
+
+def stake(scene: Scene, made: Step) -> None:
+    """Say what losing will cost, **before** it is played. #975.
+
+    DMG2's framing advice is to *"build tension by showing players the
+    negative consequences of failure"*. A cost discovered afterwards is a
+    punishment; one stated beforehand is a stake, and that is the whole
+    difference between the two.
+    """
+    for item in scene.cost:
+        if item.says:
+            made.say(item.says, "note")
+        elif item.what == "rest":
+            # Not per character, so not "1 rest(s) each" -- a denied rest
+            # is one thing the party loses together.
+            made.say("Losing this will cost the party their next rest.",
+                     "note")
+        else:
+            made.say(
+                f"Losing this will cost {item.each} {item.what}"
+                f"{'s' if item.each != 1 else ''} each.",
+                "note",
+            )
+
+
 def weather(campaign: Campaign, module: Module, scene: Scene,
             made: Step) -> None:
     """Spend the party's surges on the hours they stood in the cold. #971.
@@ -1220,6 +1300,8 @@ def step(
         if paragraph.strip():
             made.say(paragraph.strip(), "scene")
 
+    stake(scene, made)
+
     if scene.kind == "roleplay":
         _roleplay(campaign, module, scene, made, director, ask_human)
     elif scene.kind == "combat":
@@ -1238,8 +1320,22 @@ def step(
         # defensible reading -- what is not defensible is doing it silently,
         # which is how three rests in a row passed unremarked. #993.
         refused = scene.extended and _already_rested(campaign, module)
-        campaign.party.rest(extended=scene.extended and not refused)
-        if refused:
+        # **A rest a lost scene denied.** The flag is spent here rather
+        # than lingering: one rest is forfeited, not every rest after it.
+        # A flag nothing clears is a party that never rests again. #975.
+        denied = campaign.denied
+        campaign.denied = False
+        if denied:
+            made.say(
+                "Refused: the scene the party lost cost them this rest, "
+                "so nothing comes back.",
+                "note",
+            )
+        else:
+            campaign.party.rest(extended=scene.extended and not refused)
+        if denied:
+            pass
+        elif refused:
             made.say(
                 "Refused: an extended rest is once per day and the party "
                 "has had one with nothing since, so this is a short rest "
@@ -1258,7 +1354,7 @@ def step(
             #: rather than derived from `visited`, because deriving it would
             #: need the module to ask which of those scenes were extended.
             campaign.rests += 1
-        if not refused:
+        if not refused and not denied:
             # The refusal note above already says what the party got, so
             # this would otherwise print "Extended rest: everything back"
             # directly underneath a line saying they did not get one.
@@ -1285,6 +1381,8 @@ def step(
             f"{campaign.encounters} encounters since the last extended rest.",
             "note",
         )
+
+    charge(campaign, scene, made)
 
     # **The hours the scene took, before the grant and after the body.**
     # A scene that spends a surge on the weather has to do it whatever kind

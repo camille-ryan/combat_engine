@@ -42106,6 +42106,206 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def losing_a_scene_costs_something_and_the_plot_goes_on(out: Result) -> None:
+    """Camille's ruling -- *"skill challenges should never prevent the plot
+    from progressing"* -- was honoured, and that was the whole problem: a
+    lost challenge progressed **identically** to a won one. `on_failure`
+    is a scene id, so a module could branch or say nothing.
+
+    DMG2's answer is the same scene and a worse party:
+
+    > *On either a success or a failure, the characters will move on to the
+    > same obstacle. However, on a failure, they move on at a significant
+    > disadvantage.*
+
+    **Charged on any kind of scene**, which is #975's own comment's
+    recommendation rather than this body's framing: DMG2 names *"fewer
+    healing surges or daily powers"* for a costly **combat** win and the
+    body proposes the same list for a lost challenge, so keying it on
+    `Scene.kind` would build the same thing twice.
+
+    Two assertions carry the design rather than the arithmetic. The
+    **exit is unchanged**, which is the ruling itself -- a cost that also
+    rerouted the party would be the branch this exists to avoid. And the
+    stake is stated **before** the scene, because DMG2's framing advice is
+    to show the consequences of failure: a cost discovered afterwards is a
+    punishment, one stated beforehand is a stake.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    def challenge(nxt: str, cost: list[dict] | None = None, *,
+                  complexity: int = 5) -> dict:
+        scene: dict = {"id": "c", "kind": "skill_challenge", "name": "C",
+                       "exits": [nxt] if nxt else [],
+                       "complexity": complexity, "primary": ["athletics"]}
+        if cost is not None:
+            scene["cost"] = cost
+        return scene
+
+    def play(scenes: list[dict], start: str = "c",
+             seed: int = 3) -> tuple[save_mod.Campaign, run_mod.Step]:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": start, "scenes": scenes}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        return campaign, run_mod.step(campaign, built, record=False)
+
+    def notes(made: run_mod.Step) -> list[str]:
+        return [str(x) for x in made.lines
+                if getattr(x, "kind", "") == "note"]
+
+    ONWARD = {"id": "n", "kind": "roleplay", "name": "N", "exits": []}
+
+    # -- the control, against a real baseline -----------------------------
+    # **Not `surges is None`.** A challenge lays a board and `strike`
+    # harvests concrete numbers onto every sheet, so the pool is never
+    # `None` after one -- the first draft of this asserted it was and
+    # failed honestly. The baseline is the same scene without a cost.
+    plain, bare = play([challenge("n"), ONWARD])
+    free = [s.surges or 0 for s in plain.party.sheets]
+    out.that(
+        bare.outcome == "lost" and not any("Lost:" in n for n in notes(bare)),
+        "a scene that declares no cost charges nothing when it is lost, so "
+        "every module written before this plays as it did",
+        f"{[n[:40] for n in notes(bare)]}",
+    )
+
+    # -- a declared cost is charged, and the exit is unchanged ------------
+    paid, lost = play([challenge("n", [{"what": "surge"}]), ONWARD])
+    charged = [s.surges or 0 for s in paid.party.sheets]
+    out.that(
+        lost.outcome == "lost" and sum(charged) < sum(free)
+        and any("Lost: 1 surge" in n for n in notes(lost)),
+        "a lost scene charges the surge it declared, measured against the "
+        "same scene without one rather than against an assumed pool",
+        f"charged {charged} vs free {free}",
+    )
+    out.that(
+        lost.next_id == bare.next_id == "n",
+        "and the exit is the same one a win would have taken -- which is "
+        "the ruling itself: the cost is the consequence, not a reroute",
+        f"lost->{lost.next_id} vs no-cost->{bare.next_id}",
+    )
+
+    # -- the stake is stated before it is played --------------------------
+    said = notes(lost)
+    out.that(
+        said and "Losing this will cost" in said[0],
+        "the stake is the first thing said, before the challenge runs -- "
+        "a cost discovered afterwards is a punishment and one stated "
+        "beforehand is a stake",
+        f"{said[:2]}",
+    )
+    _, worded = play([challenge("n", [{"what": "surge",
+                                       "says": "The rope will not hold."}]),
+                      ONWARD])
+    out.that(
+        any("The rope will not hold." in n for n in notes(worded)),
+        "and the module's own words are used when it gives them",
+        f"{notes(worded)[:1]}",
+    )
+
+    # -- a won scene is charged nothing -----------------------------------
+    # An assertion that cannot fail is worse than none, so the setup line
+    # the first draft had here is gone and the case is skipped honestly
+    # when the seed does not produce a win.
+    easy, won = play([challenge("n", [{"what": "surge"}], complexity=1),
+                      ONWARD], seed=11)
+    if won.outcome == "won":
+        out.that(
+            all(s.surges is None or s.surges > 0
+                for s in easy.party.sheets)
+            and not any("Lost:" in n for n in notes(won)),
+            "a scene the party won charges nothing, so the cost is a "
+            "consequence of losing rather than a toll on playing",
+            f"{[s.surges for s in easy.party.sheets]}",
+        )
+    else:
+        out.skip("the easy challenge was lost on this seed, so the "
+                 "won-charges-nothing case could not be posed")
+
+    # -- an action point is the second currency ---------------------------
+    spent, drained = play(
+        [challenge("n", [{"what": "action point"}]), ONWARD])
+    out.that(
+        all(s.action_points == 0 for s in spent.party.sheets)
+        and any("action point" in n for n in notes(drained)),
+        "an action point is chargeable too, which is the resource nothing "
+        "else spends outside a fight",
+        f"{[s.action_points for s in spent.party.sheets]}",
+    )
+
+    # -- a denied rest is one rest, not every rest ------------------------
+    REST = {"id": "r", "kind": "rest", "name": "R", "exits": ["r2"]}
+    REST2 = {"id": "r2", "kind": "rest", "name": "R2", "exits": []}
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4, "start": "c",
+         "scenes": [challenge("r", [{"what": "rest"}]), REST, REST2]},
+        Path("<driver>"))
+    camp = run_mod.begin(built, seed=3)
+    rows = []
+    while not camp.finished:
+        here = camp.scene
+        made = run_mod.step(camp, built, record=False)
+        rows.append((here, camp.denied, notes(made)))
+    out.that(
+        rows[0][1] is True,
+        "losing a scene that costs a rest sets the flag",
+        f"{rows[0][1]}",
+    )
+    out.that(
+        any("cost them this rest" in n for n in rows[1][2])
+        and rows[1][1] is False,
+        "the next rest is refused and the flag is spent there",
+        f"denied after={rows[1][1]}, {[n[:40] for n in rows[1][2]]}",
+    )
+    out.that(
+        any("everything back" in n or "powers back" in n
+            for n in rows[2][2]),
+        "and the rest after *that* works -- one rest is forfeited, not "
+        "every rest, because a flag nothing clears is a party that never "
+        "rests again",
+        f"{[n[:50] for n in rows[2][2]]}",
+    )
+
+    # -- the vocabulary is closed -----------------------------------------
+    try:
+        play([challenge("n", [{"what": "a daily power"}]), ONWARD])
+        refused = ""
+    except mod.ModuleError as exc:
+        refused = str(exc)
+    out.that(
+        "is not one of" in refused,
+        "a cost the engine cannot charge is refused by `--validate` rather "
+        "than silently costing nothing",
+        refused[:110] or "it was accepted",
+    )
+
+    # -- and the denied flag survives a save ------------------------------
+    # **A campaign with the flag actually set.** The first draft
+    # round-tripped the surge-cost run, whose `denied` is already False, so
+    # `False == False` passed and a plant that dropped the field on load
+    # stayed green.
+    owing, _ = play([challenge("n", [{"what": "rest"}]), ONWARD])
+    out.that(
+        owing.denied is True,
+        "a campaign that lost a rest-costing scene carries the flag, which "
+        "is the state the round trip has to preserve",
+        f"{owing.denied}",
+    )
+    back = save_mod.from_dict(save_mod.to_dict(owing))
+    out.that(
+        back.denied is True,
+        "and it survives a save and a load, so reloading is not a way to "
+        "get the rest back",
+        f"{back.denied}",
+    )
+
+
 def a_fight_reached_without_a_rest_is_scaled_back(out: Result) -> None:
     """The sidebar "When Is an Encounter Over?":
 
@@ -44305,6 +44505,10 @@ DRIVERS = {
     # driver's, and a duplicate dict key is kept silently by the *last*
     # writer -- the second time today a new registration ran somebody
     # else's driver and reported its green assertions as mine.
+    "lost_costs": (
+        losing_a_scene_costs_something_and_the_plot_goes_on,
+        "losing a scene costs something and the plot goes on (#975)",
+    ),
     "unrested": (
         a_fight_reached_without_a_rest_is_scaled_back,
         "a fight reached without a rest is scaled back (#947)",
