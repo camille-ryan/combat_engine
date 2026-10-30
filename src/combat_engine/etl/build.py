@@ -827,6 +827,11 @@ class Report:
     #: to disable the thing at all -- a real answer, like a trap with no
     #: Perception DC -- and 24 print several and the page does not say
     #: which governs. #955.
+    #: Proper names in a monster spec with no ref anywhere in the
+    #: compendium, given an opaque token so a brief offers nothing false to
+    #: copy. 12 runs, 28 occurrences -- and a 220x over-report before the
+    #: capitalised run was confined to one line. #929.
+    unindexed: int = 0
     disable_one: int = 0
     disable_many: int = 0
     disable_none: int = 0
@@ -894,6 +899,8 @@ class Report:
             f"(print a modifier; the rest state one in words or not at all)",
             f"counter-meas  {self.countermeasures:6d}  "
             f"(skill + DC pairs a trap prints, across 16 of 17 skills)",
+            f"unindexed     {self.unindexed:6d}  "
+            f"(proper names with no ref anywhere, given an opaque token)",
             f"disable       {self.disable_one:6d}  "
             f"(print one `disable` clause; {self.disable_many} print several "
             f"and are NULL, {self.disable_none} print none and cannot be "
@@ -1044,6 +1051,12 @@ def build() -> Report:
     report.build_options, report.build_forks = _build_options(source, out, names)
     report.crossed += _swap_sub_options(out, names)
     report.crossed += _hand_swaps(out, names)
+    # **Last of the three post-passes**, because it must see the specs
+    # every earlier swap has already finished with: a name this pass
+    # tokenises is by definition one nothing else could resolve, and
+    # running it earlier would tokenise names a later pass would have
+    # swapped for a real ref. #929.
+    report.unindexed = _unindexed_names(out, names)
     report.links_found, report.links_total = _links_resolve(source, out)
     # **Last, and it has to be.** The vocabulary is the `weapon` table and the
     # text is `power.spec`, so this runs once both are finished; earlier it would
@@ -3974,6 +3987,139 @@ _HAND_SWAPS: dict[tuple[str, str], tuple[str, ...]] = {
     ("item_block", "i2693x1"): ("b:c128-3",),
     ("feat", "f2269"): ("x8_323",),
 }
+
+
+#: A capitalised run **inside one line**. The bound is the whole trick:
+#: `\s` matches a newline, so an unbounded run joins the last word of one
+#: printed line to the first of the next -- and `identifies` then believes
+#: the pair because it is two words. Measured, that mistake reported **239
+#: runs and 6,151 occurrences**, the commonest being the end of a usage line
+#: meeting the start of an attack line at 2,211. Confined to a line: 28.
+#: A 220x over-report from one `\s`. #929.
+_CAPS_RUN = re.compile(r"\b([A-Z][a-z']+(?:[ \t]+[A-Z][a-z']+)*)\b")
+
+
+def _unindexed_names(
+    out: sqlite3.Connection, names: dict[str, dict[str, str]]
+) -> int:
+    """A proper name in a monster spec that no ref can be swapped for.
+
+    **The body an author is told to copy from was not safe to copy from.**
+    `#530` made the glossary briefs safe on the ground that "the card text
+    itself is unchanged -- still refs -- so the body stays safe to copy
+    from", and a capitalised name with no ref anywhere in the compendium
+    broke that: it survives every swap because there is nothing to swap it
+    for, and `leaks.py --cited` cannot see it either, because that pass asks
+    whether a file prints the name of a ref **it also cites** and this name
+    has no ref to cite.
+
+    So it gets an opaque token, which is the same answer the race arm
+    already gives a name whose ref points somewhere else: the author is told
+    a name was here and is offered nothing false to write against. Keyed on
+    the row and the occurrence rather than on a ref, because there is no ref
+    -- numbered by order of appearance, which is deterministic from the page
+    and is the convention `item.sub_option_lines` states for the same
+    reason.
+
+    **A post-pass, like `_swap_sub_options` and `_hand_swaps`.**
+    `monster.parse` has no `names` in scope -- it returns a `Monster` -- and
+    this needs both the written specs and the whole index, neither of which
+    exists while a single stat block is being read.
+
+    **The blast radius was measured before this was written**, which `#929`
+    required and which is the only reason it is this small:
+
+        13,757 monster_power specs
+            12 names believed, 28 occurrences across 27 specs
+             0 of the 12 is anything but a single word no dictionary holds
+
+    One of them was a **skill** -- `identifies` called it a proper name
+    because `vocabulary()` reached every enum and not `SKILLS`, which is a
+    plain list. Fixed at the source instead: a name is not the right answer
+    to a missing vocabulary entry.
+
+    **The first build minted 13 against the probe's 12, and the probe was
+    the one that was right** -- which is worth recording, because the
+    standing rule here is the other way round and that rule is what made the
+    disagreement worth chasing rather than explaining away. The thirteenth
+    was the `common_word` blindness the note below this one is about: a
+    mechanical word, tokenised inside `m6674a6`'s card.
+
+    **Discovery and substitution are separate walks, because a name is
+    recognised in one row and printed in three.** The first draft did both in
+    one pass, per row, and `leaks.py --specs` went red naming `m4011a2` and
+    `m4011a5`: the name `m4011a6` had just been given a token is printed by
+    both siblings at the **start** of a line, where the sentence-initial
+    guard above declines to call a capitalised word a name -- correctly, since
+    at that position it cannot tell. So the guard decides what is a name and
+    the substitution then applies every name found to every spec, which is
+    the only arm that can reach a sentence-initial occurrence. The same
+    two-phase shape, and for the same reason, as `by_name` above.
+
+    Scope is `monster_power` on both walks. The 12 were measured there and
+    nowhere else, so applying them to the other 14 spec tables would be an
+    unmeasured substitution over 12,000 rows to no known end.
+    """
+    from .sanitise import identifies, scrub, vocabulary
+
+    rules = vocabulary()
+    # **`vocabulary()` cannot see the `common_word` table during a build, and
+    # that cost a corrupted card.** Its fourth source is "every word
+    # appearing on at least a handful of compendium pages" -- and it reads
+    # that through `db.game()`, which opens its *own* connection to
+    # `data/game.db`, while `_common_words` has only written the rows into
+    # `out`'s open transaction. So the arm comes back empty here and
+    # `identifies` is asked the question with a quarter of the vocabulary
+    # missing.
+    #
+    # Measured: exactly one of the thirteen names this pass minted a token
+    # for is in `common_word` -- a mechanical word, tokenised inside
+    # `m6674a6`'s card, which is the silent-corruption failure `#929`'s
+    # third comment named as the residual risk of the whole approach. It is
+    # also why a probe over the *committed* database counted twelve and the
+    # build minted thirteen.
+    #
+    # Read off the writer, which is the only connection that holds them.
+    rules |= {w for (w,) in out.execute("SELECT word FROM common_word")}
+    rows = out.execute(
+        "SELECT ref, spec FROM monster_power WHERE spec IS NOT NULL"
+    ).fetchall()
+    tokens: dict[str, str] = {}
+    minted: dict[str, int] = {}
+    for ref, spec in rows:
+        for line in (spec or "").splitlines():
+            for m in _CAPS_RUN.finditer(line):
+                run = m.group(1)
+                # Sentence-initial is grammar rather than a name, and the
+                # colon case matters: a clause label opens a line.
+                before = line[:m.start()].rstrip()
+                if not before or before[-1] in ".!?:;":
+                    continue
+                low = run.lower()
+                if low in rules or run in tokens:
+                    continue
+                if not identifies(low, [], rules):
+                    continue
+                # Named for the row it was first read on, so the token is
+                # traceable to a card a reader can go and look at. There is
+                # no ref to name it after -- that is what this pass is for.
+                tokens[run] = f"x_{ref}_{minted.get(ref, 0)}"
+                minted[ref] = minted.get(ref, 0) + 1
+    if not tokens:
+        return 0
+    for ref, spec in rows:
+        fixed = scrub(spec, tokens)
+        if fixed == spec:
+            continue
+        out.execute(
+            "UPDATE monster_power SET spec = ? WHERE ref = ?", (fixed, ref)
+        )
+    for printed, token in tokens.items():
+        # The name goes to the localisation, which is the only place it may
+        # live -- so the token resolves to something for a reader with the
+        # file and to nothing for anybody else.
+        names.setdefault(token, {"name": printed})
+    return len(tokens)
 
 
 def _hand_swaps(
