@@ -35,6 +35,30 @@ The rest of the policy:
   verified. "Done" is worth nothing to the next reader. Say what you did
   *not* do, too.
 * **Triage before working.** Prefer the issue that unblocks others.
+* **A rules table quoted in an issue is evidence a table exists, not
+  evidence of its contents.** Read the page in `resources/` before writing
+  one into code — the PDF extracts with `pypdf`. Measured across four issues
+  in one session, 2026-10-29, and **three of the four quotes were not what
+  they said**:
+
+  | | what the quote got wrong |
+  |---|---|
+  | `#982` | its four heroic rows were exact; its claim that `story/dc.py` holds "the DC half of the same table" was false — `dc.py` is a revised **per-level** table and the printed one is three-level **bands** |
+  | `#988` | one ten-row table was really **three** printed tables, each with a **Level** column that was dropped; one row renamed, one omitted, three absent from the book |
+  | `#1010`, `#972` | both quote DMG2, which is not in `resources/`, so neither is checkable — and `#972`'s *reverses* an earlier conclusion on that one source |
+
+  The failure is not carelessness in the quoter. A transcription loses
+  exactly the structure that decides how the data is keyed: which table a
+  row came from, and the columns nobody needed at the time. `#982` is the
+  worked example — pairing a banded damage table with a per-level DC table
+  misaligns in the **row keys**, so nothing would have raised and a level-5
+  trap would have read band `4th-6th` damage beside level-5 DCs from
+  another edition.
+
+  So: say in the code which printing a table came from and what could not be
+  verified, and if the only source is a quote, say so on the issue rather
+  than landing it. Same rule as a census — see *"an issue's census is a
+  floor"* — applied to the cells instead of the count.
 
 ### Labels
 
