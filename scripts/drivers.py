@@ -43667,7 +43667,7 @@ def a_scene_can_say_how_big_the_room_is(out: Result) -> None:
                               "kind": "octagon"})]},
         Path("<driver>")).scene("fight")
     out.that(
-        plain.room == () and stated.room == (10, 16, "octagon"),
+        plain.room is None and stated.room == (10, 16, "octagon"),
         "a scene can state its room and one that does not carries none, "
         "which is every scene written so far",
         f"{plain.room}, {stated.room}",
