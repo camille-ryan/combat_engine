@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -558,6 +558,85 @@ class Standing:
         return (f"{self.about} -- nothing is on record. This speaker would "
                 f"know it {self.knows}{hedge}. What they say about it "
                 "becomes true, so keep it small and keep it consistent.")
+
+
+#: Capitalised words that are not somebody's name. Short, because the cost
+#: of a miss is small -- an extra "nobody here has heard of that" line -- and
+#: the cost of over-filtering is the bug this exists to fix.
+NOT_A_NAME = frozenset({
+    "i", "a", "an", "the", "and", "or", "but", "if", "so", "then", "than",
+    "that", "this", "these", "those", "there", "here", "what", "when",
+    "where", "who", "whom", "whose", "why", "how", "which", "he", "she",
+    "it", "we", "they", "you", "me", "him", "her", "us", "them", "my",
+    "your", "his", "our", "their", "its", "is", "are", "was", "were", "be",
+    "been", "being", "do", "does", "did", "have", "has", "had", "can",
+    "could", "will", "would", "shall", "should", "may", "might", "must",
+    "let", "yes", "no", "not", "never", "always", "one", "two", "three",
+    "four", "five", "six", "seven", "eight", "nine", "ten", "mr", "mrs",
+    "ms", "sir", "lady", "lord", "god", "gods",
+})
+
+#: A capitalised word of at least three letters, with any possessive
+#: dropped, **and not at the start of a sentence**.
+#:
+#: English capitalises a sentence opener, so a capital in that position
+#: carries no evidence of being a name -- and taking it anyway is what made
+#: *"Tell me about your brass compass."* produce a standing about `Tell`,
+#: breaking an assertion a previous session wrote on purpose. The cost is
+#: that a player who opens with a bare name (*"Zehir, who is he?"*) is
+#: missed; the benefit is that ordinary typing does not produce noise.
+_PROPER = re.compile(r"(?<![\w'])([A-Z][a-z]{2,})(?:'s)?(?![\w'])")
+
+#: What ends a sentence, so the capital after it is an opener.
+_ENDS = ".!?\n"
+
+
+def unresolved(text: str, known: Iterable[str]) -> list[str]:
+    """Proper nouns in a line the graph could not account for.
+
+    Camille, playing 2026-10-29:
+
+    > *"I asked about the relationship between Zehir and Tiamat and got no
+    > answer, not even an 'I don't know'."*
+
+    **A name the graph has never heard of produced no `Standing` at all**,
+    so `would_know` never ran and its `not at all` branch -- *"say so
+    plainly rather than improvise"* -- could not fire. That branch worked
+    only for an entity that *exists* and has no facts, which is the one
+    case where the player needs it least. `mentions()` finding nothing for
+    a noun the player clearly named is itself information, and this is
+    what turns it into some.
+
+    `known` is every name already accounted for -- resolved by the graph
+    or already given a `Standing` this beat. **One dedupe layer rather than
+    two**: `one_beat` kept its own list of what the graph had matched, and
+    a plant that emptied that list stayed green because the caller's `seen`
+    set was doing the same job one line later. Dead bookkeeping no plant
+    can redden is dead bookkeeping.
+
+    **A capitalisation heuristic rather than a model call**, deliberately:
+    `check.py` runs the whole loop with no model, so an extractor that
+    needed one would be untested on the path that matters. The failure
+    mode is mild and in the right direction -- a false positive costs one
+    "nobody here has heard of that", a false negative is the silence this
+    is fixing.
+    """
+    said = text or ""
+    taken = " ".join(known).lower()
+    out: list[str] = []
+    for hit in _PROPER.finditer(said):
+        word = hit.group(1)
+        # A sentence opener is capitalised by grammar, not by being a name.
+        # `finditer` rather than `findall` because the only way to know is
+        # the offset: the first word of the line, or the first after `.!?`.
+        before = said[:hit.start()].rstrip()
+        if not before or before[-1] in _ENDS:
+            continue
+        low = word.lower()
+        if low in NOT_A_NAME or low in taken or word in out:
+            continue
+        out.append(word)
+    return out
 
 
 def standing(playing: Playing, mention: str, *, speaker: str,
@@ -1164,6 +1243,10 @@ def one_beat(
     # feed the model its own output back as a thing to be consistent with
     # -- which is not consistency, it is a loop.
     if playing.canon is not None or playing.told is not None:
+        recorded = any(
+            getattr(layer, "entities", None)
+            for layer in (playing.canon, playing.told) if layer is not None
+        )
         speaker = scene.npcs[0] if scene.npcs else None
         seen: set[str] = set()
         for intent in beat.intents:
@@ -1182,6 +1265,26 @@ def one_beat(
                         else "somebody here", director=director,
                         looks=speaker.looks if speaker else "",
                         wants=speaker.wants if speaker else ""))
+            # **A name the graph does not hold still gets a `Standing`.**
+            # It falls through `standing()` to `would_know`, which is where
+            # the "not at all" register lives -- so the DM is told nobody
+            # here has heard of it and can say so, instead of being handed
+            # nothing about a subject the player plainly asked about. #933.
+            #
+            # **Only against a record that holds something.** An empty
+            # graph means nothing has been ingested, not that the world is
+            # empty, so a campaign with no graph behind it must not answer
+            # every name with "nobody has heard of that" -- which is what
+            # the `with_canon=False` control in `graph_administration`
+            # caught this doing. Ignorance is only meaningful against a
+            # record.
+            for name in (unresolved(said, seen) if recorded else ()):
+                seen.add(name)
+                beat.standing.append(standing(
+                    playing, name, speaker=speaker.name if speaker
+                    else "somebody here", director=director,
+                    looks=speaker.looks if speaker else "",
+                    wants=speaker.wants if speaker else ""))
 
     playing.learnt += [r.fact for r in beat.rulings if r.won and r.fact]
     # Won, not merely attempted: a failed Perception reveals nobody.

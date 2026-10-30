@@ -815,6 +815,42 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+## A name nobody has heard of still reaches the DM
+
+Camille, playing 2026-10-29:
+
+> *"I asked about the relationship between Zehir and Tiamat and got no
+> answer, not even an 'I don't know'."*
+
+`one_beat` built `Standing` from `layer.mentions(said)` — entities the
+graph already holds — so a name it has **never heard of** produced no entry
+at all. `would_know` never ran and its `not at all` register, *"say so
+plainly rather than improvise"*, could not fire. That branch worked only
+for an entity that exists and has no facts, which is the case a player
+needs it for least.
+
+`unresolved(text, known)` picks the proper nouns the graph could not
+account for, and they go through the same `standing()` call — which finds
+no facts and asks `would_know`, exactly as intended.
+
+Three things to know before touching it:
+
+* **A capitalisation heuristic, not a model call.** `check.py` runs this
+  loop with no model, so an extractor needing one would be untested on the
+  path that matters. The failure direction is the mild one: a false
+  positive costs one "nobody here has heard of that"; a false negative is
+  the silence being fixed. Two driver assertions pin what it deliberately
+  misses — a lower-case name, and a two-word name arriving as two subjects.
+* **Two guards above it are deliberate** and both broke the first probe:
+  the whole block is skipped when there is **no graph at all**, and it
+  mines **only the player's own line**, because a companion's intent came
+  out of the model about to answer it.
+* **One dedupe layer, not two.** A plant that emptied `one_beat`'s list of
+  graph-matched names **stayed green**, because the caller's `seen` set did
+  the same job one line later. Dead bookkeeping no plant can redden is dead
+  bookkeeping; `unresolved` takes names now and `seen` is what it filters
+  against.
+
 ## A module can say the opposition did not see the party coming
 
 The engine has had the surprise round since `Encounter.start(surprised=)`,
@@ -1192,11 +1228,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     recall_order borrowed_board party_size_rule challenge_progresses \
     line_kinds objective_verdict objective_budget scene_grant \
     story_milestones timeline rest_lockout stays_cleared \
-    budget_ceiling roll_margin readiness
+    budget_ceiling roll_margin readiness unknown_name
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 29 drivers and prints 271 assertions**, and **each was
+**The command above is 30 drivers and prints 284 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

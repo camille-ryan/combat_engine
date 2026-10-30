@@ -42106,6 +42106,177 @@ def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     )
 
 
+def a_name_nobody_has_heard_of_still_reaches_the_dm(out: Result) -> None:
+    """Camille, playing 2026-10-29:
+
+    > *"I asked about the relationship between Zehir and Tiamat and got no
+    > answer, not even an 'I don't know'."*
+
+    `one_beat` built `Standing` by walking `layer.mentions(said)` --
+    entities the graph already holds -- so **a name it has never heard of
+    produced no entry at all**. `would_know` never ran, and its `not at
+    all` branch, *"say so plainly rather than improvise"*, could not fire.
+    That branch worked only for an entity that exists and has no facts,
+    which is the case a player needs it for least.
+
+    `mentions()` finding nothing for a noun the player plainly named is
+    itself information. `unresolved` turns it into some.
+
+    **A capitalisation heuristic rather than a model call**, because
+    `check.py` runs this loop with no model and an extractor that needed
+    one would be untested on the path that matters. So the asserted
+    behaviour is the heuristic's, including where it is deliberately
+    crude: the last two assertions pin what it does *not* catch, so the
+    next reader knows the shape of the gap rather than discovering it.
+    """
+    from combat_engine.story import beat as beat_mod
+
+    # -- the case Camille hit ---------------------------------------------
+    asked = "What is the relationship between Zehir and Tiamat?"
+    out.that(
+        beat_mod.unresolved(asked, ["Tiamat"]) == ["Zehir"],
+        "a name the graph does not hold is picked out of the line, and the "
+        "one it does hold is not picked twice",
+        f"{beat_mod.unresolved(asked, ['Tiamat'])}",
+    )
+    out.that(
+        beat_mod.unresolved(asked, []) == ["Zehir", "Tiamat"],
+        "and with neither in the graph, both are unresolved rather than "
+        "the line being dropped",
+        f"{beat_mod.unresolved(asked, [])}",
+    )
+
+    # -- the control: ordinary prose names nobody --------------------------
+    out.that(
+        beat_mod.unresolved("I ask the friar about the cellar.", []) == [],
+        "a line with no proper noun resolves to nothing, so an ordinary "
+        "sentence does not produce a standing about a common word",
+        f"{beat_mod.unresolved('I ask the friar about the cellar.', [])}",
+    )
+    out.that(
+        beat_mod.unresolved("The guard nods. Yes, I will.", []) == [],
+        "and a capitalised word that only starts a sentence is not taken "
+        "for a name -- the stop list is what keeps a false positive from "
+        "being the common case",
+        f"{beat_mod.unresolved('The guard nods. Yes, I will.', [])}",
+    )
+
+    # -- shapes a player actually types ------------------------------------
+    POSSESSIVE = "I look at Hallis's ledger"
+    out.that(
+        beat_mod.unresolved(POSSESSIVE, []) == ["Hallis"],
+        "a possessive is read as the name without it, because that is how "
+        "a person types a question about somebody",
+        f"{beat_mod.unresolved(POSSESSIVE, [])}",
+    )
+    out.that(
+        beat_mod.unresolved("Zehir, Zehir, always Zehir", []) == ["Zehir"],
+        "a name said three times is one unresolved subject, not three "
+        "standings about the same thing",
+        f"{beat_mod.unresolved('Zehir, Zehir, always Zehir', [])}",
+    )
+
+    # -- the stop list earns its place mid-sentence ------------------------
+    # **Not at the start of a sentence**, which the opener rule already
+    # handles: a plant that removed the stop list entirely stayed green
+    # until there was a case only the list could decide. A capitalised
+    # common word in the middle of a line is that case.
+    out.that(
+        beat_mod.unresolved("I asked the friar about God", []) == []
+        and beat_mod.unresolved("he told Him nothing", []) == [],
+        "a capitalised common word mid-sentence is not a name, which is "
+        "the only thing the stop list is left to decide",
+        f"{beat_mod.unresolved('I asked the friar about God', [])} "
+        f"{beat_mod.unresolved('he told Him nothing', [])}",
+    )
+    out.that(
+        beat_mod.unresolved("we prayed and Lord Halvard answered", [])
+        == ["Halvard"],
+        "and a title beside a real name drops the title and keeps the "
+        "name, rather than offering both as subjects",
+        f"{beat_mod.unresolved('we prayed and Lord Halvard answered', [])}",
+    )
+
+    # -- what it deliberately does not do ----------------------------------
+    out.that(
+        beat_mod.unresolved("who is tiamat", []) == [],
+        "a name typed in lower case is missed, which is the price of a "
+        "capitalisation heuristic and is recorded here rather than left "
+        "to be discovered",
+        f"{beat_mod.unresolved('who is tiamat', [])}",
+    )
+    out.that(
+        beat_mod.unresolved("tell me about the Dark Water", [])
+        == ["Dark", "Water"],
+        "and a two-word name comes back as two, because nothing here "
+        "knows which capitalised words belong together -- harmless, since "
+        "both resolve to the same `not at all`",
+        f"{beat_mod.unresolved('tell me about the Dark Water', [])}",
+    )
+
+    # -- the wiring, which is the half that fixes what Camille saw --------
+    # **Asserted through `one_beat`, not just against `unresolved`.** Every
+    # assertion above tests the extractor; none would notice if the loop
+    # never called it, which is exactly the hole a green plant found in
+    # #945. The first draft of this probe also failed for two reasons that
+    # are worth recording, because both guards are deliberate: the block is
+    # skipped entirely when there is **no graph at all**, and it mines only
+    # the **player's own line** -- a companion's intent came out of the
+    # model about to answer it, so resolving it would feed the model its
+    # own output back. So this needs a graph and a human.
+    from pathlib import Path
+
+    from combat_engine.story import graph as gr
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import table as tbl
+
+    canon = gr.Graph()
+    canon.add(gr.Entity(id="dragon", name="Tiamat", kind="person"))
+    scene = mod.parse(
+        {"id": "probe", "party_level": 1, "party_size": 2, "start": "t",
+         "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                     "sets": "A hall.", "exits": [], "max_beats": 1,
+                     "npcs": [{"name": "Halvard", "wants": "an answer"}]}]},
+        Path("<driver>")).scene("t")
+    party = run_mod.Party.of(["fighter", "cleric"], level=1, seed=3)
+
+    def asked(line: str) -> beat_mod.Beat:
+        board = tbl.lay(party, seed=23)
+        try:
+            live = beat_mod.Playing(scene=scene, canon=canon, told=gr.Graph())
+            return beat_mod.one_beat(
+                live, board,
+                [beat_mod.Actor(0, "Fighter", "fighter", "human")],
+                beat_mod.Director(scripted=True),
+                ask_human=lambda a, _s: (line, ""), party_level=1)
+        finally:
+            board.strike()
+
+    both = asked("What is the relationship between Zehir and Tiamat?")
+    about = [s.about for s in both.standing]
+    out.that(
+        "Zehir" in about,
+        "a beat in which the player names something no graph holds "
+        "produces a standing about it -- before this the DM was handed "
+        "nothing about the subject and duly said nothing",
+        f"standing about {about}",
+    )
+    out.that(
+        "Tiamat" in about,
+        "and the name the graph does hold still arrives, so the unknown "
+        "one is added beside it rather than instead of it",
+        f"standing about {about}",
+    )
+    unknown = [s for s in both.standing if s.about == "Zehir"]
+    out.that(
+        len(unknown) == 1 and not unknown[0].facts,
+        "the unknown subject carries no facts, which is what sends it "
+        "down `would_know` to the `not at all` register the DM needs",
+        f"{[(s.about, s.knows, s.facts) for s in both.standing]}",
+    )
+
+
 def a_module_can_say_the_opposition_did_not_see_the_party_coming(
     out: Result,
 ) -> None:
@@ -43412,6 +43583,10 @@ DRIVERS = {
     # silently by the *last* writer -- so the first registration of this ran
     # the other driver and reported 21 green assertions that had nothing to
     # do with it.
+    "unknown_name": (
+        a_name_nobody_has_heard_of_still_reaches_the_dm,
+        "a name nobody has heard of still reaches the DM (#933)",
+    ),
     "readiness": (
         a_module_can_say_the_opposition_did_not_see_the_party_coming,
         "a module can say the opposition did not see the party coming (#945)",
