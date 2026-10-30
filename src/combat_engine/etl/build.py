@@ -766,6 +766,25 @@ CREATE TABLE rules_dc (
   level INTEGER PRIMARY KEY, easy INTEGER, moderate INTEGER, hard INTEGER
 );
 
+-- **The printed condition list, names only.** 18 of them, against the
+-- engine's 24 `Condition` members -- and until `scripts/rules.py` read this
+-- the two readings of that gap were indistinguishable: "the engine invented
+-- six" and "the glossary omits six" looked identical because nothing had
+-- reconciled them. Reconciled once by hand (2026-10-30) and all 18 are
+-- accounted for, so what this column buys is the *next* re-import: a
+-- printed condition the engine has never heard of is a rule it cannot say,
+-- and that now goes red instead of passing unnoticed.
+--
+-- Names only, deliberately. The body is rules prose that `spec.py` has no
+-- use for and `Rules Combat`/`Rules Other` hold 226 more entries of the
+-- same kind -- storing one category's prose and not theirs would be an
+-- arbitrary line. A condition name is **mechanics**, which is why it may
+-- sit in a column at all: `sanitise.RULES_TERMS` already carries the
+-- vocabulary and `leaks.py`'s own allow-list reasoning applies. #1001.
+CREATE TABLE rules_condition (
+  ref TEXT PRIMARY KEY, name TEXT
+);
+
 -- `advantages` is the column the hand copy drops. The printed table has
 -- four and `COMPLEXITY` keeps three, so a reader wanting the advantages a
 -- challenge grants has nowhere to look -- the same shape of loss #988
@@ -884,6 +903,8 @@ class Report:
     #: supplies. Measured, and not the same thing as the table's row count,
     #: which is what `#1018`'s body first claimed.
     census: int = 0
+    #: Printed condition names, for `scripts/rules.py`'s reconciliation.
+    rules_conditions: int = 0
     #: Traps printed as an object with their own hit points, and how many of
     #: those agree with `trap.level`. The second is the cross-check, so the
     #: two are reported together and a reader can see at a glance whether a
@@ -964,6 +985,8 @@ class Report:
             f"{self.trap_hp_level} of them agree with `trap.level`, which is "
             f"the cross-check -- the other hit points in the corpus belong to "
             f"a destructible part, not the trap)",
+            f"conditions    {self.rules_conditions:6d}  "
+            f"(printed condition names, reconciled by `scripts/rules.py`)",
             f"census seen   {self.census:6d}  "
             f"(`common_word` rows the sanitiser could read mid-build; "
             f"0 means `identifies` ran without the game's own vocabulary "
@@ -1083,6 +1106,7 @@ def build() -> Report:
         "SELECT COUNT(*) FROM trap_countermeasure"
     ).fetchone()[0]
     report.rules_dc, report.rules_complexity = _rules_tables(source, out)
+    report.rules_conditions = _rules_conditions(source, out)
     # Counted off the written table rather than tallied in the loop, which
     # is the rule this file follows for every other count: a number the
     # database can be asked for cannot drift from what was stored.
@@ -3942,6 +3966,41 @@ def _disable_split(out: sqlite3.Connection) -> tuple[int, int]:
         else:
             none += 1
     return none, many
+
+
+def _rules_conditions(
+    source: sqlite3.Connection, out: sqlite3.Connection
+) -> int:
+    """The glossary's printed condition names, for the reconciliation. #1001.
+
+    A name list and nothing else -- see the column's own note for why the
+    bodies are not stored. Keyed by a `rc:` ref off the glossary id so the
+    row is addressable, the way every other imported row is.
+
+    **Refuses to write a fragment**, the same rule `_rules_tables` states:
+    the printed list is 18 and a count that is not 18 means the glossary's
+    own categorisation moved, in which case a reconciliation against a
+    partial list would pass while missing exactly the entries that went.
+    """
+    rows = source.execute(
+        "SELECT ID, Name FROM Glossary "
+        "WHERE Category = 'Rules' AND Type = 'Rules Condition'"
+    ).fetchall()
+    named = [(r["ID"], str(r["Name"]).strip()) for r in rows
+             if str(r["Name"] or "").strip()]
+    if len(named) != 18:
+        print(
+            f"  rules_condition: the glossary lists {len(named)} printed "
+            f"conditions where 18 were measured, so nothing is stored -- a "
+            f"partial list would let `rules.py` reconcile against a fragment "
+            f"and pass. #1001."
+        )
+        return 0
+    out.executemany(
+        "INSERT OR REPLACE INTO rules_condition VALUES (?, ?)",
+        [(f"rc:{i}", name) for i, name in named],
+    )
+    return len(named)
 
 
 def _rules_tables(source: sqlite3.Connection, out: sqlite3.Connection) -> tuple[int, int]:
