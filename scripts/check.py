@@ -107,6 +107,8 @@ CHECKS = (
     Instrument("seams", ("uv", "run", "--group", "dev", "lint-imports",
                          "--config", ".importlinter"),
                "the five component seams CLAUDE.md claims in prose"),
+    Instrument("rules", ("uv", "run", "scripts/rules.py"),
+               "the two hand-copied rules tables still match the printed ones"),
     Instrument("audit", ("uv", "run", "scripts/audit.py", "--changed"),
                "every declared row fires, and does something"),
     # **The instrument that says whether the one above means anything**, and it

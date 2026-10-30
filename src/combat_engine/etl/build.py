@@ -680,6 +680,35 @@ CREATE TABLE trap_countermeasure (
 );
 CREATE INDEX trap_countermeasure_ref ON trap_countermeasure(ref);
 
+-- Two printed rules tables, read out of the compendium's own glossary
+-- rather than transcribed. #1001.
+--
+-- `story/dc.py` and `story/module.py:COMPLEXITY` are hand copies of these
+-- two, and both say in their own notes that an earlier draft was
+-- **remembered and wrong** -- "hard at level 4 is 21 and not 22", and a
+-- complexity table that "assumed every primary check rolls at moderate".
+-- So the risk here is not that a copy is wrong today; it is that nothing
+-- can tell when one stops being right. `check.py --only rules` reconciles
+-- the two against these rows and goes red on a divergence.
+--
+-- A glossary entry is mechanical vocabulary -- see `_VOCABULARY_TABLE`,
+-- which keeps `Glossary` out of the name index for exactly this reason --
+-- so these numbers are a game system and the tree may hold them, the same
+-- way every `printed=` in `content/` does.
+CREATE TABLE rules_dc (
+  level INTEGER PRIMARY KEY, easy INTEGER, moderate INTEGER, hard INTEGER
+);
+
+-- `advantages` is the column the hand copy drops. The printed table has
+-- four and `COMPLEXITY` keeps three, so a reader wanting the advantages a
+-- challenge grants has nowhere to look -- the same shape of loss #988
+-- found in a quoted table. Stored whether or not anything reads it yet,
+-- because the column is what makes the omission visible.
+CREATE TABLE rules_complexity (
+  complexity INTEGER PRIMARY KEY, successes INTEGER, advantages INTEGER,
+  moderate INTEGER, hard INTEGER
+);
+
 -- A disease, which 47 rows wait on and nothing had ever read. #389.
 --
 -- The pages were indexed by name and id alone (`_ALIAS_TABLES`), so `x5_<id>`
@@ -758,6 +787,12 @@ class Report:
     #: made of. Deliberately no classification of what each check *does*;
     #: see the table's note. #989.
     countermeasures: int = 0
+    #: The two printed rules tables, read out of the glossary. Reported
+    #: because a **half**-read one is the dangerous outcome: the gate in
+    #: `check.py` would then compare a hand copy against a fragment and
+    #: pass. 30 and 5 are the printed shapes; anything else is a zero. #1001.
+    rules_dc: int = 0
+    rules_complexity: int = 0
     poisons: int = 0
     skill_powers: int = 0
     diseases: int = 0
@@ -822,6 +857,10 @@ class Report:
             f"(print a modifier; the rest state one in words or not at all)",
             f"counter-meas  {self.countermeasures:6d}  "
             f"(skill + DC pairs a trap prints, across 16 of 17 skills)",
+            f"rules tables  {self.rules_dc:6d} DC rows, "
+            f"{self.rules_complexity} complexity rows  "
+            f"(30 and 5 when whole; 0 means the printing moved -- see "
+            f"`_rules_tables`)",
             f"poisons       {self.poisons:6d}",
             f"skill powers  {self.skill_powers:6d}",
             f"diseases      {self.diseases:6d}  (stage track and the DC shape its page prints)",
@@ -928,6 +967,7 @@ def build() -> Report:
     report.countermeasures = out.execute(
         "SELECT COUNT(*) FROM trap_countermeasure"
     ).fetchone()[0]
+    report.rules_dc, report.rules_complexity = _rules_tables(source, out)
     report.poisons = _poisons(source, out, names)
     report.diseases = _diseases(source, out, names)
     report.build_powers = _build_powers(source, out, names)
@@ -3605,6 +3645,91 @@ _VOCABULARY_TABLE = "Glossary"
 #: printed name -- is simply not among them. A glossary of creature names is a
 #: name list.
 _VOCABULARY_CATEGORIES = ("Rules", "Powers", "Weapons")
+
+#: The two glossary entries that are printed **tables** rather than prose,
+#: and that two hand copies in `story/` are transcriptions of. Keyed by the
+#: entry's own printed name, which is how `dc.py`'s docstring already tells
+#: a reader to find the first one.
+_RULES_DC_ENTRY = "Skill Check Difficulty Class"
+_RULES_COMPLEXITY_ENTRY = "Skill Challenge Complexity"
+
+
+def _rules_tables(source: sqlite3.Connection, out: sqlite3.Connection) -> tuple[int, int]:
+    """Read the two printed rules tables out of the glossary.
+
+    **Read, never derived**, which is the rule `dc.py` already states for
+    the first of them and has the measurement behind: the easy column goes
+    8, 9, 9, 10, 10, 11, 11 -- a half-level step with its own rounding --
+    and hard drifts from +7 over moderate at level 1 to +10 at level 30. A
+    formula reproducing the first six rows would be wrong by three
+    somewhere in paragon with nothing to notice it.
+
+    Both entries flatten to one long line of numbers in a fixed column
+    order, so the parse is "take the integers after the header and walk
+    them in fours" rather than anything structural. That is brittle against
+    a changed printing and **says so loudly**: a row count that is not 30,
+    or a complexity count that is not 5, writes nothing and reports it,
+    because a half-read rules table is worse than an absent one -- the
+    reconciliation gate would then compare a hand copy against a fragment
+    and pass.
+
+    The complexity entry's *Advantages* column is stored even though
+    `COMPLEXITY` drops it. A column nothing reads is normally this tree's
+    definition of a mistake; here it is the opposite, because the printed
+    table has four columns and the hand copy keeps three, and the stored
+    column is what makes that visible.
+    """
+    def plain(html: str) -> str:
+        body = re.sub(r"(?is)<(script|style|head).*?</\1>", " ", html or "")
+        body = re.sub(r"(?s)<[^>]+>", " ", body)
+        return " ".join(body.replace("&nbsp;", " ").split())
+
+    def entry(name: str) -> str:
+        row = source.execute(
+            f"SELECT Txt FROM {_VOCABULARY_TABLE} WHERE Name = ?", (name,)
+        ).fetchone()
+        return plain(row[0]) if row else ""
+
+    dc_rows = 0
+    text = entry(_RULES_DC_ENTRY)
+    if "Hard" in text:
+        body = text.split("Hard", 1)[1].split("Published", 1)[0]
+        nums = [int(n) for n in re.findall(r"\d+", body)]
+        quads = [tuple(nums[i:i + 4]) for i in range(0, len(nums) - 3, 4)]
+        # 30 levels or nothing. See the docstring.
+        if len(quads) == 30 and [q[0] for q in quads] == list(range(1, 31)):
+            out.executemany(
+                "INSERT INTO rules_dc VALUES (?,?,?,?)", quads
+            )
+            dc_rows = len(quads)
+
+    cx_rows = 0
+    text = entry(_RULES_COMPLEXITY_ENTRY)
+    if "Typical DCs" in text:
+        body = text.split("Typical DCs", 1)[1].split("Published", 1)[0]
+        # `Advantages` prints an em dash at complexity 1 and 2, so the row
+        # is "1 4 - 4 moderate" and a bare integer walk would shift every
+        # column left by one. Matched per row instead, with the dash as a
+        # first-class alternative to a number.
+        each = re.finditer(
+            r"(\d+)\s+(\d+)\s+(\d+|[-\u2013\u2014])\s+"
+            r"(\d+)\s+moderate(?:\s*,\s*(\d+)\s+hard)?",
+            body, re.I,
+        )
+        found = []
+        for m in each:
+            adv = m.group(3)
+            found.append((
+                int(m.group(1)), int(m.group(2)),
+                int(adv) if adv.isdigit() else 0,
+                int(m.group(4)), int(m.group(5) or 0),
+            ))
+        if len(found) == 5 and [f[0] for f in found] == [1, 2, 3, 4, 5]:
+            out.executemany(
+                "INSERT INTO rules_complexity VALUES (?,?,?,?,?)", found
+            )
+            cx_rows = len(found)
+    return dc_rows, cx_rows
 
 
 def _other_names(
