@@ -643,6 +643,34 @@ CREATE TABLE trap (
   -- It means this column could not answer, and 160 of those 385 have an
   -- answer the page states in words. #1004.
   initiative INTEGER,
+  -- **The one countermeasure that can be read without classifying them
+  -- all**: the (skill, DC) pair whose *own sentence* says `disable`.
+  --
+  -- `#989` tried twice to derive a verb vocabulary for every pair and gave
+  -- up at 33-67% unmatched, and that conclusion stands -- the clause
+  -- vocabulary is "engage in a skill challenge to deactivate", "move into
+  -- a square without triggering", not three spellings of three states. This
+  -- is the narrower question: not *what does each pair do* but *which pair,
+  -- if any, says disable*. Measured over all 631 blocks:
+  --
+  --   477 print no disable clause at all
+  --   130 print exactly one  -> stored here
+  --    24 print two or more  -> stored as NULL, deliberately
+  --
+  -- **NULL covers two cases and a reader must not collapse them**, which is
+  -- `perception_dc`'s rule applied again. 477 blocks print no way to
+  -- disable the thing, and that is a real answer -- the trap cannot be
+  -- disabled, exactly as 275 blocks print no Perception DC and cannot be
+  -- noticed in advance. The other 24 print several and the page does not
+  -- say which governs; picking the highest or the first would be a
+  -- fabrication wearing a column's clothes, so nothing is stored and the
+  -- build report prints the count.
+  --
+  -- The skill is stored beside the DC because it is not always the obvious
+  -- one: 103 of the 130 name Thievery and 27 name something else --
+  -- Arcana 17, Religion 6, Nature 2, Streetwise 1, Perception 1. A reader
+  -- assuming Thievery would be wrong one time in five. #955.
+  disable_skill TEXT, disable_dc INTEGER,
   -- Which of the two layouts the page used. `monster` has carried this since
   -- it was written and the component rule says to record it for every dialect
   -- pair; traps did not, and without it nothing can tell a trap that *prints*
@@ -793,6 +821,15 @@ class Report:
     #: pass. 30 and 5 are the printed shapes; anything else is a zero. #1001.
     rules_dc: int = 0
     rules_complexity: int = 0
+    #: Blocks printing exactly one clause that says `disable`, so the pair
+    #: is unambiguous and stored. The two other outcomes are reported
+    #: beside it because collapsing them is the mistake: 477 print no way
+    #: to disable the thing at all -- a real answer, like a trap with no
+    #: Perception DC -- and 24 print several and the page does not say
+    #: which governs. #955.
+    disable_one: int = 0
+    disable_many: int = 0
+    disable_none: int = 0
     poisons: int = 0
     skill_powers: int = 0
     diseases: int = 0
@@ -857,6 +894,10 @@ class Report:
             f"(print a modifier; the rest state one in words or not at all)",
             f"counter-meas  {self.countermeasures:6d}  "
             f"(skill + DC pairs a trap prints, across 16 of 17 skills)",
+            f"disable       {self.disable_one:6d}  "
+            f"(print one `disable` clause; {self.disable_many} print several "
+            f"and are NULL, {self.disable_none} print none and cannot be "
+            f"disabled)",
             f"rules tables  {self.rules_dc:6d} DC rows, "
             f"{self.rules_complexity} complexity rows  "
             f"(30 and 5 when whole; 0 means the printing moved -- see "
@@ -968,6 +1009,13 @@ def build() -> Report:
         "SELECT COUNT(*) FROM trap_countermeasure"
     ).fetchone()[0]
     report.rules_dc, report.rules_complexity = _rules_tables(source, out)
+    # Counted off the written table rather than tallied in the loop, which
+    # is the rule this file follows for every other count: a number the
+    # database can be asked for cannot drift from what was stored.
+    report.disable_one = out.execute(
+        "SELECT COUNT(*) FROM trap WHERE disable_dc IS NOT NULL"
+    ).fetchone()[0]
+    report.disable_none, report.disable_many = _disable_split(out)
     report.poisons = _poisons(source, out, names)
     report.diseases = _diseases(source, out, names)
     report.build_powers = _build_powers(source, out, names)
@@ -2902,8 +2950,22 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
         # so a block printing `Thievery DC 12` twice stores it once and a
         # block printing two different Perception DCs stores both. #989.
         seen_pairs: set[tuple[str, int]] = set()
-        for skill, at in pairs.findall(spec):
+        # **And which of them says `disable`, when exactly one does.** Each
+        # pair's own sentence, not the run to the next pair: a clause
+        # routinely continues past the following DC and a longer window
+        # attributes one verb to two pairs. See the column's note for why
+        # this narrow question is asked where the general classification
+        # was abandoned. #955.
+        disables: list[tuple[str, int]] = []
+        found_pairs = list(pairs.finditer(spec))
+        for i, hit_cm in enumerate(found_pairs):
+            skill, at = hit_cm.group(1), hit_cm.group(2)
             pair = (skill.lower(), int(at))
+            stop = (found_pairs[i + 1].start()
+                    if i + 1 < len(found_pairs) else len(spec))
+            clause = _SENTENCE.split(spec[hit_cm.end():stop], 1)[0]
+            if _DISABLES.search(clause):
+                disables.append(pair)
             if pair in seen_pairs:
                 continue
             seen_pairs.add(pair)
@@ -2911,6 +2973,9 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
                 "INSERT INTO trap_countermeasure VALUES (?,?,?)",
                 (ref, pair[0], pair[1]),
             )
+        # Exactly one, or nothing. 24 blocks print several and the page does
+        # not say which governs.
+        off = disables[0] if len(disables) == 1 else (None, None)
         # **The older layout is the one with prose**, in a `<p class="flavor">`
         # italic line; the newer one opens straight into `<span class="traplead">`
         # and prints none at all. Recorded rather than inferred downstream.
@@ -2918,7 +2983,8 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
         dialect = "old" if 'class="flavor"' in (raw or "") else "new"
         prose = classed_prose(page, "flavor") if dialect == "old" else ""
         out.execute(
-            "INSERT OR REPLACE INTO trap VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO trap VALUES "
+            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 ref,
                 tid,
@@ -2935,6 +3001,8 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
                 dmg.group(1).replace(" ", "") if dmg else None,
                 sanitise.scrub(spec, {name: ref}),
                 int(init.group(1).replace(" ", "")) if init else None,
+                off[0],
+                off[1],
                 dialect,
             ),
         )
@@ -3652,6 +3720,38 @@ _VOCABULARY_CATEGORIES = ("Rules", "Powers", "Weapons")
 #: a reader to find the first one.
 _RULES_DC_ENTRY = "Skill Check Difficulty Class"
 _RULES_COMPLEXITY_ENTRY = "Skill Challenge Complexity"
+
+
+def _disable_split(out: sqlite3.Connection) -> tuple[int, int]:
+    """Of the blocks with no stored disable pair, how many print none at all.
+
+    **The two NULL cases, told apart.** `disable_dc` is NULL both for a
+    trap the page gives no way to disable and for one printing several
+    where it does not say which governs, and a reader collapsing those
+    would conclude the second kind cannot be disabled. That is the same
+    distinction `trap.perception_dc` and `trap.initiative` both insist on
+    in their own notes, and it is counted here rather than asserted so the
+    build report can state it.
+
+    Re-derived from the stored spec rather than remembered from the loop,
+    so the number cannot drift from the text the column was read out of.
+    """
+    none = many = 0
+    for spec, dc in out.execute("SELECT spec, disable_dc FROM trap"):
+        if dc is not None:
+            continue
+        hits = list(_countermeasure_pattern().finditer(spec or ""))
+        said = 0
+        for i, hit in enumerate(hits):
+            stop = hits[i + 1].start() if i + 1 < len(hits) else len(spec or "")
+            if _DISABLES.search(_SENTENCE.split(
+                    (spec or "")[hit.end():stop], 1)[0]):
+                said += 1
+        if said:
+            many += 1
+        else:
+            none += 1
+    return none, many
 
 
 def _rules_tables(source: sqlite3.Connection, out: sqlite3.Connection) -> tuple[int, int]:
@@ -4682,6 +4782,19 @@ _GRANTS = re.compile(
 #: A monster's ability -- `m5441a5`, `m965a3` -- as against a monster itself
 #: (`m2927`). `_granted` refuses one; see the note at its call site.
 _MONSTER_ABILITY = re.compile(r"^m\d+[a-z]?\d*a\d")
+
+#: One sentence of a countermeasure clause. A full stop followed by a
+#: capital, which is how these blocks are set -- and the bound matters:
+#: a clause routinely runs past the *next* printed DC, so an unbounded
+#: window attributes one verb to two pairs and a pair-to-pair window gives
+#: the first of an "X DC n or X DC m" alternation an empty clause. #955.
+_SENTENCE = re.compile(r"(?<=[.])\s+(?=[A-Z])")
+
+#: A countermeasure clause that says it puts the trap out of action.
+#: Deliberately one stem and not a vocabulary: `#989` tried deriving the
+#: full verb taxonomy twice and left a third of the clauses unmatched, and
+#: this asks the one question that does not need it.
+_DISABLES = re.compile(r"\bdisabl", re.I)
 
 #: Where a captured run ends, for the positions whose name follows the verb.
 #: Bounded for the reason `_BECOMES`'s note gives.
