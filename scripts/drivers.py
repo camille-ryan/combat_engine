@@ -16573,6 +16573,145 @@ def _in_reach(world, me, foe) -> bool:  # noqa: ANN001
     return bool(power) and _within_reach(world, me, power, foe)
 
 
+def a_refresh_gives_back_one_expended_power(out: Result) -> None:
+    """DMG2's mid-fight refresh: one expended power, one use back. #978.
+
+    The printed answer to *"wave after wave of enemies without a moment's
+    pause"* is not a longer fight, it is a fight with refresh points inside
+    it -- and two of the five printed refreshes are about a spent power:
+
+        "Each character can choose one expended encounter power and regain
+         its use"
+
+        "Each character can regain the use of an expended daily power."
+
+    **Four assertions and three are the distinctions that make it right
+    rather than merely working**: the use really comes back, it comes back
+    for the asked-for usage and not the other one, only **one** use of a
+    two-use row comes back, and an empty hand returns `""` rather than
+    silently succeeding.
+
+    The usage filter is the one that would be invisible if it were wrong. A
+    refresh that handed back a daily when the page said encounter looks
+    identical in every count -- a power came back, the row returned a ref --
+    and is the more generous half of the two printed benefits given away for
+    free.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Usage
+
+    # `f1028` rather than the usual board: it knows **17 encounter powers and
+    # 4 daily ones**, and the usage filter below is worth nothing without
+    # both. The first board tried had 10 encounter and **0** daily, so that
+    # assertion would have been vacuous -- it is asserted explicitly now for
+    # the same reason.
+    world, me, _ = _board("f1028", 1)
+    known = world.get(me, Powers)
+    c = Cast(world=world, me=me, ref="refresh")
+
+    # **Cleared, because a posed board arrives with powers already spent.**
+    # `audit.board` leaves this creature's class features on the spent list,
+    # one of which is encounter-usage -- so the empty-hand check below
+    # reported a power it had not been asked for and read as a failure of
+    # the verb. Setting a known state is the fix; assuming one was the bug.
+    known.used.clear()
+    out.that(c.regain_power() == "",
+             "with nothing expended, a refresh returns the empty string"
+             " rather than reporting a power it did not give back",
+             f"returned {c.regain_power()!r}")
+
+    enc_rows = [r for r in known.all
+                if (p := REGISTRY.get(r)) is not None
+                and p.usage is Usage.ENCOUNTER]
+    day_rows = [r for r in known.all
+                if (p := REGISTRY.get(r)) is not None
+                and p.usage is Usage.DAILY]
+    out.that(bool(enc_rows) and bool(day_rows),
+             "this creature knows both an encounter power and a daily one,"
+             " so the usage filter below is testing something",
+             f"{len(enc_rows)} encounter, {len(day_rows)} daily")
+    if not (enc_rows and day_rows):
+        return
+
+    spend, other = enc_rows[0], day_rows[0]
+    known.note_use(spend, world.round)
+    known.note_use(other, world.round)
+    out.that(spend in known.spent and other in known.spent,
+             "both are spent before the refresh",
+             f"spent: {sorted(known.spent)[:4]}")
+
+    # **The event, not just the state.** `c.restore_use` carries a note that
+    # a bare `Note` is refused by `audit.DID_SOMETHING` on purpose, because it
+    # has no `by` -- so a row whose whole Effect is a refresh would be
+    # **silent by construction** and sit in the UNUSED bucket looking
+    # finished. That is `#899`, and the first draft of this verb emitted
+    # exactly the `Note` that fix removed. Pinned here so it cannot come
+    # back.
+    from combat_engine.engine.events import UseRestored
+    restored: list[tuple[int, str, str]] = []
+    world.bus.on(UseRestored,
+                 lambda ev: restored.append((ev.who, ev.power, ev.by)))
+
+    got = c.regain_power()
+    out.that(got == spend,
+             "an encounter refresh gives back the encounter power",
+             f"gave back {got!r}, wanted {spend!r}")
+    out.that(restored and restored[-1][:2] == (me, spend),
+             "and announces it as `UseRestored` with a `by` -- a bare `Note`"
+             " would make a row whose whole Effect is a refresh silent by"
+             " construction (#899)",
+             f"events: {restored}")
+    out.that(spend not in known.spent,
+             "which is really off the spent list, not merely reported",
+             f"spent: {sorted(known.spent)[:4]}")
+    out.that(other in known.spent,
+             "and the DAILY power is untouched -- a refresh that handed back"
+             " the more generous resource would look identical in every"
+             " count",
+             f"daily {other!r} spent: {other in known.spent}")
+
+    got2 = c.regain_power(daily=True)
+    out.that(got2 == other,
+             "and asking for a daily gives back the daily one",
+             f"gave back {got2!r}, wanted {other!r}")
+
+    # **The filter asserted without relying on sort order.** The check above
+    # that the daily went untouched passes by *alphabetical accident*:
+    # `options` is sorted, so dropping the usage filter entirely still
+    # happened to offer the encounter ref first. Planting that drop left
+    # every assertion green, which is how the hole was found.
+    #
+    # With **only** a daily spent, an encounter refresh has nothing of its
+    # usage to give and must say so. An unfiltered one would hand back the
+    # daily, whatever the sort.
+    known.used.clear()
+    known.note_use(other, world.round)
+    out.that(c.regain_power() == "",
+             "with only a DAILY spent, an ENCOUNTER refresh gives back"
+             " nothing -- the usage filter, asserted without depending on"
+             " which ref happens to sort first",
+             f"returned {c.regain_power()!r} with only {other!r} spent")
+    out.that(other in known.spent,
+             "and the daily is still spent after that refusal",
+             f"spent: {sorted(known.spent)}")
+
+    # One use, not all of them. A row with two uses spent twice gets one
+    # back -- which is what the printed "its use" means and what separates
+    # `unuse` from `restore`.
+    twice = enc_rows[0]
+    known.note_use(twice, world.round)
+    known.note_use(twice, world.round)
+    before = known.times(twice)
+    c.regain_power(twice)
+    out.that(known.times(twice) == before - 1,
+             "a row used twice gets ONE use back, not all of them -- the"
+             " printed line says 'its use', and `restore` would have wiped"
+             " both",
+             f"{before} uses spent before, {known.times(twice)} after")
+
+
 def a_minion_missed_takes_nothing(out: Result) -> None:
     """A minion takes no damage from an attack that misses it.
 
@@ -49898,6 +50037,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "refresh": (
+        a_refresh_gives_back_one_expended_power,
+        "DMG2's mid-fight refresh gives back one use of one expended power,"
+        " of the usage asked for and not the other (#978)",
     ),
     "readied": (
         a_readied_attack_waits_for_reach_and_is_spent_either_way,

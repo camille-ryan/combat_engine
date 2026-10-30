@@ -49,6 +49,8 @@ Things a creature spends, and the budget it spends them from.
   - How many milestones the party has reached today. `c.milestone()`.
 - `c.per_day_left(self, ref: 'str', limit: 'int') -> 'int'`
   - How many of a daily allowance are left today, for this creature.
+- `c.regain_power(self, ref: 'str' = '', *, daily: 'bool' = False, on: 'int | None' = None) -> 'str'`
+  - Give back the use of one expended power. DMG2's mid-fight refresh.
 - `c.restore_charge(self, key: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Hand a spent charge back. False if none had been spent.
 - `c.restore_use(self, ref: 'str', *, on: 'int | None' = None) -> 'bool'`

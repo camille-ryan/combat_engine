@@ -15474,6 +15474,91 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         self.world.bus.emit(Note(text=f"{who} regains {got} power point(s)"))
         return got
 
+    def regain_power(
+        self, ref: str = "", *, daily: bool = False, on: int | None = None
+    ) -> str:
+        """Give back the use of one expended power. DMG2's mid-fight refresh.
+
+        Two of DMG2's five printed long-fight refreshes, which are the same
+        mechanism one word apart:
+
+            "Each character can choose one expended encounter power and
+             regain its use"
+
+            "Each character can regain the use of an expended daily power.
+             Save this benefit for a significant accomplishment"
+
+        So `daily=` picks which, rather than two verbs. The other three
+        refreshes are a second wind reset, an extra action point and a
+        milestone item use -- `c.regain_surge` and `c.regain_points` are two
+        of those already and the rest are still open on `#978`.
+
+        **`unuse`, not `restore`**, and the distinction is the printed word
+        *"its use"*: a row the holder has two uses of and has spent both gets
+        **one** back, not both. `Powers.restore` wipes the ref out of `used`
+        entirely, which is what a short rest does to every row at once;
+        giving that to a single refresh would hand back more than the page
+        offers. `unuse`'s own docstring makes the same distinction for a
+        reliable power that misses.
+
+        Returns the ref whose use came back, or `""` when there is nothing of
+        that usage to give back -- and that empty string is the answer a row
+        trading something for a refresh needs, so it does not pay twice. The
+        same shape as `regain_points` returning 0 for a full pool.
+
+        **The holder chooses**, because the page says "can choose": with no
+        `ref` the expended rows of that usage go through `c.choose`, which is
+        what puts the decision on the wire and in front of the AI rather than
+        taking the first alphabetically. Naming a `ref` is for a row that
+        says which power.
+
+        **Not `c.restore_use`, and the difference is the choosing.** That
+        verb is *"you regain the use of your second wind"* -- a row that
+        names the power it hands back, taking a required `ref` and giving
+        back **every** use via `Powers.restore`. A refresh does not know
+        which power; the page leaves it to the holder, and the usage is the
+        only constraint. So this selects and that one asserts. Six-odd rows
+        depend on `restore_use`'s all-uses behaviour and it is untouched.
+        """
+        from .components import Powers
+        from .dsl import get
+
+        who = self._who(on) if on is not None else self.me
+        if who is None:
+            return ""
+        known = self.world.get(who, Powers)
+        if known is None:
+            return ""
+        want = Usage.DAILY if daily else Usage.ENCOUNTER
+        # Expended rows of the asked-for usage. `spent()` is "used at least
+        # once", which for a one-use row is the whole of being expended and
+        # for a two-use row is the point at which one use is worth giving
+        # back -- so it is the right question either way.
+        options = sorted(
+            r for r in known.spent
+            if (declared := get(r)) is not None and declared.usage is want
+        )
+        if not options:
+            return ""
+        chosen = ref or (
+            options[0] if len(options) == 1
+            else (self.choose(options, "which power to regain") or options[0])
+        )
+        if chosen not in options:
+            return ""
+        known.unuse(chosen)
+        # **`UseRestored`, never a `Note`** -- and `c.restore_use`'s docstring
+        # is what caught this before it shipped. A `Note` carries no `by`, so
+        # `audit.DID_SOMETHING` refuses it *on purpose*, and a row whose whole
+        # Effect is a refresh would have been **silent by construction**: it
+        # would sit in the UNUSED bucket for its whole life looking finished.
+        # That is `#899` exactly, which `restore_use` was already fixed for,
+        # and this verb was written with the `Note` the fix removed.
+        from .events import UseRestored
+
+        self.world.bus.emit(UseRestored(who=who, power=chosen, by=self.ref))
+        return chosen
+
     # -- the spellbook -------------------------------------------------------
 
     def spellbook(self, *, of: int | None = None) -> list[str]:

@@ -443,7 +443,12 @@ CATEGORIES: dict[str, dict] = {
                 # the fight. `cf:artificer-f0` reads them together -- its
                 # allowance is the printed 1 plus one per milestone. #666.
                 "milestone",
-                "per_day_left", "restore_charge",
+                "per_day_left",
+                # `c.regain_power` beside `restore_use` because they are
+                # the same territory from two directions: that one is
+                # handed the ref and gives back every use, this one is
+                # handed a usage and picks. #978.
+                "regain_power", "restore_charge",
                 "restore_use", "spend_charge", "spend_per_day",
             ]),
             # `c.once_per_board` is here beside `payment_window` because it
