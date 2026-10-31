@@ -1303,7 +1303,7 @@ def _monsters(
     # spelled exactly like disease `x5_85`, so a blind swap there would
     # rewrite a stance into a disease ref. That wants the positional
     # treatment #506 describes, not this. #504.
-    index = {**_disease_names(source), **_creature_names(rows)}
+    index = {**_disease_names(source), **_creature_names(rows, names)}
     for row in rows:
         m = monster_parser.parse(
             row["ID"], row["Txt"], row["Source"], others=index,
@@ -1491,7 +1491,9 @@ def _is_stat_block(tail: str) -> bool:
     return sum(bool(re.search(p, flat, re.I)) for p in _BLOCK_MARKS) >= 4
 
 
-def _creature_names(rows: list) -> dict[str, str]:
+def _creature_names(
+    rows: list, names: dict[str, dict[str, str]]
+) -> dict[str, str]:
     """Every creature's printed name, mapped to its ref.
 
     Names made entirely of words the engine already has are left out -- the
@@ -1515,10 +1517,16 @@ def _creature_names(rows: list) -> dict[str, str]:
         return not all(w in mechanical() for w in words)
 
     out: dict[str, str] = {}
+    #: Which creatures print each ability name, so an **ambiguous** one can be
+    #: told from a uniquely-held one. A set, so one creature printing a name
+    #: on two of its own clauses counts once.
+    holders: dict[str, set[str]] = {}
+    creatures: set[str] = set()
     for row in rows:
         m = monster_parser.parse(row["ID"], row["Txt"], row["Source"])
         if worth_swapping((m.name or "").strip()):
             out.setdefault(m.name.strip(), m.ref_id)
+            creatures.add(m.name.strip())
         # Ability names too. A stat block saying "recharges after the use of
         # <another creature's power>" leaks that power's name exactly as a
         # creature's name leaked, and its ref is just as usable.
@@ -1526,6 +1534,68 @@ def _creature_names(rows: list) -> dict[str, str]:
             nm = (a.name or "").strip()
             if worth_swapping(nm):
                 out.setdefault(nm, f"{m.ref_id}a{a.index}")
+                holders.setdefault(nm, set()).add(m.ref_id)
+    return _opaque_shared_abilities(out, holders, creatures, names)
+
+
+def _opaque_shared_abilities(
+    out: dict[str, str],
+    holders: dict[str, set[str]],
+    creatures: set[str],
+    names: dict[str, dict[str, str]],
+) -> dict[str, str]:
+    """An ability name several creatures print resolves to **nobody**. #1027.
+
+    `monster.py:386` demotes a stranger's ability ref to that stranger's bare
+    *creature* ref rather than dropping it, and says why: *"dropping it leaves
+    the printed name in the spec and `leaks.py --specs` goes red: a leak is
+    worse than a vague pointer."* That trade was right when `#175` made it and
+    it is still right for a name **exactly one** creature prints -- such a
+    name does identify its creature.
+
+    It is wrong for a name several print, because then "that creature" is an
+    arbitrary one of them. Measured over the live parse:
+
+        809  demotions from a stranger's ability
+        426  ...where the name has MORE THAN ONE holder     <- these
+        383  ...uniquely held, so the demotion is sound     <- unchanged
+        323  genuine creature cross-references             <- unchanged
+
+    The worst single case is a name **388** creatures print, resolving every
+    one of them onto whichever happened to be indexed first. Seven rows in one
+    family all pointed at the same unrelated creature; an author writing them
+    would have written "if an enemy is in `<a different creature>`".
+
+    **Why a token rather than dropping the name.** `#929`'s `_unindexed_names`
+    mints `x_` tokens for names that survive every swap, and it looked like
+    the net here -- but it asks `identifies` first, and the names in this
+    family are two ordinary English words, which `identifies` waives as
+    coincidence by design. So dropping really would leave the printed name in
+    a spec, exactly as the `#175` comment feared. The token has to be minted
+    where the ambiguity is *known*, which is here.
+
+    **Keyed on a digest of the name, not on a counter.** An index would
+    renumber every token whenever a creature is added to the corpus, churning
+    `localization/` for no reason; a digest of the printed name is stable
+    across builds and across corpus growth.
+
+    A name that is **also** a creature's own name keeps the creature ref: 3
+    names are both, and for those the creature is the better answer -- a
+    creature name resolving to a creature is the behaviour this index exists
+    for. And a creature citing an ability name **it owns itself** is
+    unaffected either way, because `monster.py` seeds `swaps` with its own
+    abilities before consulting this index at all.
+    """
+    import hashlib
+
+    shared = sorted(
+        nm for nm, who in holders.items()
+        if len(who) > 1 and nm not in creatures
+    )
+    for nm in shared:
+        token = f"x12_{hashlib.sha1(nm.encode()).hexdigest()[:8]}"
+        out[nm] = token
+        names.setdefault(token, {"name": nm})
     return out
 
 
