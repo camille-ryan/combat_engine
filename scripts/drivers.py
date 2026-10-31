@@ -16852,6 +16852,111 @@ def underwater_modifiers_apply_to_everyone(out: Result) -> None:
              f"fire {mod(fire)} vs {dry_fire}, other {mod(cold)} vs {dry_cold}")
 
 
+def a_swimmer_swims_in_an_aquatic_fight(out: Result) -> None:
+    """DMG p.45's movement bullet: the mode a creature moves with. #949.
+
+        "creatures move using their swim speed. A creature without a swim
+         speed must use the Athletics skill to swim."
+
+    **Asserted through `movement.mode_of`, which is the shared resolver and
+    not a private helper.** Its five callers -- `walk`, `shift`, the overhead
+    test and `actions.py`'s move -- all reach the mode through it, so this is
+    the same grain as asserting the attack arms through `situational_attack`
+    rather than through `_underwater`.
+
+    **The dry twin is the load-bearing half here.** Almost every board in the
+    corpus is dry, and a reordering that fired on dry land would silently make
+    every flier in the game swim -- far worse than one that never fires. So
+    the dry reading is taken first and re-taken after the water is removed.
+
+    **Only the first sentence is implemented**, and the second arm below says
+    so rather than leaving it to be discovered: a creature with no swim speed
+    still moves at its land speed in water. That is a skill check gating
+    movement and it is a different seam.
+    """
+    from combat_engine.engine.components import Movement
+    from combat_engine.engine.movement import OVERHEAD, mode_of
+    from combat_engine.engine.query import alive, enemies
+
+    world, me, _ = _board("f1028", 1)
+    foe = next(f for f in enemies(world, me) if alive(world, f))
+
+    out.that(not world.terrain,
+             "the board starts dry, which is what the dry readings below"
+             " mean",
+             f"terrain: {sorted(world.terrain)}")
+
+    # A creature that both flies and swims -- the case the fixed order got
+    # wrong. Written onto the component rather than hunted for in the corpus:
+    # the printed numbers are `monster.modes`' business and what is under test
+    # is which of two present modes wins.
+    mv = world.get(me, Movement)
+    out.that(mv is not None,
+             "the mover has a Movement component, so the modes below are"
+             " readable",
+             f"Movement: {mv}")
+    if mv is None:
+        return
+    mv.modes["fly"] = 6
+    mv.modes["swim"] = 4
+
+    dry = mode_of(world, me, None)
+    out.that(dry == "fly",
+             "on dry land a creature that can fly flies, even though it can"
+             " also swim -- the pre-existing preference is untouched",
+             f"mode_of -> {dry!r}")
+
+    world.terrain.add("aquatic")
+    wet = mode_of(world, me, None)
+    out.that(wet == "swim",
+             "in an aquatic fight the same creature swims -- the printed"
+             " bullet, and the whole of this change",
+             f"mode_of -> {wet!r}")
+
+    # **An explicit mode still wins, in both.** Every caller may name one and
+    # a terrain read must not override a decision already taken.
+    out.that(mode_of(world, me, "fly") == "fly"
+             and mode_of(world, me, "walk") == "walk",
+             "an explicitly named mode is returned unchanged underwater, so"
+             " the reorder is a default and not an override",
+             f"fly -> {mode_of(world, me, 'fly')!r},"
+             f" walk -> {mode_of(world, me, 'walk')!r}")
+
+    # The deferred half, asserted as the behaviour it actually is rather than
+    # left unstated. A land creature is not made to swim.
+    land = world.get(foe, Movement)
+    out.that(land is not None,
+             "the other creature has a Movement component, so the no-swim"
+             " arm is testable",
+             f"Movement: {land}")
+    if land is not None:
+        land.modes.pop("swim", None)
+        land.modes.pop("fly", None)
+        land.modes.pop("burrow", None)
+        out.that(mode_of(world, foe, None) == "walk",
+                 "a creature with NO swim speed still walks in water -- the"
+                 " bullet's Athletics half is not implemented and this"
+                 " records that, so the rule reddens if it is added without"
+                 " being told about",
+                 f"mode_of -> {mode_of(world, foe, None)!r}")
+
+    # And both modes are overhead, which is why no terrain-cost assertion
+    # could have told the two apart -- said here because it is the reason
+    # this rule reads `mode_of` rather than a square count.
+    out.that("fly" in OVERHEAD and "swim" in OVERHEAD,
+             "fly and swim are both overhead, so a difficult-terrain cost"
+             " cannot distinguish them and the mode itself is the only"
+             " observable",
+             f"OVERHEAD = {sorted(OVERHEAD)}")
+
+    # The water goes away and the dry answer comes back exactly.
+    world.terrain.discard("aquatic")
+    out.that(mode_of(world, me, None) == dry,
+             "removing the water restores the dry mode exactly -- the"
+             " preference is read from `world.terrain` and holds no state",
+             f"{mode_of(world, me, None)!r} vs {dry!r}")
+
+
 def a_monsters_level_can_be_adjusted(out: Result) -> None:
     """The DMG's level adjustment, on a spawned creature. #972.
 
@@ -50606,6 +50711,11 @@ DRIVERS = {
         underwater_modifiers_apply_to_everyone,
         "the printed aquatic-combat modifiers apply to everyone in the"
         " fight, and to nobody on a dry board (#949)",
+    ),
+    "swims": (
+        a_swimmer_swims_in_an_aquatic_fight,
+        "a creature that can fly and swim swims in an aquatic fight and"
+        " flies on dry land, and one with no swim speed still walks (#949)",
     ),
     "refresh": (
         a_refresh_gives_back_one_expended_power,

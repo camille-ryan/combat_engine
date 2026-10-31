@@ -581,6 +581,23 @@ def mode_of(world: World, eid: int, mode: str | None) -> str:
 
     A creature that can fly flies, because that is what makes its printed
     speed line mean anything without every caller having to ask.
+
+    **An aquatic fight reorders that preference**, which is DMG p.45's
+    movement bullet -- *"creatures move using their swim speed"* -- and the
+    fourth of the four this function's issue is about. A creature with both a
+    fly and a swim speed flew underwater, because `fly` was simply tested
+    first: 100 fieldable rows carry a swim speed and the ordering was the only
+    thing between them and it. The number has been in `monster.modes` and in
+    `Movement.modes` all along; #1024 was filed on the belief it was missing
+    and closed when the column was found.
+
+    **Only the ordering.** The same bullet's other half -- *"a creature
+    without a swim speed must use the Athletics skill to swim"* -- is not
+    here, so a creature with no swim speed still moves at its land speed in
+    water. That is a skill check gating movement, which is a different seam
+    from the grid, and it stays on #949 rather than being smuggled in behind
+    a tuple. So this is a narrowing of the wrong answer, not the printed rule
+    in full.
     """
     from .components import Movement
 
@@ -589,7 +606,10 @@ def mode_of(world: World, eid: int, mode: str | None) -> str:
     mv = world.get(eid, Movement)
     if mv is None:
         return "walk"
-    for candidate in ("fly", "swim", "burrow"):
+    order = ("fly", "swim", "burrow")
+    if "aquatic" in getattr(world, "terrain", frozenset()):
+        order = ("swim", "fly", "burrow")
+    for candidate in order:
         if mv.modes.get(candidate):
             return candidate
     return "walk"
