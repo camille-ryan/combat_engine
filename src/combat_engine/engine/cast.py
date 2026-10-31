@@ -3869,8 +3869,13 @@ class Cast:
             return ""
         ident = self.world.get(self.me, Ident)
         book = getattr(ident, "book", "") if ident else ""
+        # **The role, for the brute minion column.** DMG2 prints two damage
+        # columns and `Table.target` could only reach the first; `Ident.role`
+        # was already here for `book`'s sake and nothing asked it. 79 monsters
+        # are both brute and minion. #1010.
+        role = getattr(ident, "role", "") if ident else ""
         return self.world.monster_math.convert(
-            d.dice, book=book, level=self.stats.level, kind=d.kind
+            d.dice, book=book, level=self.stats.level, kind=d.kind, role=role
         )
 
     def _bonus_of(self, bonus: str | int) -> int:

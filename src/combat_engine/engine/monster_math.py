@@ -65,8 +65,25 @@ class Table:
     #: Hit points as a multiple of a standard monster's, by rank.
     rank_hp: dict[str, float] = field(default_factory=dict)
 
-    def target(self, level: int, kind: str) -> float:
+    def target(self, level: int, kind: str, *, role: str = "") -> float:
         """What a `kind` of attack should average at this level.
+
+        **`role` reaches the brute column**, which is the second of the two
+        printed axes `#1010` lists and the only one this signature can
+        carry. DMG2 p133 prints two damage columns, standard and brute, and
+        `by_level.minion_damage` has taken `brute=` since it was written with
+        nothing able to ask for it -- *"`Table.target` takes a three-valued
+        `kind` with no notion of role"*, in its own words. Now it does.
+
+        Keyword-only and defaulted, so `scripts/mm3.py` and every other
+        caller keeps its meaning: no role is the standard column, which is
+        what they were already getting.
+
+        **The artillery rule is still out of reach and this is why.** *"Artillery
+        minions deal 25% less damage on multitarget and melee attacks"* needs
+        the role **and the shape of the attack**, and nothing on this path
+        carries whether the attack is melee or multitarget. A third axis, not
+        a third value -- left on `#1010`.
 
         **A minion reads a printed table rather than half this curve.** This
         used to be `out / 2`, which was quoting the book -- DMG2 prints
@@ -91,7 +108,7 @@ class Table:
         from combat_engine.by_level import minion_damage
 
         try:
-            return float(minion_damage(level))
+            return float(minion_damage(level, brute=role == "brute"))
         except ValueError:
             # Outside the printed bands. The old approximation is the honest
             # fallback -- it is what the book's own prose says -- rather than
@@ -181,7 +198,10 @@ class Math:
     def on(self) -> bool:
         return self.to is not None
 
-    def convert(self, expr: str, *, book: str, level: int, kind: str = NORMAL) -> str:
+    def convert(
+        self, expr: str, *, book: str, level: int, kind: str = NORMAL,
+        role: str = "",
+    ) -> str:
         """Rescale a printed damage expression to the target maths.
 
         The shape of the expression is kept and its size is changed: `2d8+2`
@@ -194,7 +214,7 @@ class Math:
         source = BOOKS.get(book, OLD)
         if source is self.to:
             return expr
-        want = self.to.target(level, kind)
+        want = self.to.target(level, kind, role=role)
         have = average(expr)
         if have <= 0:
             return expr

@@ -50916,6 +50916,98 @@ def a_delayed_or_disabled_trap_is_not_there(out: Result) -> None:
              "a creature is not a trap and is never suppressed")
 
 
+def a_brute_minion_reads_the_brute_column(out: Result) -> None:
+    """DMG2 p133 prints two minion damage columns and only one was reachable.
+
+    The table, verified cell by cell against the page:
+
+        band        standard  brute
+        1st-3rd            4      5
+        10th-12th          8     10
+        28th-30th         15     18
+
+    `by_level.minion_damage` has taken `brute=` since it was written, with
+    nothing able to ask for it -- its own docstring says *"`Table.target`
+    takes a three-valued `kind` with no notion of role"*. `Ident.role` was
+    already on the board and already read by `_converted` for the book, so
+    threading it is the whole change.
+
+    **Three negative controls, because this is a balance change behind an
+    opt-in preset and each is a way to over-apply it.** A brute that is not a
+    minion must not read the minion table at all; a minion that is not a
+    brute must read the standard column; and `AS_PRINTED` must move nothing
+    whatever the role, because a role is not a licence to rescale a row the
+    preset was never asked about.
+    """
+    from combat_engine.by_level import minion_damage
+    from combat_engine.engine.monster_math import (
+        AS_PRINTED,
+        BOOKS,
+        LIMITED,
+        MINION,
+        NORMAL,
+        Math,
+    )
+
+    # -- the printed table, as the floor ----------------------------------
+    out.that(minion_damage(1) == 4 and minion_damage(1, brute=True) == 5,
+             "the printed 1st-3rd band is 4 standard / 5 brute")
+    out.that(minion_damage(11) == 8 and minion_damage(11, brute=True) == 10,
+             "and 10th-12th is 8 / 10")
+    out.that(minion_damage(30) == 15 and minion_damage(30, brute=True) == 18,
+             "and 28th-30th is 15 / 18")
+
+    # **Upper case, and the first draft got this wrong twice.** `BOOKS` is
+    # keyed `MM1`/`MM2`/`MM3`, so `BOOKS.get("mm3")` is None and fell through
+    # to MM1 -- which made `convert` see source and target as the same table
+    # and return the expression untouched. The control below is what caught
+    # it, having already caught a second-rate version of the same mistake.
+    mm3 = BOOKS["MM3"]
+    out.that(mm3 is not None, "there is a target table to convert towards")
+    out.that(BOOKS["MM1"] is not mm3,
+             "and it is a different table from the one being converted from,"
+             " or convert() short-circuits and proves nothing")
+
+    # -- Table.target now takes a role ------------------------------------
+    std = mm3.target(11, MINION)
+    brute = mm3.target(11, MINION, role="brute")
+    out.that(std == 8.0, "a minion with no role reads the standard column")
+    out.that(brute == 10.0, "and role='brute' reads the brute column")
+    out.that(brute > std, "which is the higher of the two, as printed")
+
+    # -- control: a brute that is NOT a minion ----------------------------
+    normal = mm3.target(11, NORMAL, role="brute")
+    out.that(normal != brute and normal != std,
+             "a brute on a NORMAL attack reads neither minion column --"
+             " the role must not pull a standard monster onto the minion table")
+    out.that(mm3.target(11, NORMAL) == normal,
+             "and the role changes nothing for a non-minion attack")
+    out.that(mm3.target(11, LIMITED, role="brute") == mm3.target(11, LIMITED),
+             "nor for a recharge attack")
+
+    # -- control: an unknown role is the standard column ------------------
+    for role in ("soldier", "artillery", "skirmisher", "", "Brute"):
+        out.that(mm3.target(11, MINION, role=role) == std,
+                 f"role={role!r} reads the standard column"
+                 f" -- only lower-case 'brute' is the printed second column")
+
+    # -- control: the preset still has to be on ---------------------------
+    # **Not an expression that is already on target.** `2d6+3` averages
+    # exactly 10, which *is* the brute figure at level 11 -- so the first
+    # draft's conversion was a true no-op and the control below failed for
+    # the right reason. `1d4` averages 2.5 and has to move.
+    expr = "1d4"
+    out.that(AS_PRINTED.convert(expr, book="MM1", level=11, kind=MINION,
+                                role="brute") == expr,
+             "AS_PRINTED moves nothing, role or no role -- the printed row"
+             " wins unless somebody opted into the conversion")
+    live = Math("probe", to=mm3)
+    moved = live.convert(expr, book="MM1", level=11, kind=MINION, role="brute")
+    out.that(moved != expr,
+             "and the opt-in preset does move it, or the control above is"
+             " passing because nothing converts at all")
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -52270,6 +52362,10 @@ DRIVERS = {
     "trap_delay": (
         a_delayed_or_disabled_trap_is_not_there,
         "a delayed or disabled trap does not fire (#955)",
+    ),
+    "brute_minion": (
+        a_brute_minion_reads_the_brute_column,
+        "a brute minion reads DMG2's second damage column (#1010)",
     ),
 }
 
