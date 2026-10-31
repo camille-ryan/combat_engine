@@ -4308,7 +4308,12 @@ def _unindexed_names(
     """
     from .sanitise import identifies, scrub, vocabulary
 
-    rules = vocabulary()
+    # **`census=False` states what this call already gets**, and the union
+    # below is what makes this caller the strict one. Spelled out since
+    # `#1018`: asking for the census here and relying on it coming back empty
+    # would make the next line look like a belt-and-braces top-up rather than
+    # the only thing supplying it.
+    rules = vocabulary(census=False)
     # **`vocabulary()` cannot see the `common_word` table during a build, and
     # that cost a corrupted card.** Its fourth source is "every word
     # appearing on at least a handful of compendium pages" -- and it reads
@@ -4572,9 +4577,21 @@ def _cross_reference_rest(
     specs shipped a neighbour's printed name while both halves believed
     they agreed.
     """
-    from .sanitise import identifies, plural, scrub, set_races, vocabulary
+    from .sanitise import (
+        identifies,
+        indexing_vocabulary,
+        plural,
+        scrub,
+        set_races,
+    )
 
-    rules = vocabulary()
+    # **The index gate, which wants LESS vocabulary than everybody else.**
+    # `vocabulary()` would return exactly this set here anyway -- its census
+    # arm reads an uncommitted table mid-build -- so this changes nothing
+    # today and says what it is relying on. With the census present the gate
+    # waives more phrases as coincidence and 212 specs lose a ref: measured
+    # on a rebuild, `#1018`. Index generously, mint strictly.
+    rules = indexing_vocabulary()
     # Which names are races', for `identifies` and for `_racial_labels`
     # below -- one set, so the checker and the scrubber cannot hold
     # different opinions about what a race is called. Handed over rather

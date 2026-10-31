@@ -923,8 +923,17 @@ def aliases(name: str) -> list[str]:
     return out
 
 
-def vocabulary() -> set[str]:
+def vocabulary(*, census: bool = True) -> set[str]:
     """Words this script will not call a name.
+
+    `census=False` drops the fourth source below -- the compendium word
+    census -- and is how a **caller inside a build** asks for what it is
+    actually going to get. See `indexing_vocabulary` for why anybody wants
+    that on purpose, and `#1018` for what it cost while it was an accident:
+    the census arm reads `data/game.db` through its own connection, so during
+    a build it sees an uncommitted table, returns nothing, and says nothing.
+    Every in-build caller has therefore always run on three sources while
+    this docstring claimed four.
 
     Four sources, none of them a list anybody has to keep current:
 
@@ -951,10 +960,13 @@ def vocabulary() -> set[str]:
             if w.strip()
         )
     # An older game.db has no such table.
-    with contextlib.suppress(Exception):
-        from combat_engine.db import game
+    if census:
+        with contextlib.suppress(Exception):
+            from combat_engine.db import game
 
-        out.update(r["word"] for r in game().execute("SELECT word FROM common_word"))
+            out.update(
+                r["word"] for r in game().execute("SELECT word FROM common_word")
+            )
     for name in dir(types):
         member = getattr(types, name)
         if isinstance(member, EnumMeta):
@@ -978,6 +990,45 @@ def vocabulary() -> set[str]:
 
         out.update(s.lower() for s in SKILLS)
     return out
+
+
+def indexing_vocabulary() -> set[str]:
+    """What the cross-reference **index gate** is asked against. #1018.
+
+    `vocabulary()` minus the compendium word census, deliberately, and the
+    point of the name is that the omission is now a **stated choice** instead
+    of a side effect of which transaction a connection happens to read.
+
+    **Why the gate wants less vocabulary, not more.** `_cross_reference_rest`
+    asks `identifies` whether a spec names anything worth indexing, and a
+    phrase built of words the corpus treats as ordinary is waived as
+    coincidence. Give that gate the census and it waives more -- so it is the
+    one caller for which a *fuller* vocabulary is a *worse* answer. Measured
+    on a rebuild with the census injected (`#1018`, patch kept at
+    `scratchpad/1018-not-shipped.patch`):
+
+        212 specs lose a ref       the gate skips rows it used to index
+         22 printed phrases stand  left in specs as prose
+          2 self-named clauses     a row naming itself
+
+    All 236 are regressions in the direction this project cares most about,
+    which is why the "fix the census" patch was reverted and this exists
+    instead.
+
+    **It changes nothing today and that is the whole value.** During a build
+    `vocabulary()` already returns exactly this set, because its census arm
+    reads an uncommitted table. The hazard was that the behaviour every leak
+    gate currently passes on was an accident: move `_common_words` after the
+    commit, or hand this module a live connection, and 236 specs would change
+    with no code change and nothing to point at. Named, the generosity
+    survives both.
+
+    Token *minting* errs the other way and keeps the census -- see
+    `build._unindexed_names`, which unions the writer's own rows in. Index
+    generously, mint strictly.
+    """
+    return vocabulary(census=False)
+
 
 #: Every name a race holds, lowercased.
 #:
