@@ -35,8 +35,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from .rng import average
+
+if TYPE_CHECKING:
+    from .ecs import World
 
 #: What a damage expression is for. MM3 scales these differently: a
 #: recharge power hits harder than an at-will, and a minion hits for half.
@@ -292,7 +296,7 @@ HP_PER_LEVEL: dict[str, int] = {
 LEVEL_REACH = 5
 
 
-def adjust_level(world: object, eid: int, by: int) -> bool:
+def adjust_level(world: World, eid: int, by: int) -> bool:
     """Move a spawned creature's level by `by`, the way the DMG says. #972
 
         "Just increase its attack rolls, defenses, and AC by 1 for every

@@ -260,7 +260,10 @@ def _conditions(out: list[str]) -> int:
         return 0
     forms: dict[str, set[str]] = {}
     for c in Condition:
-        each = {c.name.lower().replace("_", " ")}
+        # Annotated, because the inferred `set[LiteralString]` is not
+        # assignable to `forms`' declared `set[str]` -- the same erasure
+        # `adjust_level`'s `world: object` was, pointed the other way.
+        each: set[str] = {c.name.lower().replace("_", " ")}
         if isinstance(c.value, str):
             each.add(c.value.lower().replace("_", " "))
         forms[c.name] = each

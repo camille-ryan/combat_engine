@@ -51272,7 +51272,9 @@ def the_racial_power_is_bought_with_the_pact_boon(out: Result) -> None:
     # -- spending it arms the trade against every boon -------------------
     known.note_use("p1449", world.round)
     out.that(known.times("p1449") == 1, "the racial power is now spent")
-    world.bus.emit(PowerUsed(actor=me, power="p1449", targets=()))
+    # `targets=[]`, not `()`: the field is a `list[int]`, and an empty
+    # tuple type-checks nowhere even though it behaves identically here.
+    world.bus.emit(PowerUsed(actor=me, power="p1449", targets=[]))
     armed = offers()
     out.that(set(armed) == set(BOONS),
              "spending it offers the trade against EVERY boon ref --"
