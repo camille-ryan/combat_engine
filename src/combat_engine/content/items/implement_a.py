@@ -960,8 +960,49 @@ def i2320p1(c: Cast) -> None:
     todo=("c.active_vestige()",),
 )
 def i2341p1(c: Cast) -> None:
-    """Vestiges are a pact's rotating set of granted rows and nothing
-    models one."""
+    """Bargains afresh with one of the leg's own two remnants.
+
+    Printed: *"You make one of your primary vestiges your active
+    vestige."* The body is written and is one line --
+
+        c.bargain(*c.vestiges(primary=True))
+
+    -- because `c.bargain` already ends any standing bargain, offers a
+    `c.choose` over more than one, and returns `""` on an empty set.
+    Measured on the audit board with `on=HIT_BY_ME` and the cursed gate:
+    it **fires 22 times and does nothing**, because nothing ever offers a
+    primary remnant, so the set it bargains over is always empty.
+
+    **The marker is knowingly imprecise and stays that way.** It reads
+    `c.active_vestige()`, and that symbol exists now -- which is why
+    `todo` is red. But the honest marker cannot be written: `todo=` takes a
+    **symbol**, and the thing missing is not a symbol. `c.offer_vestige`
+    exists; what is absent is a *content row* calling it. Naming that verb
+    would report ARRIVED and demand this row be finished, which is how the
+    marker came to be wrong in the first place.
+    (Tried `todo=("cf:warlock-f1.offer_vestige(primary)",)`; refused at
+    import as prose, correctly.)
+
+    So the old marker was wrong twice. It read `c.active_vestige()`: this
+    card does not *ask*
+    which remnant is active, it *sets* one, and from a named subset --
+    which is `#1034`'s whole finding. And the verb that sets it exists
+    now. What is missing is upstream of this row entirely: the pact leg
+    has to **offer** its two printed remnants with
+    `c.offer_vestige(..., primary=True)`, and until it does, this row and
+    `f2035` are both inert for the same reason.
+
+    Left `todo=` rather than `dropped=` deliberately: a `dropped=` row
+    plays with one clause missing, and this one would play with its whole
+    effect missing. A row that fires and does nothing is the shape the
+    marker rules exist to keep off the board.
+
+    The two primary remnants are printed on the boon card, whose clauses
+    are `cf:warlock-f1c12s0` and `...s1` -- and an earlier attempt to
+    dispatch on those was reverted because neither is declared in
+    content, so the comparisons were silently dead. That is the real
+    shape of the remaining work.
+    """
 
 
 @power(
