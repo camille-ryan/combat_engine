@@ -413,13 +413,24 @@ def m3069a2(c: Cast) -> None:
 @power(
     "m3069a3",
     level=10,
-    usage=ENCOUNTER,
+    usage=AT_WILL,
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
 )
 def m3069a3(c: Cast) -> None:
     """Filed as a standard action and plainly a trait: nobody chooses it.
+
+    **`AT_WILL`, which is what the card prints, and it read `ENCOUNTER`
+    until #1027's sweep.** The printed parenthetical ends `; at-will`, and
+    for a trait that is the usage: the compulsion fires every turn its
+    trigger is met, not once a fight. `cards.py` could not see the
+    disagreement because the usage sits at the end of an 87-character
+    trigger clause and its head window stopped at 90 characters measured
+    from the start -- so widening that window is what surfaced this, and
+    the row's own docstring had never said anything about usage either way.
+    Waiving it was the alternative and would have been loosening an
+    instrument against an unambiguous card.
 
     A compulsion rather than an offer -- the printed line says *must* -- so
     it is a watch on its own turn beginning rather than a declared trigger,
