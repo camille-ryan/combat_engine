@@ -973,13 +973,23 @@ def i2341p1(c: Cast) -> None:
     it **fires 22 times and does nothing**, because nothing ever offers a
     primary remnant, so the set it bargains over is always empty.
 
-    **The marker is knowingly imprecise and stays that way.** It reads
-    `c.active_vestige()`, and that symbol exists now -- which is why
-    `todo` is red. But the honest marker cannot be written: `todo=` takes a
-    **symbol**, and the thing missing is not a symbol. `c.offer_vestige`
-    exists; what is absent is a *content row* calling it. Naming that verb
-    would report ARRIVED and demand this row be finished, which is how the
-    marker came to be wrong in the first place.
+    **The blocker moved, and it is now the audit board rather than the
+    tree.** `8eb78077` made `cf:warlock-f1s6` offer the two remnants, so a
+    real vestige warlock does have a primary set and this body would pay.
+    Un-marked and measured: the row still reports **SILENT**, for two
+    independent reasons the board cannot help --
+
+        board("i2341p1")    holder is a striker, build("vestige") False
+                            cursed enemies nearby: none
+
+    -- so neither the pact nor the curse the trigger needs is posable. A
+    written row that fires and does nothing is worse than a marked one, and
+    the per-ref baseline may shrink and never grow, so adding it to
+    `silent_refs` is not available either. Re-marked rather than shipped
+    inert. Filed as the board gap it is.
+
+    The marker stays knowingly imprecise for the reason it already did:
+    `todo=` takes a **symbol**, and nothing is missing a symbol.
     (Tried `todo=("cf:warlock-f1.offer_vestige(primary)",)`; refused at
     import as prose, correctly.)
 
