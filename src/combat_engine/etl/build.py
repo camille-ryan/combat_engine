@@ -5450,6 +5450,32 @@ _MARK_OF = re.compile(
 #: category, so `leaks.py` reds on it in a backticked position -- correctly,
 #: and it is unflagged in the pattern below, which is an unquoted one. The
 #: gate drew exactly the right line and this note is where I crossed it.
+#: **The precision of this position comes from the resolver, not from the
+#: position, and it matters because `#1033` proposed trusting the position
+#: alone.** Measured over the 1,050 matches in the live specs:
+#:
+#:     resolved to a ref                          250
+#:     left as prose                              800
+#:       of those, followed by "power bonus"      428   "a +2 power bonus"
+#:       followed by "power associated"            68
+#:       one-word runs, mostly bonus numerals     443
+#:       runs of 6 words or more                  228
+#:
+#: `(?=\s+powers?\b)` is satisfied by the `power` in **"power bonus"**, so
+#: nearly half of what this pattern matches is a bonus clause rather than a
+#: citation. That costs nothing today because the index declines every one of
+#: them -- 0 of the 428 came out holding a ref -- but it means the docstring
+#: below overstates the case when it calls this "the one position strong
+#: enough to need no argument". It is strong *once a name resolves*.
+#:
+#: So **do not mint an opaque token from this position**, which is what
+#: `#1033` leaned towards to close four specs that print a name no row holds.
+#: It would have tokenised ~800 runs, the great majority of them bonus
+#: numerals and ten-word prose fragments -- replacing readable rules text
+#: with `x..._` in 428 specs an author reads, to fix 4. The pattern is left
+#: exactly as it is for the same reason: tightening the lookahead would
+#: change no output (the resolver already declines all 496) and `f668` shows
+#: the "associated" family is entangled with a ref another pass writes.
 _GRANTS = re.compile(
     r"\byou gain (?:the|a|an)\s+(.{0,70}?)"
     r"(?=\s+(?:powers?|animal companion)\b)",
