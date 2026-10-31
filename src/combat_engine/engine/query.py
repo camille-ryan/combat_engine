@@ -673,6 +673,29 @@ def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
     mv = world.get(eid, Movement)
     if mv is None:
         return 0
+    # **Swimming without a swim speed is a skill check, and it answers
+    # here** -- because this is the one place speed resolves, so the crawl's
+    # half, the run's +2 and `Cast.speed_of` all read the same number rather
+    # than three callers each remembering to ask. DMG p44, PHB p183, #949.
+    #
+    # `None` is "not a swim" and leaves the land speed alone; a number is
+    # the printed answer, and **0 is a failed check** rather than an absent
+    # one -- which is why this returns rather than falling through to the
+    # modifiers. A creature that failed its check stays where it is, and a
+    # speed bonus does not buy its way past a failure.
+    #
+    # **The terrain test is inline and first, deliberately.** This function
+    # is the most-called read in the engine -- every menu draw asks it per
+    # creature -- so the dry-land path must stay one set membership test.
+    # Calling into `movement.swims` unconditionally put a module import and
+    # a second component fetch on that path for every creature in every
+    # fight, to answer "no" in all of them.
+    if "aquatic" in getattr(world, "terrain", frozenset()):
+        from .movement import swims
+
+        swum = swims(world, eid)
+        if swum is not None:
+            return swum
     base = mv.speed
     mods = world.get(eid, Mods)
     if mods is not None:

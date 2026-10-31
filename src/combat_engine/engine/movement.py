@@ -576,6 +576,89 @@ def _occupied(world: World, eid: int, target: set[Square] | frozenset[Square]) -
     )
 
 
+#: The printed Athletics DC for swimming, by how rough the water is.
+#: PHB p183's three-row table, read off the page rather than derived.
+#:
+#: **Not the level-and-band table**, and that is worth saying because `#949`
+#: assumed it was and the assumption travelled: the swim DC does not scale
+#: with level at all. `combat_engine/dc.py` is a different table serving a
+#: different question.
+SWIM_DC = {"calm": 10, "rough": 15, "stormy": 20}
+
+#: What the water is like when nothing says. Calm is the kindest of the
+#: three, which is the right default for a fight nobody described as rough:
+#: it makes an unannounced aquatic fight no harder than the page's easiest
+#: case rather than inventing difficulty.
+DEFAULT_WATER = "calm"
+
+
+def swim_dc(world: World) -> int:
+    """How hard the water is to swim in. `Scene.ground` supplies the word."""
+    terrain = getattr(world, "terrain", frozenset())
+    for word in ("stormy", "rough", "calm"):
+        if word in terrain:
+            return SWIM_DC[word]
+    return SWIM_DC[DEFAULT_WATER]
+
+
+def swims(world: World, eid: int) -> int | None:
+    """How far this creature may swim this round, or None if it is not.
+
+    DMG p44's movement bullet, second half -- *"a creature without a swim
+    speed must use the athletics skill to swim, as described in the Player's
+    Handbook"* -- and PHB p183's Swim entry, which is what that points at:
+
+    > *"**Success:** You swim at one-half your speed… **Fail by 4 or Less:**
+    > Stay where you are and lose the rest of your move action… **Fail by 5
+    > or More:** Sink 1 square and risk suffocation by drowning…
+    > **Swim Speed:** While swimming, creatures that have a swim speed use
+    > that speed and do not make Athletics checks to swim."*
+
+    `None` means *this is not a swim* -- dry land, or a creature with a swim
+    speed, which the page exempts outright. A number is the budget, and 0 is
+    a failed check rather than an absent one; `query.speed` keeps the two
+    apart, because a creature that cannot move is not the same as one this
+    rule has nothing to say about.
+
+    **Once a round, cached on the creature, which is Camille's ruling:**
+
+    > *"Athletics check determines swim speed for the round. It's not per
+    > square."*
+
+    The page says *"part of a move action"*, and a round is where that lands
+    once there is one move action in it. The cache is what makes the ruling
+    true rather than approximately true: `query.speed` is consulted many
+    times while a menu is drawn, and rolling per call would give a creature a
+    different speed in the menu from the one it moves at -- and would burn a
+    d20 per call, moving every other roll in the fight.
+
+    **Sinking is the one printed clause with nowhere to go**, and it is
+    dropped deliberately rather than quietly: Camille ruled this a 2D plane,
+    so "sink 1 square" has no axis to move along. What survives is the part
+    that has meaning here -- the failed swimmer does not move. The drowning
+    risk belongs to a rule about suffocation that does not exist yet.
+    """
+    from .components import Movement
+    from .skills import check
+
+    if "aquatic" not in getattr(world, "terrain", frozenset()):
+        return None
+    mv = world.get(eid, Movement)
+    if mv is None:
+        return None
+    if mv.modes.get("swim"):
+        return None                      # the page exempts it from the check
+    if mv.swim_round == world.round:
+        return mv.swim_squares
+    dc = swim_dc(world)
+    got = check(world, eid, "athletics", dc, purpose="swim")
+    # Half speed on a success, and **the land speed halved** -- there is no
+    # swim speed to halve, which is the whole premise of this branch.
+    mv.swim_round = world.round
+    mv.swim_squares = max(0, mv.speed // 2) if got.success else 0
+    return mv.swim_squares
+
+
 def mode_of(world: World, eid: int, mode: str | None) -> str:
     """Resolve the mode a creature is moving with, defaulting to its best.
 

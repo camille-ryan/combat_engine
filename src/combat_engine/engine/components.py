@@ -267,6 +267,15 @@ class Movement:
     charging: bool = False
     #: Extra modes and their speeds, e.g. {"fly": 8, "climb": 3}.
     modes: dict[str, int] = field(default_factory=dict)
+    #: The round this creature last made an Athletics check to swim, and what
+    #: it bought. Camille's ruling is that the check *"determines swim speed
+    #: for the round"*, so the answer is remembered rather than re-rolled:
+    #: `query.speed` is asked many times while a menu is drawn, and a fresh
+    #: d20 per call would give a creature one speed in the menu and another
+    #: when it moved. `movement.swims` owns both. Only a creature **without**
+    #: a swim speed ever sets them -- the page exempts the rest. #949.
+    swim_round: int = -1
+    swim_squares: int = 0
     #: Kinds of difficult terrain this creature crosses for nothing, by the
     #: label `Grid.difficult` gives them. `"*"` is all of it.
     ignores: set[str] = field(default_factory=set)

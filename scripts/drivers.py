@@ -50659,6 +50659,109 @@ def forced_over_an_edge(out: Result) -> None:
              "and does not fall")
 
 
+def swimming_without_a_swim_speed(out: Result) -> None:
+    """A creature with no swim speed makes an Athletics check to swim.
+
+    DMG p44's movement bullet, second half, and PHB p183's Swim entry:
+
+    > *"**Success:** You swim at one-half your speed… **Fail by 4 or Less:**
+    > Stay where you are and lose the rest of your move action…
+    > **Swim Speed:** While swimming, creatures that have a swim speed use
+    > that speed and do not make Athletics checks to swim."*
+
+    Camille's ruling settled the cadence -- *"Athletics check determines
+    swim speed for the round. It's not per square."* -- which is why the
+    answer is cached and why one of the assertions below counts the checks
+    rolled rather than reading the speed again.
+
+    **The two negative controls are what stop this being a tax.**
+    `query.speed` is the hottest read in the engine, so a swim test that
+    fired on dry land would roll a d20 inside every menu draw in the game --
+    moving every other roll in the fight by consuming the die. And a
+    creature *with* a swim speed is exempt by the printed sentence, so
+    asking it for a check would be a rule invented rather than read.
+    """
+    from combat_engine.engine.components import Movement
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.movement import SWIM_DC, swim_dc, swims
+    from combat_engine.engine.query import speed
+
+    # -- dry land: this rule has nothing to say ---------------------------
+    dry, me, _ = _board("m145a0", 1)
+    mv = dry.get(me, Movement)
+    base = mv.speed
+    out.that(base > 0, "the creature has a land speed to halve")
+    out.that("aquatic" not in getattr(dry, "terrain", frozenset()),
+             "the control board is dry")
+    mark = len(dry.bus.log)
+    out.that(swims(dry, me) is None, "on dry land swims() answers None")
+    out.that(speed(dry, me) == base, "and the land speed is untouched")
+    out.that(not any(isinstance(e, SkillCheck) for e in dry.bus.log[mark:]),
+             "and NO check is rolled -- query.speed is the hottest read here")
+
+    # -- the DC table, read off the page ----------------------------------
+    sea, _me2, _ = _board("m145a0", 1)
+    sea.terrain = frozenset({"aquatic"})
+    out.that(swim_dc(sea) == SWIM_DC["calm"] == 10,
+             "unannounced water is calm, DC 10")
+    sea.terrain = frozenset({"aquatic", "rough"})
+    out.that(swim_dc(sea) == 15, "rough water is DC 15")
+    sea.terrain = frozenset({"aquatic", "stormy"})
+    out.that(swim_dc(sea) == 20, "stormy water is DC 20")
+    sea.terrain = frozenset({"aquatic"})
+
+    # -- a creature WITH a swim speed is exempt, by the printed sentence --
+    swimmer, me3, _ = _board("m145a0", 1)
+    swimmer.terrain = frozenset({"aquatic"})
+    mv3 = swimmer.get(me3, Movement)
+    mv3.modes["swim"] = 6
+    out.that(mv3.modes.get("swim") == 6, "the swimmer actually has a swim speed")
+    mark = len(swimmer.bus.log)
+    out.that(swims(swimmer, me3) is None,
+             "a creature with a swim speed is not asked to check")
+    out.that(not any(isinstance(e, SkillCheck)
+                     for e in swimmer.bus.log[mark:]),
+             "and rolls nothing -- the page exempts it outright")
+
+    # -- success: half speed ----------------------------------------------
+    win, me4, _ = _board("m145a0", 1)
+    win.terrain = frozenset({"aquatic"})
+    win.rng.loaded = 20
+    mv4 = win.get(me4, Movement)
+    out.that(not mv4.modes.get("swim"), "this one has no swim speed")
+    want = mv4.speed // 2
+    out.that(want > 0, "half its speed is a number worth asserting")
+    got = speed(win, me4)
+    out.that(got == want, "a successful check swims at one-half speed")
+
+    # -- cached for the round, which is the ruling ------------------------
+    mark = len(win.bus.log)
+    again = speed(win, me4)
+    rolled = [e for e in win.bus.log[mark:] if isinstance(e, SkillCheck)]
+    out.that(again == want, "asking again in the same round gives the same speed")
+    out.that(not rolled,
+             "and rolls NO second check -- the ruling is once for the round")
+
+    # a new round asks again
+    win.round += 1
+    mark = len(win.bus.log)
+    speed(win, me4)
+    out.that(any(isinstance(e, SkillCheck) and e.skill == "athletics"
+                 for e in win.bus.log[mark:]),
+             "a new round makes a fresh check")
+
+    # -- failure: it stays where it is ------------------------------------
+    lose, me5, _ = _board("m145a0", 1)
+    lose.terrain = frozenset({"aquatic"})
+    lose.rng.loaded = 1
+    mv5 = lose.get(me5, Movement)
+    out.that(not mv5.modes.get("swim"), "the failing one has no swim speed either")
+    out.that(speed(lose, me5) == 0,
+             "a failed check leaves it with no squares at all")
+    out.that(swims(lose, me5) == 0,
+             "and swims() says 0, which is a failure and not an absence")
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -52005,6 +52108,10 @@ DRIVERS = {
     "edge_save": (
         forced_over_an_edge,
         "a creature forced over an edge gets a saving throw",
+    ),
+    "swim_check": (
+        swimming_without_a_swim_speed,
+        "no swim speed means an Athletics check for the round (#949)",
     ),
 }
 
