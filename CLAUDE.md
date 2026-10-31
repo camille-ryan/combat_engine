@@ -166,10 +166,30 @@ ever be looked at:
   none of it gets in code, and CRITICALLY that no wotc content gets displayed
   to a user who doesn't have the localization file."*
 
-  So: fix tier 2 when you find it, and **strive** for tier 3 — a pre-commit
-  `leaks.py --history --staged` is the right amount of effort there, since a
-  message is editable for exactly one moment. Never rewrite tracker history
-  for it. Tier 1 is the one worth building an instrument for, and `#467` is
+  So: fix tier 2 when you find it, and **strive** for tier 3 — a message is
+  editable for exactly one moment, so a hook there is the right amount of
+  effort. Never rewrite tracker history for it.
+
+  **That hook exists now, and this paragraph used to describe one that could
+  not have worked.** It said *"a pre-commit `leaks.py --history --staged`"*,
+  and both halves were wrong. `pre-commit` runs before git writes the
+  message under composition, so the hook would have read
+  `.git/COMMIT_EDITMSG` — the **previous** commit's message — passing the
+  new one every time and failing on text nobody could still edit. And a
+  bare `--staged` fell through to the tree-wide walk and printed *"no
+  printed names in tracked files"*, which reads exactly like a message
+  passing. Five messages were "checked" that way in one session and none of
+  them was read.
+
+  It is `hooks/commit-msg`, tracked, reached through `core.hooksPath`:
+
+  ```
+  git config core.hooksPath hooks     once per clone
+  ```
+
+  `--staged` now implies `--history` and takes the message path git hands
+  the hook. Proven by committing a planted printed name: refused, naming
+  the ref, with HEAD unmoved. #1035. Tier 1 is the one worth building an instrument for, and `#467` is
   that gap: nothing verifies what the page renders when the localisation is
   absent.
 

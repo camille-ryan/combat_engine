@@ -204,13 +204,33 @@ it improves, red when it regresses, never a bare allowance. #372.
   ETL change moves a value, so a gate on it would be red most of the time and
   get ignored."*
 
-  **The gate that is worth having is pre-commit**, which is the one moment a
-  message is still editable:
+  **The gate that is worth having is at commit-msg time**, which is the one
+  moment a message is still editable, and it is installed:
 
-      uv run scripts/leaks.py --history --staged    # reads .git/COMMIT_EDITMSG
+      hooks/commit-msg                  tracked; git config core.hooksPath hooks
+      uv run scripts/leaks.py --staged  by hand, on .git/COMMIT_EDITMSG
+      uv run scripts/leaks.py --staged <path>        on a message file
 
-  Proven by writing a racial trait's printed name into a staged message: exit 1,
-  naming the ref. #447.
+  **`commit-msg`, not `pre-commit`, and the distinction is why this did not
+  exist for as long as it was documented.** git writes the message under
+  composition to a temp file and hands a `commit-msg` hook its path as `$1`.
+  A `pre-commit` hook runs before that file exists and sees only
+  `.git/COMMIT_EDITMSG`, which still holds the **previous** message — so the
+  gate as written would have passed every new message and failed on text
+  nobody could still edit.
+
+  **And `--staged` used to do something else entirely.** It lives inside the
+  `--history` pass, so a bare `leaks.py --staged` fell through to the
+  tree-wide walk and printed "no printed names in tracked files" — which
+  looks exactly like a message passing the gate. It now implies
+  `--history`. Five messages in one session were checked that way and none
+  of them was read, which is the shape of *"a check that passes over its own
+  subject matter is the one to distrust"* arriving through the argument
+  parser rather than the matcher.
+
+  Proven end to end by committing a message carrying a printed two-word
+  name: the hook exits 1 naming the ref, HEAD does not move, and the same
+  index with the name removed commits. #447, #1035.
 * **Kill a spawned server by process group.** `self.proc` is the `uv`
   wrapper, not the server; `terminate()` orphaned the uvicorn underneath and
   69 of them accumulated over three and a half days. `start_new_session=True`

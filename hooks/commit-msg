@@ -1,0 +1,25 @@
+#!/bin/sh
+# Refuse a commit message that names printed content. #1035, #447.
+#
+# **A `commit-msg` hook, not `pre-commit`, and the difference is the whole
+# reason this did not exist.** git writes the message under composition to
+# a temp file and hands a `commit-msg` hook its path as `$1`. A
+# `pre-commit` hook runs *before* that file exists and sees only
+# `.git/COMMIT_EDITMSG`, which still holds the **previous** commit's
+# message -- so the gate the root `CLAUDE.md` asks for, wired the way it
+# was documented, would have checked the last message on every commit:
+# passing the new one and failing on text nobody could still edit.
+#
+# Tracked, and reached through `core.hooksPath`, because `.git/hooks/` is
+# not in the repository and a gate nobody can review is not a gate. Install
+# once per clone:
+#
+#     git config core.hooksPath hooks
+#
+# A name in a commit message is **tier 3** in Camille's ordering (#447) --
+# "avoid, do not chase" -- and this is the one moment it is editable, which
+# is why a gate here is worth it and rewriting history never is. So it
+# fails the commit rather than warning, and `--no-verify` is the escape for
+# the case where the message is right and the index is wrong.
+set -e
+exec uv run scripts/leaks.py --staged "$1"

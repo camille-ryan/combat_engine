@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import pathlib
 import re
 import sqlite3
 import subprocess
@@ -2208,13 +2209,37 @@ def history() -> int:
 
     staged = "--staged" in sys.argv
     if staged:
-        # The pre-commit gate: the message being written, nothing else.
-        path = ROOT / ".git" / "COMMIT_EDITMSG"
-        text = path.read_text() if path.exists() else ""
+        # **The message being written, and a `commit-msg` hook has to say
+        # where it is.** This read `.git/COMMIT_EDITMSG` unconditionally,
+        # which is the wrong file for the one job it exists to do: git
+        # writes the message under composition to a temp path and hands it
+        # to the hook as `$1`, and `COMMIT_EDITMSG` still holds the
+        # *previous* commit's message until the commit completes. So a hook
+        # wired as documented would have checked the last message on every
+        # commit -- passing the new one and failing on text nobody could
+        # still edit. #1035.
+        #
+        # The no-argument form keeps reading `COMMIT_EDITMSG`, because that
+        # is what a human running this by hand after writing a message
+        # means, and it is how this was used before there was a hook.
+        where = [a for a in sys.argv[1:]
+                 if not a.startswith("--") and a != "--staged"]
+        path = pathlib.Path(where[0]) if where else (
+            ROOT / ".git" / "COMMIT_EDITMSG")
+        if not path.exists():
+            print(f"{path}: no such message file", file=sys.stderr)
+            return 1
+        # A message's comment lines are stripped by git before the commit
+        # lands, so a name inside one is not published. Dropping them here
+        # keeps the gate from failing on the instructions git itself adds.
+        text = "\n".join(
+            line for line in path.read_text().splitlines()
+            if not line.startswith("#")
+        )
         found = scan(text)
         for _name, ref in found:
-            print(f"  the staged message names {ref}")
-        print(f"\n{len(found)} name(s) in the staged commit message")
+            print(f"  the message names {ref}")
+        print(f"\n{len(found)} name(s) in {path.name}")
         return 1 if found else 0
 
     log = subprocess.run(
@@ -2419,7 +2444,14 @@ def main() -> int:
         return modules()
     if "--specs" in sys.argv:
         return specs()
-    if "--history" in sys.argv:
+    # **`--staged` implies `--history`, because otherwise it silently does
+    # something else.** `--staged` lives inside `history()`, and the
+    # documented invocation is `--history --staged` -- so a bare
+    # `leaks.py --staged` fell through to the tree-wide walk and reported
+    # "no printed names in tracked files", which looks exactly like a
+    # message passing the gate. Five commit messages were "checked" that
+    # way in one session; none of them was read. #1035.
+    if "--history" in sys.argv or "--staged" in sys.argv:
         return history()
     names = localisation()
     if not names:
