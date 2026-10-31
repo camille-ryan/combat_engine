@@ -83,9 +83,34 @@ LOG="logs/nightly-${STAMP}.log"
 #     window has already been missed twice and catching up matters more than
 #     the inconvenience.
 #
-# "The last real sweep" is the newest dated log whose first word is not
-# SKIPPED -- a skip is not a verdict, so a run of skips must not read as
-# recency. A `--fast` smoke test passes this gate unconditionally.
+# **"The last real sweep" is the newest dated log that reached a verdict**,
+# and the test is the trailing `clean at` / `RED at` line rather than the
+# header. A skip is not a verdict, so a run of skips must not read as
+# recency -- and neither must the two other ways a run ends without one.
+# A `--fast` smoke test passes this gate unconditionally.
+#
+# This used to read the log's **first word** and skip `SKIPPED|MOVED`, which
+# was wrong twice over and both ways suppressed the net for 20 hours on a
+# night that had certified nothing:
+#
+#   * **a killed or crashed run** keeps the ordinary `nightly wide sweep`
+#     header, so it counted. Live instance: 2026-10-31T0258 was voided by the
+#     tree moving under it, killed at 6 of 27 instruments, and reads as "last
+#     sweep 2h ago" -- while `check.py`, which looks for the verdict,
+#     correctly reported the last real one as 10-30. The two disagreed, and
+#     only the pessimistic one was visible.
+#   * **the `MOVED` arm could never fire.** MOVED is *appended* at the tail
+#     43 minutes in -- `_moved`'s own docstring says so -- so it is never a
+#     first word. Measured across every log on record: 13 `nightly` headers,
+#     16 `SKIPPED`, **0 `MOVED`**, with one genuine MOVED run
+#     (2026-10-28T0118) counted as recency. That contradicts the treatment
+#     stated 250 lines below, where MOVED is deliberately *"reported like
+#     SKIPPED rather than like RED"* for #543's reason.
+#
+# A MOVED run exits before the verdict line is written, so one test now
+# covers all three cases instead of enumerating headers -- which is the same
+# lesson as reading a stamp the producer wrote rather than inferring freshness
+# from the file.
 #
 # **A not-due exit writes no dated log**, because 23 of them a day is the
 # noise `--history` exists to avoid -- but it does touch a heartbeat, so
@@ -94,10 +119,10 @@ LOG="logs/nightly-${STAMP}.log"
 if [ "${1:-}" != "--fast" ]; then
     LAST=0
     for f in $(ls -t logs/nightly-2*.log 2>/dev/null); do
-        case "$(head -1 "$f" | awk '{print $1}')" in
-            SKIPPED|MOVED) continue ;;
-            *) LAST=$(stat -f %m "$f" 2>/dev/null || echo 0); break ;;
-        esac
+        if grep -qE '^(clean at|RED at) ' "$f" 2>/dev/null; then
+            LAST=$(stat -f %m "$f" 2>/dev/null || echo 0)
+            break
+        fi
     done
     NOW=$(date +%s)
     AGE=$(( (NOW - LAST) / 3600 ))
