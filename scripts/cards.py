@@ -387,7 +387,42 @@ def _card_usage(spec: str) -> tuple[str, int | None] | None:
     head = spec[: body.start()] if body else spec
     # A long head with no label is a card whose whole text is one sentence; the
     # usage is in its opening clause, not three lines down.
-    head = head[:90]
+    #
+    # **The opening parenthetical is taken whole, however long it is**, and the
+    # 90-character window applies only to a head that does not open with one.
+    # The usage is printed *inside* that bracket, so a fixed cut could put it
+    # out of reach -- and did: `m476a2` prints its usage at the end of an
+    # 87-character parenthetical, and #1027 replacing a 5-character ref inside
+    # it with a 12-character token pushed `at-will` past the cut. The card then
+    # read as having **no usage at all**, the header had nothing to disagree
+    # with, and this instrument reported its waiver as "no longer needed" --
+    # a check that had silently stopped firing, announcing itself as a fix.
+    #
+    # So the bound is now the card's own structure rather than a count of
+    # characters, which is what makes it independent of how long a ref is. A
+    # usage read that moves when a ref is renamed was not reading the card.
+    # **The LARGER of the two bounds, because there are two card dialects and
+    # either bound alone loses one of them.** Measured, four rows:
+    #
+    #   `( <a long trigger clause>; at-will)`     the usage is INSIDE the
+    #   `(while mounted by ...; at-will)`         bracket, past 90 chars
+    #
+    #   `(weapon) At-Will (3/encounter)`          the usage FOLLOWS a short
+    #   `(charm) Recharge when no enemy ...`      keyword bracket
+    #
+    # Taking the bracket whole reads the first pair and **cuts the second
+    # pair's usage off entirely**; taking 90 characters does the reverse. The
+    # first draft of this fix did the former and traded `m302a2` and
+    # `m4962a3` away for `m476a2` and `m3069a3` -- a lateral move that reads
+    # as progress because the headline count improves.
+    bound = 90
+    if head.lstrip().startswith("("):
+        lead = head.lstrip()
+        close = lead.find(")")
+        if close != -1:
+            bound = max(bound, close + 1)
+        head = lead
+    head = head[:bound]
     found = _earliest(head, _USAGES)
     if not found:
         return None
