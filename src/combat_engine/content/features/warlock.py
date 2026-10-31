@@ -40,6 +40,7 @@ from typing import Any
 
 from combat_engine.content.features.builds import on_leg
 from combat_engine.content.features.strikers import (
+    PRIME_SHOT_BONUS,
     extra_damage,
     nearest_to_target,
 )
@@ -61,6 +62,7 @@ from combat_engine.engine import (
     Cast,
     DamageType,
     Dropped,
+    Hit,
     Keyword,
     Ranged,
     SavingThrow,
@@ -476,6 +478,77 @@ def warlock_f1c10(c: Cast) -> None:
     c.instead_of(BOON, payout)
 
 
+def _vestige_augment(c: Cast, victim: int) -> None:
+    """The extra effect `cf:warlock-f1c11` gains from the active remnant.
+
+    The card prints one Augment line per primary remnant and a third line
+    sending the reader elsewhere for the rest:
+
+        cf:warlock-f1c12s0  one ally who hits the target before the end of
+                            your next turn can roll a saving throw
+        cf:warlock-f1c12s1  you gain your cf:warlock-f2 bonus against the
+                            target until the end of your next turn
+        other vestige       see the entry on the daily power that granted
+                            access to the vestige
+
+    **Which clause belongs to which remnant is read off the source, not
+    guessed, and three things agree.** The leg's own spec names its two
+    primary remnants in order; `cf:warlock-f1c12` labels its two boon
+    clauses in that same order, which is where `_PRIMARY_REMNANTS` comes
+    from; and the *subject* matches independently -- the first clause of
+    each pair is about an ally and the second of each is about
+    `cf:warlock-f2`. Order alone would have been one coincidence away from
+    wrong.
+
+    **On a hit, which the leg states and this card does not.** The at-will
+    prints its Augment lines with no `Hit:` prefix, so they read as
+    standing effects; the pact says *"you gain an additional effect,
+    referred to as an augment, associated with your active vestige **when
+    you make a successful attack with this power**"*. That settles it, and
+    it is why this is called from inside the hit branch rather than at the
+    top of the body.
+
+    **The second clause carries no gate, where `cf:warlock-f1c12`'s does,
+    and the difference is the printed verb.** The boon says the bonus
+    *"increases to +3"* -- an operation on a standing bonus, so it keeps
+    `cf:warlock-f2`'s own "no ally nearer" condition. This one says you
+    *gain* that bonus against the target: a grant, scoped to one creature,
+    and conditioning it would make the augment worth nothing to a warlock
+    who already has the feature it names. The amount is
+    `PRIME_SHOT_BONUS` rather than a literal, so the two cannot drift.
+
+    **The third line is not written and wants no symbol.** It defers to the
+    granting power's own entry, and the only such power in the imported
+    tier is `f2035`, which is still marked -- so the clause has nothing to
+    defer to yet rather than a mechanism missing. `#1034` carries it.
+    """
+    active = c.active_vestige()
+    if active == _PRIMARY_REMNANTS[0]:
+        mine = set(c.allies())
+
+        def granted(ev: Any) -> None:
+            # "One ally **who hits the target**": the ally is identified by
+            # the blow, not chosen, so there is nothing to `c.choose`.
+            if ev.target != victim or ev.attacker not in mine:
+                return
+            c.save(on=ev.attacker)
+
+        # `once=True` is the printed "one ally", and it is measured by
+        # whether the handler *did* something -- so an ally hitting
+        # somebody else, or one with nothing to shake off, does not spend
+        # it on a creature the clause never helped.
+        c.watch(Hit, granted, until=When.EONT, on=c.me, once=True,
+                label=c.ref)
+    elif active == _PRIMARY_REMNANTS[1]:
+        c.bonus("attack", PRIME_SHOT_BONUS, on=c.me, until=When.EONT,
+                kind="untyped",
+                # Scoped to this creature and to ranged attacks, which is
+                # what "your cf:warlock-f2 bonus against the target" says:
+                # that feature's bonus is a ranged one.
+                when=lambda ctx: (ctx.get("target") == victim
+                                  and bool(ctx.get("ranged"))))
+
+
 @power(
     "cf:warlock-f1c11",
     level=1,
@@ -486,7 +559,7 @@ def warlock_f1c10(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(CON, vs=WILL),
-    dropped=("c.curse_damage()", "c.active_vestige()"),
+    dropped=("c.curse_damage()",),
 )
 def warlock_f1c11(c: Cast) -> None:
     """The one at-will that moves the curse around: it lands on the target
@@ -498,16 +571,20 @@ def warlock_f1c11(c: Cast) -> None:
     state -- so the rider `cf:warlock-f4` arms is armed here under the same
     label, which is what a curse from any second source needs.
 
-    Two clauses are dropped. A creature already cursed takes the curse's
-    extra damage instead of the target, which wants that damage payable on
-    demand rather than on the next hit; and the remnant the warlock is
-    bargaining with adds a rider of its own to this card, which wants the
-    active one to be readable.
+    **The remnant's augment is written** -- `_vestige_augment` above, which
+    carries the reading of which clause belongs to which remnant and why it
+    lands on a hit. One clause is still dropped: a creature already cursed
+    takes the curse's extra damage *instead of* the target, which wants
+    that damage payable on demand rather than on the next hit.
     """
     victim = c.target
     if not c.strike() or victim is None:
         return
     c.damage("1d6", c.con_mod, dtype=DamageType.PSYCHIC)
+    # **Before the curse-placement block, which can return early.** The
+    # augment is owed to a successful attack, and a hit that finds nobody
+    # left to curse is still a successful attack.
+    _vestige_augment(c, victim)
     near = [victim, *(e for e in c.within(3, of=victim, side="enemy") if e != victim)]
     pool = sorted(e for e in near if not c.cursed(on=e))
     pick = c.choose(pool, f"{c.ref}: who the curse settles on") if pool else None

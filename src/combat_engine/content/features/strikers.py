@@ -255,6 +255,15 @@ def extra_damage(
     c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=label)
 
 
+#: The printed size of the shared ranged bonus. A constant for the same
+#: reason `nearest_to_target` is a function and not a copied closure: a
+#: **third** reader wants it now. `cf:warlock-f1c11`'s augment prints *"you
+#: gain your cf:warlock-f2 bonus against the target"*, which is this number
+#: and not a number of its own, so the two must move together or the card
+#: would grant a bonus its own feature does not have.
+PRIME_SHOT_BONUS = 1
+
+
 def nearest_to_target(c: Cast):  # noqa: ANN201
     """"No ally of yours stands nearer to that target than you do."
 
@@ -304,8 +313,8 @@ def prime_shot(c: Cast) -> None:
     per style each of the two rows states its own half in `requires=` --
     which is the printed sentence rather than a bucket standing in for it.
     """
-    c.bonus("attack", 1, until=When.ENCOUNTER, on=c.me, kind="untyped",
-            when=nearest_to_target(c))
+    c.bonus("attack", PRIME_SHOT_BONUS, until=When.ENCOUNTER, on=c.me,
+            kind="untyped", when=nearest_to_target(c))
 
 
 _TOOK_THE_TACTIC = on_leg("cutthroat")

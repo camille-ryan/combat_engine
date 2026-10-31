@@ -51401,6 +51401,361 @@ def a_prerequisite_asks_about_the_card_not_one_of_its_refs(out: Result) -> None:
              "and the prerequisite is NOT met for them, so the reader is "
              "still a gate rather than True for everybody")
 
+def the_at_will_gains_the_active_remnants_augment(out: Result) -> None:
+    """`cf:warlock-f1c11` gains the augment its active remnant prints. #1034.
+
+    Three printed Augment lines, one per remnant plus a pointer:
+
+        cf:warlock-f1c12s0  one ally who hits the target before the end of
+                            your next turn can roll a saving throw
+        cf:warlock-f1c12s1  you gain your cf:warlock-f2 bonus against the
+                            target until the end of your next turn
+        other vestige       see the granting daily power's own entry
+
+    **On a hit, which only the leg says.** The at-will prints its Augment
+    lines with no `Hit:` prefix, so they read as standing effects; the pact
+    leg says *"you gain an additional effect ... associated with your
+    active vestige **when you make a successful attack with this
+    power**"*. The die is loaded to 20 for that reason and the rule asserts
+    the hit landed before reading anything.
+
+    **The sharpest assertion is that the second clause has NO gate.**
+    `cf:warlock-f1c12`'s remnant-1 clause raises the same bonus and keeps
+    `cf:warlock-f2`'s "no ally stands nearer" condition, because its
+    printed verb is *increases to*. This one says you *gain* that bonus
+    against the target -- so it must pay with an ally standing nearer, and
+    a reader who copied the boon's gate across would be wrong in a way
+    nothing else here would catch. An ally is walked onto the foe's own
+    doorstep to force it.
+    """
+    from combat_engine.content.features.strikers import PRIME_SHOT_BONUS
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit, SavingThrow
+    from combat_engine.engine.query import alive, distance_between
+
+    REMNANTS = ("cf:warlock-f1c12s0", "cf:warlock-f1c12s1")
+    REF = "cf:warlock-f1c11"
+    #: **19, not 20, and the difference is the whole first clause.** A
+    #: natural 20 is a critical, which at this level killed the target
+    #: outright -- so the ally had nobody left to hit, the saving throw
+    #: never happened, and the clause read as broken for three rounds of
+    #: debugging. 19 still beats every defence on this board.
+    HITS_NO_CRIT = 19
+
+    def posed(active: str):  # noqa: ANN202
+        world, me, _ = _board("cf:warlock-f1s6", 1)
+        c = Cast(world=world, me=me, ref="probe")
+        c.bargain(active)
+        return world, me, c
+
+    def stand_beside(world, who: int, target: int) -> bool:  # noqa: ANN001
+        """Put `who` in a free square next to `target`. True if it landed.
+
+        **Lift, move, re-index** -- `Position.square` alone leaves `Grid`'s
+        occupant index naming the old square, which is the shape that has
+        emptied a control here before. And the square has to be *free*: the
+        audit board is crowded, so the first neighbour tried is usually
+        occupied and a silent failure leaves the ally out of reach with
+        every assertion below reading zero.
+        """
+        there = world.need(target, Position).square
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
+                       (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            beside = (there[0] + dx, there[1] + dy)
+            if not world.grid.inside(beside) or not world.grid.passable(beside):
+                continue
+            if world.grid.occupant(beside) not in (None, who):
+                continue
+            world.grid.lift(who)
+            world.need(who, Position).square = beside
+            world.grid.place(who, frozenset({beside}))
+            return True
+        return False
+
+    def a_foe(c, world, me):  # noqa: ANN001, ANN202
+        """Enemies that are actually on the grid.
+
+        **`Position` is asked for**, because a creature off the grid has no
+        distance and the "ally stands nearer" setup below would compare
+        against nothing. `Cast.enemies` is the side question; standing
+        somewhere is the other half.
+        """
+        return [e for e in c.enemies()
+                if e != me and world.get(e, Position) is not None]
+
+    # -- remnant 0: an ally who hits the target gets a saving throw -------
+    world, me, c = posed(REMNANTS[0])
+    out.that(c.active_vestige() == REMNANTS[0],
+             "the first remnant is active -- the premise of every read below")
+    held = world.get(me, Powers)
+    out.that(held is not None and REF in held.known,
+             "the leg granted the at-will, so there is a card to augment")
+
+    foes = a_foe(c, world, me)
+    mates = [a for a in c.allies() if a != me]
+    out.that(len(foes) >= 2,
+             "the board has two enemies -- one to hit and one for the"
+             " control, without which 'against the target' is unprovable",
+             f"{len(foes)} enemies")
+    out.that(bool(mates), "and an ally to do the hitting",
+             f"{len(mates)} allies")
+    if len(foes) < 2 or not mates:
+        out.skip("the board would not field two enemies and an ally")
+        return
+    # `foes[1]` is not taken here: the "hits somebody else" control runs on
+    # its own board below, so the second enemy on *this* board is only
+    # needed to prove the board can field one.
+    victim, mate = foes[0], mates[0]
+
+    # The ally needs something to shake off, or `c.save` finds no save-ends
+    # effect, rolls nothing, and the clause looks like a rule that never
+    # applies. Slowed rather than dazed: a dazed ally may not be able to
+    # swing, which would empty the control rather than test it.
+    #
+    # **TWO of them, under different labels, and that is what makes the
+    # once-only check bite.** With one, the first throw succeeds on a loaded
+    # 19 and *removes the only thing there was to save against* -- so a
+    # second hit grants nothing whether the watch is once-only or not, and
+    # the plant that turns `once=True` into `once=False` stayed green. Two
+    # effects leave something for a second throw to find, so the count can
+    # tell a spent watch from a live one.
+    # **On every ally, not just the swinger, and that was the second
+    # vacuity here.** The clause saves `ev.attacker`, so the once-only check
+    # below -- which has a *different* ally land the second hit -- was asking
+    # a creature that had nothing to save against. It read one throw either
+    # way and the `once=False` plant stayed green twice.
+    savers = [a for a in c.allies() if a != me]
+    for who in savers:
+        Cast(world=world, me=me, ref="probe-slow").slowed(
+            on=who, until=When.SAVE_ENDS)
+        Cast(world=world, me=me, ref="probe-weak").weakened(
+            on=who, until=When.SAVE_ENDS)
+    out.that(all(len([e for e in world.effects.of(a)
+                      if e.when == When.SAVE_ENDS]) >= 2 for a in savers),
+             "every ally carries two save-ends effects -- two because the"
+             " first throw succeeds on a loaded 19 and removes what it saved"
+             " against, so with one there is nothing for a second throw to"
+             " find and the once-only check cannot fail",
+             f"{[len([e for e in world.effects.of(a)
+                      if e.when == When.SAVE_ENDS]) for a in savers]}")
+
+    world.rng.loaded = HITS_NO_CRIT          # the augment is owed to a *successful* attack
+    before_saves = len([e for e in world.bus.log if isinstance(e, SavingThrow)])
+    use(world, me, REF, targets=[victim], spend=False)
+    hits = [e for e in world.bus.log
+            if isinstance(e, Hit) and e.attacker == me]
+    out.that(bool(hits),
+             "the attack hit, so the augment is owed at all -- a miss makes"
+             " every read below vacuous",
+             f"{len(hits)} hits by the caster")
+    # **And the target has to survive it**, which is the setup assertion
+    # that would have found the critical above in one run instead of three.
+    out.that(alive(world, victim),
+             "and the target survived it, so there is somebody for the ally"
+             " to hit -- a dead target empties the clause silently",
+             f"alive: {alive(world, victim)}")
+
+    def ally_hits(at: int, who: int | None = None) -> bool:
+        """Have the ally hit `at` with one of its own attack rows.
+
+        **Reports whether a `Hit` was announced, not whether a call
+        returned True**, and both of those cost a wrong diagnosis here.
+        `Cast.basic` returns False *before it rolls* when the swinger is not
+        adjacent, so the first draft never attacked at all and read
+        `0 -> 0`. Standing the ally next to the target fixed that and
+        `basic` then returned **True while announcing no attack whatsoever**
+        -- `PowerUsed` and `PowerResolved` with no `AttackDeclared`,
+        `AttackRolled` or `Hit` between them, because this chassis carries
+        an implement and has no weapon to swing. A truthy return meant "the
+        row was used".
+
+        So the ally uses a declared attack row of its own instead, through
+        `dsl.use` like any other attack, and the only thing believed is the
+        event. Several are tried because reach differs between them.
+        """
+        swinger = mate if who is None else who
+        if not stand_beside(world, swinger, at):
+            return False
+        known = world.get(swinger, Powers)
+        rows = [r for r in (known.known if known else ())
+                if r in REGISTRY and REGISTRY[r].attack is not None]
+        for ref in rows:
+            before = len([e for e in world.bus.log
+                          if isinstance(e, Hit) and e.attacker == swinger
+                          and e.target == at])
+            use(world, swinger, ref, targets=[at], spend=False)
+            now = len([e for e in world.bus.log
+                       if isinstance(e, Hit) and e.attacker == swinger
+                       and e.target == at])
+            if now > before:
+                return True
+        return False
+
+    out.that(ally_hits(victim), "the ally can be made to hit the target")
+    after = len([e for e in world.bus.log if isinstance(e, SavingThrow)])
+    out.that(after > before_saves,
+             "and an ally who hits the target gets a saving throw",
+             f"{before_saves} -> {after} saving throws")
+
+    # **"One ally" -- and the second hit comes from a DIFFERENT ally**, which
+    # is both the stronger reading of the printed line and the only one this
+    # board can pose. The same ally swinging twice ran out of attack rows
+    # that could reach, so that check failed on the board rather than on the
+    # rule; a second ally also tests that the limit is one *ally*, not one
+    # hit each.
+    second = [a for a in c.allies() if a not in (me, mate)]
+    # **The target is dead by now, which is why this was a skip.** The
+    # caster's attack plus the first ally's dropped it, so the second ally
+    # had nothing to swing at and the limit went unproven. Standing it back
+    # up is a harness setup step, not a rules claim -- the clause is about
+    # who hits, and the target's hit points are incidental to it.
+    hp = world.get(victim, Health)
+    if hp is not None:
+        hp.hp = hp.max_hp
+    out.that(hp is not None and alive(world, victim),
+             "the target is stood back up for the second ally -- it was"
+             " dropped by the first hit, and a dead target is why this"
+             " check could not be posed at all",
+             f"hp {getattr(hp, 'hp', None)}/{getattr(hp, 'max_hp', None)}")
+    if not second:
+        out.skip("the board fielded only one ally, so 'one ally' is"
+                 " unposeable here")
+    elif not ally_hits(victim, second[0]):
+        out.skip("the second ally could not be made to hit the target")
+    else:
+        out.that(len([e for e in world.bus.log if isinstance(e, SavingThrow)])
+                 == after,
+                 "a second ally hitting the target grants no further throw --"
+                 " the printed 'one ally' is the watch ending, not a flag,"
+                 " and not one throw per ally",
+                 f"{after} -> "
+                 f"{len([e for e in world.bus.log if isinstance(e, SavingThrow)])}")
+
+    # -- the control, on its OWN board -----------------------------------
+    # **Not the same board, and sharing one cost a wrong diagnosis.** Run
+    # first on the board above, the control's own attacks left the ally
+    # standing somewhere else and had spent the reach the next swing wanted,
+    # so the positive case then failed and read as the clause being broken.
+    # The two questions are independent, so they get independent worlds --
+    # which is `posed()`'s whole point and the sibling rule's shape.
+    worldB, meB, cB = posed(REMNANTS[0])
+    foesB = a_foe(cB, worldB, meB)
+    matesB = [a for a in cB.allies() if a != meB]
+    if len(foesB) < 2 or not matesB:
+        out.skip("the control board would not field two enemies and an ally")
+        return
+    victimB, bystanderB, mateB = foesB[0], foesB[1], matesB[0]
+    cB.slowed(on=mateB, until=When.SAVE_ENDS)
+    worldB.rng.loaded = HITS_NO_CRIT
+    saves_before_B = len([e for e in worldB.bus.log
+                          if isinstance(e, SavingThrow)])
+    use(worldB, meB, REF, targets=[victimB], spend=False)
+
+    def ally_hits_B(at: int) -> bool:
+        if not stand_beside(worldB, mateB, at):
+            return False
+        known = worldB.get(mateB, Powers)
+        rows = [r for r in (known.known if known else ())
+                if r in REGISTRY and REGISTRY[r].attack is not None
+                # **Single-target rows only.** A close burst aimed at the
+                # bystander also catches the real target standing nearby,
+                # which would pay the clause and make this control report
+                # the opposite of what it means.
+                and "burst" not in str(REGISTRY[r].reach).lower()]
+        for ref in rows:
+            before = len([e for e in worldB.bus.log
+                          if isinstance(e, Hit) and e.attacker == mateB
+                          and e.target == at])
+            use(worldB, mateB, ref, targets=[at], spend=False)
+            now = len([e for e in worldB.bus.log
+                       if isinstance(e, Hit) and e.attacker == mateB
+                       and e.target == at])
+            if now > before:
+                return True
+        return False
+
+    out.that(ally_hits_B(bystanderB),
+             "on a fresh board the ally can hit the OTHER enemy -- a swing"
+             " that never happened makes the control empty rather than"
+             " negative, which is how this read 0 -> 0 twice")
+    out.that(len([e for e in worldB.bus.log if isinstance(e, SavingThrow)])
+             == saves_before_B,
+             "and hitting a different enemy grants no saving throw -- the"
+             " card says 'who hits the target'",
+             f"{saves_before_B} -> "
+             f"{len([e for e in worldB.bus.log if isinstance(e, SavingThrow)])}")
+
+    # -- remnant 1: the ranged bonus, scoped, and ungated ----------------
+    world2, me2, c2 = posed(REMNANTS[1])
+    foes2 = a_foe(c2, world2, me2)
+    mates2 = [a for a in c2.allies() if a != me2]
+    if len(foes2) < 2 or not mates2:
+        out.skip("the second board would not field two enemies and an ally")
+        return
+    victim2, bystander2, mate2 = foes2[0], foes2[1], mates2[0]
+
+    def atk(target: int) -> int:
+        return c2.total("attack", me2,
+                        {"actor": me2, "target": target, "ranged": True})
+
+    base_v, base_b = atk(victim2), atk(bystander2)
+    world2.rng.loaded = HITS_NO_CRIT
+    use(world2, me2, REF, targets=[victim2], spend=False)
+
+    out.that(atk(victim2) == base_v + PRIME_SHOT_BONUS,
+             f"remnant 1 gives +{PRIME_SHOT_BONUS} to ranged attacks against"
+             f" the target -- the feature's own number, not one of its own",
+             f"{base_v} -> {atk(victim2)}")
+    out.that(atk(bystander2) == base_b,
+             "and nothing against another creature -- 'against the target'"
+             " is a scope, and an unscoped bonus would pass the check above",
+             f"{base_b} -> {atk(bystander2)}")
+
+    # **The gate the boon has and this does not.** Stand the ally right on
+    # the target so `nearest_to_target` is False, and the bonus must still
+    # pay: the printed verb here is *gain*, not *increases to*.
+    out.that(stand_beside(world2, mate2, victim2),
+             "the ally can be stood next to the target -- the setup for the"
+             " check below, and a move that silently failed would make it"
+             " agree with itself")
+    out.that(distance_between(world2, mate2, victim2)
+             <= distance_between(world2, me2, victim2),
+             "the ally now stands at least as near the target as the caster"
+             " -- the setup for the check below, and a move that silently"
+             " failed would make it agree with itself",
+             f"ally {distance_between(world2, mate2, victim2)}"
+             f" vs caster {distance_between(world2, me2, victim2)}")
+    out.that(atk(victim2) == base_v + PRIME_SHOT_BONUS,
+             "and the augment still pays with an ally nearer: the card says"
+             " you *gain* the bonus, where cf:warlock-f1c12s1 says it"
+             " *increases*, which is why that one keeps the feature's gate"
+             " and this one must not",
+             f"{atk(victim2)}")
+
+    # -- no remnant: nothing is laid -------------------------------------
+    world3, me3, _ = _board(REF, 1)
+    c3 = Cast(world=world3, me=me3, ref="probe")
+    foes3 = a_foe(c3, world3, me3)
+    if not foes3:
+        out.skip("the control board fielded no enemy")
+        return
+    out.that(not c3.active_vestige(),
+             "the control warlock is on no vestige pact, so no remnant is"
+             " active -- otherwise this board cannot answer",
+             f"active: {c3.active_vestige()!r}")
+    base3 = c3.total("attack", me3,
+                     {"actor": me3, "target": foes3[0], "ranged": True})
+    world3.rng.loaded = HITS_NO_CRIT
+    use(world3, me3, REF, targets=[foes3[0]], spend=False)
+    out.that(c3.total("attack", me3,
+                      {"actor": me3, "target": foes3[0], "ranged": True})
+             == base3,
+             "and gains no augment -- the clause is keyed to a remnant, so a"
+             " warlock without one must get neither half")
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -52775,6 +53130,10 @@ DRIVERS = {
     "card_prerequisite": (
         a_prerequisite_asks_about_the_card_not_one_of_its_refs,
         "a prerequisite asks about the card, not one of its refs (#1045)",
+    ),
+    "vestige_augment": (
+        the_at_will_gains_the_active_remnants_augment,
+        "the at-will gains the active remnant's augment (#1034)",
     ),
 }
 
