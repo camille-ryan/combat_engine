@@ -237,6 +237,48 @@ class Campaign:
             return self.control[slot]
         return "human"
 
+    def bury(self) -> list[str]:
+        """Take the dead out of the party, by name. #923.
+
+        `Party.bury` drops the sheets and hands back the slots they held.
+        The work here is the other three lists, which run **parallel to
+        `sheets` by index** -- `personas`, `control` and `formation` -- so
+        dropping a sheet alone would hand a dead character's name, who is
+        playing them and their marching position to whoever was behind them.
+        Measured as a real hazard rather than a theoretical one: `persona`
+        and `controls` both index straight into their list by slot.
+
+        **The names are read before the removal**, because afterwards the
+        slot that described somebody describes somebody else.
+
+        **And the slots come from `Party`, never from a second copy of the
+        test here.** The first draft computed its own `down` list, which a
+        plant caught by staying green: changing `Party.bury`'s test left
+        every assertion passing, because this short-circuited on its own
+        answer and never reached it. Two readings of one rule is how the
+        sheets and the parallel lists come to drop different slots. Same
+        fault and same fix as #1014.
+
+        Returns who left, so the caller can say so. A character vanishing
+        from the party in silence is the failure mode this whole component
+        is warned about.
+        """
+        doomed = self.party.doomed()
+        if not doomed:
+            return []
+        names = [self.persona(i).name or self.party.sheets[i].cls.title()
+                 for i in doomed]
+        # What `Party.bury` *actually* removed, rather than what this
+        # predicted it would -- so the two can never disagree.
+        gone = self.party.bury()
+        for parallel in (self.personas, self.control, self.formation):
+            # Back to front, for the reason `Party.bury` gives: a removal
+            # shifts every index after it.
+            for i in reversed(gone):
+                if i < len(parallel):
+                    del parallel[i]
+        return names
+
     @property
     def finished(self) -> bool:
         return not self.scene

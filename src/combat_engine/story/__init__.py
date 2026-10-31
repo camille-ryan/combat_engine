@@ -28,6 +28,7 @@ exactly one thing that knows how to field one.
 
 from __future__ import annotations
 
+import collections
 from dataclasses import dataclass, field
 from functools import lru_cache
 from random import Random
@@ -69,6 +70,12 @@ class Fielded:
     #: Which shape of encounter this is -- see `PARADIGMS`. `"named"` when the
     #: caller named the monsters outright, which `replay.py` does.
     paradigm: str = ""
+    #: Anybody fielded above the total their sheet records -- which should be
+    #: nobody, and is the thing #923 was. Empty on every ordinary board, so
+    #: a caller printing it unconditionally prints nothing. A clamp is
+    #: printed: this component's rule, and the reason that bug survived a
+    #: month is that this one was not.
+    clamped: list[str] = field(default_factory=list)
 
 
 # -- what survives a fight --------------------------------------------------
@@ -217,6 +224,22 @@ class Sheet:
             left -= 1
         self.surges = left
 
+    def stabilise(self) -> None:
+        """Bring a dying character to 1, which a rest does when surges cannot.
+
+        **Dying only, never dead.** `down` is the death floor and a sheet
+        past it is removed from the party by `bury` rather than stood up --
+        the two answers Camille gave are different answers and collapsing
+        them would resurrect somebody. #923.
+
+        `hp is None` means untouched and is left alone: a party that has not
+        fought must land exactly as it did before any of this existed, which
+        is what keeps the replay fixtures pinning something.
+        """
+        if self.hp is None or self.down or self.hp > 0:
+            return
+        self.hp = 1
+
     @property
     def character(self) -> chargen.Character:
         """The build request this sheet is a record of."""
@@ -288,6 +311,51 @@ class Party:
             ))
         return cls(sheets=sheets)
 
+    def doomed(self) -> list[int]:
+        """Which slots hold a character the rules call dead.
+
+        **One definition, read by both `bury`s.** `Campaign.bury` needs the
+        slots *before* the removal, to read the names off while they still
+        describe who they describe -- and it first computed them itself,
+        which is two copies of one rule. Found by a plant: changing the test
+        in `Party.bury` left every assertion green, because `Campaign.bury`
+        short-circuited on its own answer and never reached it. The same
+        fault as #1014, and the same fix.
+        """
+        return [i for i, sheet in enumerate(self.sheets) if sheet.down]
+
+    def bury(self) -> list[int]:
+        """Take the dead out of the party. Returns the slots they held.
+
+        Camille's ruling, 2026-10-30, verbatim as the option read:
+
+            They leave the party
+            The character is out of the campaign. The party plays on
+            short-handed, and chargen can deal a replacement later.
+
+        **The slots are returned rather than the sheets**, because three
+        lists on `Campaign` run parallel to `sheets` by index -- `personas`,
+        `control` and `formation` -- and dropping a sheet without dropping
+        the same index from each silently hands a dead character's name and
+        marching position to whoever was behind them. `Campaign.bury` is the
+        caller that knows about those; this one is what arcade mode can
+        reach, since `api/day.py` has a `Party` and no `Campaign`.
+
+        **Dead, not dying.** `Sheet.down` is the death floor; a dying
+        character is stabilised by `rest` instead. Collapsing the two would
+        either resurrect somebody or delete somebody who could be healed.
+
+        **Called before any rest**, which is an ordering this cannot enforce
+        and the caller must keep: an extended rest sets `hp = None`, which
+        erases the very number that says somebody died.
+        """
+        gone = self.doomed()
+        # **Back to front**, or each removal shifts the indices of the ones
+        # after it and the second deletion takes the wrong sheet.
+        for i in reversed(gone):
+            del self.sheets[i]
+        return gone
+
     def rest(self, *, extended: bool = False) -> None:
         """Five minutes, or six hours.
 
@@ -305,9 +373,32 @@ class Party:
 
         Surges are spent one at a time up to full and no further, which is the
         obvious reading of "any number" for somebody who wants to keep fighting.
-        A character past `dying_at` is not healed at all: dying is not a thing
-        five minutes fixes, and quietly reviving one would make a wipe look like
-        a win.
+
+        **And a character the surges could not reach is stabilised at 1.**
+        This paragraph used to say the opposite -- *"a character past
+        `dying_at` is not healed at all: dying is not a thing five minutes
+        fixes, and quietly reviving one would make a wipe look like a win"* --
+        and it was half right. It is right about **dead**, which is what
+        `Sheet.down` and `dying_at` are: `bury` takes those sheets out of the
+        party and no rest touches them. It was wrong about **dying**, because
+        a dying character left at a negative total was then fielded at 0 by
+        `_wear`'s clamp and fought at full capability, which is a worse lie
+        than standing them up on purpose. #923.
+
+        Camille's ruling, 2026-10-30, choosing between fielding a dying
+        character down and stabilising one, verbatim as the option read:
+
+            The rest stabilises them
+            A scene boundary brings a dying character to 1 HP. No balance
+            change, every fight starts full-strength, and nothing else is
+            needed. A house rule, not the printed one.
+
+        **After `heal`, not instead of it**, which is what keeps it a no-op
+        for everything that already worked: a dying character *with* surges
+        was already healed from a negative total up to full and still is, so
+        the only case this reaches is the one the fixture actually produced --
+        dying with **no surges left**, where the rest previously bought
+        nothing and the clamp did the reviving silently.
         """
         from combat_engine.engine.dsl import get
         from combat_engine.engine.types import Usage
@@ -327,9 +418,10 @@ class Party:
                 if row is None or row.usage is not Usage.DAILY:
                     del sheet.spent[ref]
             sheet.heal()
+            sheet.stabilise()
 
 
-def _wear(world: World, eid: int, sheet: Sheet) -> None:
+def _wear(world: World, eid: int, sheet: Sheet) -> str:
     """Put a sheet's wear on a freshly built character.
 
     After `spawn` rather than instead of it, which is the whole shape of this:
@@ -339,12 +431,32 @@ def _wear(world: World, eid: int, sheet: Sheet) -> None:
     `None` means "whatever a fresh one has", so a party that has not fought
     lands exactly as it did before any of this existed -- which is what keeps
     the six replay fixtures still pinning something.
+
+    **Returns a sentence when the floor moved somebody**, and that is the
+    whole of #923's lesson rather than a nicety. `max(0, ...)` was fielding a
+    character recorded at -26 -- below the death floor -- as a conscious
+    combatant, and the reason it went unnoticed for a month is that it did it
+    in silence. `bury` and `stabilise` mean nothing recorded by a fight
+    reaches here below zero any more, so this should be unreachable; the one
+    way it is not is a module putting two fights back to back with no rest
+    between (#947), which Camille's ruling is not about. Measured: a sheet at
+    -10 with no rest is still fielded at 0, `alive` and `can_act`.
+
+    So it is printed rather than fixed here, because inventing a rest the
+    module did not write is the kind of quiet correction this component is
+    told not to make.
     """
     from combat_engine.engine.components import ActionPoints, Health, Powers
 
+    said = ""
     health = world.get(eid, Health)
     if health is not None:
         if sheet.hp is not None:
+            if sheet.hp < 0:
+                said = (
+                    f"{sheet.cls.title()} was recorded at {sheet.hp} and is "
+                    f"fielded at 0 -- no rest stood them up (#1023)."
+                )
             health.hp = max(0, min(sheet.hp, health.max_hp))
         if sheet.surges is not None:
             health.surges = max(0, min(sheet.surges, health.max_surges))
@@ -365,6 +477,7 @@ def _wear(world: World, eid: int, sheet: Sheet) -> None:
         # `powers.known` at all. Filtering it the way `spent` is filtered
         # would drop every one of them.
         powers.per_day = dict(sheet.per_day)
+    return said
 
 
 def harvest(world: World, party: Party) -> None:
@@ -455,18 +568,28 @@ def mixed(pool: list[str]) -> list[str]:
 #: budget** -- three of them at 4,000 XP and one at 6,000, against a standard 2,000.
 #: An elite is worth two standards and a solo five, so "four creatures" is a count
 #: and not a budget.
-PARADIGMS = ("standard", "leader", "elites", "solo")
+#: The shapes a random encounter is **drawn** from, which is now the
+#: printed five rather than four of our own. Camille's call, 2026-10-30,
+#: asked directly and answered yes. #951.
+#:
+#: The printed d10 rolls them at equal weight -- commander and troops,
+#: wolf pack, dragon's den, battlefield control, double line -- so `leader`
+#: and `solo` keep their places as the first and third of those, and the
+#: three that had no analogue join them.
+#:
+#: **`standard` and `elites` leave the draw, and that is the part worth
+#: knowing.** Neither is a printed template: `standard` is "a mix of roles
+#: freely" and `elites` is the only shape that fielded elite monsters at
+#: all. Both are still reachable by name through `SHAPES_BY_NAME`, so
+#: nothing can no longer be built -- but a random arcade board will not
+#: produce an elite pair any more, and that was not obvious from the ask.
+PARADIGMS = ("leader", "wolf pack", "solo", "battlefield control",
+             "double line")
 
 #: Every shape that can be **asked for** by name, which is a longer list
-#: than the one that gets **drawn**.
-#:
-#: `PARADIGMS` is the draw, and the printed templates are deliberately not
-#: in it: the book rolls five templates at equal weight, so adopting that
-#: would re-shape every arcade board and every fixture -- which owes
-#: `winrate` both ways and a re-record. The templates are reachable by
-#: name until somebody wants to pay for that. #951.
-SHAPES_BY_NAME = (*PARADIGMS, "double line", "battlefield control",
-                  "wolf pack")
+#: than the one that gets **drawn** -- it keeps `standard` and `elites`,
+#: which the printed draw does not roll. #951.
+SHAPES_BY_NAME = (*PARADIGMS, "standard", "elites")
 
 #: How many standards' worth each rank costs, from the printed maths.
 RANK_COST = {"standard": 1, "elite": 2, "solo": 5}
@@ -563,6 +686,28 @@ BAND = 3
 MOST = 12
 
 
+def commonest(rows: list[int]) -> int:
+    """The most common value in a column, which is the figure the page printed.
+
+    **Here rather than in `xp.py` so there is one definition of the rule.**
+    Two callers ask a level's `monster.xp` the same question -- `budget`,
+    for what an encounter may cost, and `xp.standard`, for what overcoming
+    one pays -- and a second copy is a second thing to keep in step. `xp.py`
+    already imports from this module, so this is the direction that needs no
+    new edge and no function-local import. #1014.
+
+    Not called `mode`: in this tree that word already means a movement mode
+    (`c.lose_mode`) and a way of playing (arcade, day, story), and a third
+    sense would read as one of those.
+
+    Returns 0 for an empty column, which every caller treats as "nothing is
+    written at this level" rather than as a figure.
+    """
+    if not rows:
+        return 0
+    return collections.Counter(rows).most_common(1)[0][0]
+
+
 @lru_cache(maxsize=1)
 def ceiling() -> int:
     """The highest level the database can actually field a standard monster at.
@@ -612,6 +757,24 @@ def budget(level: int, scale: float = 1.0) -> int:
     rule. Read off the database rather than from a table here, so it cannot
     disagree with what the monsters are actually worth.
 
+    **The commonest XP at the level, and that is a correctness fix rather
+    than a tidy-up.** This was `LIMIT 1` with no `ORDER BY`, so the figure
+    was whichever row the query plan happened to hand back. A verified
+    no-op today -- the commonest value and the first row agree at **all 13
+    levels** -- and one re-ordering away from not, because the strays are
+    already in the table:
+
+        level   commonest   a stray that is there
+            1         100   one at    25   (a quarter)
+            8         350   one at 1,750   (five times)
+           13         800   one at 1,600   (twice)
+
+    So the failure was never bounded at the 40% #1014's title names: a
+    level-8 encounter could have been fielded five times over, in silence,
+    with nothing to raise. `commonest` is shared with `xp.standard`, which
+    asks the same column the same question for what overcoming a fight
+    pays. #1014.
+
     `scale` multiplies it, which is what an adventuring day's difficulty curve
     is made of -- a soft opener and a hard finale around standard middles. It
     is a **multiple of the printed budget** and not a second notion of
@@ -624,17 +787,40 @@ def budget(level: int, scale: float = 1.0) -> int:
     # **A *standard* monster's XP**, which the rank filter is for: taking the
     # first row with an XP at all picked up a solo at 2,500 and declared the
     # budget 10,000, which fielded 48 creatures on a 16x12 board.
-    row = game().execute(
-        "SELECT xp FROM monster WHERE level = ? AND minion = 0 AND xp > 0 "
-        "AND (rank IS NULL OR rank = 'standard') LIMIT 1",
-        (min(max(level, 1), ceiling()),),
-    ).fetchone()
+    #
+    # **The commonest figure at the level, not whichever row sorted first.**
+    # This was `LIMIT 1` with no `ORDER BY`, so the answer was whatever the
+    # query plan handed back -- and the strays that would have made that
+    # wrong are in the table today. #1014.
+    #
+    # And the two guards above were guarding one failure, which a plant
+    # showed by staying green. Measured across all 13 levels:
+    #
+    #                        with the filter   without it
+    #     commonest                  same           same
+    #     LIMIT 1, level 10           500          2,500
+    #     LIMIT 1, level 13           800          4,000
+    #
+    # That 2,500 is the bug the paragraph above describes, so the rank
+    # filter was never what stood between here and a 10,000 budget --
+    # reading the column properly is. The filter **stays**, because it
+    # states which monsters the printed rule is about and a rebuild can
+    # move a distribution, but it is belt-and-braces now rather than the
+    # guard. Said here because a plant that drops it is green, and the next
+    # reader deserves to know that is expected rather than a hole.
+    rows = [
+        r[0] for r in game().execute(
+            "SELECT xp FROM monster WHERE level = ? AND minion = 0 AND xp > 0 "
+            "AND (rank IS NULL OR rank = 'standard')",
+            (min(max(level, 1), ceiling()),),
+        )
+    ]
     # **Rounded, not truncated.** `int()` on 0.75 of a 4x100 budget gives 300
     # either way, but on an odd standard XP a truncation loses a creature's
     # worth at the bottom of the band -- and `opposition` skips a candidate
     # that would break the ceiling, so a budget one point short is a monster
     # fewer rather than a rounding nicety.
-    return round((row[0] if row else 0) * SIDE * scale)
+    return round(commonest(rows) * SIDE * scale)
 
 
 def opposition(
@@ -1104,6 +1290,7 @@ def field_encounter(
     # is worth, and one of the two copies this replaces did not pass it.
     terrain.dress(world, seed, level=level, traps=traps)
 
+    clamped: list[str] = []
     if party is not None:
         # **`squares` or the column this has always used.** The default
         # keeps every replay fixture still: a fight starts from these
@@ -1116,7 +1303,8 @@ def field_encounter(
                 standing[i] if i < len(standing)
                 else (party_at[0], party_at[1] + i * SPACING),
             )
-            _wear(world, eid, sheet)
+            if (note := _wear(world, eid, sheet)):
+                clamped.append(note)
     else:
         drawn_up = line_up(
             party_at, len(pcs or PARTY), room, inward=1)
@@ -1144,7 +1332,8 @@ def field_encounter(
         pool, found_at, shape = opposition(
             level, Random(seed), paradigm=paradigm, scale=scale)
     if not pool:
-        return Fielded(world=world, enemies=[], found_at=found_at, paradigm=shape)
+        return Fielded(world=world, enemies=[], found_at=found_at,
+                       paradigm=shape, clamped=clamped)
 
     # **The paradigm decides how many, so this no longer takes `SIDE` of them.**
     # A solo is one creature and a leader-and-minions is ten, and taking four
@@ -1172,4 +1361,5 @@ def field_encounter(
 
     number_repeats(world)
     return Fielded(world=world, enemies=list(pool), found_at=found_at,
+                   clamped=clamped,
                    paradigm=shape)

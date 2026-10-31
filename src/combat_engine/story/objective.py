@@ -66,7 +66,7 @@ from dataclasses import dataclass, field
 
 from combat_engine.engine.components import Position, Side, Team
 from combat_engine.engine.ecs import World
-from combat_engine.engine.events import RoundEnd
+from combat_engine.engine.events import Moved, RoundEnd
 from combat_engine.engine.query import alive, combatants
 
 #: The objectives a scene may state.
@@ -142,7 +142,14 @@ class Objective:
     #: For `hold`: how many enemies may reach the position before the party
     #: has failed. Defaults to the party's own size at fielding time, which is
     #: the figure the source uses and the only one that scales with the table.
-    leaks: int = 0
+    #: How many foes may reach the area without breaking a `hold` --
+    #: permitted, not forbidden, which is what the verdict's "an allowed
+    #: N" has always said.
+    #:
+    #: **`None` is "the module did not say"**, which `watcher` fills from
+    #: the party's size; `0` is a module saying *not one*. Those were the
+    #: same value before, so `leaks: 0` silently became four. #1017.
+    leaks: int | None = None
     #: One step along `module.DIFFICULTY`. Both false is no change; both true
     #: is refused at load.
     harder: bool = False
@@ -267,11 +274,39 @@ class Watch:
         """
         self.began_with = len(_standing(self.world, Team.ENEMY))
         self.world.bus.on(RoundEnd, self._round)
+        # **A breach is counted when it happens, not at the next round
+        # boundary.** `RoundEnd` alone could not see one: on these boards
+        # the party usually wins inside a round or two and
+        # `Encounter.finished` ends the loop the moment a side is gone, so
+        # by the first boundary the opposition is dead and
+        # `_standing(ENEMY)` is empty. Measured: a `hold` over four
+        # different bands -- including the centre, which the opposition has
+        # to cross to reach the party -- reported **0 reached** every time.
+        # The same early-win case `survive`'s verdict already warns about,
+        # one method up.
+        self.world.bus.on(Moved, self._moved)
+        # And a foe that starts inside the area and never steps out of it
+        # is a breach too, which neither hook sees.
+        self._breach(_standing(self.world, Team.ENEMY))
+
+    def _moved(self, ev: Moved) -> None:
+        """Count a breach the instant somebody steps into the area."""
+        self._breach(_standing(self.world, Team.ENEMY))
+
+    def _breach(self, foes: list[int]) -> None:
+        """Add any foe now standing in a `hold` objective's area."""
+        aim = self.objective
+        if aim.kind != "hold":
+            return
+        squares = area(self.world, aim.position)
+        self.reached |= {
+            eid for eid in foes if _inside(self.world, eid, squares)
+        }
 
     # -- per round ----------------------------------------------------------
 
     def _round(self, ev: RoundEnd) -> None:
-        world, aim = self.world, self.objective
+        world = self.world
         self.rounds = ev.round
         foes = _standing(world, Team.ENEMY)
         # **Anybody, not everybody.** The first draft of this asked whether
@@ -285,10 +320,7 @@ class Watch:
                    if _side(world, eid) is Team.PC):
             self.anyone_down = True
 
-        if aim.kind == "hold":
-            squares = area(world, aim.position)
-            self.reached |= {eid for eid in foes if _inside(world, eid, squares)}
-
+        self._breach(foes)
         self._decide(foes)
 
     def _decide(self, foes: list[int]) -> None:
@@ -422,13 +454,23 @@ class Watch:
                                 f"{aim.rounds} rounds")
 
         if aim.kind == "hold":
-            allowed = aim.leaks
+            allowed = aim.leaks if aim.leaks is not None else 0
             through = len(self.reached)
             # The duration **or** an empty field, for the reason `survive`
             # gives. The leak count still binds either way: breaking through
             # and then dying is not holding the line.
             lasted = self.rounds >= aim.rounds or not foes
-            met = lasted and through < allowed
+            # **`<=`, because "an allowed N" is what the verdict says.**
+            # This was `<`, under which `allowed` was really "the number
+            # that breaks it" -- and that only became visible once
+            # `leaks: 0` could be expressed: nought permitted with `<`
+            # makes a hold unwinnable by anybody, since `0 < 0` is false.
+            # The words and the arithmetic now agree.
+            #
+            # It shifts the party-size default by one -- four reaching is
+            # permitted where it used to break -- and no module states a
+            # hold objective today, so nothing in `modules/` moves. #1017.
+            met = lasted and through <= allowed
             how = ("the line was clear before the time was up"
                    if lasted and not foes
                    else f"the line held {self.rounds} of {aim.rounds} rounds")
@@ -460,7 +502,7 @@ def watcher(world: World, objective: Objective | None,
     """
     if objective is None:
         return None
-    if objective.kind == "hold" and not objective.leaks:
+    if objective.kind == "hold" and objective.leaks is None:
         from dataclasses import replace
 
         objective = replace(objective, leaks=max(1, party_size))

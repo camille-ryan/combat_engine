@@ -1251,6 +1251,82 @@ story fight prints `Won in 4 rounds` and sends the blow-by-blow to a
 transcript nobody reads during play; there is a whole encounter of this
 material and none of it is narrated.
 
+## What a level is worth is read once, and asserted through both callers (#1014)
+
+`budget` asked `monster.xp` for a level with `LIMIT 1` and no `ORDER BY`, so
+its figure was whichever row the query plan handed back. `xp.standard` asked
+the same column the same question and took the **mode** — two copies of one
+rule, which is what lets them drift. `story.commonest` is the single
+definition, a layer below both: `xp.py` already imports from
+`story/__init__.py`, so this needed no new edge and no function-local import.
+
+Not called `mode`. In this tree that word already means a movement mode
+(`c.lose_mode`) and a way of playing (arcade, day, story), and a third sense
+reads as one of those.
+
+**A verified no-op**: the commonest value and the first row agree at all 13
+levels, so no board moved and the eight `replay` fixtures are identical.
+
+**The exposure was never the 40% the issue's title names**, and the strays are
+in the table today:
+
+| level | commonest | a stray that is there | |
+|---|---|---|---|
+| 1 | 100 | **25** | a quarter |
+| 8 | 350 | **1,750** | five times |
+| 13 | 800 | 1,600 | twice |
+
+### The rank filter and `LIMIT 1` were guarding one failure
+
+A plant that dropped the standard-rank filter **stayed green**, which is worth
+more than the fix. Measured across all 13 levels:
+
+```
+                       with the filter   without it
+  commonest                     same           same
+  LIMIT 1, level 10              500          2,500
+  LIMIT 1, level 13              800          4,000
+```
+
+That 2,500 is verbatim the bug `budget`'s own comment describes — a solo read
+as a standard monster, declaring a budget of 10,000. So the filter was never
+what stood between here and that number; **reading the column properly is.**
+The filter stays, because it states which monsters the printed rule is about
+and a rebuild can move a distribution, but it is belt-and-braces rather than
+the guard — and the comment says that a plant dropping it is *expected* to be
+green.
+
+### Asserting the answer cannot catch this, so the assertion is through the caller
+
+The sharpest thing here. Three plants stayed green against assertions on the
+figure — `budget` reverting to `rows[0]`, the award reverting to `rows[0]`, and
+`budget` going back to `LIMIT 1` — because **against this database every wrong
+read returns the right answer.** That is precisely why the bug sat unnoticed,
+so no assertion on the output can ever see it.
+
+So `commonest` is replaced with a recorder and the questions become: did this
+caller route through it, and **was it handed the whole column or one row?** A
+`LIMIT 1` query hands over exactly one. All three went red, as did two further
+plants that inline a second copy of the rule instead of sharing one.
+
+Two traps in writing that, both costing a red run:
+
+* **`xp.py` does `from combat_engine.story import commonest`**, so patching
+  `story.commonest` alone leaves the award reading the original and the plant
+  stays green regardless. Both names are patched.
+* **three gates each refuse a different obvious spelling of a module rebind** —
+  `ty` refuses `module.fn = other`; `ruff`'s structural walk refuses a
+  mypy-style suppression comment, which `ty` would not honour anyway; and
+  `ruff`'s B009/B010 refuse `setattr` with a *literal* attribute name. The name
+  in a variable is none of those. And the structural walk is a **text search**,
+  so the comment explaining which suppression it forbids tripped it by naming
+  one — the instrument being right rather than fussy, and the same shape as
+  every other place in this repo where explaining a rule is where it gets
+  broken.
+
+18 plants over two rounds, 17 red, 1 control green, 1 documented
+expected-green.
+
 ## The budget clamps to what the database holds, and says it did
 
 `story.budget` reads a standard monster's XP out of `game.db`, which stops
@@ -1519,6 +1595,106 @@ fires **only for a scene that states its own XP**, since a scene without
 one is already scaled through `per_head` and the rule on top would
 double-count.
 
+## The dead leave the party and the dying are stood up (#923, #927)
+
+`_wear` rebuilt a character from its class on every new board and put the
+carried wear back — but it could not put back *being down*, so it clamped:
+
+```python
+health.hp = max(0, min(sheet.hp, health.max_hp))
+```
+
+Measured through the real path, and it is a step worse than either issue
+records:
+
+```
+ sheet.hp | board hp  max  dying_at | alive  conscious  can_act
+      -26 |       0    43      -21  | True   True       True
+      -10 |       0    43      -21  | True   True       True
+```
+
+`-26` is **below the floor**. That is not a dying character revived, it is a
+**dead** one fielded as a functioning combatant — `query.alive` is
+`hp > dying_at`, `query.conscious` is `alive and not UNCONSCIOUS`, and
+`0 > -21`, so nothing in the chain notices.
+
+**Camille's two rulings, 2026-10-30, verbatim as the options read**, because
+the two states get different answers:
+
+> **The rest stabilises them.** A scene boundary brings a dying character to
+> 1 HP. No balance change, every fight starts full-strength, and nothing else
+> is needed. A house rule, not the printed one.
+
+> **They leave the party.** The character is out of the campaign. The party
+> plays on short-handed, and chargen can deal a replacement later.
+
+So the line between them is `Sheet.down`, the death floor, and collapsing the
+two would either resurrect somebody or delete somebody who could be healed.
+
+### What that cost, which is less than it looks
+
+* **`Sheet.stabilise`** brings a dying character to 1. It runs **after
+  `heal`, not instead of it** — a dying character *with* surges was already
+  healed from a negative total up to full and still is, so the only case this
+  reaches is the one the fixture produced: dying with **no surges left**,
+  where the rest bought nothing and the clamp did the reviving. Measured:
+  `-10` with 3 surges still ends at 20, unchanged.
+* **`Party.bury`** drops the dead sheets and returns the slots. On `Party`
+  rather than `Campaign` because `api/day.py` has a `Party` and no
+  `Campaign`.
+* **`Campaign.bury`** is the one that matters, and the reason is the hazard
+  rather than the removal: `personas`, `control` and `formation` run
+  **parallel to `sheets` by index**, so dropping a sheet alone hands a dead
+  character's name, controller and marching band to whoever was behind them —
+  and every count agrees either way. The assertion is ordered tuples, never a
+  length.
+* **Nothing else needed changing.** All three consequences Camille named fall
+  out of `len(party.sheets)`, which `cast_list.resolve(party_size=)`,
+  `xp.pay(heads=)` and `treasure.per_head` already read.
+
+**No `winrate` run is owed**, and that is the ruling's doing rather than
+luck: nobody is ever fielded down, a dying character comes back at 1 instead
+of at 0, and the only board that moves is one that was previously fielding a
+dead character at full strength. **#1022** — the engine having no way to put a
+creature *into* the dying or dead state except by damaging it into one — was
+filed before the ruling and is not needed by it.
+
+### The ordering is load-bearing and nothing else could check it
+
+`bury` must run **before** any rest: an extended rest sets `hp = None`, which
+erases the very number that says somebody died. So it is called in `_fight`
+immediately after `harvest` — the first moment the death is true and the last
+before anything can hide it — and `drivers.py` poses the wrong order rather
+than arguing for the right one: rest first and nobody leaves.
+
+### The one case the ruling does not reach is printed, not corrected
+
+Two fights back to back with no rest (#947) still field a dying character
+standing — measured, `-10` with no rest is still board hp 0, `alive`,
+`can_act`. The ruling is about the rest and there is no rest, so **#1023**
+carries it.
+
+What landed is that the clamp **announces itself**. `Fielded.clamped` names
+the total the sheet was recorded at and `run._fight` says it:
+
+```
+Fighter was recorded at -10 and is fielded at 0 -- no rest stood them up.
+```
+
+That is the difference between this and the month #923 survived. A clamp is
+printed — and the reason that bug lived is that this one was not.
+
+### #927 is the same chain from the other end
+
+Its body asks to check the third reading first — *"`run.py` already tests
+`sheet.hp <= 0`, so there may be an intended path"*. There is not: both sites
+are beat-loop participation, a character at or below 0 does not speak (#808)
+and is listed by `down()`. Nothing on the combat side asked at all.
+
+Its second point stands and is not fixed here: `api_smoke`'s carry check
+lives inside the per-leg loop, so a day that ends at leg 1 never compares the
+snapshots, and the gate is only reachable when the party wins leg 1.
+
 ## Seams
 
 * **`story/__init__.py` has now been edited twice**, and saying "one
@@ -1574,13 +1750,14 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
+    dead_and_dying \
     graph_edges challenge_says fight_aftermath reinforcements \
     scene_allies trap_budget room_shape templates skill_cap \
     treasure
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 50 drivers and prints 609 assertions**, and **each was
+**The command above is 51 drivers and prints 646 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -1861,7 +2038,7 @@ worth keeping:
   been to Fenn"* is filed under the person — so requiring both names in the
   span drops exactly the facts most worth having. The owner counts as named.
 
-## A challenge says what each check meant (#932, step 1 of two)
+## A challenge says what each check meant (#932)
 
 A converted challenge emitted five mechanical lines and a tally:
 
@@ -1922,6 +2099,77 @@ Posing that took two corrections:
   refusal, which makes the assertion unable to fail. **Seed 1** has the first
   use succeed, so the lose text is never true and a refusal printing it is
   visible. 39 refusals there; the plant now reddens.
+
+### The matcher needs a phrasing, which is why the beat loop is still not here
+
+`#932`'s second half is the beat loop in `_challenge`, and it is **blocked on
+the same shape of gap step 1 was**. Step 1's argument was that wiring the loop
+before the skills carried `win`/`lose` would hand the DM *"a roll to narrate
+and nothing to narrate from"*. The mirror: `Affordance.what` is, in its own
+docstring, *"the only thing the matcher compares an intent against"*, and a
+`Try` had only `skill` plus DM-facing prose.
+
+Measured through the shipped `Director.match` — never a hand-rolled prompt,
+since a reflow of identical words flips this model 5/5 the other way. Four
+intents against the converted challenge's three skills, three runs each way at
+temperature 0:
+
+```
+bare skill name        3/12 correct
+a written phrasing    12/12 correct
+```
+
+**Perfectly stable in both arms**, so these are two different answers rather
+than noise. And the failure is the dangerous one rather than a shrug — every
+single run:
+
+```
+"I grab a blanket and start beating down the flames"  -> none
+"I draw my sword and look for someone to hit"         -> athletics
+```
+
+The intent with nothing to match stretched onto a skill, and the one that
+plainly was athletics was refused. That is the matcher inventing an
+affordance, which is exactly what the enum-constrained design exists to
+prevent, and it is #801's lesson again: replaying real intents against a
+player-facing phrasing took a tavern scene from 0 of 4 to 3 of 4.
+
+So `Try.what` landed and the loop did not. With a `what`, a `Try` **is** an
+`Affordance` in every way the matcher and the DM care about, so the loop can
+reuse `play_scene` wholesale rather than growing a second one.
+
+**Two refusals, and the measurement is what earned the first.**
+
+* **A phrasing that is just the skill name is refused.** `"what":
+  "athletics"` looks filled in and performs *worse* than leaving it empty.
+  That is the shape of mistake worth refusing rather than noting. A phrasing
+  that merely *mentions* the skill is fine — the refusal is narrow.
+* **All of them or none.** A half-phrased challenge offers the matcher the
+  phrased skills and leaves the rest unreachable by any intent, silently,
+  which is a cap nobody printed.
+
+A challenge written as bare strings — which is every converted one — still
+parses, carries no `tries`, and rolls exactly as it always did.
+
+**Worth stating plainly, because `check.py` could not have caught it:**
+`--no-llm` runs the scripted matcher, which takes the affordances in order. So
+shipping the loop first would have put a quarter of declared intents on the
+wrong skill with every instrument green.
+
+### And the importer brief had gone stale against this repo's own parser
+
+`b2d63e85` retired `secondary_grants: "success"` and the brief still offered
+it — *"or `success` (it counts outright)"*. An importing agent following the
+brief would write a value `parse` refuses outright:
+
+```
+REFUSED: scene 'c': secondary_grants 'success' is not one of bonus
+```
+
+Found by reading the brief to add the `what` guidance, not by any gate.
+Nothing checks that the brief and the parser agree, which is a gap worth
+knowing about: the brief is prose in a tracked file and the parser is the
+thing it describes.
 
 ## A fight says how it went, and the next scene carries it (#943, combat half)
 
@@ -2310,18 +2558,53 @@ challenge in `modules/` uses `bonus`. Retiring it is a one-line deletion plus
 three sites in `challenge.py`; left for a decision rather than taken, because
 removing an authoring option is not a thing to do silently.
 
-## The party finds the money it is owed (#969, the monetary half)
+## The party finds the treasure it is owed (#969)
 
 No treasure was awarded anywhere: a party finished a module with the equipment
 `chargen` dealt it and nothing else.
 
-**The monetary half only, and the line is the point.** The printed system is
-ten parcels per level — four magic items at party level +1 to +4, and six
-monetary. The item half is left alone because a found item sits **above**
-`band(level)`, and `band` is exactly what monster defences are set against, so
-items off that curve owe `winrate` both ways. **Coins change no number on any
-board**, so they owe nothing — which is what makes this the half worth landing
-first.
+Ten parcels per level — **four magic items at party level +1 to +4, and six
+monetary.** Both halves are here. The monetary one landed first, on the ground
+that coins change no number on any board; the item half was held for a decision
+because a parcel sits **above** `band(level)` and `band` is exactly what monster
+defences are set against, so an item off that curve looked like it owed
+`winrate` both ways. Camille's call, 2026-10-30, was to award them.
+
+**It owes no `winrate` run, and the reason is a scoping call rather than an
+argument: a found item is carried, not worn.** `Sheet.carried` is a count of
+what happened to the party and **nothing in a fight reads it**, so the party's
+power is unchanged — all eight replay fixtures identical, which is the proof
+rather than the hope. `chargen.treasure` equips three items at `band(level)`;
+**equipping from inventory is the part that would owe the measurement**, and
+there is no action for it today. Both docstrings say so, so the next reader does
+not re-derive it.
+
+`ITEM_STEPS = (4, 3, 2, 1)`, descending, because the page lists parcel 1 as the
+best of them — and because DMG2's alternative rewards replace *"the
+highest-level magic items you would otherwise give out"*, which only means
+anything if parcel 1 is the dearest.
+
+**`item_for` draws the way `chargen.treasure` draws** — joining `item` to
+`item_step` — so it can only ever pick a rung that exists at the level asked
+for. That is the pattern to reuse here rather than `terrain.printed_trap`'s.
+**Not** filtered by slot or base item, deliberately: a parcel is what the party
+*found*, and the page does not promise anybody present can use it;
+`chargen`'s `_fits_base` matters when an item is being **equipped**, which
+nothing here does. A level the database prices nothing at yields `""` and the
+parcel is **dropped rather than retried elsewhere**, because substituting a
+different level would hide a gap in the corpus.
+
+An item goes to **one character**, round-robin by parcel, because an item is
+one object; coin divides because coin does. Measured at level 5 over twelve
+fights: items at levels 9, 8, 7 and 6, then 550, 500, 340, 340, 160, 110, then
+nothing on fights 11 and 12 — ten parcels, 499 gp each, one item on each sheet.
+
+**And one existing assertion had to change its question.** `scene_grant` asked
+whether the party carried *exactly one thing* after the next fight, which was
+the same question as "#935's grant survived" until a won fight started handing
+over an item into the same bag. A total conflates *the grant survived* with
+*nothing else arrived*; it asks about the granted ref now, which is the claim
+and is equally breakable in both directions.
 
 **Nothing is written down that the database already holds.** The curve is
 `2 x market_price(level)`, computed from the mode of `item_step.cost`, and it
@@ -2347,8 +2630,28 @@ because a die said so. Measured over nine fights at level 5: 550, 500, 340,
 340, 160, 110, then nothing, and the party holds **1,996 of 2,000** with the
 4 gp lost to the per-head flooring.
 
-Nothing resets the count, because nothing levels up (#1013) — so six parcels
+Nothing resets the count, because nothing levels up (#1013) — so ten parcels
 is the module's lot, and `hoard`'s docstring says so.
 
 **Nothing spends the coins.** An economy wants rituals (#453) and a market; a
 visible number that cannot be spent is honest, awarding nothing was not.
+
+**Two pieces of the printed system are absent, both filed with a measurement:**
+
+* **#1020, alternative rewards.** They go in an item parcel's *place*, are not
+  physical objects, occupy no slot, and fade after five levels — and **119 of
+  them are already in `game.db`** under their own category with `slot = ''`.
+  `item_for` filters on nothing, so **5% of the pool is already one** (64 of
+  1,287 refs at levels 6–9) and `hoard` files it as a carried object, which is
+  the wrong noun. Harmless today because nothing reads `carried`.
+
+  The reason it is the *interesting* half rather than the leftover: the page
+  says alternative rewards **never grant enhancement bonuses**, so a reward is
+  the only parcel that could be put **in play** without moving the curve the
+  monster defences are set against. That curve is the whole reason the item
+  half had to be carried rather than worn.
+* **#1021, the group-size adjustment.** The printed table adds and drops
+  parcels for a party that is not five; this divides a fixed ten evenly, so a
+  party of three is richer per head and the level's total never moves. Filed
+  **without** the table's contents, because the page has not been read — which
+  is the rule about a quoted table applied to an issue I was writing myself.

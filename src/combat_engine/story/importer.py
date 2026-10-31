@@ -639,9 +639,24 @@ span a party it is a ladder. Measured on the fixture, the win rate by
 complexity went from 82/17/7/5/2 percent to 100/55/37/15/7 on that change
 alone.
 
-`secondary_grants` is `bonus` (a secondary success is +2 to the next primary
-check) or `success` (it counts outright). Default `bonus`; use `success` only
-where the page plainly says a secondary check earns one.
+`secondary_grants` is `bonus` and nothing else -- a secondary success is +2
+to the next primary check. The `success` reading was retired: DMG2's list of
+what a secondary check can do does not include counting outright, it measured
+as degenerate (5 wins in 5, three of four successes coming from easy secondary
+rolls), and no converted scene ever set it. `parse` refuses any other value.
+
+**Give every skill a `what`** if you want the challenge to be *played* rather
+than only rolled -- the words a player would actually type to attempt it, two
+or three phrasings, exactly as a roleplay scene's affordances carry. It is the
+only thing the matcher compares a declared intent against, and a skill name is
+not it:
+
+    bare skill name        3/12 declared intents matched correctly
+    a written phrasing    12/12
+
+Write all of them or none of them; a half-phrased challenge hides the rest
+from the matcher and is refused. A challenge with no phrasings at all is fine
+and still rolls exactly as it always did.
 
 `on_success` and `on_failure` are scene ids. Leave both empty if the adventure
 carries on regardless.

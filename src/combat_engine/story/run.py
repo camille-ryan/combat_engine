@@ -508,6 +508,15 @@ def _fight(
         room=room,
     )
     world = fielded.world
+    # **Anybody the floor stood up, said out loud.** Empty on an ordinary
+    # board: `bury` removes the dead and the rest stabilises the dying, so
+    # a sheet recorded below zero only reaches a board when the module put
+    # two fights back to back with no rest between (#947). That case is
+    # outside Camille's ruling, so it is printed rather than silently
+    # corrected -- inventing a rest the module did not write is the quiet
+    # kind of fix this component is told not to make. #923.
+    for note in fielded.clamped:
+        step.say(note, "note")
     # **The module's own allies, on the party's side. #961.**
     #
     # Spawned after the party and before the encounter, which is where the
@@ -702,6 +711,18 @@ def _fight(
     if written is not None:
         written.flush()
     harvest(world, campaign.party)
+    # **The party's own dead leave it, here and not at the rest.** Camille's
+    # ruling, 2026-10-30: a character past the death floor is out of the
+    # campaign, and the party plays on short-handed. It has to happen before
+    # any rest -- an extended rest sets `hp = None` and erases the number
+    # that says somebody died -- and `harvest` is where that number arrives,
+    # so this is the first moment it is true and the last one before
+    # anything can hide it. #923.
+    #
+    # `Campaign.bury` rather than `Party.bury`, because `personas`,
+    # `control` and `formation` run parallel to the sheets by index.
+    for who in campaign.bury():
+        step.say(f"{who} is dead and leaves the party.", "note")
     # **Record what this fight killed, so a revisit does not raise it.**
     # Read off the board rather than from the bus log: the question is which
     # creatures are down *now*, which is a state, and `query.alive` is the
@@ -1465,18 +1486,47 @@ def hoard(campaign: Campaign, module: Module, scene: Scene,
     because a die said so, but because the level's treasure is spent.
     That is the same shape the page describes with no roll invented.
 
-    **Only the monetary half.** The four item parcels are not awarded:
-    found items are party level +1 to +4, which is **above**
-    `band(level)`, and `band` is what monster defences are set against.
-    Items off that curve owe `winrate` both ways. Coins change no number
-    on any board.
+    **Ten parcels, not six.** The four item parcels come first -- the page
+    lists them as parcels 1 to 4 and they are the dearest -- and the six
+    monetary ones follow. So the first four fights of a level hand over an
+    item each and the next six hand over coin.
 
-    Nothing resets `parcels`, because nothing levels up (#1013). So six
+    **An item is carried, not worn**, which is why this owes no `winrate`
+    run: `Sheet.carried` is a count of what happened to the party and
+    nothing in a fight reads it, so the party's power is unchanged.
+    `chargen` equips three items at `band(level)` and monster defences are
+    set against that number; a parcel is one to four levels above it, and
+    putting one *in play* is the part that would owe the measurement.
+    Nothing equips from inventory today.
+
+    Nothing resets `parcels`, because nothing levels up (#1013). So ten
     parcels is the module's lot, and that is stated rather than hidden.
     """
     if scene.kind != "combat" or made.outcome != "won":
         return
     level = scene.level or module.party_level
+    # **The item parcels first**, which is the order the page lists them
+    # in and the order DMG2's alternative rewards assume -- they replace
+    # "the highest-level magic items you would otherwise give out", which
+    # only means anything if parcel 1 is the dearest. #969.
+    found = treasure.items(level, _stream(campaign, scene, "treasure"))
+    if campaign.parcels < len(found):
+        ref = found[campaign.parcels]
+        campaign.parcels += 1
+        # **To one character, not split.** An item is one object; the coin
+        # half divides because coin does. Round-robin by parcel so a
+        # four-item level does not load one sheet.
+        who = campaign.party.sheets[
+            (campaign.parcels - 1) % len(campaign.party.sheets)]
+        who.carried[ref] = who.carried.get(ref, 0) + 1
+        made.say(
+            f"Treasure: {ref}, a level {level + treasure.ITEM_STEPS[campaign.parcels - 1]} "
+            f"item (parcel {campaign.parcels} of "
+            f"{len(found) + len(treasure.shares(level))}) -- carried, not "
+            "worn; nothing equips it yet (#969).",
+            "note",
+        )
+        return
     purse = treasure.shares(level)
     if not purse:
         made.say(
@@ -1485,16 +1535,18 @@ def hoard(campaign: Campaign, module: Module, scene: Scene,
             "note",
         )
         return
-    if campaign.parcels >= len(purse):
+    spent = campaign.parcels - len(found)
+    if spent >= len(purse):
         return
-    parcel = purse[campaign.parcels]
+    parcel = purse[spent]
     campaign.parcels += 1
     each = treasure.per_head(parcel, len(campaign.party.sheets))
     for sheet in campaign.party.sheets:
         sheet.coins += each
     made.say(
         f"Treasure: {parcel} gp, {each} each "
-        f"(parcel {campaign.parcels} of {len(purse)} for level {level}).",
+        f"(parcel {campaign.parcels} of {len(found) + len(purse)} for "
+        f"level {level}).",
         "note",
     )
 

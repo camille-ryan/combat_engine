@@ -241,6 +241,18 @@ class Day:
         )
         here.ended = self._snapshot(session, here)
         story.harvest(session.world, self.party)
+        # **The dead leave the party, before the rest and not after.** An
+        # extended rest sets `hp = None`, which erases the number that says
+        # somebody died, and a short rest's `heal` skips them and leaves a
+        # sheet at -26 for `_wear` to clamp to 0 -- which is #923, and which
+        # `api_smoke`'s own carry check is what caught. Camille's ruling,
+        # 2026-10-30: a character past the death floor is out.
+        #
+        # The seam is crossed deliberately: the fix is `story`'s, but a
+        # `Day` holds a `Party` and no `Campaign`, so this is the only place
+        # arcade mode can make the call. One line, no `Campaign` state to
+        # keep in step here because a day has no personas or formation.
+        self.party.bury()
 
         # **Rested is read off the sheets, not off the board.** `Party.rest`
         # is the copy that outlives the fight and is the only one that spends

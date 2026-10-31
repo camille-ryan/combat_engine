@@ -129,7 +129,23 @@ COMPLEXITY = {
 #: As a bonus to the next primary check, a secondary does what the word means:
 #: it helps, from an angle, and the challenge is still decided on the skills it
 #: named first.
-SECONDARY_GRANTS = ("bonus", "success")
+#:
+#: **`success` was the other option and it is gone.** Camille's call,
+#: 2026-10-30, asked directly and answered "yes" to retiring it. Three
+#: things agreed:
+#:
+#: * **DMG2 does not list it.** Its five printed secondary effects are
+#:   cancel a failure, give a bonus, grant a reroll, open another skill,
+#:   and raise a primary's success cap -- and the standing instruction is
+#:   that DMG2 wins where the two books differ. #984.
+#: * **the measurement above**, which was already recorded here;
+#: * **nothing used it.** Measured before cutting: the one converted
+#:   challenge sets `bonus`, and no driver referenced it.
+#:
+#: The field stays, so a module that spells `secondary_grants: "bonus"`
+#: still parses and a module that spells `"success"` is now refused
+#: rather than silently reinterpreted.
+SECONDARY_GRANTS = ("bonus",)
 
 #: What a secondary success adds to the next primary check under `bonus`.
 SECONDARY_BONUS = 2
@@ -421,6 +437,28 @@ class Try:
     skill: str
     win: str = ""
     lose: str = ""
+    #: **The words a player would type**, exactly as `Affordance.what` is,
+    #: and for exactly the same reason: it is the only thing the matcher
+    #: compares a declared intent against. A skill *name* is not that.
+    #:
+    #: Measured through the shipped `Director.match`, four intents against
+    #: the converted chapter-1 challenge's three skills, three runs each
+    #: way at temperature 0 -- and perfectly stable, so these are two
+    #: different answers rather than noise:
+    #:
+    #:     bare skill name        3/12 correct
+    #:     a written phrasing    12/12 correct
+    #:
+    #: The failure is the dangerous one rather than a shrug. Every run,
+    #: *"I draw my sword and look for someone to hit"* matched **athletics**
+    #: while *"I grab a blanket and start beating down the flames"* matched
+    #: **none** -- the matcher inventing an affordance, which is the one
+    #: thing the enum-constrained design exists to prevent.
+    #:
+    #: Empty is fine and is what every converted challenge holds. A
+    #: challenge with no phrasings simply cannot run beats; it still rolls
+    #: exactly as it does today. #932.
+    what: str = ""
 
 
 @dataclass(frozen=True)
@@ -763,7 +801,11 @@ class Scene:
     #: usually asking for a tighter fight than the default -- which is the
     #: point: a 6x8 chamber and a 10x16 hall are different fights with the
     #: same cast.
-    room: tuple[int, int, str] = ()  # ty: ignore[invalid-assignment]
+    #: `None` when the module says nothing, not an empty tuple: the field
+    #: is `(width, height, kind)` and `()` is not that shape, which cost
+    #: five type-ignore directives and a red `ruff` walk before anybody
+    #: read them. #1017.
+    room: tuple[int, int, str] | None = None
 
     #: Creatures fighting **on the party's side**. #961.
     #:
@@ -806,7 +848,7 @@ class Scene:
     #: A skill not named here takes the default -- see `Scene.cap_for`.
     #: #984.
     caps: tuple[tuple[str, int], ...] = ()
-    #: `"bonus"` or `"success"` -- see `SECONDARY_GRANTS`.
+    #: `"bonus"`, which is the only one left -- see `SECONDARY_GRANTS`.
     secondary_grants: str = "bonus"
     #: Where success and failure lead. Both fall back to `exits` when empty,
     #: so a challenge that only gates flavour needs neither.
@@ -1024,10 +1066,13 @@ def _as_objective(raw: Any, where: str,
         problems.append(f"{where}: defeat_foe needs at least one ref in foes")
     elif kind != "defeat_foe" and foes:
         problems.append(f"{where}: objective {kind!r} takes no foes")
-    leaks = raw.get("leaks", 0)
-    if not isinstance(leaks, int) or leaks < 0:
+    # **`None` when unstated, so `0` can mean nought.** They were the same
+    # value, and `watcher` tested `not objective.leaks` -- so a module
+    # asking for no leaks at all got the party-size default instead. #1017.
+    leaks = raw.get("leaks")
+    if leaks is not None and (not isinstance(leaks, int) or leaks < 0):
         problems.append(f"{where}: objective leaks must be a whole number")
-        leaks = 0
+        leaks = None
     return Objective(
         kind=kind, foes=foes, share=float(share), rounds=rounds,
         position=position, leaks=leaks, harder=harder, easier=easier,
@@ -1037,15 +1082,15 @@ def _as_objective(raw: Any, where: str,
 
 def _as_room(
     raw: Any, where: str, problems: list[str],
-) -> tuple[int, int, str]:
-    """A stated chamber, or `()` for the floor every fight has used. #974."""
+) -> tuple[int, int, str] | None:
+    """A stated chamber, or `None` for the floor every fight has used. #974."""
     if raw is None:
-        return ()  # ty: ignore[invalid-return-type]
+        return None
     if not isinstance(raw, dict):
         problems.append(
             f"{where}: a room must be an object with width and height, got "
             f"{type(raw).__name__}")
-        return ()  # ty: ignore[invalid-return-type]
+        return None
     size = []
     for side in ("width", "height"):
         got = raw.get(side)
@@ -1053,14 +1098,14 @@ def _as_room(
             problems.append(
                 f"{where}: room {side} must be an integer between "
                 f"{ROOM_MIN} and {ROOM_MAX}, got {got!r}")
-            return ()  # ty: ignore[invalid-return-type]
+            return None
         size.append(got)
     kind = str(raw.get("kind", "rectangle")).strip().lower()
     if kind not in ROOM_KINDS:
         problems.append(
             f"{where}: room kind {kind!r} is not one of "
             f"{', '.join(ROOM_KINDS)}")
-        return ()  # ty: ignore[invalid-return-type]
+        return None
     return (size[0], size[1], kind)
 
 
@@ -1476,7 +1521,8 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                 said.append(Try(
                     skill=skill,
                     win=str(item.get("win", "")).strip(),
-                    lose=str(item.get("lose", "")).strip()))
+                    lose=str(item.get("lose", "")).strip(),
+                    what=str(item.get("what", "")).strip()))
                 continue
             if str(item).strip():
                 names.append(str(item).strip().lower())
@@ -1516,6 +1562,36 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
             f"{where}: a {kind} scene states what a skill check means, but "
             "only a skill_challenge rolls them")
 
+    # **A phrasing that is just the skill name is refused**, because it is
+    # the exact thing measured at 3 of 12 -- and the three failures include
+    # the matcher putting an intent with nothing to match onto a skill. An
+    # author writing `"what": "athletics"` has written something that looks
+    # filled in and performs worse than leaving it empty, which is the
+    # shape of mistake worth a refusal rather than a note. #932.
+    bare = sorted({t.skill for t in tries
+                   if t.what and t.what.strip().lower() == t.skill})
+    if bare:
+        problems.append(
+            f"{where}: {', '.join(bare)} states a phrasing that is just the "
+            "skill name. `what` is the words a player would type -- a bare "
+            "name matched 3 of 12 declared intents against 12 of 12 for a "
+            "written phrasing, and stretched an unrelated intent onto a "
+            "skill every run"
+        )
+    # **All of them or none of them.** A challenge where some skills carry a
+    # phrasing and others do not is one the player can only half engage
+    # with: the matcher is offered the phrased ones and the rest are
+    # unreachable by any intent, silently. That is a cap nobody printed.
+    phrased = {t.skill for t in tries if t.what}
+    if phrased and phrased != set(primary) | set(secondary):
+        missing = sorted((set(primary) | set(secondary)) - phrased)
+        problems.append(
+            f"{where}: {', '.join(missing)} carry no `what`, while other "
+            "skills in the same challenge do. Either all of them are "
+            "reachable by a declared intent or none are -- a partly phrased "
+            "challenge silently hides the rest from the matcher"
+        )
+
     caps: list[tuple[str, int]] = []
     for skill, most in dict(raw.get("caps") or {}).items():
         name = str(skill).strip().lower()
@@ -1549,13 +1625,21 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                     f"{where}: the caps allow {most} success(es) and the "
                     f"challenge wants {needs}, so it could never be won")
 
-    grants = str(raw.get("secondary_grants", "bonus")).strip().lower()
-    if grants not in SECONDARY_GRANTS:
+    # **`assists`, not `grants`.** The name `grants` is used again 110
+    # lines down for the scene's *loot* grants (#935), and the second
+    # assignment won: `Scene.secondary_grants` has been receiving a
+    # **tuple of items** since that field was added, so the string it
+    # claims to hold was never there. `secondary_grants == "success"`
+    # could not be true, which is why retiring that reading cost nothing
+    # -- it had never once fired. Found by cutting the option and watching
+    # a probe return `()` where a word was expected. #984.
+    assists = str(raw.get("secondary_grants", "bonus")).strip().lower()
+    if assists not in SECONDARY_GRANTS:
         problems.append(
-            f"{where}: secondary_grants {grants!r} is not one of "
+            f"{where}: secondary_grants {assists!r} is not one of "
             f"{', '.join(SECONDARY_GRANTS)}"
         )
-        grants = "bonus"
+        assists = "bonus"
     overlap = set(primary) & set(secondary)
     if overlap:
         problems.append(
@@ -1720,7 +1804,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         secondary=secondary,
         tries=tries,
         caps=tuple(caps),
-        secondary_grants=grants,
+        secondary_grants=assists,
         on_success=str(raw.get("on_success", "")).strip(),
         on_failure=str(raw.get("on_failure", "")).strip(),
         extended=bool(raw.get("extended", False)),

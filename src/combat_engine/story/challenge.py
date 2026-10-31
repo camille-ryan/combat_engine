@@ -246,13 +246,13 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
         else:
             run.failures += 1
     elif success:
+        # **A secondary assists and never scores.** The `success` reading
+        # was retired on Camille's call -- see `module.SECONDARY_GRANTS`
+        # for the three reasons -- so there is one branch here where there
+        # were two.
         run.spent.add(skill)
-        if run.scene.secondary_grants == "success":
-            run.successes += 1
-            counted = "success"
-        else:
-            run.pending_bonus = SECONDARY_BONUS
-            counted = "assist"
+        run.pending_bonus = SECONDARY_BONUS
+        counted = "assist"
     else:
         # A failed secondary costs a failure and does **not** burn the cap.
         # Charging both would make the easier roll the more expensive one.
@@ -313,9 +313,9 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
     # by the next primary check and does not stack, so a chooser that takes the
     # easy roll whenever it has the best margin opens by burning every
     # secondary it has for one usable +2 -- measured, three assists rolled and
-    # two thrown away, in two of the first three seeds. Under
-    # `secondary_grants: "success"` there is nothing to waste and the gate does
-    # not apply.
+    # two thrown away, in two of the first three seeds. The gate applies
+    # always now: the `success` reading, under which there was nothing to
+    # waste, is retired.
     #
     # **Unless this character has nothing to offer on a primary.** The gate
     # above, applied flatly, forced a wizard to roll athletics at -3 rather
@@ -325,9 +325,7 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
         table.modifier(slot, s) < dc_for(run.level, run.band_now) - 10
         for s in run.scene.primary
     ) if run.scene.primary else True
-    may_assist = (
-        run.scene.secondary_grants == "success" or not run.pending_bonus or hopeless
-    )
+    may_assist = not run.pending_bonus or hopeless
     if may_assist:
         options += [(s, "easy") for s in run.scene.secondary if s not in run.spent]
     if not options:
