@@ -3335,7 +3335,6 @@ def i2291p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.active_vestige()",),
 )
 def i2296x1(c: Cast) -> None:
     """"Instead of taking its normal benefit" is written now, and the row
@@ -3383,16 +3382,17 @@ def i2296x1(c: Cast) -> None:
     first, so a player can see the board; the AI policy cannot, which is
     `instead_of_now`'s own recorded cost.
 
-    **Four of the five boon refs now, and the marker is re-pointed.** It
-    read "two of the five", naming `cf:warlock-f1`'s three inline legs and
-    `p16254` as payouts that did not offer the clause; both do now, by
-    opposite readers for the reason `instead_of_now`'s docstring gives. So
-    the residual is `cf:warlock-f1c12` alone, which pays **nothing** until
-    `c.active_vestige()` lands -- a different gap from a payout that does
-    not offer itself, and the symbol the marker names now.
+    **All six boon refs now, and the marker is gone.** The count went
+    "two of the five", then "four of the five" with `cf:warlock-f1c12`
+    named as the residual -- *"which pays nothing until
+    `c.active_vestige()` lands"*. It pays: `cf:warlock-f1s6` offers the two
+    primary remnants, `cf:warlock-f1c12` offers its payout as the `BOON`
+    clause, and `f2035` is a sixth ref besides. Measured off the live
+    store, every ref in `BOONS` is armed and none is missing.
 
-    A warlock on that pact keeps the printed boon and is offered nothing,
-    still a narrowing rather than a widening.
+    So the marker was never about this row's own text, which has not
+    changed here: it named a gap in the row this one registers against.
+    Same shape as `f3444`, and both fell to the same commit.
 
     Note the clause above about reading the dropped creature off the bus
     log is now true of **three** routes rather than two: `cf:warlock-f1`

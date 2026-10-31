@@ -51756,6 +51756,209 @@ def the_at_will_gains_the_active_remnants_augment(out: Result) -> None:
              "and gains no augment -- the clause is keyed to a remnant, so a"
              " warlock without one must get neither half")
 
+def a_feat_granted_remnant_offers_pays_and_augments(out: Result) -> None:
+    """A remnant a feat grants is offered, pays its boon, and augments. #1034.
+
+    `f2035` prints three clauses and this asserts all three, plus the thing
+    both un-markings in the same commit rest on -- that a row trading "your
+    pact boon" away reaches this boon too.
+
+        Benefit   adds the remnant to your **primary** vestiges
+        Pact Boon on an enemy under your curse dropping, slide a
+                  *different* cursed creature your Intelligence modifier
+        Augment   a clause on cf:warlock-f1c11 while it is active
+
+    **Primary is the printed word and the row's old note had it backwards**
+    -- it assumed a granted remnant is offered without being primary. The
+    card: *"You add <remnant> to your primary vestiges."* So this is read
+    through `c.vestiges(primary=True)`, which is the narrower question, and
+    a row offering it unmarked would pass a `c.vestiges()` check and fail
+    this one.
+
+    **The remnant's identity is the granting row's own ref**, because the
+    remnant is named in prose and prints no card of its own. That is also
+    what makes the at-will's third Augment line sayable: it defers to "the
+    daily power that grants access to the vestige", and `f2035` is the row
+    it defers to.
+    """
+    from combat_engine.content.features.warlock import BOONS
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import Moved
+    from combat_engine.engine.query import alive
+
+    REF = "f2035"
+    HITS_NO_CRIT = 19
+
+    # -- the Benefit: offered, and offered as *primary* -------------------
+    world, me, _ = _board(REF, 1)
+    c = Cast(world=world, me=me, ref="probe")
+    REGISTRY[REF].body(Cast(world=world, me=me, ref=REF))
+
+    out.that(REF in c.vestiges(),
+             "the feat offers its remnant at all",
+             f"offered: {c.vestiges()}")
+    out.that(REF in c.vestiges(primary=True),
+             "and offers it as a PRIMARY one -- the card says 'you add it"
+             " to your primary vestiges', and the row's old note assumed"
+             " the opposite",
+             f"primary: {c.vestiges(primary=True)}")
+    out.that(not c.active_vestige(),
+             "offering it does not make it active -- a feat that granted"
+             " access and took the bargain too would decide for the player",
+             f"active: {c.active_vestige()!r}")
+
+    # -- the Pact Boon ----------------------------------------------------
+    # Two cursed enemies are needed: one to drop and a *different* one to
+    # slide. With one, "a different creature" finds nobody and the clause
+    # pays nothing while looking as though it had been asked.
+    foes = [e for e in c.enemies() if world.get(e, Position) is not None]
+    out.that(len(foes) >= 2,
+             "the board fields two enemies -- the printed 'a different"
+             " creature' needs somebody other than the one that fell",
+             f"{len(foes)} enemies")
+    if len(foes) < 2:
+        out.skip("the board would not field two enemies")
+        return
+    falls, slides = foes[0], foes[1]
+
+    def pose(active: bool):  # noqa: ANN202
+        """A holder with the remnant offered, and bargained with or not."""
+        w, who, _ = _board(REF, 1)
+        cc = Cast(world=w, me=who, ref="probe")
+        REGISTRY[REF].body(Cast(world=w, me=who, ref=REF))
+        if active:
+            cc.bargain(REF)
+        return w, who, cc
+
+    world, me, c = pose(active=True)
+    out.that(c.active_vestige() == REF,
+             "the remnant can be bargained with once offered -- the premise"
+             " of the boon below")
+    c.curse(on=falls)
+    c.curse(on=slides)
+    out.that(c.cursed(on=falls) and c.cursed(on=slides),
+             "both enemies carry the curse, so there is a faller and a"
+             " different creature to slide",
+             f"{c.cursed(on=falls)}, {c.cursed(on=slides)}")
+
+    where = world.need(slides, Position).square
+    moves_before = len([e for e in world.bus.log if isinstance(e, Moved)])
+    hp = world.get(falls, Health)
+    if hp is not None:
+        c.flat(hp.hp + hp.temp + 5, on=falls)
+    out.that(not alive(world, falls),
+             "the cursed enemy really dropped -- the boon's whole trigger,"
+             " and a survivor leaves every read below about nothing",
+             f"alive: {alive(world, falls)}")
+
+    moved = [e for e in world.bus.log if isinstance(e, Moved)][moves_before:]
+    # **This does not prove the "a different creature" exclusion**, and a
+    # plant established that rather than my assuming it: removing the
+    # row's `f != ev.actor` leaves all 18 assertions green, because the
+    # creature that fell is already out of `c.enemies()` by the time the
+    # handler runs -- measured, and it still carries the curse, so it is
+    # the enemy list doing the excluding and not the curse check. Said
+    # here so the green is not read as evidence for that clause.
+    out.that(any(e.actor == slides for e in moved),
+             "the boon slid the OTHER cursed creature when the first fell",
+             f"{[(e.actor, getattr(e, 'from_', None)) for e in moved]}")
+    out.that(world.need(slides, Position).square != where
+             or any(e.actor == slides for e in moved),
+             "and it is on a different square than it started",
+             f"{where} -> {world.need(slides, Position).square}")
+
+    # -- the control: the remnant offered but NOT active ------------------
+    # Same size as the positive. Without it a row paying unconditionally
+    # passes every check above, which is exactly what the old marker said
+    # this row must not do: it would hand the warlock a second boon beside
+    # the one its own leg already pays.
+    w2, _me2, c2 = pose(active=False)
+    foes2 = [e for e in c2.enemies() if w2.get(e, Position) is not None]
+    if len(foes2) < 2:
+        out.skip("the control board would not field two enemies")
+    else:
+        f2, s2 = foes2[0], foes2[1]
+        c2.curse(on=f2)
+        c2.curse(on=s2)
+        out.that(not c2.active_vestige(),
+                 "the control has the remnant offered and NOT active --"
+                 " otherwise it cannot answer",
+                 f"offered {c2.vestiges()}, active {c2.active_vestige()!r}")
+        before2 = len([e for e in w2.bus.log if isinstance(e, Moved)])
+        h2 = w2.get(f2, Health)
+        if h2 is not None:
+            c2.flat(h2.hp + h2.temp + 5, on=f2)
+        out.that(not alive(w2, f2), "and its cursed enemy dropped too")
+        out.that(not [e for e in w2.bus.log if isinstance(e, Moved)][before2:]
+                 or not any(e.actor == s2 for e in
+                            [e for e in w2.bus.log
+                             if isinstance(e, Moved)][before2:]),
+                 "yet nothing slid -- the boon pays only while this remnant"
+                 " is the active one")
+
+    # -- the Augment, on cf:warlock-f1c11 --------------------------------
+    # The third printed Augment line of the at-will defers to this row, so
+    # proving it needs a holder of both: the leg's at-will and this feat's
+    # remnant active.
+    w3, me3, _ = _board("cf:warlock-f1s6", 1)
+    c3 = Cast(world=w3, me=me3, ref="probe")
+    REGISTRY[REF].body(Cast(world=w3, me=me3, ref=REF))
+    c3.bargain(REF)
+    held3 = w3.get(me3, Powers)
+    foes3 = [e for e in c3.enemies() if w3.get(e, Position) is not None]
+    out.that(held3 is not None and "cf:warlock-f1c11" in held3.known,
+             "the holder has the at-will the augment lands on")
+    out.that(c3.active_vestige() == REF,
+             "and the granted remnant is the active one, which is the"
+             " augment's gate")
+    if not foes3:
+        out.skip("the augment board fielded no enemy")
+    else:
+        mark = foes3[0]
+        start = w3.need(mark, Position).square
+        w3.rng.loaded = HITS_NO_CRIT
+        use(w3, me3, "cf:warlock-f1c11", targets=[mark], spend=False)
+        out.that(alive(w3, mark),
+                 "the target survived the hit, so a slide is observable --"
+                 " 19 rather than 20 because a critical kills it",
+                 f"alive: {alive(w3, mark)}")
+        out.that(w3.need(mark, Position).square != start,
+                 "and the augment slid the target 1 square, which is the"
+                 " clause the at-will's third printed line defers here for",
+                 f"{start} -> {w3.need(mark, Position).square}")
+
+    # -- what both un-markings rest on -----------------------------------
+    # `f3444` and `i2296x1` each trade "your pact boon" away and name no
+    # pact, so each registers against every ref in `BOONS`. Both were
+    # marked for `c.active_vestige()` because one of those refs paid
+    # nothing; the marker named a gap in *another* row. So the thing to
+    # assert is the coverage, per row, off the live store.
+    # **`i2296x1` only, and `f3444` is deliberately not here.** `f3444`
+    # arms nothing until its racial power is spent -- its body installs a
+    # `PowerUsed` watch and registers inside it -- so running the body on a
+    # fresh board correctly produces an empty store, and asserting coverage
+    # here failed on 6 of 6 refs. `drivers.boon_for_racial` poses the spend
+    # and asserts the same coverage there; duplicating it badly would have
+    # been worse than not duplicating it.
+    w4, me4, _ = _board("i2296x1", 1)
+    REGISTRY["i2296x1"].body(Cast(world=w4, me=me4, ref="i2296x1"))
+    known4 = w4.get(me4, Powers)
+    armed = {k[0] for k in (known4.pre_empts if known4 else {})
+             if k[1] == "boon"}
+    out.that(set(BOONS) <= armed,
+             "i2296x1 registers against every boon ref, including the two"
+             " this commit changed -- the card names no pact and cannot"
+             " know which leg the holder took, which is what its marker"
+             " was really about",
+             f"missing {sorted(set(BOONS) - armed)}")
+    out.that(REF in BOONS,
+             "and this feat's own boon is in BOONS, so a row trading the"
+             " boon away reaches it -- omitting it would make both of those"
+             " rows silently miss the one boon a feat pays",
+             f"{list(BOONS)}")
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -53134,6 +53337,10 @@ DRIVERS = {
     "vestige_augment": (
         the_at_will_gains_the_active_remnants_augment,
         "the at-will gains the active remnant's augment (#1034)",
+    ),
+    "granted_remnant": (
+        a_feat_granted_remnant_offers_pays_and_augments,
+        "a feat-granted remnant is offered, pays and augments (#1034)",
     ),
 }
 

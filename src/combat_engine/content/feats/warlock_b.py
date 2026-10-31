@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.warlock import BOON
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -662,23 +663,90 @@ def f1166(c: Cast) -> None:
 
 
 @power("f2035", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=VESTIGE)
+       reach=PERSONAL, target=SELF)
 def f2035(c: Cast) -> None:
     """Adds a remnant whose boon slides a second cursed creature.
 
-    Re-aimed, and the payout is the half that *is* writable: `Dropped`
-    plus `cursed_by_me` is the moment, `c.cursed` finds the others and
-    `c.slide` moves one Intelligence modifier of squares. What cannot be
-    said is **when** the warlock has it. The boon is printed as the one
-    that pays while this remnant is active, so a row that paid it
-    unconditionally would hand the warlock a second boon beside the one
-    its own leg already pays -- which is `cf:warlock-f1c12`'s argument for
-    the same symbol, word for word. The augment line is a clause of that
-    remnant's at-will and waits on the same state.
+    Three printed clauses and all three are written now that
+    `c.offer_vestige` and `c.active_vestige` exist:
 
-    The old marker's second symbol, `cf:warlock-f4c0`, is stale: the spec
+        Benefit   adds a remnant to your **primary** vestiges, with access
+                  to the boon below while it is the active one
+        Pact Boon when an enemy under your cf:warlock-f4 drops to 0 hit
+                  points, slide a *different* creature under that curse a
+                  number of squares equal to your Intelligence modifier
+        Augment   a clause on cf:warlock-f1c11 while this remnant is active
+
+    **"Primary", which the old note had backwards.** It assumed a remnant a
+    feat grants is offered without being primary -- a reasonable reading of
+    `c.offer_vestige(primary=)`'s docstring, and not what this card says:
+    *"You add <remnant> to your primary vestiges"*. So `primary=True`, and
+    `i2296x1` -- a rod naming "one of your primary vestiges" -- can reach
+    it.
+
+    **The remnant's identity is this row's own ref.** It has no ref of its
+    own in the compendium, because it is named in prose rather than
+    printed as a card; the feat that grants it is the only thing with one.
+    That is also what makes `cf:warlock-f1c11`'s third Augment line
+    sayable -- it defers to "the daily power that grants access to the
+    vestige", and this is the row it defers to.
+
+    **The boon pays only while the remnant is active**, which is the whole
+    of what the old marker was waiting for: a row paying it unconditionally
+    would hand the warlock a second boon beside the one its own leg already
+    pays.
+
+    `Dropped` under `cursed_by_me` is the moment, the same as every other
+    boon in the family, and it is a **watch rather than a declared
+    trigger** -- the row has a standing job too (the offer), and a declared
+    `on=` means the body runs only when the trigger fires, so the offer
+    would never be laid. `instead_of_now` for the payout, because it fires
+    inside a watcher this row installed and `Cast.variant` is 0 for ever.
+
+    "A different creature" is read as every enemy under the curse except
+    the one that just fell, and `c.choose` picks among them: the card says
+    *a* different creature, which is a choice.
+
+    The old marker's second symbol, `cf:warlock-f4c0`, was stale: the spec
     names `cf:warlock-f4` here and that row is declared.
     """
+    me = c.me
+    c.offer_vestige(c.ref, primary=True)
+
+    def fell(ev: Any) -> None:
+        if not cursed_by_me(c.world, me, ev) or c.active_vestige() != c.ref:
+            return
+        # Read **inside** the handler, not at arm time: who is cursed
+        # changes all fight, and the one that just fell is excluded by the
+        # printed "a different creature".
+        # **`ev.actor`, not `ev.target`.** `Dropped` names the creature
+        # that fell as its actor; the first draft read `.target` and
+        # raised. `i2296x1` already does it this way, two files over.
+        #
+        # **And `f != ev.actor` is defence in depth rather than the thing
+        # that says "a different creature".** Measured at the moment this
+        # handler runs: the creature that fell is already **out of
+        # `c.enemies()`** (though it still carries the curse), so the
+        # printed exclusion is enforced by the enemy list before this
+        # condition is reached. The plant that removes it stays green, and
+        # that is recorded here rather than left looking load-bearing --
+        # the clause is kept because it is what the card says, not because
+        # anything today depends on it.
+        others = sorted(
+            f for f in c.enemies() if f != ev.actor and c.cursed(on=f)
+        )
+        if not others:
+            return
+
+        def pay() -> None:
+            mark = others[0] if len(others) == 1 else c.choose(
+                others, f"{c.ref}: which cursed creature slides")
+            if mark is not None:
+                c.slide(c.int_mod, on=mark)
+
+        c.instead_of_now(BOON, pay)
+
+    c.watch(Dropped, fell, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f1358", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

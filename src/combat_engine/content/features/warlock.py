@@ -129,6 +129,13 @@ BOONS = (
     "cf:warlock-f1c10",
     "cf:warlock-f1c12",
     "p16254",
+    # **A feat, not a leg, and it belongs here for the same reason.**
+    # `f2035` grants a remnant and pays that remnant's boon, so a card
+    # trading "your pact boon" away has this to trade too. A registration
+    # against a row the character does not hold never fires, so listing it
+    # costs nothing and omitting it would make `f3444` silently miss the
+    # one boon a feat pays. #1034.
+    "f2035",
 )
 
 _A_CURSED_ENEMY_FALLS = "an enemy under your curse drops to 0 hit points"
@@ -354,6 +361,19 @@ def warlock_f1s5(c: Cast) -> None:
 #: `c.offer_vestige` takes `primary=` rather than owning the whole set.
 _PRIMARY_REMNANTS = ("cf:warlock-f1c12s0", "cf:warlock-f1c12s1")
 
+#: Remnants a row **grants**, beside the augment each adds to
+#: `cf:warlock-f1c11`. Keyed by the remnant, which is the granting row's own
+#: ref -- those remnants are named in prose and print no card, so the row
+#: that hands one over is the only thing with a ref.
+#:
+#: **A table rather than a branch per ref**, because the pact page says the
+#: set is open: *"you can gain temporary access to other vestiges by using
+#: certain daily attack powers"*. One entry in the imported heroic tier,
+#: which `c.bargain`'s docstring already measured ("the 2 printed clauses
+#: plus 1 power that grants access"). The value is the clause's shape, not
+#: a callable, because every such line so far is one slide.
+_GRANTED_AUGMENTS = {"f2035": "f2035"}
+
 
 @power(
     "cf:warlock-f1s6",
@@ -539,6 +559,18 @@ def _vestige_augment(c: Cast, victim: int) -> None:
         # it on a creature the clause never helped.
         c.watch(Hit, granted, until=When.EONT, on=c.me, once=True,
                 label=c.ref)
+    elif active == _GRANTED_AUGMENTS.get(active):
+        # **The third printed line, which defers rather than prints.**
+        # "See the entry for the daily power that grants access to the
+        # vestige" -- so the clause belongs to the granting row, and the
+        # table below is read rather than the ref hard-coded, because the
+        # set of granting rows is open in principle. One entry today.
+        #
+        # The branch is keyed on the **active remnant**, not on
+        # `c.feat(...)`: a character can only have this remnant active if
+        # the row that grants it handed it over, so the feat check would be
+        # a second gate saying the same thing.
+        c.slide(1, on=victim)
     elif active == _PRIMARY_REMNANTS[1]:
         c.bonus("attack", PRIME_SHOT_BONUS, on=c.me, until=When.EONT,
                 kind="untyped",
