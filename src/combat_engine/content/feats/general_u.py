@@ -650,8 +650,7 @@ def f3443(c: Cast) -> None:
 
 
 @power("f3444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.active_vestige()",))
+       reach=PERSONAL, target=SELF)
 def f3444(c: Cast) -> None:
     """Hands back the racial power **in place of** the pact boon.
 
@@ -685,17 +684,19 @@ def f3444(c: Cast) -> None:
     `Powers.pre_empts` when they end, so the trade stops being offered
     after it is taken.
 
-    **Six of the seven pacts now, and the marker is re-pointed rather than
-    dropped.** It used to read "two of the seven", naming `cf:warlock-f1`'s
-    three inline legs and `p16254` as payouts that did not offer the
-    clause; both offer it now, so that premise is spent. What is left is
-    `cf:warlock-f1c12`, which pays **nothing at all** until
-    `c.active_vestige()` lands -- so the gap is no longer "the payout does
-    not offer itself" but "there is no payout to trade", and the marker
-    names that symbol instead. One marker, one gap.
+    **Seven of the seven pacts, and the marker is gone rather than
+    re-pointed.** This has been narrowed twice. It first read "two of the
+    seven", naming `cf:warlock-f1`'s three inline legs and `p16254` as
+    payouts that did not offer the clause; both offer it now. Then it read
+    `c.active_vestige()`, because `cf:warlock-f1c12` paid **nothing at
+    all** and so had no payout to trade -- the gap being "there is no
+    payout" rather than "the payout does not offer itself".
 
-    A warlock on that one pact keeps the printed boon and is offered
-    nothing, which is still a narrowing rather than a widening.
+    Both premises are now spent. `8eb78077` gave that boon a payout (the
+    pact leg offers two remnants and bargains with one) and `150e44b0`
+    made it offer that payout as the `BOON` clause. So the loop below
+    registers against all seven and no warlock is left out.
+
     `ENCOUNTER` on a trait armed once at the start of the fight is this
     file's convention."""
     armed: list[Any] = []

@@ -51209,6 +51209,100 @@ def the_boon_pays_the_active_remnants_clause(out: Result) -> None:
                  "and the boon pays neither clause rather than guessing one")
 
 
+def the_racial_power_is_bought_with_the_pact_boon(out: Result) -> None:
+    """`f3444` trades the boon away to get its racial power back. #641.
+
+    Printed: *"Once per encounter, when you reduce an enemy under your curse
+    to 0 hit points, you can regain the use of your `p1449` racial power if
+    you have already used it that encounter **instead of gaining your
+    normal pact boon**."*
+
+    The row was written long ago and marked, twice over, on the **price**
+    rather than the payout: first because three boon payouts did not offer
+    themselves as a clause, then because `cf:warlock-f1c12` paid nothing so
+    had no payout to trade. `150e44b0` closed the second, so it registers
+    against every ref in `BOONS` now and this is the rule that says so.
+
+    **Registered when `p1449` is spent, not when the fight starts**, which
+    is the row's own sharpest decision: `c.instead_of_now` cannot take an
+    offer back once accepted, so a clause offered with nothing to regain
+    would trade the boon away for nothing -- worse than the row not firing.
+    So the negative control is the floor here, not the decoration.
+    """
+    from combat_engine.content.features.warlock import BOON, BOONS
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.events import PowerUsed
+
+    world, me, _ = _board("f3444", 1)
+    c = Cast(world=world, me=me, ref="f3444")
+    known = world.get(me, Powers)
+
+    out.that(known is not None and "p1449" in set(known.known),
+             "the posed holder really knows the racial power this trades"
+             " for -- without it every check below is about nothing")
+    if known is None or "p1449" not in set(known.known):
+        return
+    held = [b for b in BOONS if b in set(known.known)]
+    out.that(bool(held),
+             "and holds at least one boon payout to trade away",
+             f"holds {held}")
+
+    def offers() -> list[str]:
+        # **The key is a `(ref, what)` tuple**, which the first draft of
+        # this reader got wrong -- it looked up `store[ref]` and found
+        # nothing, reporting "armed against 0 of 5" against a row that was
+        # registering correctly. `Cast.pre_empt` writes
+        # `known.pre_empts[(on_ref, what)]`.
+        store = getattr(known, "pre_empts", {}) or {}
+        return [r for r in BOONS if (r, BOON) in store]
+
+    # -- armed, but nothing offered while the power is unspent -----------
+    # **The board arms this row itself, and the body is deliberately not
+    # run again here.** Running it a second time registers a second watcher
+    # with its own `armed` list, and `regain` pops only its own -- so
+    # taking one trade left the other run's registration standing and the
+    # "the offer lifts" assertion below failed on an artefact of the probe
+    # rather than on the row. One arming, one store.
+    out.that(offers() == [],
+             "with the racial power unspent, NO trade is offered -- an"
+             " offer that cannot be taken back would sell the boon for"
+             " nothing")
+
+    # -- spending it arms the trade against every boon -------------------
+    known.note_use("p1449", world.round)
+    out.that(known.times("p1449") == 1, "the racial power is now spent")
+    world.bus.emit(PowerUsed(actor=me, power="p1449", targets=()))
+    armed = offers()
+    out.that(set(armed) == set(BOONS),
+             "spending it offers the trade against EVERY boon ref --"
+             " the card names no pact and cannot know which leg was taken",
+             f"armed against {len(armed)} of {len(BOONS)}")
+
+    # -- taking it hands the power back ----------------------------------
+    store = getattr(known, "pre_empts", {}) or {}
+    clause = None
+    for ref in BOONS:
+        # **`(clause, label)`, and the clause is first.** Read off the live
+        # store rather than guessed: `entry[-1]` is the label string, which
+        # the first draft tried to call.
+        entries = store.get((ref, BOON)) or ()
+        for entry in entries:
+            clause = entry[0] if isinstance(entry, tuple) else entry
+            break
+        if clause is not None:
+            break
+    out.that(clause is not None, "the registered clause is reachable")
+    if clause is None:
+        return
+    clause(c)
+    out.that(known.times("p1449") == 0,
+             "taking the trade hands the racial power back")
+    out.that(offers() == [],
+             "and the offer lifts, which is the printed once per encounter"
+             " -- not a flag but the registration ending")
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -52575,6 +52669,10 @@ DRIVERS = {
     "vestige_boon": (
         the_boon_pays_the_active_remnants_clause,
         "only the active remnant's boon clause pays (#1034)",
+    ),
+    "boon_for_racial": (
+        the_racial_power_is_bought_with_the_pact_boon,
+        "f3444 trades the pact boon for its racial power (#641)",
     ),
 }
 
