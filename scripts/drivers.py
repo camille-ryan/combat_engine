@@ -43565,8 +43565,27 @@ def a_combat_scene_is_judged_on_the_objective_its_module_states(
     )
 
     held = play({"kind": "hold", "rounds": 2})
+    # **The breaking half needs creatures that actually run**, and two
+    # soldiers do not: they stand and fight. This control used them and was
+    # green on the story branch, where it reported "2 of an allowed 1 reached
+    # the east" -- then went red on `master` the moment the branch merged,
+    # reporting **0**, because `f42b4ecc` lines the party up across the west
+    # (`Step.stood` is `[(2,3), (2,5), (2,7), (2,9)]` now and did not exist
+    # before). From there the party kills both soldiers inside three rounds,
+    # so nobody crosses, the line holds, and the assertion below had nothing
+    # to test. Skirmishers cross. #1028.
     leaked = play({"kind": "hold", "rounds": 3, "leaks": 1,
-                   "position": "east"})
+                   "position": "east"}, FAST, "hard")
+    # **And the setup is asserted before the thing it sets up**, so the next
+    # placement change reddens as "the control is empty" rather than as a
+    # confusing outcome mismatch. This is the assertion whose absence cost
+    # the bisect.
+    out.that(
+        "0 of an allowed" not in said(leaked),
+        "the breaking half actually gets a creature over the line, so the"
+        " miss below is a broken line and not an empty control",
+        said(leaked),
+    )
     out.that(
         held.outcome == "won" and leaked.outcome == "lost",
         "hold is met with the line unbroken and missed when it is not",
