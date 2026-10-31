@@ -51176,6 +51176,26 @@ def the_boon_pays_the_active_remnants_clause(out: Result) -> None:
              "remnant 1 leaves the ally's defences alone -- the exclusivity"
              " in the other direction")
 
+    # -- the payout is tradeable, which is #641 -------------------------
+    # Without this the `c.instead_of(BOON, ...)` wrap is unproven: the
+    # twelve assertions above all pass whether the payout is offered as a
+    # named clause or paid inline, because nothing is trying to replace it.
+    # A card saying "instead of gaining your normal pact boon" is exactly
+    # what `f3444` and `i2296x1` print.
+    _w4, me4, c4 = posed(REMNANTS[0])
+    taken = []
+    c4.pre_empt("cf:warlock-f1c12", "boon", lambda _c: taken.append(1))
+    mates4 = [a for a in c4.within(1, side="ally") if a != me4]
+    if mates4:
+        base4 = c4.total("ac", mates4[0], {"actor": mates4[0]})
+        REGISTRY["cf:warlock-f1c12"].body(c4)
+        out.that(taken == [1],
+                 "a row may trade the boon away -- the payout is offered as"
+                 " the named BOON clause, not paid inline (#641)")
+        out.that(c4.total("ac", mates4[0], {"actor": mates4[0]}) == base4,
+                 "and the traded-away clause does NOT also pay, which is"
+                 " what 'instead of' means")
+
     # -- no remnant active: nothing pays ---------------------------------
     world3, me3, _ = _board("cf:warlock-f1s5", 1)
     c3 = Cast(world=world3, me=me3, ref="cf:warlock-f1c12")

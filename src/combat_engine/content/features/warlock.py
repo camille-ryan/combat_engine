@@ -565,17 +565,37 @@ def warlock_f1c12(c: Cast) -> None:
     The ally is `c.choose`n, because *"one ally adjacent to you"* is a
     choice and the first adjacent body is not an answer to it.
     """
-    active = c.active_vestige()
-    if active == _PRIMARY_REMNANTS[0]:
-        mates = [a for a in c.within(1, side="ally") if a != c.me]
-        if not mates:
-            return
-        mate = mates[0] if len(mates) == 1 else c.choose(
-            mates, "which adjacent ally gains the defences")
-        if mate is None:
-            return
-        for defence in DEFENCES:
-            c.bonus(defence, 2, on=mate, until=When.EONT, kind="untyped")
-    elif active == _PRIMARY_REMNANTS[1]:
-        c.bonus("attack", 2, on=c.me, until=When.EONT, kind="untyped",
-                when=nearest_to_target(c))
+    def pay() -> None:
+        active = c.active_vestige()
+        if active == _PRIMARY_REMNANTS[0]:
+            mates = [a for a in c.within(1, side="ally") if a != c.me]
+            if not mates:
+                return
+            mate = mates[0] if len(mates) == 1 else c.choose(
+                mates, "which adjacent ally gains the defences")
+            if mate is None:
+                return
+            for defence in DEFENCES:
+                c.bonus(defence, 2, on=mate, until=When.EONT, kind="untyped")
+        elif active == _PRIMARY_REMNANTS[1]:
+            c.bonus("attack", 2, on=c.me, until=When.EONT, kind="untyped",
+                    when=nearest_to_target(c))
+
+    # **Offered as the named `BOON` clause, so a card saying "instead of
+    # gaining your normal pact boon" can replace it.** That is `#641`, and
+    # the note above `BOONS` records why this row was the one left out: it
+    # paid nothing, so there was no payout to trade. It pays now.
+    #
+    # **`instead_of_now`, and the first draft got this wrong.** I reasoned
+    # that a standard action with a menu entry means `Triggers._ask` has
+    # already offered the substitution, so plain `instead_of` would read it.
+    # The note above `BOONS` says the distinction is a **declared trigger**,
+    # not a menu entry: `p16254` carries one, so `_ask` runs and
+    # `instead_of` works; `cf:warlock-f1` pays inside a watcher it installed
+    # and needs `_now`. This row has no `on=` at all, so `Cast.variant` is 0
+    # for ever and it is the second case.
+    #
+    # Caught by the assertion that the clause is tradeable, which failed on
+    # both halves -- the trade did not take and the payout still paid. A
+    # wrap nothing tries to replace looks identical either way.
+    c.instead_of_now(BOON, pay)
