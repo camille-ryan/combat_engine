@@ -37,28 +37,46 @@ The rest of the policy:
 * **Triage before working.** Prefer the issue that unblocks others.
 * **A rules table quoted in an issue is evidence a table exists, not
   evidence of its contents.** Read the page in `resources/` before writing
-  one into code — the PDF extracts with `pypdf`. Measured across four issues
-  in one session, 2026-10-29, and **three of the four quotes were not what
-  they said**:
+  one into code — the PDF extracts with `pypdf`. Four issues, measured:
 
   | | what the quote got wrong |
   |---|---|
   | `#982` | its four heroic rows were exact; its claim that `story/dc.py` (now `combat_engine/dc.py`) holds "the DC half of the same table" was false — that table is a revised **per-level** one and the printed one is three-level **bands** |
   | `#988` | one ten-row table was really **three** printed tables, each with a **Level** column that was dropped; one row renamed, one omitted, three absent from the book |
-  | `#1010`, `#972` | both quote DMG2, which is not in `resources/`, so neither is checkable — and `#972`'s *reverses* an earlier conclusion on that one source |
+  | `#1010` | **exact.** All 20 cells of a ten-band, two-column table, and the sentence under it, verbatim |
+  | `#972` | **exact.** The whole level-adjust rule, verbatim, and it had already shipped |
 
-  The failure is not carelessness in the quoter. A transcription loses
-  exactly the structure that decides how the data is keyed: which table a
-  row came from, and the columns nobody needed at the time. `#982` is the
-  worked example — pairing a banded damage table with a per-level DC table
+  **This table used to say "three of the four quotes were not what they
+  said", and counted `#1010` and `#972` among the three on the ground that
+  "both quote DMG2, which is not in `resources/`, so neither is checkable".
+  Every clause of that was wrong**, and it is the sharpest case in this file
+  of the mistake the file is about:
+
+  * `resources/` holds **six** PDFs and one of them is `Dungeon Masters
+    Guide 2.pdf`. The session that wrote the claim opened the *first*
+    Dungeon Master's Guide, correctly found no minion damage table in it,
+    and concluded the source was absent. `ls resources/` was never run.
+  * `#972` does not quote DMG2 at all. It quotes the first DMG, which was
+    never in doubt.
+  * Both quotes check out **exactly** — 20 of 20 cells on one, the entire
+    rule on the other. So the tally is **2 of 4 wrong, not 3**, and a
+    reader was being told to distrust the two that were right.
+
+  So the lesson is narrower and more useful than the old headline: **the
+  numbers were right in 4 of 4 cases, and what went wrong both times was
+  the structure around them** — which table a row came from, which columns
+  were dropped, which file holds the other half. `#982` is the worked
+  example: pairing a banded damage table with a per-level DC table
   misaligns in the **row keys**, so nothing would have raised and a level-5
   trap would have read band `4th-6th` damage beside level-5 DCs from
   another edition.
 
   So: say in the code which printing a table came from and what could not be
-  verified, and if the only source is a quote, say so on the issue rather
-  than landing it. Same rule as a census — see *"an issue's census is a
-  floor"* — applied to the cells instead of the count.
+  verified; **`ls resources/` before declaring a source absent**, because
+  that is a one-command claim and it was wrong here for two days; and if the
+  only source really is a quote, say so on the issue rather than landing it.
+  Same rule as a census — see *"an issue's census is a floor"* — applied to
+  the cells instead of the count.
 
 ### Labels
 
