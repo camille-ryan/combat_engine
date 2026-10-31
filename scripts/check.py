@@ -886,7 +886,20 @@ def main() -> int:
               + (", and the audit was narrow" if narrowed or mapped else ""))
     else:
         print(f"all {len(wanted)} instruments clean")
-    for line in _top_up_map(bool(failed)):
+    # **The line the nightly reads, and it is the single source of truth for
+    # `_ROW_RUNNERS`.** `nightly.sh` had the same "any failure" gate and only
+    # a count to work from, so the distinction has to be published rather
+    # than re-implemented in shell -- a second copy of this set is how the
+    # two gates would drift apart. Printed on every run, so its absence is
+    # itself meaningful: the nightly treats a missing line as blocking.
+    _blocking = _row_runners_red(failed)
+    print(f"# row-runners: {', '.join(_blocking) if _blocking else 'clean'}")
+    if failed and not _blocking:
+        # Said out loud because it is the behaviour #1030 changed: these red
+        # instruments used to freeze the map and now do not.
+        print(f"         the {len(failed)} red instrument(s) fire no row, so"
+              f" the map's recording is not blocked. #1030")
+    for line in _top_up_map(failed):
         print(line)
     for line in _clear_red(args.all, bool(failed), at, began_clean):
         print(line)
@@ -1601,7 +1614,39 @@ def _submit_order(wanted: list[Instrument]) -> list[Instrument]:
 TOP_UP_CAP = 40
 
 
-def _top_up_map(red: bool) -> list[str]:
+#: The instruments that **execute a declared row**, and so the only ones
+#: whose redness can make a recorded ref list short. #1030.
+#:
+#: The hazard both recording gates name is real and narrow: a row that raises
+#: records only the lines it reached *before* raising, so its ref list omits
+#: rows. Only something that fires a row can produce that. `audit` and
+#: `verdicts` are the same script and are what observes a raise; `drivers`
+#: runs row bodies, so a red one means the kernel is wrong mid-row and it
+#: belongs here on the conservative side.
+#:
+#: **Gating on any failure instead cost both healing paths indefinitely**,
+#: which is worse than it sounds because `todo` is red *by design* when a
+#: wanted symbol arrives -- it stays red until somebody writes the rows, and
+#: 7 of the 8 rows behind the live instance are content work with a measured
+#: blast radius. So `ruff`, `todo`, `leaks`, `browser`, `types`, `seams` and
+#: fifteen others each froze the nightly's re-recording and the per-commit
+#: top-up, and none of them executes a row. Measured on the live state: the
+#: map had narrowed **2 audit runs in its entire life** against 366 wide.
+#:
+#: This is a **loosening of a guard that protects a selector against
+#: choosing too few rows**, which `scripts/CLAUDE.md` is blunt about -- so it
+#: carries both halves of a plant rather than an argument. See the commit:
+#: a deliberately broken `audit` still declines, and a red `todo` alone now
+#: proceeds.
+_ROW_RUNNERS = frozenset({"audit", "verdicts", "drivers"})
+
+
+def _row_runners_red(failed: list[str]) -> list[str]:
+    """Which red instruments actually fired a row. See `_ROW_RUNNERS`."""
+    return sorted(set(failed) & _ROW_RUNNERS)
+
+
+def _top_up_map(failed: list[str]) -> list[str]:
     """Record the rows this commit touched, so the map never goes stale.
 
     **This is what stops "the map had no entry" being a standing excuse.**
@@ -1615,9 +1660,11 @@ def _top_up_map(red: bool) -> list[str]:
     Declines, out loud, on each of the cases where recording would be
     wrong or not worth it:
 
-    * **a red run**, for the nightly's reason -- a row that raises records
-      only the lines it reached before raising, so its ref list comes out
-      short in the direction that omits rows;
+    * **a red run among `_ROW_RUNNERS`**, for the nightly's reason -- a row
+      that raises records only the lines it reached before raising, so its
+      ref list comes out short in the direction that omits rows. A red
+      instrument that fires no row cannot do that and no longer declines
+      the recording; #1030 has what gating on `bool(failed)` cost;
     * **no map**, or a sampled one, which a top-up cannot repair;
     * **nothing under `content/` changed**, so there is nothing to record
       that the map does not already hold;
@@ -1628,9 +1675,10 @@ def _top_up_map(red: bool) -> list[str]:
     selector that fails open, so a failed top-up costs a wide audit next
     time and nothing else.
     """
-    if red:
-        return ["map top-up skipped: the run was red, and a raising row"
-                " records a short ref list"]
+    blocking = _row_runners_red(failed)
+    if blocking:
+        return [f"map top-up skipped: {', '.join(blocking)} red, and a"
+                f" raising row records a short ref list"]
     path = ROOT / "logs" / "impact.json"
     if not path.exists():
         return ["map top-up skipped: no map to merge into"]

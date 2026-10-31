@@ -403,11 +403,25 @@ cp "$LOG" logs/nightly-latest.log
 # rather than left in place. `impact._load` fails open with no map, so
 # deleting costs a night of wide sweeps and keeping a misattributed one costs
 # a silently wrong selection. Not a close call.
+#
+# **"Red" here means a red *row-running* instrument, not a non-zero exit.**
+# `VERDICT` is the number of instruments that failed, and twenty of them fire
+# no row -- so `ruff`, `leaks`, `types`, `seams` and `todo` each used to
+# freeze this recording, and `todo` is red *by design* for as long as a
+# wanted symbol has unwritten rows. The map had narrowed 2 audit runs in its
+# life against 366 wide. `check.py` publishes the distinction on a
+# `# row-runners:` line so this gate and its own share one set; a missing
+# line is treated as blocking, because an older or crashed `check.py` cannot
+# be read as evidence of anything. #1030.
+ROW_RUNNERS=$(grep -m1 '^# row-runners: ' "$LOG" | sed 's/^# row-runners: //')
 if [ "${1:-}" = "--fast" ]; then
     echo "map: not recorded -- --fast is the smoke test" | tee -a "$LOG"
-elif [ "$VERDICT" -ne 0 ]; then
-    echo "map: not recorded -- the sweep was red, and rows that raise record" \
-         "short ref lists" | tee -a "$LOG"
+elif [ -z "$ROW_RUNNERS" ]; then
+    echo "map: not recorded -- check.py printed no row-runners line, so" \
+         "whether a row raised is unknown" | tee -a "$LOG"
+elif [ "$ROW_RUNNERS" != "clean" ]; then
+    echo "map: not recorded -- ${ROW_RUNNERS} red, and rows that raise" \
+         "record short ref lists" | tee -a "$LOG"
 elif [ -n "$(git status --porcelain -- . ":(exclude)$LEDGER")" ]; then
     echo "map: not recorded -- the tree is dirty beyond the ledger" | tee -a "$LOG"
 else
