@@ -4726,6 +4726,31 @@ def _cross_reference_rest(
         low = name.lower()
         if len(low) < 3:
             continue
+        # **An opaque token is not a row and must never be a substitution
+        # target here.** `_opaque_shared_abilities` registers each `x12_`
+        # token in `names` so the monster glossary can resolve it for an
+        # author -- and that also made it visible to this index, where it
+        # competed with real rows. A token whose name is a word-boundary
+        # *prefix* of a longer real name then won and split that name:
+        # `f2037` printed a whole feat name, resolved correctly to `f2023b`
+        # before, and came out as the token plus the rest of the printed
+        # name left standing as prose. One correct ref traded for a leaked
+        # fragment, which `leaks.py --specs` cannot see because a fragment
+        # is not an indexed name. #1027.
+        #
+        # Measured before fixing: 39 of 1,156 `x12_` tokens are such a
+        # prefix, and **exactly one** actually split a name in the eleven
+        # spec tables. `#929`'s 2,584 `x_` tokens hold 52 prefix sites and
+        # split **nothing**, so this is not a pre-existing fault arriving
+        # by a new route -- it is the new route's own.
+        #
+        # Skipped wholesale rather than only for the 39, because the four
+        # specs this gives up were an *accident*: the general pass closing
+        # four printed-name leaks it was never aimed at. Those are worth
+        # their own issue rather than resting on a token being in an index
+        # it has no business in.
+        if ref.startswith("x12_"):
+            continue
         # Both spellings of the possessive. The pages set it as a curly
         # apostrophe and a spec quotes it the same way, but a lookup and a
         # printed-name key must meet somewhere, and half the callers here
