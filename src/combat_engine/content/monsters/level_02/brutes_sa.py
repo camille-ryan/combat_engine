@@ -1461,12 +1461,37 @@ def m855a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("actions.legal('ready')",),
 )
 def m855a2(c: Cast) -> None:
-    """The whole trait is a bonus on a *readied* attack, and readying an action
-    is not something a creature can do -- so there is no attack for the bonus
-    to sit on and no way to recognise one."""
+    """+4 damage on a readied basic attack against a foe that steps into reach.
+
+    **The marker's premise was true when it was written and is not now.** It
+    read *"readying an action is not something a creature can do -- so there
+    is no attack for the bonus to sit on and no way to recognise one"*, and
+    `#996` built both halves: `actions._readying` offers the hold to any
+    actor with a basic attack, and the swing it fires carries
+    `granted_via="ready"`. So there is an attack and there is a way to
+    recognise it.
+
+    `when=` on the provenance key, which is the idiom `f602` uses for the
+    same shape -- a damage bonus that applies only to an attack some other
+    row granted.
+
+    **No melee test beside it, and no adjacency test either**, for the reason
+    `f602` gives about its own clause: this creature's only basic attack is
+    `m855a0`, which is melee, so `granted_via="ready"` on *this* creature is
+    necessarily the melee basic attack the card names. And "a foe that enters
+    a square adjacent to it" is enforced by `use`, which checks reach (#381)
+    -- a melee basic attack cannot reach a mover that is not in reach, so
+    re-stating it here would be a second opinion about the same thing.
+
+    Not `once=`: the hold itself is `once=True`, so there is one readied
+    swing per hold and the modifier cannot pay twice for one.
+    """
+    c.bonus(
+        "damage", 4, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("granted_via") == "ready",
+    )
 
 
 @power(
@@ -1542,11 +1567,24 @@ def m933a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("actions.legal('ready')",),
 )
 def m933a2(c: Cast) -> None:
-    """The same trait as `m855a2` and the same one absence: nothing readies an
-    action, so there is no attack for the bonus to ride."""
+    """The same trait as `m855a2`, written the same way.
+
+    Its card prints the clause at slightly greater length -- *"readies an
+    action to make a basic melee attack"* against the other's *"readies a
+    melee basic attack"* -- and means the same thing, so the two rows are
+    the same body rather than one borrowing the other: `#996`'s own lesson
+    was that a trait reading "the same as <sibling>" is how a marker outlives
+    its premise unnoticed.
+
+    This creature's only basic attack is `m933a0`, melee reach 1, so the
+    provenance key is the whole of the printed condition here too.
+    """
+    c.bonus(
+        "damage", 4, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("granted_via") == "ready",
+    )
 
 
 @power(
