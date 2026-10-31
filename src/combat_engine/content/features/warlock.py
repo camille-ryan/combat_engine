@@ -337,6 +337,16 @@ def warlock_f1s5(c: Cast) -> None:
     c.grant_row("cf:warlock-f1c10")
 
 
+#: The two remnants the boon card names as **primary**, as its own clause
+#: refs. `cf:warlock-f1c12`'s spec labels one boon clause with each, so this
+#: is the printed list rather than a reading of it -- and refs, not names, so
+#: `leaks.py` stays honest. Other remnants arrive from daily attack powers,
+#: which the card says plainly ("other pact boons are described in the daily
+#: attack powers that give you access to new vestiges") and which is why
+#: `c.offer_vestige` takes `primary=` rather than owning the whole set.
+_PRIMARY_REMNANTS = ("cf:warlock-f1c12s0", "cf:warlock-f1c12s1")
+
+
 @power(
     "cf:warlock-f1s6",
     level=0,
@@ -346,23 +356,41 @@ def warlock_f1s5(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("c.active_vestige()",),
     requires=on_leg("vestige"),
     requires_text="needs the pact that prints it",
 )
 def warlock_f1s6(c: Cast) -> None:
-    """The leg exists; the choice *within* the leg does not.
+    """The leg, and the remnant it bargains with this fight.
 
-    Which of the two remnants this warlock bargained with is active is
-    picked after a rest and changed mid-fight by certain dailies, and the
-    at-will and the boon both read it. Nothing holds that state, so the
-    two rows are handed over and neither can tell which remnant it is
-    speaking for.
+    Printed: *"you can choose from between two or more vestige pacts to fuel
+    your arcane power"*, and *"you have a pact boon associated with your
+    active vestige"*. So a warlock on this pact always has one active, and
+    which one is a per-fight choice -- which is exactly `c.bargain`'s
+    shape and why it is state rather than a `Build` token.
+
+    **The two primary remnants are the boon card's own clause refs.**
+    `cf:warlock-f1c12`'s spec reads *"The pact boons associated with the
+    primary vestiges are given below"* and then labels one clause with each,
+    so `_PRIMARY_REMNANTS` is not a choice I made -- it is the card's own
+    list, and `c.vestiges(primary=True)` hands it to any row that needs the
+    subset.
+
+    `c.bargain` does the choosing: it offers a `c.choose` over more than
+    one, ends any standing bargain first, and is idempotent on re-arming.
+    `usage=ENCOUNTER` is what re-establishes it each fight.
+
+    **Was `dropped=("c.active_vestige()",)`**, and the clause it was missing
+    is this one. The verb it named existed; what did not was anybody
+    *offering* a remnant for it to be active among, so `c.active_vestige()`
+    answered `""` for every reader. #1034 is where that was measured across
+    the three rows waiting on it.
     """
     if not c.build("vestige"):
         return
     c.grant_row("cf:warlock-f1c11")
     c.grant_row("cf:warlock-f1c12")
+    c.offer_vestige(*_PRIMARY_REMNANTS, primary=True)
+    c.bargain(*c.vestiges(primary=True))
 
 
 # -- the cards only a pact above prints ---------------------------------

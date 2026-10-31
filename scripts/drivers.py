@@ -51008,6 +51008,88 @@ def a_brute_minion_reads_the_brute_column(out: Result) -> None:
              " passing because nothing converts at all")
 
 
+def the_vestige_pact_bargains_with_one_of_its_two(out: Result) -> None:
+    """A vestige-pact warlock arrives with an active remnant. #1034.
+
+    Printed on the pact: *"you can choose from between two or more vestige
+    pacts to fuel your arcane power"*, and *"you have a pact boon associated
+    with your active vestige"*. So one is always active and which one is a
+    per-fight choice, which is `c.bargain`'s own shape.
+
+    **The two primary remnants are the boon card's clause refs, not a
+    reading of it.** `cf:warlock-f1c12`'s spec says *"the pact boons
+    associated with the primary vestiges are given below"* and labels one
+    clause with each.
+
+    **Posed through the row's body, not through the verbs.**
+    `drivers.vestige_set` already proves `c.offer_vestige` and
+    `c.vestiges`; what this asserts is that the *leg* calls them, which is
+    the half that was missing while the verbs existed. Calling the verb
+    proves the mechanism and says nothing about the row.
+
+    The negative control is the one that matters: a warlock on a **different
+    pact** must come out with an empty set, because `c.vestiges()` answering
+    non-empty for everybody is what a clause keyed to a remnant needs in
+    order *not* to fire -- and it would make every one of the seven rows
+    still waiting on this ambiguous again.
+
+    **And that control is carried by the header, not the body**, which a
+    plant established rather than my assuming either way: removing the
+    body's `if not c.build("vestige")` leaves all ten assertions green,
+    because `requires=on_leg("vestige")` keeps the row off a warlock on
+    another pact and the control board never runs it. So the body's guard is
+    defence in depth and the file's idiom across its sibling legs -- not the
+    thing this rule proves. Said here because a reader would otherwise take
+    the green as evidence for the guard.
+    """
+    from combat_engine.engine.cast import Cast
+
+    # -- the pact that prints it ------------------------------------------
+    world, me, _ = _board("cf:warlock-f1s6", 1)
+    c = Cast(world=world, me=me, ref="probe")
+    primary = c.vestiges(primary=True)
+    active = c.active_vestige()
+
+    out.that(len(primary) == 2,
+             "the leg offers exactly the two remnants its boon card names",
+             f"got {primary}")
+    out.that(primary == ("cf:warlock-f1c12s0", "cf:warlock-f1c12s1"),
+             "and they are the card's own clause refs, sorted")
+    out.that(bool(active), "one of them is active after the leg arms")
+    out.that(active in primary,
+             "and the active one came from the primary set, not from nowhere",
+             f"active={active!r}")
+    out.that(set(c.vestiges()) == set(primary),
+             "the wider set is the primary set and nothing else yet --"
+             " other remnants arrive from daily attack powers")
+
+    # -- the boon and the at-will the leg hands over ----------------------
+    # **`Powers.known`, and the first draft of these two asserted nothing.**
+    # They read `ref in held or True`, which is always true -- a dead
+    # assertion dressed as a control, and exactly what `scripts/CLAUDE.md`
+    # means by a check that has never been shown to work. `granted` and
+    # `owned` are both empty here; `known` is where `c.grant_row` puts them.
+    from combat_engine.engine.components import Powers
+    known = world.get(me, Powers)
+    held = set(known.known) if known is not None else set()
+    for ref in ("cf:warlock-f1c11", "cf:warlock-f1c12"):
+        out.that(ref in held,
+                 f"the leg still grants {ref} -- the half that already"
+                 f" worked, and un-marking must not have dropped it",
+                 f"known holds {len(held)} rows")
+
+    # -- the negative control: another pact gets nothing ------------------
+    other, me2, _ = _board("cf:warlock-f1s5", 1)
+    c2 = Cast(world=other, me=me2, ref="probe")
+    out.that(not c2.build("vestige"),
+             "the control board's warlock is on a different pact")
+    out.that(c2.vestiges() == (),
+             "a warlock on another pact is offered no remnant at all")
+    out.that(c2.active_vestige() == "",
+             "and has none active, which is what lets a remnant clause"
+             " decline rather than guess")
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -52366,6 +52448,10 @@ DRIVERS = {
     "brute_minion": (
         a_brute_minion_reads_the_brute_column,
         "a brute minion reads DMG2's second damage column (#1010)",
+    ),
+    "vestige_pact": (
+        the_vestige_pact_bargains_with_one_of_its_two,
+        "a vestige-pact warlock arrives with an active remnant (#1034)",
     ),
 }
 
