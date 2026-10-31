@@ -763,7 +763,7 @@ class Scene:
     #: usually asking for a tighter fight than the default -- which is the
     #: point: a 6x8 chamber and a 10x16 hall are different fights with the
     #: same cast.
-    room: tuple[int, int, str] = ()  # type: ignore[assignment]
+    room: tuple[int, int, str] = ()  # ty: ignore[invalid-assignment]
 
     #: Creatures fighting **on the party's side**. #961.
     #:
@@ -1040,12 +1040,12 @@ def _as_room(
 ) -> tuple[int, int, str]:
     """A stated chamber, or `()` for the floor every fight has used. #974."""
     if raw is None:
-        return ()  # type: ignore[return-value]
+        return ()  # ty: ignore[invalid-return-type]
     if not isinstance(raw, dict):
         problems.append(
             f"{where}: a room must be an object with width and height, got "
             f"{type(raw).__name__}")
-        return ()  # type: ignore[return-value]
+        return ()  # ty: ignore[invalid-return-type]
     size = []
     for side in ("width", "height"):
         got = raw.get(side)
@@ -1053,14 +1053,14 @@ def _as_room(
             problems.append(
                 f"{where}: room {side} must be an integer between "
                 f"{ROOM_MIN} and {ROOM_MAX}, got {got!r}")
-            return ()  # type: ignore[return-value]
+            return ()  # ty: ignore[invalid-return-type]
         size.append(got)
     kind = str(raw.get("kind", "rectangle")).strip().lower()
     if kind not in ROOM_KINDS:
         problems.append(
             f"{where}: room kind {kind!r} is not one of "
             f"{', '.join(ROOM_KINDS)}")
-        return ()  # type: ignore[return-value]
+        return ()  # ty: ignore[invalid-return-type]
     return (size[0], size[1], kind)
 
 
