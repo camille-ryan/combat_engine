@@ -216,6 +216,23 @@ name.** Those are different questions and only the second is forbidden.
 * **Hand-write every row.** No regex, no loop minting rows from a table.
   The one exception is a small `_feature(ref, what)`-style helper for a run
   of rows that genuinely share a marker.
+* **The printed row wins over a printed table.** Camille, asked directly,
+  2026-10-31:
+
+  > *"We should always stick with the printed rows unless using some house
+  > rule flag later on (potentially a 'update to MM3 math')."*
+
+  This answers the question *"never derive a number the page prints"* leaves
+  open: what to do when **two** printed things disagree, a table and a row.
+  The row does. A prescriptive table — DMG2's minion damage is the worked
+  case, `#1010` — does **not** license overriding a number a row printed, and
+  the place for that is a **house-rule flag**, named and opt-in, never a
+  silent substitution.
+
+  Worth knowing before this reads as a loss: it is why `de36346a` moves only
+  3 rows. That change put the printed table inside `Math.convert`, which is
+  the opt-in scaling preset, and left declared rows alone — the small number
+  is the ruling working, not the change failing.
 * **A row is fully implemented before it is added, or it carries a
   marker.** `todo=` (refused in play), `dropped=` (plays, one clause
   missing), `narrative=` (finished, no combat meaning), `obsolete=` (retired
@@ -454,6 +471,28 @@ is no longer worth routing around.
   `check.py` prints when the net last reached a verdict, and
   `uv run scripts/check.py --history` has the attempts.
 
+  **And reading the stamp is not the same as reasoning from it.** On
+  2026-10-31 a session read `last run 2026-10-30 05:11 clean`, concluded
+  tonight's had already happened, and started editing `cast.py` — while the
+  poll was mid-sweep. That line was *yesterday's*; the schedule is a poll
+  with a 20-hour window, so a run inside it says nothing about whether the
+  next one is due. The stamp answers "when did the net last reach a verdict",
+  and nothing else.
+
+  **An edit voids a running sweep as surely as a rebuild, and far more
+  quietly.** `build.py` refuses outright while it is sweeping; an edit is
+  simply accepted, and `audit.py` reads source from disk through
+  `inspect.getsource`, so shifting line numbers under a module imported
+  earlier makes it tokenise from the wrong offset and report a **raise on a
+  sound row**. The tell that session had and did not read: the sweep logged
+  `symbols 466 placed` while the live count was already 468. Its timings went
+  too — `ruff` 421s against a normal ~90s, because the same session was
+  running its own checks alongside.
+
+  So: `pgrep -f "scripts/"` before **any** tree change, not only before a
+  launch. Checking before three destructive launches and then editing during
+  a fourth is how this one happened.
+
   **And it loses to a dirty tree, silently, for days.** It refuses to start
   on uncommitted edits — rightly, since a sweep over them certifies no
   commit — so one stray modified file stops the net indefinitely. On
@@ -506,14 +545,82 @@ is no longer worth routing around.
 * **After a rebuild the next run is wide, once.** `data/game.db` is git-ignored
   and every monster number is read from it, so a rebuild moves rows no path test
   can see.
+* **Batch the gate, not the proof.** The expensive checks are per-*run*, not
+  per-change, so N changes behind one gate cost what one change costs:
+
+  ```
+  per change     a narrow proof -- the parse-level harness (seconds) or the
+                 instrument itself (<1s) -- plus a plant that goes red
+  batch          every ETL change -> ONE rebuild
+  after rebuild  diff ALL ELEVEN spec tables, four leak gates, ONE wide sweep
+  the sweep      `audit.py --since`, NOT a plain run -- see below
+  separately     baseline writes, their own commit, per-field diff read
+  ```
+
+  **A committed batch empties `--changed`, so a plain `check.py` audits
+  nothing and says so.** Found immediately, on the first batch run this way:
+  committing the work before the gate — which is right, a merge has to be
+  committed — left a clean tree, so `_changed` selected **zero rows** and
+  `check.py` reported `audit checked NOTHING -- a skip, not a pass` under 26
+  green instruments. Only `#466`'s third exit code tells those apart; a
+  reader going by the headline would have taken an unaudited engine change
+  for a verified one. `--since` measures from the last *completed* full
+  sweep and is the invocation a batch wants.
+
+  **The narrow proof is what makes batching safe, and without it batching is
+  how a regression hides.** A rebuild diff over five parser changes cannot
+  attribute anything: `#1027` shipped a fix verified against **one spec table
+  of eleven**, reported "41 specs changed" where all eleven gave **46**, and
+  the five it missed held a regression that split a printed name in two. That
+  cost a second rebuild, which is exactly what batching is supposed to avoid.
+
+  **The harness is cheap and is the technique to reach for.** `etl/` is
+  reproducible without a rebuild: `_creature_names(rows, names)` then
+  `monster.parse(id, txt, src, others)` reproduced that bug and proved its
+  fix in **3 seconds**, and `_cross_reference_rest(con, names)` over a
+  **copy** of `game.db` did the same for the pass that caused it.
+
+  Baselines stay a separate commit because a batch moving `audited.json`,
+  `keywords.json` and `ingest.json` at once cannot say which change shrank
+  which — read the per-field diff, never the headline.
+* **What a change costs to gate, by where it lands.** Not every component is
+  wide, and the file never said which: `audit.WIDE` names five paths and
+  nothing else.
+
+  | a change under | what it costs to gate |
+  |---|---|
+  | `engine/` | WIDE, and the impact map can narrow it |
+  | `etl/` | WIDE **plus** a rebuild |
+  | `chargen/`, `story/` | WIDE |
+  | `scripts/audit.py` | WIDE |
+  | `policy/` | **no audit at all** — `replay` and `fight` are the cover |
+  | `scripts/` (anything else) | narrow: run that instrument, plant it |
+  | `content/` | narrow, by file |
+
+  `policy/` costing nothing is deliberate and `WIDE`'s own note says so: a
+  policy change decides what the AI *chooses* among options the rules already
+  allow, so it cannot break a row. Costs only — no counts and no running
+  order here, because a schedule in a rules file is what rots. This file has
+  watched it happen to the seam line numbers twice, to the row count above,
+  and to the nightly's stated hour three times.
 * **`--only <name>`** while iterating on one instrument's finding.
 * **`--only scorecard` on a `policy/` change**, with `scorecard.py --save` when
   the change *is* the improvement. It is paused out of the default run: 2 red
   runs in 108 is not a gate, it is a measurement.
 
-`audit.py` is the expensive one: about ten minutes for all 12,197 rows, and
-that cost has been measured and **cannot be tuned away** — see
-`_changed`'s docstring before trying. Use the narrow forms:
+`audit.py` is the expensive one: **about 25 minutes for all 23,061 rows** —
+1,475s, 1,532s and 1,563s on three runs measured 2026-10-31. That cost has
+been measured and **cannot be tuned away** — see `_changed`'s docstring
+before trying.
+
+This said *"ten minutes for all 12,197 rows"*, which was wrong on both
+numbers and in the direction that matters: a reader pricing an engine change
+off 12,197 rows and ten minutes is pricing **half the corpus at 40% of the
+clock**, and will reach for a wide run far too casually. `engine/CLAUDE.md`
+has carried the corrected figures for a while and this file contradicted it.
+Count it off `dsl.REGISTRY`, which is what `audit.py` walks.
+
+Use the narrow forms:
 
 ```
 uv run scripts/audit.py --changed          rows in changed files
@@ -525,4 +632,65 @@ uv run scripts/audit.py --sample 300       a direction, cheaply
 **Who you are changes two rules.** The main session lints the whole tree
 (`ruff check .`) and commits. A parallel content agent lints **only its own
 file** and never touches git — a tree-wide `--fix` has destroyed another
-agent's work.
+agent's work. The wider division those two rules are an instance of is
+below.
+
+## Who runs the gates
+
+Camille, after watching a separate Story session close issues quickly but
+hit friction landing the work, 2026-10-31: *"I was wondering if it makes
+more sense to use you here as a controller, and have you delegate tasks to
+agents, and then only you decide when to sweep, check, audit, push."*
+
+Yes — and the friction was never the push. It is **shared mutable state with
+no single owner**. One checkout, one `game.db`, one nightly, one impact map,
+one set of baselines, two writers. What that cost in a single day:
+
+* `#1028` was fixed **twice**, independently, from different sides
+  (`968a6c90` and `f17c46cd`) — and the second had to be reverted at the
+  merge.
+* `Scene.room`'s bad type was fixed at the cause on one side (`c4db47d0`)
+  while the other **suppressed** it; the suppression commit was superseded
+  the moment the two met.
+* A rebuild here truncated the other session's `game.db` mid-read.
+* A sweep was voided by an edit landing under it.
+* `origin/master` and local master diverged **34 / 9** with nobody owning
+  the merge.
+
+### One owner for anything shared or destructive
+
+**Rebuild, wide sweep, impact-map record, baseline writes, merge, push.**
+No exceptions — that list is exactly what collided above. Everything on it
+either rewrites a file every other process reads, or claims a lock, or
+decides what the tree *is*.
+
+### Delegate what can be verified narrowly
+
+The boundary is not seniority, it is **whether the work can be checked
+without the shared suite**:
+
+* **Content rows: delegate.** They partition by file and verify with
+  `lint.py <file>` and `audit.py <refs>`, which is already the rule above
+  and already works. It is also where the token spend is, so it is where
+  parallelism pays.
+* **Engine, ETL and instruments: do not.** Their verification is *global* —
+  see the per-component gate table in **Checking** — so handing one out buys
+  no parallelism and costs a collision. They **batch** instead, which gets
+  the same saving: the gate is per-run, not per-change.
+
+### Branch per session; the controller owns master
+
+The infrastructure already assumes this — worktrees exist and
+`scripts/build.py` refuses to rebuild from one (`#857`). The only missing
+piece was that **merging had no owner**, which is how a branch tip became
+`origin/master` while local master carried 34 unmerged commits.
+
+### A controller that also authors must gate itself
+
+The failure above was not carelessness about the rule; it was a session that
+checked `pgrep -f "scripts/"` before three destructive **launches** and then
+edited during a fourth, having reasoned from a stale stamp that the nightly
+had already run. An edit is as destructive to a running sweep as a rebuild
+and much quieter — see the nightly bullet in **Checking**.
+
+So the check belongs before **any** tree change, not before launches.

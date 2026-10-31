@@ -401,6 +401,15 @@ Not `--monsters`, not `--class`, not `check.py`.
 own file** — a tree-wide `ruff --fix` has destroyed another agent's work —
 and never touches git. The main session lints the tree and commits.
 
+**And content is the one component this applies to, which is the point.**
+The root file's *"Who runs the gates"* draws the general line: work is
+delegable when it can be verified **without the shared suite**, and rows are
+the case that can — they partition by file and check with `lint.py <file>`
+and `audit.py <refs>`. Engine, ETL and instrument work verifies globally, so
+it is batched behind one gate rather than handed out. Rebuild, wide sweep,
+map record, baseline writes, merge and push have a single owner there, never
+an agent.
+
 `lint.py` takes paths for exactly that reason, and **it did not until #388**:
 this file said "only its own file" and named a command that walked all 776 of
 them, so the one tool the rule offered did the one thing the rule forbids. Four
