@@ -19,8 +19,17 @@ Four judgements run through the file.
 * **Five items in this slot print the same elemental daily**: use it when
   you make an attack of some shape, that attack changes damage type and
   gains a rider, and every attack of that shape deals 1 extra for the rest
-  of the fight. They share `_infusion` and `_on_next_hit`, and each drops
-  `c.milestone()` -- nothing counts a day's milestones.
+  of the fight. They share `_infusion` and `_on_next_hit`, and each reads
+  `c.milestone()` for the second printed number.
+
+  **This said they *drop* it, because "nothing counts a day's
+  milestones".** That premise was falsified by `#666`: `api/day.py:215`
+  sets `world.milestones` before `encounter.start()` arms anything, on
+  Camille's ruling of every two completed encounters, and `c.milestone()`
+  reads it. `_infusion` has read it since -- `c.milestone() >= 1` picks
+  between the two printed extras for all five rows -- so the bullet
+  described a gap that had been closed underneath it. Found while
+  measuring `#978`, which is a different issue about the same reader.
 * **A skill modifier is real** and its context is `{actor, skill}` only,
   so "+2 to Athletics checks" is exact and "+2 to Athletics checks **to
   climb**" is the same flat modifier plus
