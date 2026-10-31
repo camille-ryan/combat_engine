@@ -137,7 +137,7 @@ made that a cycle.
 
 ## Seam
 
-**These are a gate now, not a paragraph.** `.importlinter` holds six
+**These are a gate now, not a paragraph.** `.importlinter` holds seven
 contracts and `check.py --only seams` asserts them in 0.1s, so what follows
 is checked rather than believed. Making it a gate corrected every number
 this list used to carry.

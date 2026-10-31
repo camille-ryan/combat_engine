@@ -53,10 +53,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from combat_engine.dc import BANDS
 from combat_engine.engine.cast import TERRAIN_WORDS
 from combat_engine.engine.skills import SKILLS
 
-from .dc import BANDS
 from .objective import KINDS as OBJECTIVES
 from .objective import POSITIONS, Objective
 from .objective import ROUNDS as OBJECTIVE_ROUNDS

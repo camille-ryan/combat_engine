@@ -13,8 +13,8 @@ which is neither a dice-count progression nor a die-size one, and the
 modifier repeats at `+5` for two consecutive bands while the dice keep
 moving. A loop reproducing two rows would be wrong in the third.
 
-**`story/dc.py` is NOT the other half of this table**, and that is worth
-stating here because the issue that asked for this assumed it was. `dc.py`
+**`combat_engine/dc.py` is NOT the other half of this table**, and that is
+worth stating here because the issue that asked for this assumed it was. It
 carries revised **per-level** DCs -- level 1 is `(8, 12, 19)` -- where this
 table is printed as ten three-level **bands** whose first is `10 / 15 / 20`.
 Different numbers and a different shape, from two printings. Pairing them

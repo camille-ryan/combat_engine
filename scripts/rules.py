@@ -1,24 +1,29 @@
 #!/usr/bin/env python
-"""Do the hand-copied rules tables still match the printed ones?
+"""Do the rules tables in the tree still match the printed ones?
 
-Two modules in `story/` are transcriptions of printed glossary tables:
+Two printed glossary tables have readers here, and the two are now at
+different stages, which is why this file asks them different questions:
 
-    story/dc.py:TABLE          level -> (easy, moderate, hard), 30 levels
-    story/module.py:COMPLEXITY complexity -> (successes, moderate, hard), 5
+    combat_engine/dc.py        READS `rules_dc` -- 90 cells, no copy left
+    story/module.py:COMPLEXITY a transcription -- 5 rows x 3 of 4 columns
 
-Both are **correct today** -- this check's first run confirmed every one of
-the 95 numbers -- and both say in their own notes that an earlier draft was
+Both were **correct on this check's first run** -- every one of the 95
+numbers -- and both say in their own notes that an earlier draft was
 *remembered* and wrong: "hard at level 4 is 21 and not 22", and a complexity
 table that "assumed every primary check rolls at moderate" when the printed
-shape escalates. So the risk this gate exists for is not a present error. It
-is that **nothing could tell when one stopped being right.**
+shape escalates. So the risk this gate exists for was never a present error.
+It is that **nothing could tell when one stopped being right.**
 
-`#1001` named that as the real prize and it is the reason this is a check
-rather than a migration: switching `dc.py` to *read* the column is
-`story/` work and a different component's call. Reconciling the two is not,
-and it turns a staleness risk into a red line the moment they diverge --
-which is the half that stops a silent fabrication, whichever direction the
-divergence comes from.
+**The DC half has since been migrated rather than merely gated**, which is
+the stronger of the two answers `#1001` set out: `combat_engine/dc.py` reads
+the column, so the whole class of transcription error is gone instead of
+watched. What is left to ask there is whether the *reader* returns what the
+column holds -- see `_dc`, which is narrower and catches more than the
+reconciliation it replaced.
+
+**The complexity half is still a hand copy**, so it still gets the original
+question. Migrating it is `story/`'s call and wants its own issue; until
+then the reconciliation is what stops it drifting, in either direction.
 
 **It fails if the table is absent, rather than passing.** A missing
 `rules_dc` means the glossary's printing moved and `_rules_tables` refused
@@ -41,11 +46,43 @@ from combat_engine.db import game
 
 
 def _dc(out: list[str]) -> int:
-    """`rules_dc` against `story.dc.TABLE`, all 30 levels."""
-    from combat_engine.story.dc import BANDS, TABLE
+    """`rules_dc` against what `combat_engine.dc.dc()` answers, all 90 cells.
 
+    **The question moved one step out when the hand copy went away, and this
+    is narrower and stronger than what it replaced.** It used to reconcile
+    `story/dc.py:TABLE` against the column; `#949`/`#1001` moved the table to
+    `combat_engine/dc.py`, which *reads* the column, so there is no
+    transcription left to disagree with one -- and a check comparing a
+    column against itself would be theatre.
+
+    What is still worth asking is whether **the reader returns what the column
+    holds**, which the old check could not see at all:
+
+    * a band mis-mapped to a column -- `easy` and `hard` swapped reads as a
+      working table and moves every DC in the campaign by eleven;
+    * `BANDS` reordered without the ETL's columns following, which the
+      module's own note warns about;
+    * the 1-30 clamp, which is behaviour rather than data and had no gate;
+    * a short table, which `#1001` records needing its own assertion because
+      a lookup against three rows of thirty looks exactly like one against
+      all of them.
+
+    So this reads the column directly -- the one place a second opinion is
+    still available -- and asks the reader for each cell.
+    """
+    from combat_engine.dc import BANDS, LEVELS, dc
+
+    # **Keyed by the column's own name, never by position**, and that is the
+    # difference between a check and a nuisance. The first draft compared
+    # `dc(lvl, BANDS[i])` against the i'th column, which goes red when
+    # `BANDS` is merely *reordered* -- and a reorder is harmless, because
+    # `dc.py` uses the same tuple to name the columns it selects and to index
+    # the row, so the two move together by construction. Asking by name keeps
+    # that green and still catches the bug that matters: a `_table` whose
+    # tuple order and whose `BANDS` order disagree, which hands back a
+    # neighbouring band's number and reads as a working table.
     rows = {
-        r["level"]: (r["easy"], r["moderate"], r["hard"])
+        r["level"]: {band: r[band] for band in BANDS}
         for r in game().execute("SELECT * FROM rules_dc")
     }
     if not rows:
@@ -55,30 +92,66 @@ def _dc(out: list[str]) -> int:
             "reconciliation cannot run without its reference."
         )
         return 1
-    if len(rows) != 30:
-        out.append(f"rules_dc holds {len(rows)} levels, not 30")
+    if len(rows) != LEVELS:
+        out.append(f"rules_dc holds {len(rows)} levels, not {LEVELS}")
         return 1
-    bad = [
-        (lvl, rows[lvl], TABLE.get(lvl))
-        for lvl in sorted(rows)
-        if rows[lvl] != TABLE.get(lvl)
-    ]
-    for lvl, printed, hand in bad:
+    bad: list[str] = []
+    for lvl in sorted(rows):
+        for band in BANDS:
+            try:
+                got = dc(lvl, band)
+            except Exception as exc:
+                bad.append(f"dc({lvl}, {band!r}) raised {exc!r}")
+                continue
+            if got != rows[lvl][band]:
+                bad.append(
+                    f"dc({lvl}, {band!r}) answers {got}, the printed"
+                    f" {band} column holds {rows[lvl][band]}"
+                )
+    # **The clamp is behaviour and gets asked about too.** A module may name a
+    # level this engine does not play, and `dc` promises the nearest level the
+    # table holds rather than a raise.
+    for level, nearest in ((0, 1), (-3, 1), (31, LEVELS), (99, LEVELS)):
+        for band in BANDS:
+            if dc(level, band) != rows[nearest][band]:
+                bad.append(
+                    f"dc({level}, {band!r}) does not clamp to level {nearest}"
+                )
+    # And the band refusal, for #539's reason: a gate on a word nothing
+    # carries reads exactly like a gate that works.
+    #
+    # **The message has to be the guard's own, and a plant is what established
+    # that.** The first version accepted any `ValueError` and stayed green
+    # when `dc`'s band check was replaced by `if False:` -- because
+    # `BANDS.index('trivial')` raises `ValueError` of its own two lines
+    # later. So the check passed while the guard was gone, which is exactly
+    # the fault it was written to watch for, one level up. It now requires the
+    # refusal to name the three bands, which only the guard does.
+    try:
+        got = dc(5, "trivial")
+        bad.append(f"dc(5, 'trivial') returned {got} instead of raising")
+    except ValueError as exc:
+        if "not one of" not in str(exc):
+            bad.append(
+                f"dc(5, 'trivial') raised {exc!r}, which is not the band"
+                f" guard's refusal -- `tuple.index` raises ValueError too, so"
+                f" the guard may be gone"
+            )
+    except Exception as exc:
+        bad.append(f"dc(5, 'trivial') raised {exc!r}, not a ValueError")
+    for line in bad:
+        out.append(line)
+    if bad:
         out.append(
-            f"level {lvl}: printed {printed}, story/dc.py has {hand}"
-        )
-    missing = sorted(set(TABLE) - set(rows))
-    if missing:
-        out.append(f"story/dc.py holds levels the printed table does not: {missing}")
-    if bad or missing:
-        out.append(
-            "The printed table is the authority. Correct `story/dc.py` -- "
-            "never this check -- and say which number moved."
+            "The printed column is the authority. Correct"
+            " `combat_engine/dc.py` -- never this check -- and say which"
+            " number moved."
         )
         return 1
     print(
-        f"the DC table reconciles: {len(rows)} levels x {len(BANDS)} bands, "
-        f"90 numbers, printed and hand copy identical"
+        f"the DC reader reconciles: {len(rows)} levels x {len(BANDS)} bands,"
+        f" {len(rows) * len(BANDS)} cells read back out of `rules_dc`,"
+        f" plus the clamp and the band refusal"
     )
     return 0
 

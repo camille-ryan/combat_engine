@@ -61,9 +61,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from combat_engine.dc import BANDS
+from combat_engine.dc import dc as dc_for
+
 from . import tension
-from .dc import BANDS
-from .dc import dc as dc_for
 from .module import SECONDARY_BONUS, Scene
 from .table import Table
 

@@ -750,13 +750,18 @@ CREATE INDEX trap_countermeasure_ref ON trap_countermeasure(ref);
 -- Two printed rules tables, read out of the compendium's own glossary
 -- rather than transcribed. #1001.
 --
--- `story/dc.py` and `story/module.py:COMPLEXITY` are hand copies of these
--- two, and both say in their own notes that an earlier draft was
--- **remembered and wrong** -- "hard at level 4 is 21 and not 22", and a
--- complexity table that "assumed every primary check rolls at moderate".
--- So the risk here is not that a copy is wrong today; it is that nothing
--- can tell when one stops being right. `check.py --only rules` reconciles
--- the two against these rows and goes red on a divergence.
+-- Both were hand copies when this landed, and both say in their own notes
+-- that an earlier draft was **remembered and wrong** -- "hard at level 4 is
+-- 21 and not 22", and a complexity table that "assumed every primary check
+-- rolls at moderate". So the risk was never that a copy is wrong today; it
+-- is that nothing could tell when one stopped being right.
+--
+-- **`rules_dc` now has a real reader rather than a reconciliation.**
+-- `combat_engine/dc.py` -- below every component, beside `armour.py` --
+-- reads these thirty rows, so the DC copy is gone rather than gated and
+-- `check.py --only rules` asks whether that *reader* returns what this
+-- table holds. `story/module.py:COMPLEXITY` is still a copy and still
+-- reconciled. #949.
 --
 -- A glossary entry is mechanical vocabulary -- see `_VOCABULARY_TABLE`,
 -- which keeps `Glossary` out of the name index for exactly this reason --

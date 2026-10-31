@@ -108,3 +108,35 @@ forbidden_modules =
 # live in `combat_engine/armour.py` now, below every component, the same place
 # and for the same reason as `db.py`. The edge is gone instead of allow-listed,
 # which is why this contract has no `ignore_imports`. #852.
+
+[importlinter:contract:printed-tables-are-below-everything]
+name = The printed tables import nothing but db.py
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    combat_engine.armour
+    combat_engine.dc
+forbidden_modules =
+    combat_engine.engine
+    combat_engine.content
+    combat_engine.etl
+    combat_engine.chargen
+    combat_engine.policy
+    combat_engine.story
+    combat_engine.api
+# Two modules that are a **table, not behaviour**: the printed armour numbers
+# and the printed skill-check DCs. `db.py` above has the same contract for the
+# same reason, and these two sit beside it -- `combat_engine.db` is
+# deliberately absent from the forbidden list, because reading the database is
+# the whole of what they do.
+#
+# `armour.py` has carried that claim in prose since #852 and **nothing checked
+# it**, which is the state every other line in this file was written to end.
+# It is in here now rather than in its own commit because it is the same claim
+# about the same layer.
+#
+# `dc.py` is the new one. It was `story/dc.py` holding ninety numbers as a hand
+# copy, which was right while the campaign runner was the only reader -- and
+# #949's swim clause put a second reader in the kernel, where `engine -> story`
+# is zero and two contracts above keep it so. Moving the table down is the same
+# answer as #334 and #852 rather than a new one. #949, #1001.

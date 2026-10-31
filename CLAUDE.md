@@ -43,7 +43,7 @@ The rest of the policy:
 
   | | what the quote got wrong |
   |---|---|
-  | `#982` | its four heroic rows were exact; its claim that `story/dc.py` holds "the DC half of the same table" was false — `dc.py` is a revised **per-level** table and the printed one is three-level **bands** |
+  | `#982` | its four heroic rows were exact; its claim that `story/dc.py` (now `combat_engine/dc.py`) holds "the DC half of the same table" was false — that table is a revised **per-level** one and the printed one is three-level **bands** |
   | `#988` | one ten-row table was really **three** printed tables, each with a **Level** column that was dropped; one row renamed, one omitted, three absent from the book |
   | `#1010`, `#972` | both quote DMG2, which is not in `resources/`, so neither is checkable — and `#972`'s *reverses* an earlier conclusion on that one source |
 
@@ -274,9 +274,10 @@ say so in the commit.
 | Story Engine | `src/combat_engine/story/` | the campaign runner: a module as a graph of scenes, roleplay, skill challenges, reflavouring, persistence, and the party carried between fights. `story/CLAUDE.md` governs it. |
 | Database | `src/combat_engine/db.py` | where `game.db` and the localisation are, and how to read them. Below every component; imports nothing from the package. |
 | Armour table | `src/combat_engine/armour.py` | the printed armour and shield numbers, read once. Below every component; imports only `db.py`. A table, not behaviour. |
+| DC table | `src/combat_engine/dc.py` | what a skill check has to beat, by level and band — 90 numbers read out of `rules_dc`. Below every component; imports only `db.py`. A table, not behaviour. Was `story/dc.py` and moved when the kernel became a second reader. #949, #1001. |
 | Instruments | `scripts/` | belongs to no component. |
 
-**These seams are now a gate, not a paragraph.** `.importlinter` holds six
+**These seams are now a gate, not a paragraph.** `.importlinter` holds seven
 contracts and `check.py`'s `seams` instrument asserts them in seconds, so
 what follows is checked on every run rather than believed. Making it a gate
 corrected two of the five claims it started with, which is why the prose

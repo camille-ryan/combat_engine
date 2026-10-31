@@ -52,10 +52,10 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from combat_engine.dc import dc as dc_for
 from combat_engine.engine.skills import CheckResult
 
 from . import llm
-from .dc import dc as dc_for
 from .module import Affordance, Scene
 from .table import Table
 
