@@ -130,6 +130,71 @@ def drop(world: World, eid: int, squares: int = 0, *, by: int = 0, safe: bool = 
         _FALLING.discard(key)
 
 
+#: What an edge save has to beat -- the printed saving-throw number, and the
+#: same one `Cast.save` uses. Named rather than inlined for the reason
+#: `SQUARES_PER_DIE` is: a number and the rule it comes from must not drift.
+SAVE_BEATS = 10
+
+
+def catches_itself(
+    world: World, eid: int, into: tuple[int, int], *,
+    bonus: int = 0, power: str = "",
+) -> bool:
+    """Can this creature avoid being forced over an edge? PHB p284.
+
+    > *"**Catching Yourself:** If a power or a bull rush forces you over a
+    > precipice or into a pit, you can immediately make a saving throw to
+    > avoid going over the edge. This saving throw works just like a normal
+    > saving throw, except you make it as soon as you reach the edge, not at
+    > the end of your turn."*
+
+    True means it caught itself and **does not move**; False means it goes
+    over and the fall follows from `ground` as it always did.
+
+    **Scoped to forced movement, which is what the rule says.** Walking off
+    a ledge of your own accord gets no save -- the printed sentence names a
+    power or a bull rush -- so this is called from `movement.forced` and not
+    from `step`. Putting it in `drop` instead would have handed the save to
+    every voluntary fall in the game, which is the more generous reading and
+    not the printed one.
+
+    `when_="edge"` on the event is the printed distinction, and it is the
+    whole reason that field exists (#671): the throw is taken *now*, not at
+    the end of the turn, so a row reading "a bonus to saving throws made at
+    the start of your turn" must not pay out on it. The one content reader
+    of `when_` tests for `"early"` explicitly, so it is unaffected.
+
+    **Any drop down is an edge**, however shallow. A one-square step down
+    deals no damage -- `SQUARES_PER_DIE` is 2 -- but the printed rule is
+    about whether you went *over*, not about how far, so the save is offered
+    and the damage follows separately. Gating it on a damaging height would
+    be inventing a threshold the page does not print.
+    """
+    from .events import SavingThrow
+    from .resolve import _mods
+
+    pos = world.get(eid, Position)
+    if pos is None or airborne(world, eid):
+        # A flyer is where it means to be; there is no edge to go over.
+        return False
+    if world.grid.floor(into) >= world.grid.floor(pos.square):
+        return False
+    natural = world.rng.roll("1d20").total
+    plus = bonus + _mods(
+        world, eid, "save",
+        {"actor": eid, "label": "falling", "conditions": frozenset(),
+         "ongoing": False, "dtype": None, "keywords": frozenset(),
+         "when_": "edge", "granted_via": power},
+    )
+    return world.bus.emit(
+        SavingThrow(
+            actor=eid, against="falling", natural=natural, bonus=plus,
+            saved=natural + plus >= SAVE_BEATS, when_="edge",
+            granted_via=power, keywords=frozenset(),
+        )
+    ).saved
+
+
 def ground(world: World, eid: int) -> int:
     """Settle a creature onto the floor of the square it is standing in.
 

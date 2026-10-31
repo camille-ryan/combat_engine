@@ -899,17 +899,45 @@ def forced(
         # announcing a Leave/Enter/Moved for a square nobody left.
         moved = 0
         for sq in _line(world.need(target, Position).square, to)[1:]:
-            if moved >= amount or not step(world, target, sq, kind=how.value):
+            if moved >= amount or _over_an_edge(world, target, sq, power):
+                break
+            if not step(world, target, sq, kind=how.value):
                 break
             moved += 1
         return moved
     moved = 0
     for _ in range(amount):
         nxt = _forced_square(world, source, target, anchor, how)
-        if nxt is None or not step(world, target, nxt, kind=how.value):
+        if nxt is None or _over_an_edge(world, target, nxt, power):
+            break
+        if not step(world, target, nxt, kind=how.value):
             break
         moved += 1
     return moved
+
+
+def _over_an_edge(
+    world: World, target: int, into: Square, power: str
+) -> bool:
+    """Did the shoved creature catch itself at the edge? PHB p284.
+
+    **Checked before the step, in both loops, and that is the printed
+    timing**: *"you make it as soon as you reach the edge"*. A save taken
+    after the step would have to put the creature back, and the fall would
+    already have been announced.
+
+    True stops the forced movement where it stands. Returning the *save*
+    rather than its opposite would read better here and would be wrong at
+    the call sites, which is why the name is about the edge and not about
+    the throw.
+
+    Only a drop qualifies, and `catches_itself` decides that -- so a shove
+    across flat ground rolls nothing, which matters because this sits in the
+    inner loop of every push, pull and slide in the game. #949.
+    """
+    from .falling import catches_itself
+
+    return catches_itself(world, target, into, power=power)
 
 
 def forced_squares(

@@ -50519,6 +50519,146 @@ def a_scene_can_hand_the_party_something_that_survives_the_next_scene(
     )
 
 
+def forced_over_an_edge(out: Result) -> None:
+    """A creature forced over an edge gets a saving throw. PHB p284.
+
+    > *"If a power or a bull rush forces you over a precipice or into a pit,
+    > you can immediately make a saving throw to avoid going over the edge.
+    > This saving throw works just like a normal saving throw, except you
+    > make it as soon as you reach the edge, not at the end of your turn."*
+
+    `falling.py` had the whole fall -- `1d10` per two squares, prone on
+    landing, `Fell` cancellable so a row could arrest it -- and nothing made
+    this throw. A shove over a precipice dropped the target with no save.
+
+    **The negative controls are most of the value here.** The save sits in
+    the inner loop of every push, pull and slide in the game, so the two
+    ways to get it wrong are both silent: rolling on flat ground (a save
+    nobody is owed, in the log of every shove), and handing it to a creature
+    that walked off the ledge of its own accord, which the printed sentence
+    does not -- it names a power or a bull rush.
+
+    Deterministic through `Rng.loaded`, which forces every d20. A save is
+    one roll in twenty at the edges, so asserting a rate instead would need
+    hundreds of shoves to tell the branches apart.
+
+    **Every square is found, not assumed, and the first draft of this rule
+    is why.** The audit board is crowded -- 8 creatures, and the two squares
+    either side of this one are both occupied -- so a hardcoded pit was a
+    body, the shove stopped against it, and five assertions failed for a
+    reason that had nothing to do with edges. `_free_edge` picks an
+    unoccupied neighbour and derives the anchor by mirroring it, so the
+    push direction is a consequence of the chosen square rather than a
+    second guess about the board.
+    """
+    from combat_engine.engine.components import Health, Movement, Position
+    from combat_engine.engine.events import Fell, SavingThrow
+    from combat_engine.engine.movement import forced, step
+    from combat_engine.engine.types import Forced
+
+    def _free_edge(world, eid):          # noqa: ANN001, ANN202
+        """An empty neighbour, and the anchor that pushes the creature into it."""
+        at = world.need(eid, Position).square
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
+                       (1, 1), (-1, -1), (1, -1), (-1, 1)):
+            sq = (at[0] + dx, at[1] + dy)
+            if (world.grid.inside(sq) and world.grid.passable(sq)
+                    and world.grid.occupant(sq) is None):
+                return at, sq, (at[0] - dx, at[1] - dy)
+        return at, None, None
+
+    world, me, _ = _board("m145a0", 1)
+    here, pit, anchor = _free_edge(world, me)
+    world.grid.elevation[pit] = -4
+
+    # **The setup, asserted.** A pit that is not lower than the floor, a
+    # creature not actually beside it, or an anchor that pushes it the other
+    # way, leaves every assertion below vacuous and green -- which is what
+    # happened on the first run of this rule.
+    out.that(pit is not None, "the board has a free square to sink")
+    out.that(world.grid.floor(pit) < world.grid.floor(here),
+             "the pit's floor is below the creature's")
+    out.that(world.grid.occupant(pit) is None,
+             "the pit is empty, so nothing else stops the shove")
+
+    # -- the save succeeds: it does not go over ----------------------------
+    world.rng.loaded = 20
+    mark = len(world.bus.log)
+    went = forced(world, me, me, Forced.PUSH, 1, anchor=anchor, power="probe")
+    saves = [e for e in world.bus.log[mark:] if isinstance(e, SavingThrow)]
+    out.that(went == 0, "a save at the edge stops the shove dead")
+    out.that(world.need(me, Position).square == here,
+             "and the creature has not left its square")
+    out.that(len(saves) == 1 and saves[0].saved,
+             "exactly one saving throw, and it succeeded")
+    out.that(bool(saves) and saves[0].when_ == "edge",
+             "the throw is marked as taken at the edge, not at end of turn")
+    out.that(not any(isinstance(e, Fell) for e in world.bus.log[mark:]),
+             "nothing fell")
+
+    # -- the save fails: over it goes, and the fall is the old one ---------
+    world.rng.loaded = 1
+    health = world.get(me, Health)
+    hp_before = health.hp
+    mark = len(world.bus.log)
+    went = forced(world, me, me, Forced.PUSH, 1, anchor=anchor, power="probe")
+    fell = [e for e in world.bus.log[mark:] if isinstance(e, Fell)]
+    out.that(went == 1, "a failed save does not stop the shove")
+    out.that(world.need(me, Position).square == pit,
+             "the creature is in the pit")
+    out.that(bool(fell), "and the fall was announced")
+    out.that(health.hp < hp_before, "a four-square drop costs hit points")
+
+    # -- negative control: flat ground rolls nothing -----------------------
+    world2, me2, _ = _board("m145a0", 1)
+    world2.rng.loaded = 20
+    _, flat, flat_anchor = _free_edge(world2, me2)
+    out.that(world2.grid.floor(flat) == 0,
+             "the control square is level -- nothing was sunk on this board")
+    mark = len(world2.bus.log)
+    moved = forced(world2, me2, me2, Forced.PUSH, 1, anchor=flat_anchor,
+                   power="probe")
+    out.that(moved == 1, "a shove across level ground still moves")
+    out.that(not any(isinstance(e, SavingThrow)
+                     for e in world2.bus.log[mark:]),
+             "and rolls NO saving throw -- the edge test, not every shove")
+
+    # -- negative control: walking off is not being forced off ------------
+    # The printed sentence names a power or a bull rush. A creature that
+    # steps off a ledge itself is owed nothing, and putting the save in
+    # `drop` instead of in `forced` would have given it one.
+    world3, me3, _ = _board("m145a0", 1)
+    world3.rng.loaded = 20
+    p3, hole, _unused = _free_edge(world3, me3)
+    world3.grid.elevation[hole] = -4
+    out.that(world3.grid.floor(hole) < world3.grid.floor(p3),
+             "the third board's hole is a real drop too")
+    mark = len(world3.bus.log)
+    out.that(step(world3, me3, hole, kind="walk"),
+             "the creature actually walked into the hole")
+    out.that(not any(isinstance(e, SavingThrow)
+                     for e in world3.bus.log[mark:]),
+             "a voluntary step off a ledge gets no save")
+    out.that(any(isinstance(e, Fell) for e in world3.bus.log[mark:]),
+             "and it does fall, exactly as it did before")
+
+    # -- a flyer has no edge to go over -----------------------------------
+    world4, me4, _ = _board("m145a0", 1)
+    world4.rng.loaded = 1
+    mv = world4.get(me4, Movement)
+    mv.using = "fly"
+    _, gap, gap_anchor = _free_edge(world4, me4)
+    world4.grid.elevation[gap] = -4
+    out.that(mv.using == "fly", "the flyer is actually flying")
+    mark = len(world4.bus.log)
+    forced(world4, me4, me4, Forced.PUSH, 1, anchor=gap_anchor, power="probe")
+    out.that(not any(isinstance(e, SavingThrow)
+                     for e in world4.bus.log[mark:]),
+             "a flyer shoved over a gap rolls no edge save")
+    out.that(not any(isinstance(e, Fell) for e in world4.bus.log[mark:]),
+             "and does not fall")
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -51862,6 +52002,10 @@ DRIVERS = {
                                     "one creature's hold, another's save"),
     "immune_to_a_keyword": (immune_to_a_keyword,
                             "immunity to a class of effect, not a condition"),
+    "edge_save": (
+        forced_over_an_edge,
+        "a creature forced over an edge gets a saving throw",
+    ),
 }
 
 
