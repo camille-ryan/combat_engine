@@ -51303,6 +51303,104 @@ def the_racial_power_is_bought_with_the_pact_boon(out: Result) -> None:
              " -- not a flag but the registration ending")
 
 
+def a_prerequisite_asks_about_the_card_not_one_of_its_refs(out: Result) -> None:
+    """"Prerequisite: You must have the wild shape power" -- under any ref
+    that card is declared under. #1045.
+
+    One printed card, two refs: `p5032` is the class's own row and `f3646b`
+    is the copy `f3646` hands over, because the feat prints a card of its
+    own and that card is the same door. `f3646`'s docstring says exactly
+    that. So a character who got the power *through the feat* holds
+    `f3646b` and not `p5032`, and `has_wild_shape` naming only the class ref
+    answered **False** for somebody the feat had just given the power to.
+
+    **Nothing on a dealt character was wrong, and this rule is not
+    pretending otherwise.** Both rows gating on it are `cls="druid"`, so the
+    only holder who can draw them already has `p5032` -- which is why the
+    fault was latent and why no instrument could have reached it from a
+    board built out of the draw. This poses the holder the draw cannot
+    produce, which is the only way the question is askable at all.
+
+    So read the green as "the prerequisite asks about the card", not as
+    "two rows started working". `#1045` holds the larger question of
+    whether the copy should exist; this is the half that is wrong whichever
+    way that goes, because a ref is not a card.
+    """
+    from combat_engine.content.powers.druid.tiny_forms import (
+        WILD_SHAPE,
+        WILD_SHAPE_REFS,
+        has_wild_shape,
+    )
+    from combat_engine.engine.components import Powers
+
+    # -- the holder the feat made, which no draw deals ---------------------
+    world, me, _ = _board("f3646", 1)
+    known = world.get(me, Powers)
+
+    out.that(known is not None,
+             "the posed holder has a power list at all -- without one every "
+             "read below is about nothing")
+    if known is None:
+        return
+
+    # **Assert the setup landed before asserting the consequence.** If the
+    # feat failed to arm, `f3646b` is absent and the read below would be
+    # about a creature holding neither ref -- the negative control's board,
+    # not this one, and the rule would pass by agreeing with itself.
+    out.that("f3646b" in known.known,
+             "the feat handed its own copy of the card over",
+             f"holds {sorted(known.known)[:6]}")
+
+    # **The board deals a druid, so the class ref has to be taken away by
+    # hand.** `f3646`'s natural holder scores as a druid, who already has
+    # `p5032` -- which made the first draft of this rule read `True` for
+    # the old reason and assert nothing at all. That is the state no draw
+    # produces and the only one the question is about: somebody holding the
+    # feat's copy of the card and not the class's.
+    if WILD_SHAPE in known.known:
+        known.known.remove(WILD_SHAPE)
+    out.that(WILD_SHAPE not in known.known,
+             "the class ref is now gone from the posed holder -- the whole "
+             "premise, and a setup that silently failed would make the "
+             "read below true for the reason it is supposed to replace",
+             f"holds {sorted(known.known)[:6]}")
+    out.that("f3646b" in known.known,
+             "while the feat's copy is still there")
+
+    out.that(has_wild_shape(world, me),
+             "so the printed prerequisite is met: this character has the "
+             "card, under the ref the feat gave them -- and a reader naming "
+             "only the class ref would answer False on this exact board")
+
+    # -- the druid who drew it the ordinary way must still pass ----------
+    # **A board, not `WILD_SHAPE in WILD_SHAPE_REFS`.** The first draft
+    # asserted tuple membership, which is a restatement of the line above
+    # it and cannot fail while the module imports -- the vacuity I have
+    # written twice already. This asks the reader.
+    druid, dru, _ = _board("p5032", 1)
+    theirs = druid.get(dru, Powers)
+    out.that(theirs is not None and WILD_SHAPE in theirs.known,
+             "the ordinary druid holder has the class ref",
+             f"holds {sorted(theirs.known)[:6] if theirs else None}")
+    out.that(has_wild_shape(druid, dru),
+             "and still meets the prerequisite -- widening the question "
+             "must not have cost the case that already worked")
+
+    # -- the negative control: somebody with neither ref -------------------
+    # Same size as each positive, deliberately: one creature, one read. A
+    # reader that answered True for everybody would pass both checks above
+    # and this is the only thing that can tell them apart.
+    other, who, _ = _board("f3444", 1)
+    none_of_it = other.get(who, Powers)
+    out.that(none_of_it is not None
+             and not (set(WILD_SHAPE_REFS) & set(none_of_it.known)),
+             "the control holds neither ref -- otherwise it cannot answer "
+             "False and every check above is vacuous",
+             f"holds {sorted(none_of_it.known)[:6] if none_of_it else None}")
+    out.that(not has_wild_shape(other, who),
+             "and the prerequisite is NOT met for them, so the reader is "
+             "still a gate rather than True for everybody")
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -52673,6 +52771,10 @@ DRIVERS = {
     "boon_for_racial": (
         the_racial_power_is_bought_with_the_pact_boon,
         "f3444 trades the pact boon for its racial power (#641)",
+    ),
+    "card_prerequisite": (
+        a_prerequisite_asks_about_the_card_not_one_of_its_refs,
+        "a prerequisite asks about the card, not one of its refs (#1045)",
     ),
 }
 

@@ -48,13 +48,41 @@ from .forms import BEAST, current_form, ends_with
 #: The class's own shape-change, and the row these two hang off.
 WILD_SHAPE = "p5032"
 
+#: **Every ref that printed card is declared under.** `f3646b` is the same
+#: card: `f3646` hands it over with `c.grant_row`, because the feat prints a
+#: card of its own that is a copy of this one, and its docstring says so --
+#: *"it is the same door `p5032` already is; the feat's own copy is what is
+#: handed over, so the card is reachable rather than orphaned."*
+#:
+#: So a character who got the power through the feat holds `f3646b` and not
+#: `p5032`, and a prerequisite naming only the class ref answers **False**
+#: for somebody the feat just gave the power to. `#1045` is the duplication
+#: itself and whether the copy should exist at all; this is the half that is
+#: wrong either way, because "do you have this card" is the question the
+#: printed line asks and a ref is not the card.
+#:
+#: **Nothing is wrong on a dealt character today** and the tuple is not
+#: pretending otherwise: both readers below are `cls="druid"`, so the only
+#: holder who can draw them already has `p5032`. It is the next reader that
+#: this is for -- naming one ref is the natural way to write this and the
+#: wrong way, and nothing said so at the point where somebody would write
+#: the next one.
+WILD_SHAPE_REFS = (WILD_SHAPE, "f3646b")
+
 PRIMAL = [Keyword.PRIMAL]
 
 
 def has_wild_shape(world: World, eid: int) -> bool:
-    """"Prerequisite: You must have the wild shape power."""
+    """"Prerequisite: You must have the wild shape power."
+
+    Asks about the **card**, under any ref it is declared under -- see
+    `WILD_SHAPE_REFS`. `twins.py --declared-twice` is the gate that keeps
+    that tuple honest: it reddens if the two stop being one card.
+    """
     known = world.get(eid, Powers)
-    return known is not None and WILD_SHAPE in known.known
+    if known is None:
+        return False
+    return any(ref in known.known for ref in WILD_SHAPE_REFS)
 
 
 def _offer(c: Cast, dress: Callable[[], tuple[Effect | None, ...]]) -> None:
