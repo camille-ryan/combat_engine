@@ -220,8 +220,16 @@ CATEGORIES: dict[str, dict] = {
             # bargain does nothing at all on its own -- it decides which
             # clause of somebody else's card pays. One at a time, per
             # encounter. #897.
+            # **Two questions, not one, and the second is the one three rows
+            # actually wanted.** `bargain`/`active_vestige` say which remnant
+            # is active; `offer_vestige`/`vestiges` say which ones can be
+            # bargained with at all. A feat granting a remnant, a feat
+            # swapping between them and a rod naming "one of your primary
+            # vestiges" all carried `c.active_vestige()` as their marker and
+            # none of them wanted it. Listed together because a row reaching
+            # for one almost always needs the other. #1034.
             ("the vestige bargain", [
-                "active_vestige", "bargain",
+                "active_vestige", "bargain", "offer_vestige", "vestiges",
             ]),
             # Its own track, not a condition and not a modifier: a disease
             # has stages and a saving throw at the end of the encounter

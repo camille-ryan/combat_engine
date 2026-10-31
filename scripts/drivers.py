@@ -16957,6 +16957,78 @@ def a_swimmer_swims_in_an_aquatic_fight(out: Result) -> None:
              f"{mode_of(world, me, None)!r} vs {dry!r}")
 
 
+def the_set_of_remnants_is_held_apart_from_the_active_one(out: Result) -> None:
+    """Which remnants a warlock *can* bargain with. #1034.
+
+    `c.bargain` and `c.active_vestige` answer "which one is active". Three
+    rows carried that symbol as their marker and wanted a different
+    question -- a feat swapping the active remnant needs the ones held
+    earlier to choose among, a feat *granting* a remnant needs to make
+    itself available, and a rod printing "one of your primary vestiges"
+    needs to know which those are.
+
+    **The load-bearing assertion is the last one.** `c.bargain` ends a
+    standing bargain with a *substring* test over every effect on the
+    creature -- `if _VESTIGE in str(eff.label)` -- so a prefix that
+    contained `"vestige:"` would make every bargain silently delete the
+    whole offer set, and the row that then asked `c.vestiges()` would get
+    an empty tuple with nothing to say why. That is asserted here rather
+    than left to whoever next renames a constant.
+    """
+    from combat_engine.engine.cast import Cast
+
+    world, me, _ = _board("f1028", 1)
+    c = Cast(world=world, me=me, ref="probe")
+
+    out.that(c.vestiges() == () and c.vestiges(primary=True) == (),
+             "a warlock on another pact can bargain with nothing, which is"
+             " what a clause keyed to a remnant needs in order not to fire",
+             f"{c.vestiges()} / {c.vestiges(primary=True)}")
+
+    out.that(c.offer_vestige("x1", "x2", primary=True) == ("x1", "x2"),
+             "the leg offers its two printed remnants and both are taken",
+             "offer_vestige returned otherwise")
+    out.that(c.vestiges() == ("x1", "x2")
+             and c.vestiges(primary=True) == ("x1", "x2"),
+             "a primary remnant is in both the wide set and the primary"
+             " one, so neither reader has to know about the other",
+             f"{c.vestiges()} / {c.vestiges(primary=True)}")
+
+    # A daily grants a third: offered, but not primary.
+    out.that(c.offer_vestige("x9") == ("x9",),
+             "a granted remnant joins the set",
+             "offer_vestige returned otherwise")
+    out.that(c.vestiges() == ("x1", "x2", "x9")
+             and c.vestiges(primary=True) == ("x1", "x2"),
+             "and is NOT primary -- the printed distinction a rod naming"
+             " `one of your primary vestiges` depends on",
+             f"{c.vestiges()} / {c.vestiges(primary=True)}")
+
+    out.that(c.offer_vestige("x1", primary=True) == (),
+             "offering one already offered adds nothing, so the leg"
+             " re-arming each encounter does not accumulate",
+             "offer_vestige returned otherwise")
+
+    # -- the one that would be silent -------------------------------------
+    before = c.vestiges()
+    c.bargain(*c.vestiges(primary=True))
+    out.that(c.active_vestige() in ("x1", "x2"),
+             "bargaining from the primary set sets an active remnant",
+             f"active={c.active_vestige()!r}")
+    out.that(c.vestiges() == before,
+             "and the OFFER SET SURVIVES THE BARGAIN -- `c.bargain` ends"
+             " standing bargains by substring, so a prefix containing"
+             " `vestige:` would empty this silently",
+             f"{before} -> {c.vestiges()}")
+
+    # A second bargain is still exclusive, and still does not eat the set.
+    c.bargain("x9")
+    out.that(c.active_vestige() == "x9" and c.vestiges() == before,
+             "a second bargain replaces the active one and leaves the set"
+             " alone, which is the printed rule both ways",
+             f"active={c.active_vestige()!r}, set={c.vestiges()}")
+
+
 def a_monsters_level_can_be_adjusted(out: Result) -> None:
     """The DMG's level adjustment, on a spawned creature. #972.
 
@@ -50720,6 +50792,11 @@ DRIVERS = {
         a_vestige_bargain_selects_one_remnant,
         "a vestige-pact warlock bargains with one remnant at a time, per"
         " encounter, and a reader says which (#897)",
+    ),
+    "vestige_set": (
+        the_set_of_remnants_is_held_apart_from_the_active_one,
+        "the set of remnants a warlock can bargain with is held apart from"
+        " the active one, and a bargain does not eat it (#1034)",
     ),
     "levelled": (
         a_monsters_level_can_be_adjusted,

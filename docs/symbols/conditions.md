@@ -127,6 +127,10 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Which remnant this warlock is bargaining with. `c.active_vestige()`
 - `c.bargain(self, *refs: 'str', on: 'int | None' = None) -> 'str'`
   - "You bargain with one of your vestiges." #897.
+- `c.offer_vestige(self, *refs: 'str', on: 'int | None' = None, primary: 'bool' = False) -> 'tuple[str, ...]'`
+  - Which remnants this warlock **can** bargain with. #1034.
+- `c.vestiges(self, *, of: 'int | None' = None, primary: 'bool' = False) -> 'tuple[str, ...]'`
+  - The remnants this warlock can bargain with. `c.vestiges()`
 
 ## disease
 

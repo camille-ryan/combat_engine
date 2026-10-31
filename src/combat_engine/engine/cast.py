@@ -89,6 +89,33 @@ class _Decline:
 #: time, per encounter, read back by `c.active_vestige`. #897.
 _VESTIGE = "vestige:"
 
+#: Marks a remnant this warlock **can** bargain with, which is a different
+#: question from which one is active and is the one three rows actually
+#: wanted. `c.offer_vestige` writes it, `c.vestiges` reads it. #1034.
+#:
+#: Apart from `_VESTIGE` rather than a flag on it, because the two have
+#: different cardinality by the printed rule: the bargain is exclusive and
+#: the offer is a set. One prefix carrying both would make
+#: `c.active_vestige`'s "first label wins" search answer whichever offer
+#: happened to be laid first.
+#:
+#: **These two prefixes must not be substrings of each other, and that is
+#: load-bearing rather than tidy.** `c.bargain` ends a standing bargain with
+#: `if _VESTIGE in str(eff.label)`, a substring test over every effect on the
+#: creature -- so a spelling like `"vestige:can:"` would make every bargain
+#: silently delete the whole offer set, and the row that then asked
+#: `c.vestiges()` would get `()` with nothing to say why. `"vestige-can:"`
+#: does not contain `"vestige:"`; asserted in `drivers.vestige_set` rather
+#: than left to the reader to notice.
+_OFFERED = "vestige-can:"
+
+#: And which of those are the leg's **primary** remnants, because a card can
+#: name that subset specifically -- `i2341p1` prints "one of your primary
+#: vestiges", which may not reach one a daily granted. Laid *beside*
+#: `_OFFERED` rather than instead of it, so a primary remnant is offered and
+#: primary, and a reader asking the wider question still finds it.
+_PRIMARY = "vestige-primary:"
+
 #: The hold that waives the printed size rule on a basic manoeuvre. Two
 #: feats grant it and `Cast._manoeuvrable` is the one reader.
 _ANY_SIZE = "manoeuvre:any-size"
@@ -15638,6 +15665,84 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             if _VESTIGE in tag:
                 return tag.split(_VESTIGE, 1)[1].strip()
         return ""
+
+    def offer_vestige(
+        self, *refs: str, on: int | None = None, primary: bool = False
+    ) -> tuple[str, ...]:
+        """Which remnants this warlock **can** bargain with. #1034.
+
+        `c.bargain` takes its options from the caller, deliberately -- *"the
+        engine decides what happens; which remnants a warlock has access to
+        is content's knowledge"* -- and that located the knowledge in the
+        **leg**, which prints the two primary remnants. It left no place to
+        put it, and three rows need it from outside the leg: a feat that
+        swaps the active remnant has no record to choose among, a feat that
+        *grants* a remnant cannot make itself available, and a rod printing
+        "one of your primary vestiges" cannot see which those are. All three
+        carried `c.active_vestige()` as their marker and none of them wanted
+        it.
+
+        **A set, where the bargain is exclusive**, which is why this is its
+        own label rather than a flag on `_VESTIGE`: one prefix carrying both
+        would make `active_vestige`'s first-label-wins search return
+        whichever offer happened to be laid first.
+
+        **`primary=` is the printed distinction, not a convenience.** A card
+        may name the leg's own two specifically, and a remnant a daily
+        granted is offered without being primary. A primary one is laid
+        under *both* labels, so a reader asking the wider question still
+        finds it and neither reader has to know about the other.
+
+        Additive and idempotent: offering a remnant already offered lays
+        nothing further, so the leg re-arming each encounter does not
+        accumulate. Held at `When.ENCOUNTER` like the bargain, for the same
+        reason -- the leg is a trait and `arm_traits` re-establishes it.
+
+        Returns the refs newly offered, so a caller can tell "added" from
+        "already there".
+        """
+        who = on if on is not None else self.me
+        held = set(self.vestiges(of=who))
+        fresh: list[str] = []
+        for ref in refs:
+            if not ref or ref in held:
+                continue
+            held.add(ref)
+            fresh.append(ref)
+            for tag in (_OFFERED,) + ((_PRIMARY,) if primary else ()):
+                self.world.effects.apply(
+                    who, self.me, When.ENCOUNTER,
+                    # The ref leads the label for `audit._claimed`, which is
+                    # the same reason `c.bargain`'s does -- 17 rows reported
+                    # SILENT for getting this the other way round (#374).
+                    label=f"{self.ref} {tag}{ref}",
+                    by=self.ref,
+                )
+        return tuple(fresh)
+
+    def vestiges(
+        self, *, of: int | None = None, primary: bool = False
+    ) -> tuple[str, ...]:
+        """The remnants this warlock can bargain with. `c.vestiges()`
+
+        `primary=True` narrows to the leg's own, for a card that names that
+        subset. Sorted, so a row offering them to `c.choose` presents the
+        same order every time -- an unordered answer here would make the
+        menu depend on the order effects happen to be laid in, which is the
+        kind of thing a replay fixture notices and nothing else does.
+
+        Empty before any offer, which is the honest answer for a warlock on
+        another pact and is what a clause keyed to a remnant needs in order
+        not to fire.
+        """
+        who = of if of is not None else self.me
+        tag = _PRIMARY if primary else _OFFERED
+        found = set()
+        for eff in self.world.effects.of(who):
+            label = str(eff.label)
+            if tag in label:
+                found.add(label.split(tag, 1)[1].strip())
+        return tuple(sorted(found))
 
     # -- the spellbook -------------------------------------------------------
 
