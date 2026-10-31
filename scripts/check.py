@@ -61,6 +61,24 @@ CHECKS = (
                "signatures mean what the call says, on the files that moved"),
     Instrument("refs", ("uv", "run", "scripts/refs.py"),
                "every ref a row's prose names resolves to something"),
+    # **The other direction of `refs`' question**: that one asks whether every
+    # ref a row names exists, this asks whether two refs are secretly the same
+    # card. One printed card declared both as something a character is
+    # *granted* and as something the draw can *deal* is two hand-written
+    # bodies, so the same card does two things depending on which route the
+    # holder took -- and nothing anywhere reported it.
+    #
+    # Deliberately **not** the similarity ranking in the same file, which is a
+    # judgement and stays out of this list. The gate asks a structural
+    # question with one right answer, so there is no floor to tune.
+    #
+    # 0.4s. Six clusters are waived by name in `twins.DECLARED_TWICE_KNOWN`
+    # against #1043 and #1045, so a seventh reddens -- and a waiver whose
+    # cluster stops forming reddens too, because "fixed" and "this check went
+    # blind" look identical and only one of them is safe.
+    Instrument("cards-twice", ("uv", "run", "scripts/twins.py",
+                               "--declared-twice"),
+               "no printed card is declared under two refs"),
     # **Beside `refs` because it is the same question about the other
     # vocabulary.** `refs` asks whether a ref a row names exists; this asks
     # whether a *symbol* a row looks up exists, in both directions:

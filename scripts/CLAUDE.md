@@ -84,6 +84,18 @@ it improves, red when it regresses, never a bare allowance. #372.
   So a plant that fails to go red is a finding either way. Do not adjust the
   plant until you know which of the two is wrong.
 
+  **And plant the check going blind, not only the thing it watches.** A gate
+  with a waiver list has a second failure mode the usual plant cannot see:
+  it stops *finding* something and reports clean, because the waiver covers
+  a cluster that no longer forms. `twins.py --declared-twice` was planted
+  three ways and the third is the one that taught something — removing its
+  `_self_blind` normalisation took the findings from 6 to 4 and the run still
+  **exited 0**, having silently lost two real ones. A stale waiver cannot
+  tell "the duplication was fixed" from "this check went blind", and only the
+  second is dangerous, so it is red and a human says which. Any instrument
+  with a named baseline wants that plant: break the *matcher*, not the
+  subject, and check the count rather than the verdict.
+
 * **A check that passes over its own subject matter is the one to distrust.**
   `leaks.py` reported "no printed names in tracked files" on every run on
   record while about **44** sat in comments and docstrings -- because
@@ -276,7 +288,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `spec.py` | the sanitised brief handed to an author |
 | `vocab.py` | the generated `Cast` surface — the authority on what exists; `--find` searches docstrings |
 | `triage.py` | for every blocked symbol, does the thing already exist? Ranks candidates; `fixtures/triage.json` holds the verdicts, and `--drift` reconciles them against the tree |
-| `twins.py` | for every blocked row, has somebody already written the same card? Ranks pairs by card text; not a gate |
+| `twins.py` | for every blocked row, has somebody already written the same card? Ranks pairs by card text — **not a gate**. `--declared-twice` **is** one and is in `check.py`: no printed card may be declared both as something a character is *granted* and as something the draw can *deal*, which is two bodies for one card. Two different questions in one file, and the ranking stays a question |
 | `fight.py` | play a whole fight and print the log |
 | `show.py` | one row, printed text beside emitted events |
 | `build.py` | rebuild `data/game.db` |

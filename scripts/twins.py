@@ -4,11 +4,44 @@
     uv run scripts/twins.py                 ranked, similarity >= 0.55
     uv run scripts/twins.py --min 0.95      the identical-card clusters
     uv run scripts/twins.py --json out.json
+    uv run scripts/twins.py --declared-twice   the gate -- see below
 
-**Not a gate and never in `check.py`.** It answers "which row already prints
-this sentence", which is a question about where to look next, not a question
-with a right answer. `triage.py` is in the same category and for the same
-reason.
+**The ranking is not a gate and never in `check.py`.** It answers "which row
+already prints this sentence", which is a question about where to look next,
+not a question with a right answer. `triage.py` is in the same category and
+for the same reason.
+
+**`--declared-twice` is a gate, and the difference is the question, not the
+threshold.** It asks whether one printed card is declared **both as
+something a character is granted and as something the draw can deal** --
+`class_feature`/`feat` on one side, `power` on the other. That is two routes
+to one card, so two hand-written bodies, and which route a holder took
+decides what the card does. There is one right answer (none) and no number
+to tune.
+
+`--min 0.95` found one of the six live clusters and could not have found the
+rest, and the floor was never what stood in the way: the ranking compares
+**blocked** rows against written ones, so a cluster where *no* side carries
+a marker is invisible to it -- and that is the dangerous case, because then
+nothing anywhere reports a gap.
+
+Two things had to be got right, and each was got wrong first.
+
+**The normalisation.** The compendium substitutes a card's self-reference,
+so one printed text reads `"... see the cf:warlock-f1c11 Augment entry"`
+under one ref and `"... see the p6855 Augment entry"` under the other. A
+plain compare finds only the cards that never mention themselves -- which
+excluded one of the two pairs this was built for.
+
+**The scope.** Asking the question of *all* declared rows reported **436**
+findings against 2 real ones: a monster ability's card is a formula, so two
+creatures printing `"+7 vs. AC Hit: 1d8 + 6 damage."` is two creatures with
+the same numbers, and five class features printing one boilerplate
+bonus-feat sentence is boilerplate. `scripts/CLAUDE.md` already had the
+lesson -- coincidence collapsing under scoping is *"true for invented names
+and false for mechanical ones"* -- and this failed the same way `--cited`'s
+first draft did. Scoping by **route** rather than by a similarity floor took
+it to 6, and 4 of the 6 were clusters nobody had found.
 
 ## Why it exists
 
@@ -101,6 +134,127 @@ def _cards() -> dict[str, str]:
     return out
 
 
+#: Clusters this gate already knows about, and the issue that decides each.
+#:
+#: **Keyed by the whole cluster**, so the waiver is a statement about *these
+#: refs printing one card* rather than a licence for either ref. If a card
+#: changes on either side the two stop matching, the cluster stops forming,
+#: and the waiver silently covers nothing -- which is the right direction:
+#: a waiver that cannot outlive its subject cannot rot into an allowance.
+#:
+#: No entry is a judgement that the duplication is acceptable. Each names
+#: the issue holding the decision, and the gate reddens on a **seventh**
+#: cluster -- which is what makes this a gate and not a record.
+#:
+#: **Two kinds, and they are two issues because they are two gaps.** The
+#: first pair of each kind is the worked example:
+#:
+#: * `#1043` -- a class feature and a power row for one card, where the
+#:   `power` side carries no gate, so the draw deals it to characters who
+#:   cannot use it. The `p` body is also the poorer of the two.
+#: * `#1045` -- a feat's `b` card re-declaring a class power it *grants*,
+#:   which is the `b` convention working as designed on a card that already
+#:   has its own ref. Both bodies are hand-written, so one printed card
+#:   does two things depending on which route the holder took.
+DECLARED_TWICE_KNOWN: dict[tuple[str, ...], str] = {
+    ("cf:warlock-f1c10", "p2263"): "#1043",
+    ("cf:warlock-f1c11", "p6855"): "#1043",
+    ("f3646b", "p5032"): "#1045",
+    ("f3648b", "p15858"): "#1045",
+    ("f3664b", "f3668b", "p15849"): "#1045",
+    ("f3675b", "p15850"): "#1045",
+}
+
+
+def _self_blind(spec: str, ref: str) -> str:
+    """A card's text with its own ref removed and its whitespace collapsed.
+
+    Both halves are needed and each was found by the compare failing. The
+    **self-reference** because the compendium substitutes it, so one printed
+    card reads differently under each of its refs -- that is what hid
+    `cf:warlock-f1c11`/`p6855` from an exact compare while leaving
+    `cf:warlock-f1c10`/`p2263` visible. The **whitespace** because the two
+    tables do not agree on it: `class_feature` keeps the page's line breaks
+    where `power` has reflowed some of them.
+
+    Not lower-cased, deliberately. Case is the one signal that tells a
+    card's printed name from the generic rules phrase that spells the same
+    (4,100 of 4,100 confirm it), so folding it here would make two different
+    sentences compare equal for a reason this function cannot see.
+    """
+    return " ".join(spec.replace(ref, "@SELF@").split())
+
+
+def _homes() -> dict[str, str]:
+    """Which table each ref's card came out of. First table wins, as `_cards`."""
+    from combat_engine.db import game
+
+    db = game()
+    out: dict[str, str] = {}
+    for table in TABLES:
+        try:
+            rows = db.execute(f"SELECT ref FROM {table}")
+        except Exception:  # a table without a spec column
+            continue
+        for (ref,) in rows:
+            out.setdefault(ref, table)
+    return out
+
+
+def _declared_twice() -> list[tuple[tuple[str, ...], str]]:
+    """Declared refs that share one printed card, as (cluster, sample text).
+
+    **Scoped to clusters that straddle two tables, with monster abilities
+    excluded, and that scope is the whole soundness of this gate.** The
+    first draft asked only "do two declared rows share a card" and reported
+    **436** findings against 2 real ones, because a monster ability's card
+    *is* a formula -- `"At-Will Attack: Melee 1 (one creature); +7 vs. AC
+    Hit: 1d8 + 6 damage."` is printed by two unrelated creatures and means
+    two creatures with the same numbers, not one card declared twice. Five
+    class features sharing a boilerplate bonus-feat sentence are the same
+    story.
+
+    So identical text does **not** imply one card, and `scripts/CLAUDE.md`
+    already says why in as many words -- the premise that coincidence
+    collapses under scoping is *"true for invented names and false for
+    mechanical ones"*, which is what sank `--cited`'s first draft at 1,379
+    hits. This one failed the same way for the same reason.
+
+    What makes the two real pairs real is **structural**: the card is
+    declared once as something a character is *granted* (`class_feature`,
+    `feat`) and once as something the draw can *deal* (`power`). Those are
+    two routes to one card, so two bodies, and which route a character took
+    decides what the card does. A monster is neither granted nor dealt, and
+    two rows in the same table cannot differ by route -- so both drop out
+    by the question rather than by a threshold, which is what lets this be
+    a gate at all. 436 -> 6, and 4 of the 6 were pairs I had not found.
+
+    No tier filter and no token floor, unlike `_sides`, which has both.
+    Those exist to stop the *ranking* filling with noise; a floor here
+    would quietly exempt the short cards.
+    """
+    import combat_engine.content  # noqa: F401  -- populates REGISTRY
+    from combat_engine.engine.dsl import REGISTRY
+
+    spec = _cards()
+    home = _homes()
+    seen: dict[str, list[str]] = defaultdict(list)
+    for ref in REGISTRY:
+        text = spec.get(ref)
+        if text:
+            seen[_self_blind(text, ref)].append(ref)
+
+    found = []
+    for text, refs in seen.items():
+        if len(refs) < 2:
+            continue
+        tables = {home.get(r) for r in refs}
+        if "monster_power" in tables or len(tables) < 2:
+            continue
+        found.append((tuple(sorted(refs)), text))
+    return found
+
+
 def _tokens(text: str) -> frozenset[str]:
     return frozenset(
         w for w in _WORD.findall(text.lower())
@@ -168,6 +322,48 @@ def _pairs(blocked: dict, written: dict, floor: float) -> list[tuple]:
     return found
 
 
+def _gate(limit: int) -> int:
+    """The `--declared-twice` run. Non-zero on a cluster nobody has waived."""
+    clusters = _declared_twice()
+    known = {c: why for c, why in DECLARED_TWICE_KNOWN.items()}
+    fresh = [(c, t) for c, t in clusters if c not in known]
+    waived = [c for c, _t in clusters if c in known]
+
+    print(f"{len(clusters)} printed card(s) declared under more than one ref")
+    for cluster in sorted(waived):
+        print(f"  waived  {' '.join(cluster)}  -- {known[cluster]}")
+    # **A waiver whose cluster no longer forms is RED, and the first draft
+    # had it as a note.** It means one of two opposite things -- the
+    # duplication was resolved, so drop the entry; or the gate stopped
+    # seeing a cluster it used to see, so it is quietly watching nothing.
+    # Only a human can say which, and the second is silent, so it cannot be
+    # the default. Found by a plant: removing `_self_blind`'s substitution
+    # took the clusters from 6 to 4 and the run still **exited 0**, which is
+    # the gate losing two real findings and reporting clean.
+    stale = sorted(set(known) - {c for c, _t in clusters})
+    for cluster in stale:
+        print(f"  STALE WAIVER  {' '.join(cluster)} ({known[cluster]}) -- "
+              f"these refs no longer share a card. Either the duplication "
+              f"was fixed (drop the entry) or this check stopped seeing it.")
+    if not fresh and not stale:
+        print("no printed card is declared twice except the waived cluster(s)")
+        return 0
+    if not fresh:
+        print(f"\n{len(stale)} waiver(s) cover nothing -- say which of the "
+              f"two it is before dropping them")
+        return 1
+
+    print()
+    for cluster, text in fresh[:limit]:
+        print(f"  {' '.join(cluster)}")
+        print(f"      {text[:150]}")
+    if len(fresh) > limit:
+        print(f"... {len(fresh) - limit} more; --limit to see them")
+    print(f"\n{len(fresh)} unwaived -- two bodies for one card can disagree, "
+          f"and which one a character holds decides what the card does")
+    return 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--min", type=float, default=0.55,
@@ -176,7 +372,12 @@ def main() -> int:
                     help="level range, as LOW-HIGH (default 0-10, heroic)")
     ap.add_argument("--json", metavar="PATH", help="also write the full list")
     ap.add_argument("--limit", type=int, default=40)
+    ap.add_argument("--declared-twice", action="store_true",
+                    help="gate: no printed card declared under two refs")
     args = ap.parse_args()
+
+    if args.declared_twice:
+        return _gate(args.limit)
 
     low, _, high = args.tier.partition("-")
     blocked, written = _sides((int(low), int(high or low)))
