@@ -50762,6 +50762,160 @@ def swimming_without_a_swim_speed(out: Result) -> None:
              "and swims() says 0, which is a failure and not an absence")
 
 
+def a_delayed_or_disabled_trap_is_not_there(out: Result) -> None:
+    """A delayed or disabled trap does not fire. DMG p84.
+
+    > *"When a character delays a trap, the trap stops functioning for a
+    > period of time (until the end of the character's next turn, with a 50%
+    > chance each round that it reactivates after that). Disabling a trap
+    > takes the trap out of commission until someone makes the effort to
+    > repair or reset it. **While it's delayed or disabled, the trap
+    > effectively isn't there.**"*
+
+    That last sentence is why there is one predicate rather than two: the
+    page treats both as absence and differs only on whether it lifts.
+
+    **The positive control runs first and it is not decoration.** Every
+    assertion about suppression is an *absence* -- no damage, no `sprung` --
+    and an absence passes just as well on a board where the trap could never
+    have fired at all. So the first thing asserted is that an untouched trap
+    on this board really does go off when stepped on.
+
+    `sprung` staying clear through a delay is the half that matters for the
+    lapse: a trap that marked itself sprung while suppressed would be
+    permanently dead the moment the delay ran out, which is the opposite of
+    what the page says a delay is.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.content import terrain
+    from combat_engine.db import game
+    from combat_engine.engine.components import Health, Position, Trap
+    from combat_engine.engine.movement import step
+    from combat_engine.engine.traps import delay, disable, suppressed
+
+    printed = game().execute(
+        "SELECT ref, level, perception_dc, attack, defence, damage, "
+        "initiative FROM trap WHERE attack IS NOT NULL AND level IS NOT NULL "
+        "AND damage IS NOT NULL AND level <= 5 ORDER BY level DESC, ref "
+        "LIMIT 1"
+    ).fetchone()
+    out.that(printed is not None,
+             "the floor: a printed trap row with an attack and damage")
+    if printed is None:
+        return
+
+    def armed():  # noqa: ANN202
+        """A board with one single-shot trap, one square from the creature."""
+        row = dict(printed)
+        row["initiative"] = None       # the plate case, not the ongoing one
+        row["perception_dc"] = None    # nobody is noticing it in advance
+        real = terrain.printed_trap
+        terrain.printed_trap = (  # ty: ignore[invalid-assignment]
+            lambda level, pick=None: row
+        )
+        try:
+            world, me, _ = _posed("f1378b", 5)
+            here = world.need(me, Position).square
+            # **Found, not assumed.** This board is crowded -- the first
+            # draft put the plate on (x+1, y), which holds another
+            # creature, so the step failed and every "no damage" assertion
+            # below was passing on a trap nothing could have reached. The
+            # positive control is what caught it.
+            square = next(
+                sq for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
+                                  (1, 1), (-1, -1), (1, -1), (-1, 1))
+                if (sq := (here[0] + dx, here[1] + dy))
+                and world.grid.inside(sq) and world.grid.passable(sq)
+                and world.grid.occupant(sq) is None
+            )
+            eid = terrain.arm(world, square, level=5, pick=Random(3))
+        finally:
+            terrain.printed_trap = real
+        return world, me, eid, square
+
+    # -- the positive control: it fires when nothing has touched it -------
+    world, me, eid, square = armed()
+    trap = world.need(eid, Trap)
+    health = world.need(me, Health)
+    out.that(not trap.sprung, "the fresh trap is not sprung")
+    out.that(not suppressed(world, eid), "and is not suppressed")
+    out.that(world.grid.occupant(square) is None, "its square is empty")
+    before = health.hp
+    out.that(step(world, me, square, kind="walk"),
+             "the creature actually stepped onto the plate")
+    out.that(trap.sprung,
+             "an untouched trap FIRES -- without this every absence below"
+             " would pass on a board where nothing could happen")
+
+    # -- disabled: out of commission, and it stays unsprung ---------------
+    world, me, eid, square = armed()
+    trap = world.need(eid, Trap)
+    health = world.need(me, Health)
+    out.that(disable(world, eid), "disable() takes it")
+    out.that(suppressed(world, eid), "a disabled trap is suppressed")
+    before = health.hp
+    out.that(step(world, me, square, kind="walk"), "the creature steps on it")
+    out.that(not trap.sprung,
+             "a disabled trap does not spring -- so it is still repairable")
+    out.that(health.hp == before, "and deals no damage")
+    for r in range(1, 6):
+        world.round = r
+        if suppressed(world, eid):
+            continue
+        out.that(False, f"a disabled trap came back in round {r}")
+        break
+    else:
+        out.that(True, "and never comes back on its own, over five rounds")
+
+    # -- delayed: dead through the anchor round ---------------------------
+    world, me, eid, square = armed()
+    trap = world.need(eid, Trap)
+    health = world.need(me, Health)
+    start = world.round
+    out.that(delay(world, eid, me), "delay() takes it")
+    out.that(trap.delayed_until == start + 1,
+             "the anchor is the round after this one")
+    out.that(suppressed(world, eid), "it is suppressed in the round delayed")
+    before = health.hp
+    out.that(step(world, me, square, kind="walk"), "the creature steps on it")
+    out.that(not trap.sprung and health.hp == before,
+             "and a delayed trap neither springs nor hurts")
+    world.round = start + 1
+    out.that(suppressed(world, eid), "still suppressed in the anchor round")
+
+    # -- past the anchor, the printed 50% decides -------------------------
+    world.round = start + 2
+    world.rng.loaded = 20
+    out.that(not suppressed(world, eid),
+             "past the anchor a high roll reactivates it")
+    out.that(trap.delayed_until is None,
+             "and the delay is cleared rather than re-rolled each time")
+
+    world2, me2, eid2, _sq2 = armed()
+    delay(world2, eid2, me2)
+    world2.round = world2.round + 2
+    world2.rng.loaded = 1
+    out.that(suppressed(world2, eid2),
+             "a low roll leaves it suppressed for that round")
+    rolls = len(world2.rng.rolls)
+    out.that(suppressed(world2, eid2),
+             "and asking again in the same round gives the same answer")
+    out.that(len(world2.rng.rolls) == rolls,
+             "without rolling again -- once a round, or the answer would"
+             " change between the menu and the step")
+    world2.round += 1
+    world2.rng.loaded = 20
+    out.that(not suppressed(world2, eid2),
+             "and the next round gets a fresh roll, which brings it back")
+
+    # -- anything that is not a trap is not suppressed --------------------
+    out.that(not suppressed(world2, me2),
+             "a creature is not a trap and is never suppressed")
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -52112,6 +52266,10 @@ DRIVERS = {
     "swim_check": (
         swimming_without_a_swim_speed,
         "no swim speed means an Athletics check for the round (#949)",
+    ),
+    "trap_delay": (
+        a_delayed_or_disabled_trap_is_not_there,
+        "a delayed or disabled trap does not fire (#955)",
     ),
 }
 

@@ -36,6 +36,7 @@ from combat_engine.engine.components import (
 from combat_engine.engine.events import EnterSquare, RoundStart, TurnStart
 from combat_engine.engine.grid import Square
 from combat_engine.engine.resolve import attack
+from combat_engine.engine.traps import suppressed
 
 #: What rough going is made of. `Grid.difficult` carries a label and
 #: `c.ignores_difficult(kind)` reads it, so a board where every rough
@@ -232,6 +233,12 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",
         def stepped(ev: EnterSquare) -> None:
             if trap.sprung or ev.square != square:
                 return
+            # **A delayed or disabled trap effectively isn't there** -- DMG
+            # p84's own words -- so the plate does not go off and `sprung`
+            # stays clear, which is what lets the trap work again if the
+            # delay lapses. #955.
+            if suppressed(world, eid):
+                return
             # Health is what tells a creature from the scenery and the
             # zones, which also walk through squares.
             if world.get(ev.actor, Health) is None:
@@ -265,6 +272,12 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",
 
     def each_turn(ev: TurnStart) -> None:
         if ev.actor != eid or ev.ghost:
+            return
+        # Same suppression as the plate above. An ongoing trap keeps its
+        # initiative slot while delayed -- the page takes it out of
+        # commission, not out of the order -- so this declines on the turn
+        # rather than leaving the order.
+        if suppressed(world, eid):
             return
         # Whoever is standing in it, and nobody if the square is empty.
         # The trap is deliberately absent from the occupancy index -- see

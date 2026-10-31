@@ -513,6 +513,21 @@ class Trap:
     ref: str = ""
     #: A pressure plate that has gone off and not reset.
     sprung: bool = False
+    #: **Delayed or disabled, which the page treats as one state.** DMG p84:
+    #: *"While it's delayed or disabled, the trap effectively isn't
+    #: there."* So these three fields say *whether it is there*, and nothing
+    #: reads which of the two reasons applies -- `engine/traps.py` owns them
+    #: and `traps.suppressed` is the only reader.
+    #:
+    #: `disabled` has no expiry because the page gives it none. `delayed_until`
+    #: is the round through which a delay certainly holds; after it, the
+    #: printed 50% a round decides, and `delay_check` remembers which round
+    #: that was last rolled in so the answer is stable inside a round.
+    #: A trap absent for the menu and present for the step would be worse
+    #: than either. #955.
+    disabled: bool = False
+    delayed_until: int | None = None
+    delay_check: int = -1
     #: The printed `Perception DC` to notice it before it fires, or `None`
     #: for a trap whose block prints none -- 275 of the 631 do, and the
     #: honest reading of that is **cannot be noticed in advance** rather
