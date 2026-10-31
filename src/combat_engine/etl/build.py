@@ -6205,7 +6205,28 @@ def _elsewhere(spec: str, by_other: dict[str, str], rules: set[str]) -> str:
             # its own note: without this, every deity printed with a
             # leading article was refused in the position built to name
             # one. #340.
-            if not ref or not sanitise.cited(name, rules, whole_name=True):
+            # **One exception to `cited`'s one-word refusal, and it is the
+            # narrowest one available.** That refusal is deliberate and its
+            # docstring says *"no position in this corpus is strong enough to
+            # overrule it"* -- which held until this position was measured.
+            # *"You must worship <name>"* names a deity by construction, and
+            # a deity's printed name is very often a single word, so the
+            # refusal lands on exactly the rows the position was built for.
+            #
+            # Gated on **both** halves rather than on the position alone: the
+            # run has to be one word *and* resolve to an `x1_` ref, which is
+            # a deity page and nothing else. A one-word run that resolves to
+            # a ritual or a hazard is still refused, so this cannot widen
+            # past the case measured. Twelve item rows print the
+            # requirement; eleven already arrive id-resolved and this is the
+            # twelfth. #1040.
+            if not ref:
+                continue
+            one_word_deity = (
+                ref.startswith("x1_") and " " not in name.strip()
+            )
+            if not (one_word_deity
+                    or sanitise.cited(name, rules, whole_name=True)):
                 continue
             head = " ".join(words[:-size])
             return " ".join(w for w in (head, ref) if w)
