@@ -51090,6 +51090,105 @@ def the_vestige_pact_bargains_with_one_of_its_two(out: Result) -> None:
              " decline rather than guess")
 
 
+def the_boon_pays_the_active_remnants_clause(out: Result) -> None:
+    """One boon, one clause per remnant, and only the active one pays. #1034.
+
+    The card labels each clause with its remnant:
+
+        cf:warlock-f1c12s0  one ally adjacent to you gains +2 to all
+                            defenses until the end of your next turn
+        cf:warlock-f1c12s1  the bonus to attack rolls from your
+                            cf:warlock-f2 increases to +3 until EONT
+
+    **Exclusivity is the whole point and the only thing worth asserting.**
+    Both halves were sayable alone for a long time; what was missing was
+    anything saying which fires, and *"a row that paid both would be twice
+    the card"* is the row's own note. So this poses each remnant in turn and
+    checks the other clause did **not** happen -- which is the assertion a
+    naive implementation passes only by accident.
+
+    All four defences, not AC: `Cast.second_wind` records what laying only
+    AC costs, and the card says *"all defenses"*.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.types import DEFENCES
+
+    REMNANTS = ("cf:warlock-f1c12s0", "cf:warlock-f1c12s1")
+
+    def posed(active: str):  # noqa: ANN202
+        """A vestige warlock bargaining with the named remnant, and a mate."""
+        world, me, _ = _board("cf:warlock-f1s6", 1)
+        c = Cast(world=world, me=me, ref="cf:warlock-f1c12")
+        c.bargain(active)
+        return world, me, c
+
+    # -- the floor: the leg really did offer both ------------------------
+    _world, me, c = posed(REMNANTS[0])
+    out.that(set(c.vestiges(primary=True)) == set(REMNANTS),
+             "the leg offers both remnants, so either can be made active")
+    out.that(c.active_vestige() == REMNANTS[0],
+             "and bargaining with the first one takes")
+
+    mates = [a for a in c.within(1, side="ally") if a != me]
+    out.that(bool(mates),
+             "there is an adjacent ally for the first clause to find --"
+             " without one it pays nothing and every check below is vacuous",
+             f"adjacent allies: {len(mates)}")
+    if not mates:
+        return
+    mate = mates[0]
+
+    # -- remnant 0: the ally's defences, and NOT the attack bonus --------
+    # **A baseline per defence, not one shared baseline.** The first draft
+    # compared every defence against AC's number through a `>= before + 2 -
+    # 10` bound, which is true whatever happens -- four assertions that
+    # asserted nothing, the same shape as the `or True` pair in
+    # `drivers.vestige_pact`. Each defence is now measured against its own
+    # before-value and has to move by exactly the printed 2.
+    keys = [d.value if hasattr(d, "value") else str(d) for d in DEFENCES]
+    before = {k: c.total(k, mate, {"actor": mate}) for k in keys}
+    before_atk = c.total("attack", me, {"actor": me, "target": None})
+    from combat_engine.engine.dsl import REGISTRY
+    REGISTRY["cf:warlock-f1c12"].body(c)
+    for k in keys:
+        now = c.total(k, mate, {"actor": mate})
+        out.that(now == before[k] + 2,
+                 f"remnant 0 gives the adjacent ally +2 to {k}"
+                 f" -- the card says *all* defenses",
+                 f"{before[k]} -> {now}")
+    out.that(c.total("attack", me, {"actor": me, "target": None})
+             == before_atk,
+             "and the OTHER clause did not pay -- a row paying both would"
+             " be twice the card")
+
+    # -- remnant 1: the attack bonus, and NOT the ally's defences --------
+    _world2, me2, c2 = posed(REMNANTS[1])
+    out.that(c2.active_vestige() == REMNANTS[1],
+             "the second remnant can be made active too")
+    mates2 = [a for a in c2.within(1, side="ally") if a != me2]
+    if not mates2:
+        out.that(False, "the second board has an adjacent ally as well")
+        return
+    mate2 = mates2[0]
+    def2_before = c2.total("ac", mate2, {"actor": mate2})
+    REGISTRY["cf:warlock-f1c12"].body(c2)
+    out.that(c2.total("ac", mate2, {"actor": mate2}) == def2_before,
+             "remnant 1 leaves the ally's defences alone -- the exclusivity"
+             " in the other direction")
+
+    # -- no remnant active: nothing pays ---------------------------------
+    world3, me3, _ = _board("cf:warlock-f1s5", 1)
+    c3 = Cast(world=world3, me=me3, ref="cf:warlock-f1c12")
+    out.that(c3.active_vestige() == "",
+             "a warlock on another pact has no active remnant")
+    mates3 = [a for a in c3.within(1, side="ally") if a != me3]
+    if mates3:
+        base = c3.total("ac", mates3[0], {"actor": mates3[0]})
+        REGISTRY["cf:warlock-f1c12"].body(c3)
+        out.that(c3.total("ac", mates3[0], {"actor": mates3[0]}) == base,
+                 "and the boon pays neither clause rather than guessing one")
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -52452,6 +52551,10 @@ DRIVERS = {
     "vestige_pact": (
         the_vestige_pact_bargains_with_one_of_its_two,
         "a vestige-pact warlock arrives with an active remnant (#1034)",
+    ),
+    "vestige_boon": (
+        the_boon_pays_the_active_remnants_clause,
+        "only the active remnant's boon clause pays (#1034)",
     ),
 }
 

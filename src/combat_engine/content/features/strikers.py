@@ -255,6 +255,35 @@ def extra_damage(
     c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=label)
 
 
+def nearest_to_target(c: Cast):  # noqa: ANN201
+    """"No ally of yours stands nearer to that target than you do."
+
+    Extracted from `prime_shot`'s own closure so that the **second reader
+    can share it rather than copy it**: `cf:warlock-f1c12`'s remnant clause
+    raises this same bonus to +3, and a hand-rolled second copy of the
+    distance walk is the shape that drifts. One definition, two callers, and
+    they cannot disagree.
+
+    Returns the predicate rather than a boolean, because `c.bonus(when=)`
+    wants something to call per attack and the answer depends on where
+    everybody is standing at that moment.
+    """
+    me, world = c.me, c.world
+
+    def alone(ctx: dict[str, Any]) -> bool:
+        target = ctx.get("target")
+        if target is None or not ctx.get("ranged"):
+            return False
+        mine = distance_between(world, me, target)
+        return all(
+            distance_between(world, mate, target) >= mine
+            for mate in allies(world, me)
+            if alive(world, mate)
+        )
+
+    return alone
+
+
 def prime_shot(c: Cast) -> None:
     """Arm "+1 to a ranged attack on a target no ally of yours stands nearer to".
 
@@ -275,20 +304,8 @@ def prime_shot(c: Cast) -> None:
     per style each of the two rows states its own half in `requires=` --
     which is the printed sentence rather than a bucket standing in for it.
     """
-    me, world = c.me, c.world
-
-    def alone(ctx: dict[str, Any]) -> bool:
-        target = ctx.get("target")
-        if target is None or not ctx.get("ranged"):
-            return False
-        mine = distance_between(world, me, target)
-        return all(
-            distance_between(world, mate, target) >= mine
-            for mate in allies(world, me)
-            if alive(world, mate)
-        )
-
-    c.bonus("attack", 1, until=When.ENCOUNTER, on=me, kind="untyped", when=alone)
+    c.bonus("attack", 1, until=When.ENCOUNTER, on=c.me, kind="untyped",
+            when=nearest_to_target(c))
 
 
 _TOOK_THE_TACTIC = on_leg("cutthroat")

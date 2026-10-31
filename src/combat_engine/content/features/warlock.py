@@ -39,10 +39,14 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.features.builds import on_leg
-from combat_engine.content.features.strikers import extra_damage
+from combat_engine.content.features.strikers import (
+    extra_damage,
+    nearest_to_target,
+)
 from combat_engine.engine import (
     AT_WILL,
     CON,
+    DEFENCES,
     ENCOUNTER,
     FREE,
     NO_TARGET,
@@ -110,11 +114,13 @@ BOON = "boon"
 #: `Triggers._ask` has already offered the substitution and plain
 #: `instead_of` reads it.
 #:
-#: `cf:warlock-f1c12` is the one left, and it pays **nothing at all** until
-#: `c.active_vestige()` lands -- so there is no payout to trade, which is a
-#: different gap from "the payout does not offer itself". Listing it here
-#: still costs nothing: a registration against a leg the character does not
-#: stand on never fires. #641.
+#: `cf:warlock-f1c12` **used to be the one left**, on the ground that it
+#: "pays nothing at all until `c.active_vestige()` lands -- so there is no
+#: payout to trade". That has landed: `cf:warlock-f1s6` offers the two
+#: primary remnants and bargains with one, and the boon now pays whichever
+#: clause the active remnant names. So it has a payout to trade like the
+#: rest. Listing it here always cost nothing anyway: a registration against
+#: a leg the character does not stand on never fires. #641, #1034.
 BOONS = (
     "cf:warlock-f1",
     "cf:warlock-f1s4",
@@ -522,12 +528,54 @@ def warlock_f1c11(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
     requires=on_leg("vestige"),
     requires_text="needs the pact that prints it",
-    todo=("c.active_vestige()",),
 )
 def warlock_f1c12(c: Cast) -> None:
-    """One row holding one boon per remnant, and which one pays is whichever
-    is active. Both of the two printed here are sayable on their own -- an
-    adjacent ally's defences, or the curse's attack bonus -- but nothing
-    says which of them fires, and a row that paid both would be twice the
-    card.
+    """One boon per remnant, and which one pays is whichever is active.
+
+    The card prints both clauses and labels each with its remnant:
+
+        cf:warlock-f1c12s0  one ally adjacent to you gains a +2 bonus to
+                            all defenses until the end of your next turn
+        cf:warlock-f1c12s1  the bonus to attack rolls from your
+                            cf:warlock-f2 increases to +3 until the end of
+                            your next turn
+
+    **A row that paid both would be twice the card**, which is why this
+    waited: both halves were sayable on their own and nothing said which
+    fires. `c.active_vestige()` is that, now that `cf:warlock-f1s6` offers
+    the two and bargains with one.
+
+    **All four defences, not AC.** The card says *"all defenses"*, and
+    `Cast.second_wind` records what that costs when only AC is laid: every
+    creature two points easier to hit on the other three.
+
+    **`+2` on top of `cf:warlock-f2`'s `+1`, with that row's own gate.**
+    The printed line is *"increases to +3"* -- a replacement -- and this
+    adds 2 to a standing 1, which is the same number by a different route.
+    The route matters because the gate has to match: `cf:warlock-f2` only
+    pays when no ally stands nearer the target, so a flat +2 would pay in
+    cases the thing it is raising does not. `nearest_to_target` is
+    `prime_shot`'s own predicate, shared rather than copied so the two
+    cannot drift.
+
+    Where the two readings would differ is if something *else* also moved
+    `cf:warlock-f2`'s bonus -- then "+2 more" and "becomes 3" part company.
+    Nothing in the tree does today; said here rather than silently assumed.
+
+    The ally is `c.choose`n, because *"one ally adjacent to you"* is a
+    choice and the first adjacent body is not an answer to it.
     """
+    active = c.active_vestige()
+    if active == _PRIMARY_REMNANTS[0]:
+        mates = [a for a in c.within(1, side="ally") if a != c.me]
+        if not mates:
+            return
+        mate = mates[0] if len(mates) == 1 else c.choose(
+            mates, "which adjacent ally gains the defences")
+        if mate is None:
+            return
+        for defence in DEFENCES:
+            c.bonus(defence, 2, on=mate, until=When.EONT, kind="untyped")
+    elif active == _PRIMARY_REMNANTS[1]:
+        c.bonus("attack", 2, on=c.me, until=When.EONT, kind="untyped",
+                when=nearest_to_target(c))
