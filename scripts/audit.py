@@ -2103,6 +2103,16 @@ def _source_of(body: object, ref: str = "") -> str:
         return ""
 
 
+#: A ref as it appears inside a row's declared trigger **text**.
+#:
+#: Word-bounded rather than anchored, because this reads prose: a trigger
+#: says "you use cf:warlock-f1c10" and the ref is one word of it. The text
+#: is what names other rows here -- the one rule in this repo forbids
+#: names -- so it is the honest place to look, and it is declared data
+#: where the predicate beside it is a closure. #1053.
+_REF_IN_TEXT = re.compile(r"\b((?:cf|rt):[\w-]+|[pfim]\d+[a-z0-9]*)\b")
+
+
 def _class_of_leg(leg: str) -> str:
     """The one class that owns this build leg, or "" when it is shared.
 
@@ -2251,6 +2261,33 @@ def board(ref: str, seed: int, pose: bool = False,
         # `declared.cls` reads are in the `types` baseline and a new one is
         # not, so the honest spelling is the defensive one.
         gate_leg = getattr(getattr(declared, "requires", None), "leg", "")
+        # **And the leg named by the row this one's trigger waits on**, when
+        # it declares none of its own. `#1042` taught this to read a leg off
+        # a row's *own* `requires=`; one indirection put it back out of
+        # reach. `f292` is a feat with no gate whose trigger is the star
+        # pact's boon card -- only a star-leg warlock can use that card, so
+        # only a star-leg warlock can make the feat fire, and the board had
+        # nothing to read. It posed a warlock on whatever leg came first and
+        # reported UNUSED on a correct row.
+        #
+        # **Two rows in the corpus**, measured: `f292` and `i3410p1`. Small,
+        # and the shape is not -- a feat or an item riding a card that a
+        # build leg gates is how every pact, oath, tradition and tactic is
+        # written. `i3410p1` is the one that shows why this is worth the
+        # lines: it is `cls="item"`, so with no leg to read it took the
+        # fighter-or-ranger fallback and was posed on a class that cannot
+        # hold the swordmage at-will its trigger names.
+        #
+        # Off the declared **trigger text**, not the predicate: the
+        # predicate is a closure and the text is data. #1053.
+        leg_ref = ref
+        if not gate_leg:
+            for named in _REF_IN_TEXT.findall(getattr(declared, "trigger", "")
+                                              or ""):
+                other = getattr(get(named), "requires", None)
+                if (found := getattr(other, "leg", "")):
+                    gate_leg, leg_ref = found, named
+                    break
         legged = _class_of_leg(gate_leg)
         cls = (not carried and not racial and not themed and declared.cls) or (
             gated or legged
@@ -2296,7 +2333,7 @@ def board(ref: str, seed: int, pose: bool = False,
             world,
             chargen.Character(
                 cls, max(1, declared.level), hand,
-                build=chargen.build_for(cls, ref),
+                build=chargen.build_for(cls, leg_ref),
                 feats=[ref] if a_feat else [],
                 race=race,
             ),
