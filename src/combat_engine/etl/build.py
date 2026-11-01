@@ -871,7 +871,11 @@ CREATE INDEX poison_level ON poison(level);
 CREATE TABLE skill_use (
   skill TEXT, use TEXT, ord INTEGER,
   action TEXT, dc TEXT, success TEXT, failure TEXT, special TEXT,
-  PRIMARY KEY (skill, use)
+  -- **`ord`, not `use`.** Athletics prints `SWIM` twice -- once as a
+  -- capability and once as the heading of the Swim DC table -- so keying on
+  -- the heading made the second silently replace the first: 48 parsed, 47
+  -- stored, and only the two counts disagreeing showed it.
+  PRIMARY KEY (skill, ord)
 );
 CREATE INDEX skill_use_skill ON skill_use(skill);
 
@@ -3234,6 +3238,21 @@ def _skill_uses(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
                     current = {}
                     uses.append(("", current))
                 current.setdefault(m.group(1).lower(), m.group(2).strip())
+        # **A heading with no fields under it is not a use.** Athletics
+        # prints `SWIM` twice: once as a capability with `Action:`, `DC:`
+        # and three `Failure by ...:` lines, and once as the heading of the
+        # **Swim DC table** (`Calm 10 / Rough 15 / Stormy 20`). It also
+        # prints `IMPROVISING WITH ATHLETICS`, which heads the banded
+        # sample tasks `skill_task` collects.
+        #
+        # Caught by the row count disagreeing with the parse count -- 48
+        # parsed, 47 stored -- because the key was `(skill, use)` and the
+        # second `SWIM` silently replaced the first. That is a real use
+        # lost to a duplicate heading, and the sort of thing a count-only
+        # report cannot show. The key is `(skill, ord)` now, as
+        # `skill_task`'s is, so nothing can collapse; this filter is what
+        # stops the non-uses arriving in the first place.
+        uses = [(use, fields) for use, fields in uses if fields]
         for ord_, (use, fields) in enumerate(uses):
             out.execute(
                 "INSERT OR REPLACE INTO skill_use VALUES (?,?,?,?,?,?,?,?)",
