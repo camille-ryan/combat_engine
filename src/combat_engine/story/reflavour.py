@@ -189,6 +189,18 @@ class Reflavour:
     resist: tuple[tuple[str, int], ...] = ()
     vulnerable: tuple[tuple[str, int], ...] = ()
     immune: tuple[str, ...] = ()
+    #: Levels to move the creature by, the DMG's level adjustment. #1031.
+    #:
+    #: **It rides here rather than on the spawn call because this is the
+    #: one thing already applied to a creature after `loader.spawn` and
+    #: before the encounter starts**, which is exactly when a level
+    #: adjustment has to land -- `monster_math.adjust_level` writes `Mod`s
+    #: and hit points, and both want the board built and nobody's turn
+    #: begun.
+    #:
+    #: 0 means the printed level, which is what every module line that
+    #: names a creature in its own tier gets.
+    levels: int = 0
 
     @property
     def mechanical(self) -> bool:
@@ -196,6 +208,13 @@ class Reflavour:
         return bool(
             self.add_words or self.drop_word or self.retype
             or self.resist or self.vulnerable or self.immune
+            # **`levels` counts, and it is the only field here that a
+            # by-name creature ever carries.** The note at `_for_spec`
+            # says a creature found by name "already *is* the thing" and
+            # gets a cosmetic reflavour -- true of words and damage types,
+            # and false of its level, which the module can legitimately
+            # move without the creature becoming something else.
+            or self.levels
         )
 
     def __str__(self) -> str:
@@ -208,6 +227,8 @@ class Reflavour:
         bits += [f"resist {n} {d}" for d, n in self.resist]
         bits += [f"vuln {n} {d}" for d, n in self.vulnerable]
         bits += [f"immune {d}" for d in self.immune]
+        if self.levels:
+            bits.append(f"level {self.levels:+d}")
         return ", ".join(bits) or "cosmetic"
 
 
@@ -275,6 +296,20 @@ def apply(world: World, eid: int, flavour: Reflavour) -> int:
         return 0
     laid = 0
     cast = Cast(world, eid, REF)
+
+    # **The level first, because everything below reads the creature as it
+    # now is.** `resist_amount` is keyed to level and `adjust_level` moves
+    # hit points and all four defences, so laying resistances first and
+    # then re-levelling would price them off the printed level and apply
+    # them to a creature that is no longer at it.
+    #
+    # `adjust_level` refuses a minion and anything past its own ±5 ceiling
+    # and says so by returning False; this records the refusal as 0 laid
+    # rather than pretending. #1031, #972.
+    if flavour.levels:
+        from combat_engine.engine.monster_math import adjust_level
+
+        laid += bool(adjust_level(world, eid, flavour.levels))
 
     if flavour.add_words or flavour.drop_word:
         cast.set_origin(

@@ -51,11 +51,13 @@ worth and the clamp should not fire at all.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from functools import lru_cache
 from random import Random
 
 from combat_engine.content import loader
 from combat_engine.db import game, localisation
+from combat_engine.engine.monster_math import LEVEL_REACH
 
 from . import BAND, SIDE, WORTH, budget, ceiling
 from .module import DIFFICULTY, FoeSpec, Scene
@@ -406,8 +408,38 @@ def _draw_for(
     tier = ""
     pool: list[str] = []
 
-    if named and usable(named) and in_tier(named, party_level):
-        tier, pool = BY_NAME, [named]
+    # **A named creature's level is a reach, not a tier**, and that is the
+    # composition `#1031` is about. `in_tier` is the right question for the
+    # *pool* -- a draw should not rummage through another tier -- but for a
+    # creature the module named by name the book says something narrower
+    # and more generous: adjust it by up to five levels, and past that pick
+    # a different creature. `monster_math.LEVEL_REACH` is that ceiling and
+    # it is the book's own.
+    #
+    # So the order is: in tier, field it as printed; out of tier but within
+    # reach, field it re-levelled; beyond reach, substitute as before. The
+    # third case is unchanged and is still the common one -- a level-20
+    # creature for a level-3 party is not a level adjustment.
+    levels = 0
+    if named and usable(named):
+        gap = party_level - _facts(named)[1]
+        if in_tier(named, party_level):
+            tier, pool = BY_NAME, [named]
+        elif abs(gap) <= LEVEL_REACH:
+            tier, pool, levels = BY_NAME, [named], gap
+            out.notes.append(
+                f"{scene.id}: the creature written for {spec.name!r} is "
+                f"level {_facts(named)[1]}, {abs(gap)} from the party -- "
+                f"fielding it at {party_level} by the DMG's level "
+                f"adjustment rather than substituting"
+            )
+        else:
+            out.notes.append(
+                f"{scene.id}: the creature written for {spec.name!r} is "
+                f"level {_facts(named)[1]}, {abs(gap)} from the party and "
+                f"past the {LEVEL_REACH}-level reach -- fielding something "
+                f"of the right shape instead"
+            )
     elif named and usable(named):
         out.notes.append(
             f"{scene.id}: the creature written for {spec.name!r} is level "
@@ -450,6 +482,13 @@ def _draw_for(
         if tier == BY_SHAPE
         else Reflavour(name=spec.name)
     )
+    # **The level delta is carried whichever tier found the creature**, so
+    # a re-levelled by-name creature keeps its cosmetic reflavour and gains
+    # the one mechanical thing the module did ask for. `themed` builds the
+    # shape-tier flavour and never sets this, because a creature drawn from
+    # the pool was already chosen near the party's level.
+    if levels:
+        flavour = replace(flavour, levels=levels)
     return pool, flavour
 
 

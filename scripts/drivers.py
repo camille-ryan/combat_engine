@@ -51961,6 +51961,159 @@ def a_feat_granted_remnant_offers_pays_and_augments(out: Result) -> None:
              " rows silently miss the one boon a feat pays",
              f"{list(BOONS)}")
 
+def a_named_creature_is_relevelled_rather_than_substituted(out: Result) -> None:
+    """A module's own creature, four levels off, is adjusted not replaced. #1031
+
+    `monster_math.adjust_level` has existed and been verified since `#972`
+    and **nothing called it**, so a module naming a creature outside the
+    party's tier got a substitute of the right shape instead. The DMG says
+    otherwise, and narrowly: adjust by up to five levels, and past that
+    pick a different creature.
+
+    So the composition `#1031` asks for is three-way, and this asserts all
+    three plus the thing that makes them mean anything -- that the delta
+    reaches the board.
+
+        in the party's tier        fielded as printed, no adjustment
+        out of tier, within +-5    fielded re-levelled, and said so
+        beyond +-5                 substituted, as before
+
+    **`in_tier` is kept for the pool and dropped for the named creature**,
+    which is the one judgement here. A draw should not rummage through
+    another tier -- that is what `in_tier` is right about -- but a creature
+    the module named by name is not a draw, and for it the book's own
+    ±5 reach is both narrower and more generous than a tier.
+
+    **The printed name is read out of the localisation at run time and
+    never written here.** This file is tracked. If the localisation is
+    absent the name half is skipped rather than guessed.
+    """
+    from pathlib import Path
+    from random import Random
+
+    from combat_engine.db import localisation
+    from combat_engine.engine.monster_math import LEVEL_REACH
+    from combat_engine.story import cast_list
+    from combat_engine.story import module as mod
+
+    # A level-11 creature that is written and usable, so the only reason it
+    # would be refused is its level.
+    REF, LEVEL = "m75", 11
+    word = ((localisation().get(REF) or {}).get("name") or "").strip()
+    if not word:
+        out.skip("no localisation, so a module cannot name a creature here")
+        return
+
+    out.that(cast_list.usable(REF),
+             "the creature is written and usable, so level is the only thing"
+             " that can refuse it -- otherwise every check below passes for"
+             " the wrong reason")
+    out.that(cast_list._facts(REF)[1] == LEVEL,
+             f"and it is level {LEVEL}, which is what the gaps below are"
+             f" measured from",
+             f"{cast_list._facts(REF)[1]}")
+
+    def dressed(party_level: int):  # noqa: ANN202
+        raw = {"id": "p", "party_level": party_level, "party_size": 5,
+               "start": "f",
+               "scenes": [{"id": "f", "kind": "combat", "name": "F",
+                           "sets": "A ledge.", "exits": [],
+                           "xp": 2000,
+                           "foes": [{"count": 1, "name": word,
+                                     "rank": "standard"}]}]}
+        scene = mod.parse(raw, Path("<driver>")).scene("f")
+        return cast_list.resolve(scene, party_level=party_level,
+                                 draw=Random(7))
+
+    def levels_of(got) -> int:  # noqa: ANN001
+        for ref, flavour in zip(got.refs, got.flavours, strict=True):
+            if ref == REF:
+                return flavour.levels
+        return 0
+
+    # -- in the party's tier: printed, untouched --------------------------
+    same = dressed(LEVEL)
+    out.that(REF in same.refs,
+             "a creature in the party's tier is fielded by name",
+             f"{same.refs}")
+    out.that(levels_of(same) == 0,
+             "and carries no level adjustment -- the printed level is the"
+             " printed level",
+             f"{levels_of(same)}")
+
+    # -- out of tier, within reach: re-levelled, and said so --------------
+    NEAR = 8                       # floor 1, so a level-11 creature is out
+    gap = NEAR - LEVEL             # -3
+    near = dressed(NEAR)
+    out.that(not cast_list.in_tier(REF, NEAR),
+             f"at party level {NEAR} the creature is out of tier, which is"
+             f" the premise -- this used to mean substituted")
+    out.that(abs(gap) <= LEVEL_REACH,
+             f"and {abs(gap)} levels away, inside the book's {LEVEL_REACH}")
+    out.that(REF in near.refs,
+             "so it is fielded by name rather than substituted",
+             f"{near.refs}")
+    out.that(levels_of(near) == gap,
+             f"carrying exactly the gap as its adjustment, {gap}",
+             f"{levels_of(near)}")
+    out.that(any("level adjustment" in n for n in near.notes),
+             "and the module author is told it was adjusted rather than"
+             " left to infer it from a creature that looks wrong",
+             f"{near.notes}")
+
+    # -- beyond reach: substituted, exactly as before ---------------------
+    FAR = 3
+    far = dressed(FAR)
+    out.that(abs(FAR - LEVEL) > LEVEL_REACH,
+             f"at party level {FAR} the gap is {abs(FAR - LEVEL)}, past the"
+             f" reach -- the book says pick another creature")
+    out.that(REF not in far.refs,
+             "so the named creature is NOT fielded, which is the behaviour"
+             " this change must not have widened away",
+             f"{far.refs}")
+    out.that(any(f"{LEVEL_REACH}-level reach" in n for n in far.notes),
+             "and the note says why, naming the reach",
+             f"{far.notes}")
+
+    # -- and the delta reaches the board ----------------------------------
+    # **The three checks above are all about `cast_list`'s decision.** A
+    # `Reflavour` carrying `levels=-3` that nothing applies would pass every
+    # one of them, which is the shape of a modifier nothing consults -- the
+    # commonest bug in this tree. So this spawns the creature and reads the
+    # numbers.
+    from combat_engine.content import loader
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.query import defence
+    from combat_engine.engine.types import Defense
+    from combat_engine.story import reflavour as rf
+
+    def spawn_with(levels: int):  # noqa: ANN202
+        world = World(Grid(12, 12), Rng(1), Bus())
+        eid = loader.spawn(world, REF, (3, 3))
+        laid = rf.apply(world, eid, rf.Reflavour(levels=levels))
+        hp = world.get(eid, Health)
+        # `Defense.AC`, not the string: `query.defence` reads `.value`
+        # off it to key the modifier lookup, so a bare "ac" raises.
+        return (world, eid, laid, hp.hp if hp else 0,
+                defence(world, eid, Defense.AC))
+
+    _w0, _e0, laid0, hp0, ac0 = spawn_with(0)
+    _w1, _e1, laid1, hp1, ac1 = spawn_with(gap)
+    out.that(laid0 == 0,
+             "a reflavour with no level delta lays nothing -- the control,"
+             " and without it the next check cannot tell the adjustment"
+             " from the spawn",
+             f"{laid0}")
+    out.that(laid1 == 1, "and one with a delta lays exactly the adjustment",
+             f"{laid1}")
+    out.that(ac1 == ac0 + gap,
+             f"AC moves by the gap, {gap}, which is the DMG's 1 per level",
+             f"{ac0} -> {ac1}")
+    out.that(hp1 < hp0,
+             "and hit points come down, by the printed per-role table",
+             f"{hp0} -> {hp1}")
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -53343,6 +53496,10 @@ DRIVERS = {
     "granted_remnant": (
         a_feat_granted_remnant_offers_pays_and_augments,
         "a feat-granted remnant is offered, pays and augments (#1034)",
+    ),
+    "relevel_named": (
+        a_named_creature_is_relevelled_rather_than_substituted,
+        "a module's named creature is re-levelled, not replaced (#1031)",
     ),
 }
 
