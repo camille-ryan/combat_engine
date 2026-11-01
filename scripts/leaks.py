@@ -2433,7 +2433,46 @@ def ingest() -> int:
     return 0
 
 
+#: **Every flag this file answers to**, because an unrecognised one used to
+#: be indistinguishable from a clean run.
+#:
+#: Each flag is tested by membership in `sys.argv` rather than parsed, which
+#: is fine until a spelling is wrong: `main` then falls through to the
+#: tree-wide walk, prints `no printed names in tracked files` and exits 0.
+#: That is the most reassuring output this file has, produced for a question
+#: nobody asked. `#1035` fixed exactly this shape for a bare `--staged` and
+#: left the parsing alone, so the hole stayed reachable by any misspelling —
+#: and `--stagd <file>` passed a planted name. `#1050`.
+#:
+#: Not included, deliberately: `--cached`, `--exclude-standard`, `--json`,
+#: `--limit`, `--others`, `--state`. Those are arguments this file hands to
+#: `git` and `gh` subprocesses, not flags it answers to itself.
+KNOWN_FLAGS = frozenset({
+    "--categories", "--cited", "--history", "--ingest", "--issues",
+    "--modules", "--record", "--show", "--specs", "--staged",
+})
+
+
+def _refuse_unknown_flags() -> str:
+    """The unrecognised flag, or `""`. A gate that cannot say "I did not
+    run" is worse than one that goes red -- so this names the argument
+    rather than guessing what was meant by it."""
+    for arg in sys.argv[1:]:
+        if arg.startswith("--") and arg not in KNOWN_FLAGS:
+            return arg
+    return ""
+
+
 def main() -> int:
+    unknown = _refuse_unknown_flags()
+    if unknown:
+        print(f"{unknown}: not a flag this instrument answers to.",
+              file=sys.stderr)
+        print(f"  known: {' '.join(sorted(KNOWN_FLAGS))}", file=sys.stderr)
+        print("  Refusing rather than running the tree-wide walk, which"
+              " would print a verdict about something you did not ask"
+              " about. #1050.", file=sys.stderr)
+        return 2
     if "--ingest" in sys.argv:
         return ingest()
     if "--categories" in sys.argv:
