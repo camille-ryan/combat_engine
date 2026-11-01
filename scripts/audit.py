@@ -2246,7 +2246,12 @@ def board(ref: str, seed: int, pose: bool = False,
         # ones are up to four classes at once, which is #235's finding.
         # A shared name answers nothing, so it falls through to the existing
         # fallback rather than picking one, which is the fail-open direction.
-        legged = _class_of_leg(getattr(declared.requires, "leg", ""))
+        # `getattr` down the whole chain, because `get(ref)` is typed
+        # `Power | None` and this branch has no guard -- the neighbouring
+        # `declared.cls` reads are in the `types` baseline and a new one is
+        # not, so the honest spelling is the defensive one.
+        gate_leg = getattr(getattr(declared, "requires", None), "leg", "")
+        legged = _class_of_leg(gate_leg)
         cls = (not carried and not racial and not themed and declared.cls) or (
             gated or legged
         ) or (
