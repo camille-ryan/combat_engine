@@ -4666,6 +4666,10 @@ class Cast:
                 spend=spend and not lent,
                 trigger=self.trigger,
                 reentrant=again,
+                # The same `lent` the spend above turns on. A borrowed row
+                # answers to the lender, so the borrower's *build* does not
+                # license it -- see `dsl.usable`. #1054.
+                borrowed=lent,
             )
         finally:
             self.world.bus.off(sub)

@@ -3187,7 +3187,7 @@ def keywords_of(world: Any, actor: int, p: Any) -> frozenset[Keyword]:
 
 def usable(
     world: World, actor: int, p: Power, *, dying: bool = False, spent_ok: bool = False,
-    augment: int = 0, aimed: bool = False,
+    augment: int = 0, aimed: bool = False, borrowed: bool = False,
 ) -> tuple[bool, str]:
     """Can this power be used, and if not, why not?
 
@@ -3338,6 +3338,26 @@ def usable(
     open_branches = [
         b for b in branches_for(world, actor, p)
         if can_branch_for(world, actor, p, b)
+        # **A lent row's authority comes from the lender, so the borrower's
+        # *build* is not what licenses it.** `Cast.use_power` already draws
+        # this line for spending -- "a lent row is never spent, because the
+        # item's own use is the cost" -- and drew it for nothing else, so a
+        # row reproduced on an item was still measured against whoever
+        # happened to be holding it. For most gates that is harmless,
+        # because the holder can satisfy them; a **build leg** can never be
+        # satisfied, because a build is fixed at creation. `i1825p1` prints
+        # "as the warlock's p6855 power, which is reproduced below" and went
+        # silent in a ranger's hands the moment that power gained its pact
+        # gate. #1054.
+        #
+        # **Only a gate that is nothing but a leg test.** `features.on_leg`
+        # records `.leg` on the callable it returns, and nothing else does
+        # -- so a composite gate, a weapon requirement or a keyword test
+        # carries no `.leg` and stays refused. Fail-closed, which is the
+        # direction that matters: waiving the whole requirement would make
+        # every `requires=` a suggestion for anybody willing to route
+        # through `use_power`.
+        or (borrowed and bool(getattr(p.requires_of(b), "leg", "")))
     ]
     if not open_branches:
         # The printed sentence when there is one, because it is what the
@@ -3780,6 +3800,7 @@ def use(
     variant: int = 0,
     reentrant: bool = False,
     reached: bool = False,
+    borrowed: bool = False,
 ) -> bool:
     """Use a power. Returns False if it could not be used.
 
@@ -3824,6 +3845,7 @@ def use(
     # `usable` that this turns off, and `_within_reach` further down, which is
     # the question that replaces it. #429.
     ok, _why = usable(world, actor, p, dying=dying, spent_ok=reentrant,
+                      borrowed=borrowed,
                       augment=augment, aimed=targets is not None)
     if not ok:
         return False
