@@ -312,9 +312,34 @@ def p16038(c: Cast) -> None:
     on=Trigger(AttackRolled, by_me, "you make an attack roll"),
 )
 def p1450(c: Cast) -> None:
-    """"Use the second roll, even if it's lower" is `keep="new"`."""
+    """"Use the second roll, even if it's lower" is `keep="new"`.
+
+    **`f980`'s clause for `p919` is written here, and here is the only place
+    it can go.** The feat prints *"if you are an r4 and you miss with this
+    attack, and you use your p1450 racial power to reroll, you can add a +2
+    bonus to the reroll"* -- so the clause belongs to the **reroll**, not to
+    the attack, and the reroll happens in this body.
+
+    That is a wrinkle worth naming, because it is the one case the content
+    guide's rule does not cover as written: *"a feat that names one power
+    writes its clause into that power"* would send this to `p919`, and
+    `p919` never rerolls anything. The row that has to carry it is the one
+    the sentence's verb belongs to.
+
+    **`bonus=` rather than a `c.bonus` laid first**, which is
+    `reroll_attack`'s own documented reason: the reroll and its bonus are
+    one printed clause, and a modifier laid beforehand *"is read by the next
+    attack rather than by this one"*.
+
+    `c.trigger` is the `AttackRolled` this row was offered for, so
+    `ev.power` is what names the attack being rerolled -- the only way to
+    tell `p919`'s miss from any other. #1061.
+    """
     lent(c)                      # f3158's sibling: f3159 lends this one
-    c.reroll_attack(keep="new")
+    ev = c.trigger
+    rerolling = getattr(ev, "power", "") if ev is not None else ""
+    extra = 2 if rerolling == "p919" and c.feat("f980") else 0
+    c.reroll_attack(keep="new", bonus=extra)
 
 
 @power(
