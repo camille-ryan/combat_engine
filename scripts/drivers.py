@@ -52217,7 +52217,11 @@ def the_importer_brief_and_the_parser_agree(out: Result) -> None:
         "difficulty": tuple(mod.DIFFICULTY),
         "rank": tuple(mod.RANKS),
         "role": tuple(mod.ROLES),
-        "complexity": tuple(str(c) for c in mod.COMPLEXITY),
+        # `#1049` turned the literal into a reader, so the vocabulary
+        # is the column's keys rather than a dict's. The brief is
+        # checked against what `parse` will accept, and `parse`
+        # accepts whatever the printed table holds.
+        "complexity": tuple(str(c) for c in mod.complexity_table()),
         "secondary_grants": tuple(mod.SECONDARY_GRANTS),
         "quest": tuple(mod.QUEST_KINDS),
         "state": tuple(mod.QUEST_STATES),

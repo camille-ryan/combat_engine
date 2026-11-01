@@ -488,7 +488,9 @@ Read 2026-10-29. Three gaps found by reading it against what is built,
 each filed rather than fixed:
 
 * **the complexity table has an `Advantages` column** -- 2 at complexity
-  3, 4 at 4, 6 at 6 -- and `module.COMPLEXITY` drops it. Latent: both
+  3, 4 at 4, 6 at 6 -- and `module.complexity_table()` drops it (it was
+  `module.COMPLEXITY`, a hand copy, until #1049 made it read the column).
+  Latent: both
   converted challenges are complexity 1 and 2, which grant none. #939.
 * **quests are a third of a level's XP structure** -- the DMG budgets
   "six to eight encounters, one major quest, and one minor quest per

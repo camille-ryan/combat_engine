@@ -1,41 +1,48 @@
 #!/usr/bin/env python
 """Do the rules tables in the tree still match the printed ones?
 
-Two printed glossary tables have readers here, and the two are now at
-different stages, which is why this file asks them different questions:
+**There is no hand copy left, and that changed what this file asks.** Two
+printed glossary tables have readers here and both now read their column:
 
-    combat_engine/dc.py        READS `rules_dc` -- 90 cells, no copy left
-    story/module.py:COMPLEXITY a transcription -- 5 rows x 3 of 4 columns
+    combat_engine/dc.py              READS `rules_dc`          #1001
+    story/module.complexity_table()  READS `rules_complexity`  #1049
 
-Both were **correct on this check's first run** -- every one of the 95
-numbers -- and both say in their own notes that an earlier draft was
-*remembered* and wrong: "hard at level 4 is 21 and not 22", and a complexity
-table that "assumed every primary check rolls at moderate" when the printed
-shape escalates. So the risk this gate exists for was never a present error.
-It is that **nothing could tell when one stopped being right.**
+Both copies were **correct on this check's first run** -- every one of the
+95 numbers -- and both recorded that an earlier draft had been *remembered*
+and wrong: "hard at level 4 is 21 and not 22", and a complexity table that
+"assumed every primary check rolls at moderate" when the printed shape
+escalates. So the risk was never a present error. It was that **nothing
+could tell when one stopped being right.**
 
-**The DC half has since been migrated rather than merely gated**, which is
-the stronger of the two answers `#1001` set out: `combat_engine/dc.py` reads
-the column, so the whole class of transcription error is gone instead of
-watched. What is left to ask there is whether the *reader* returns what the
-column holds -- see `_dc`, which is narrower and catches more than the
-reconciliation it replaced.
+Migrating beats gating, which is the stronger of the two answers `#1001`
+set out: a reader cannot drift from the thing it reads, so the whole class
+of transcription error is gone rather than watched.
 
-**The complexity half is still a hand copy**, so it still gets the original
-question. Migrating it is `story/`'s call and wants its own issue; until
-then the reconciliation is what stops it drifting, in either direction.
+**So both halves now ask the question one step out: does the reader return
+what the column holds?** That is narrower than the reconciliation it
+replaced and catches more -- a field mapped to the wrong column reads as a
+working table, and no comparison between two copies of the same numbers
+could ever see it.
 
-**It fails if the table is absent, rather than passing.** A missing
-`rules_dc` means the glossary's printing moved and `_rules_tables` refused
-to write a fragment, and a reconciliation that skips itself when its
-reference is gone is the "a check that runs on half its runs is not a
-check" fault `scripts/CLAUDE.md` opens with.
+**The order is written out in each check and never imported from the
+reader.** `_complexity`'s first version imported `_COLUMNS` and compared
+the reader's position `i` against `row[_COLUMNS[i]]`, so swapping two
+entries moved *both* sides and a plant that swapped `moderate` and `hard`
+passed at exit 0 -- the "column against itself" theatre this file exists to
+avoid, arriving through an import. `_dc` is safe importing `BANDS` only
+because `dc(level, band)` is keyed by **name**; `complexity_table()` hands
+back a positional tuple two callers unpack, so its order is load-bearing.
 
-**One printed column is deliberately not compared**: `advantages`. The
-printed complexity table has four columns and `COMPLEXITY` keeps three, so
-there is nothing in the tree to compare the fourth against -- it is stored
-so the omission is visible and reported here as a count, not as a failure.
-Whether a skill challenge should grant advantages is `story`'s question.
+**It fails if a table is absent, rather than passing.** A missing table
+means the glossary's printing moved and `_rules_tables` refused to write a
+fragment, and a check that skips itself when its reference is gone is the
+"a check that runs on half its runs is not a check" fault
+`scripts/CLAUDE.md` opens with.
+
+**One printed column is read by nothing**: `advantages`. It is stored so
+the omission is visible, and reported here as a count rather than a
+failure. Whether a skill challenge should grant advantages is `story`'s
+question -- #939, closed.
 """
 
 from __future__ import annotations
