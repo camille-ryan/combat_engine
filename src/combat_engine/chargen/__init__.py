@@ -2088,11 +2088,19 @@ def loadout(
     # `_chassis_map`.
     from combat_engine.engine.types import Keyword as _Kw
 
+    # **And a level-0 row that names a leg belongs to that leg only.** This
+    # path does not go through `_fits`, so it was unconditional: measured
+    # before `#1051`, every one of the warlock's seven pact features sat in
+    # **84 of 84** warlock hands -- all seven legs at once -- and the same
+    # held for every class whose chassis carries a gated feature. Harmless
+    # in play, because `Power.requires` refuses them mid-fight, and wrong
+    # everywhere it is read: the sheet, the page, and the policy's menu.
     chassis = chassis_of(cls, who_chassis)
     belongs = _chassis_map()
     out = sorted(p.ref for p in mine
                  if p.level == 0
                  and _Kw.BLADESPELL not in (p.keywords or ())
+                 and leg_named_by(p) in ("", build.name)
                  and belongs.get(p.ref, "") in ("", chassis))
     # Not already dealt: a class whose heal is itself a level-0 row was
     # handed it twice, so `Powers.known` carried the ref twice over. The
@@ -2846,12 +2854,49 @@ def spellbook(cls: str, level: int, prepared: list[str], held: int = 2) -> list[
     return out
 
 
+def leg_named_by(p) -> str:  # noqa: ANN001
+    """The build leg this row's own `requires=` names, or `""`.
+
+    `features.on_leg` records the name on the gate it returns, so the leg
+    is readable **without a character to ask** -- which is the whole point
+    here, because the draw has no world and `Power.requires` is a
+    mid-fight question. `audit._class_of_leg` already relies on the same
+    field.
+
+    Read rather than called, deliberately. Calling the gate needs a
+    `World` and an entity id; the name is a string sitting on it.
+    """
+    gate = getattr(p, "requires", None)
+    return getattr(gate, "leg", "") if gate is not None else ""
+
+
 def _fits(p, build: Build) -> bool:  # noqa: ANN001
     """Is this power on the build's leg?
+
+    **A declared leg wins over ability fit, and until `#1051` this function
+    only asked about the ability** -- which is what its own first line has
+    always claimed to be doing and was not. The gap was not academic:
+    `cf:warlock-f1c10` declares `requires=on_leg("star")` and
+    `requires_text="needs the pact that prints it"`, and it was dealt to
+    19% of infernal and 14% of dark hands and **0%** of star ones, because
+    it is a Constitution attack and those are the Constitution legs. The
+    pact's own at-will went to six legs and never to its own.
+
+    `Power.requires` is asked mid-fight, so the card was dealt and then
+    refused in play -- a dead at-will in the hand, and for the ungated twin
+    a card whose augment lines key off a remnant its holder cannot have.
+    49 declared rows across 8 classes carry such a gate, so this is not a
+    warlock problem.
 
     No attack line means no ability to be wrong about -- those are open to
     everybody, which is how a cleric of either leg still gets its heals.
     """
+    leg = leg_named_by(p)
+    if leg:
+        # The row says which fork it belongs to, which is a stronger
+        # statement than which ability it rolls: a pact's own card is for
+        # that pact whether or not the ability happens to line up.
+        return leg == build.name
     if p.attack is None or p.attack.ability is None:
         return True
     return p.attack.ability is build.primary

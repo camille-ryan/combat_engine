@@ -591,6 +591,18 @@ def _vestige_augment(c: Cast, victim: int) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(CON, vs=WILL),
+    # **The pact that prints it, which this row declared and this one did
+    # not.** Its sibling `cf:warlock-f1c10` carries the same gate for the
+    # same reason; this one carried none, and the draw dealt it to 56% of
+    # infernal and 55% of dark hands -- both Constitution legs, which is
+    # why the ability test let it through -- and 0% of vestige ones, the
+    # only leg whose remnant its augment lines key off. So a warlock on
+    # the wrong pact held a working at-will with three clauses that could
+    # never fire, and the pact it belongs to got it by `c.grant_row`
+    # above rather than from the pool. #1051, and #1043 is where the
+    # 56/55 was first measured on its retired twin.
+    requires=on_leg("vestige"),
+    requires_text="needs the pact that prints it",
     dropped=("c.curse_damage()",),
 )
 def warlock_f1c11(c: Cast) -> None:

@@ -43396,7 +43396,19 @@ def an_element_sworn_leg_draws_its_own_element(out: Result) -> None:
                 for b in legs:
                     rows = chargen.loadout("sorcerer", 1, build=b,
                                            rng=Random(seed))
-                    drawn[b.name] = tuple(sorted(map(str, rows)))
+                    # **Leg-gated rows set aside for the identity test.**
+                    # `#1051` made the draw honour a `requires=on_leg(...)`,
+                    # so the four legs no longer draw byte-identical
+                    # loadouts even unscored: each gets its own gated
+                    # features and not the other three's. That is the fix
+                    # working, and the claim this rule needs is narrower
+                    # than the one it used to make -- that the *element*
+                    # corpus is flat unscored, which the counts below
+                    # measure on every row regardless.
+                    drawn[b.name] = tuple(sorted(
+                        str(r) for r in rows
+                        if not chargen.leg_named_by(get(str(r)))
+                    ))
                     for ref in rows:
                         p = get(str(ref))
                         if p is None:
@@ -43444,8 +43456,9 @@ def an_element_sworn_leg_draws_its_own_element(out: Result) -> None:
     # A negative control on one seed would prove nothing; this is the same 30.
     same_off, counts_off = draw(scored=False)
     out.that(same_off == SEEDS,
-             "unscored, all four legs draw the identical loadout every seed -- "
-             "which is the state #464 found and #906 mistook for pollution",
+             "unscored, all four legs draw the identical loadout every seed "
+             "once each leg's own gated features are set aside -- which is "
+             "the state #464 found and #906 mistook for pollution",
              f"{same_off} of {SEEDS}")
 
     off_lean = lean(counts_off)
@@ -51744,9 +51757,21 @@ def the_at_will_gains_the_active_remnants_augment(out: Result) -> None:
     if not foes3:
         out.skip("the control board fielded no enemy")
         return
+    # **The control builds its own premise now, rather than relying on the
+    # draw to hand it a warlock without a remnant.** `#1051` gave this row
+    # the `requires=on_leg("vestige")` its sibling already had, and
+    # `audit.board` reads a leg off a row's own `requires` (`#1042`) -- so
+    # the board poses a *vestige* warlock, correctly, and the old premise
+    # inverted under it. A control that depends on the dealer not having
+    # done its job is one the next fix breaks.
+    for eff in list(world3.effects.of(me3)):
+        if "vestige:" in str(eff.label):
+            world3.effects.end(eff, "cleared for the control")
     out.that(not c3.active_vestige(),
-             "the control warlock is on no vestige pact, so no remnant is"
-             " active -- otherwise this board cannot answer",
+             "the control warlock has no remnant active -- cleared by hand,"
+             " because the board now poses the pact this row names and a"
+             " standing bargain would make the check below agree with"
+             " itself",
              f"active: {c3.active_vestige()!r}")
     base3 = c3.total("attack", me3,
                      {"actor": me3, "target": foes3[0], "ranged": True})
