@@ -94,6 +94,15 @@ def _live_readers() -> list[str]:
         # the decision it drives ("wait") is unchanged.
         if re.match(r"^(?:/bin/)?(?:z|ba|da|k)?sh\b", command):
             continue
+        # **And `uv run`, for the same reason and by the same measurement.**
+        # The note above fixed the shell wrapper and left this one: one
+        # `replay.py verify` still showed as two, `uv run scripts/...`
+        # beside `.venv/bin/python3 scripts/...`, so the refusal read "2
+        # other processes are live" for a single reader. The interpreter is
+        # the one holding the database open, so the wrapper is what goes --
+        # which also keeps the listed pid the one worth waiting on.
+        if re.match(r"^\S*uv\b", command) and " run " in f" {command} ":
+            continue
         found.append(f"  {pid}  {command[:96]}")
     return found
 
