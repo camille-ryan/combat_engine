@@ -462,6 +462,34 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
                     f" asked; the carry, the rest and the milestone are"
                     f" unexercised past this point",
                 )
+            # **And it FAILS when the carry was never asked at all**, which
+            # is the half a skip cannot do. #1025.
+            #
+            # The carry compares leg `n+1`'s `entering` against leg `n`'s
+            # `rested`, and that comparison sits *below* this break -- so a
+            # day that ends at leg 0 asks it zero times. The skip above
+            # names that honestly and leaves the suite green, and a green
+            # suite with this instrument's sharpest assertion unasked is
+            # exactly what happened for three commits: 84 checks with one
+            # failing became 67 with none, and three unrelated engine
+            # commits appeared to fix a bug they had not touched.
+            #
+            # **The party losing a leg is a legitimate outcome of the
+            # fixture, not of the carry.** The seed is pinned (1) against a
+            # recorded distribution -- 11 of 24 seeds clear all three legs
+            # at this level and these scales -- so a pinned seed that stops
+            # reaching leg 1 is a fixture to re-pin, not a question to stop
+            # asking. That is the one case where refusing beats skipping,
+            # and it is narrow: ending at leg 1 still only skips the rest
+            # and the milestone, which the skip above covers.
+            check.that(
+                leg_no >= 1,
+                "the pinned seed got far enough to ask the carry at all --"
+                " a seed that stops clearing leg 0 is a fixture to re-pin"
+                " against the recorded distribution, not a check to skip",
+                f"the day ended at leg {leg_no}:"
+                f" {(state.get('outcome') or 'the party did not win it')}",
+            )
             break
         check.that(state["awaiting_next"] and not state["encounter"],
                    f"after leg {leg_no} the day waits for the player to walk on"
