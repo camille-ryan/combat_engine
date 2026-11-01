@@ -585,16 +585,30 @@ def m1933c0a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ride(size=)",),
 )
 def m1933c0a2(c: Cast) -> None:
-    """The card waives a restriction this engine does not impose. `c.ride`
-    sets `Relation.RIDDEN_BY` for anybody who asks and reads no footprint at
-    all -- there is no size rule anywhere in `movement`, `actions` or
-    `relations` -- so the exception has nothing to except and a row written
-    as a no-op would read as finished. The marker is the size gate on
-    riding, which is what has to exist before the waiver means anything.
+    """"A Small creature can ride this, even though it isn't Large."
+
+    **The marker's premise was falsified twelve days after this row was
+    written, and name-matching could never have retired it.** The note here
+    said *"there is no size rule anywhere in `movement`, `actions` or
+    `relations`"*, which was true on 2026-10-15 and stopped being true on
+    2026-10-27: `fdb4e96f` made mounting an action and gave the size rule
+    its one exception. `c.rideable(sizes=)` is that exception, `query.
+    may_ride` is its single reader, and two sibling rows already write this
+    clause as a one-liner -- `level_02/skirmishers_sa.py` and
+    `level_03/skirmishers_sa.py`, both `c.rideable(sizes=(Size.MEDIUM,))`.
+
+    `todo.py` could not see it because the symbol it waited on,
+    `c.ride(size=)`, is not the name the facility arrived under -- which is
+    the repo's own rule that a stale marker is found by its **premise**,
+    not by its name.
+
+    `on=c.me` because the permission is recorded on the **mount**, which is
+    `c.rideable`'s own design note: a bare call would lay it on nobody,
+    which `content/CLAUDE.md` calls the commonest single mistake here.
     """
+    c.rideable(sizes=(Size.SMALL,), on=c.me)
 
 
 # ==========================================================================
