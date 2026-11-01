@@ -5229,6 +5229,11 @@ def _cross_reference_rest(
             # now whichever pass resolved it, and this is the only pass that
             # looks *inside* one. See `_self_named_clauses`.
             fixed = _self_named_clauses(fixed, owns)
+            # **And the row's own title where a slot proves it is one.**
+            # Narrower than `_self_named_clauses` above, which owns a
+            # labelled clause; this owns a sentence shape. See
+            # `_own_title_slot`. #1048.
+            fixed = _own_title_slot(fixed, ref, names)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
                 changed += 1
@@ -6545,6 +6550,60 @@ def _cited_members(
         return ref
 
     return _CITED_MEMBER.sub(swap, spec)
+
+
+#: `You gain the <title> power`, with the title captured. The slot is
+#: delimited on both sides, which is what stops it swallowing a longer
+#: phrase -- the `#1027` fault was a match that could grow across a word
+#: boundary, and this one cannot.
+_OWN_TITLE = re.compile(
+    r"\b(you gain the )([A-Za-z][A-Za-z\u2019' -]{2,40}?)( power\b)", re.I
+)
+
+
+def _own_title_slot(spec: str, ref: str, names: dict) -> str:
+    """Swap a spec's own row's title for its ref, inside the one slot that
+    proves the text is a title. #1048.
+
+    Six class features print `You gain the <X> power` where `X` is indexed
+    to **that very row** -- so the row grants itself, and its own printed
+    title was reaching an author as prose.
+
+    **Both halves of the test are load-bearing and neither is enough
+    alone**, which is the whole reason this is narrow:
+
+    * the **slot** alone is not a title position. Measured across all
+      eleven spec tables: 60 `you gain the X power` slots, and **51** of
+      them hold generic prose -- `use of the chosen`, `at-will attack`,
+      `benefit of this`. So `_label_refs`' claim that "in this position it
+      is never a coincidence" is false here.
+    * the **own name** alone is not self-reference either, at whole-spec
+      scope. `_clause_self_ref`'s docstring measured it: removing the
+      ordinary-words waiver gives *"3,885 hits, nearly all of them
+      innocent -- a monster ability named for a generic combat phrase,
+      mentioned in prose that means the phrase"*. 375 monster specs name
+      themselves that way and must not be touched.
+
+    Together they are decisive: the slot says the text is a power's title
+    and the index says whose, and the answer is this row. Six specs,
+    measured, and no waiver or vocabulary test anywhere in it.
+
+    A spec naming a **different** row's title is left alone, for the
+    reason `_clause_self_ref` gives: that is `_cross_reference`'s job and
+    doing it here would hide which pass is failing.
+    """
+    own = ((names.get(ref) or {}).get("name") or "").strip()
+    if len(own) < 4:
+        return spec
+    low = own.lower()
+
+    def swap(m: re.Match) -> str:
+        found = m.group(2).strip().lower()
+        if found != low and found != low.replace("\u2019", "'"):
+            return m.group(0)
+        return f"{m.group(1)}{ref}{m.group(3)}"
+
+    return _OWN_TITLE.sub(swap, spec)
 
 
 def _self_named_clauses(spec: str, owns: dict[str, list[str]]) -> str:
