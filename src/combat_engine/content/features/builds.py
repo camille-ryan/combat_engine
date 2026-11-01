@@ -51,6 +51,16 @@ def on_leg(name: str):  # noqa: ANN201
     def check(world: World, eid: int) -> bool:
         return on_build(world, eid, name)
 
+    # **The leg is readable off the gate**, so a caller that has the row but
+    # not the character can ask which fork it wants. `audit.board` is the
+    # caller: it fields an item or racial row on a fallback class, and a rod
+    # printing "one of your primary vestiges" was posed on a striker who has
+    # no such pact -- so the row fired, declined correctly, and reported
+    # SILENT for the board's reason rather than its own. #1042.
+    #
+    # An attribute rather than a second table, because the closure already
+    # holds the only copy and a table would be a second place to be wrong.
+    check.leg = name  # ty: ignore[unresolved-attribute]
     return check
 
 

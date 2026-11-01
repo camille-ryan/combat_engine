@@ -2103,6 +2103,25 @@ def _source_of(body: object, ref: str = "") -> str:
         return ""
 
 
+def _class_of_leg(leg: str) -> str:
+    """The one class that owns this build leg, or "" when it is shared.
+
+    `on_leg` records its name on the gate it returns, so a row's
+    `requires=` says which fork it wants without a character to ask. What
+    it does **not** say is the class, and for an item or racial row that is
+    the only clue there is -- see `board`.
+
+    Shared names answer "", deliberately. 12 of 75 are shared and the
+    positional `fNsM` ones reach four classes, so guessing one would field
+    a warlock row on a shaman as often as not.
+    """
+    if not leg:
+        return ""
+    owners = [c for c, bs in chargen.BUILDS.items()
+              if any(b.name == leg for b in bs)]
+    return owners[0] if len(owners) == 1 else ""
+
+
 def board(ref: str, seed: int, pose: bool = False,
           arm: str = "", element: bool = False) -> tuple[World, int, set[str]]:
     """A caster with the row, four creatures in reach, and the fight started.
@@ -2214,7 +2233,23 @@ def board(ref: str, seed: int, pose: bool = False,
         # fighter that could never satisfy it. `feat.prereq` names the
         # class for 1,022 of them and every name it uses is a real one.
         gated = next((c for c in _atoms(gate, "class") if c in chargen.CLASSES), "")
-        cls = (not carried and not racial and not themed and declared.cls) or gated or (
+        # **And the class a `requires=on_leg(...)` implies**, which is the
+        # only thing that names it for an item row. A rod printing "one of
+        # your primary vestiges" carries `cls="item"`, so it took the
+        # fighter-or-ranger fallback and was posed on a striker who has no
+        # such pact: the row fired, declined correctly, and reported SILENT
+        # for the board's reason rather than its own. #1042.
+        #
+        # **Only where the leg name belongs to exactly one class.** Measured:
+        # 63 of 75 leg names are owned by one class and 12 are shared --
+        # `elemental` is shaman's and warlock's, and the `fNsM` positional
+        # ones are up to four classes at once, which is #235's finding.
+        # A shared name answers nothing, so it falls through to the existing
+        # fallback rather than picking one, which is the fail-open direction.
+        legged = _class_of_leg(getattr(declared.requires, "leg", ""))
+        cls = (not carried and not racial and not themed and declared.cls) or (
+            gated or legged
+        ) or (
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
         )
         # Its class features come too. A row that triggers on a *cursed*

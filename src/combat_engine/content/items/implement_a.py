@@ -56,6 +56,7 @@ from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.features.arcanist import STAFF_DEFENCE_RAISE
+from combat_engine.content.features.builds import on_leg
 from combat_engine.content.features.controllers import IMPOSITION_RAISE
 from combat_engine.content.features.strikers import extra_damage
 from combat_engine.content.features.warlock import BOON, BOONS, CURSE
@@ -957,62 +958,40 @@ def i2320p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit a cursed enemy with an attack power using this rod",
-    todo=("c.active_vestige()",),
+    on=HIT_BY_ME,
+    requires=on_leg("vestige"),
+    requires_text="needs the pact that prints primary vestiges",
 )
 def i2341p1(c: Cast) -> None:
     """Bargains afresh with one of the leg's own two remnants.
 
-    Printed: *"You make one of your primary vestiges your active
-    vestige."* The body is written and is one line --
+    Printed: *"You make one of your primary vestiges your active vestige."*
+    One line, because `c.bargain` already ends any standing bargain, offers
+    a `c.choose` over more than one, and returns `""` on an empty set.
 
-        c.bargain(*c.vestiges(primary=True))
+    **`requires=on_leg("vestige")`, which is the printed requirement said
+    in the column.** The card prints no Prerequisite line, but "your
+    primary vestiges" is a thing only that pact has -- a warlock on any
+    other leg has an empty set and this rod can do nothing. So the gate is
+    the card's own sentence rather than an inference, and it is what makes
+    the row refuse honestly in play instead of firing and declining.
 
-    -- because `c.bargain` already ends any standing bargain, offers a
-    `c.choose` over more than one, and returns `""` on an empty set.
-    Measured on the audit board with `on=HIT_BY_ME` and the cursed gate:
-    it **fires 22 times and does nothing**, because nothing ever offers a
-    primary remnant, so the set it bargains over is always empty.
+    It is also what made the row **posable**, which is the longer half of
+    the story. `audit.board` fields an item row on a fallback class, so
+    this was posed on a striker with no pact: it fired 22 times, declined
+    correctly every time, and reported SILENT for the board's reason rather
+    than its own. The marker then described the instrument rather than the
+    tree, which `todo` has no vocabulary for. `audit._class_of_leg` reads
+    the leg off this gate and fields a warlock on it. #1042.
 
-    **The blocker moved, and it is now the audit board rather than the
-    tree.** `8eb78077` made `cf:warlock-f1s6` offer the two remnants, so a
-    real vestige warlock does have a primary set and this body would pay.
-    Un-marked and measured: the row still reports **SILENT**, for two
-    independent reasons the board cannot help --
-
-        board("i2341p1")    holder is a striker, build("vestige") False
-                            cursed enemies nearby: none
-
-    -- so neither the pact nor the curse the trigger needs is posable. A
-    written row that fires and does nothing is worse than a marked one, and
-    the per-ref baseline may shrink and never grow, so adding it to
-    `silent_refs` is not available either. Re-marked rather than shipped
-    inert. Filed as the board gap it is.
-
-    The marker stays knowingly imprecise for the reason it already did:
-    `todo=` takes a **symbol**, and nothing is missing a symbol.
-    (Tried `todo=("cf:warlock-f1.offer_vestige(primary)",)`; refused at
-    import as prose, correctly.)
-
-    So the old marker was wrong twice. It read `c.active_vestige()`: this
-    card does not *ask*
-    which remnant is active, it *sets* one, and from a named subset --
-    which is `#1034`'s whole finding. And the verb that sets it exists
-    now. What is missing is upstream of this row entirely: the pact leg
-    has to **offer** its two printed remnants with
-    `c.offer_vestige(..., primary=True)`, and until it does, this row and
-    `f2035` are both inert for the same reason.
-
-    Left `todo=` rather than `dropped=` deliberately: a `dropped=` row
-    plays with one clause missing, and this one would play with its whole
-    effect missing. A row that fires and does nothing is the shape the
-    marker rules exist to keep off the board.
-
-    The two primary remnants are printed on the boon card, whose clauses
-    are `cf:warlock-f1c12s0` and `...s1` -- and an earlier attempt to
-    dispatch on those was reverted because neither is declared in
-    content, so the comparisons were silently dead. That is the real
-    shape of the remaining work.
+    The cursed gate is in the body rather than in the trigger because
+    `HIT_BY_ME` is the file's shape for the printed "using this rod" and a
+    second predicate would be a second place to keep the implement test.
     """
+    foe = c.target
+    if foe is None or not c.cursed(on=foe):
+        return
+    c.bargain(*c.vestiges(primary=True))
 
 
 @power(
