@@ -457,15 +457,44 @@ else
         PYTHONUNBUFFERED=1 uv run scripts/impact.py --record 2>&1 \
             | grep -Ev '^#   [0-9]+/' || true
         ENDED=$(git rev-parse --short HEAD)
+        # **Uncommitted edits as well as a moved HEAD, and that was the
+        # hole.** `_build_map` parses every engine file from disk at the
+        # *end* to turn recorded lines into functions, so any edit during
+        # the 87 minutes misattributes coverage -- and an uncommitted edit
+        # moves the lines without moving `HEAD`, which is the normal state
+        # of a session doing work. Watching only `HEAD` could not see it.
+        #
+        # It happened: the 07:00 run of 2026-10-31 swept clean, began
+        # recording at ~07:50, and `engine/movement.py` and `falling.py`
+        # gained ~65 and ~32 lines at 09:38 with HEAD unmoved. The
+        # recording was killed by hand. #1038.
+        #
+        # The `elif` above guarantees the tree was clean when the recording
+        # started, so any dirt here is new. Same `:(exclude)$LEDGER` as the
+        # start-up guard, for the same reason: the sweep rewrites it.
+        #
         # Full shas, for the reason given beside `AT_FULL`: an abbreviation
         # that grew during the recording is not the tree moving.
+        MOVED_NOW=""
         if [ "$(git rev-parse HEAD)" != "$AT_FULL" ]; then
+            MOVED_NOW="HEAD moved from ${AT} to ${ENDED}"
+        elif [ -n "$(git status --porcelain -- . ":(exclude)$LEDGER")" ]; then
+            MOVED_NOW="the working tree was edited during the recording"
+        fi
+        if [ -n "$MOVED_NOW" ]; then
             rm -f logs/impact.json
-            echo "   DISCARDED -- the tree moved from ${AT} to ${ENDED} during"
-            echo "   the recording, so the line-to-function attribution is"
-            echo "   against files the coverage was not taken from. No map"
-            echo "   means every engine change audits every row, which is the"
-            echo "   safe direction."
+            echo "   DISCARDED -- ${MOVED_NOW}, so the line-to-function"
+            echo "   attribution is against files the coverage was not taken"
+            echo "   from. No map means every engine change audits every row,"
+            echo "   which is the safe direction."
+        else
+            # **And it says so when nothing went wrong**, which it did not
+            # before. The 07:00 log's last line is `recording at 783fb2c7 --
+            # about 87 minutes` and then the file ends: a killed or voided
+            # recording was indistinguishable from one that finished, and a
+            # reader had to infer the difference from the map's age, which
+            # is reasoning from a stamp. #1038.
+            echo "   recorded at ${AT} -- the tree did not move"
         fi
     } 2>&1 | tee -a "$LOG"
     cp "$LOG" logs/nightly-latest.log
