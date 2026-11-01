@@ -847,6 +847,54 @@ CREATE TABLE poison (
   ref TEXT PRIMARY KEY, id INTEGER, level INTEGER, cost TEXT, spec TEXT
 );
 CREATE INDEX poison_level ON poison(level);
+
+-- What each of the seventeen skills can be **used to do**, with the printed
+-- sample DC and the printed task beside it.
+--
+-- **The seventeen names are not here, deliberately.** `#455` ruled that the
+-- compendium's `Skill` list is not an ingestion -- `engine.skills.SKILLS`
+-- hardcodes the seventeen and maps each to its ability, so a second copy
+-- would only be a way for the two to silently disagree. That verdict holds
+-- and is checked: `rules.py` asserts the two counts still agree. This table
+-- adds only the part the engine does not have.
+--
+-- `skill` is the engine's own key (`acrobatics`), so a reader joins on the
+-- thing it already uses rather than on a ref nothing else knows.
+--
+-- `use` is the printed sub-heading, lowercased, or **empty for a skill whose
+-- page prints no sub-heading at all**. Six of the seventeen are that shape:
+-- a single use whose `Action:` and `DC:` sit directly under the general
+-- prose. A parser keyed on headings reports zero uses for those six and
+-- looks like it worked, which is why the check below is per skill rather
+-- than a total -- 42 named uses across 17 skills sums to a plausible number
+-- with six of them at nothing. #1002.
+CREATE TABLE skill_use (
+  skill TEXT, use TEXT, ord INTEGER,
+  action TEXT, dc TEXT, success TEXT, failure TEXT, special TEXT,
+  PRIMARY KEY (skill, use)
+);
+CREATE INDEX skill_use_skill ON skill_use(skill);
+
+-- A printed **sample task** for a skill, with the band the page puts on it.
+--
+-- Separate from `skill_use` because they are different things and the
+-- measurement said so. A use is a capability -- `balance`, `escape grasp` --
+-- with an action cost and a prose DC line. A sample task is one example
+-- sentence with an **inline band**: `(moderate DC)`, `(hard DC)`.
+--
+-- **This is the priceable half, and the better-covered one.** Every band
+-- printed is one of `combat_engine.dc.BANDS`, so `dc(level, band)` turns a
+-- task straight into a number -- where a use's `DC` column is prose like
+-- "See the table". And it reaches **all seventeen** skills where uses reach
+-- sixteen: History prints no sub-heading *and* no field labels, only four
+-- banded tasks, which is a third shape the first two passes both miss.
+--
+-- 47 rows. #1002.
+CREATE TABLE skill_task (
+  skill TEXT, ord INTEGER, band TEXT, task TEXT,
+  PRIMARY KEY (skill, ord)
+);
+CREATE INDEX skill_task_skill ON skill_task(skill);
 """
 
 
@@ -920,6 +968,8 @@ class Report:
     disable_many: int = 0
     disable_none: int = 0
     poisons: int = 0
+    skill_uses: int = 0
+    skill_tasks: int = 0
     skill_powers: int = 0
     diseases: int = 0
     links_found: int = 0
@@ -1005,6 +1055,8 @@ class Report:
             f"(30 and 5 when whole; 0 means the printing moved -- see "
             f"`_rules_tables`)",
             f"poisons       {self.poisons:6d}",
+            f"skill uses    {self.skill_uses:6d}",
+            f"skill tasks   {self.skill_tasks:6d}",
             f"skill powers  {self.skill_powers:6d}",
             f"diseases      {self.diseases:6d}  (stage track and the DC shape its page prints)",
             f"weapon rows   {self.wields:6d}  (what each power's text says it needs)",
@@ -1121,6 +1173,8 @@ def build() -> Report:
     report.disable_none, report.disable_many = _disable_split(out)
     report.trap_hp, report.trap_hp_level = _object_stat_lines(out)
     report.poisons = _poisons(source, out, names)
+    report.skill_uses = _skill_uses(source, out)
+    report.skill_tasks = _skill_tasks(source, out)
     report.diseases = _diseases(source, out, names)
     report.build_powers = _build_powers(source, out, names)
     # Every other name the compendium prints, so the scrubber can see
@@ -3049,6 +3103,146 @@ def _armour(source: sqlite3.Connection, out: sqlite3.Connection,
         names.setdefault(f"a{aid}", {})
         names[f"a{aid}"] = {**names[f"a{aid}"], "name": name}
         written += 1
+    return written
+
+
+#: A field line under a use, with the optional space before the colon the
+#: pages actually print. Diplomacy writes `Action :` and Acrobatics writes
+#: `Action:`; a pattern for one silently drops the other's field and reports
+#: the use as having none. Same shape as the two apostrophes
+#: `_cross_reference_rest` already handles.
+_SKILL_FIELD = re.compile(
+    r"^(Action|DC|Success|Failure|Special|Target|Check)\s*:\s*(.*)$"
+)
+
+#: A named use: the page sets these as an all-capitals sub-heading. The
+#: skill's own title line is all-capitals too (`ACROBATICS (DEXTERITY)`) and
+#: is told apart by its parenthesised ability rather than by position.
+_SKILL_USE = re.compile(r"^[A-Z][A-Z' /-]{2,40}$")
+
+
+#: A printed sample task, which ends in its band: `... (moderate DC)`.
+#: The three words are exactly `combat_engine.dc.BANDS`, checked rather
+#: than assumed -- `rules.py` asserts the set the pages use is the set the
+#: table holds, so a fourth band appearing in print cannot be imported as
+#: something `dc()` would refuse.
+_SKILL_TASK = re.compile(
+    r"^(.*?)\s*\((easy|moderate|hard)\s+DC\)\s*$", re.I
+)
+
+
+def _skill_tasks(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
+    """The printed sample tasks for each skill, with their bands. #1002
+
+    The half of `#1002` that is directly usable: a band is a key into
+    `rules_dc`, so `dc(level, band)` prices one of these without anybody
+    deciding anything. A use's printed `DC` is prose -- "See the table",
+    "The Dungeon Master sets the DC" -- and resolving it here would be the
+    ETL answering a rules question.
+
+    **And it is the pass that reaches all seventeen.** `_skill_uses` gets
+    sixteen: History prints no all-capitals sub-heading *and* no
+    `Action:`/`DC:` labels, only four banded sentences. That is a third
+    page shape, found because the check is per skill -- 48 use-rows across
+    16 skills is a plausible total with one skill empty.
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    written = 0
+    for name, plain in source.execute(
+        "SELECT Name, PlainTxt FROM Skill ORDER BY Name"
+    ):
+        key = (name or "").strip().lower()
+        if key not in SKILLS:
+            continue
+        ord_ = 0
+        for raw in (plain or "").splitlines():
+            m = _SKILL_TASK.match(raw.strip())
+            if m is None:
+                continue
+            task = " ".join(m.group(1).split())
+            if len(task) < 8:
+                continue
+            out.execute(
+                "INSERT OR REPLACE INTO skill_task VALUES (?,?,?,?)",
+                (key, ord_, m.group(2).lower(), task),
+            )
+            ord_ += 1
+            written += 1
+    return written
+
+
+def _skill_uses(source: sqlite3.Connection, out: sqlite3.Connection) -> int:
+    """What each skill can be used to do, with its printed DC and task. #1002
+
+    `#455` ruled the compendium's seventeen-row `Skill` **list** is not an
+    ingestion, because `engine.skills.SKILLS` hardcodes it. That holds. What
+    it did not look at is the body: `PlainTxt` carries the per-skill usage
+    prose broken into named uses, each with a sample DC and a sample task,
+    which is the content every skill-challenge judgement currently invents.
+
+    ## Two shapes, and the second is why this cannot count a total
+
+    A skill prints **either** named uses as all-capitals sub-headings, each
+    followed by its fields -- or, for six of the seventeen, **no sub-heading
+    at all**, because it has a single use and the fields sit directly under
+    the general prose. Measured: 42 named uses across 17 skills, with
+    Diplomacy, History, Insight, Intimidate, Streetwise and Bluff at zero
+    named ones.
+
+    So a parser keyed on headings gets 11 of 17 and reports a plausible
+    total. The implicit case is stored with an empty `use`, and `rules.py`
+    asserts **per skill** that each of the seventeen has at least one row --
+    a sum would have hidden exactly this.
+
+    Nothing is derived. A field the page does not print is `NULL`, which is
+    the component rule; a `DC` reading "See the table" is stored as that
+    text rather than resolved, because the table it means is `rules_dc`'s
+    and pointing at it here would be this file deciding a rules question.
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    written = 0
+    for name, plain in source.execute(
+        "SELECT Name, PlainTxt FROM Skill ORDER BY Name"
+    ):
+        key = (name or "").strip().lower()
+        # Only the seventeen the engine knows. A compendium row the engine
+        # does not name is a disagreement to report, not a row to import --
+        # `rules.py` is where that is said.
+        if key not in SKILLS:
+            continue
+        uses: list[tuple[str, dict[str, str]]] = []
+        current: dict[str, str] | None = None
+        for raw in (plain or "").splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            if _SKILL_USE.match(line):
+                # The title line, which is the only all-capitals line
+                # carrying its ability in brackets.
+                if "(" in line:
+                    continue
+                current = {}
+                uses.append((line.lower(), current))
+                continue
+            if (m := _SKILL_FIELD.match(line)) is not None:
+                if current is None:
+                    # **The implicit single use.** Six skills print their
+                    # fields with no heading above them, so the fields
+                    # arrive before any use has been opened.
+                    current = {}
+                    uses.append(("", current))
+                current.setdefault(m.group(1).lower(), m.group(2).strip())
+        for ord_, (use, fields) in enumerate(uses):
+            out.execute(
+                "INSERT OR REPLACE INTO skill_use VALUES (?,?,?,?,?,?,?,?)",
+                (key, use, ord_, fields.get("action"), fields.get("dc"),
+                 fields.get("success"), fields.get("failure"),
+                 fields.get("special") or fields.get("target")
+                 or fields.get("check")),
+            )
+            written += 1
     return written
 
 

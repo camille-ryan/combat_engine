@@ -287,6 +287,76 @@ def _conditions(out: list[str]) -> int:
     return 1 if missing else 0
 
 
+def _skills(out: list[str]) -> int:
+    """The seventeen skills, their uses and their banded sample tasks. #1002
+
+    Three questions, and the shape of the first is the whole lesson.
+
+    **Per skill, never a total.** `skill_use` holds 48 rows across
+    **sixteen** skills -- History prints no all-capitals sub-heading and no
+    `Action:`/`DC:` labels, so the use parser finds nothing in it. 48 across
+    16 is a perfectly plausible number with one skill empty, and a sum would
+    have shipped that. `skill_task` covers all seventeen, so the test is
+    that every skill has at least one row *somewhere*.
+
+    **The bands have to be `dc.BANDS`.** A task's band is a key into
+    `rules_dc`; a fourth word appearing in print would import as something
+    `dc()` refuses, which is a silent hole rather than an error.
+
+    **And `#455`'s verdict gets a gate.** It ruled the compendium's
+    seventeen-row `Skill` list is not an ingestion because the engine
+    hardcodes it -- correct, and until now nothing checked the two still
+    agree. A skill the pages name and the engine does not is reported here
+    rather than imported.
+    """
+    from combat_engine.dc import BANDS
+    from combat_engine.engine.skills import SKILLS
+
+    if not _has_table("skill_task") or not _has_table("skill_use"):
+        out.append(
+            "  the skill tables are absent, so what each skill can be used"
+            " to do reaches no column -- see #1002. Reported, not failed:"
+            " they were never claimed to exist."
+        )
+        return 0
+    db = game()
+    uses = {r[0] for r in db.execute("SELECT DISTINCT skill FROM skill_use")}
+    tasks = {r[0] for r in db.execute("SELECT DISTINCT skill FROM skill_task")}
+    bands = {r[0] for r in db.execute("SELECT DISTINCT band FROM skill_task")}
+    engine = set(SKILLS)
+
+    bare = sorted(engine - (uses | tasks))
+    if bare:
+        out.append(
+            f"  {len(bare)} skill(s) have neither a use nor a sample task,"
+            f" so nothing says what they are for: {', '.join(bare)}"
+        )
+    stray = sorted((uses | tasks) - engine)
+    if stray:
+        out.append(
+            f"  {len(stray)} skill(s) imported that the engine does not"
+            f" name: {', '.join(stray)} -- #455 ruled the list is the"
+            f" engine's, so this is a disagreement not a row"
+        )
+    off = sorted(bands - set(BANDS))
+    if off:
+        out.append(
+            f"  {len(off)} sample-task band(s) are not one of dc.BANDS"
+            f" {BANDS}: {', '.join(off)} -- dc() would refuse them"
+        )
+    if bare or stray or off:
+        return 1
+    n_use = db.execute("SELECT count(*) FROM skill_use").fetchone()[0]
+    n_task = db.execute("SELECT count(*) FROM skill_task").fetchone()[0]
+    out.append(
+        f"  the skills reconcile: {len(engine)} named by the engine,"
+        f" {len(uses)} with a printed use ({n_use} uses) and {len(tasks)}"
+        f" with a banded sample task ({n_task} tasks), 0 with neither,"
+        f" 0 bands outside {BANDS}"
+    )
+    return 0
+
+
 def _has_table(name: str) -> bool:
     """Is that table in the built database?"""
     return bool(game().execute(
@@ -296,7 +366,8 @@ def _has_table(name: str) -> bool:
 
 def main() -> int:
     problems: list[str] = []
-    bad = _dc(problems) | _complexity(problems) | _conditions(problems)
+    bad = (_dc(problems) | _complexity(problems)
+           | _conditions(problems) | _skills(problems))
     for line in problems:
         print(line)
     return bad
