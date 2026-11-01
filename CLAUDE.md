@@ -390,9 +390,17 @@ a push" below is a cheaper instruction than it was, and the per-commit run
 is no longer worth routing around.
 
 * **`check.py` per commit.** Narrow; seconds to a couple of minutes.
-* **`check.py --all` once before a push**, not once per commit. It is the only
-  invocation that settles the whole-tree debt, and `check.py` now names that
-  debt and **withholds "all instruments clean"** until it is paid.
+* **`check.py --all` once before a push**, not once per commit, and **by
+  whoever pushes** — nothing else settles it. It is the only invocation that
+  clears the whole-tree debt, and `check.py` names that debt and
+  **withholds "all instruments clean"** until it is paid.
+
+  **It is also ~30 minutes, so the work that owes one gets batched.** That
+  is Camille's caveat on `#1055` and it is the whole reason this line is
+  not "run it when in doubt": a sweep per fix cost 102 minutes in one
+  session for work that warranted a single run. Finish the batch, run the
+  cheap gates, sweep once. The nightly bullet below has the sequence and
+  the measurement.
 * **A worktree merges on whatever looked at its rows, and `check.py` says
   which.** The rule used to be *"a worktree owes its own `--all` before it
   merges"* (#848), on the ground that `nightly.sh` is installed against the
@@ -484,12 +492,50 @@ is no longer worth routing around.
   which is the same day-long window this file already accepts. `check.py`
   prints the map's age and corpus on every run so nobody has to ask.
   #853, #865, #866.
-* **Or let the nightly pay it.** `scripts/nightly.sh`
-  (`scripts/combat-engine-nightly.plist`, installed once with `launchctl
-  bootstrap`). The sweep is a **net, not a gate** — everything that catches a
-  regression in *seconds* already runs per commit — so a regression that
-  lands at 10am being found overnight is the right trade against a gate
-  people route around.
+* **The nightly does NOT pay the wide debt, and this file said for weeks
+  that it did.** Camille's call on `#1055`, after asking whether the
+  schedule was still earning its keep:
+
+  > *"option 2 is fine with the caveat that long-duration sweeps should be
+  > done infrequently and consequently work should be batched
+  > intelligently."*
+
+  Measured over its whole life — **31 attempts, 2026-10-08 to 2026-11-01**:
+
+  ```
+  completed CLEAN    0
+  completed RED      8
+  SKIPPED           20      "a check.py was running", "a dirty tree"
+  no verdict         3
+  ```
+
+  **Zero clean sweeps in 24 days.** The skips are structural rather than
+  unlucky: it can only run when nobody is working and the tree is clean, and
+  this project is worked on for most of the day. So every session deferring
+  wide debt to the nightly was deferring it to nothing — and the same false
+  premise pushed a session the *other* way on 2026-11-01, hand-launching
+  four `--all` runs (~102 minutes) because a green sweep felt necessary
+  before closing an issue.
+
+  **So the gate is narrow checks plus the impact map, and a wide sweep is
+  owed before a push, by whoever pushes.** Nothing settles it automatically.
+
+  What actually bought the saving was the **map**, not the schedule —
+  71 rows in 73s against 23,063 in ~1,300s, 18x, with no flag — which is
+  why retiring the net claim costs nothing it was really providing.
+
+  **`nightly.sh` stays, for the one job it demonstrably does**: re-recording
+  the map. It recorded 23,063 of 23,063 contexts on 2026-11-01 *after* a red
+  sweep, because `#1030` lets a red run whose failing instruments fire no
+  rows record anyway. A recorder that works is worth keeping; a net that has
+  never caught anything is not worth citing.
+
+  And the caveat is the operative half: **a long sweep is rare, so batch the
+  work that owes one.** Finish the whole batch, run the cheap gates — `ruff`,
+  `todo` (0.6s), `rules` (0.4s), `lint <file>`, a repo-wide grep for every
+  renamed symbol, then `drivers` — and only then one sweep. A sweep used to
+  *discover* breakage instead of confirm it gets paid for three times over;
+  that is exactly how the 102 minutes above were spent.
 
   **It is an hourly poll, not a clock time, and this file must stop naming
   one.** A stated hour has gone stale here three times — `02:07` against logs
