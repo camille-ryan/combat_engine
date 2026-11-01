@@ -591,10 +591,19 @@ is no longer worth routing around.
   per change     a narrow proof -- the parse-level harness (seconds) or the
                  instrument itself (<1s) -- plus a plant that goes red
   batch          every ETL change -> ONE rebuild
-  after rebuild  diff ALL ELEVEN spec tables, four leak gates, ONE wide sweep
+  after rebuild  diff EVERY spec table, four leak gates, ONE wide sweep
   the sweep      `audit.py --since`, NOT a plain run -- see below
   separately     baseline writes, their own commit, per-field diff read
   ```
+
+  **"EVERY", because the count was wrong.** This said *"ALL ELEVEN spec
+  tables"* and there are **15** — `associate`, `build_option`,
+  `class_feature`, `companion`, `disease`, `feat`, `item`, `item_block`,
+  `monster_power`, `poison`, `power`, `race`, `racial_trait`, `terrain`,
+  `trap`. A reader diffing eleven of them would have missed four, which is
+  exactly the failure the instruction exists to prevent. Ask the schema —
+  every table with both a `ref` and a `spec` column — rather than carrying
+  a number that grows whenever an importer lands. #1048.
 
   **A committed batch empties `--changed`, so a plain `check.py` audits
   nothing and says so.** Found immediately, on the first batch run this way:
