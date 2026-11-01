@@ -1291,9 +1291,16 @@ def specs() -> int:
             print(f"  {table}.{ref}: {why}")
     print("no printed names in any spec")
     bad = _self_named_clauses()
-    return (registered or bad or _unresolved_citations()
-            or _unswapped_names(index) or _resolved_positions(index)
-            or _entitled_names() or columns(index))
+    # **Not folded into the `or` chain below**, deliberately: `or`
+    # short-circuits, so a pass placed after a red one never runs and its
+    # finding is invisible until the earlier one is fixed. Each of these is
+    # a different question and all of them should answer on every run.
+    verdicts = [
+        registered, bad, _cited_in_specs(), _unresolved_citations(),
+        _unswapped_names(index), _resolved_positions(index),
+        _entitled_names(), columns(index),
+    ]
+    return 1 if any(verdicts) else 0
 
 
 #: `<Head> (<class>, <book>, page <N>)` -- the compendium's inline citation,
@@ -1852,6 +1859,105 @@ def _resolved_positions(index: dict[str, list[str]]) -> int:
 
 #: A labelled clause as the ETL leaves one: `<ref> : <sentence>`.
 _CLAUSE = re.compile(r"^([A-Za-z0-9:_.-]+) : (.*)$")
+
+
+#: **A spec printing the name of a ref it itself cites.** Real misses, owed
+#: rather than waived -- the distinction `POSITION_OWED` draws and the
+#: reason this is a separate frozenset from anything that means "read and
+#: dismissed". Each entry is a leak the ETL must stop writing; the list
+#: shrinks and never grows.
+#:
+#: One entry, which is the honest state of it rather than a sample.
+#: `#1058`, split out of `#1033` because a *suffix* printed with no citation
+#: at all is a different question with a different cause.
+CITED_IN_SPEC_OWED: frozenset[tuple[str, str, str]] = frozenset({
+    ("feat", "f3391", "cf:psion-f0"),
+})
+
+
+def _cited_in_specs() -> int:
+    """Does a spec print the name of a ref it also cites? `#1058`.
+
+    **`--cited` asks exactly this of tracked files and nothing asked it of a
+    spec column.** That question found 20 real leaks on its first run which
+    every previous tree-wide walk had called clean, and the reason it could
+    is the reason it transfers here: a **cited ref makes the position
+    exact**, so this needs none of the breadth judgement the broad name
+    search lives or dies by. Same argument as `_self_named_clauses` one
+    column over.
+
+    The four tree-walking passes cannot reach this by construction. They
+    read **tracked files only** and `data/game.db` is git-ignored, so no
+    amount of widening them would ever look at a `spec`.
+
+    It matters more here than in a tracked file, which is worth saying
+    plainly: a spec is what `scripts/spec.py` hands an authoring agent, and
+    it is what `api/wire.py:_spec_lines` falls back to when the localisation
+    is absent -- so a name in a spec is one `CE_NAMES` default away from
+    being rendered to a player. That is `#467`'s exposure, and `#1033`
+    records a `power` row where it is live.
+
+    **The one waiver is `cited()`'s own and is copied rather than
+    reinvented**: a name whose every word is trusted mechanical vocabulary
+    is not evidence, because a monster ability named for a generic combat
+    phrase appears in prose that means the phrase. Dropping that waiver on
+    the broad walk was measured at 3,885 hits across 3,130 specs, nearly all
+    innocent -- `_self_named_clauses` records the number.
+    """
+    names = localisation()
+    if not names:
+        print("  (no localisation, so no spec can be checked against a name)")
+        return 0
+    mechanical = _trusted_vocabulary()
+
+    db = game()
+    hits: list[tuple[str, str, str]] = []
+    checked = cites = 0
+    for table in _SPEC_TABLES:
+        for ref, spec in db.execute(f"SELECT ref, spec FROM {table}"):
+            text = spec or ""
+            if not text:
+                continue
+            checked += 1
+            found = set(CITED_REF.findall(text))
+            if not found:
+                continue
+            cites += len(found)
+            folded = _fold(text).lower()
+            for other in sorted(found):
+                # **Its own name in its own spec is self-reference**, which
+                # `_self_named_clauses` is about and this must not re-report.
+                if other == ref:
+                    continue
+                name = (names.get(other) or {}).get("name", "")
+                if len(name) < CITED_MIN:
+                    continue
+                if _fold(name).lower() not in folded:
+                    continue
+                words = [_stem(w) for w in re.findall(r"[A-Za-z']+", name)]
+                if words and all(w in mechanical for w in words):
+                    continue
+                hits.append((table, ref, other))
+
+    fresh = [h for h in hits if h not in CITED_IN_SPEC_OWED]
+    gone = sorted(CITED_IN_SPEC_OWED - set(hits))
+    for table, ref, other in fresh:
+        print(
+            f"  {table}.{ref} prints the name of {other}, which it also"
+            f" cites -- the ref is there, so the name is a leak rather than"
+            f" a reference. See `etl/build._label_refs` for the swap."
+        )
+    if gone:
+        print(
+            f"  {len(gone)} owed entry(ies) no longer leak -- shrink"
+            f" `CITED_IN_SPEC_OWED`: {', '.join(f'{t}.{r}' for t, r, _ in gone)}"
+        )
+    print(
+        f"  {checked} spec(s) carry text and cite {cites} ref(s);"
+        f" {len(hits)} print a cited ref's name"
+        + (f", {len(CITED_IN_SPEC_OWED)} of them owed" if hits else "")
+    )
+    return 1 if fresh else 0
 
 
 def _self_named_clauses() -> int:
