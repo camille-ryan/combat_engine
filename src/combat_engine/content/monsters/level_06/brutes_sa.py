@@ -1564,12 +1564,32 @@ def m4032a1(c: Cast) -> None:
     target=NO_TARGET,
     requires=_ridden_by_sixth_level,
     requires_text="while mounted by a friendly rider of 6th level or higher with the feat",
+    dropped=("etl.monster.feat_ref()",),
 )
 def m4032a2(c: Cast) -> None:
+    """A charge bonus for a qualified rider; the feat half of the printed
+    Requirement is the dropped clause.
+
+    **This asked `c.feat("m3183")` and `m3183` is a creature**, so the
+    comparison was False for every rider there has ever been and the bonus
+    was dead -- while the row carried no marker and reported finished.
+
+    The printed Requirement names the feat as `x12_fa61d3a8`, an opaque
+    shared-ability token: the importer minted one because it never resolved
+    that feat's identity, and the token appears twice in `monster_power` and
+    **never** in the `feat` table. So there is no ref to ask for, and the
+    clause cannot be written until the importer resolves one.
+
+    Paying it to a qualified rider rather than to nobody is the deliberate
+    direction, and it is `m476a2`'s -- the sibling printing this same
+    Requirement, which drops the feat test the same way. A mount whose
+    whole printed ability never fires is wrong in every fight, which is the
+    argument `dsl.entry_defect` is built on; slightly too generous is wrong
+    only against a rider who lacks one feat. The `dropped=` says which half
+    is missing rather than leaving it to be rediscovered.
+    """
     rider = c.rider()
     if rider is None or not _ridden_by_sixth_level(c.world, c.me):
-        return
-    if not c.feat("m3183", on=rider):
         return
     c.bonus(
         "attack", 1, on=rider, until=When.ENCOUNTER, when=lambda ctx: bool(ctx.get("charge"))

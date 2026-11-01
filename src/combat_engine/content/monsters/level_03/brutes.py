@@ -1273,9 +1273,27 @@ def _qualified_rider(c: Cast) -> int | None:
     reach=PERSONAL,
     target=NO_TARGET,
     requires_text="the m476 must be carrying a friendly rider of 3rd level or higher",
+    dropped=("etl.monster.feat_ref()",),
 )
 def m476a2(c: Cast) -> None:
     """A bonus to the rider's damage roll, and only when it came in at a run.
+
+    **The feat half of the printed Requirement is dropped, and now says
+    so.** The card reads "a friendly rider of 3rd level or higher with the
+    `x12_fa61d3a8` feat"; `_qualified_rider` tests team and level and not
+    the feat, so this pays a rider who lacks it. That was true before this
+    marker and carried no note, which is the half worth fixing: the row
+    reported finished.
+
+    The feat cannot be asked for. `x12_fa61d3a8` is an opaque
+    shared-ability token the importer minted because it never resolved that
+    feat's identity -- it is in `monster_power` twice and in the `feat`
+    table never -- so there is no ref to hand `c.feat`.
+
+    `m4032a2` prints the same Requirement and had tried to ask, with a
+    *creature* ref, so its bonus was dead for every rider. Both now behave
+    this way and both carry this symbol: too generous against one feat
+    beats a printed mount ability that never fires at all.
 
     Two watches rather than a gated `c.bonus("damage", 5)`: `charge` rides
     on the attack events and on the *attack* modifier context, and the
