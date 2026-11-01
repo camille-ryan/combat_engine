@@ -52114,6 +52114,173 @@ def a_named_creature_is_relevelled_rather_than_substituted(out: Result) -> None:
              "and hit points come down, by the printed per-role table",
              f"{hp0} -> {hp1}")
 
+#: Backticked words in the importer brief that sit in a closed vocabulary's
+#: own paragraph and are **not** values of it. Each is allowed for a stated
+#: reason, the same shape as `cards.KNOWN` and `leaks.DEFERRED`.
+#:
+#: Two, and both are the kind a prose check cannot judge for itself. #1026.
+BRIEF_STRAYS = {
+    "secondary_grants": {
+        # The brief says *"The `success` reading was retired"*, which is a
+        # historical note and the opposite of an instruction -- it exists
+        # so an agent reading an older module does not think the value is
+        # still live. A check cannot tell that from "use `success`", which
+        # is exactly the stale instruction this rule is about, so it is
+        # named here rather than pattern-matched.
+        "success",
+        # A function, not a value: *"`parse` refuses any other value"*.
+        "parse",
+    },
+}
+
+
+def the_importer_brief_and_the_parser_agree(out: Result) -> None:
+    """The brief cannot instruct an agent to write a value `parse` refuses.
+
+    `importer.BRIEF` is prose describing the module schema and
+    `module.parse` is the thing it describes, and **nothing checked that
+    they agree**. `b2d63e85` retired `secondary_grants: "success"` and the
+    brief went on telling agents to use it -- so an agent following the
+    brief produced a module that would not load, and got a refusal naming
+    a key it had been told to use, with no way to tell a stale instruction
+    from its own mistake. It cannot read the parser; that is the premise of
+    having a brief at all.
+
+    `story/CLAUDE.md` already states the rule this implements: *"When a
+    constant has to appear in both the prompt and a schema, write it in
+    both and have a driver assert the prompt still names it."*
+
+    ## Two halves, and the second needs a baseline where the first does not
+
+    **The generator.** `importer` writes `module.draft.json` with literal
+    values in closed-vocabulary fields -- `"difficulty": "standard"`,
+    `"secondary_grants": "bonus"`. Every one must be a value `parse`
+    accepts, or the skeleton an agent starts from is already invalid. That
+    is a fact about source text and needs no judgement.
+
+    **The prose.** A backticked word in a vocabulary's own paragraph that
+    is not a value of it is usually a stale instruction and sometimes a
+    deliberate note -- the brief says *"The `success` reading was
+    retired"*, which a matcher cannot tell from *"use `success`"*. So
+    those are named in `BRIEF_STRAYS` with a reason each, and anything
+    else is a finding.
+
+    ## What this does NOT assert, deliberately
+
+    That the brief **enumerates** each vocabulary. It does not, by design,
+    and the brief says why: *"It reports every problem at once and prints
+    the whole of any closed vocabulary you miss, so you should not need
+    this file to look a word up."* Measured before writing this -- 9 of
+    the 13 vocabularies are not mentioned at all and 4 name none of their
+    values -- so a rule demanding enumeration would fail on the brief's
+    own correct design. The validator is the enumeration; the brief is the
+    instructions.
+    """
+    import dataclasses as dc
+    import re
+    from pathlib import Path
+
+    from combat_engine.story import importer
+    from combat_engine.story import module as mod
+
+    # Every closed vocabulary `parse` enforces, by the schema key that
+    # carries it. Written out rather than discovered, because a module-level
+    # tuple of strings is not distinguishable from a vocabulary by shape.
+    vocab = {
+        "kind": tuple(mod.KINDS),
+        "room": tuple(mod.ROOM_KINDS),
+        "difficulty": tuple(mod.DIFFICULTY),
+        "rank": tuple(mod.RANKS),
+        "role": tuple(mod.ROLES),
+        "complexity": tuple(str(c) for c in mod.COMPLEXITY),
+        "secondary_grants": tuple(mod.SECONDARY_GRANTS),
+        "quest": tuple(mod.QUEST_KINDS),
+        "state": tuple(mod.QUEST_STATES),
+        "cost": tuple(mod.COSTS),
+        "danger": tuple(mod.DANGERS),
+        "readiness": tuple(mod.READINESS),
+        "unit": tuple(mod.UNITS),
+    }
+    out.that(len(vocab) >= 13,
+             "the parser's closed vocabularies are reachable -- without them"
+             " every check below is about nothing",
+             f"{len(vocab)}")
+    out.that(all(v for v in vocab.values()),
+             "and none of them is empty, which would make its half vacuous",
+             f"{ {k: len(v) for k, v in vocab.items() if not v} }")
+
+    # -- half one: the generated draft's own literals ----------------------
+    source = Path(importer.__file__).read_text()
+    bad = []
+    for key, allowed in vocab.items():
+        for value in re.findall(rf'"{key}":\s*"([^"]*)"', source):
+            if value and value not in allowed:
+                bad.append(f"{key}={value!r}")
+    out.that(not bad,
+             "every literal the importer writes into a closed-vocabulary"
+             " field is a value the parser accepts -- otherwise the"
+             " skeleton an agent starts from will not load",
+             f"{bad}")
+    # The scan has to find something, or it proves nothing about the
+    # generator. `secondary_grants` and `difficulty` are both written.
+    seen = [k for k in vocab if re.search(rf'"{k}":\s*"', source)]
+    out.that(len(seen) >= 2,
+             "and the scan actually found literals to check -- a regex that"
+             " matched nothing would pass the check above for free",
+             f"{seen}")
+
+    # -- half two: the brief's own paragraphs ------------------------------
+    fields: set[str] = set()
+    for cls in (mod.Scene, mod.FoeSpec):
+        if dc.is_dataclass(cls):
+            fields |= {f.name for f in dc.fields(cls)}
+    out.that(len(fields) > 20,
+             "the schema's field names are readable, so a backticked key can"
+             " be told from a backticked value",
+             f"{len(fields)}")
+
+    paragraphs = re.split(r"\n\s*\n", importer.BRIEF)
+    strays: dict[str, list[str]] = {}
+    mentioned = []
+    for key, allowed in vocab.items():
+        here = [p for p in paragraphs if f"`{key}`" in p]
+        if not here:
+            continue
+        mentioned.append(key)
+        words: set[str] = set()
+        for para in here:
+            words |= set(re.findall(r"`([a-z][a-z_]*)`", para))
+        left = sorted(
+            w for w in words
+            if w not in allowed and w not in vocab and w not in fields
+            and w not in BRIEF_STRAYS.get(key, ())
+        )
+        if left:
+            strays[key] = left
+    out.that(bool(mentioned),
+             "the brief mentions at least one closed vocabulary by key --"
+             " otherwise half two is checking an empty set",
+             f"{mentioned}")
+    out.that(not strays,
+             "and no vocabulary's paragraph backticks a word that is not one"
+             " of its values, a schema key, or named in BRIEF_STRAYS with a"
+             " reason -- which is how a retired value went on being"
+             " instructed",
+             f"{strays}")
+
+    # -- the baseline covers something, and only what it says -------------
+    for key, named in BRIEF_STRAYS.items():
+        allowed = vocab.get(key, ())
+        out.that(key in vocab,
+                 f"BRIEF_STRAYS names {key!r}, which is a real vocabulary --"
+                 f" an entry for a key that does not exist waives nothing")
+        for word in sorted(named):
+            out.that(word not in allowed,
+                     f"and {word!r} really is outside {key}'s values, so the"
+                     f" waiver is covering a stray rather than a value the"
+                     f" parser accepts anyway",
+                     f"{allowed}")
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -53500,6 +53667,10 @@ DRIVERS = {
     "relevel_named": (
         a_named_creature_is_relevelled_rather_than_substituted,
         "a module's named creature is re-levelled, not replaced (#1031)",
+    ),
+    "brief_agrees": (
+        the_importer_brief_and_the_parser_agree,
+        "the importer brief names no value the parser refuses (#1026)",
     ),
 }
 

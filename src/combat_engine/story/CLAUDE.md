@@ -297,7 +297,27 @@ So: **keep a measured prompt a verbatim literal.** Never assemble one by
 interpolation, `textwrap` or `dedent` over a reflowed source. When a
 constant has to appear in both the prompt and a schema, write it in both
 and have a driver assert the prompt still names it -- `drivers.py
-graph_administration` does. And when two runs of "the same" prompt
+graph_administration` does, and `drivers.py brief_agrees` now does it for
+`importer.BRIEF`, which was the one prompt this rule named and did not
+cover. It had already cost what the rule exists to prevent: `b2d63e85`
+retired `secondary_grants: "success"` and the brief went on instructing
+agents to use it, so an agent following the brief produced a module that
+would not load -- and it cannot read the parser, which is the premise of
+having a brief. #1026.
+
+**Two halves, because only one of them is a fact.** The literals the
+importer writes into `module.draft.json` must be values `parse` accepts;
+that needs no judgement. A backticked word in a vocabulary's paragraph
+that is not one of its values is *usually* a stale instruction and
+sometimes a deliberate note -- the brief says *"The `success` reading was
+retired"*, which no matcher can tell from *"use `success`"* -- so those
+are named in `BRIEF_STRAYS` with a reason each.
+
+And it deliberately does **not** require the brief to enumerate each
+vocabulary. Measured: 9 of 13 are not mentioned at all, which is the
+brief's own correct design -- it says *"the validator prints the whole of
+any closed vocabulary you miss, so you should not need this file to look
+a word up."* And when two runs of "the same" prompt
 disagree, diff the **raw** strings before concluding the model is
 unstable; stable-but-opposite is this bug's signature.
 

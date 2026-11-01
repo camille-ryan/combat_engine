@@ -5630,6 +5630,29 @@ NOTHING_IN_SCOPE = 3
 #: in `check.py`.
 NARROW: tuple[str, ...] = ()
 
+def _is_wide(name: str) -> bool:
+    """Does this changed file widen `--changed` to the whole corpus?
+
+    Under one of `WIDE`'s paths, outside `NARROW`, **and not a `.md`**.
+
+    The suffix test is the whole of what this adds, and it was costing
+    real time: both callers used a bare `startswith(WIDE)`, so editing
+    `src/combat_engine/story/CLAUDE.md` -- a documentation file -- selected
+    all 21,495 rows and a 25-minute sweep. A component file cannot change
+    what a row does, so the tax was on writing documentation in exactly
+    the four components whose rules most need it.
+
+    **`.md` specifically, not "anything that is not `.py`."** Measured:
+    the entire non-Python surface under those four paths is three
+    `CLAUDE.md` files and nothing else. Excluding only documentation means
+    a data file added under `etl/` later still widens, which is the safe
+    direction -- `etl/`'s own note in `WIDE` is about exactly that kind of
+    dependency, and a suffix allow-list would have to be remembered.
+    """
+    return (name.startswith(WIDE) and not name.startswith(NARROW)
+            and not name.endswith(".md"))
+
+
 
 def _calls(symbols: list[str]) -> list[str]:
     """Rows that touch a named verb, plus the rows waiting for one.
@@ -5743,8 +5766,7 @@ def _changed(widen: bool = True) -> list[str]:
     if done.returncode != 0:
         return _corpus()
     files = [line[3:].strip() for line in done.stdout.splitlines() if line[3:].strip()]
-    engine = [f for f in files
-              if f.startswith(WIDE) and not f.startswith(NARROW)]
+    engine = [f for f in files if _is_wide(f)]
     if engine and widen:
         return _corpus()
     # **`widen=False` is `--calls` asking for the content half only.** The
@@ -5869,7 +5891,7 @@ def _since(sha: str) -> list[str]:
     if got.returncode != 0:
         return _corpus()
     files = [f.strip() for f in got.stdout.splitlines() if f.strip()]
-    if any(f.startswith(WIDE) and not f.startswith(NARROW) for f in files):
+    if any(_is_wide(f) for f in files):
         return _corpus()
     refs: list[str] = []
     for name in files:
