@@ -7412,6 +7412,19 @@ def main() -> int:
                 "fired": ok,
                 "silent": len(silent),
                 "never": len(never),
+                # **By ref as well, which is what this bucket never had.**
+                # A clean sweep moved `never` 848 -> 849 with `fired` and
+                # `silent` both flat, and the file could not say which row
+                # had become unposable: the count is one integer and the
+                # two neighbouring buckets are per-ref lists. Answering it
+                # at all took a **second** full sweep with `--never`, about
+                # 20 minutes, to print the breakdown and dump the refs.
+                #
+                # Same shape and same argument as `silent_refs` and
+                # `known_quiet_refs` below -- a count cannot see one row
+                # arriving while another leaves, because the total does not
+                # move. Written by a full sweep only, like the rest. #1008.
+                "never_refs": sorted(r.ref for r in never),
                 # **The bucket the file never named.** Stored as a count and
                 # by ref, the same shape as `silent_refs` below and for the
                 # same reason its note gives: a count cannot see one row

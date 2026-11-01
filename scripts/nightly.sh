@@ -194,9 +194,17 @@ fi
 # **What it is really protecting against is a hand-tuned baseline**, which
 # `nightly.sh` has always said: "a human-edited baseline, or one whose
 # `silent_refs` differ, is a real edit and still blocks". So the test is now
-# that question directly -- the two **per-ref lists** must not have moved --
+# that question directly -- the **per-ref lists** must not have moved --
 # rather than a line count that stands in for it. `sha`, `refs`, `fired`,
-# `never` and `known_quiet` are counts a sweep legitimately rewrites.
+# `silent`, `never` and `known_quiet` are counts a sweep legitimately
+# rewrites; the lists beside them are not.
+#
+# **`never` has a list now too** (`never_refs`, #1008), so this guard is
+# stricter than when it was written: a sweep that moves which rows are
+# unposable leaves the ledger differing in refs and blocks the next night
+# until it is committed. That is the same contract `silent_refs` has
+# always had and the same reason -- an unattributable movement in a
+# bucket of 849 rows is exactly what the list exists to stop.
 #
 # The sweep still reports what moved in its `-- baseline --` section, so a
 # row changing sides is read by a human either way; this only stops the
