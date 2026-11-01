@@ -635,6 +635,19 @@ is no longer worth routing around.
   | `policy/` | **no audit at all** — `replay` and `fight` are the cover |
   | `scripts/` (anything else) | narrow: run that instrument, plant it |
   | `content/` | narrow, by file |
+  | a `CLAUDE.md` **anywhere**, including inside a WIDE component | narrow |
+
+  **That last row is new and it used to be false.** Both of `WIDE`'s tests
+  were a bare `startswith`, so editing `src/combat_engine/story/CLAUDE.md`
+  selected all 21,495 rows — a 25-minute sweep to write down a rule. The
+  tax fell on documenting exactly the four components whose rules most need
+  documenting, which is why it is worth a line here. `audit._is_wide`
+  excludes `.md` now: a `.md`-only change reports `scope: 0 of 23061` in
+  **2 seconds**, and says `SKIPPED` rather than claiming green.
+
+  It excludes `.md` and not "everything that is not `.py`", deliberately:
+  the whole non-Python surface under those four paths is three `CLAUDE.md`
+  files, so a data file added under `etl/` later still widens. #1026.
 
   `policy/` costing nothing is deliberate and `WIDE`'s own note says so: a
   policy change decides what the AI *chooses* among options the rules already
