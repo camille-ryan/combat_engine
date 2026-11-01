@@ -499,31 +499,29 @@ def p5905(c: Cast) -> None:
         c.damage("1d6", c.cha_mod, dtype=DamageType.PSYCHIC)
 
 
-@power(
-    "p6855",
-    level=1,
-    cls="warlock",
-    usage=AT_WILL,
-    action=STANDARD,
-    reach=Ranged(10),
-    target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
-    attack=Attack(CON, vs=WILL),
-)
-def p6855(c: Cast) -> None:
-    """"If it is already cursed, deal your curse damage to it instead" reaches
-    into the class feature's own rider, which a power row cannot move, so
-    only the placing half is written. The vestige augments have no leg."""
-    victim = c.target
-    if not c.strike() or victim is None:
-        return
-    c.damage("1d6", c.con_mod, dtype=DamageType.PSYCHIC)
-    pool = sorted(
-        {victim, *(f for f in c.within(3, of=victim, side="enemy") if c.can_see(f))}
-    )
-    mark = c.choose(pool, f"{c.ref}: who the curse settles on")
-    if mark is not None and not c.cursed(mark):
-        c.curse(on=mark)
+# `p6855` is **the same printed card** as `cf:warlock-f1c11`, and is declared
+# there -- which is the leg's own ref, the one the vestige pact grants and the
+# one `api/wire.py` reaches as `cf:{cls}-{leg}`. Camille's call, asked
+# directly, 2026-11-01, choosing between this and a seventh marker:
+#
+#     "Declare one side only"
+#
+# **80 printed cards are reachable under two refs and 78 already declare one
+# side only**, so this is the norm rather than a special case; declaring both
+# was the anomaly. `twins.py --declared-twice` is the gate that found the two
+# that did, and its waiver for this cluster is gone with the declaration --
+# the cluster no longer forms.
+#
+# Why this side and not the other: the body here was the poorer of the two,
+# and it declared **no pact gate**, so `chargen` dealt it to 52% of infernal
+# and 58% of dark hands and **0%** of vestige hands -- the one leg whose
+# remnant its augment lines are keyed to. The exclusion was backwards.
+#
+# It could not be fixed by declaring the prerequisite, which is the reading
+# to resist: `chargen.meets` is build-time and reads an imported tree, while
+# `Power.requires` is "asked mid-fight of a creature on a board", so a gate
+# here would have refused the card in play to a warlock already holding it.
+# Powers have no prerequisite column at all -- `#1044`. `#1043`.
 
 
 @power(

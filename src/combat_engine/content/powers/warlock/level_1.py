@@ -461,29 +461,22 @@ def one_d20_bonus(c: Cast) -> None:
         c.watch(event, spend, until=When.EONT, on=me, label=c.ref)
 
 
-@power(
-    "p2263",
-    level=1,
-    cls="warlock",
-    usage=AT_WILL,
-    action=FREE,
-    reach=PERSONAL,
-    target=SELF,
-    # Prerequisite: Star Pact. See p2094.
-    trigger=_CURSED_DROPS,
-    on=_ON_CURSED_DROPS,
-)
-def p2263(c: Cast) -> None:
-    """+1 to any single d20 roll during your next turn, the holder's choice.
-
-    **Written: the one-shot spans kinds now.** The old note was right that
-    `c.bonus(once=True)` does it for one kind of roll and that the gap was
-    a one-shot spanning four. It was wrong that only attack rolls can carry
-    a modifier here -- the save and both check paths each read one -- so the
-    row no longer lands the whole card on the attack roll.
-
-    **Re-pointed: this is not `c.boost_roll` either.** That verb (#495) adds
-    to the roll on the table, and this bonus is banked *before* any of the
-    four rolls happens.
-    """
-    one_d20_bonus(c)
+# `p2263` is **the same printed card** as `cf:warlock-f1c10`, and is declared
+# in `features/warlock.py` -- the leg's own ref, which the star pact grants.
+# Camille's call, 2026-11-01: *"Declare one side only"*. 78 of the 80 cards
+# reachable under two refs already do, so declaring both was the anomaly.
+# `#1043`.
+#
+# The comment that used to sit in this header is the whole reason the issue
+# existed: it read `# Prerequisite: Star Pact. See p2094.` -- the printed
+# prerequisite recorded where nothing reads it. The twin says the same thing
+# in the one place that is enforced, `requires=on_leg("star")`, and a
+# `requires=` here could not have helped: `chargen.meets` is build-time and
+# `Power.requires` is asked mid-fight, so the card would have been dealt and
+# then refused. `#1044` is the missing column.
+#
+# The twin is also the richer body, which is why this is the side that goes.
+# It lays all four keys a d20 modifier is read under, reads `amount_for` so
+# an item can raise the bonus, and offers the payout under `BOON` so a card
+# can trade it away. This row laid `one_d20_bonus` and nothing else -- that
+# helper stays, because `feats/warlock.py` calls it too.

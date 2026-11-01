@@ -1427,11 +1427,11 @@ def i1825x1(c: Cast) -> None:
     laid -- is this one, so "for that attack" and "until the end of the
     turn" come to the same payment.
 
-    What is left is the other clause. The distance at which `p6855` picks
+    What is left is the other clause. The distance at which `cf:warlock-f1c11` picks
     its second creature is the literal 3 in `c.within(3, of=victim, ...)`
     inside *that row's body*, and no modifier reaches a literal.
     `c.bonus("range", ...)` -- which the old marker pointed at -- is the
-    wrong lever: it lengthens a row's own printed range line, which p6855
+    wrong lever: it lengthens a row's own printed range line, which cf:warlock-f1c11
     already gets right.
 
     **The marker is right about the obstacle and wrong about the answer,
@@ -1442,22 +1442,30 @@ def i1825x1(c: Cast) -> None:
     `c.change_amount` / `c.amount_for` has always been for" -- and
     `i1986p1`, this row's own sibling, is written exactly that way.
 
-    So the finished shape is: `p6855` asks
+    So the finished shape is: `cf:warlock-f1c11` asks
     `c.within(c.amount_for(SPREAD, 3), of=victim, side="enemy")` and this
     row adds `c.change_amount(SPREAD, 5, on=c.me, until=When.ENCOUNTER)`
     beside the bonus below. `amount_for` takes the largest, so the printed
     3 and the raised 5 coexist, and the ordering is not a trap here -- this
-    is a standing trait and `p6855` reads the amount when its body runs,
+    is a standing trait and `cf:warlock-f1c11` reads the amount when its body runs,
     which is the half `i1986p1` had to declare a trigger for.
 
-    Not written because `p6855` lives in `powers/warlock/level_1_c.py`,
+    Not written because `cf:warlock-f1c11` lives in `features/warlock.py`,
     which this wave did not own. The marker stays naming the symbol that
     does not exist, rather than being re-pointed at a verb that does.
+
+    **Every `p6855` in this row became `cf:warlock-f1c11` when `#1043`
+    retired the duplicate declaration.** They are one printed card and the
+    `p` ref is no longer declared, so the comparison below had gone dead --
+    the bonus would have been laid for no hit this item ever sees.
+    `lint.py` said so in as many words, which is what caught it: an earlier
+    hand search for the ref had used double quotes and this occurrence is
+    in single, so the grep missed it and the instrument did not.
     """
     me = c.me
 
     def on_hit(ev: Hit) -> None:
-        if ev.attacker != me or ev.power != "p6855":
+        if ev.attacker != me or ev.power != "cf:warlock-f1c11":
             return
         c.bonus(f"{CURSE} damage", 1, on=me, until=When.EOT)
 

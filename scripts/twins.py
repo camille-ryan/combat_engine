@@ -156,9 +156,13 @@ def _cards() -> dict[str, str]:
 #:   which is the `b` convention working as designed on a card that already
 #:   has its own ref. Both bodies are hand-written, so one printed card
 #:   does two things depending on which route the holder took.
+#: **`#1043`'s two clusters are gone rather than waived**, which is this
+#: gate's own design working: the `p` side of each pair is no longer
+#: declared, so neither cluster forms and a waiver for it would go red as
+#: stale. Camille's call, 2026-11-01, asked directly: *"Declare one side
+#: only"*. The `#1045` clusters stay waived because that duplication is
+#: deliberate -- a feat's `b` card re-declaring a class power it grants.
 DECLARED_TWICE_KNOWN: dict[tuple[str, ...], str] = {
-    ("cf:warlock-f1c10", "p2263"): "#1043",
-    ("cf:warlock-f1c11", "p6855"): "#1043",
     ("f3646b", "p5032"): "#1045",
     ("f3648b", "p15858"): "#1045",
     ("f3664b", "f3668b", "p15849"): "#1045",
