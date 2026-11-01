@@ -7,7 +7,10 @@ prerequisites, so "an enemy cursed by you" is a real question --
 The pact half of the list was written as though the boons were prose.
 They are not: each prerequisite names a pact leg (`cf:warlock-f1s2`,
 `f1s3`, `f1s5`) and each *benefit* names the card it raises by ref --
-`p2263`, `p2094`, `p2095` -- all three of which are declared rows. So
+`cf:warlock-f1c10`, `p2094`, `p2095` -- all three of which are declared
+rows. (That first one was `p2263` until `#1043` retired the duplicate
+declaration; it is the same printed card under the ref the star pact
+grants.) So
 the boon feats are ordinary riders on a use, and the number they raise
 does not have to be reached: a second bonus stacks, a second blink adds
 squares, and a larger pool of temporary hit points supersedes the one
@@ -199,16 +202,16 @@ def f695(c: Cast) -> None:
 
 @power("f292", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       trigger="you use p2263",
-       on=Trigger(PowerResolved, _used("p2263"), "your pact boon pays"))
+       trigger="you use cf:warlock-f1c10",
+       on=Trigger(PowerResolved, _used("cf:warlock-f1c10"), "your pact boon pays"))
 def f292(c: Cast) -> None:
     """A second +1 on the roll that boon buys.
 
-    Re-read: nothing has to reach inside `p2263`. It lays untyped one-shots
+    Re-read: nothing has to reach inside `cf:warlock-f1c10`. It lays untyped one-shots
     and untyped bonuses stack, so an identical set laid beside it comes to
     the +2 the card describes and is spent by the same roll.
 
-    **Widened with `p2263`.** This said only attack rolls could carry a
+    **Widened with `cf:warlock-f1c10`.** This said only attack rolls could carry a
     modifier, which was the shape that row had been forced into and is no
     longer true: `one_d20_bonus` lays all four keys a d20 modifier is read
     under, so the second +1 follows the first onto whichever roll it lands

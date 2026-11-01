@@ -789,7 +789,7 @@ def f1358(c: Cast) -> None:
 
     **The boon this names is a card with a ref**, `p2094`, and
     `feats/warlock.py` already hangs f291, f292 and f293 off `p2094`,
-    `p2095` and `p2263` exactly this way -- so "when your pact boon
+    `p2095` and `cf:warlock-f1c10` exactly this way -- so "when your pact boon
     triggers" is an ordinary declared trigger and the symbol this row
     carried was answering a question it never asked.
 

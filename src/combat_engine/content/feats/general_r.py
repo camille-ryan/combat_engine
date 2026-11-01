@@ -1887,13 +1887,13 @@ def f3633(c: Cast) -> None:
     binder's own class page is entirely about vestiges -- it describes keeping
     one active, and names the two a beginning character has -- so "a binder
     pact boon" is the Vestige Pact's, which is `cf:warlock-f1s6`. Its at-will
-    attack is `p6855` and the boon itself is `cf:warlock-f1c12`; both are
+    attack is `cf:warlock-f1c11` and the boon itself is `cf:warlock-f1c12`; both are
     declared.
 
     "As encounter powers" is `uses=1` on each, which is the only thing the
     feat changes about them: a pact warlock has them at will.
     """
-    for ref in ("p6855", "cf:warlock-f1c12"):
+    for ref in ("cf:warlock-f1c11", "cf:warlock-f1c12"):
         c.grant_row(ref, on=c.me, until=When.ENCOUNTER, uses=1)
 
 

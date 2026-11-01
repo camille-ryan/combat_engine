@@ -1485,9 +1485,9 @@ def i1825x1(c: Cast) -> None:
     target=ONE_CREATURE,
 )
 def i1825p1(c: Cast) -> None:
-    """The whole printed Effect is p6855, declared and finished. Lent for
+    """The whole printed Effect is cf:warlock-f1c11, declared and finished. Lent for
     the one use and not spent: the wand's encounter use is the price."""
-    c.use_power("p6855", on=c.target, spend=False)
+    c.use_power("cf:warlock-f1c11", on=c.target, spend=False)
 
 
 @power(
