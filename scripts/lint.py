@@ -415,6 +415,16 @@ def main() -> int:
         )
         faults += 1
 
+    for where, ref, at, why in _dead_ref_handoffs():
+        print(
+            f"{where}:{at}: hands {ref!r} to {why}, and no row declares"
+            f" that ref. Either it is a second id for a row this tree"
+            f" declares under another one -- which is what `#1043` retired"
+            f" -- or the row owes a marker naming it. A comparison would"
+            f" have been caught by the walk above; a hand-off was not."
+        )
+        faults += 1
+
     for ref, pred, event, has in _dead_triggers():
         print(
             f"{ref}: `{pred}` reads a field {event} does not have"
@@ -2676,6 +2686,191 @@ def _gates_on_nothing() -> list[tuple[str, str, str]]:
                 found = named(side)
                 if found and found[0] not in declared:
                     out.append((path.name, found[0], f"line {found[1]}"))
+    return out
+
+
+#: A ref as this tree spells one, anchored at both ends.
+#:
+#: Anchored because a label is not a ref and the two look alike at the
+#: front: `c.dice_for("cf:warlock-f4 damage")` opens with a ref and is a
+#: modifier key. `x5_23` and its family are deliberately absent -- those are
+#: the opaque shared-ability tokens, which name no row by design, and
+#: including them put 16 sites of `c.contract()` into the first measurement.
+#:
+#: **A bare `m\d+` is a creature and not a row**, which is the second thing
+#: the measurement corrected. Most monsters have no hand-written ability
+#: rows, so a predicate asking "is that an `m3787`" is ordinary and
+#: undeclared is its normal state -- all three the first draft reported are
+#: in the `monster` table. An *ability* row carries a letter after the
+#: digits (`m6233a3`, `m1932c0a1`) and is declared or it is nothing, so that
+#: is the form this matches.
+_REF_SHAPED = re.compile(
+    r"^(?:[pfi]\d+[a-z0-9]*|m\d+[a-z][a-z0-9]*|(?:cf|rt):[\w-]+)$")
+
+#: **Verbs whose first argument has to be a row this tree declares.** Two,
+#: and the shortness is the point -- see `_dead_ref_handoffs`.
+#:
+#: Not derived by introspection, though that was tried and the measurement
+#: is why it is not: 41 `Cast` methods take a first parameter called `ref`,
+#: `power` or `row`, and walking all of them reports **70 sites**, 67 of
+#: them `c.summon()`. A summoned creature's ref comes out of `game.db` and
+#: most monsters have no hand-written ability rows at all, so "undeclared"
+#: is its normal state. The same is true of `c.carrying` and `c.give` on an
+#: item. Those verbs take a *database entity*; these two take a *row*.
+_HANDS_OFF_A_ROW = {
+    "grant_row": "hands the row to a creature, which then holds nothing",
+    "use_power": "runs the row, so the whole printed Effect does nothing",
+}
+
+
+def _dead_ref_handoffs() -> list[tuple[str, str, str, str]]:
+    """Content **handing** a ref that no declared row can answer to.
+
+    `_gates_on_nothing` is the sibling of this and reads *comparisons*. Its
+    docstring argues, correctly, that a walk over mere **mentions** would be
+    twelve waivers for one catch. This is the third category: a ref in the
+    argument position of a verb that consumes a row, which is a *use* and
+    not a mention, and which that check cannot see.
+
+    **`#1043` is why it exists, and it cost 140 events of play.** Retiring
+    two duplicate declarations left four live references to the dead refs.
+    The comparison walk named one:
+
+        implement_b.py   ev.power != "p6855"              caught
+        general_r.py     c.grant_row(ref, ...) in a loop  missed
+        implement_b.py   c.use_power("p6855", ...)        missed
+        warlock.py       _used("p2263") inside a Trigger  missed
+
+    `f3633` grants `("p6855", "cf:warlock-f1c12")` -- a feat handing its
+    holder a card that no longer existed. `replay` fell 1322 -> 1182 events
+    on one fixture, which reads exactly like an intended draw change and was
+    taken for one.
+
+    **Three resolutions, because the fault arrived through the third.** A
+    literal; a module-level name bound to one, which is the indirection
+    `_gates_on_nothing` already handles for comparisons; and a loop variable
+    over a tuple of literals, which is the idiom for "grants these" and is
+    what `f3633` does.
+
+    A `Trigger(...)` is walked whole rather than by predicate name. The
+    helper is per-file -- `_used` in one, something else in the next -- so
+    naming them would be a list that rots, where "a ref-shaped literal
+    anywhere inside a Trigger constructor" is a property of the shape. A
+    predicate matching a ref nothing declares never fires, and the row
+    reports no fault and no event: nothing distinguishes it from a trigger
+    whose moment did not arrive.
+
+    **Zero findings when written**, on the same tree, which is the evidence
+    the scope is right: the check needs no waivers, exactly as its sibling
+    needs none. #1052.
+    """
+    import ast
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY
+
+    declared = set(REGISTRY)
+    out: list[tuple[str, str, str, str]] = []
+    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        alias: dict[str, str] = {}
+        bundles: dict[str, list[str]] = {}
+        for node in tree.body:
+            if not (isinstance(node, ast.Assign) and len(node.targets) == 1
+                    and isinstance(node.targets[0], ast.Name)):
+                continue
+            name = node.targets[0].id
+            if (isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)):
+                alias[name] = node.value.value
+            elif isinstance(node.value, ast.Tuple | ast.List):
+                vals = [e.value for e in node.value.elts
+                        if isinstance(e, ast.Constant)
+                        and isinstance(e.value, str)]
+                if vals:
+                    bundles[name] = vals
+
+        # **A loop variable is resolved by scope, not pooled by name.**
+        # Pooling was the first draft and it misattributes: `for ref in A`
+        # and `for ref in B` in one file gave every `c.grant_row(ref)` site
+        # the union of A and B, so a call in the second loop could be
+        # blamed for a dead ref in the first. Over-reporting rather than
+        # under, but a gate that names the wrong line is a gate somebody
+        # learns to discount. Each `For` is walked with its own binding.
+        loops: dict[int, tuple[str, list[str]]] = {}
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.For)
+                    and isinstance(node.target, ast.Name)):
+                continue
+            if isinstance(node.iter, ast.Tuple | ast.List):
+                vals = [e.value for e in node.iter.elts
+                        if isinstance(e, ast.Constant)
+                        and isinstance(e.value, str)]
+            elif isinstance(node.iter, ast.Name):
+                vals = bundles.get(node.iter.id, [])
+            else:
+                vals = []
+            if vals:
+                for inner in ast.walk(node):
+                    loops[id(inner)] = (node.target.id, vals)
+
+        # `alias` and `loops` are bound as defaults rather than captured:
+        # they are rebuilt per file in the enclosing loop, and a closure
+        # over them reads whichever file happened to be last. Harmless as
+        # written, since the call is in the same iteration, and `ruff`'s
+        # B023 is right that it is one edit away from not being.
+        def candidates(
+            arg: ast.expr,
+            call: ast.Call,
+            alias: dict[str, str] = alias,
+            loops: dict[int, tuple[str, list[str]]] = loops,
+        ) -> list[str]:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                return [arg.value]
+            if isinstance(arg, ast.Name):
+                if arg.id in alias:
+                    return [alias[arg.id]]
+                bound = loops.get(id(call))
+                if bound is not None and bound[0] == arg.id:
+                    return bound[1]
+            return []
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            # A verb that consumes a row.
+            if (isinstance(node.func, ast.Attribute)
+                    and node.func.attr in _HANDS_OFF_A_ROW and node.args):
+                for value in candidates(node.args[0], node):
+                    if _REF_SHAPED.match(value) and value not in declared:
+                        out.append((path.name, value, f"line {node.lineno}",
+                                    f"c.{node.func.attr}() {_HANDS_OFF_A_ROW[node.func.attr]}"))
+            # A trigger's **predicate**, and only that.
+            #
+            # **Not the whole `Trigger(...)`, which was the first draft and
+            # was wrong.** `Trigger(event, predicate, text)` carries printed
+            # text in its third argument, and that text names other
+            # creatures *by ref* -- which is the one rule this repo has, not
+            # a fault. Walking the call whole reported `m3787` and `m4168`
+            # sitting in trigger prose as dead hand-offs. The predicate is
+            # the only argument whose refs have to resolve.
+            if isinstance(node.func, ast.Name) and node.func.id == "Trigger":
+                where = list(node.args[1:2])
+                where += [kw.value for kw in node.keywords
+                          if kw.arg in ("when", "pred")]
+                for arg in where:
+                    for inner in ast.walk(arg):
+                        if (isinstance(inner, ast.Constant)
+                                and isinstance(inner.value, str)
+                                and _REF_SHAPED.match(inner.value)
+                                and inner.value not in declared):
+                            out.append((path.name, inner.value,
+                                        f"line {node.lineno}",
+                                        "a declared trigger's predicate,"
+                                        " so it never fires"))
     return out
 
 
