@@ -52,7 +52,7 @@ from pathlib import Path
 
 from combat_engine.db import ROOT
 
-from .module import COMPLEXITY, DIFFICULTY, KINDS, RANKS, ROLES
+from .module import DIFFICULTY, KINDS, RANKS, ROLES, complexity_table
 from .objective import KINDS as OBJECTIVES
 from .objective import POSITIONS
 
@@ -824,8 +824,8 @@ def write_brief(into: Path, module_id: str, pages: int, scenes: int,
         objectives=", ".join(OBJECTIVES),
         positions=", ".join(POSITIONS),
         terrain=", ".join(sorted(TERRAIN_WORDS)),
-        complexity_lo=min(COMPLEXITY),
-        complexity_hi=max(COMPLEXITY),
+        complexity_lo=min(complexity_table()),
+        complexity_hi=max(complexity_table()),
         skills="\n".join(
             "    " + "  ".join(f"{s:<14}" for s in listed[i:i + 4])
             for i in range(0, len(listed), 4)

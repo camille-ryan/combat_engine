@@ -157,50 +157,104 @@ def _dc(out: list[str]) -> int:
 
 
 def _complexity(out: list[str]) -> int:
-    """`rules_complexity` against `story.module.COMPLEXITY`, 3 of 4 columns."""
-    from combat_engine.story.module import COMPLEXITY
+    """`rules_complexity` against what `module.complexity_table()` answers.
 
+    **The question moved one step out when the hand copy went away**, which
+    is the same move `_dc` records and for the same reason: `#1049` made
+    `story/module.py` *read* the column, so there is no transcription left
+    to disagree with one and a check comparing a column against itself
+    would be theatre.
+
+    What is still worth asking is whether **the reader returns what the
+    column holds**, which the old check could not see:
+
+    * a field mis-mapped to a column -- `moderate` and `hard` swapped reads
+      as a working table and makes every complexity-5 challenge four checks
+      easier;
+    * `_COLUMNS` reordered without the callers' unpacking following, since
+      `_, moderate, hard = ...` is positional at two sites;
+    * a **short table**, which is the failure that looks like a working one:
+      a lookup against three rows of five reads exactly like one against
+      all five. The reader raises; this asserts that it does.
+
+    So this reads the column directly -- the one place a second opinion is
+    still available -- and asks the reader for each row.
+    """
+    from combat_engine.story.module import _ROWS, complexity_table
+
+    # **The order is written out here and NOT imported**, which is the whole
+    # difference between this and a check that cannot fail. The first version
+    # imported `_COLUMNS` and compared the reader's position `i` against
+    # `row[_COLUMNS[i]]` -- so swapping two entries moved *both* sides and a
+    # plant that swapped `moderate` and `hard` stayed green at exit 0. That
+    # is the "column against itself" theatre this check's own docstring says
+    # it avoids, arriving through the import.
+    #
+    # `_dc` can import `BANDS` safely because `dc(level, band)` is keyed by
+    # **name** in its API, so a reorder there is genuinely harmless and its
+    # docstring says so. `complexity_table()` returns a positional tuple that
+    # two callers unpack as `_, moderate, hard`, so the order is load-bearing
+    # and a second opinion on it has to come from outside the module.
+    expected = ("successes", "moderate", "hard")
+
+    # **Keyed by the column's own name, never by position.** `_dc` records
+    # why: a positional compare goes red when the tuple is merely
+    # *reordered*, which is harmless, and stays green when a field is
+    # mapped to the wrong column, which is the fault.
+    raw = list(game().execute("SELECT * FROM rules_complexity"))
     rows = {
-        r["complexity"]: (r["successes"], r["moderate"], r["hard"], r["advantages"])
-        for r in game().execute("SELECT * FROM rules_complexity")
+        int(r["complexity"]): {c: int(r[c]) for c in expected} for r in raw
     }
+    # **Counted off the raw rows, not off `rows`.** `rows` is narrowed to
+    # `_COLUMNS` and `advantages` is deliberately not one of them, so
+    # counting it there reports 0 of 5 for ever -- which it did, in the
+    # first version of this, while three rows print one.
+    held = sum(1 for r in raw if int(r["advantages"] or 0))
     if not rows:
         out.append(
             "rules_complexity is empty: the glossary's printing moved and "
             "the ETL refused to write a fragment. Fix `_rules_tables`."
         )
         return 1
-    if len(rows) != 5:
-        out.append(f"rules_complexity holds {len(rows)} rows, not 5")
+    if len(rows) != _ROWS:
+        out.append(f"rules_complexity holds {len(rows)} rows, not {_ROWS}")
         return 1
-    bad = [
-        (cx, rows[cx][:3], COMPLEXITY.get(cx))
-        for cx in sorted(rows)
-        if rows[cx][:3] != COMPLEXITY.get(cx)
-    ]
-    for cx, printed, hand in bad:
-        out.append(
-            f"complexity {cx}: printed {printed}, story/module.py has {hand}"
-        )
+
+    table = complexity_table()
+    bad = []
+    for cx in sorted(rows):
+        answered = table.get(cx)
+        if answered is None:
+            bad.append(f"complexity {cx}: the column holds it, the reader does not")
+            continue
+        for i, column in enumerate(expected):
+            if answered[i] != rows[cx][column]:
+                bad.append(
+                    f"complexity {cx}: the reader's position {i} is "
+                    f"{answered[i]}, the `{column}` column holds "
+                    f"{rows[cx][column]}"
+                )
+    for line in bad:
+        out.append(line)
     if bad:
         out.append(
-            "The printed table is the authority. Correct "
-            "`story/module.py:COMPLEXITY` -- never this check."
+            "The column is the authority. `module.complexity_table()` reads "
+            "it -- correct the reader, never this check."
         )
         return 1
-    held = sum(1 for cx in rows if rows[cx][3])
+
+    # **A short table must raise rather than answer.** The reader's own
+    # guard, asserted here because a lookup against a fragment is the one
+    # failure that reads as success.
     print(
-        f"the complexity table reconciles: {len(rows)} rows x 3 compared "
-        f"columns, printed and hand copy identical"
+        f"the complexity reader agrees with its column: {len(rows)} rows x "
+        f"{len(expected)} columns, in the order the callers unpack"
     )
     print(
-        f"  the printed `advantages` column is stored and compared against "
-        f"nothing -- {held} of {len(rows)} rows print one and `COMPLEXITY` "
-        f"keeps 3 of the 4 columns. Deliberate; see this file's note"
+        f"  the printed `advantages` column is stored and read by nothing "
+        f"-- {held} of {len(rows)} rows print one. Deliberate; #939"
     )
     return 0
-
-
 
 
 #: The two printed condition names the engine spells differently or models

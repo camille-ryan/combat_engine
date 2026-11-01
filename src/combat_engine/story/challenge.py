@@ -6,7 +6,8 @@ nothing counted the results against each other. #791.
 
 ## The printed shape, read rather than remembered
 
-`module.COMPLEXITY` holds the table out of the compendium glossary. Complexity
+`module.complexity_table()` reads the table out of `rules_complexity`,
+which the compendium glossary was imported into (#1001, #1049). Complexity
 1 to 5 fixes both how many successes are needed and **what mix of DCs the
 checks are rolled at** -- four moderate at complexity 1, eight moderate and
 four hard at complexity 5.

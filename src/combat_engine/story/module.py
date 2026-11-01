@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, replace
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -97,23 +98,61 @@ RANKS = ("standard", "elite", "solo", "minion")
 #: makes with its separate `rank=` and `minion=` arguments.
 ROLES = ("soldier", "brute", "artillery", "skirmisher", "controller", "lurker")
 
-#: `complexity -> (successes needed, moderate checks, hard checks)`.
-#:
-#: The printed table, read out of the compendium glossary rather than
-#: remembered -- `select Txt from Glossary where Name = 'Skill Challenge
-#: Complexity'`. The first draft of this had the success counts right and the
-#: **DCs wrong**: it assumed every primary check rolls at moderate, and the
-#: printed shape is a mix that escalates, from four moderate at complexity 1 to
-#: eight moderate and four hard at complexity 5. A challenge built from
-#: all-moderate checks is a materially easier thing than the one the book
-#: describes, and it would have looked correct forever.
-COMPLEXITY = {
-    1: (4, 4, 0),
-    2: (6, 5, 1),
-    3: (8, 6, 2),
-    4: (10, 7, 3),
-    5: (12, 8, 4),
-}
+#: The three columns this reads, **by name**, and the order the callers
+#: unpack. Named rather than `SELECT *` for the reason `dc.py` gives: a
+#: positional read goes wrong silently the day the importer adds a column,
+#: and `rules_complexity` already carries a fourth (`advantages`) that
+#: nothing here wants.
+_COLUMNS = ("successes", "moderate", "hard")
+
+#: How many rows the glossary prints. A short table is the failure that
+#: looks like a working one -- a lookup against three rows of five reads
+#: exactly like a lookup against all of them.
+_ROWS = 5
+
+
+@cache
+def complexity_table() -> dict[int, tuple[int, int, int]]:
+    """`complexity -> (successes needed, moderate checks, hard checks)`.
+
+    The printed table, **read out of `rules_complexity`** rather than
+    transcribed. `#1001` imported it; this is the half that retires the copy,
+    and `#1049` is the issue.
+
+    What the copy cost, which is why it is worth retiring rather than
+    leaving reconciled: its first draft had the success counts right and the
+    **DCs wrong** -- it assumed every primary check rolls at moderate, where
+    the printed shape escalates from four moderate at complexity 1 to eight
+    moderate and four hard at 5. A challenge built from all-moderate checks
+    is a materially easier thing than the book's, and it would have looked
+    correct forever. `check.py --only rules` caught nothing then because
+    there was nothing to compare against; now there is no copy to be wrong.
+
+    **Lazy and cached rather than read at import**, which is `dc.py`'s
+    reasoning and applies here with more force: a `game.db` built before
+    `#1001`'s column existed would otherwise make the whole package
+    unimportable, taking down every instrument that would have explained
+    why. Deferred, a stale database is a raise in the caller that asked.
+
+    The `@cache` means a rebuild inside one process is not seen. These are
+    printed numbers a re-import cannot change, and the instruments run the
+    ETL in a separate process from its readers.
+    """
+    from combat_engine.db import game
+
+    rows = {
+        int(row["complexity"]): tuple(int(row[c]) for c in _COLUMNS)
+        for row in game().execute(
+            f"SELECT complexity, {', '.join(_COLUMNS)} FROM rules_complexity"
+        )
+    }
+    if len(rows) != _ROWS:
+        raise ValueError(
+            f"rules_complexity holds {len(rows)} of {_ROWS} printed rows, so"
+            f" no skill challenge can be sized -- rebuild the database"
+            f" (`scripts/build.py`). See #1001 for the import."
+        )
+    return rows
 
 #: What a successful secondary skill check is worth. Both readings are printed
 #: and a module says which it means; this is the default when it does not.
@@ -918,7 +957,7 @@ class Scene:
     @property
     def needs(self) -> int:
         """Successes this challenge wants before three failures."""
-        return COMPLEXITY.get(self.complexity, (0, 0, 0))[0]
+        return complexity_table().get(self.complexity, (0, 0, 0))[0]
 
     @property
     def capped(self) -> bool:
@@ -963,7 +1002,8 @@ class Scene:
         sequence runs out, because failures mean more checks get rolled than
         the table lists.
         """
-        _, moderate, hard = COMPLEXITY.get(self.complexity, (0, 0, 0))
+        _, moderate, hard = complexity_table().get(self.complexity,
+                                                  (0, 0, 0))
         return ("moderate",) * moderate + ("hard",) * hard
 
 
@@ -1550,10 +1590,11 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     if not isinstance(complexity, int) or complexity < 0:
         problems.append(f"{where}: complexity must be an integer, got {complexity!r}")
         complexity = 0
-    if kind == "skill_challenge" and complexity not in COMPLEXITY:
+    if kind == "skill_challenge" and complexity not in complexity_table():
         problems.append(
             f"{where}: a skill challenge needs a complexity in "
-            f"{min(COMPLEXITY)}-{max(COMPLEXITY)}, got {complexity}"
+            f"{min(complexity_table())}-{max(complexity_table())},"
+            f" got {complexity}"
         )
     if kind == "skill_challenge" and not primary:
         problems.append(f"{where}: a skill challenge needs at least one primary skill")
@@ -1619,7 +1660,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         stated = dict(caps)
         if all(s in stated for s in primary):
             most = sum(stated[s] for s in primary)
-            needs = COMPLEXITY.get(complexity, (0, 0, 0))[0]
+            needs = complexity_table().get(complexity, (0, 0, 0))[0]
             if most < needs:
                 problems.append(
                     f"{where}: the caps allow {most} success(es) and the "
