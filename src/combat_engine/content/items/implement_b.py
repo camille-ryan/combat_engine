@@ -2432,11 +2432,35 @@ def i2345x1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.vestige()",),
+    todo=("chargen.power_choice()",),
 )
 def i2345p1(c: Cast) -> None:
-    """Switching which of a warlock's vestiges is active is a class
-    mechanic nothing models."""
+    """The bound remnant becomes active on a hit, and the binding is the gap.
+
+    **Re-pointed, because the old premise is false.** It read "switching
+    which of a warlock's vestiges is active is a class mechanic nothing
+    models", and `#1034` modelled exactly that: `c.bargain` makes one
+    remnant active and ends any standing bargain first, so this row's
+    whole printed Effect is one call. The symbol it waited on,
+    `c.vestige()`, was never minted and would now be a synonym for a verb
+    that exists.
+
+    **What is actually missing is one row up.** `i2345x1` prints the
+    binding -- on acquiring the rod you choose a daily power you know with
+    a `cf:warlock-f1s6` entry, permanently, and that power's remnant is
+    bound to the rod. It is declared inert for the honest reason that the
+    choice happens off the board. So nothing records *which* power was
+    chosen, and there is no ref to hand `c.bargain`.
+
+    That is a chargen-recorded choice of a power, which is the gap nine
+    other rows already name -- hence `chargen.power_choice()` rather than
+    a tenth synonym. `i457p1` is the precedent for an item row waiting on
+    one.
+
+    Writable the day that store exists: the trigger is an ordinary `Hit`
+    under `cursed_by_me` with `c.weapon_is(c.ref)`, and the body is
+    `c.bargain` on the chosen power's remnant.
+    """
 
 
 @power(

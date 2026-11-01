@@ -88,10 +88,23 @@ CURSE_DAMAGE = f"{CURSE} damage"
 PACT = "cf:warlock-f1"
 SHADOW = "cf:warlock-f3"
 
-#: Which remnant a vestige warlock is speaking for. Nothing holds it, so
-#: neither the at-will nor the boon it gates can tell which one it is.
-#: `cf:warlock-f1s6` and its two cards carry the same symbol.
-VESTIGE = ("c.active_vestige()",)
+#: **The record of which remnants have *been* active, which is a different
+#: question from which can be bargained with.** `#1046`.
+#:
+#: This used to read `c.active_vestige()`, and that symbol **arrived** --
+#: `#1034` landed the offered set, the active one and the swap, and the
+#: rows that wanted them were finished. `todo.py` went red on exactly
+#: that: a symbol that exists with a row still waiting on it.
+#:
+#: The row behind it is not finished, though, so this is a re-point rather
+#: than an un-marking. `c.vestiges()` reads `When.ENCOUNTER` effects --
+#: the right lifetime for "what can you bargain with" and the wrong one
+#: for a window that spans rests, so the existing state is the wrong
+#: shape rather than a near miss.
+#:
+#: Named as a parameter on the verb that already exists, because the two
+#: readings differ only in the window they ask about.
+VESTIGE = ("c.vestiges(since_rest=True)",)
 #: "Instead of": a printed swap for half of what a class feature does
 #: inside its own body. Declining that half is the operation nothing has.
 INSTEAD = ("c.pre_empt(ref, clause)",)
@@ -653,12 +666,30 @@ def f2291(c: Cast) -> None:
 def f1166(c: Cast) -> None:
     """Swaps the active remnant when the pact boon fires.
 
-    Re-aimed. The boon's moment is not what holds this: `cf:warlock-f1s6`
-    is declared, every boon fires off `Dropped` under `cursed_by_me`, and
-    `feats/warlock.py` writes three riders that way already. What is
-    missing is the thing `cf:warlock-f1s6` and both its cards wait on --
-    nothing holds which remnant is active, so there is no state to change
-    and no record of the ones held earlier for the card to choose among.
+    Re-aimed twice, and the second time is the one worth reading. The
+    boon's moment was never what held this: `cf:warlock-f1s6` is declared,
+    every boon fires off `Dropped` under `cursed_by_me`, and
+    `feats/warlock.py` writes three riders that way already.
+
+    **Half of what this row waited on has arrived.** `#1034` landed which
+    remnant is active (`c.active_vestige`), the set that can be bargained
+    with (`c.vestiges`), and the swap itself (`c.bargain`, which ends any
+    standing bargain first, so a swap cannot leave two active). The old
+    note said "nothing holds which remnant is active"; that is now false,
+    and the rows it was written beside are finished.
+
+    **What is still missing is the history, which is the half the card
+    actually turns on.** The printed clause offers any other remnant that
+    has *been* active since the last short or extended rest -- so the
+    options are a record over a rest-length window, and `c.vestiges()`
+    answers a different question at a shorter lifetime. A warlock who has
+    swapped twice may offer a remnant a daily power granted and then lost
+    access to, which the offered set no longer holds.
+
+    So the marker stays and now names that gap. `#1046` carries it, and
+    also the thing worth settling first: `c.bargain` holds the bargain per
+    *encounter* while the pact leg's own spec says per *rest*, so the
+    window this row needs is the one already approximated next door.
     """
 
 
