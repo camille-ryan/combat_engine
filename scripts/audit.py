@@ -5336,6 +5336,62 @@ def _wanted_by_field(ref: str) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _wanted_by_declaration(ref: str) -> tuple[str, ...]:
+    """A launcher for a row whose **header** says it reaches with a weapon.
+
+    The sixth weapon axis, and the first to read the *declaration* rather
+    than the body. `rba` -- the engine's own ranged basic -- is the row it
+    exists for: its body is `c.strike()` and an `instead_of`, naming no
+    weapon ref, no printed weapon word and no `Weapon` column, so all five
+    knobs above answer nothing and the board offered it no launcher. It
+    reported `could not be used on the board at all`, which took
+    `--verdicts` to 12 of 13 and is a check that cannot pass. #1068.
+
+    The signal is in the header and is data: `reach.kind == "ranged"` with
+    an attack line that picks the ability **by weapon**. A ranged implement
+    power resolves its ability from the class, so it does not match; a
+    melee weapon row is already served by the arrangements above.
+
+    **Measured before writing it, because "read the declaration" sounds
+    corpus-wide and is not.** Over all 23,059 declared rows:
+
+        ranged reach                          2,807
+        attack line picks by weapon               1
+        both -- this axis's whole scope           1   (`rba`)
+
+    So it cannot move any board but `rba`'s. That is why it is a knob here
+    rather than a change to `_provoke`: the narrow measurement is what
+    makes it safe, and if a later row matches, it wants a launcher for the
+    same reason.
+
+    Returns the cheapest projectile weapon, chosen the way
+    `_wanted_by_field` chooses one for the `ranged` column -- `PRINTED`
+    order, and the group has to be a projectile, because a thrown dagger
+    has a printed range and is not fired.
+    """
+    row = REGISTRY.get(ref)
+    if row is None:
+        return ()
+    if getattr(getattr(row, "reach", None), "kind", "") != "ranged":
+        return ()
+    attack = getattr(row, "attack", None)
+    if attack is None:
+        return ()
+    from combat_engine.engine.dsl import Pick
+
+    # The field has been spelled differently over the life of `Attack`, so
+    # ask for each rather than pin one: a rename here would otherwise make
+    # this axis silently answer nothing, which is the failure it was built
+    # to fix.
+    picks = [getattr(attack, name, None) for name in ("ability", "pick", "by")]
+    if not any(p is Pick.BY_WEAPON for p in picks):
+        return ()
+    for other, weapon in sorted(chargen.PRINTED.items()):
+        if getattr(weapon, "ranged", None) and weapon.group in _PROJECTILE_GROUPS:
+            return (other,)
+    return ()
+
+
 def _wanted_by_word(ref: str) -> tuple[str, ...]:
     """Weapon refs for the printed weapon **words** this row's body names.
 
@@ -6142,8 +6198,15 @@ def _attempts(out: Result):  # noqa: ANN202
     # `silent_refs`, and #629 names arming these two as its own cheapest
     # confirmation that the 35 guarded rows are guarded rather than broken.
     # Last again, for the reason the line above is last. #629.
+    # **Sixth: the header says it reaches with a weapon.** `rba` names no
+    # ref, no word and no column, so the five axes above all answered
+    # nothing and the ranged basic could not be used on the board at all.
+    # Reads the declaration, and measured at **1 row of 23,059** before
+    # being written -- see `_wanted_by_declaration`. Last, like the two
+    # above it, so a row that shows itself on a cheaper arrangement is
+    # never credited by this one. #1068.
     for held in (*_wanted_weapon(out.ref), *_wanted_by_word(out.ref),
-                 *_wanted_by_field(out.ref)):
+                 *_wanted_by_field(out.ref), *_wanted_by_declaration(out.ref)):
         for posed in (False, True):
             for face in LOADED:
                 for seed in range(1, TRIES + 1):
