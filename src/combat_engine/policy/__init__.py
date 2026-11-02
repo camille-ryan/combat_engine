@@ -149,6 +149,29 @@ def features(
     # a turn -- so the first grabbed creature would have spent every move
     # action of the fight struggling whether or not it was worth it.
     f["is_escape"] = float(action.kind == "escape")
+    # **Three DECLARED ZEROS, which is a different thing from being
+    # unnamed.** `#1065` tracks ten printed kinds with no term, and these
+    # three are the ones that are honestly correct at nothing: picking a
+    # lock is out of combat, stepping into a zone is already priced by the
+    # geometry terms that move anybody, and crawling is a worse move with
+    # no upside the scorer cannot already see.
+    #
+    # **It provably changes no number**, which is why it needs no
+    # measurement and no decision: `doctrine.py:2092` scores
+    # `self.weights.get(k, 0.0) * v`, so an absent weight and an explicit
+    # `0.0` contribute identically. `"is_second_wind": 0.0` is the same
+    # shape already in the table. What it buys is the record -- the kind
+    # comes off `drivers.UNNAMED_KINDS_OWED`, so the owed list means "still
+    # undecided" rather than "nobody has looked".
+    #
+    # The other seven stay owed. They are real tactics and want a value on
+    # the ladder, which `policy/CLAUDE.md` is explicit is a balance
+    # decision rather than a derivation -- and `mount`/`dismount` want one
+    # answer **between them**, because a priced mount beside a zero
+    # dismount means climbing on and never getting off.
+    f["is_open_lock"] = float(action.kind == "open_lock")
+    f["is_move_zone"] = float(action.kind == "move_zone")
+    f["is_crawl"] = float(action.kind == "crawl")
     # **The last six.** Every kind `actions.legal` can produce is named
     # here now, because an unnamed one scores zero -- which beats ending
     # a turn at -2 and beats a move that closes nothing -- and so becomes
@@ -684,6 +707,14 @@ WEIGHTS: dict[str, float] = {
     # fail and standing cannot.
     "is_escape": 2.5,
     "is_second_wind": 0.0,
+    # **Declared zeros, not omissions.** See `features` for the whole
+    # argument: an absent weight and an explicit 0.0 score identically, so
+    # these three move nothing and exist to say the decision was made.
+    # Picking a lock is out of combat; a zone step is already priced by the
+    # geometry terms; crawling is a worse move with no upside. #1065.
+    "is_open_lock": 0.0,
+    "is_move_zone": 0.0,
+    "is_crawl": 0.0,
     # **An automatic critical on a helpless creature, which usually ends it.**
     # Priced above a standing attack rather than merely level with one: the
     # alternative on the same standard action is an ordinary swing at something

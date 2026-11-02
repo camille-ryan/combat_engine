@@ -1,10 +1,21 @@
 """A policy that scores the three things `docs/AI_DOCTRINE.md` actually asks for.
 
-`policy.features` gives 44 features and `policy.WEIGHTS` prices 37 of them, and every
-one is an action kind, a hit chance or a count of targets. Nothing there can say
+`policy.features` gives **58** features and `policy.WEIGHTS` prices **35** of them,
+and every one is an action kind, a hit chance or a count of targets. Nothing there can say
 **where a square is good**, **how dangerous a creature is**, or **whether a heal is
 worth casting** -- which is most of what the doctrine is about. This module adds those,
 and holds the policy that weighs them.
+
+**Both figures said 44 and 37 and were measured wrong in the direction that
+flatters.** Counted off `f["..."]` in `policy.features` and off `WEIGHTS`
+itself: 58 features, 35 of them priced, so **23 are computed and not
+weighted** -- most deliberately (`hit_chance` and `expected_hits` are
+rescaled by `expected_vs`; the `usage_*` and `allies_*` families are read by
+`scorecard` counters), and `is_run` because `run_penalty` prices running
+instead (`#683`). Three weights name no `policy.features` key at all --
+`inert_wastes_action`, `run_penalty`, `shoved_from_prey` -- because this
+module produces them. Recompute rather than quote: both numbers move
+whenever a feature or a weight lands.
 
 **There is one policy, and this is it.** It began as a second one beside
 `LinearPolicy` so that an A/B could attribute a regression -- "forty-five interacting

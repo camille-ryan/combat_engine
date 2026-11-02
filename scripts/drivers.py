@@ -54931,16 +54931,24 @@ def the_importer_brief_and_the_parser_agree(out: Result) -> None:
 #:
 #: Every one of these is a printed action, so none of them should be
 #: unreachable. Pricing them is balance work and wants a decision per kind.
+#: **Three came off by being DECLARED ZERO rather than priced**, which is
+#: `#1065`'s own proposal: `crawl`, `move_zone` and `open_lock` are named in
+#: `policy.features` at an explicit `0.0`, so the list now means "still
+#: undecided" instead of "nobody has looked". That moved no number --
+#: `doctrine.py:2092` is `self.weights.get(k, 0.0) * v`, so an absent weight
+#: and an explicit zero score the same.
+#:
+#: The seven left are real tactics wanting a value on the ladder, which is a
+#: balance decision. `mount` and `dismount` want **one answer between
+#: them**: a priced mount beside a zero dismount means climbing on and never
+#: getting off.
 UNNAMED_KINDS_OWED = frozenset(
     {
         "bull_rush",
-        "crawl",
         "dismount",
         "feint",
         "grab",
         "mount",
-        "move_zone",
-        "open_lock",
         "pull_grabbed",
         "ready",
     }
