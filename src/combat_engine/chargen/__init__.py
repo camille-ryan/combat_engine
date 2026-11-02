@@ -677,7 +677,21 @@ def _abilities(printed: str) -> list[Ability]:
 #: then added the racial +2 on top of them. A fighter of a Strength race came
 #: out with **20**, a +5, one point of attack and one of damage above what the
 #: game allows at first level, on every character that had ever been dealt.
-STANDARD_ARRAY = (16, 14, 14, 13, 10, 8)
+#: **Camille's ruling, #992**, quoted because the placement below is not
+#: derivable from the numbers alone:
+#:
+#:     "For now, just use 16, 14, 14, 13, 10, 10. The 16 should go in the
+#:     primary ability score, a 14 should go in the secondary, and the other
+#:     14 should shore up the last defense, if possible. For example, a
+#:     swordmage with the assault option should put the 16 in intelligence,
+#:     the 14 in strength, and the other 14 in wisdom or charisma to get a
+#:     better will save. Might want to refine much later."
+#:
+#: What this replaced was `(16, 14, 14, 13, 10, 8)` -- a **maximal Method 2
+#: point buy**, spending all 22 points to the point, which is a legal array
+#: and is not the book's Method 1 (`16, 14, 13, 12, 11, 10`). The `8` was
+#: the only part that made it maximal.
+STANDARD_ARRAY = (16, 14, 14, 13, 10, 10)
 
 
 def _spread(order: list[Ability]) -> dict[Ability, int]:
@@ -1377,11 +1391,88 @@ def scores_for(line: ClassLine, build: Build) -> dict[Ability, int]:
     """
     values = list(STANDARD_ARRAY)
     out: dict[Ability, int] = {}
-    ordered = [build.primary, build.secondary]
-    ordered += [a for a in line.scores if a not in ordered]
-    for ability, value in zip(ordered, values, strict=False):
+
+    # 16 to the primary, the first 14 to the secondary.
+    head: list[Ability] = []
+    for ability in (build.primary, build.secondary):
+        if ability is not None and ability not in head:
+            head.append(ability)
+    for ability, value in zip(head, values, strict=False):
+        out[ability] = value
+
+    # **The second 14 shores up the weakest defence**, which is the half of
+    # Camille's ruling the old code could not express: it handed the third
+    # value to the class page's third-ranked ability instead, so a build
+    # whose page ranks a third attack stat got nothing for its worst save.
+    spent = len(head)
+    if spent < len(values):
+        shore = _shores_up(line, out)
+        if shore is not None:
+            out[shore] = values[spent]
+            spent += 1
+
+    # The rest in the page's own ranking, then printed order for anything it
+    # does not name. **A fixed order, never a random one** -- Camille left
+    # this open ("either assigning ability scores 3 to 6 randomly, or always
+    # doing it on a particular order are fine") and determinism decides it:
+    # `dealt_hand` keys on `seed:cls:build.name` and the replay fixtures pin
+    # the party, so a random tiebreak would add a second source of variation
+    # to something that has to replay identically, and would need a
+    # distribution to gate where a fixed order needs one expected sheet.
+    rest = [a for a in line.scores if a not in out]
+    rest += [a for a in Ability if a not in out and a not in rest]
+    for ability, value in zip(rest, values[spent:], strict=False):
         out[ability] = value
     return out
+
+
+def _shores_up(line: ClassLine, placed: dict[Ability, int]) -> Ability | None:
+    """Which unplaced ability most needs the second 14. `#992`.
+
+    *"the other 14 should shore up the last defense, if possible"* -- so this
+    finds the weakest of the three ability defences given what is placed so
+    far, and returns a free ability backing it.
+
+    **Asked of `defences` rather than re-derived**, which matters: a class
+    adds `+2` to the defence it is good at and a shield adds to Reflex, so
+    the weakest defence is not simply the pair with the lowest scores.
+    Re-computing `max(mod(STR), mod(CON))` here would have ignored both and
+    picked the wrong save for every class with a defence bonus.
+
+    Unplaced abilities read as 10 through `defences`' own `.get(a, 10)`,
+    which is the floor the remaining `13, 10, 10` cannot go below.
+
+    Ties broken by a fixed order and never randomly -- see `scores_for`.
+    Between the two abilities backing a defence, the class page's own ranking
+    wins, because that is the class stating which of the pair it would
+    rather have; printed order settles what the page does not name.
+    """
+    pairs: dict[object, tuple[Ability, ...]] = {
+        FORT: (STR, CON),
+        REF: (DEX, INT),
+        WILL: (WIS, CHA),
+    }
+    standing = defences(line, placed, 1)
+    # **Will first, and Camille's own worked example is why.** The ruling's
+    # swordmage puts its second 14 "in wisdom or charisma to get a better
+    # will save" -- and measured, that build's Fortitude and Will are
+    # **tied at 12**, because the swordmage already carries a printed +2
+    # Will that the example does not mention. So the example is not a
+    # statement about which defence is lowest; it is the one piece of
+    # evidence about which way a *tie* should go, and it says Will.
+    #
+    # Fortitude before Reflex for the rest of the order, on the one asymmetry
+    # this engine has: `defences` adds the shield to Reflex and to nothing
+    # else, so Reflex is the least likely of the three to be the real weak
+    # point. No evidence either way beyond that, and a fixed order is the
+    # delegated decision.
+    order = [WILL, FORT, REF]
+    weakest = min(order, key=lambda d: (standing[d], order.index(d)))
+    free = [a for a in pairs[weakest] if a not in placed]
+    if not free:
+        return None
+    ranked = [a for a in line.scores if a in free]
+    return ranked[0] if ranked else free[0]
 
 
 #: A race's page, the way `ClassLine` is a class's.

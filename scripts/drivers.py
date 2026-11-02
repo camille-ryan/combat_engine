@@ -43790,8 +43790,26 @@ def a_combat_scene_is_judged_on_the_objective_its_module_states(
         f"the captain {last_one.rounds} rounds, defeat_all "
         f"{everything.rounds} rounds",
     )
+    # **No floor on `sooner.rounds`, and removing it is a fix rather than a
+    # loosening.** It read `1 < sooner.rounds < last_one.rounds`, where the
+    # `1 <` stood in for "the build did not match nobody" -- matching nobody
+    # satisfies the objective at the first round boundary. But round 1 is
+    # also what a party that simply kills three minions in its first round
+    # produces, so the floor conflated a broken lookup with a fast fight.
+    #
+    # `#992` made that concrete: raising the dump stat from 8 to 10 and
+    # putting the second 14 on a defence was enough for the party to clear
+    # the minions in round 1, and this assertion went red on working code.
+    #
+    # The "matched nobody" case is caught by the assertion **above** this
+    # one, not by a round count -- proven by planting it: with
+    # `Watch._matches`' name lookup removed, *"designating the last creature
+    # to fall is as long as killing them all"* fails, because the captain
+    # then dies in round 1 instead of taking as long as `defeat_all`. So the
+    # floor here was redundant with a direct check and fragile where that
+    # check is not.
     out.that(
-        sooner.outcome == "won" and 1 < sooner.rounds < last_one.rounds,
+        sooner.outcome == "won" and sooner.rounds < last_one.rounds,
         "designating a creature that falls sooner ends the fight sooner",
         f"thugs {sooner.rounds} rounds vs the captain {last_one.rounds}",
     )
@@ -52396,6 +52414,128 @@ UNNAMED_KINDS_OWED = frozenset(
 )
 
 
+def the_array_shores_up_the_weakest_defence(out: Result) -> None:
+    """The six numbers, and where the second 14 goes. `#992`.
+
+    Camille's ruling, quoted because the placement is not derivable from the
+    numbers:
+
+    > *"For now, just use 16, 14, 14, 13, 10, 10. The 16 should go in the
+    > primary ability score, a 14 should go in the secondary, and the other
+    > 14 should shore up the last defense, if possible. For example, a
+    > swordmage with the assault option should put the 16 in intelligence,
+    > the 14 in strength, and the other 14 in wisdom or charisma to get a
+    > better will save."*
+
+    What it replaced was `(16, 14, 14, 13, 10, 8)` -- a maximal Method 2
+    point buy rather than the book's Method 1 -- handing the third value to
+    the class page's third-ranked ability, so a build whose page ranks a
+    third attack stat got nothing for its worst save.
+
+    **The worked example is asserted as a case, not as prose**, and it earned
+    that: the swordmage's Fortitude and Will come out **tied** before
+    placement, because the class carries a printed +2 Will the example does
+    not mention. So the example is not a statement about which defence is
+    lowest -- it is the one piece of evidence about which way a *tie* goes,
+    and the first version of this put the 14 on Constitution and still
+    satisfied "shore up the weakest defence". `_shores_up` now orders Will
+    first for exactly that reason.
+
+    **And the sweep over all 97 builds is deliberately order-independent.**
+    It asserts the second 14 backs a defence that is *minimal* before
+    placement, not that it backs the one the tie-break picks -- asserting
+    the tie-break here would restate the implementation and could never
+    fail. That distinction is the difference between a control and a
+    paraphrase.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine import CHA, CON, DEX, FORT, INT, REF, STR, WILL, WIS
+
+    out.that(chargen.STANDARD_ARRAY == (16, 14, 14, 13, 10, 10),
+             "the array is Camille's six numbers",
+             f"{chargen.STANDARD_ARRAY}")
+
+    pairs = {FORT: (STR, CON), REF: (DEX, INT), WILL: (WIS, CHA)}
+
+    # -- the worked example, as a case -----------------------------------
+    line = chargen.CLASSES["swordmage"]
+    assault = next((b for b in chargen.BUILDS.get("swordmage", ())
+                    if b.name == "assault"), None)
+    out.that(assault is not None,
+             "the build Camille's example names is dealt, so the example can"
+             " be asked at all")
+    if assault is not None:
+        got = chargen.scores_for(line, assault)
+        out.that(got.get(INT) == 16,
+                 "the example's 16 is in Intelligence", f"{got.get(INT)}")
+        out.that(got.get(STR) == 14,
+                 "and its first 14 in Strength", f"{got.get(STR)}")
+        out.that(got.get(WIS) == 14 or got.get(CHA) == 14,
+                 "and the other 14 in Wisdom or Charisma, which is the"
+                 " clause the old placement could not satisfy",
+                 f"WIS {got.get(WIS)} CHA {got.get(CHA)}")
+        bare = {assault.primary: 16, assault.secondary: 14}
+        out.that(chargen.defences(line, got, 1)[WILL]
+                 > chargen.defences(line, bare, 1)[WILL],
+                 "and the will save is better for it -- the reason the"
+                 " example gives, asserted rather than assumed",
+                 f"{chargen.defences(line, bare, 1)[WILL]}"
+                 f" -> {chargen.defences(line, got, 1)[WILL]}")
+
+    # -- every build, order-independently --------------------------------
+    checked = wrong = 0
+    missed: list[str] = []
+    for cls, cl in sorted(chargen.CLASSES.items()):
+        for build in chargen.BUILDS.get(cls, ()):
+            checked += 1
+            scores = chargen.scores_for(cl, build)
+            if sorted(scores.values(), reverse=True) != [16, 14, 14, 13, 10, 10]:
+                missed.append(f"{cls}/{build.name} array")
+                wrong += 1
+                continue
+            head = {}
+            for ability in (build.primary, build.secondary):
+                if ability is not None and ability not in head:
+                    head[ability] = 16 if not head else 14
+            standing = chargen.defences(cl, head, 1)
+            floor = min(standing[d] for d in pairs)
+            reachable = [d for d in pairs
+                         if standing[d] == floor
+                         and any(a not in head for a in pairs[d])]
+            if not reachable:
+                continue
+            if not any(scores.get(a) == 14 and a not in head
+                       for d in reachable for a in pairs[d]):
+                wrong += 1
+                missed.append(f"{cls}/{build.name}")
+
+    out.that(checked > 90,
+             "every dealt build was checked, so the verdict below is not a"
+             " verdict over an empty set", f"{checked} build(s)")
+    out.that(not wrong,
+             "every build spends the six numbers and puts its second 14 on a"
+             " defence that is minimal before placement",
+             f"{wrong} of {checked}: {missed[:6]}")
+
+    # -- and it is deterministic, which is the delegated decision ---------
+    again = [chargen.scores_for(cl, b)
+             for cl, cls_builds in
+             ((chargen.CLASSES[c], chargen.BUILDS.get(c, ()))
+              for c in sorted(chargen.CLASSES))
+             for b in cls_builds]
+    twice = [chargen.scores_for(cl, b)
+             for cl, cls_builds in
+             ((chargen.CLASSES[c], chargen.BUILDS.get(c, ()))
+              for c in sorted(chargen.CLASSES))
+             for b in cls_builds]
+    out.that(again == twice,
+             "and asking twice gives the same scores -- Camille left random"
+             " placement open and determinism is why it was declined, so a"
+             " random tiebreak arriving later is a change this notices",
+             f"{sum(1 for a, b in zip(again, twice, strict=False) if a != b)}"
+             " differed")
+
+
 def every_action_kind_is_named(out: Result) -> None:
     """Every kind the engine can offer has a term that is about it.
 
@@ -54177,6 +54317,11 @@ DRIVERS = {
     "brief_agrees": (
         the_importer_brief_and_the_parser_agree,
         "the importer brief names no value the parser refuses (#1026)",
+    ),
+    "array_shores_up": (
+        the_array_shores_up_the_weakest_defence,
+        "the standard array's second 14 shores up the weakest defence"
+        " (#992)",
     ),
     "kinds_named": (
         every_action_kind_is_named,
