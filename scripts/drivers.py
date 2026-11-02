@@ -50743,6 +50743,28 @@ def swimming_without_a_swim_speed(out: Result) -> None:
              "and NO check is rolled -- query.speed is the hottest read here")
 
     # -- the DC table, read off the page ----------------------------------
+    #
+    # **Every word below must be one a scene can actually state**, which is
+    # the assertion this section was missing and #1060 is. These three
+    # assignments set `world.terrain` by hand, so they proved the *table*
+    # while the only real writer could never deliver two of its three
+    # rows: `story.module` refuses any word outside `TERRAIN_WORDS`,
+    # `story.run.ground` is the sole writer of `world.terrain` in `src/`,
+    # and the intersection of `SWIM_DC`'s keys with that set was **empty**.
+    # So "rough water is DC 15" was green and unreachable, and every swim
+    # check in every fight rolled the calm DC.
+    #
+    # Asserted first and separately, because a hand-set field is exactly
+    # the shape that passes while the caller cannot reach it.
+    from combat_engine.engine.cast import TERRAIN_WORDS
+
+    unstateable = sorted(set(SWIM_DC) - set(TERRAIN_WORDS))
+    out.that(not unstateable,
+             "every water word the DC table keys on is one a scene may"
+             " state -- a band no module can ask for is a row of this table"
+             " that cannot be reached",
+             f"keyed on but not stateable: {unstateable}")
+
     sea, _me2, _ = _board("m145a0", 1)
     sea.terrain = frozenset({"aquatic"})
     out.that(swim_dc(sea) == SWIM_DC["calm"] == 10,
@@ -52529,7 +52551,7 @@ def a_tie_goes_to_ending_the_turn(out: Result) -> None:
 
     end = Action(kind="end", cost=ActionType.NONE)
     free = Action(kind="power", cost=ActionType.FREE, ref="i1363p1")
-    pol.score = lambda *a, **k: 0.0  # type: ignore[method-assign]
+    pol.score = lambda *a, **k: 0.0  # ty: ignore[invalid-assignment]
 
     picked = [pol.act(world, enc, actor, [free, end]).kind,
               pol.act(world, enc, actor, [end, free]).kind]
@@ -52730,7 +52752,7 @@ def the_draw_is_declared_not_inherited(out: Result) -> None:
         seen.append(chargen.SCORED_CHOICES)
         return real(ref, seed)
 
-    audit.board = spy
+    audit.board = spy  # ty: ignore[invalid-assignment]
     try:
         chargen.SCORED_CHOICES = True
         world = _board()

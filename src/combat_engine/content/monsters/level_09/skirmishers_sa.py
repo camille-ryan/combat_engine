@@ -2048,7 +2048,7 @@ def m5303a1(c: Cast) -> None:
 
     **The old note said the board has no concept of direct sunlight.** Ten
     monster rows ask it, with `c.terrain("sunlight")` -- `sunlight` is one of
-    the ten words in `TERRAIN_WORDS`. What it has no concept of is *which
+    the words in `TERRAIN_WORDS`. What it has no concept of is *which
     square* is in the sun: the terrain word is a property of the encounter.
     That is the honest limit and it is the safe one, since `World.terrain` is
     empty until a board sets it.

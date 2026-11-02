@@ -494,7 +494,7 @@ def m1435a5(c: Cast) -> None:
 
     **The old note said nothing on the board measures it. Eight monster rows
     measure it.** `c.terrain("sunlight")` is the question -- `sunlight` is
-    one of the ten words in `TERRAIN_WORDS`, and `m820a1` implements this
+    one of the words in `TERRAIN_WORDS`, and `m820a1` implements this
     very card with it: a `TurnStart` watcher that empties the budget and a
     `TurnEnd` watcher that kills. The two cards differ only in which action
     the sun leaves.

@@ -238,8 +238,20 @@ _SPENT_ON_ATTACK = frozenset({
 #: `moonlight` and `starlight` are sources; a creature burned by
 #: daylight is not one hindered by gloom. This set exists to catch a
 #: synonym and a typo, not to re-design the vocabulary.
+#: **The three water words are here because `movement.SWIM_DC` keys on
+#: them and nothing could state one.** #1060. `swim_dc` looks for
+#: `stormy`, `rough` or `calm` and falls back to `calm`; the intersection
+#: of its keys with this set was **empty**, `story.module` refuses any word
+#: outside this set, and `story.run.ground` is the only writer of
+#: `world.terrain` in `src/`. So the two harder bands were unreachable by
+#: construction and every swim check in every fight rolled DC 10.
+#:
+#: `calm` is statable too, though it is also the fallback, so that a scene
+#: can say the water is calm rather than leave it to be inferred — the
+#: same reason `bright` is in the set beside the light sources.
 TERRAIN_WORDS = frozenset({
     "aquatic", "ice", "snow", "forest",
+    "calm", "rough", "stormy",
     "bright", "dim light", "darkness",
     "sunlight", "moonlight", "starlight",
 })

@@ -593,7 +593,19 @@ DEFAULT_WATER = "calm"
 
 
 def swim_dc(world: World) -> int:
-    """How hard the water is to swim in. `Scene.ground` supplies the word."""
+    """How hard the water is to swim in. `Scene.terrain` supplies the word.
+
+    **`Scene.ground` is not a field** and this docstring named it for as
+    long as it existed, which sent a reader looking for the writer in the
+    wrong place. `story.run.ground` is the *function* that writes
+    `world.terrain`, and the name collision is presumably where it came
+    from. #1060.
+
+    The three words it keys on are in `cast.TERRAIN_WORDS`, so a scene can
+    state one. They were not, until #1060 — the intersection was empty, and
+    since `story.module` refuses any word outside that set, this loop could
+    never take its first branch and every swim check rolled the calm DC.
+    """
     terrain = getattr(world, "terrain", frozenset())
     for word in ("stormy", "rough", "calm"):
         if word in terrain:
