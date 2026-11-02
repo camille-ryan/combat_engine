@@ -2039,13 +2039,32 @@ VOCABULARY_COLUMNS = (
     ("armour", "type"),
     ("armour", "base"),
     # **`weapon.slug` is deliberately absent, and `racial_trait` has no slug to
-    # add.** The asymmetry is the point and is worth leaving written down: a
-    # weapon's name is mechanics -- thirty are in `sanitise.RULES_TERMS` and
-    # none has a `names.json` entry -- so that column cannot hold a name by
-    # construction. A racial trait's label is an ordinary printed name, its slug
-    # held it on 147 of 151 rows, and adding the column here duly went red on
-    # 17 of them. Nothing read the column, so it was dropped rather than
-    # exempted; see the note on the table in `etl/build.py`. #433.
+    # add.** The asymmetry is the point and is worth leaving written down. A
+    # racial trait's label is an ordinary printed name, its slug held it on 147
+    # of 151 rows, and adding the column here duly went red on 17 of them.
+    # Nothing read the column, so it was dropped rather than exempted; see the
+    # note on the table in `etl/build.py`. #433.
+    #
+    # **`weapon.slug` is exempt because it is *meant* to hold a printed name,
+    # and this comment used to give the opposite reason.** It said a weapon's
+    # name "is mechanics" and that "none has a `names.json` entry -- so that
+    # column cannot hold a name by construction". Measured, #521: **64 of 117**
+    # distinct weapon slugs are a printed name in `names.json`, 13 of them
+    # resolving only to the weapon's own `w` ref. So the column holds names on
+    # more than half its rows and the old reason was false on a one-command
+    # claim.
+    #
+    # The exemption survives on the **real** reason, which
+    # `chargen/__init__.py` has always stated and this file contradicted: the
+    # `weapon` table "is where the printed name belongs" -- `chargen._table`
+    # reads the slug *as* the name, which is why the constants there carry no
+    # slug of their own. `data/game.db` is git-ignored, so a name there breaks
+    # nothing; a name in tracked source would.
+    #
+    # So this is a **name column that is allowed to hold names**, not a
+    # mechanical column that cannot. Reading it as the latter is what filed
+    # #521. What it does *not* say is that the value is safe to render: that
+    # is tier 1 and #467's question, which is deferred.
 )
 
 
