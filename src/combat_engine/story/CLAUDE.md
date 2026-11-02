@@ -670,6 +670,44 @@ nothing leads *to* and says nothing about one nothing leads *out of*, so a
 challenge can be authored that is entered and never left -- measured on a
 two-scene module that parses clean.
 
+## The level band stays symmetric at 3, and widening it is refused
+
+`BAND = 3` either way, where the book gives **-3 to +4** and widens to **+7**
+for a deliberately hard fight. That looks like a fidelity gap and it is a
+decision. Camille's ruling on `#966`, verbatim:
+
+> *"IIRC, this is potentially dangerous, because going +7 means monster
+> defenses are likely at +7. So if it took a 12+ to hit before, now it takes
+> a 19+, and the dynamic of the fight is changed drastically. I think what I
+> want here is to stay in the +3/-3 band for now. Still field monsters as
+> written in modules.*
+>
+> *But let's also defer this instead of closing it. When everything else is
+> done and we've got the AI policy in a good place, we can test how it's
+> working."*
+
+So **do not widen `BAND`** to match the printed window, and do not file the
+difference as a gap -- it is a decision with a reason, and the reason is
+that this engine's bonuses scale with level, so a level reach is a to-hit
+reach. The right trigger for revisiting it is the AI policy being in good
+shape, which is the same shape of deferral `#467` carries.
+
+**The second sentence is already honoured and needs no work.** A module
+naming a creature is fielded by name (`cast_list`'s `BY_NAME` tier),
+re-levelled within `LEVEL_REACH` by the printed level-adjustment rule
+(`#972`), and only substituted beyond that. `BAND` is read by `_pool`,
+which is the **generated** roster -- so the band narrows what the engine
+*invents* and never what a module *states*.
+
+Also measured on the issue and worth not re-deriving: `easy` and `hard`
+both land **inside** the printed ranges rather than beside them, so the
+symmetric band produces legal encounters. A narrower set than the book
+allows, not a wrong one.
+
+And the house-rule idea in the same ruling -- delevelling the bonuses on
+everything toward bounded accuracy, which would remove the scaling problem
+rather than work around it -- is its own issue rather than a note here.
+
 ## A band cannot keep a secret, and a printed number beats both
 
 Two measurements that settled the design of `Lore` and are worth not
