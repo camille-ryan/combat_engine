@@ -3372,12 +3372,37 @@ def i1154x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
+    defect="summons m1179c0, which the ETL marks defective: its a1 prints "
+           "no defence, so the entry drops and the creature this row puts "
+           "on the board cannot make the attack its card gives it (#1059)",
 )
 def i1179p1(c: Cast) -> None:
     """One of the two blocks printing a real level and role, so this is a
     level-6 creature with 70 hit points rather than the surge-value beast
     `_figurine` made of it. Its printed speed is 2 with a fly 6 -- the row
-    guessed a flat fly 10, five squares out and in the wrong field."""
+    guessed a flat fly 10, five squares out and in the wrong field.
+
+    **`defect=` on Camille's ruling, #1059, verbatim:**
+
+    > *"if the conjuraiton is defective, the thing that summons it is also
+    > defective and should be removed as a defect."*
+
+    That settles a contradiction between two tracked artefacts rather than
+    only this row. `monster.defect` marks `m1179c0` malformed; `#601`'s
+    last comment and `conjured.py`'s module docstring both read the same
+    blank defence line as importer boilerplate and call the row writable.
+    `#612` reversed that and its own driver says why -- *"knowing why a
+    line is junk does not make the row writable"*. The ruling keeps the
+    defect, so `#612`'s reading stands and the other two are the stale
+    ones.
+
+    **Why the marker belongs here and not only on the conjuration.**
+    `loader.usable` consults the defect and `pick` stops offering a
+    defective creature -- but `loader.spawn` consults none of it, so a row
+    that names the ref directly put it on the board anyway. This is the
+    only declared thing that does: the printed summoner `m1179` is level
+    12 and out of tier, so it is not declared at all.
+    """
     _conjured(c, "m1179c0")
 
 
