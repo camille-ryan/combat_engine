@@ -390,6 +390,13 @@ Four memoisations and a parallel instrument loop, each verified by an
 a push" below is a cheaper instruction than it was, and the per-commit run
 is no longer worth routing around.
 
+**The `--all` figure has since drifted back to 35 minutes**, measured over
+three wide runs on 2026-11-02, and the audit is not what moved: it got
+*faster* (1,279s to ~1,250s) while `drivers` grew to 658s and became bigger
+than the other 26 instruments combined. The arithmetic is under `audit.py`
+below. The cadence argument is unchanged — a 35-minute run once before a
+push is still affordable — but do not quote 25 minutes.
+
 * **`check.py` per commit.** Narrow; seconds to a couple of minutes.
 * **`check.py --all` once before a push**, not once per commit, and **by
   whoever pushes** — nothing else settles it. It is the only invocation that
@@ -716,10 +723,32 @@ is no longer worth routing around.
   the change *is* the improvement. It is paused out of the default run: 2 red
   runs in 108 is not a gate, it is a measurement.
 
-`audit.py` is the expensive one: **about 25 minutes for all 23,061 rows** —
-1,475s, 1,532s and 1,563s on three runs measured 2026-10-31. That cost has
+`audit.py` is the expensive one: **about 21 minutes for all 23,059 rows** —
+1,217s, 1,266s and 1,281s on three runs measured 2026-11-02. That cost has
 been measured and **cannot be tuned away** — see `_changed`'s docstring
 before trying.
+
+**It is no longer the only expensive one, and that is the correction worth
+reading.** `drivers` costs **658s**, which is more than the other 26
+instruments put together, so a whole `--all` is **35 minutes** and not the
+25 this file claimed two paragraphs up:
+
+```
+audit (solo)                     1,217s
+drivers                            658s
+browser (solo)                     169s
+the other 26 instruments          ~304s
+serial sum 2,348s, wall 35 min     the lanes buy about 4 minutes
+```
+
+The lanes buy so little because `audit` is solo and `drivers` dominates
+everything left to parallelise. **And `drivers` costs the same standalone
+as it does inside the suite** — 658s against 650/673/685s — so this is its
+own cost and not contention; `#1066` was filed on the opposite premise and
+the measurement refuted it. Four rules carry half of it, `reroll_after`
+alone 147.6s for 15 assertions, because they build 250-board negative
+controls. Whether that sample size is worth 23% of every run is on
+`#1066`.
 
 This said *"ten minutes for all 12,197 rows"*, which was wrong on both
 numbers and in the direction that matters: a reader pricing an engine change
