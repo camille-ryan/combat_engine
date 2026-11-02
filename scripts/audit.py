@@ -289,6 +289,33 @@ KNOWN_SILENT = {
     #
     # So the row is covered either way, and by the instrument that can
     # actually see it. Losing the excuse loses nothing.
+    # **`p10044` is back on this list, and the reason is measured rather
+    # than inherited.** The note above removed its old entry because the
+    # stated premise ("the board poses no incoming blow") had expired, and
+    # observed that what made it un-silent was a *sibling racial trait's*
+    # `TempHP` rather than its own clause. `#914` re-rolled two races, that
+    # sibling left the board, and the row went silent -- so it never
+    # regressed; it stopped being credited for somebody else's event.
+    #
+    # Instrumenting the verb across its own attempt, 48 calls:
+    #
+    #     DamageRolled with roll=None     48 of 48
+    #     with a reprice recipe            0 of 48
+    #
+    # So there are no dice to rewrite and `c.set_damage_faces` returns 0 by
+    # its own documented contract. Identical cause to `i1761p1` three
+    # entries up -- `LOADED` pins the die at 20, so the board's blows are
+    # criticals, and a critical maximises the faces instead of rolling
+    # them.
+    #
+    # **The announcement half was still a real gap and is fixed**, not
+    # excused: the verb edited `ev.amount` in place and said nothing, so
+    # the row would have reported silent even on a board that did give it
+    # dice. `DiceRewritten` is that moment and `drivers.pinned_die`
+    # asserts it fires exactly once naming this row. #1067.
+    "p10044": "sets the faces of an incoming blow, and the board poses only"
+              " criticals, which maximise the faces and leave no roll to"
+              " set (48 of 48) -- proved in drivers.pinned_die",
     "i3036p1": "returns early unless the wearer knows f650b, and the draw"
                " stopped dealing it between 81f5229a1 and 00429a9e4 -- #783",
     # `i1676p1` and `i3271p1` were excused here and are **not any more**: the
@@ -1304,8 +1331,15 @@ DID_SOMETHING = {
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
-    "TargetAdded", "MarkHeld",
+    "TargetAdded", "MarkHeld", "DiceRewritten",
 }  # fmt: skip
+# `DiceRewritten` is the eleventh and is admitted for the reason the two
+# before it were: `c.set_damage_faces` edits `ev.amount` **in place**, so a
+# row whose entire Effect is that call changed a blow and left no moment in
+# the log carrying a `by`. `p10044` fired 48 times out of 8 and reported
+# silent. The event is emitted only when a face actually changed, so this
+# admits "rewrote dice" and not "was asked to and did nothing" -- which is
+# the line that keeps it an admission rather than a loosening. #1067.
 # `BlowRedirected`, `UseRestored` and `UseSpent` are the **ninth and tenth**
 # classes, and the first of them is the one that says something new about this
 # list rather than just lengthening it.

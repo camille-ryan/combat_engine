@@ -1587,7 +1587,7 @@ def m5581a5(c: Cast) -> None:
     action=ActionType.IMMEDIATE_REACTION,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="the Emotional Backlash skill challenge ends",
+    trigger="a skill challenge ends",
     todo=("Trigger(SkillChallengeEnded)",),
 )
 def m5581a6(c: Cast) -> None:
@@ -1595,7 +1595,19 @@ def m5581a6(c: Cast) -> None:
     that is a narrative structure outside the board this engine tracks, so
     nothing can declare the trigger. Confirmed absent:
     `grep -n "class SkillChallenge" engine/events.py` is empty, and
-    `uv run scripts/vocab.py --brief` names no such trigger."""
+    `uv run scripts/vocab.py --brief` names no such trigger.
+
+    **`trigger=` is narrower than the card, deliberately.** The printed
+    clause waits on **one named** skill challenge, and that challenge
+    carries no ref -- it is an adventure's structure, not a compendium
+    entry, so there is nothing to point at. Its printed title was sitting
+    in this string, and `trigger=` is prose the page renders, which made it
+    a tier-1 leak under `#447`'s ordering rather than a tier-2 one. #1069.
+
+    So the string says the mechanical shape and loses the identity. When
+    `Trigger(SkillChallengeEnded)` arrives (#905) the predicate is where
+    the particular challenge belongs -- by ref if it ever gets one, and
+    otherwise this row stays broader than print and should say so here."""
 
 
 # ==========================================================================

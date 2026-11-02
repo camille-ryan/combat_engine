@@ -1278,6 +1278,54 @@ class BlowRedirected(Event):
 
 
 @dataclass
+class DiceRewritten(Event):
+    """Damage dice already rolled were rewritten, and by which row.
+
+    `c.set_damage_faces` reads the live `Roll` off the event, assigns every
+    face and adds the repriced difference to `ev.amount` **in place**. It
+    announced nothing, so there was no moment in the bus log carrying a
+    `by`, and `audit.DID_SOMETHING` had nothing to credit: `p10044`, whose
+    entire Effect is that one call, fired 48 times out of 8 and reported
+    **silent**. #1067.
+
+    Exactly the shape `UseRestored` below was added for, and the third time
+    this component has paid for it -- see `RelationCleared` beside
+    `RelationSet` in that docstring. A mutation nobody announces is
+    indistinguishable from a row that did nothing.
+
+    **Not `Rerolled`, deliberately.** That event is about a **d20** and its
+    `roll` field is one of `attack`, `save`, `check` or `initiative`; damage
+    dice are none of those, so reusing it would file a damage rewrite as an
+    attack reroll and let a rider keyed to one pay out on the other. The
+    same reasoning that gave `Rerolled` its `roll` field in the first place.
+
+    `who` is the creature whose blow was rewritten, `dice` how many faces
+    were set, `face` what they were set to, and `delta` the change to the
+    blow's amount after repricing -- which is **0** when the event carries
+    no recipe, and that case is real rather than a bug: a row can legally
+    rewrite dice on a blow nothing can reprice, and a reader must be able
+    to tell "rewrote nothing" from "rewrote, worth nothing".
+
+    `actor` is the creature whose row did it and `who` the creature whose
+    blow was rewritten -- usually not the same one, since the printed
+    clause is an interrupt on *taking* damage. `actor` is declared here
+    rather than inherited: `Event` carries only `seq`, `depth`, `cancelled`
+    and `reason`, so `Rerolled` declares its own too, and passing one to a
+    class that has not is a `TypeError` at the emit.
+
+    `by` is the ref that did it, which is the field the whole event exists
+    for.
+    """
+
+    actor: int
+    who: int
+    dice: int
+    face: int
+    delta: int
+    by: str
+
+
+@dataclass
 class UseRestored(Event):
     """A spent use of a power was handed back.
 

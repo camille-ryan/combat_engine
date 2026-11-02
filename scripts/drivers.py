@@ -26855,9 +26855,32 @@ def a_damage_die_is_pinned(out: Result) -> None:
         else:
             theirs.append(list(roll.dice))
 
+    # **And the announcement, which is what the audit can see.** Everything
+    # below reads `roll.dice` off the event -- a state diff, which this repo
+    # has a standing rule against relying on alone: an unobservable effect
+    # gets an event. `c.set_damage_faces` edited `ev.amount` in place and
+    # said nothing, so `p10044` reported SILENT however well it worked.
+    # `DiceRewritten` is the moment, and `by` is why it exists -- without
+    # that field nothing can tell this row's rewrite from anybody else's.
+    # #1067.
+    from combat_engine.engine.events import DiceRewritten
+
+    said: list[DiceRewritten] = []
+    world.bus.on(DiceRewritten, said.append)
+
     world.bus.on(DamageRolled, watch)
     Cast(world=world, me=foe, ref="drivers:blow").damage("4d8", on=me)
     Cast(world=world, me=me, ref="drivers:blow").damage("4d8", on=foe)
+    out.that([e.by for e in said] == ["p10044"],
+             "p10044 announces the rewrite exactly once, naming itself --"
+             " the incoming blow only, so the outgoing one emits nothing"
+             " and the row cannot be credited for a blow it left alone",
+             f"emitted {[(e.by, e.dice, e.face, e.delta) for e in said]}")
+    out.that(bool(said) and said[0].dice == 4 and said[0].face == 1,
+             "and says how much it rewrote -- four dice set to 1, so a"
+             " reader can price the change rather than only learn that one"
+             " happened",
+             f"{said[0] if said else None}")
     if not mine or not theirs:
         out.skip("a blow at the caster and one away from it, for p10044")
     else:
@@ -38521,6 +38544,20 @@ def f981s_branch_on_p1758_pays_when_the_target_hurt_you(out: Result) -> None:
     from combat_engine.engine.events import DamageApplied, TurnEnd
     from combat_engine.engine.query import damaged_since, enemies
 
+    # **This rule's board depends on state it does not set, and that is
+    # filed rather than patched here.** It reaches `audit.board` directly
+    # instead of through `_board`, and importing `audit` sets
+    # `chargen.SCORED_CHOICES = False` at module scope (`audit.py:99`), so
+    # which character it is handed depends on what ran before it. Measured
+    # on this tree: green standalone, red inside the full suite, and in a
+    # single process the two draw modes disagree.
+    #
+    # A pin here was tried and withdrawn: it has to sit after the import
+    # block above, `isort` reorders that block, and this file's own
+    # `_board` docstring records that exact trap -- a guard that reproduces
+    # the bug it was written to fix. The cause needs settling before the
+    # fix, so the setup assertion below is what stops it reporting a
+    # content fault in the meantime. #1070.
     world, me, _started = _posed("p1758", 1)
     foe = enemies(world, me)[0]
     known = world.get(me, Powers)
@@ -38556,6 +38593,26 @@ def f981s_branch_on_p1758_pays_when_the_target_hurt_you(out: Result) -> None:
     world.rng.loaded = 20
     REGISTRY["p1758"].body(
         Cast(world=world, me=me, ref="p1758", target=foe))
+    # **The setup is asserted before the clause is.** `paid == []` means the
+    # row applied nothing at all, which is an empty board and not a verdict
+    # about `f981` -- and reporting it as one is what made this rule read as
+    # a content failure when the draw moved under it. One helping is the
+    # row working and the branch not paying, which IS the finding; none is
+    # the setup.
+    # **A skip, not a pass and not a failure.** `paid == []` means the row
+    # applied nothing, so the clause below was never exercised -- and
+    # asserting on it anyway is what made this rule report a fault in
+    # `f981` that did not exist. Reported out loud, with the reason, the
+    # way the `p10044` block in `pinned_die` already does for an
+    # unlandable setup: a skip the total reconciles against is honest,
+    # where a silent one is the thing `scripts/CLAUDE.md` forbids. The
+    # inherited-draw cause is #1070; one helping instead of two would
+    # still be a real finding and still fails.
+    if not paid:
+        out.skip("f981's second helping: the board's character lands"
+                 " nothing with p1758 under the draw this rule inherited,"
+                 " so the branch was not exercised -- #1070")
+        return
     out.that(len(paid) >= 2,
              "**and firing the row pays a second helping of damage** -- the"
              " weapon damage and `f981`'s Wisdom modifier on top, which is"
@@ -52549,7 +52606,14 @@ def searching_a_room_needs_no_dice(out: Result) -> None:
              "the party has an automatic result at all -- the number the"
              " page says to use instead of rolling")
 
-    def scene_with(certain: bool, pressed: bool, dc: int) -> object:
+    # `-> mod.Module`, not `-> object`. Annotating this helper `object`
+    # erased the type for every caller, so each `.scenes` read became an
+    # `unresolved-attribute` -- eight of them, which `types` reported as
+    # one drifted key because the baseline is keyed `rule|message`. `ruff`
+    # passed throughout. The `isinstance(..., dict)` guards below were
+    # written to appease that erasure and are gone: `Module.scenes` is
+    # declared `dict[str, Scene]` at `story/module.py:1067`.
+    def scene_with(certain: bool, pressed: bool, dc: int) -> mod.Module:
         raw = {
             "id": "probe", "party_level": 2, "party_size": 4,
             "start": "room",
@@ -52564,8 +52628,7 @@ def searching_a_room_needs_no_dice(out: Result) -> None:
         return mod.parse(raw, Path("<driver>"))
 
     built = scene_with(True, False, 12)
-    scene = next(iter(built.scenes.values()
-                      if isinstance(built.scenes, dict) else built.scenes))
+    scene = next(iter(built.scenes.values()))
     row = scene.lore[0]
     out.that(getattr(row, "certain", False) is True,
              "a module can say a fact is found without dice, and the flag"
@@ -52578,8 +52641,7 @@ def searching_a_room_needs_no_dice(out: Result) -> None:
 
     pressed_built = scene_with(True, True, 12)
     pressed_scene = next(iter(
-        pressed_built.scenes.values()
-        if isinstance(pressed_built.scenes, dict) else pressed_built.scenes))
+        pressed_built.scenes.values()))
     out.that(pressed_scene.pressed is True,
              "while a scene under a time constraint says so -- the printed"
              " exception the automatic result does not apply to")
@@ -52749,7 +52811,9 @@ def a_theme_can_grant_a_power(out: Result) -> None:
 
     from combat_engine.story import module as mod
 
-    def parsed(powers: object) -> tuple[object, list[str]]:
+    # Real types, for the reason given above `scene_with`: a `-> object`
+    # here erased `built` and made its `.scenes` read unresolvable.
+    def parsed(powers: list[str]) -> tuple[mod.Module | None, list[str]]:
         problems: list[str] = []
         raw = {
             "id": "probe", "party_level": 2, "party_size": 4,
@@ -52813,9 +52877,21 @@ def a_theme_can_grant_a_power(out: Result) -> None:
     # line is the one to read.
     from combat_engine.story import cast_list as cl
 
-    scene = next(iter(
-        built.scenes.values() if isinstance(getattr(built, "scenes", None), dict)
-        else built.scenes))
+    # **The setup gets asserted before it is read**, which this rule did not
+    # do. `parsed` answers `None` when the parse refuses, and the honest
+    # return type is what surfaced that -- while the helper was annotated
+    # `-> tuple[object, ...]` the dereference below typed clean and a
+    # refused good-parse would have raised an `AttributeError` here rather
+    # than failing an assertion. A raise reads as a broken instrument; this
+    # reads as the finding it would be.
+    out.that(built is not None,
+             "the good module parses at all, so the middle hop below is"
+             " read off a real scene rather than raising",
+             f"parse said: {str(_why)[:90]}")
+    if built is None:
+        return
+
+    scene = next(iter(built.scenes.values()))
     dressed_out = cl.resolve(scene, party_level=2, party_size=4)
     carried = [list(getattr(f, "powers", ()) or ())
                for f in getattr(dressed_out, "flavours", [])]

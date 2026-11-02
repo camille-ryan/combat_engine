@@ -14294,8 +14294,32 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             if had != face:
                 roll.dice[i] = face
                 set_ += 1
+        delta = 0
         if price is not None:
-            ev.amount += price(roll.total) - was
+            delta = price(roll.total) - was
+            ev.amount += delta
+        # **Announced, because a mutation nobody announces reads as a row
+        # that did nothing.** `ev.amount` is edited in place, so before
+        # this there was no moment in the log carrying a `by` and `p10044`
+        # -- whose whole Effect is this one call -- fired 48 times and
+        # reported silent. Emitted only when a face actually changed, so a
+        # row that rewrites nothing is not credited with having acted.
+        # #1067.
+        if set_:
+            # Function-local, like `c.reroll_attack`'s `Rerolled` import,
+            # so a new event here does not widen what imports `events` at
+            # module scope.
+            from .events import DiceRewritten
+
+            # `self.me`, not `self.actor` -- `Cast` has no `actor` field
+            # (`cast.py:354` is `me: int`) and guessing it raised an
+            # `AttributeError` through every board that posed this row.
+            who = getattr(ev, "target", None)
+            self.world.bus.emit(DiceRewritten(
+                actor=self.me,
+                who=self.me if who is None else who,
+                dice=set_, face=face, delta=delta, by=self.ref,
+            ))
         return set_
 
     def floor_damage_dice(
