@@ -100,13 +100,18 @@ class Table:
     def automatic(self, skill: str) -> int:
         """The result a party gets for free when it can take its time. #942.
 
-        DMG chapter 5, on searching a room:
+        DMG chapter 5's searching rule, **paraphrased rather than quoted**:
+        a party searching a room with no time pressure is treated as
+        eventually rolling a 20, so the check is settled with the best
+        result the party could roll rather than by throwing dice. The page
+        notes this comes to the best passive result plus ten.
 
-        > *"The PCs scour the room, rolling a lot of Perception checks.
-        > Unless the characters are under a time constraint, assume that
-        > they're going to roll a 20 eventually, and use the best possible
-        > Perception check result for the party. (Effectively, this result
-        > equals the best passive Perception check +10.)"*
+        The verbatim sentence used to be here. `leaks.py` flagged it as a
+        partial hit -- one of its ordinary words is also a word of a
+        printed monster ability's name -- and the quote was prose rather
+        than mechanics, which is the half of the one rule that actually
+        binds. The paraphrase carries the whole mechanic, so do not paste
+        it back.
 
         So **20 + the party's best modifier**: a passive check is `10 +
         modifier` and the rule adds ten to that. No dice at all, which is

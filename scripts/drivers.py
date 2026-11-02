@@ -43125,7 +43125,10 @@ def a_borrowed_row_records_which_one_was_taken(out: Result) -> None:
              "choice to record",
              f"stored_row(of=f1512) = {c3.stored_row(of='f1512')!r}")
 
-    # **The tripwire fired, and this is the assertion it became.** It used
+    # **The standing guard fired, and this is the assertion it became.**
+    # (The word that was here is one word of a printed trap's name, so
+    # `leaks.py` reported a partial hit on a metaphor. Not the gate's
+    # fault -- it cannot know the sense.) It used
     # to read "rt:r6-t3 still borrows nothing, so #743's two rows stay
     # blocked on the race fork rather than on this reader" -- written so
     # that the day the fork started working, somebody would come and write
@@ -52564,13 +52567,18 @@ def the_fixture_challenge_can_run_beats(out: Result) -> None:
 def searching_a_room_needs_no_dice(out: Result) -> None:
     """A party that can take its time finds what its best member would. `#942`.
 
-    DMG chapter 5, on searching a room:
+    DMG chapter 5's searching rule, **paraphrased rather than quoted** --
+    the mechanic, which is not copyrightable, instead of the page's
+    wording, which is: a party searching a room with no time pressure is
+    treated as eventually rolling a 20, so the check is settled with the
+    best result the party could roll rather than by throwing dice. The
+    page notes this comes to the best passive result plus ten.
 
-    > *"The PCs scour the room, rolling a lot of Perception checks. Unless
-    > the characters are under a time constraint, assume that they're going
-    > to roll a 20 eventually, and use the best possible Perception check
-    > result for the party. (Effectively, this result equals the best
-    > passive Perception check +10.)"*
+    The verbatim quote used to sit here and in three other files, and
+    `leaks.py` was right to flag it: one of its ordinary words is also a
+    word of a printed monster ability's name, so the walk reported a
+    partial hit on prose that had nothing to do with that ability. Do not
+    paste the sentence back -- a paraphrase carries the whole mechanic.
 
     So the number is **20 + the party's best modifier** -- a passive check
     is `10 + modifier` and the rule adds ten -- and no die is thrown.

@@ -1493,11 +1493,13 @@ def _recall(playing: Playing, table: Table, actors: list[Actor],
         target = row.dc or dc_for(playing.scene.level or party_level, row.band)
         knew: list[tuple[int, str]] = []
         mine = False
-        # **A certain row is compared, not rolled.** #942. DMG chapter 5:
-        # *"assume that they're going to roll a 20 eventually, and use the
-        # best possible Perception check result for the party"* -- so the
-        # party's automatic result either clears the DC or does not, and no
-        # die is thrown.
+        # **A certain row is compared, not rolled.** #942. DMG chapter 5's
+        # searching rule, paraphrased rather than quoted: a party with time
+        # to search is treated as eventually rolling a 20, so the check is
+        # settled with the best result it could roll -- the party's
+        # automatic result either clears the DC or does not, and no die is
+        # thrown. The verbatim sentence was here and `leaks.py` flagged it;
+        # see `story/table.py`.
         #
         # **Unless the scene says they are pressed**, which is the page's
         # own exception: the argument for skipping the dice is that the

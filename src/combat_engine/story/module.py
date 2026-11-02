@@ -632,9 +632,10 @@ class Lore:
     skill: str
     #: Found without dice, when the party can take its time. #942.
     #:
-    #: DMG chapter 5's searching rule: *"assume that they're going to roll
-    #: a 20 eventually, and use the best possible Perception check result
-    #: for the party"*. So this row is not rolled -- it is compared against
+    #: DMG chapter 5's searching rule, paraphrased rather than quoted: a
+    #: party with time to search is treated as eventually rolling a 20, so
+    #: the check is settled with the best result it could roll.
+    #: So this row is not rolled -- it is compared against
     #: `Table.automatic`, which is the party's best modifier plus twenty,
     #: and either the party has it or it is out of reach.
     #:
