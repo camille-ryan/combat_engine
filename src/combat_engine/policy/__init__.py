@@ -797,6 +797,17 @@ WEIGHTS: dict[str, float] = {
     # looking -- and it is the thing to suspect first if a creature with a
     # spare minor starts looking every round instead of helping.
     "is_search": 1.0,
+    # **An inert row must lose to ending the turn, not tie it.** #796.
+    # Small on purpose: `is_end` is 0.001 and the whole table rests on that
+    # floor, so this only has to clear it. Large enough and an inert free
+    # action would start losing to things it should merely rank beneath.
+    #
+    # Not reusing `inert_costs_turn`, which is what the first reading of
+    # this suggested: a free or minor action that accomplishes nothing has
+    # not cost the creature its *turn*, and pricing it as though it had
+    # would be a number saying something untrue. This is a hair of
+    # negative, which is what the honest version is.
+    "inert_wastes_action": -0.5,
     # A summon acting on its own is free value; the action is the
     # owner's minor, which `_instinctives` has already charged for.
     "is_instinctive": 5.0,

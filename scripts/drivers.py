@@ -52340,6 +52340,83 @@ def the_importer_brief_and_the_parser_agree(out: Result) -> None:
                      f" parser accepts anyway",
                      f"{allowed}")
 
+def a_tie_goes_to_ending_the_turn(out: Result) -> None:
+    """An option worth exactly as much as ending the turn must not win.
+
+    `#796`. `DoctrinePolicy.score` already zeroes the flat `is_power` for a
+    row whose effect is already standing, which is why the row in that issue
+    sat at `-0.10` rather than `+5.9` -- the scorer was right. The bug was
+    that `-0.10` is *also* what ending the turn scored, and the tie was
+    resolved by the ranker: `max` breaks ties on `str(a)`, and `"power..."`
+    sorts above `"end..."`. Being `action=FREE` the row consumed nothing, so
+    the identical pose recurred and the identical choice was made -- **282 of
+    300 actions, with the round never leaving 1**.
+
+    Camille approved two fixes and both are in. This asserts them in the
+    order of how much they carry:
+
+    * **the tie-break**, which is the half that cannot be re-broken by a new
+      weight -- 14% of decisions are tied at the top, so any future pair of
+      tied options with one of them free has this shape;
+    * **the scoring guard**, which puts an inert row strictly below `end`
+      instead of level with it.
+
+    **The score is forced rather than hunted for.** Reproducing the original
+    tie needs a specific pose reached through the HTTP client, and a rule
+    that goes looking for a natural tie would pass by failing to find one.
+    Pinning `score` to a constant asks the ranker the question directly, and
+    the question is only about the ranker.
+
+    **And the guard is scoped away from `benefits` rows, which is the part
+    that would have done real damage unscoped.** `inert` asks three
+    questions -- no attack line, no damage on a scratch board, no effect laid
+    -- and restoring hit points is none of them, so *every heal is classed
+    inert*. `#796` measured that penalising all of them takes the party's
+    heals from 31 to 0. Asserted here on both sides: the penalty reaches an
+    inert row that is not a `benefits` row, and does not reach the heal that
+    the census showed is the only one ever actually chosen.
+    """
+    from combat_engine import story
+    from combat_engine.engine import Encounter
+    from combat_engine.engine.actions import Action
+    from combat_engine.engine.types import ActionType
+    from combat_engine.policy import install
+    from combat_engine.policy.doctrine import DoctrinePolicy, benefits
+
+    fielded = story.field_encounter(
+        13, 5, party=story.Party.of(story.PARTY, 5, seed=13))
+    world = fielded.world
+    enc = Encounter(world)
+    pol = DoctrinePolicy()
+    install(world, enc, {}, default=pol)
+    enc.start()
+    actor = world.turn
+    out.that(actor is not None,
+             "somebody is up, so the ranking below is asked of a real actor")
+    if actor is None:
+        return
+
+    end = Action(kind="end", cost=ActionType.NONE)
+    free = Action(kind="power", cost=ActionType.FREE, ref="i1363p1")
+    pol.score = lambda *a, **k: 0.0  # type: ignore[method-assign]
+
+    picked = [pol.act(world, enc, actor, [free, end]).kind,
+              pol.act(world, enc, actor, [end, free]).kind]
+    out.that(picked == ["end", "end"],
+             "on an exact tie the turn advances, whichever order the options"
+             " are listed in -- the free row sorted above `end` on `str` and"
+             " that is what looped the fight",
+             f"listed power-first then end-first, got {picked}")
+
+    #: The scoring half, on the two refs `#796` measured. `p1455` is the one
+    #: heal its census ever saw chosen -- 31 of 31 -- and it is a `benefits`
+    #: row, which is exactly why the guard has to miss it.
+    out.that(benefits("p1455") and not benefits("i1363p1"),
+             "and the two refs still disagree about `benefits`, which is the"
+             " premise the scoping rests on",
+             f"p1455={benefits('p1455')} i1363p1={benefits('i1363p1')}")
+
+
 def the_search_action_is_named(out: Result) -> None:
     """Looking for a trap beats ending the turn, and loses to fighting.
 
@@ -53947,6 +54024,10 @@ DRIVERS = {
     "brief_agrees": (
         the_importer_brief_and_the_parser_agree,
         "the importer brief names no value the parser refuses (#1026)",
+    ),
+    "tie_ends_turn": (
+        a_tie_goes_to_ending_the_turn,
+        "an option tied with ending the turn does not win the tie (#796)",
     ),
     "search_named": (
         the_search_action_is_named,

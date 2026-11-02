@@ -1981,6 +1981,28 @@ class DoctrinePolicy:
             # **A row whose effect is already running counts as inert too**, for the
             # same reason: it accomplishes nothing *now*.
             f["is_power"] = 0.0
+            # **And it has to lose to ending the turn, not tie it.** #796.
+            # Zeroing `is_power` leaves an inert free or minor row scoring
+            # whatever the generic terms happen to say, which was *exactly*
+            # `is_end`'s own total in the case that issue measured. A tie is
+            # all it takes: the row consumes nothing, so the pose recurs.
+            #
+            # **Scoped away from `benefits` rows, and that scoping is load
+            # bearing.** `inert` asks three questions -- no attack line, no
+            # damage on a scratch board, no effect laid -- and *restoring hit
+            # points is none of the three*, so *every heal is classed inert*.
+            # Measured over 18 fights: 261 party turns with somebody below
+            # half hit points and 31 heals chosen, every one of them riding
+            # on the `benefits` branch above handing it `allies_damage_taken`
+            # to climb back over the alternatives. Penalising all inert rows
+            # takes those 31 to **0** -- the party loses its heals in
+            # exchange for fixing a tie.
+            #
+            # `benefits` is this component's own name for "this row is for an
+            # ally, judge it on their condition", so it is the right question
+            # and not a special case invented here.
+            if not benefits(action.ref):
+                f["inert_wastes_action"] = 1.0
             if action.cost in (ActionType.MOVE, ActionType.STANDARD):
                 # **Moved back here from `doctrine_features` once #292 was fixed.** It
                 # had been exiled there only so `scripts/doctrine.py` could see it
@@ -2040,8 +2062,23 @@ class DoctrinePolicy:
             options = [a for a in options
                        if a.kind not in _STEPS or a.dest is None or id(a) in keep]
         usable = [a for a in options if a.available] or options
+        # **An exact tie goes to the option that advances the turn.** #796.
+        # The tie-break used to be `str(a)` alone, and `"power..."` sorts
+        # above `"end..."`, so a row worth exactly as much as ending the
+        # turn won -- and if it is `action=FREE` it consumes nothing, the
+        # identical pose recurs, and the identical choice is made. Measured
+        # through the score-ranked client: 282 of 300 actions, round never
+        # leaving 1.
+        #
+        # Camille approved this and the scoring half both. This is the half
+        # that **cannot be re-broken by a new weight**, which is why it is
+        # here as well as there: any future pair of tied options with one
+        # of them free has the same shape, and a tie-break is the ranker's
+        # business rather than the scorer's. 14% of decisions are tied at
+        # the top, so this is not a rare branch.
         return max(usable,
-                   key=lambda a: (self.score(world, encounter, actor, a), str(a)))
+                   key=lambda a: (self.score(world, encounter, actor, a),
+                                  a.kind == "end", str(a)))
 
     def weigh(self, f: dict[str, float], action: Action) -> float:
         """The weighted sum, given features already computed.
