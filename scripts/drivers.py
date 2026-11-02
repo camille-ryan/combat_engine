@@ -50413,14 +50413,18 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
         Path("<driver>"))
     camp = run_mod.begin(built, seed=5)
     camp.party.sheets[0].hp = -10
-    # **The wiring is asserted by recording the call, not by its output.**
-    # The obvious version -- look for the note in `made.lines` -- cannot be
-    # made to pass today, and the reason is a separate bug rather than this
-    # pass: a character fielded dying ends a real fight at a negative total
-    # with **no conditions on them at all**, so `rally` correctly finds
-    # nobody to help. Measured at `rally` time: `hp=-10, dying=False,
-    # effects=[]`. That is logged on its own issue; asserting the note here
-    # would be asserting a bug fixed.
+    # **Both the call and its output, and the second one took a root
+    # cause to make assertable.** The obvious version -- look for the note
+    # in `made.lines` -- failed at first, and the reason was not this pass:
+    # `Encounter.advance -> finish -> effects.end_encounter` ends every
+    # encounter-duration effect when the fight stops, and `DYING` is
+    # carried by one of them. So a character at -10 reached `rally` with
+    # **no conditions at all** and `is_(DYING)` answered False. #1076.
+    #
+    # `rally` reads the hit points now, which is the fact that survives
+    # teardown, so the note does appear for a real fight -- and the probes
+    # that passed before were the ones calling `rally` on a board whose
+    # encounter had never finished, which is why none of them caught it.
     reached: list[int] = []
     was = run_mod.rally
 
@@ -50439,6 +50443,20 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
         "only being callable by a probe -- the wiring, which is the half a "
         "helper-level assertion never covers",
         f"reached {len(reached)} time(s)",
+    )
+
+    # -- and it SAYS something, which is what the teardown bug hid --------
+    camp = run_mod.begin(built, seed=5)
+    camp.party.sheets[0].hp = -10
+    made = run_mod.step(camp, built, record=False)
+    spoke = [str(x) for x in made.lines if "After the fight" in str(x)]
+    out.that(
+        spoke,
+        "and a real fight that leaves somebody dying produces the attempt "
+        "-- the assertion the encounter teardown made impossible until "
+        "`rally` stopped reading the condition and started reading the "
+        "hit points (#1076)",
+        f"{spoke[:1]}",
     )
 
 

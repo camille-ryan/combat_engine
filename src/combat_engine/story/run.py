@@ -1698,7 +1698,7 @@ def rally(world: World, step: Step) -> None:
     from combat_engine.engine.actions import STABILISE_DC
     from combat_engine.engine.components import Condition, Health
     from combat_engine.engine.durations import When
-    from combat_engine.engine.query import alive, is_
+    from combat_engine.engine.query import alive
     from combat_engine.engine.skills import check as roll_check
 
     mine = [
@@ -1707,18 +1707,40 @@ def rally(world: World, step: Step) -> None:
         and (ident := world.get(eid, Ident)) is not None
         and ident.ref.startswith("c:")
     ]
-    # **Closest to death first, by failures**, which is Camille's rule and
-    # is the number the engine already keeps. Ties go to the lower entity
-    # id so a seeded run is reproducible without the dice.
+    # **Dying is read off the hit points, not off the condition, and that
+    # is the whole reason this pass works.** #1076: the fight's own
+    # teardown ends every encounter-duration effect --
+    # `Encounter.advance -> finish -> effects.end_encounter`, reason
+    # "encounter over" -- and `DYING` is carried by one of them. So by the
+    # time anything post-fight runs, a character at -10 has **no
+    # conditions at all** and asking `is_(DYING)` answers False. The first
+    # version of this asked exactly that and helped nobody, with every
+    # assertion green, because the probes called `rally` on a board whose
+    # encounter had not finished.
+    #
+    # The hit points are the truth that survives: `restore_hp` and
+    # `_drop` both decide dying by the same two bounds, and `harvest`
+    # carries the total onto the sheet. The condition is the in-combat
+    # representation of a fact, and this runs after combat.
+    #
+    # `STABLE` is read the same way for the same reason -- it is also an
+    # encounter effect -- so within one `rally` nobody is helped twice,
+    # and across fights `Sheet.stable` is what carries it.
+    helped: set[int] = set()
+
+    def is_dying(eid: int) -> bool:
+        health = world.get(eid, Health)
+        if health is None:
+            return False
+        return health.dying_at < health.hp <= 0
+
     down = sorted(
-        (e for e in mine
-         if is_(world, e, Condition.DYING)
-         and not is_(world, e, Condition.STABLE)),
+        (e for e in mine if is_dying(e) and e not in helped),
         key=lambda e: (-(world.need(e, Health).failures), e),
     )
     if not down:
         return
-    standing = [e for e in mine if alive(world, e) and e not in down]
+    standing = [e for e in mine if alive(world, e) and not is_dying(e)]
     if not standing:
         step.say(
             f"{len(down)} dying and nobody standing to help them.", "note")
@@ -1730,6 +1752,7 @@ def rally(world: World, step: Step) -> None:
                 hurt, helper, When.ENCOUNTER, label="stabilised",
                 conditions=(Condition.STABLE,),
             )
+            helped.add(hurt)
             step.say(
                 f"After the fight, {_named(world, helper)} stabilises "
                 f"{_named(world, hurt)} ({got.total} vs {STABILISE_DC}).",
