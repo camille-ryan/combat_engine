@@ -2113,6 +2113,35 @@ def step(
     elif scene.kind == "skill_challenge":
         _challenge(campaign, module, scene, made, choose)
     elif scene.kind == "rest":
+        # **The camp conversation, before the sleep.** A rest scene was one
+        # canned line and had nowhere to put *"you make camp and the rain
+        # finally stops"* -- Camille's complaint on #937, and the half that
+        # kept it open. `_roleplay` returns at once unless the author wrote
+        # an npc, an affordance or a lore row, so every converted module
+        # prints exactly what it printed before.
+        #
+        # **Before the rest resolution, and the ordering is load-bearing.**
+        # `_roleplay` lays a board through `table.lay`, and `Table.strike`
+        # harvests the board's own counts back over every sheet, so beats
+        # running *after* the restoration write a board's resource state on
+        # top of it. Measured on a rested party:
+        #
+        #     rested   hp None, surges None      "unset, so full"
+        #     struck   hp 56, surges 12          concrete
+        #
+        # No resource is lost today -- the arming-is-not-spending rule
+        # holds -- but the record stops saying "rested" and starts saying
+        # "at 56 of 56", and anything a future beat spends would be baked
+        # in on top of the restoration. Resting last makes the rest the
+        # last word, which is the order a reader would assume anyway: you
+        # talk at camp, then you sleep. A plant that moves this call below
+        # the rest turns **two** assertions in `drivers.camp_talk` red.
+        #
+        # The cost is that a dying character does not speak at camp. That
+        # is #808's rule rather than a new one, and the rest then stands
+        # them up -- the right sequence rather than a character silenced
+        # after having already been healed.
+        _roleplay(campaign, module, scene, made, director, ask_human)
         # **An extended rest the lockout refuses becomes a short one, and
         # says so.** The printed rule stops another extended rest beginning;
         # it says nothing against the five minutes of a short one, and a

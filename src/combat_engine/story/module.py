@@ -1893,14 +1893,22 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     unused = {
         "roleplay": ("foes", "terrain", "complexity", "primary", "secondary",
                      "objective", "readiness"),
-        # `details` is roleplay-only: nothing else runs beats to spend them.
+        # `details` belongs to the kinds that run beats to spend them, which
+        # is roleplay **and rest** since #937 -- not roleplay alone, as this
+        # comment said while a rest scene had no beats to run.
         "skill_challenge": ("foes", "terrain", "affordances", "objective",
                             "readiness", "details"),
         "combat": ("complexity", "primary", "secondary", "affordances",
                    "details"),
+        # **A rest scene may carry a conversation.** `npcs`, `affordances`,
+        # `lore` and `details` were refused here because nothing ran the
+        # beat loop on a rest scene, which is the half of #937 that kept it
+        # open: there was nowhere to put *"you make camp and the rain
+        # finally stops"*. The fight fields stay refused -- a rest scene
+        # with a foe list still plays as a rest and silently drops the
+        # fight, which is what this whole check is about.
         "rest": ("foes", "terrain", "complexity", "primary", "secondary",
-                 "affordances", "npcs", "lore", "objective", "readiness",
-                 "details"),
+                 "objective", "readiness"),
     }[kind]
     for name in unused:
         if raw.get(name):

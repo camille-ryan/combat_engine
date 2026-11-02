@@ -48377,15 +48377,26 @@ def the_scene_s_text_is_read_once_and_details_are_spent(out: Result) -> None:
                                "foes": [{"count": 1, "rank": "standard"}]})
     out.that(
         "must not carry 'details'" in combat,
-        "a combat scene carrying details is refused -- nothing but a "
-        "roleplay scene runs the beats that would spend them, so a pool "
-        "there would be written and never read",
+        "a combat scene carrying details is refused -- it runs no beats to "
+        "spend them, so a pool there would be written and never read",
         combat[:110] or "it was accepted",
     )
+    # **This assertion was the other way round and had to be inverted, not
+    # loosened.** It read *"and a rest scene likewise, which is the same
+    # reason"*, and its reason -- *"nothing but a roleplay scene runs the
+    # beats"* -- stopped being true when `#937` gave a rest scene the beat
+    # loop. The refusal was correct when written and describes a design
+    # that no longer exists, so the honest fix is to assert the opposite
+    # claim rather than to delete the check: a rest scene accepts a pool
+    # **because it now has somewhere to spend it**.
     out.that(
-        "must not carry 'details'" in refuse("rest", {}),
-        "and a rest scene likewise, which is the same reason",
-        refuse("rest", {})[:90] or "it was accepted",
+        refuse("rest", {}) == "",
+        "and a rest scene **accepts** one, which is the inverse of what "
+        "this assertion used to claim: `#937` gave a rest scene the beat "
+        "loop, so *\"an owl calls twice\"* has a beat to arrive on. The "
+        "pool-is-written-and-never-read reason above is still the rule -- "
+        "it simply stopped applying here",
+        refuse("rest", {})[:90] or "accepted, as it should be",
     )
 
     # -- more beats than details -------------------------------------------
@@ -51364,6 +51375,174 @@ def an_extended_rest_is_once_per_day_and_a_refusal_is_printed(
         "exactly one line says everything came back -- a refused rest does "
         "not print the benefit it just declined to give",
         f"{[n for n in said_three if 'everything back' in n]}",
+    )
+
+
+def a_rest_scene_can_carry_a_conversation(out: Result) -> None:
+    """A rest scene was one canned line, which is Camille's complaint:
+
+    > *A rest scene is one canned line, and a journey has no
+    > representation at all.*
+
+    The journey half landed with `journey.py`; this is the other one.
+    `run.step`'s rest branch printed the scene's text, restored
+    resources and moved on -- so there was nowhere to put *"you make
+    camp and the rain finally stops"*, because the beat loop ran for a
+    `roleplay` scene and nothing else. `module.parse` enforced that from
+    the other side: `npcs`, `affordances`, `lore` and `details` were all
+    refused on a rest scene.
+
+    **Three claims here and the third is the load-bearing one.** That the
+    beats run, that a scene with nothing written is untouched, and that a
+    rest with a conversation in it restores exactly what a rest without
+    one does. The third is the claim this component's failure mode is
+    about -- `_roleplay` lays a board through `table.lay` and
+    `Table.strike` harvests the board's counts back over every sheet, so
+    a party quietly weaker is the shape to watch for and every line of
+    output would still read correct.
+
+    **The ordering is asserted rather than argued, and it is
+    load-bearing.** The camp lines come before the rest's own note: you
+    talk at camp, then you sleep, and resting last makes the rest the last
+    word on resources. Moving the call below the rest turns **two** of
+    these red, which is more than I expected when writing the comment that
+    called the ordering defensive: `lay` plus `strike` turns `hp None,
+    surges None` into `hp 56, surges 12`, so no resource is lost but the
+    record stops saying "rested".
+
+    The fight fields stay refused, which is the control on the schema
+    half: a rest scene carrying a foe list still plays as a rest and
+    silently drops the fight, and that is what the whole `unused` check
+    is for. #937.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+
+    NPC = {"id": "host", "name": "the host", "wants": "quiet",
+           "knows": ["the road north is washed out"]}
+    LORE = {"fact": "the mill burned in spring", "skill": "history",
+            "band": "easy"}
+
+    def camp(*, talk: bool) -> dict:
+        scene: dict = {"id": "r", "kind": "rest", "name": "Camp",
+                       "extended": True, "sets": "You make camp.",
+                       "exits": []}
+        if talk:
+            scene |= {"npcs": [NPC], "details": ["An owl calls twice."],
+                      "lore": [LORE]}
+        return scene
+
+    def played(*, talk: bool) -> tuple[
+            save_mod.Campaign | None, run_mod.Step | None, list[str]]:
+        # **A refusal is caught rather than allowed to crash the probe.**
+        # A plant that puts `npcs` back on the refused list raises out of
+        # `parse`, and a driver that dies says only that something
+        # changed -- not which rule broke. This repo has paid for that
+        # three times (#965's orphan assertion, #962's eleven crashing
+        # plants), so the refusal becomes a readable verdict below.
+        try:
+            built = mod.parse(
+                {"id": "probe", "party_level": 5, "party_size": 4,
+                 "start": "r", "scenes": [camp(talk=talk)]},
+                Path("<driver>"))
+        except mod.ModuleError as err:
+            return None, None, [f"REFUSED: {err}"]
+        campaign = run_mod.begin(built, seed=3)
+        made = run_mod.step(campaign, built, record=False)
+        kinds = [getattr(x, "kind", "") for x in made.lines]
+        return campaign, made, kinds
+
+    # -- the schema half first, both directions ----------------------------
+    #
+    # First because the runner half below cannot run at all if `parse`
+    # refuses the scene, so a schema plant would crash the probe instead
+    # of naming a rule.
+    def refused(extra: dict) -> str:
+        scene = camp(talk=False) | extra
+        try:
+            mod.parse({"id": "probe", "party_level": 5, "party_size": 4,
+                       "start": "r", "scenes": [scene]}, Path("<driver>"))
+        except mod.ModuleError as err:
+            return str(err)
+        return ""
+
+    out.that(
+        not refused({"npcs": [NPC]}) and not refused({"lore": [LORE]})
+        and not refused({"details": ["An owl calls twice."]}),
+        "`module.parse` accepts a conversation on a rest scene, which it "
+        "refused outright before -- the schema and the runner had to move "
+        "together or an author could write only one of the two",
+        f"npcs={refused({'npcs': [NPC]})!r}",
+    )
+    foes = refused({"foes": [{"count": 1, "role": "soldier",
+                              "rank": "standard"}]})
+    out.that(
+        "must not carry 'foes'" in foes
+        and "must not carry 'complexity'" in refused({"complexity": 2}),
+        "**and the fight fields stay refused**, which is the control: a "
+        "rest scene carrying a foe list plays as a rest and silently "
+        "drops the fight, and that reads exactly like a scene that works. "
+        "Opening the kind up wholesale would have taken that with it",
+        f"{foes!r}",
+    )
+
+    quiet, quiet_made, quiet_kinds = played(talk=False)
+    loud, loud_made, loud_kinds = played(talk=True)
+
+    # -- the control, first: a rest scene nobody wrote a line for ----------
+    out.that(
+        "dm" not in quiet_kinds and "recall" not in quiet_kinds
+        and quiet_made is not None
+        and any("Extended rest" in str(x) for x in quiet_made.lines),
+        "**a rest scene with nothing written to play is untouched** -- its "
+        "text, the rest, and on. `_roleplay` returns at once unless the "
+        "author wrote an npc, an affordance or a lore row, so every "
+        "converted module prints what it printed before",
+        f"{quiet_kinds}",
+    )
+    out.that(
+        loud_kinds.count("dm") > 0 and "recall" in loud_kinds,
+        "and a rest scene carrying a conversation **runs the beat loop** "
+        "-- the DM answers and the party's own lore rolls, which is the "
+        "half of #937 that kept it open: there was nowhere to put *\"you "
+        "make camp and the rain finally stops\"*",
+        f"{loud_kinds}",
+    )
+
+    # -- the one that matters: the rest is still a rest ---------------------
+    def holdings(
+        campaign: save_mod.Campaign | None,
+    ) -> list[tuple[object, ...]]:
+        if campaign is None:          # the scene was refused; said above
+            return [("refused",)]
+        return [(s.cls, s.hp, s.surges, s.action_points,
+                 tuple(sorted(s.spent or ())))
+                for s in campaign.party.sheets]
+
+    out.that(
+        holdings(loud) == holdings(quiet),
+        "**and the conversation costs the party nothing** -- a rest with "
+        "beats in it restores exactly what a rest without them does. "
+        "`_roleplay` lays a board and `Table.strike` harvests its counts "
+        "back over every sheet, so this is the assertion the component's "
+        "own failure mode is about: quietly weaker, with every line of "
+        "output reading correct",
+        f"talk={holdings(loud)} quiet={holdings(quiet)}",
+    )
+    talked = [i for i, k in enumerate(loud_kinds) if k in ("dm", "recall")]
+    rested = [i for i, x in enumerate(loud_made.lines)
+              if "Extended rest" in str(x)] if loud_made else []
+    out.that(
+        bool(talked) and bool(rested) and max(talked) < min(rested),
+        "and the camp lines come **before** the rest's own note, which is "
+        "the ordering: you talk at camp, then you sleep. Resting last "
+        "makes the rest the last word on resources, and the cost is that "
+        "a dying character does not speak -- #808's rule, with the rest "
+        "then standing them up",
+        f"talked at {talked}, rested at {rested}",
     )
 
 
@@ -54913,6 +55092,11 @@ DRIVERS = {
     "affliction": (
         a_disease_moves_at_an_extended_rest,
         "a carried disease moves at an extended rest (#948)",
+    ),
+    "camp_talk": (
+        a_rest_scene_can_carry_a_conversation,
+        "a rest scene can carry a conversation, and the rest is still a "
+        "rest (#937)",
     ),
     "rest_lockout": (
         an_extended_rest_is_once_per_day_and_a_refusal_is_printed,

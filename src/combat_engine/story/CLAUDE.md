@@ -933,8 +933,16 @@ through the same `playing.spent` mechanism `Affordance.once` uses. **A
 spent detail leaves the prompt** — the offer stops being re-made because
 it is not there to read.
 
-`details` is roleplay-only, because nothing else runs the beats that would
-spend them, and a pool written and never read is worse than no pool.
+`details` belongs to the kinds that **run beats**, because a pool written
+and never read is worse than no pool. That was roleplay alone when this was
+written and is roleplay **and rest** since #937 — a rest scene runs the beat
+loop now, so *"an owl calls twice"* has a beat to arrive on. A combat or
+challenge scene still refuses one.
+
+The driver had to be **inverted rather than loosened**: `scene_once` carried
+*"and a rest scene likewise, which is the same reason"*, and the reason
+stopped being true. It asserts the acceptance now, with the
+pool-is-never-read rule left standing where it still applies.
 
 ### What this asserts, and what it does not
 
@@ -1426,6 +1434,47 @@ can check, and extracting it is what made the distinction assertable. The
 plant that followed — dropping a ref without its flavour — only became
 possible to write afterwards.
 
+## A rest scene can carry a conversation, and the rest is still a rest
+
+Camille, on #937: *"A rest scene is one canned line, and a journey has no
+representation at all."* The journey half is `journey.py`; this is the
+other, and it was the half that kept the issue open.
+
+`run.step`'s rest branch printed the scene's text, restored resources and
+moved on. The beat loop ran for a `roleplay` scene and nothing else, and
+`module.parse` enforced that from the other side -- `npcs`, `affordances`,
+`lore` and `details` were all refused on a rest scene. So there was nowhere
+to put *"you make camp and the rain finally stops"*.
+
+Both halves moved together, because either alone is useless: an author
+could write the field and have it ignored, or run beats on a scene the
+schema will not let carry anybody.
+
+Three things to know before touching it.
+
+* **The beats run BEFORE the rest, and the ordering is load-bearing.**
+  `_roleplay` lays a board through `table.lay`, and `Table.strike`
+  harvests the board's counts back over every sheet -- so beats after the
+  restoration write a board's resource state on top of it. Measured on a
+  rested party, `lay` plus `strike` turns `hp None, surges None` into
+  `hp 56, surges 12`: no resource is lost, but the record stops saying
+  "rested". A plant that moves the call below the rest turns **two**
+  assertions red, including the resource one, which is more than the first
+  draft of the comment expected. Resting last makes the rest the last word,
+  and it is the order a reader assumes: you talk at camp, then you sleep.
+* **A dying character does not speak at camp.** That is #808's rule rather
+  than a new one, and the rest then stands them up -- the right sequence
+  rather than a character silenced after having been healed.
+* **The fight fields stay refused.** A rest scene carrying a foe list still
+  plays as a rest and silently drops the fight, which is the whole reason
+  the `unused` check exists. Opening the kind up wholesale would have taken
+  that with it, and the control asserts it.
+
+A rest scene with nothing written is **untouched** -- `_roleplay` returns
+at once unless the author wrote an npc, an affordance or a lore row -- so
+every converted module prints exactly what it printed before. That is the
+first assertion rather than an afterthought.
+
 ## An extended rest is once per day, and the refusal is printed
 
 Nothing bounded it: a campaign of three consecutive extended-rest scenes
@@ -1775,11 +1824,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     dead_and_dying \
     graph_edges challenge_says fight_aftermath reinforcements \
     scene_allies trap_budget room_shape templates skill_cap \
-    treasure
+    treasure camp_talk
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 51 drivers and prints 670 assertions**, and **each was
+**The command above is 52 drivers and prints 676 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
