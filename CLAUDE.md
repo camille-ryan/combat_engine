@@ -37,7 +37,7 @@ The rest of the policy:
 * **Triage before working.** Prefer the issue that unblocks others.
 * **A rules table quoted in an issue is evidence a table exists, not
   evidence of its contents.** Read the page in `resources/` before writing
-  one into code — the PDF extracts with `pypdf`. Four issues, measured:
+  one into code — the PDF extracts with `pypdf`. Five issues, measured:
 
   | | what the quote got wrong |
   |---|---|
@@ -45,6 +45,7 @@ The rest of the policy:
   | `#988` | one ten-row table was really **three** printed tables, each with a **Level** column that was dropped; one row renamed, one omitted, three absent from the book |
   | `#1010` | **exact.** All 20 cells of a ten-band, two-column table, and the sentence under it, verbatim |
   | `#972` | **exact.** The whole level-adjust rule, verbatim, and it had already shipped |
+  | `#1021` | **the table does not exist.** It said the parcel table "is keyed to five characters and gives a rule for every other size from one to eight". The page gives **one sentence** — *"add a parcel for each additional character… remove parcels accordingly"* — and no size-keyed table; a search of all 221 pages for an `N characters` phrase found 21 hits and none of them one. The parcel *lists* are per **level**, ten entries each |
 
   **This table used to say "three of the four quotes were not what they
   said", and counted `#1010` and `#972` among the three on the ground that
