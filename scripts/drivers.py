@@ -52340,6 +52340,137 @@ def the_importer_brief_and_the_parser_agree(out: Result) -> None:
                      f" parser accepts anyway",
                      f"{allowed}")
 
+#: Action kinds `engine/actions.py` can construct that `policy.features`
+#: names no `is_<kind>` term for. `#1063`.
+#:
+#: **Owed, not waived.** Each of these is an action the AI scores entirely
+#: on terms that are about something else, which is the fault seven earlier
+#: kinds were each fixed for *after* somebody noticed the AI behaving
+#: oddly. The list may **shrink and never grow**: naming a kind means
+#: deleting its entry, and a kind arriving unnamed is red the day it lands.
+#:
+#: Which direction the fault points has changed and is worth knowing before
+#: pricing any of them. The comment in `policy/__init__.py` says an unnamed
+#: kind "scores zero -- which beats ending a turn at -2", and `is_end` is
+#: **0.001** now, so an unnamed kind scores *below* ending the turn rather
+#: than above it. The failure is no longer "becomes the idle default"; it is
+#: "is never chosen", on the same 0.001 knife-edge `#1016` was about.
+#:
+#: Every one of these is a printed action, so none of them should be
+#: unreachable. Pricing them is balance work and wants a decision per kind.
+UNNAMED_KINDS_OWED = frozenset(
+    {
+        "bull_rush",
+        "crawl",
+        "dismount",
+        "feint",
+        "grab",
+        "mount",
+        "move_zone",
+        "open_lock",
+        "pull_grabbed",
+        "ready",
+    }
+)
+
+
+def every_action_kind_is_named(out: Result) -> None:
+    """Every kind the engine can offer has a term that is about it.
+
+    `#1063`. `actions.legal` produces an `Action` with a `kind`, and
+    `policy.features` turns that into an `is_<kind>` term. A kind with no
+    term is scored entirely by the generic terms that happen to apply --
+    `i_am_bloodied`, `nearest_enemy`, `my_surges` -- none of which is about
+    the action. **Seven kinds have been fixed for exactly this after the
+    fact**, each with a comment in the source saying it should have been
+    named on the day it was added, and nothing checked.
+
+    What it cost, read off those comments: a weapon swap became the idle
+    default twelve times a fight; a crossbow user fired once and abandoned
+    ranged attacks for the rest of the fight; the right action-point grant
+    was bought on 48 of 48 occasions **by luck**, because ties break on
+    `str(action)` and `"standard"` sorts last.
+
+    **The vocabulary is derived, not listed.** `Action.kind` is a bare `str`
+    whose closed vocabulary lives in a comment, so there is nothing to
+    iterate -- and a hand-kept list here would be the same staleness one
+    layer along. Every kind the engine can offer has to be *constructed*
+    somewhere in `engine/actions.py`, so the constructions are the
+    vocabulary: 33 of them, read off the AST. That needs no `engine/`
+    change, which is what keeps this narrow rather than costing a wide
+    sweep for a constant.
+
+    **It found ten, not one.** `#1063` was filed about the search action
+    being the seventh; building the gate found the claim in
+    `policy/__init__.py` that "every kind `actions.legal` can produce is
+    named here now" to be false by **ten**. They are owed in
+    `UNNAMED_KINDS_OWED` rather than waived, because every one is a printed
+    action and none of them should be unreachable.
+    """
+    import ast
+    from pathlib import Path
+
+    from combat_engine import story
+    from combat_engine.engine import Encounter
+    from combat_engine.engine.actions import Action
+    from combat_engine.engine.types import ActionType
+    from combat_engine.policy import features
+
+    src = Path("src/combat_engine/engine/actions.py")
+    out.that(src.exists(),
+             "the module that constructs every offered action is where this"
+             " rule expects it, so the vocabulary below is derived from the"
+             " code rather than from a list that can go stale",
+             f"{src}")
+    if not src.exists():
+        return
+
+    kinds: set[str] = set()
+    for node in ast.walk(ast.parse(src.read_text())):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Action":
+            for kw in node.keywords:
+                if kw.arg == "kind" and isinstance(kw.value, ast.Constant):
+                    kinds.add(str(kw.value.value))
+    out.that(len(kinds) >= 30,
+             "and a real vocabulary came out of it -- a parse that silently"
+             " found nothing would make every assertion below vacuous",
+             f"{len(kinds)} kinds constructed")
+
+    fielded = story.field_encounter(
+        3, 5, party=story.Party.of(story.PARTY, 5, seed=3))
+    world = fielded.world
+    enc = Encounter(world)
+    enc.start()
+    actor = world.turn
+    if actor is None:
+        out.that(False, "somebody is up, so `features` can be asked at all")
+        return
+
+    unnamed = set()
+    for kind in sorted(kinds):
+        f = features(world, enc, actor,
+                     Action(kind=kind, cost=ActionType.STANDARD))
+        if f"is_{kind}" not in f:
+            unnamed.add(kind)
+
+    fresh = unnamed - UNNAMED_KINDS_OWED
+    out.that(not fresh,
+             "no action kind the engine can offer is scored with no term"
+             " about it, beyond the ones already owed -- an unnamed kind is"
+             " decided by `i_am_bloodied` and `nearest_enemy` instead",
+             f"newly unnamed: {sorted(fresh)}")
+
+    #: **The other direction, which is the half a plain baseline misses.**
+    #: A named kind still listed as owed means the list has gone stale, and
+    #: a stale baseline cannot tell "fixed" from "this check went blind".
+    fixed = UNNAMED_KINDS_OWED - unnamed
+    out.that(not fixed,
+             "and every kind still listed as owed is still genuinely"
+             " unnamed -- naming one means deleting its entry, so the list"
+             " shrinks and never goes stale in the quiet direction",
+             f"named but still listed: {sorted(fixed)}")
+
+
 def a_tie_goes_to_ending_the_turn(out: Result) -> None:
     """An option worth exactly as much as ending the turn must not win.
 
@@ -54024,6 +54155,11 @@ DRIVERS = {
     "brief_agrees": (
         the_importer_brief_and_the_parser_agree,
         "the importer brief names no value the parser refuses (#1026)",
+    ),
+    "kinds_named": (
+        every_action_kind_is_named,
+        "every action kind the engine can offer has a term about it"
+        " (#1063)",
     ),
     "tie_ends_turn": (
         a_tie_goes_to_ending_the_turn,
