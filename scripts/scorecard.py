@@ -73,7 +73,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import fight
-from combat_engine.engine import Ident
+from combat_engine.engine import Encounter, Ident, World
 from combat_engine.engine.components import (
     Budget,
     Build,
@@ -390,7 +390,10 @@ def turn_watch(world, pol: Counted, actor: int) -> None:  # noqa: ANN001
     pol.n[f"{side}/melee_turns"] += 1
 
 
-def play(level: int, seed: int, pol: Counted, cap: int = 30) -> tuple[int, bool]:
+def play(
+    level: int, seed: int, pol: Counted, cap: int = 30,
+    *, built: tuple[World, Encounter] | None = None,
+) -> tuple[int, bool]:
     """Play one seeded fight. `(rounds, finished)`.
 
     **`finished` exists because a stall used to read as a long fight.** The
@@ -413,7 +416,13 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> tuple[int, bool]
     than dropping them -- a silently excluded fight would be the same bug
     pointed the other way. #473.
     """
-    world, encounter = fight.build(seed, level, "full")
+    # **`built` is how `day()` reuses this whole body for fight two of
+    # four.** With it `None` -- every caller before `#305` -- this is the
+    # original `fight.build` line and nothing about a single fight moves,
+    # which is deliberate: the committed baseline is a single-fight
+    # measurement and a day mode must not silently re-price it.
+    world, encounter = built if built is not None else fight.build(
+        seed, level, "full")
     T.clear()
     D.forget()
     # Per-fight, unlike every tally on `pol`: entity ids and round numbers both
@@ -545,7 +554,73 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> tuple[int, bool]
     return world.round, encounter.finished
 
 
-def measure(levels: tuple[int, ...]) -> dict:
+def day(
+    level: int, seed: int, pol: Counted, cap: int = 30, fights: int = 1,
+) -> tuple[list[int], int]:
+    """Play `fights` encounters with **one party carried between them**.
+
+    `([rounds per fight], how many stalled)`.
+
+    **This is `#305`'s own remaining half.** Every figure this instrument
+    has ever printed is "fight one of a notional four": `play` builds a
+    fresh party per seed, nothing sets `world.fights_left`, and
+    `doctrine.reserved` therefore prices every daily against the `DAY`
+    default. Its docstring says so -- *"the day factor only bites when
+    something sets `fights_left`, which today is `fight.py --fights`
+    alone"* -- and nothing measured that. So the across-day behaviour the
+    reservation was built for has shipped unverified.
+
+    The two things only a day loop knows, both copied from
+    `fight.py`'s loop rather than re-derived:
+
+    * **`world.fights_left`**, counting this fight -- a daily spent in the
+      first of four has three fights to regret it in and one spent in the
+      last has none;
+    * **`world.milestones`**, every two completed encounters, set *before*
+      `encounter.start()` so a trait reading it at arming gets the right
+      number. `api/day.py` does the same and for the same reason.
+
+    `story.harvest` carries the sheets out of each `World` and
+    `Party.rest()` takes the short rest between, which is why this is
+    plumbing rather than new mechanics.
+
+    **`fights=1` does not come through here at all.** `measure` calls
+    `play` directly in that case, so the committed baseline -- a
+    single-fight measurement -- is produced by byte-identical code. A day
+    mode that silently re-priced the default would make every `(was ...)`
+    figure incomparable, which is the opposite of the point.
+    """
+    # Function-local: `story` is only reached by the day path, and a
+    # module-level import would pull the story engine into every
+    # single-fight run that does not use it.
+    from combat_engine import story
+
+    party = story.Party.of(story.PARTY, level, seed=seed)
+    rounds: list[int] = []
+    stalls = 0
+    for n in range(1, fights + 1):
+        fielded = story.field_encounter(seed + n, level, scaling="full",
+                                        party=party)
+        if not fielded.enemies:
+            break
+        world = fielded.world
+        world.paradigm = fielded.paradigm
+        encounter = Encounter(world)
+        world.fights_left = fights - n + 1
+        world.milestones = (n - 1) // 2
+        # `play` installs `pol` itself and clears `T`/`D` per fight, which
+        # is the per-fight state `fight.py` gets by building a fresh
+        # policy -- so there is nothing extra to reset here.
+        went, done = play(level, seed, pol, cap, built=(world, encounter))
+        rounds.append(went)
+        stalls += 0 if done else 1
+        story.harvest(world, party)
+        if n < fights:
+            party.rest()
+    return rounds, stalls
+
+
+def measure(levels: tuple[int, ...], fights: int = 1) -> dict:
     out: dict = {}
     for level in levels:
         pol = Counted()
@@ -553,10 +628,28 @@ def measure(levels: tuple[int, ...]) -> dict:
         stalled: list[int] = []
         for seed in SEEDS:
             # Counting attacks needs a hook; the policy records them itself below.
-            went, done = play(level, seed, pol)
-            if done:
-                rounds.append(went)
-            else:
+            #
+            # **`fights == 1` takes the original call**, not `day(...,
+            # fights=1)`, so the committed baseline keeps being produced by
+            # the code that produced it. `day` builds its party through
+            # `story.Party.of` and seeds encounters at `seed + n`, which is
+            # not the same draw as `fight.build(seed, ...)` -- routing the
+            # default through it would move every figure in the file for no
+            # reason anybody asked for. #305.
+            if fights == 1:
+                went, done = play(level, seed, pol)
+                if done:
+                    rounds.append(went)
+                else:
+                    stalled.append(seed)
+                continue
+            went_each, stalls = day(level, seed, pol, fights=fights)
+            rounds.extend(went_each)
+            # One seed is one **day**, so a day with any unresolved fight in
+            # it is named once. Counting each stalled fight separately would
+            # make `stalled` incomparable with the seed list it is printed
+            # as.
+            if stalls:
                 stalled.append(seed)
         # **The median is over the fights that finished, and the ones that
         # did not are named.** A fight nobody won is not a long fight, and
@@ -575,6 +668,7 @@ def measure(levels: tuple[int, ...]) -> dict:
             rounds = [0]
         cell: dict = {
             "fights": len(SEEDS),
+            "fights_per_day": fights,
             "fights_resolved": len(SEEDS) - len(stalled),
             "fights_stalled": len(stalled),
             "stalled_seeds": stalled,
@@ -676,7 +770,14 @@ def show(now: dict, was: dict | None) -> None:
     for level in sorted(now, key=int):
         cell = now[level]
         old = (was or {}).get(level, {})
-        print(f"\n=== level {level}, {cell['fights']} fights, "
+        # **"days" when a day was played, because the number means a
+        # different thing.** With `--fights 4` each seed is one day of four
+        # encounters, so 24 is days and 96 is fights, and labelling the
+        # former "fights" is the kind of unit slip this file has a standing
+        # note about. #305.
+        per = cell.get("fights_per_day", 1)
+        unit = "fights" if per == 1 else f"days of {per} fights"
+        print(f"\n=== level {level}, {cell['fights']} {unit}, "
               f"median {cell['rounds_median']} rounds"
               + (f" (was {old.get('rounds_median')})" if old else "")
               + f", mean {cell.get('rounds_mean', 0)}"
@@ -719,11 +820,26 @@ def main() -> int:
                     help="repeatable; defaults to 5 and 10")
     ap.add_argument("--save", action="store_true",
                     help="write the measurement as the new committed baseline")
+    ap.add_argument("--fights", type=int, default=1,
+                    help="fights per day, carrying one party between them. "
+                         "1 (the default) is the single-fight measurement the "
+                         "committed baseline holds; 4 is a day, which is what "
+                         "exercises the daily reservation at all (#305)")
     args = ap.parse_args()
     levels = tuple(args.level) if args.level else LEVELS
     was = json.loads(BASELINE.read_text()) if BASELINE.exists() else None
     stale = staleness(was)
-    now = measure(levels)
+    now = measure(levels, fights=args.fights)
+    if args.fights != 1:
+        # **Refuse the comparison rather than print a misleading one.** The
+        # baseline is a single-fight measurement; a four-fight day spends
+        # more of everything by construction, so every `(was ...)` figure
+        # would read as a regression. Dropping `was` makes the run report
+        # only what it measured.
+        print(f"  --fights {args.fights}: a DAY, not a fight. The baseline is "
+              f"single-fight, so it is not comparable and is not shown.\n"
+              f"  Attrition lines below are per day, over {len(SEEDS)} days.")
+        was = None
     if stale:
         print(stale)
     show(now, was)
