@@ -489,6 +489,13 @@ def _draw_for(
     # the pool was already chosen near the party's level.
     if levels:
         flavour = replace(flavour, levels=levels)
+    # **Carried whichever tier found the creature**, like `levels` above and
+    # for the same reason: a card the module asked for is the one mechanical
+    # thing it *stated*, so a by-name creature keeps its cosmetic reflavour
+    # and still gains it. `themed` never sets this -- it builds the shape
+    # tier from words, and a card is not a word. #985.
+    if spec.powers:
+        flavour = replace(flavour, powers=spec.powers)
     return pool, flavour
 
 

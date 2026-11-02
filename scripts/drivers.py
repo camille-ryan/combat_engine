@@ -52530,6 +52530,95 @@ def a_theme_can_grant_a_power(out: Result) -> None:
              " repeats itself does not hand the creature two copies",
              f"laid {twice_laid}, count {twice_after.count(spare)}")
 
+    # -- through the MODULE, which is the only caller that matters --------
+    #
+    # **Everything above constructs a `Reflavour` by hand.** That proves
+    # `apply` and says nothing about whether a module can ask for it --
+    # which is the whole point of the field, and exactly the "assert
+    # through the caller, not the helper" shape this repo has a standing
+    # note about. `FoeSpec.powers` is the first field on that spec to
+    # state a *reflavour*: `levels` is computed by `cast_list` from the
+    # level gap rather than asked for, so there was no precedent to copy.
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+
+    def parsed(powers: object) -> tuple[object, list[str]]:
+        problems: list[str] = []
+        raw = {
+            "id": "probe", "party_level": 2, "party_size": 4,
+            "start": "pit",
+            "scenes": [{
+                "id": "pit", "kind": "combat", "name": "Pit", "exits": [],
+                "difficulty": "easy",
+                "foes": [{"count": 1, "role": "soldier", "rank": "standard",
+                          "powers": powers}],
+            }],
+        }
+        try:
+            built = mod.parse(raw, Path("<driver>"))
+        except Exception as e:  # a refusal is the answer, not a crash
+            return None, [str(e)]
+        return built, problems
+
+    built, _why = parsed([spare])
+    said = []
+    if built is not None:
+        for scene in getattr(built, "scenes", {}).values() \
+                if isinstance(getattr(built, "scenes", None), dict) \
+                else getattr(built, "scenes", ()):
+            for line in getattr(scene, "foes", ()) or ():
+                said += list(getattr(line, "powers", ()) or ())
+    out.that(said == [spare],
+             "a module stating a card by ref parses, and the ref reaches the"
+             " foe line -- so the field is reachable from a scene file and"
+             " not only from code",
+             f"{said}")
+
+    #: A word rather than a ref is refused **at parse**, which is where a
+    #: module author finds out. `reflavour.apply` drops an unresolvable ref
+    #: in silence -- right there, wrong as the only guard, because the
+    #: creature would field looking themed and holding nothing.
+    bad, why = parsed(["a wolf"])
+    refused = bad is None or any("ref" in str(w) for w in (why or [])) or (
+        bad is not None and not any(
+            getattr(line, "powers", ())
+            for scene in (getattr(bad, "scenes", {}).values()
+                          if isinstance(getattr(bad, "scenes", None), dict)
+                          else getattr(bad, "scenes", ()))
+            for line in (getattr(scene, "foes", ()) or ())))
+    out.that(refused,
+             "while a printed word instead of a ref is refused at parse --"
+             " a card is the one field here with no name fallback",
+             f"parse said: {str(why)[:90]}")
+
+    # -- the hop in the MIDDLE, which a plant proved was uncovered --------
+    #
+    # **This assertion exists because the rule was wrong without it.**
+    # Everything above checks the two *ends* of the chain -- the module
+    # parses a ref onto the foe line, and `apply` grants a `Reflavour`'s
+    # powers to a creature. Nothing checked the hop between them, where
+    # `cast_list` copies `spec.powers` onto the flavour it builds. Planted:
+    # deleting that copy left this rule **fully green**, which is the
+    # control-cannot-tell-two-implementations-apart shape with the chain's
+    # own middle as the blind spot.
+    #
+    # `Dressed.flavours` runs parallel to `refs`, so the flavour for the
+    # line is the one to read.
+    from combat_engine.story import cast_list as cl
+
+    scene = next(iter(
+        built.scenes.values() if isinstance(getattr(built, "scenes", None), dict)
+        else built.scenes))
+    dressed_out = cl.resolve(scene, party_level=2, party_size=4)
+    carried = [list(getattr(f, "powers", ()) or ())
+               for f in getattr(dressed_out, "flavours", [])]
+    out.that(any(spare in one for one in carried),
+             "and the ref the module stated reaches the reflavour that will"
+             " be applied -- the hop `cast_list` makes, which the two ends"
+             " of this chain both pass without",
+             f"flavours carried {carried}")
+
 
 def the_array_shores_up_the_weakest_defence(out: Result) -> None:
     """The six numbers, and where the second 14 goes. `#992`.

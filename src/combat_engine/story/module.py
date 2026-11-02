@@ -49,6 +49,7 @@ would field a fight with no terrain and look exactly like one that worked.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
@@ -200,6 +201,14 @@ class ModuleError(Exception):
         super().__init__(f"{path}: {len(problems)} problem(s)\n{lines}")
 
 
+#: What a ref looks like: a letter-prefixed id, optionally with a card
+#: suffix -- `m1234`, `m1234a5`, `p704`, `cf:cleric-warpriest-f11s3`.
+#: Deliberately loose about the *body*: this only has to tell a ref from a
+#: printed word, and `reflavour.apply` is what refuses one that resolves to
+#: nothing. #985.
+_REF_SHAPED = re.compile(r"^(?:[a-z]{1,3}:)?[a-z]\d[\w:-]*$|^[a-z]{2,3}:[\w-]+$")
+
+
 @dataclass(frozen=True)
 class FoeSpec:
     """One line of a scene's opposition: *four of something, roughly like this*.
@@ -236,6 +245,19 @@ class FoeSpec:
     #: its earliest waves count toward the reward -- which is also what
     #: keeps a ten-round fight from being worth an arbitrary amount.
     worth: bool = True
+    #: Cards this line also has, by **ref**. #985.
+    #:
+    #: DMG2's theme step 4 adds powers to a stat block, and this is the
+    #: only way a module can ask for it. **Refs, never names** -- the rest
+    #: of this dataclass takes the module's own words because a module from
+    #: another edition carries words, but a card has no fallback: a word
+    #: here would be a printed name in a field the engine reads, and there
+    #: is nothing to match it against.
+    #:
+    #: The first field on this spec that states a *reflavour*. `levels` is
+    #: computed by `cast_list` from the level gap rather than asked for, so
+    #: there was no precedent and this is it.
+    powers: tuple[str, ...] = ()
 
     @property
     def arrives(self) -> bool:
@@ -1198,11 +1220,32 @@ def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
         problems.append(
             f"{where}: until {until} is before at {at}, so this wave never "
             "arrives")
+    # **Refs, and refused if they are not ref-shaped.** A card is the one
+    # field here with no name fallback, so a module writing a word gets
+    # told rather than silently fielding a creature with nothing added --
+    # `reflavour.apply` would drop an unresolvable ref in silence, which is
+    # the right behaviour there and the wrong place to find out.
+    powers: tuple[str, ...] = ()
+    said = raw.get("powers", ())
+    if said:
+        if isinstance(said, str) or not isinstance(said, (list, tuple)):
+            problems.append(
+                f"{where}: `powers` is a list of refs, not {type(said).__name__}")
+        else:
+            for one in said:
+                ref = str(one).strip()
+                if not _REF_SHAPED.match(ref):
+                    problems.append(
+                        f"{where}: `powers` takes a ref like `m1234a5`,"
+                        f" not {ref!r} -- a card has no name fallback")
+                    continue
+                powers += (ref,)
     return FoeSpec(
         count=count, name=str(raw.get("name", "")).strip(),
         words=words, role=role, rank=rank,
         at=at, every=every, until=until,
         worth=bool(raw.get("worth", True)),
+        powers=powers,
     )
 
 
