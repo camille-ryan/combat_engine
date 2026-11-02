@@ -58,6 +58,7 @@ from . import (
     bands_of,
     field_encounter,
     harvest,
+    journey,
     line_up,
     loot,
     tension,
@@ -1649,6 +1650,50 @@ def stake(scene: Scene, made: Step) -> None:
             )
 
 
+def travel(campaign: Campaign, module: Module, scene: Scene,
+           made: Step) -> None:
+    """How far the party got, for a scene that says it travelled. #937.
+
+    A journey had no representation at all -- Camille, playing: *"no
+    prose for the journey"*. This is the arithmetic half: the party's
+    pace, the hours, the going, and the distance those come to.
+
+    **The pace is read off a laid board, not off the sheets.** A
+    character's speed is their race's minus their armour, and `Sheet`
+    carries no armour -- so re-deriving it here would silently drop the
+    term the page itself names as the reason groups are slow.
+    `journey.pace` takes the board for that reason.
+
+    **The board is laid and never struck**, which is the difference
+    between this and `weather`. `Table.strike` harvests board state back
+    onto every sheet, and this reads a speed and changes nothing, so
+    harvesting could only write back something no scene did -- the fault
+    that once left four characters walking out of a conversation having
+    spent ten powers between them.
+
+    Says nothing for a scene that declares no `going`, which is every
+    scene in every module today.
+    """
+    if not scene.going:
+        return
+    hours = scene.hours or journey.DAY_HOURS
+    board = table_mod.lay(
+        campaign.party, seed=seed_for(campaign, scene, "travel"))
+    speed = journey.pace(board)
+    if not speed:
+        # Nobody standing, so no pace could be worked out. Said rather
+        # than defaulted: a distance off a guessed pace is a number
+        # nobody can check.
+        made.say("Travel: nobody could be laid out, so no pace", "note")
+        return
+    far = journey.miles(speed, hours, scene.going)
+    made.say(
+        f"Travel: {hours}h at the slowest pace of {speed} over "
+        f"{scene.going} going -- {far:g} miles",
+        "note",
+    )
+
+
 def weather(campaign: Campaign, module: Module, scene: Scene,
             made: Step) -> None:
     """Spend the party's surges on the hours they stood in the cold. #971.
@@ -1994,6 +2039,11 @@ def step(
     # of scene it is -- a conversation on a mountainside is as cold as a
     # fight on one -- so this sits outside the kind dispatch. #971.
     weather(campaign, module, scene, made)
+
+    # **Beside the weather and for the same reason.** A journey is
+    # time passing, so it happens whatever kind of scene declared
+    # it -- a module can walk the party somewhere and then talk. #937.
+    travel(campaign, module, scene, made)
 
     # **After the body, so a fight's grant is a reward rather than a loan.**
     # Unconditional on the outcome, which is the smallest honest version:

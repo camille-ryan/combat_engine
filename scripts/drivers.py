@@ -50098,6 +50098,177 @@ def a_revisited_scene_does_not_raise_the_creatures_it_lost(
     )
 
 
+def the_party_travels_as_far_as_its_slowest_member(out: Result) -> None:
+    """A day's travel, from the printed tables and the party's own pace. #937.
+
+    A journey had no representation: the graph went straight from one
+    scene to the next, and a `rest` scene printed one canned line.
+
+    **The tables were read in `resources/` rather than taken from the
+    issue's quote.** All 12 cells of the overland speed table and all
+    three terrain multipliers were exact -- and two claims around them
+    were wrong, which is this repo's recorded pattern for a quoted table:
+    the tables are in the Player's Handbook rather than the DMG, and
+    `Scene.terrain` cannot carry the multiplier because `TERRAIN_WORDS`
+    is the combat board's vocabulary.
+
+    The strongest assertion here is the armour one. See below.
+    """
+    from pathlib import Path
+
+    from combat_engine import chargen
+    from combat_engine.engine.components import Movement
+    from combat_engine.story import Party
+    from combat_engine.story import journey as j
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story import table as table_mod
+
+    # -- the printed table, both columns, all three rows ------------------
+    # A computed figure matching a printed one is stronger evidence than
+    # any shape assertion, which is `story_xp`'s rule and the reason this
+    # module computes rather than holding a lookup.
+    printed = ((5, 2.5, 25), (6, 3.0, 30), (7, 3.5, 35))
+    out.that(
+        all(j.miles_per_hour(s) == mph for s, mph, _ in printed),
+        "the per-hour column is reproduced for every printed speed",
+        ", ".join(f"{s}->{j.miles_per_hour(s)}" for s, _, _ in printed),
+    )
+    out.that(
+        all(j.miles(s) == day for s, _, day in printed),
+        "and so is the per-day column, at the printed ten hours",
+        ", ".join(f"{s}->{j.miles(s):g}" for s, _, _ in printed),
+    )
+    out.that(
+        j.DAY_HOURS == 10,
+        "ten hours is the party's day, which is the figure the day column "
+        "is computed from",
+    )
+
+    # -- the speeds the page has no row for, which the corpus can field ---
+    # Measured: of 55 races the speeds run 4 to 7, and armour takes another
+    # point off -- so a real board speed reaches 3 and the printed table
+    # starts at 5. A lookup would have had no answer for either.
+    out.that(
+        j.miles(4) == 20 and j.miles(3) == 15,
+        "a pace below the printed table still answers, because the law is "
+        "computed from the combat speed rather than looked up",
+        f"speed 3 -> {j.miles(3):g} miles, speed 4 -> {j.miles(4):g}",
+    )
+
+    # -- the three terrain multipliers ------------------------------------
+    out.that(
+        j.miles(5, going="mostly") == 12.5
+        and j.miles(5, going="extensive") == 18.75
+        and j.miles(5, going="little") == 25,
+        "each printed going multiplier cuts the day's distance by its own "
+        "share",
+    )
+    out.that(
+        j.miles(5, going="little") == j.miles(5),
+        "and a scene that says nothing about its landscape is not slowed, "
+        "which is the page's own x1 row rather than a default of ours",
+    )
+
+    # == THE ARMOUR TERM, which is why `pace` takes a board ===============
+    # The whole design rests on this: a character's speed is their race's
+    # MINUS their armour, `Sheet` carries no armour, so re-deriving the
+    # pace from `Sheet.race` drops a point in the generous direction. On
+    # the real dealt party the two answers genuinely differ, so this is a
+    # measurement rather than a restatement.
+    party = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+    races = chargen._races_from_the_book()
+    by_race = [races[s.race].speed for s in party.sheets if s.race in races]
+    board = table_mod.lay(party, seed=3)
+    got = j.pace(board)
+    out.that(
+        by_race and got < min(by_race),
+        "the party's pace is SLOWER than its slowest race, because armour "
+        "costs a point and the page names that as why groups are slow -- "
+        "so reading the pace off the sheets would overstate it",
+        f"slowest race {min(by_race) if by_race else '?'}, pace {got}",
+    )
+    out.that(
+        j.miles(got) != j.miles(min(by_race)) if by_race else False,
+        "and the difference reaches the distance, so this is not a "
+        "bookkeeping detail",
+        f"{j.miles(got):g} miles against {j.miles(min(by_race)):g} if the "
+        f"armour term were dropped",
+    )
+    speeds = [
+        mv.speed for mv in
+        (board.world.get(eid, Movement) for eid in board.eids)
+        if mv is not None
+    ]
+    out.that(
+        got == min(speeds),
+        "the pace is the MINIMUM of what is standing, not a mean -- *a "
+        "group moves at the slowest traveller's pace*",
+        f"{sorted(speeds)} -> {got}",
+    )
+    out.that(
+        j.pace(None) == 0,
+        "and a board with nobody on it reports no pace rather than "
+        "guessing one",
+    )
+
+    # -- through `run.step`, which is the wiring ---------------------------
+    def walk(**extra: object) -> list[str]:
+        built = mod.parse(
+            {"id": "p", "party_level": 2, "party_size": 4, "start": "s",
+             "scenes": [dict({"id": "s", "kind": "rest", "name": "S",
+                              "exits": [], "extended": True}, **extra)]},
+            Path("<driver>"))
+        campaign = run_mod.begin(built, seed=3)
+        said: list[str] = []
+        while not campaign.finished:
+            made = run_mod.step(campaign, built, record=False, god=True)
+            said += [str(x) for x in made.lines
+                     if getattr(x, "kind", "") == "note"]
+        return [n for n in said if n.startswith("Travel")]
+
+    out.that(
+        walk(going="little", hours=10) == [
+            "Travel: 10h at the slowest pace of 5 over little going "
+            "-- 25 miles"],
+        "a scene that says it travelled prints how far the party got, "
+        "through `run.step` and off a real dealt party",
+        f"{walk(going='little', hours=10)}",
+    )
+    out.that(
+        "12.5 miles" in (walk(going="mostly", hours=10) or [""])[0],
+        "and the going reaches the figure the campaign prints, rather "
+        "than only the pure function",
+    )
+    out.that(
+        not walk(),
+        "a scene declaring no going says nothing about travel, which is "
+        "every scene in every module today",
+    )
+    out.that(
+        "10h" in (walk(going="little") or [""])[0],
+        "a scene that states no hours gets the printed ten rather than a "
+        "zero-mile journey",
+        f"{walk(going='little')}",
+    )
+
+    # -- and an unknown landscape word is refused at load ------------------
+    try:
+        mod.parse(
+            {"id": "p", "party_level": 2, "party_size": 4, "start": "s",
+             "scenes": [{"id": "s", "kind": "rest", "name": "S",
+                         "exits": [], "going": "swampy"}]},
+            Path("<driver>"))
+        refused = ""
+    except Exception as why:
+        refused = str(why)
+    out.that(
+        "going 'swampy' is not one of" in refused,
+        "a landscape word the printed table does not have is refused at "
+        "load, naming the three it does",
+    )
+
+
 def a_disease_moves_at_an_extended_rest(out: Result) -> None:
     """A carried disease improves or worsens at an extended rest. #948.
 
@@ -53955,6 +54126,10 @@ DRIVERS = {
     "stays_cleared": (
         a_revisited_scene_does_not_raise_the_creatures_it_lost,
         "a revisited scene does not raise the creatures it lost (#970)",
+    ),
+    "journey": (
+        the_party_travels_as_far_as_its_slowest_member,
+        "a day's travel is the slowest pace over the stated going (#937)",
     ),
     "affliction": (
         a_disease_moves_at_an_extended_rest,

@@ -58,6 +58,7 @@ from typing import Any
 from combat_engine.dc import BANDS
 from combat_engine.engine.cast import TERRAIN_WORDS
 from combat_engine.engine.skills import SKILLS
+from combat_engine.story.journey import GOING
 
 from .objective import KINDS as OBJECTIVES
 from .objective import POSITIONS, Objective
@@ -873,6 +874,15 @@ class Scene:
     #: Overrides `difficulty` when the module prints a real XP figure.
     xp: int = 0
     terrain: tuple[str, ...] = ()
+    #: How much difficult terrain the party crosses getting here, from
+    #: `journey.GOING`. Sets the distance a day's travel covers.
+    #:
+    #: **Its own field and not a `terrain` word**, which was the issue's
+    #: suggestion: `TERRAIN_WORDS` is the combat board's vocabulary --
+    #: light levels, weather, footing -- and 2 of its 13 entries are
+    #: landscape at all. One symbol serving two needs is what the root
+    #: rules file forbids. #937.
+    going: str = ""
     foes: tuple[FoeSpec, ...] = ()
     tactics: str = ""
     #: How ready the opposition is -- see `READINESS`. `asleep` or
@@ -1609,6 +1619,13 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                 f"Known: {', '.join(sorted(TERRAIN_WORDS))}"
             )
 
+    going = str(raw.get("going", "")).strip().lower()
+    if going and going not in GOING:
+        problems.append(
+            f"{where}: going {going!r} is not one of "
+            f"{', '.join(sorted(GOING))}"
+        )
+
     difficulty = str(raw.get("difficulty", "standard")).strip().lower()
     if difficulty not in DIFFICULTY:
         problems.append(
@@ -1909,6 +1926,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         difficulty=difficulty,
         xp=int(raw.get("xp", 0) or 0),
         terrain=terrain,
+        going=going,
         foes=foes,
         allies=allies,
         room=room,
