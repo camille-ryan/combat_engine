@@ -65,6 +65,107 @@ from .table import Table
 #: the cast and the affordances are already in it.
 RECALL = 3
 
+#: Words carrying no position, so two people disagreeing about the same thing
+#: are not called restaters for sharing them. Deliberately short: the length
+#: filter in `position` already drops most of them, and a long list would be
+#: this file deciding what an argument is made of.
+_FILLER = frozenset((
+    "that", "this", "they", "them", "then", "than", "with", "what", "when",
+    "will", "would", "have", "want", "wont", "your", "youre", "their",
+    "there", "theyre", "about", "into", "from", "here", "were", "well",
+    "just", "only", "cant", "dont", "isnt", "arent", "been", "being",
+    "said", "says", "tell", "told", "like", "really", "think",
+))
+
+#: How much of an actor's own earlier wording has to come back before it reads
+#: as a restatement rather than a new argument.
+#:
+#: **Measured on hand-written pairs rather than on live play, and that is the
+#: honest limit of it.** Twelve pairs, all in `drivers.py vignette`:
+#:
+#: ```
+#: four restatements, same position reworded      0.333  0.500  0.667  0.714
+#: four new arguments, subject changed            0.000  0.000  0.000  0.000
+#: four new arguments ON THE SAME SUBJECT         0.077  0.083  0.111  0.200
+#: ```
+#:
+#: The third row is the one that set the number. An argument that changes the
+#: subject scores nothing and would separate at any threshold; one that
+#: stays on the subject and reuses its nouns reaches **0.20**, against a
+#: lowest restatement of **0.333**. So the gap is real and it is narrow --
+#: 0.13 wide -- and 0.30 sits inside it nearer the restatements, because a
+#: missed stall costs a nudge and a false one costs a scene ending early.
+#:
+#: What is **not** measured is how often a live model restates, because no
+#: companion intent is on disk anywhere: `logs/*.jsonl` carries the player's
+#: own typed lines and the DM's paragraphs and nothing any companion
+#: declared. So this measure is known to separate the distinction the page
+#: names, and its live firing rate is unknown. #976.
+RESTATE = 0.30
+
+#: Consecutive beats of **both** sides restating before the scene concludes.
+#:
+#: Two, because the page makes restating a nudge first and a stop second:
+#: *"If this stalemate happens, nudge the proceedings along by suggesting a
+#: new argument [...] If the players remain dug in, move to the next stage."*
+#: So one stalled beat buys a nudge and the second ends the scene -- at one
+#: the nudge could never be read, and the issue proposing this as the stop
+#: condition outright had the printed order the other way round.
+DUG_IN = 2
+
+
+def position(intent: Intent) -> frozenset[str]:
+    """The content words of what one actor said and did.
+
+    A set rather than a sequence, because a restatement is *"the same
+    position"* and not the same sentence -- the page's own example has a
+    player making one point three ways. `story/CLAUDE.md` already measured
+    verbatim repetition at essentially zero across the DM's replies, so a
+    phrase match would never fire.
+    """
+    words = re.findall(r"[a-z]+", f"{intent.speech} {intent.doing}".lower())
+    return frozenset(w for w in words if len(w) > 3 and w not in _FILLER)
+
+
+def restated(now: Intent, earlier: Iterable[Intent]) -> float:
+    """How much of this actor's own earlier wording is back, 0.0 to 1.0.
+
+    Jaccard against **each** earlier line separately and the largest taken,
+    not against the pooled history: pooling makes a long scene look
+    repetitive by itself, since the union keeps growing while one line stays
+    the same length.
+    """
+    mine = position(now)
+    if not mine:
+        return 0.0
+    best = 0.0
+    for was in earlier:
+        theirs = position(was)
+        if not theirs:
+            continue
+        best = max(best, len(mine & theirs) / len(mine | theirs))
+    return best
+
+
+def restating(playing: Playing, intents: list[Intent]) -> set[int]:
+    """Which slots are repeating themselves rather than arguing. #976.
+
+    *"You can tell that players have dug in their heels when proponents of
+    each side begin to restate their positions."* Each actor is compared
+    against **their own** earlier lines in this scene only -- agreeing with
+    somebody is not restating, and two characters on one side are expected
+    to sound alike.
+    """
+    out: set[int] = set()
+    for intent in intents:
+        earlier = [
+            was for beat in playing.beats for was in beat.intents
+            if was.slot == intent.slot
+        ]
+        if earlier and restated(intent, earlier) >= RESTATE:
+            out.add(intent.slot)
+    return out
+
 
 @dataclass(frozen=True)
 class Actor:
@@ -301,8 +402,24 @@ class Playing:
             if not n.unseen or n.unseen in self.found
         )
 
+    #: Consecutive beats in which **both** sides of a vignette's conflict had
+    #: somebody restating. Only ever written for a vignette scene, so the
+    #: other five kinds end exactly where they ended before. #976.
+    #:
+    #: **The write in `one_beat` is the guard that matters, not the read
+    #: below**, and a plant said so: removing `scene.vignette is not None`
+    #: from `over` stayed green, because nothing writes `stalled` for a
+    #: scene with no vignette so it is 0 for ever. The read is
+    #: belt-and-braces and cannot be reddened today; it is kept because a
+    #: future writer of this field should not have to find the read.
+    stalled: int = 0
+
     @property
     def over(self) -> bool:
+        if self.scene.vignette is not None and self.stalled >= DUG_IN:
+            # *"If the players remain dug in, move to the next stage."* The
+            # scene concludes; `run._vignette` reads the goals to say how.
+            return True
         return bool(self.leads_to) or len(self.beats) >= self.scene.max_beats
 
     def open_affordances(self) -> list[Affordance]:
@@ -941,6 +1058,22 @@ class Director:
         told = [f"The scene: {scene.seen}"]
         if who:
             told.append("Who is here, speaking to you: " + "; ".join(who))
+        # **A companion is told their own side's goal and the other side's,
+        # because both are things their character knows.** The conflict is
+        # out loud in the room; withholding the opponent's goal would make
+        # the companion argue with somebody whose position they cannot hear,
+        # which is the opposite of the `Npc.hides` case -- that withholds a
+        # *secret*, and a stated goal is not one.
+        if scene.vignette is not None:
+            mine = next(
+                (s for s in scene.vignette.sides if actor.slot in s.slots),
+                None)
+            told.append(
+                f"The conflict: {scene.vignette.conflict}\n"
+                + "\n".join(
+                    f"{s.name} wants: {s.goal}"
+                    + ("   <-- this is your side" if s is mine else "")
+                    for s in scene.vignette.sides))
         if playing.learnt:
             told.append("What the party has worked out: " + "; ".join(playing.learnt))
         if playing.recent():
@@ -1095,6 +1228,34 @@ class Director:
                     f"offered again:\n{spare}")
         if who:
             told.append("WHO IS HERE:\n" + "\n".join(who))
+        # **A vignette's framing, every beat and not only the opening one.**
+        # The opposite call from `THE SCENE` one block up, and for the
+        # opposite reason: that text contains one-time offers, which is why
+        # it is spent. A conflict and two goals are the *standing* state of
+        # the scene -- forgetting them after beat one is how a conflict
+        # scene becomes a chat -- and they carry nothing that can be
+        # re-offered.
+        if scene.vignette is not None:
+            told.append(
+                "THE CONFLICT in this scene, and what each side wants. Keep"
+                " the pressure on it; do not resolve it for them:\n"
+                f"  {scene.vignette.conflict}\n"
+                + "\n".join(f"  {side.name} wants: {side.goal}"
+                            for side in scene.vignette.sides))
+            if playing.stalled:
+                # *"nudge the proceedings along by suggesting a new argument
+                # or negotiating position that one or the other side might
+                # adopt."* A suggestion, which is why it is phrased as
+                # something somebody here raises rather than as a fact: the
+                # standing rule in this file is that nothing the model
+                # writes becomes true.
+                told.append(
+                    "THEY ARE REPEATING THEMSELVES -- both sides have"
+                    " restated the position they already took. Do not"
+                    " summarise the argument again. Put ONE new argument or"
+                    " offer into somebody's mouth that one side might take"
+                    " up: a concession, a price, a thing neither of them has"
+                    " weighed yet.")
         # **An intent that matched nothing changes nothing**, and the DM
         # has to be told which those were. It was not, and the result was
         # that the one thing this layer refuses -- the model deciding what
@@ -1309,6 +1470,19 @@ def one_beat(
         if intent is not None and (intent.speech or intent.doing):
             beat.intents.append(intent)
     beat.intents.sort(key=lambda i: i.slot)
+
+    # -- is the vignette dug in? ------------------------------------------
+    # **Before `react`, because `react` is what delivers the nudge.** And
+    # only for a vignette: `stalled` is the one field `Playing.over` reads
+    # that is not the beat count, so writing it for an ordinary roleplay
+    # scene would end conversations early across every converted module.
+    if scene.vignette is not None:
+        dug = restating(playing, beat.intents)
+        both = all(
+            any(slot in dug for slot in side.slots)
+            for side in scene.vignette.sides
+        ) if scene.vignette.sides else False
+        playing.stalled = playing.stalled + 1 if both else 0
 
     # -- match, then roll
     picks = director.match(playing, beat.intents)

@@ -257,7 +257,7 @@
       "name": "The Sluice Gate",
       "sets": "Three iron levers stand in the silt. Two are worn smooth; the third is bright, and the water behind the gate is rising.",
       "exits": [
-        "loft"
+        "the_split"
       ],
       "puzzle": {
         "prompt": "Which lever was fitted last, and so is the one that has never been pulled?",
@@ -276,6 +276,68 @@
           "nature"
         ],
         "tries": 3
+      }
+    },
+    {
+      "id": "the_split",
+      "kind": "vignette",
+      "name": "Two Ways Up",
+      "sets": "The stair to the loft is sound. The ladder beside it is not, but it comes out behind whatever is up there. You have a few minutes to argue about it, and the water is still rising.",
+      "exits": [
+        "loft"
+      ],
+      "max_beats": 4,
+      "details": [
+        "A rung of the ladder gives way under a boot and falls into the dark.",
+        "Something upstairs stops moving, as though it is listening."
+      ],
+      "affordances": [
+        {
+          "id": "take-the-stair",
+          "what": "argue for going straight up the stair together",
+          "skill": "diplomacy",
+          "dc": 11,
+          "win": "It is settled: everybody goes up the stair, together.",
+          "lose": "Nobody is convinced. The argument goes on.",
+          "once": true
+        },
+        {
+          "id": "take-the-ladder",
+          "what": "argue for splitting up and climbing the ladder behind",
+          "skill": "intimidate",
+          "dc": 11,
+          "win": "It is settled: the party splits, and the ladder is used.",
+          "lose": "Nobody is convinced. The argument goes on.",
+          "once": true
+        }
+      ],
+      "vignette": {
+        "kind": "interaction",
+        "conflict": "whether to go up together or split and come in behind",
+        "sides": [
+          {
+            "name": "together",
+            "goal": "keep everybody on one stair where nobody is alone",
+            "slots": [
+              0,
+              1
+            ],
+            "wins": [
+              "take-the-stair"
+            ]
+          },
+          {
+            "name": "behind",
+            "goal": "put somebody on the ladder to come in from behind",
+            "slots": [
+              2,
+              3
+            ],
+            "wins": [
+              "take-the-ladder"
+            ]
+          }
+        ]
       }
     },
     {

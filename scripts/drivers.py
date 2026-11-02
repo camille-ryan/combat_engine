@@ -51882,6 +51882,527 @@ def a_puzzle_tests_the_player_and_never_stops_the_plot(out: Result) -> None:
     )
 
 
+def a_vignette_is_a_conflict_and_can_end_in_an_impasse(out: Result) -> None:
+    """DMG2's fifth scene kind: a conflict, two goals, and no dice. #976.
+
+    The printed resolution is why it is a kind and not a flag on
+    `roleplay`: *"Vignettes can unfold through dialogue alone, without
+    resorting to skill checks."* A `roleplay` scene with no affordances,
+    NPCs or lore returns before a word is said -- and a vignette has
+    something to play with none of those three, because two characters want
+    incompatible things.
+
+    **Three outcomes, which is the page's own list** rather than a third
+    value bolted beside won/lost:
+
+    > *If the conflict resolves itself naturally, the players either
+    > compromise, allowing both sides to achieve their goals, or one side
+    > capitulates to the other. [...] If both sides refuse to budge [...]
+    > An impasse can be a strong outcome because it leaves unanswered
+    > questions the players can deal with in subsequent scenes.*
+
+    **The restate measure is where the real work is, and the page puts it
+    one stage earlier than `#976` did.** The issue proposed restate
+    detection as the *stop* condition replacing `max_beats`. Page 25 puts it
+    in **Development** as a nudge -- *"If this stalemate happens, nudge the
+    proceedings along by suggesting a new argument"* -- and only then *"If
+    the players remain dug in, move to the next stage."* So `DUG_IN = 2`:
+    the first stalled beat buys a nudge, the second concludes the scene. At
+    one the nudge could never be read.
+
+    Twelve calibration pairs below, and the third group is the one that set
+    `RESTATE`. An argument that changes the subject scores 0.0 and would
+    separate anywhere; one that stays on the subject and reuses its nouns
+    reaches 0.20 against a lowest restatement of 0.333.
+    """
+    import inspect
+    from pathlib import Path
+
+    from combat_engine.story import beat as beat_mod
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    def said(text: str) -> beat_mod.Intent:
+        return beat_mod.Intent(slot=1, name="A", speech=text)
+
+    # -- the measure, on hand-written pairs ---------------------------------
+    # **Four of each, and the middle group is the easy one.** Kept here
+    # rather than in a fixture because the numbers in `beat.RESTATE`'s note
+    # are these and a reader checking them wants them beside the threshold.
+    REWORDED = [
+        ("We cannot hand the ledger over, the guild would ruin us.",
+         "Handing the ledger over ruins the guild's trust in us, so no."),
+        ("I say we wait for the caravan before we decide anything.",
+         "Deciding anything before the caravan arrives is foolish; we wait."),
+        ("The boy is too young to stand watch alone at the gate.",
+         "He is a boy. Alone at the gate, on watch, too young by half."),
+        ("Paying them buys one quiet night and nothing more.",
+         "One quiet night is all a payment buys, and nothing more than that."),
+    ]
+    ELSEWHERE = [
+        ("We cannot hand the ledger over, the guild would ruin us.",
+         "Then let me copy the pages tonight and give them the copy."),
+        ("I say we wait for the caravan before we decide anything.",
+         "The river crossing floods by dusk, so waiting costs us the ford."),
+        ("The boy is too young to stand watch alone at the gate.",
+         "Put a dog with him and the whole street hears any trouble."),
+        ("Paying them buys one quiet night and nothing more.",
+         "I would rather spend the coin on a locksmith for the cellar door."),
+    ]
+    SAME_SUBJECT = [
+        ("We cannot hand the ledger over, the guild would ruin us.",
+         "The ledger names the guild's own debtors, so give it to the"
+         " magistrate."),
+        ("I say we wait for the caravan before we decide anything.",
+         "The caravan master owes me a favour; I will ask him to carry us."),
+        ("The boy is too young to stand watch alone at the gate.",
+         "The boy knows every face in this street, which is worth more at"
+         " the gate than a sword."),
+        ("Paying them buys one quiet night and nothing more.",
+         "Paying them in grain instead of coin ties them to us past"
+         " tonight."),
+    ]
+    scored = {
+        name: [beat_mod.restated(said(b), [said(a)]) for a, b in pairs]
+        for name, pairs in (("reworded", REWORDED), ("elsewhere", ELSEWHERE),
+                            ("same subject", SAME_SUBJECT))
+    }
+    out.that(
+        all(x >= beat_mod.RESTATE for x in scored["reworded"]),
+        "**a position restated in different words reads as a restatement**, "
+        "which is the printed tell -- *you can tell that players have dug in "
+        "their heels when proponents of each side begin to restate their "
+        "positions*. A phrase match could not do this: `story/CLAUDE.md` "
+        "measured verbatim repetition at essentially zero, so the measure is "
+        "content-word overlap and a set rather than a sequence",
+        f"{[round(x, 3) for x in scored['reworded']]} vs {beat_mod.RESTATE}",
+    )
+    out.that(
+        all(x < beat_mod.RESTATE for x in scored["same subject"]),
+        "**and a NEW argument on the SAME subject does not**, which is the "
+        "group that set the threshold and the only one that could have gone "
+        "wrong: an argument that changes the subject scores zero and would "
+        "separate at any value, so asserting only against those would be "
+        "asserting nothing",
+        f"{[round(x, 3) for x in scored['same subject']]}",
+    )
+    gap = min(scored["reworded"]) - max(scored["same subject"])
+    out.that(
+        0.10 < gap < 0.20 and all(x == 0.0 for x in scored["elsewhere"]),
+        "and the margin is REAL BUT NARROW, stated rather than implied -- "
+        "about 0.13 between the lowest restatement and the highest "
+        "same-subject argument, with a subject change scoring exactly "
+        "nothing. `RESTATE` sits inside that gap nearer the restatements, "
+        "because a missed stall costs one nudge and a false one ends a scene "
+        "early",
+        f"gap={gap:.3f} elsewhere={[round(x, 3) for x in scored['elsewhere']]}",
+    )
+    out.that(
+        beat_mod.restated(said("I will not go back there, not for him."),
+                          [said("I will not go back there, not for him.")])
+        == 1.0
+        and beat_mod.restated(said(""), [said("anything at all")]) == 0.0,
+        "the two ends are pinned: a line repeated word for word scores 1.0, "
+        "and an actor who said nothing scores 0.0 rather than dividing by "
+        "an empty set -- a silent companion is not a stalled one",
+        "1.0 and 0.0",
+    )
+
+    # -- the scene, played --------------------------------------------------
+    # **Two sides, one affordance each, so every one of the three printed
+    # conclusions is posable.** `wins` is what makes the outcome readable
+    # without judging: the module says what reaching a goal looks like.
+    def scene(**over: object) -> dict:
+        base = {
+            "id": "v", "kind": "vignette", "name": "V", "exits": ["after"],
+            "max_beats": 3,
+            "sets": "The two of you stand either side of the strongbox.",
+            "affordances": [
+                {"id": "yield-it", "what": "argue that the box is opened now",
+                 "skill": "diplomacy", "band": "easy",
+                 "win": "The box is opened.", "lose": "It stays shut."},
+                {"id": "hold-it", "what": "argue that the box stays shut",
+                 "skill": "diplomacy", "band": "easy",
+                 "win": "It stays shut.", "lose": "The box is opened."},
+            ],
+            "vignette": {
+                "kind": "interaction",
+                "conflict": "whether to open the strongbox before dawn",
+                "sides": [
+                    {"name": "the impatient", "goal": "open it now",
+                     "slots": [0, 1], "wins": ["yield-it"]},
+                    {"name": "the cautious", "goal": "leave it shut",
+                     "slots": [2, 3], "wins": ["hold-it"]},
+                ],
+            },
+        }
+        base.update(over)
+        return base
+
+    AFTER = {"id": "after", "kind": "roleplay", "name": "A", "exits": []}
+
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4,
+         "start": "v", "scenes": [scene(), AFTER]}, Path("<driver>"))
+    vig = built.scene("v").vignette
+    assert vig is not None
+
+    # **The three conclusions are posed through `run.concluded`, because two
+    # of them are unreachable headlessly.** `Director.match` when scripted
+    # returns `none` for every intent *by design* -- its own comment says a
+    # canned "always take the first affordance" would make the `once` rule
+    # and the ending look tested when they were only being driven. So
+    # `Playing.found` is empty in every suite run, measured stable over
+    # eight seeds, and a played scene can only ever reach an impasse. That
+    # is why the read is a named function: logic a probe cannot reach is
+    # logic nobody can check.
+    out.that(
+        run_mod.concluded(vig, {"yield-it", "hold-it"})[0] == "compromise",
+        "**both goals reached is a compromise**, in the page's own words -- "
+        "*the players either compromise, allowing both sides to achieve "
+        "their goals*. Read off `Side.wins` against the affordances the "
+        "scene actually won, so the module says what reaching a goal looks "
+        "like and nothing is judged",
+        f"{run_mod.concluded(vig, {'yield-it', 'hold-it'})[0]!r}",
+    )
+    verdict, carried = run_mod.concluded(vig, {"hold-it"})
+    out.that(
+        verdict == "capitulation" and len(carried) == 1
+        and carried[0].name == "the cautious",
+        "**one goal reached is a capitulation, and the side that carried it "
+        "is named** -- *one side capitulates to the other*. A single "
+        "won/lost would have to pick a protagonist, and in an interaction "
+        "both sides are the party",
+        f"{verdict!r} {[s.name for s in carried]}",
+    )
+    out.that(
+        run_mod.concluded(vig, set())[0] == "impasse"
+        and run_mod.concluded(vig, {"nothing-won-here"})[0] == "impasse",
+        "**neither goal reached is an IMPASSE**, and so is a scene that won "
+        "something neither side had claimed. The page is explicit that this "
+        "is not a failure: *an impasse can be a strong outcome because it "
+        "leaves unanswered questions the players can deal with in "
+        "subsequent scenes*",
+        "impasse on an empty set and on an unclaimed win",
+    )
+
+    # -- and through the real scene, which is the wiring half ---------------
+    # `concluded` being right proves nothing about `step` calling it, which
+    # is the mistake `Step.stood`, `Step.surprised` and `Step.traps` were
+    # each written for.
+    # **`concluded` is replaced by a RECORDER rather than asserted on its
+    # answer**, which is the #1014 technique and is needed for the same
+    # reason: headless the scripted matcher wins nothing, so the outcome is
+    # *always* an impasse -- and a plant replacing the call with the literal
+    # `"impasse", []` stayed green against an assertion on the value. What
+    # can tell them apart is whether the call happened and what it was
+    # handed.
+    # **Rebound with a variable attribute name, and the types are real.**
+    # Three gates each refuse a different obvious spelling: `ty` refuses
+    # `module.fn = other`, `ruff`'s structural walk refuses a `# type:
+    # ignore` comment (`ty` would not honour it anyway), and B009/B010
+    # refuse `setattr` with a *literal* name. A name in a variable is none
+    # of the three -- and `-> tuple` would erase the return type, which is
+    # its own recorded fault.
+    seen_calls: list[tuple[mod.Vignette, set[str]]] = []
+    real_concluded = run_mod.concluded
+    swap = "concluded"
+
+    def recording(vignette: mod.Vignette,
+                  found: set[str]) -> tuple[str, list[mod.Side]]:
+        seen_calls.append((vignette, set(found)))
+        return real_concluded(vignette, found)
+
+    campaign = run_mod.begin(built, seed=4)
+    # **Every slot is `ai`, which is what `--solo` does and more.** With the
+    # default control every character is `human`, and `check.py` plays with
+    # `beat.silent` -- so nobody declares anything and the loop spins empty
+    # exchanges, which is this component's own recorded warning about
+    # `--solo` being load-bearing rather than a fallback. An empty beat
+    # cannot restate, so the stall below would be unposable.
+    campaign.control = ["ai"] * len(campaign.party.sheets)
+    setattr(run_mod, swap, recording)
+    try:
+        neither = run_mod.step(campaign, built, record=False)
+    finally:
+        setattr(run_mod, swap, real_concluded)
+    out.that(
+        len(seen_calls) == 1
+        and seen_calls[0][0] is vig
+        and neither.played is not None
+        and seen_calls[0][1] == set(neither.played.found),
+        "**a played vignette asks `concluded`, once, with the scene's own "
+        "conflict and the affordances the scene actually won** -- the wiring "
+        "rather than the arithmetic. Asserted as a recorded CALL and not as "
+        "a value, because headless the answer is always an impasse: a plant "
+        "replacing the call with that literal passed every assertion on the "
+        "outcome. Same shape, and the same fix, as `#1014`",
+        f"{len(seen_calls)} call(s), found={sorted(seen_calls[0][1]) if seen_calls else None}",
+    )
+    out.that(
+        neither.outcome == "impasse" and neither.next_id == "after",
+        "**and a vignette nobody resolves takes the scene's ordinary "
+        "exit** -- Camille's standing ruling applied to a fifth kind. The "
+        "outcome is recorded so a later scene can read it; it reroutes "
+        "nobody. Headless the scripted matcher wins nothing, by its own "
+        "design, so an impasse is the only outcome a suite run reaches -- "
+        "measured stable over eight seeds",
+        f"outcome={neither.outcome!r} next={neither.next_id!r}",
+    )
+    out.that(
+        "impasse" not in run_mod.tension.DECIDED,
+        "and an impasse does not count as a loss against the party's recent "
+        "record, which is the same claim from `tension.py`'s side: "
+        "`DECIDED` is won and lost, so a standstill pitches the next scene "
+        "neither harder nor easier. A third value folded into either would "
+        "have made a strong outcome into a punishment",
+        f"{run_mod.tension.DECIDED}",
+    )
+
+    # -- the scene plays at all, which the roleplay guard would have stopped
+    # **A vignette with NO affordances, which is the only way to pose this.**
+    # The fixture above carries two, so `scene.affordances` is truthy and
+    # `_roleplay`'s guard lets it through regardless -- a plant removing
+    # `always` stayed green against it, which is the fixture being too
+    # generous rather than the claim being wrong. A conflict and two goals
+    # with nothing to roll is a legal vignette and is the printed default:
+    # *dialogue alone, without resorting to skill checks*.
+    BARE = {
+        "id": "v", "kind": "vignette", "name": "V", "exits": ["after"],
+        "max_beats": 2, "sets": "Either side of the strongbox.",
+        "vignette": {
+            "kind": "interaction",
+            "conflict": "whether to open the strongbox before dawn",
+            "sides": [
+                {"name": "the impatient", "goal": "open it now",
+                 "slots": [0, 1]},
+                {"name": "the cautious", "goal": "leave it shut",
+                 "slots": [2, 3]},
+            ],
+        },
+    }
+    bare_built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4,
+         "start": "v", "scenes": [BARE, AFTER]}, Path("<driver>"))
+    bare_campaign = run_mod.begin(bare_built, seed=4)
+    bare_campaign.control = ["ai"] * len(bare_campaign.party.sheets)
+    bare = run_mod.step(bare_campaign, bare_built, record=False)
+    out.that(
+        bare.played is not None and len(bare.played.beats) == 2,
+        "**the beat loop runs for a vignette with no affordances, no NPCs "
+        "and no lore**, which `_roleplay`'s guard would otherwise refuse: a "
+        "scene with nothing written to do is its brief printed and on, and "
+        "that guard is right for every other kind. A vignette's thing to "
+        "play is the conflict, and the printed resolution is dialogue with "
+        "no dice -- so a vignette with nothing to roll is the DEFAULT shape "
+        "rather than a degenerate one",
+        f"{len(bare.played.beats) if bare.played else 0} beat(s)",
+    )
+    out.that(
+        bare.outcome == "impasse" and bare.next_id == "after",
+        "and it still reaches a conclusion and still takes the ordinary "
+        "exit -- a vignette whose sides named no winning affordance can "
+        "only end in an impasse, which is the honest answer rather than a "
+        "missing one",
+        f"outcome={bare.outcome!r} next={bare.next_id!r}",
+    )
+
+    # -- dug in --------------------------------------------------------------
+    # The scripted director returns the identical line every beat, so every
+    # actor restates from beat 2 by construction -- which is what makes the
+    # stall posable with no model at all.
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4,
+         "start": "v", "scenes": [scene(max_beats=6), AFTER]},
+        Path("<driver>"))
+    campaign = run_mod.begin(built, seed=4)
+    campaign.control = ["ai"] * len(campaign.party.sheets)
+    stalled = run_mod.step(campaign, built, record=False)
+    beats = len(stalled.played.beats) if stalled.played else 0
+    out.that(
+        beats == beat_mod.DUG_IN + 1 and beats < 6,
+        "**a dug-in vignette concludes rather than running to `max_beats`**, "
+        "and the count is the printed order rather than a tidy number: the "
+        "first stalled beat buys the nudge and the second ends the scene, so "
+        "a six-beat scene stops at three. `#976` proposed restate detection "
+        "as the stop condition outright; page 25 puts the nudge in "
+        "**Development** and the stop in **Conclusion**, which is one beat "
+        "later",
+        f"{beats} beats of a 6-beat scene, DUG_IN={beat_mod.DUG_IN}",
+    )
+    out.that(
+        any("dug in" in str(x) for x in stalled.lines),
+        "and it says so, because a scene that ended early for a reason "
+        "nobody can see reads as a scene that ran out of beats -- the same "
+        "rule this component applies to a clamped budget",
+        f"{[str(x) for x in stalled.lines if 'dug in' in str(x)]}",
+    )
+    # **The other five kinds must not stall, and this is the control.** A
+    # roleplay scene with the same affordances runs its full length: nothing
+    # writes `stalled` unless the scene carries a vignette, which is what
+    # keeps every converted module's conversations exactly as long as they
+    # were.
+    PLAIN = {k: v for k, v in scene(max_beats=6).items() if k != "vignette"}
+    PLAIN["kind"] = "roleplay"
+    plain_built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4,
+         "start": "v", "scenes": [PLAIN, AFTER]}, Path("<driver>"))
+    plain_campaign = run_mod.begin(plain_built, seed=4)
+    plain_campaign.control = ["ai"] * len(plain_campaign.party.sheets)
+    plain = run_mod.step(plain_campaign, plain_built, record=False)
+    plain_beats = len(plain.played.beats) if plain.played else 0
+    out.that(
+        plain_beats == 6,
+        "**and an ordinary roleplay scene with the identical affordances "
+        "still runs its full six beats**, which is the control that matters: "
+        "`stalled` is the one field `Playing.over` reads that is not the "
+        "beat count, so writing it for every kind would quietly shorten "
+        "every conversation in every converted module",
+        f"{plain_beats} beats",
+    )
+
+    # -- what reaches the prompts -------------------------------------------
+    # Structural, not a model claim -- `story/CLAUDE.md` is explicit that
+    # this component has failed eight times to reproduce a model fault in
+    # isolation, so what is asserted is that the words are in the prompt.
+    react_src = inspect.getsource(beat_mod.Director.react)
+    declare_src = inspect.getsource(beat_mod.Director.declare)
+    out.that(
+        "THE CONFLICT" in react_src
+        and "scene.vignette is not None" in react_src
+        and "if playing.stalled:" in react_src,
+        "**the conflict and both goals reach the DM every beat, and the "
+        "nudge only once they are stalled** -- the opposite call from `THE "
+        "SCENE` one block up and for the opposite reason. That text is spent "
+        "because it carries one-time offers; a conflict and two goals are "
+        "the standing state of the scene and carry nothing re-offerable",
+        f"{len(react_src)} chars read",
+    )
+    out.that(
+        "this is your side" in declare_src,
+        "and a companion is told their OWN side's goal and the other "
+        "side's, both marked -- the conflict is out loud in the room, so "
+        "withholding the opponent's position would make a companion argue "
+        "with somebody they cannot hear. That is the opposite of "
+        "`Npc.hides`, which withholds a secret",
+        "the marker is in declare",
+    )
+
+    # -- refusals ------------------------------------------------------------
+    def refused(**over: object) -> str:
+        try:
+            mod.parse(
+                {"id": "probe", "party_level": 2, "party_size": 4,
+                 "start": "v", "scenes": [scene(**over), AFTER]},
+                Path("<driver>"))
+        except mod.ModuleError as exc:
+            return str(exc)
+        return ""
+
+    one_side = refused(vignette={
+        "conflict": "whether to open it",
+        "sides": [{"name": "a", "goal": "open it", "slots": [0]}]})
+    out.that(
+        "exactly two sides" in one_side,
+        "**a vignette with one side is refused**, because *both sides* and "
+        "*one side capitulates to the other* are the phrases the printed "
+        "conclusion is written in -- one side is not a conflict and three "
+        "leave compromise undefined",
+        one_side[:90],
+    )
+    no_goal = refused(vignette={
+        "conflict": "whether to open it",
+        "sides": [{"name": "a", "goal": "open it", "slots": [0]},
+                  {"name": "b", "slots": [2]}]})
+    out.that(
+        "has no 'goal'" in no_goal,
+        "and a side with no goal is refused -- *establish the goal each side "
+        "pursues* is the framing stage, and the outcome here is read off "
+        "whether a goal was reached, so a side without one could never win "
+        "and never say why",
+        no_goal[:90],
+    )
+    no_conflict = refused(vignette={
+        "sides": [{"name": "a", "goal": "x", "slots": [0]},
+                  {"name": "b", "goal": "y", "slots": [2]}]})
+    out.that(
+        "needs a 'conflict'" in no_conflict,
+        "and a vignette with no conflict is refused, since the page frames "
+        "the whole scene on it",
+        no_conflict[:90],
+    )
+    bad_win = refused(vignette={
+        "conflict": "c",
+        "sides": [{"name": "a", "goal": "x", "slots": [0],
+                   "wins": ["nothing-like-it"]},
+                  {"name": "b", "goal": "y", "slots": [2]}]})
+    out.that(
+        "and no affordance has that id" in bad_win,
+        "**and a `wins` naming no affordance is refused**, which is the one "
+        "that would be silent: the side could never be found to have reached "
+        "its goal, so every scene would end in an impasse and read exactly "
+        "like two sides who would not budge",
+        bad_win[:90],
+    )
+    both_sides = refused(vignette={
+        "conflict": "c",
+        "sides": [{"name": "a", "goal": "x", "slots": [0, 1]},
+                  {"name": "b", "goal": "y", "slots": [1, 2]}]})
+    out.that(
+        "on both sides" in both_sides,
+        "a slot on both sides of the conflict is refused -- it makes *both "
+        "sides restated* unanswerable, which is the measurement the whole "
+        "development stage turns on",
+        both_sides[:90],
+    )
+    not_built = refused(vignette={
+        "kind": "lookback", "conflict": "c",
+        "sides": [{"name": "a", "goal": "x", "slots": [0]},
+                  {"name": "b", "goal": "y", "slots": [2]}]})
+    out.that(
+        "printed but not built" in not_built
+        and len(mod.VIGNETTE_TYPES) == 5
+        and len(mod.VIGNETTE_BUILT) == 1,
+        "**four of the five printed types are refused rather than accepted "
+        "inert.** Each turns on *tell them whom they will portray -- their "
+        "own characters or other NPCs*, and nothing binds a slot to anybody "
+        "but the character in it. `interaction` is the one where everybody "
+        "plays themselves, which is why `#976` called it the type needing "
+        "nothing new. The vocabulary is kept so the next reader does not "
+        "re-read the page for it",
+        not_built[:90],
+    )
+    made_up = refused(vignette={
+        "kind": "montage", "conflict": "c",
+        "sides": [{"name": "a", "goal": "x", "slots": [0]},
+                  {"name": "b", "goal": "y", "slots": [2]}]})
+    out.that(
+        "not one of the printed five" in made_up,
+        "and a type nobody printed is refused separately from one that is "
+        "printed and unbuilt -- they are different authoring mistakes and "
+        "only the second is worth waiting for",
+        made_up[:90],
+    )
+    elsewhere_block = refused(kind="roleplay")
+    out.that(
+        "must not carry 'vignette'" in elsewhere_block,
+        "and a vignette block on any other kind is refused: written and "
+        "never read is the fault the `unused` table exists for, and this is "
+        "the direction that table cannot express",
+        elsewhere_block[:90],
+    )
+    tally = refused(primary=["diplomacy"])
+    out.that(
+        "must not carry 'primary'" in tally,
+        "**and a vignette may not carry a challenge's tally.** The printed "
+        "resolution is *dialogue alone, without resorting to skill checks*, "
+        "so a success count would be a second mechanism deciding the same "
+        "scene. The beat-loop fields all stay -- an affordance is how a goal "
+        "gets reached",
+        tally[:90],
+    )
+
+
 def a_rest_scene_can_carry_a_conversation(out: Result) -> None:
     """A rest scene was one canned line, which is Camille's complaint:
 
@@ -55601,6 +56122,11 @@ DRIVERS = {
         a_puzzle_tests_the_player_and_never_stops_the_plot,
         "a puzzle tests the player, rolls the hard DC, and never stops the "
         "plot (#960)",
+    ),
+    "vignette": (
+        a_vignette_is_a_conflict_and_can_end_in_an_impasse,
+        "a vignette is a conflict and two goals, and an impasse is a real "
+        "outcome (#976)",
     ),
     "camp_talk": (
         a_rest_scene_can_carry_a_conversation,

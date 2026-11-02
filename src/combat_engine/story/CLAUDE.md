@@ -1565,6 +1565,116 @@ priced as an encounter, so by the same page's logic it arguably should --
 but that moves action points and every replay fixture with them, so it is a
 separate decision rather than a silent extension.
 
+## A vignette is a conflict and two goals, and an impasse is a real outcome
+
+`module.KINDS` held five. DMG2 chapter 1 gives its own section to a sixth
+thing, and its printed resolution is why it is a kind rather than a flag on
+`roleplay`: *"Vignettes can unfold through dialogue alone, without resorting
+to skill checks."* A `roleplay` scene with no affordances, NPCs or lore
+returns before a word is said — and a vignette has something to play with
+none of those three, because two characters want incompatible things.
+
+**Every quote in `#976` checks out exactly** against pages 22–25 in
+`resources/` — six of six, word for word. What the page moved was the
+**structure**, which is the failure the root `CLAUDE.md` is mostly about:
+
+* **Restating is a nudge first and a stop second.** The issue proposes
+  restate detection as the stop condition replacing `max_beats`. Page 25 puts
+  it in **Development** — *"nudge the proceedings along by suggesting a new
+  argument"* — and only then *"If the players remain dug in, move to the next
+  stage."* So `DUG_IN = 2`: the first stalled beat buys the nudge, the second
+  concludes the scene. At one the nudge could never be read.
+* **The conclusion names three resolutions**, not a third value beside
+  won/lost: compromise (both sides reach their goals), capitulation (one
+  does), impasse (neither).
+* **And the hard half answers itself.** The page offers *"decide who gives
+  in"* with *"the PCs should have more influence"*, then ends on *"If players
+  seem unhappy to relent for their PCs, **default to an impasse**."* So the
+  engine never forces a capitulation — that is the page's own fallback rather
+  than a shortcut around judging which side argued better, which is the one
+  thing this component has measured the model to be bad at.
+
+### The restate measure, and the half of it that is not measured
+
+Content-word overlap of an actor's line against **their own** earlier lines
+in the scene — a set, not a phrase, because verbatim repetition here is
+already measured at essentially zero. Twelve hand-written pairs:
+
+```
+four restatements, same position reworded      0.333  0.500  0.667  0.714
+four new arguments, subject changed            0.000  0.000  0.000  0.000
+four new arguments ON THE SAME SUBJECT         0.077  0.083  0.111  0.200
+```
+
+The third row set `RESTATE = 0.30` and is the only group that could have gone
+wrong — an argument that changes the subject scores nothing and would
+separate at any threshold. The gap is **0.13 wide**, and the threshold sits
+in it nearer the restatements, because a missed stall costs one nudge and a
+false one ends a scene early.
+
+**The live firing rate is unknown and could not be measured here.** No
+companion intent exists on disk anywhere: `logs/*.jsonl` carries the
+player's typed lines and the DM's paragraphs and nothing any companion
+declared. So the measure separates the distinction the page names, and how
+often a live model trips it is an open number — stated in the constant's own
+note rather than left to be found.
+
+### Four calls
+
+* **Only `interaction` is built; the other four are refused at load.** Each
+  turns on *"Tell them whom they will portray — their own characters or other
+  NPCs"*, and nothing binds a slot to anybody but the character in it.
+  `interaction` is the one type where everybody plays themselves, which is
+  why the issue called it the type needing nothing new. Accepting the others
+  inert is the drawable-and-inert fault.
+* **The outcome is read off the module, never judged.** `Side.wins` names the
+  affordance that means *this side got its goal*; `run.concluded` reads it
+  against `Playing.found`.
+* **A vignette keeps every beat-loop field and loses every fight field**,
+  the tally included — a `primary`/`secondary` success count would be a
+  second mechanism deciding a scene whose printed resolution is dialogue.
+* **No XP work was needed, and that is the page's doing.** `xp.drama` already
+  exists, reads `made.played`, and is off by default, which is the book's own
+  framing. And an impasse is deliberately **not** in `tension.DECIDED`, so a
+  standstill pitches the next scene neither harder nor easier.
+
+### Three green plants, three different mistakes
+
+24 plants, 23 red, one intended control.
+
+* **Two guards, one claim.** Removing `scene.vignette is not None` from
+  `Playing.over` stayed green, because nothing *writes* `stalled` for a scene
+  with no vignette so it is 0 for ever. The write in `one_beat` is
+  load-bearing; the read cannot be reddened today and says so.
+* **The assertion was written from the passing case.** Headless,
+  `Director.match` returns `none` for every intent **by design**, so
+  `Playing.found` is always empty and a played vignette can only reach an
+  impasse — stable over eight seeds. A plant replacing the `concluded` call
+  with the literal `"impasse", []` therefore passed every assertion on the
+  outcome. It is a recorded **call** now, `#1014`'s technique.
+* **The fixture was too generous to pose the claim.** The probe scene carries
+  two affordances, so `_roleplay`'s guard lets it through whether `always` is
+  passed or not. Posed now with a vignette carrying **no** affordances —
+  which is the printed default shape rather than a degenerate one.
+
+### Two name findings, both from a gate rather than from judgement
+
+The fixture's invented prose was hand-checked against all 33,238 indexed
+strings and one long word collided with a printed feat name, used as an
+ordinary adverb; it was reworded. And `leaks.py` **refused the page's own
+word** for the second vignette type, because it is part of a printed power's
+name — it is `lookback` in `VIGNETTE_TYPES`, with the substitution and its
+reason recorded there. A third type's word is *also* part of a printed name
+and passes only because the gate waives it as a common word, which is the
+`--cited` blind spot showing up in a vocabulary.
+
+**Not done: the four unbuilt types, and `#965`/`#937` are not closed by
+this.** `#976` notes that the *transition* type is DMG2's answer to those
+two. It is refused rather than built, for the same slot-binding reason as
+the rest — and its own framing, *"Ask the players to describe a conflict that
+occupied them during the elapsed time period"*, is additionally a question
+nothing can ask headlessly.
+
 ## A rest scene can carry a conversation, and the rest is still a rest
 
 Camille, on #937: *"A rest scene is one canned line, and a journey has no
@@ -1955,11 +2065,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     dead_and_dying \
     graph_edges challenge_says fight_aftermath reinforcements \
     scene_allies trap_budget room_shape templates skill_cap \
-    treasure camp_talk puzzle
+    treasure camp_talk puzzle vignette
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 53 drivers and prints 687 assertions**, and **each was
+**The command above is 54 drivers and prints 713 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

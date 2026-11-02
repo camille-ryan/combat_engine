@@ -65,13 +65,19 @@ from .objective import POSITIONS, Objective
 from .objective import ROUNDS as OBJECTIVE_ROUNDS
 from .objective import SHARE as OBJECTIVE_SHARE
 
-#: What sort of thing a scene is. Four, and they are the four the module in
-#: `modules/` is made of -- its outline has a heading for each.
+#: What sort of thing a scene is. The first four are the four the module in
+#: `modules/` is made of -- its outline has a heading for each -- and the last
+#: two are printed kinds no converted adventure holds, because both are DM
+#: technique rather than adventure text.
 #:
 #: `rest` is a scene rather than a property of the edge between two, because a
 #: module says where the party may rest and that is a decision with a position
 #: in the story. `turns.short_rest` and `Party.rest` are what it runs.
-KINDS = ("roleplay", "skill_challenge", "combat", "rest", "puzzle")
+#:
+#: **This comment said "Four" for two kinds longer than it was true**, which
+#: is the cheapest possible instance of the stale-count problem the root
+#: `CLAUDE.md` is mostly about. Count the tuple.
+KINDS = ("roleplay", "skill_challenge", "combat", "rest", "puzzle", "vignette")
 
 #: What shape a stated room may be. An octagon and an irregular chamber
 #: need nothing new -- a cut corner is blocking squares, the same
@@ -533,6 +539,93 @@ class Puzzle:
     #: printed concession is a *hint* per check rather than an unlimited
     #: retry, and an unbounded loop is what `#965`'s walk guard exists for.
     tries: int = 3
+
+
+#: The printed five, DMG2 page 22, in the order the page bullets them. Kept
+#: whole even though one is built, because the set is the vocabulary and
+#: re-deriving it from the page is the cost `#976` already paid once.
+#:
+#: **Only `interaction` is built**, and the parse refuses the other four
+#: rather than accepting them inert. Each of those four turns on *"Tell them
+#: whom they will portray -- their own characters or other NPCs"*, which is a
+#: slot-to-persona binding this engine does not have: `Campaign.control` maps
+#: a slot to human-or-AI and nothing maps a slot to somebody who is not the
+#: character sitting in it. `interaction` is the one type where everybody
+#: plays themselves, which is why the issue called it the type needing
+#: nothing new -- and it was right.
+#:
+#: **Four of the five are the page's own words and the second is not**, which
+#: is the one rule biting a vocabulary: the page's word for it is part of a
+#: printed power's name, so `leaks.py` refused it and `lookback` is the
+#: substitute. Nothing reads these strings but the refusal below and a module
+#: author, so the cost is one word of fidelity in a list that is documentation
+#: either way. Worth knowing that `dream` is **also** part of a printed name
+#: and passes only because the gate waives it as a common word -- the blind
+#: spot `--cited` exists for, and acceptable here because an author writing
+#: `dream` in this field means the English word.
+VIGNETTE_TYPES = ("interaction", "lookback", "dream", "transition", "teaser")
+
+#: The types whose slot binding exists. See `VIGNETTE_TYPES`.
+VIGNETTE_BUILT = ("interaction",)
+
+
+@dataclass(frozen=True)
+class Side:
+    """One party to a vignette's conflict, and what it is after.
+
+    *"Then lay out the conflict that drives the scene, preferably between
+    two characters or sets of characters. Establish the goal each side
+    pursues."* So a side is a set of participants plus one goal, and both
+    halves are required -- a side with no goal cannot be said to have
+    achieved it, which is what decides the scene's outcome below.
+    """
+
+    name: str
+    goal: str
+    #: Party slots on this side. A slot on no side is in the scene and not in
+    #: the conflict, which the page allows: *"designating which players you
+    #: want to participate"* is a selection, not the whole table.
+    slots: tuple[int, ...] = ()
+    #: Affordance ids that mean **this side got its goal**. The printed
+    #: conclusion is stated in exactly those terms -- the players either
+    #: *"compromise, allowing both sides to achieve their goals"*, or *"one
+    #: side capitulates"* -- so the module says which won affordance counts
+    #: as whose goal, and `run._vignette` reads the two answers off
+    #: `Playing.found`. No judging, and no model.
+    wins: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Vignette:
+    """A scene that is a conflict and two goals, resolved by talking. #976.
+
+    DMG2 gives this its own section and its resolution mechanism is the
+    reason it belongs here rather than under `skill_challenge`: *"Vignettes
+    can unfold through dialogue alone, without resorting to skill checks."*
+    So the mechanical content of a vignette is almost entirely the framing --
+    who is in it, what the conflict is, what each side wants -- and the beat
+    loop already plays the rest.
+
+    **The difference from a `roleplay` scene is not the beats, it is the
+    stakes.** `run._roleplay` returns immediately for a scene with no
+    affordances, NPCs or lore, because a scene with nothing written to do is
+    its brief printed and on. A vignette has something to do with none of
+    those three: two characters want incompatible things. That is why it is
+    a kind and not a flag.
+
+    **Three outcomes, which is the page's own list** -- compromise, where
+    both sides reach their goal; capitulation, where one does; and impasse,
+    where neither does. The third is not a failure: *"An impasse can be a
+    strong outcome because it leaves unanswered questions the players can
+    deal with in subsequent scenes."*
+    """
+
+    conflict: str
+    #: Exactly two. *"preferably between two characters or sets of
+    #: characters"* -- and more than two makes "both sides" meaningless,
+    #: which is the phrase the whole conclusion is written in.
+    sides: tuple[Side, ...] = ()
+    kind: str = "interaction"
 
 
 @dataclass(frozen=True)
@@ -1010,6 +1103,9 @@ class Scene:
 
     #: The puzzle a `puzzle` scene runs. #960.
     puzzle: Puzzle | None = None
+
+    #: The conflict a `vignette` scene runs. #976.
+    vignette: Vignette | None = None
 
     def affordance(self, wanted: str) -> Affordance | None:
         """One by id, or `None`. `"none"` is a legal answer and means nothing."""
@@ -1768,6 +1864,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         problems.append(f"{where}: 'puzzle' must be an object, not a list")
     if kind == "puzzle" and puzzle is None:
         problems.append(f"{where}: a puzzle scene needs a 'puzzle' block")
+
     for skill in (*primary, *secondary):
         if skill not in SKILLS:
             problems.append(
@@ -1916,6 +2013,88 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     seen_ids = [a.id for a in affordances]
     for aid in sorted({a for a in seen_ids if seen_ids.count(a) > 1}):
         problems.append(f"{where}: two affordances share the id {aid!r}")
+    # -- the vignette block, #976 ------------------------------------------
+    vignette: Vignette | None = None
+    raw_vig = raw.get("vignette")
+    if isinstance(raw_vig, dict):
+        vig_kind = str(raw_vig.get("kind", "interaction")).strip().lower()
+        if vig_kind not in VIGNETTE_TYPES:
+            problems.append(
+                f"{where}: vignette kind {vig_kind!r} is not one of the"
+                f" printed five: {', '.join(VIGNETTE_TYPES)}")
+        elif vig_kind not in VIGNETTE_BUILT:
+            # **Refused rather than accepted inert.** Each of the four turns
+            # on telling a player *whom they portray*, and nothing here binds
+            # a slot to anybody but the character in it -- so a module could
+            # declare one of the four, get an ordinary conversation, and
+            # nothing would say the type had been ignored.
+            problems.append(
+                f"{where}: vignette kind {vig_kind!r} is printed but not"
+                f" built -- it needs a slot bound to somebody other than the"
+                f" character in it, which nothing here does. Built:"
+                f" {', '.join(VIGNETTE_BUILT)}. #976")
+        conflict = str(raw_vig.get("conflict", "")).strip()
+        if not conflict:
+            problems.append(
+                f"{where}: a vignette needs a 'conflict' -- the page frames"
+                f" the whole scene on it")
+        sides: list[Side] = []
+        raw_sides = raw_vig.get("sides") or ()
+        if not isinstance(raw_sides, list):
+            problems.append(f"{where}: vignette 'sides' must be a list")
+            raw_sides = ()
+        for i, raw_side in enumerate(raw_sides):
+            if not isinstance(raw_side, dict):
+                problems.append(
+                    f"{where}: vignette side {i + 1} must be an object")
+                continue
+            side_name = str(raw_side.get("name", "")).strip()
+            goal = str(raw_side.get("goal", "")).strip()
+            if not goal:
+                problems.append(
+                    f"{where}: vignette side {side_name or i + 1} has no"
+                    f" 'goal'; the page says to establish the goal each side"
+                    f" pursues, and the outcome is read off whether it was"
+                    f" reached")
+            slots = tuple(
+                int(s) for s in (raw_side.get("slots") or ())
+                if isinstance(s, int) or str(s).lstrip("-").isdigit()
+            )
+            wins = tuple(
+                str(w).strip() for w in (raw_side.get("wins") or ())
+                if str(w).strip()
+            )
+            for won in wins:
+                if not any(a.id == won for a in affordances):
+                    problems.append(
+                        f"{where}: vignette side {side_name or i + 1} names"
+                        f" {won!r} as its win, and no affordance has that id")
+            sides.append(Side(name=side_name or f"side {i + 1}", goal=goal,
+                              slots=slots, wins=wins))
+        # **Exactly two, because "both sides" is the phrase the printed
+        # conclusion is written in.** One side is not a conflict; three make
+        # compromise ("allowing both sides to achieve their goals") and
+        # capitulation ("one side capitulates to the other") undefined.
+        if len(sides) != 2:
+            problems.append(
+                f"{where}: a vignette needs exactly two sides, got"
+                f" {len(sides)} -- the printed conclusion is stated as"
+                f" 'both sides' and 'one side capitulates to the other'")
+        twice = sorted({
+            s for side in sides for s in side.slots
+            if sum(s in other.slots for other in sides) > 1
+        })
+        if twice:
+            problems.append(
+                f"{where}: slot(s) {', '.join(str(s) for s in twice)} are on"
+                f" both sides of the vignette's conflict")
+        vignette = Vignette(conflict=conflict, sides=tuple(sides),
+                            kind=vig_kind)
+    elif raw_vig is not None:
+        problems.append(f"{where}: 'vignette' must be an object, not a list")
+    if kind == "vignette" and vignette is None:
+        problems.append(f"{where}: a vignette scene needs a 'vignette' block")
+
     if "none" in seen_ids:
         # The matcher's enum carries "none" for "this just happens", so an
         # affordance called that would be unreachable *and* would silently
@@ -2023,6 +2202,17 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         "puzzle": ("foes", "terrain", "complexity", "primary", "secondary",
                    "objective", "readiness", "affordances", "npcs", "lore",
                    "details"),
+        # **A vignette keeps every beat-loop field and loses every fight
+        # field.** It is a conversation with stakes, so `affordances`,
+        # `npcs`, `lore` and `details` all do their usual work -- an
+        # affordance is how a side's goal is *reached*, which is what
+        # `Side.wins` names. What it must not carry is a tally
+        # (`primary`/`secondary`/`complexity`): the printed resolution is
+        # *"dialogue alone, without resorting to skill checks"*, so a
+        # challenge's success count would be a second mechanism deciding
+        # the same scene.
+        "vignette": ("foes", "terrain", "complexity", "primary", "secondary",
+                     "objective", "readiness"),
     }[kind]
     # **And `puzzle` belongs to the one kind that runs one.** A block on any
     # other scene is written and never read, which is the fault the whole
@@ -2032,6 +2222,10 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         problems.append(
             f"{where}: a {kind} scene must not carry 'puzzle' --"
             f" only a puzzle scene runs one")
+    if kind != "vignette" and raw.get("vignette"):
+        problems.append(
+            f"{where}: a {kind} scene must not carry 'vignette' --"
+            f" only a vignette scene runs one")
     for name in unused:
         if raw.get(name):
             problems.append(f"{where}: a {kind} scene must not carry {name!r}")
@@ -2069,6 +2263,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         secondary=secondary,
         tries=tries,
         puzzle=puzzle,
+        vignette=vignette,
         caps=tuple(caps),
         secondary_grants=assists,
         on_success=str(raw.get("on_success", "")).strip(),

@@ -79,6 +79,14 @@ from .module import (
     SHELTERED,
     Module,
     Scene,
+    Vignette,
+)
+from .module import (
+    # **Aliased because `Side` is taken by the engine** -- `engine.Side` is
+    # PC or enemy, and a vignette's side is a party to an argument. Two
+    # unrelated meanings of one word, and this file is the only place that
+    # needs both.
+    Side as VignetteSide,
 )
 from .objective import watcher
 from .reflavour import Dressed
@@ -913,7 +921,7 @@ def _told(campaign: Campaign) -> object:
 
 def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
               director: beat_mod.Director | None,
-              ask_human: beat_mod.AskHuman) -> None:
+              ask_human: beat_mod.AskHuman, *, always: bool = False) -> None:
     """Play a roleplay scene out, if the module gave it anything to play.
 
     **A scene with nothing written to do stays what it was**: its brief,
@@ -936,7 +944,12 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
     # two scenes back. A scene nobody narrates drops it, which is right --
     # nobody was asked.
     carried = _carried(campaign)
-    if not (scene.affordances or scene.npcs or scene.lore):
+    # **`always` is for a vignette, which has something to play with none of
+    # those three.** Two characters wanting incompatible things is the thing
+    # to play, and it lives in `Scene.vignette` -- so the guard below, which
+    # is right for every other kind, would return before a word was said.
+    # #976.
+    if not (always or scene.affordances or scene.npcs or scene.lore):
         return
     # Said once, at the top of the scene, so a character who never speaks
     # reads as down rather than as broken.
@@ -1225,6 +1238,96 @@ def _puzzle(campaign: Campaign, module: Module, scene: Scene, step: Step,
         )
     finally:
         board.strike()
+
+
+def concluded(vignette: Vignette,
+              found: set[str]) -> tuple[str, list[VignetteSide]]:
+    """Which of the three printed conclusions this vignette reached. #976.
+
+    > *If the conflict resolves itself naturally, the players either
+    > compromise, allowing both sides to achieve their goals, or one side
+    > capitulates to the other. [...] If both sides refuse to budge [...]
+    > an impasse can be a strong outcome.*
+
+    A **named function and not six lines inside `_vignette`**, for the reason
+    `survivors` and `record_fallen` are: logic a probe cannot reach is logic
+    nobody can check. Posing a compromise through a played scene means
+    arranging for two particular affordances to be won, which with no model
+    serving is an artefact of the scripted matcher's ordering rather than of
+    the scene -- so the read would be asserted against whichever outcome the
+    ordering happened to produce.
+    """
+    reached = [
+        side for side in vignette.sides
+        if side.wins and any(won in found for won in side.wins)
+    ]
+    if vignette.sides and len(reached) == len(vignette.sides):
+        return "compromise", reached
+    if len(reached) == 1:
+        return "capitulation", reached
+    return "impasse", reached
+
+
+def _vignette(campaign: Campaign, module: Module, scene: Scene, step: Step,
+              director: beat_mod.Director | None,
+              ask_human: beat_mod.AskHuman) -> None:
+    """A conflict and two goals, resolved by talking. #976.
+
+    The beat loop does the scene; this says **how it ended**, and the
+    printed conclusion names three ways:
+
+    > *If the conflict resolves itself naturally, the players either
+    > compromise, allowing both sides to achieve their goals, or one side
+    > capitulates to the other. [...] If both sides refuse to budge [...]
+    > an impasse can be a strong outcome.*
+
+    Read off `Side.wins` against the affordances the scene actually won, so
+    the module says what reaching a goal looks like and nothing is judged.
+    Both goals reached is a compromise, one is a capitulation, neither is an
+    impasse.
+
+    **Impasse is the default and the engine never forces anybody to give
+    in**, which is the page's own fallback rather than a shortcut around the
+    hard half: it offers *"decide who gives in"*, with *"the PCs should have
+    more influence"* when they face NPCs, and then ends on *"If players seem
+    unhappy to relent for their PCs, default to an impasse."* Deciding would
+    mean judging which side argued better, which is the one thing this
+    component has measured the model to be bad at.
+
+    **And an impasse takes the scene's ordinary exit**, which is Camille's
+    standing ruling applied to a fifth kind. The outcome is recorded for a
+    later scene to read; it reroutes nobody.
+    """
+    _roleplay(campaign, module, scene, step, director, ask_human, always=True)
+    vig = scene.vignette
+    if vig is None:          # refused at load; belt and braces
+        return
+    playing = step.played
+    found = playing.found if playing is not None else set()
+    verdict, reached = concluded(vig, found)
+    if verdict == "compromise":
+        step.outcome = "compromise"
+        step.say(
+            "Compromise -- both sides got what they came for: "
+            + "; ".join(side.goal for side in reached), "note")
+    elif verdict == "capitulation":
+        step.outcome = "capitulation"
+        step.say(
+            f"{reached[0].name} carried it -- {reached[0].goal}. The other"
+            f" side gave way.", "note")
+    else:
+        step.outcome = "impasse"
+        step.say(
+            "Impasse -- neither side budged. That is a strong outcome rather"
+            " than a failure: it leaves the question open for a later scene,"
+            " and the party moves on.", "note")
+    if playing is not None and playing.stalled >= beat_mod.DUG_IN:
+        # Printed, because a scene that ended early for a reason nobody can
+        # see reads as a scene that ran out of beats.
+        step.say(
+            f"  (They dug in -- both sides restated themselves"
+            f" {playing.stalled} beats running, so the scene was concluded"
+            f" rather than run to its limit.)", "note")
 
 
 #: Which checks the "get a clue" rule rolls when a module names none. The
@@ -2242,6 +2345,8 @@ def step(
         _challenge(campaign, module, scene, made, choose)
     elif scene.kind == "puzzle":
         _puzzle(campaign, module, scene, made, ask_human)
+    elif scene.kind == "vignette":
+        _vignette(campaign, module, scene, made, director, ask_human)
     elif scene.kind == "rest":
         # **The camp conversation, before the sleep.** A rest scene was one
         # canned line and had nowhere to put *"you make camp and the rain
