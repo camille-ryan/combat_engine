@@ -117,15 +117,50 @@
       "complexity": 1,
       "level": 2,
       "primary": [
-        "athletics",
-        "endurance",
-        "nature",
-        "thievery"
+        {
+          "skill": "athletics",
+          "what": "I brace against the jammed timber and heave it clear",
+          "win": "A baulk of timber comes free and the wheel shifts.",
+          "lose": "The timber holds fast, and you are soaked to the waist."
+        },
+        {
+          "skill": "endurance",
+          "what": "I keep working in the cold water until it gives",
+          "win": "You work on past the cold and clear another armful of silt.",
+          "lose": "The cold wins first, and you climb out shaking."
+        },
+        {
+          "skill": "nature",
+          "what": "I read how the silt has packed to find where it will give",
+          "win": "The silt is packed against one spoke; clearing that slackens the rest.",
+          "lose": "You misread the pack, and the silt you shift slides straight back."
+        },
+        {
+          "skill": "thievery",
+          "what": "I work the jammed catch with my tools",
+          "win": "The catch lifts and the shaft turns freely.",
+          "lose": "A tool slips, and the catch is wedged tighter than before."
+        }
       ],
       "secondary": [
-        "perception",
-        "arcana",
-        "insight"
+        {
+          "skill": "perception",
+          "what": "I search the wheelhouse for what is actually jamming it",
+          "win": "The real obstruction shows itself: a timber pinned under the axle.",
+          "lose": "Nothing shows itself in the dark water."
+        },
+        {
+          "skill": "arcana",
+          "what": "I check whether something is holding the wheel by magic",
+          "win": "Nothing magical holds the wheel, which rules out the slow approaches.",
+          "lose": "You cannot tell whether anything is at work here."
+        },
+        {
+          "skill": "insight",
+          "what": "I watch the water for whatever is listening down there",
+          "win": "Whatever is in the cellar has gone still; you have a moment.",
+          "lose": "You cannot read the water, and the sense of being heard stays."
+        }
       ],
       "on_success": "cellar",
       "on_failure": "cellar_alarmed"

@@ -52414,6 +52414,77 @@ UNNAMED_KINDS_OWED = frozenset(
 )
 
 
+def the_fixture_challenge_can_run_beats(out: Result) -> None:
+    """Our own challenge fixture says what each roll meant. `#932`.
+
+    `Try` landed with `what`, `win` and `lose`, and `#932` recorded the
+    thing that blocked using it: *"the fixture challenge in
+    `scripts/fixtures/modules/` has none either. That one is ours and
+    `check.py` plays it, so it will need them when the loop lands -- and it
+    is the only place the loop can be exercised offline."*
+
+    So this asserts the fixture is ready, because it is the only board the
+    beat loop will ever be provable on without a model.
+
+    **`win`/`lose` are live today and `what` is not, and the split is worth
+    knowing.** `run.py` already calls `Scene.means(skill, won=)` for every
+    challenge roll, so facts reach the transcript the moment they exist --
+    that half is a behaviour change, not preparation. `what` is the
+    matcher's input and nothing reads it until the loop lands, so that half
+    is data waiting for a reader. Asserting both keeps the fixture from
+    half-regressing: a skill listed as a bare string loses all three at
+    once, silently, because the parser accepts a bare string as a valid
+    entry with no prose.
+
+    A fact, not narration -- which is `Try`'s own rule: *"what is true
+    because the roll went that way"*, handed to the DM to deliver rather
+    than written as delivery.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+
+    here = Path(__file__).resolve().parent.parent
+    loaded = mod.load(here / "scripts/fixtures/modules/sunken-mill.json")
+    scene = loaded.scene("wheelhouse")
+
+    out.that(scene.kind == "skill_challenge",
+             "the fixture still holds a skill challenge to speak for",
+             f"{scene.kind}")
+    out.that(len(scene.tries) >= 7,
+             "every skill on it is a full entry rather than a bare name --"
+             " the parser takes a bare string with no prose, so a"
+             " half-regression is silent",
+             f"{len(scene.tries)} tries against"
+             f" {len(scene.primary) + len(scene.secondary)} skills")
+    bare = [t.skill for t in scene.tries if not (t.win and t.lose)]
+    out.that(not bare,
+             "and each says what is true on a win and on a loss, which"
+             " `run.py` reads through `Scene.means` for every roll",
+             f"missing prose: {bare}")
+    unspoken = [t.skill for t in scene.tries if not t.what]
+    out.that(not unspoken,
+             "and each carries the words a player would type, which is what"
+             " the beat loop will match an intent against",
+             f"no phrasing: {unspoken}")
+
+    #: Through `means`, not off the dataclass: that is the reader `run.py`
+    #: actually uses, and a `Try` whose prose never reaches it would pass
+    #: every assertion above.
+    for one in scene.tries:
+        got = (scene.means(one.skill, won=True),
+               scene.means(one.skill, won=False))
+        if not all(got):
+            out.that(False,
+                     "and the reader run.py uses returns both facts for"
+                     f" every skill -- {one.skill} gave {got}")
+            break
+    else:
+        out.that(True,
+                 "and the reader `run.py` uses returns both facts for every"
+                 " skill on the challenge")
+
+
 def searching_a_room_needs_no_dice(out: Result) -> None:
     """A party that can take its time finds what its best member would. `#942`.
 
@@ -54639,6 +54710,10 @@ DRIVERS = {
     "brief_agrees": (
         the_importer_brief_and_the_parser_agree,
         "the importer brief names no value the parser refuses (#1026)",
+    ),
+    "fixture_challenge": (
+        the_fixture_challenge_can_run_beats,
+        "our own challenge fixture says what each roll meant (#932)",
     ),
     "search_certain": (
         searching_a_room_needs_no_dice,
