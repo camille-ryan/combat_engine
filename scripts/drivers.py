@@ -38625,7 +38625,7 @@ def the_dc_table_matches_what_the_compendium_prints(out: Result) -> None:
 
     4e prints many checks as a band -- "Athletics check (hard DC)" -- and
     `terrain.check_band` holds that word on 15 rows with the DC left null,
-    `disease.dc_shape = 'band'` on 8 more. `engine/difficulty.py` is the
+    `disease.dc_shape = 'band'` on 8 more. `combat_engine/dc.py` is the
     table and `query.difficulty` the reader. #491.
 
     **The load-bearing assertion compares the module against the
@@ -38642,24 +38642,50 @@ def the_dc_table_matches_what_the_compendium_prints(out: Result) -> None:
     import sqlite3 as _sql
     from pathlib import Path as _Path
 
-    from combat_engine.engine.difficulty import BANDS, DCS
+    # **Read off `dc.py`, which reads `rules_dc`.** This used to import
+    # `DCS` from `engine/difficulty.py` -- a second hand copy of the
+    # printed table, retired by #1062 -- so the invariants below were
+    # asserted against a literal rather than against what the engine
+    # actually answers. They are the same assertions over the live table.
+    from combat_engine.dc import BANDS, _table
     from combat_engine.engine.query import difficulty
 
+    # **Keyed by band NAME, never by position.** #1049 records why: reading
+    # a column by index means a reorder moves both sides at once and the
+    # check cannot see it. `BANDS.index` is used once, to build the
+    # name-keyed view, and nothing below indexes a tuple.
+    live = {
+        lvl: {word: row[BANDS.index(word)] for word in BANDS}
+        for lvl, row in _table().items()
+    }
+
     # -- the invariants, which hold with or without the compendium ---------
-    out.that(sorted(DCS) == list(range(1, 31)),
+    out.that(sorted(live) == list(range(1, 31)),
              "the table covers levels 1-30 and no others -- the printed"
              " range, and a hole would make `difficulty` clamp into the"
              " wrong row rather than refuse",
-             f"{len(DCS)} levels, {min(DCS)}-{max(DCS)}")
-    out.that(all(e < m < h for e, m, h in DCS.values()),
+             f"{len(live)} levels, {min(live)}-{max(live)}")
+    out.that(all(cells["easy"] < cells["moderate"] < cells["hard"]
+                 for cells in live.values()),
              "and easy < moderate < hard at every level, which is the one"
              " ordering a transposed column would break",
              "all 30 ordered")
-    rising = all(
-        DCS[n][i] <= DCS[n + 1][i] for n in range(1, 30) for i in range(3))
+    rising = all(live[n][word] <= live[n + 1][word]
+                 for n in range(1, 30) for word in BANDS)
     out.that(rising,
              "and no band ever falls as the level rises",
              f"{rising}")
+    # **And the reader agrees with the table it reads**, which is the
+    # assertion that becomes possible once there is only one table: with
+    # two, a cell-for-cell check could only compare a copy against a copy.
+    off = [(lvl, word) for lvl, cells in live.items() for word in BANDS
+           if difficulty(lvl, word) != cells[word]]
+    out.that(not off,
+             "and `query.difficulty` answers the table's own cell for all"
+             " 90 of them -- one table, one reader, so this compares the"
+             " reader against the page rather than one copy against"
+             " another",
+             f"disagreed at {off[:4]}")
 
     # -- the reader's refusals ---------------------------------------------
     out.that(difficulty(3, "hard") == 21 and difficulty(30, "moderate") == 32,
@@ -38695,8 +38721,15 @@ def the_dc_table_matches_what_the_compendium_prints(out: Result) -> None:
              "the glossary's rules table parsed into 30 rows -- the floor,"
              " and parsing nothing would make the comparison vacuous",
              f"{len(printed)} rows parsed")
-    wrong = {k: (printed[k], DCS.get(k)) for k in printed
-             if DCS.get(k) != printed[k]}
+    # **Against `rules_dc` itself, not against a copy of it.** This read
+    # `DCS` from `engine/difficulty.py`, so the strongest assertion in the
+    # rule compared the page against a hand transcription while the engine
+    # answered from a different table entirely. #1062 deleted that copy, so
+    # the comparison now runs page -> built column -> reader with nothing
+    # in between.
+    held = _table()
+    wrong = {k: (printed[k], held.get(k)) for k in printed
+             if tuple(held.get(k) or ()) != tuple(printed[k])}
     out.that(not wrong,
              "**and every cell matches what the compendium prints** -- the"
              " assertion this rule exists for, since a wrong DC is silent",

@@ -2964,15 +2964,47 @@ def difficulty(level: int, band: str) -> int | None:
     `disease.dc_shape = 'band'` on 8, each with the DC left null for want of
     this. #491.
 
-    The table lives in `engine/difficulty.py`, read off the compendium's
-    `Glossary` entry 384 rather than recalled -- it has been got wrong here
-    from memory before. This is the reader, and it is here because this is
-    where readers live and where `docs/symbols/reading.md` finds them.
+    **The table is `combat_engine/dc.py`, which reads `rules_dc`**, and
+    this function is now only the band-and-level contract over it. It used
+    to read a dict literal in `engine/difficulty.py` -- a second hand copy
+    of the printed table, which `#1001` set out to retire and missed
+    because it is reached only through this one function-local import. The
+    two agreed on **90 of 90** cells when measured, so retiring it closed a
+    latent hazard rather than a live one: the risk was never that a copy was
+    wrong, it was that nothing could tell when one stopped being right.
+    Two readers of one printed table can also drift from *each other*,
+    which a column-against-column check cannot see. #1062.
 
-    `None` means *unknown*, never "no DC": an unrecognised band is a parse
-    fault upstream, and a null level cannot be resolved at all, which is the
-    case the 8 band-shaped diseases are in -- their `level` is null too.
+    `dc.py` imports only `db.py` and sits below every component, so this is
+    not a new seam -- `.importlinter`'s seventh contract already covers it,
+    and `story/` has read it since `#949`.
+
+    Three contracts this keeps that `dc.dc` does not, which is why the
+    wrapper is not just a re-export:
+
+    * **the band is normalised** -- `"HARD "` resolves, because this reads
+      words off parsed rows rather than from a caller who typed them;
+    * **an unrecognised band is `None`, not a raise.** `dc.dc` raises on
+      purpose, which is right for a module author naming a band; here a
+      bad word is a parse fault upstream and burying it behind an exception
+      would lose the row;
+    * **a non-integer level is `None`.** The 8 band-shaped diseases have a
+      null level as well as a null DC, so this table cannot resolve them
+      on its own and saying so is the honest answer.
+
+    `None` therefore means *unknown*, never "no DC".
+
+    The import stays **function-local and `dc.py` stays lazy.** Its
+    docstring records why: an import-time read would make a `game.db` built
+    before `rules_dc` existed unable to import the package at all. This is
+    called on a board, so the deferral costs nothing.
     """
-    from .difficulty import difficulty as _dc
+    from combat_engine.dc import BANDS
+    from combat_engine.dc import dc as _dc
 
-    return _dc(level, band)
+    if not isinstance(level, int):
+        return None
+    word = (band or "").strip().lower()
+    if word not in BANDS:
+        return None
+    return _dc(level, word)
