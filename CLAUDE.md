@@ -45,7 +45,7 @@ The rest of the policy:
   | `#988` | one ten-row table was really **three** printed tables, each with a **Level** column that was dropped; one row renamed, one omitted, three absent from the book |
   | `#1010` | **exact.** All 20 cells of a ten-band, two-column table, and the sentence under it, verbatim |
   | `#972` | **exact.** The whole level-adjust rule, verbatim, and it had already shipped |
-  | `#1021` | **the table does not exist.** It said the parcel table "is keyed to five characters and gives a rule for every other size from one to eight". The page gives **one sentence** — *"add a parcel for each additional character… remove parcels accordingly"* — and no size-keyed table; a search of all 221 pages for an `N characters` phrase found 21 hits and none of them one. The parcel *lists* are per **level**, ten entries each |
+  | `#1021` | **exact, and my "the table does not exist" was the wrong answer** — Camille corrected it. The size-keyed table is on DMG page 125 and gives all eight sizes, naming the parcel numbers to add or remove. I searched for an `N characters` phrase and for the heading in normal case; it renders in small caps as `charact Er Group sizE and trEasurE parcELs`, so neither could match. **A failed search is not an absent table** — see the paragraph below |
 
   **This table used to say "three of the four quotes were not what they
   said", and counted `#1010` and `#972` among the three on the ground that
@@ -64,18 +64,32 @@ The rest of the policy:
     reader was being told to distrust the two that were right.
 
   So the lesson is narrower and more useful than the old headline: **the
-  numbers were right in 4 of 4 cases, and what went wrong both times was
-  the structure around them** — which table a row came from, which columns
-  were dropped, which file holds the other half. `#982` is the worked
-  example: pairing a banded damage table with a per-level DC table
-  misaligns in the **row keys**, so nothing would have raised and a level-5
-  trap would have read band `4th-6th` damage beside level-5 DCs from
-  another edition.
+  numbers were right in 5 of 5 cases, and what went wrong was always the
+  structure around them** — which table a row came from, which columns
+  were dropped, which file holds the other half, whether the table is
+  there at all. `#982` is the worked example: pairing a banded damage
+  table with a per-level DC table misaligns in the **row keys**, so
+  nothing would have raised and a level-5 trap would have read band
+  `4th-6th` damage beside level-5 DCs from another edition.
+
+  **And the fifth case inverts the direction, which is why the count moved
+  from 4 to 5.** `#1021`'s quote was *exact* and this file called the
+  table non-existent — so the error was mine and not the issue's, and it
+  took Camille correcting it to find. Three searches had come back empty:
+  an `N characters` phrase, the heading in normal case, and a scan of all
+  221 pages. The heading renders in small caps, extracting as
+  `charact Er Group sizE and trEasurE parcELs`, so every one of those
+  searches was asking for text the page does not contain.
 
   So: say in the code which printing a table came from and what could not be
   verified; **`ls resources/` before declaring a source absent**, because
-  that is a one-command claim and it was wrong here for two days; and if the
-  only source really is a quote, say so on the issue rather than landing it.
+  that is a one-command claim and it was wrong here for two days; **grep a
+  distinctive phrase from a table's *body* before declaring the table
+  absent**, because a heading is the least reliable thing to search for —
+  it is the text most likely to be set in a display face that extracts as
+  nonsense, and the body row `Add three parcels` found the page
+  immediately; and if the only source really is a quote, say so on the
+  issue rather than landing it.
   Same rule as a census — see *"an issue's census is a floor"* — applied to
   the cells instead of the count.
 

@@ -1500,6 +1500,13 @@ def hoard(campaign: Campaign, module: Module, scene: Scene,
     monetary ones follow. So the first four fights of a level hand over an
     item each and the next six hand over coin.
 
+    **Ten for the printed five characters, and the real head count
+    otherwise.** DMG page 125 adds a parcel per character above five and
+    removes named parcels below it, so a party of four gets nine and a
+    party of eight thirteen. `treasure.group_size` is the table and both
+    halves read it -- the item parcels through `parcels_for`, the monetary
+    ones through `shares`. #1021.
+
     **An item is carried, not worn**, which is why this owes no `winrate`
     run: `Sheet.carried` is a count of what happened to the party and
     nothing in a fight reads it, so the party's power is unchanged.
@@ -1508,8 +1515,9 @@ def hoard(campaign: Campaign, module: Module, scene: Scene,
     putting one *in play* is the part that would owe the measurement.
     Nothing equips from inventory today.
 
-    Nothing resets `parcels`, because nothing levels up (#1013). So ten
-    parcels is the module's lot, and that is stated rather than hidden.
+    Nothing resets `parcels`, because nothing levels up (#1013). So the
+    level's parcels are the module's lot, and that is stated rather than
+    hidden.
     """
     if scene.kind != "combat" or made.outcome != "won":
         return
@@ -1518,17 +1526,27 @@ def hoard(campaign: Campaign, module: Module, scene: Scene,
     # in and the order DMG2's alternative rewards assume -- they replace
     # "the highest-level magic items you would otherwise give out", which
     # only means anything if parcel 1 is the dearest. #969.
-    found = treasure.parcels_for(level, _stream(campaign, scene, "treasure"))
+    # **The real head count, not the printed five.** DMG page 125 adds a
+    # parcel per character above five and removes named parcels below it,
+    # and `len(sheets)` is already what `per_head` and `xp.pay` read --
+    # including after `bury` has taken somebody out of the party. #1021.
+    found = treasure.parcels_for(
+        level, _stream(campaign, scene, "treasure"),
+        len(campaign.party.sheets))
     if campaign.parcels < len(found):
-        ref, is_reward = found[campaign.parcels]
+        # **The step comes back with the parcel rather than being indexed
+        # out of `ITEM_STEPS`.** The returned list is not the printed four
+        # in order: a thin level drops its parcel and `#1021`'s group-size
+        # adjustment drops and adds named ones, so `parcels - 1` named the
+        # wrong step for a party of four and raised for a party of eight.
+        ref, is_reward, step = found[campaign.parcels]
         campaign.parcels += 1
         # **To one character, not split.** An item is one object; the coin
         # half divides because coin does. Round-robin by parcel so a
         # four-item level does not load one sheet.
         who = campaign.party.sheets[
             (campaign.parcels - 1) % len(campaign.party.sheets)]
-        step = treasure.ITEM_STEPS[campaign.parcels - 1]
-        total = len(found) + len(treasure.shares(level))
+        total = len(found) + len(treasure.shares(level, len(campaign.party.sheets)))
         if is_reward:
             # **`rewards`, not `carried`.** A reward is not a physical
             # object, so the noun matters: it takes no slot and nobody
@@ -1553,7 +1571,7 @@ def hoard(campaign: Campaign, module: Module, scene: Scene,
                 "note",
             )
         return
-    purse = treasure.shares(level)
+    purse = treasure.shares(level, len(campaign.party.sheets))
     if not purse:
         made.say(
             f"No treasure can be worked out for level {level} -- no "

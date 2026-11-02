@@ -1779,7 +1779,7 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 51 drivers and prints 646 assertions**, and **each was
+**The command above is 51 drivers and prints 670 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the
@@ -2658,7 +2658,7 @@ is the module's lot, and `hoard`'s docstring says so.
 **Nothing spends the coins.** An economy wants rituals (#453) and a market; a
 visible number that cannot be spent is honest, awarding nothing was not.
 
-**Two pieces of the printed system are absent, both filed with a measurement:**
+**One piece of the printed system is absent, filed with a measurement:**
 
 * **#1020, alternative rewards.** They go in an item parcel's *place*, are not
   physical objects, occupy no slot, and fade after five levels — and **119 of
@@ -2672,8 +2672,38 @@ visible number that cannot be spent is honest, awarding nothing was not.
   the only parcel that could be put **in play** without moving the curve the
   monster defences are set against. That curve is the whole reason the item
   half had to be carried rather than worn.
-* **#1021, the group-size adjustment.** The printed table adds and drops
-  parcels for a party that is not five; this divides a fixed ten evenly, so a
-  party of three is richer per head and the level's total never moves. Filed
-  **without** the table's contents, because the page has not been read — which
-  is the rule about a quoted table applied to an issue I was writing myself.
+
+### The party size moves the parcels, and both halves of the ten
+
+**#1021, the group-size adjustment, is in.** `treasure.GROUP_SIZE` is the
+printed table from DMG page 125, read in `resources/`: which parcels to add
+as levels above the party, and which printed parcel **numbers** to remove.
+Three things are worth knowing before touching it.
+
+* **It reaches both halves of the ten.** `parcels_for` honours the item
+  numbers (1 to 4) and `shares` the monetary ones (5 up) -- and `shares`
+  did not take a head count at all until #1021's second pass, while
+  `parcels_for`'s own comment claimed the 5 was "honoured there". A party
+  of one keeps the whole level's coin on that reading.
+* **A caller cannot re-derive a parcel's level.** `parcels_for` returns
+  `(ref, is_reward, step)` because the returned list is *not* the printed
+  four in order: a thin level drops its parcel and the table drops and
+  appends named ones. `hoard` indexed `ITEM_STEPS` by how many parcels it
+  had handed out, which named the wrong level for a party of four and
+  **raised** for a party of eight.
+* **Clamped, not extrapolated.** The page gives one through eight and says
+  nothing about nine, so a bigger party is treated as eight. The counts
+  are 1, 1, 2, 3, 4, 5, 6, 7 item parcels -- one and two are equal because
+  parcels 1, 2 and 4 are all removed below three characters.
+
+And `treasure.monetary_only(level, heads)` is Camille's separate ask on the
+same issue -- *"an option to just do monetary treasure. For example: at
+level 1, it is 144gp per character"* -- summed from `shares` rather than
+from `monetary` so the two cannot disagree. Nothing in `run` calls it yet;
+it is the figure a DM wanting no items would use.
+
+**What this file used to say here was that the table does not exist**,
+*"because the page has not been read"*. It had been looked for and not
+found: the heading is in small caps and extracts as nonsense, so three
+searches came back empty. The root `CLAUDE.md` carries the general lesson
+-- grep a phrase from a table's **body**, never its heading.

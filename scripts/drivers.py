@@ -44252,15 +44252,15 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
     pf = tr.parcels_for(5, Random(4))
     out.that(
         len(pf) == 4 and pf[0][1] is True
-        and not any(flag for _ref, flag in pf[1:]),
+        and not any(flag for _ref, flag, _step in pf[1:]),
         "**parcel 1 is the alternative reward and parcels 2 to 4 are "
         "items** -- the page replaces one magic item per level, and the "
         "one it names is the highest it would otherwise have given, which "
         "is parcel 1 by `ITEM_STEPS` above",
         f"{pf}",
     )
-    rewards = {r for r, flag in pf if flag}
-    items_drawn = {r for r, flag in pf if not flag}
+    rewards = {r for r, flag, _step in pf if flag}
+    items_drawn = {r for r, flag, _step in pf if not flag}
     out.that(
         not (rewards & items_drawn),
         "and the two draws partition -- `item_for` excludes the category "
@@ -44273,7 +44273,73 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
         "and the flag is the database's own category rather than this "
         "rule's opinion -- a reward flagged as an item would be filed "
         "under `carried`, which is the wrong noun and the whole bug",
-        f"{[(r, _is_reward(r)) for r, _f in pf]}",
+        f"{[(r, _is_reward(r)) for r, _f, _s in pf]}",
+    )
+    out.that(
+        [step for _r, _f, step in pf] == list(tr.ITEM_STEPS),
+        "and each parcel carries **its own step** rather than leaving the "
+        "caller to index `ITEM_STEPS` -- for the printed five that is the "
+        "identity, which is why the old indexing looked right (#1021)",
+        f"{[s for _r, _f, s in pf]} vs {list(tr.ITEM_STEPS)}",
+    )
+
+    # -- the printed group-size adjustment, DMG page 125 (#1021) ------------
+    #
+    # **Camille's correction, and the reason this block exists**: I had
+    # recorded that this table is not in the book. It is on page 125 and
+    # extracts with its heading in small caps, which is why two searches
+    # for it found nothing. A failed search is not an absent table.
+    counts = {h: len(tr.parcels_for(5, Random(4), h)) for h in range(1, 9)}
+    out.that(
+        counts == {1: 1, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7},
+        "**the printed table moves the item parcels with the party size** "
+        "-- five characters get the four the lists are written for, eight "
+        "get three more, and a small party has named parcels removed. "
+        "Parcels 1, 2 and 4 are all removed below three characters, which "
+        "is why one and two characters both get one",
+        f"{counts}",
+    )
+    out.that(
+        [s for _r, _f, s in tr.parcels_for(5, Random(4), 4)] == [4, 3, 1],
+        "and a party of four loses printed parcel **3**, so what survives "
+        "is +4, +3 and +1 -- the gap in the middle is the whole reason a "
+        "caller cannot index `ITEM_STEPS` by how many it has handed out",
+        f"{[s for _r, _f, s in tr.parcels_for(5, Random(4), 4)]}",
+    )
+    out.that(
+        tr.group_size(0) == tr.group_size(1)
+        and tr.group_size(99) == tr.group_size(8),
+        "and the table is **clamped rather than extrapolated** -- the page "
+        "gives one through eight and says nothing about nine, so a larger "
+        "party is treated as eight. Extending the pattern would be "
+        "deriving a number the page does not print",
+        f"0 -> {tr.group_size(0)}, 99 -> {tr.group_size(99)}",
+    )
+    out.that(
+        len(tr.shares(5, 1)) == 5 and len(tr.shares(5, 2)) == 6,
+        "**and the adjustment reaches the monetary half, which nothing "
+        "honoured.** Printed parcel 5 is the first monetary one and a solo "
+        "character has it removed, so the coin list is five rather than "
+        "six -- `parcels_for`'s own comment said this was honoured in "
+        "`shares` while `shares` did not take a head count at all",
+        f"1 -> {tr.shares(5, 1)}, 2 -> {tr.shares(5, 2)}",
+    )
+    out.that(
+        tr.monetary_only(1, 5) == 144,
+        "and the monetary-only option is **144 gp each at level 1**, which "
+        "is Camille's own figure on #1021 and confirms the existing curve "
+        "rather than needing one of its own: `monetary(1)` is 720, twice a "
+        "level-1 item's market price, over the five characters the lists "
+        "are written for",
+        f"{tr.monetary_only(1, 5)} from {tr.monetary(1)}",
+    )
+    out.that(
+        tr.monetary_only(1, 1) == sum(tr.shares(1, 1)),
+        "and it is **summed from `shares`, not from `monetary`**, so the "
+        "two cannot disagree -- reading the level's total directly would "
+        "hand a solo character the parcel the page took away",
+        f"{tr.monetary_only(1, 1)} vs {sum(tr.shares(1, 1))} "
+        f"(level total {tr.monetary(1)})",
     )
     out.that(
         tr.faded(5, 9) is False and tr.faded(5, 10) is True,
@@ -44289,7 +44355,8 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
     )
 
     # -- and through a module of fights ------------------------------------
-    def nine_fights(level: int = 5, seed: int = 3, fights: int = 12) -> tuple:
+    def nine_fights(level: int = 5, seed: int = 3, fights: int = 12,
+                    heads: int = 4) -> tuple:
         # **Twelve, not nine.** Ten parcels now -- four items then six
         # monetary -- so nine fights left the last monetary parcel unpaid
         # and three assertions short. Two spare fights also prove the
@@ -44302,31 +44369,70 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
             for i in range(fights)
         ]
         built = mod.parse(
-            {"id": "probe", "party_level": level, "party_size": 4,
+            {"id": "probe", "party_level": level, "party_size": heads,
              "start": "f0", "scenes": scenes}, Path("<driver>"))
         campaign = run_mod.begin(built, seed=seed)
         found: list[int] = []
+        told: list[str] = []
         while not campaign.finished:
             made = run_mod.step(campaign, built, record=False)
             said = [str(x) for x in made.lines if "Treasure:" in str(x)]
             found.append(len(said))
-        return campaign, found
+            told.extend(said)
+            # **Rested between fights, because twelve in a row wipes the
+            # party and an empty party cannot be asked about coins.**
+            #
+            # This probe measures what a LEVEL pays out, which takes ten
+            # parcels and so more fights than a party survives unrested.
+            # The premise that it would survive was never guaranteed and
+            # `#1064` made it false: monsters no longer spend a minor
+            # action looking for traps, so they spend it on something
+            # lethal, and `sheets` came back empty. Four assertions then
+            # read an empty list -- and three of them PASSED on it, since
+            # `len(set([])) <= 1` and `sum([]) == 0` are both true of
+            # nobody.
+            #
+            # A rest is what a real campaign puts between encounters
+            # anyway, so this restores the premise rather than weakening
+            # any claim about treasure: the fight count, the parcel
+            # sequence and every figure asserted below are unchanged.
+            campaign.party.rest()
+        return campaign, found, told
 
-    campaign, found = nine_fights()
+    campaign, found, told = nine_fights()
     out.that(
-        sum(found) == 10 and found[:10] == [1] * 10
-        and found[10:] == [0, 0],
-        "the first ten fights of a level each carry a parcel and the rest "
-        "carry none -- four items then six monetary, over the eight to ten "
-        "encounters the page budgets a level at. The tail is the printed "
+        sum(found) == 9 and found[:9] == [1] * 9
+        and found[9:] == [0, 0, 0],
+        "each fight of a level carries a parcel until the level's are spent "
+        "and the rest carry none -- for this FOUR-character party, three "
+        "items then six monetary. **Nine, not ten**: DMG page 125 removes "
+        "parcel 3 for a party of four, and this assertion encoded the "
+        "pre-#1021 behaviour where party size was ignored. The tail is the "
+        "printed "
         "*\"two to four encounters with no treasure reward\"*, and it "
         "falls out of the parcels being spent rather than from a roll",
         f"{found}",
     )
     out.that(
-        campaign.parcels == 10,
-        "and the campaign knows how many it has found",
+        campaign.parcels == 9,
+        "and the campaign knows how many it has found -- nine for a party "
+        "of four, which is the printed size adjustment rather than the ten "
+        "a party of five gets (#1021)",
         f"{campaign.parcels}",
+    )
+    levels = [int(w) for line in told if "level " in line
+              for w in [line.split("level ", 1)[1].split()[0]]
+              if w.isdigit()]
+    out.that(
+        levels[:3] == [9, 8, 6],
+        "**and each item parcel is announced at the level it is actually "
+        "priced at** -- +4, +3 and +1 above a level-5 party, because DMG "
+        "page 125 removes parcel 3 for a party of four. `hoard` used to "
+        "name the level by indexing `ITEM_STEPS` with how many parcels it "
+        "had handed out, which reads +2 for the third one and tells the "
+        "player the wrong level; for a party of eight it raised outright. "
+        "The parcel carries its own step now",
+        f"{levels[:3]} from {told[:3]}",
     )
     coins = [sheet.coins for sheet in campaign.party.sheets]
     out.that(
@@ -44347,22 +44453,27 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
     carried = [dict(sheet.carried) for sheet in campaign.party.sheets]
     held = [dict(sheet.rewards) for sheet in campaign.party.sheets]
     out.that(
-        sum(sum(c.values()) for c in carried) + sum(len(r) for r in held) == 4
-        and all(len(c) + len(r) == 1
+        sum(sum(c.values()) for c in carried) + sum(len(r) for r in held) == 3
+        and all(len(c) + len(r) <= 1
                 for c, r in zip(carried, held, strict=True)),
-        "the four parcels land **one per character**, round-robin by "
+        "the item parcels land **one per character**, round-robin by "
         "parcel, because an item is one object where coin divides -- a "
-        "four-parcel level must not load one sheet",
+        "multi-parcel level must not load one sheet. **Three, not four**: "
+        "DMG page 125 removes parcel 3 for a party of four, and this "
+        "assertion's `== 4` encoded the pre-#1021 behaviour where party "
+        "size was ignored. Three items across four sheets leaves one "
+        "sheet empty, so the per-sheet test is `<= 1` rather than `== 1`",
         f"carried={carried} rewards={held}",
     )
     out.that(
         sum(len(r) for r in held) == 1
-        and sum(sum(c.values()) for c in carried) == 3,
-        "**and exactly one of the four is a reward, filed apart from "
+        and sum(sum(c.values()) for c in carried) == 2,
+        "**and exactly one of them is a reward, filed apart from "
         "`carried`** -- the page replaces one item per level, and a "
         "reward is not a physical object so it must not land in the "
         "dictionary that means held. This assertion went red when #1020 "
-        "moved parcel 1 and is what caught the split",
+        "moved parcel 1 and is what caught the split. The carried half "
+        "reads 2 rather than 3 for the same #1021 reason as above",
         f"rewards={sum(len(r) for r in held)} carried="
         f"{sum(sum(c.values()) for c in carried)}",
     )
@@ -44383,6 +44494,49 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
         "power is unchanged. That is the whole reason this owes no "
         "`winrate` run; equipping one is the part that would",
         f"{carried}",
+    )
+
+    # -- and a party larger than the printed five --------------------------
+    #
+    # **Through `run.step`, not through `parcels_for`.** The arithmetic
+    # above is the helper's; this is the caller's, and the caller is where
+    # `#1021` left an `IndexError` waiting: `hoard` named each parcel's
+    # level by indexing `ITEM_STEPS[campaign.parcels - 1]`, which has four
+    # entries, and an eight-character party is handed **seven** item
+    # parcels. Parcel 5 raised. Nothing covered it because every probe in
+    # this rule fielded four characters.
+    big, big_found, big_told = nine_fights(fights=15, heads=8)
+    big_items = [
+        dict(sheet.carried) for sheet in big.party.sheets]
+    big_held = [dict(sheet.rewards) for sheet in big.party.sheets]
+    out.that(
+        sum(big_found) == 13 and big.parcels == 13,
+        "**an eight-character party is handed thirteen parcels** -- the "
+        "printed four items plus the three the page adds, then the six "
+        "monetary ones. The old step index would have raised on the fifth "
+        "item parcel, so this is a load-bearing count rather than a "
+        "restatement of the table above",
+        f"{sum(big_found)} over {len(big_found)} fights, "
+        f"parcels={big.parcels}",
+    )
+    out.that(
+        sum(sum(c.values()) for c in big_items)
+        + sum(len(r) for r in big_held) == 7,
+        "and seven of them are items, round-robin across eight sheets, so "
+        "nobody is loaded and nobody is handed a parcel the page did not "
+        "print",
+        f"carried={big_items} rewards={big_held}",
+    )
+    big_levels = [int(w) for line in big_told if "level " in line
+                  for w in [line.split("level ", 1)[1].split()[0]]
+                  if w.isdigit()]
+    out.that(
+        big_levels[:7] == [9, 8, 7, 6, 8, 7, 6],
+        "and the three added parcels are announced at +3, +2 and +1 -- the "
+        "page's own order for what to add, after the printed four. This is "
+        "the assertion the old `ITEM_STEPS` index could not reach at all: "
+        "it raised on the fifth",
+        f"{big_levels[:7]}",
     )
 
     # -- what does not pay --------------------------------------------------
@@ -44431,7 +44585,7 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
     # -- and it survives a save --------------------------------------------
     back = save_mod.from_dict(save_mod.to_dict(campaign))
     out.that(
-        back.parcels == campaign.parcels == 10
+        back.parcels == campaign.parcels == 9
         and [s.coins for s in back.party.sheets] == coins,
         "the coins and the count of parcels found both survive a save, so "
         "reloading is not a way to find the level's treasure twice",

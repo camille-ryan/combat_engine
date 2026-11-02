@@ -84,19 +84,43 @@ def monetary(level: int) -> int:
     return DOUBLE * market_price(level)
 
 
-def shares(level: int) -> tuple[int, ...]:
-    """The six monetary parcels, in the printed descending order.
+#: The party size the printed parcel lists are written for.
+PRINTED_FOR = 5
 
-    Sums to `monetary(level)` exactly. The remainder from the rounding
-    goes on the **largest** parcel, where it is proportionally smallest
-    and where a reader is least likely to notice a lumpy number.
+
+def shares(level: int, heads: int = PRINTED_FOR) -> tuple[int, ...]:
+    """The monetary parcels, in the printed descending order.
+
+    Sums to `monetary(level)` exactly for the five characters the printed
+    lists are written for. The remainder from the rounding goes on the
+    **largest** parcel, where it is proportionally smallest and where a
+    reader is least likely to notice a lumpy number.
+
+    **The group-size adjustment reaches the monetary half too, and only
+    `parcels_for` used to honour it.** DMG page 125 removes printed parcel
+    numbers for a party smaller than five, and parcel 5 is the *first
+    monetary* one -- so a party of one has it removed and gets five
+    monetary parcels rather than six. `parcels_for` returns item parcels
+    only and its own comment said a 5 in the remove list was "honoured
+    there rather than here"; nothing honoured it, so the whole level's
+    coin still went to a solo character. The page's added parcels are all
+    items, so nothing is added here.
+
+    A party larger than five is unchanged, which is why the default moves
+    no existing caller.
     """
     total = monetary(level)
     if total <= 0:
         return ()
     cut = [int(total * share) for share in PARCELS]
     cut[0] += total - sum(cut)
-    return tuple(cut)
+    # The page names printed parcel *numbers*; 1 to 4 are the items and 5
+    # up are these six, so number `n` is `cut[n - 5]`.
+    _add, drop = group_size(heads)
+    return tuple(
+        money for i, money in enumerate(cut)
+        if (i + len(ITEM_STEPS) + 1) not in drop
+    )
 
 
 #: What the four item parcels are worth, as levels above the party's.
@@ -222,10 +246,93 @@ def items(level: int, draw: Random) -> tuple[str, ...]:
     return tuple(ref for ref in found if ref)
 
 
-def parcels_for(level: int, draw: Random) -> tuple[tuple[str, bool], ...]:
-    """The four item parcels, each with whether it is a reward. #1020.
+#: What the printed table does to the ten parcels for a party that is not
+#: five, by head count. DMG page 125, read in `resources/` -- **and this
+#: table's absence was my own wrong claim**, corrected by Camille on
+#: `#1021`. I searched for an `N characters` phrase and for the heading in
+#: normal case; it is set in small caps and extracts as
+#: `charact Er Group sizE and trEasurE parcELs`, so neither search could
+#: ever have matched. A failed search is not an absent table.
+#:
+#: Expressed as the page expresses it: which parcels to **add** (as levels
+#: above the party, like `ITEM_STEPS`) and which printed parcel **numbers**
+#: to remove. The page names the numbers, so this names them too rather
+#: than re-deriving an index -- and the numbers line up with `ITEM_STEPS`
+#: exactly, which is a cross-check worth having: parcel 1 is level + 4,
+#: 2 is + 3, 3 is + 2, 4 is + 1, and parcel 5 is the first monetary one.
+GROUP_SIZE: dict[int, tuple[tuple[int, ...], tuple[int, ...]]] = {
+    8: ((3, 2, 1), ()),
+    7: ((2, 1), ()),
+    6: ((2,), ()),
+    5: ((), ()),
+    4: ((), (3,)),
+    3: ((), (2, 4)),
+    2: ((), (1, 2, 4)),
+    1: ((), (1, 2, 4, 5)),
+}
 
-    `(ref, is_reward)`, best first. The page replaces **one magic item per
+
+
+def group_size(heads: int) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """`(levels to add, printed parcel numbers to remove)` for a party. #1021.
+
+    Clamped to the printed range rather than extrapolated: the page gives
+    one through eight and says nothing about nine, so a larger party is
+    treated as eight and a smaller one as one. Extending the pattern would
+    be deriving a number the page does not print, which is the rule this
+    module's own `market_price` docstring already follows.
+    """
+    return GROUP_SIZE[max(1, min(8, heads))]
+
+
+def monetary_only(level: int, heads: int) -> int:
+    """The whole level's treasure as coin, per character. Camille's ask.
+
+    > *"let's have somewhere an option to just do monetary treasure. For
+    > example: at level 1, it is 144gp per character."*
+
+    144 is exactly what this computes: `monetary(1)` is 720 -- twice a
+    level-1 item's market price, which is the printed Total Monetary
+    Treasure figure -- and 720 over the five characters the lists are
+    written for is 144. So the figure confirms the existing curve rather
+    than needing one of its own, which is why there is no new constant
+    here.
+
+    **Divided by the real head count, not by five.** A party of four at
+    level 1 gets 180 each and the level still pays out 720, which is the
+    same reading `per_head` already takes: the level's total is the level's
+    total, and who shares it is a different question.
+
+    **Summed from `shares` rather than from `monetary`**, so the two cannot
+    disagree: the group-size adjustment removes printed parcel 5 for a solo
+    character, and reading the level's total directly would hand a parcel
+    over that the page took away.
+
+    Floored, like `per_head` and `xp.share`, and for the same reason: the
+    page gives no rule for the odd coin.
+    """
+    return sum(shares(level, heads)) // max(1, heads)
+
+
+def parcels_for(level: int, draw: Random,
+                heads: int = PRINTED_FOR,
+                ) -> tuple[tuple[str, bool, int], ...]:
+    """The item parcels, each with whether it is a reward and its step. #1020.
+
+    `(ref, is_reward, step)`, best first, where `step` is how many levels
+    above the party the parcel is priced -- `ITEM_STEPS` for the printed
+    four and `GROUP_SIZE`'s added ones after them.
+
+    **The step is returned rather than re-derived, because the caller
+    cannot re-derive it.** `run.hoard` used to index `ITEM_STEPS` by how
+    many parcels it had handed out, which is only right when the returned
+    list is the printed four in order. It is not: a level the database
+    prices nothing at drops its parcel, and `#1021`'s group-size
+    adjustment drops named parcels for a small party and appends extra
+    ones for a large one. For a party of four, parcel 3 is removed, so the
+    third parcel handed out is printed parcel 4 at `+1` and the old index
+    called it `+2`; for a party of eight there are seven parcels against
+    four steps and it would have raised `IndexError`. The page replaces **one magic item per
     level** with an alternative reward, and it says which one: the highest
     it would otherwise have given. So parcel 1 -- the `+4` step -- is the
     reward and parcels 2 to 4 stay items. `run`'s own comment at the award
@@ -249,16 +356,35 @@ def parcels_for(level: int, draw: Random) -> tuple[tuple[str, bool], ...]:
     retrying at another level, both of which would hide a thin spot in the
     corpus. The caller is told which it got.
     """
-    out: list[tuple[str, bool]] = []
+    # **The printed group-size adjustment, by parcel number.** DMG page
+    # 125, and `heads` defaults to the five the lists are written for so
+    # every existing caller is unchanged. #1021.
+    #
+    # The page names parcel *numbers* and `ITEM_STEPS` is in the same
+    # order, so `i + 1` is the printed number -- parcel 1 at level + 4
+    # through parcel 4 at level + 1. Parcel 5 is the first monetary one,
+    # so a `5` in the remove list is `shares`' business and is honoured
+    # there; this returns item parcels only.
+    add, drop = group_size(heads)
+    out: list[tuple[str, bool, int]] = []
     for i, step in enumerate(ITEM_STEPS):
+        if (i + 1) in drop:
+            continue
         if i == 0:
             got = reward_for(level + step, draw)
             if got:
-                out.append((got, True))
+                out.append((got, True, step))
                 continue
         got = item_for(level + step, draw)
         if got:
-            out.append((got, False))
+            out.append((got, False, step))
+    # Added after the printed four, in the page's own order, and never a
+    # reward: the page says *"add a magic item of level + N"*, and a
+    # reward replaces the dearest item rather than an extra one.
+    for step in add:
+        got = item_for(level + step, draw)
+        if got:
+            out.append((got, False, step))
     return tuple(out)
 
 
