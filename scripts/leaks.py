@@ -1675,6 +1675,25 @@ _LOOKS_REF = re.compile(r"^(?:[a-z]+:[\w:-]*\d[\w:-]*|[a-z]{1,3}\d[\w:_-]*)$")
 #: any threshold that keeps all the genuine ones. A ranker, not a gate, the
 #: same verdict `triage.py` carries.
 #:
+#: **`f3270` is the sixth of an identical family and was added by the check
+#: getting STRONGER, not by a spec changing.** `f3190`, `f3244`, `f3262`,
+#: `f3267` and `f3269` were already here for `m5441a5`, and `f3270` says the
+#: same thing its siblings say -- the phrase is the *character's* own
+#: feature, and the monster ability that shares the printed name is the
+#: coincidence. Nothing in the index holds that name character-side, which
+#: is why the scrub cannot resolve it and why a waiver is the answer rather
+#: than an extraction fix.
+#:
+#: What made it visible is worth recording, because it looks like a
+#: regression and is the opposite. This pass measures the compendium's own
+#: habit -- how often a ref follows each three-word lead-in -- and `#1033`
+#: put `p7635` directly after *"benefit when your"* in `f1416`, which is
+#: `f3270`'s lead-in exactly. So the detector learned one more position and
+#: immediately found a sixth coincidence in a family it already knew. The
+#: spec is byte-identical across that rebuild: measured, `f3270` is not
+#: among the 13 feat specs `#1033` moved, and it carries the phrase in a
+#: copy of the database taken before the batch.
+#:
 #: Shrinks, never grows. #340.
 POSITION_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
     ("feat", "f748", "rt:r8-t1"),
@@ -1686,6 +1705,7 @@ POSITION_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
     ("feat", "f3262", "m5441a5"),
     ("feat", "f3267", "m5441a5"),
     ("feat", "f3269", "m5441a5"),
+    ("feat", "f3270", "m5441a5"),
     ("item_block", "i580x1", "m5441a5"),
     ("item_block", "i630p1", "i192"),
     ("item_block", "i694x1", "m5441a5"),
