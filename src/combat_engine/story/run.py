@@ -39,6 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from random import Random
+from typing import Protocol
 
 from combat_engine.engine import Ident, Side, Team
 from combat_engine.engine.components import Condition, Conditions, Position, Trap
@@ -1656,7 +1657,21 @@ def stake(scene: Scene, made: Step) -> None:
             )
 
 
-def rally(world: World, step: Step) -> None:
+class Says(Protocol):
+    """What `rally` needs of a step: somewhere to put a line.
+
+    **A protocol rather than `Step`**, because that is the honest
+    signature: this pass reads nothing off a step and only reports. Typing
+    it as `Step` made `drivers.rally` pass a recorder that `ty` then
+    refused -- 27 diagnostics above the baseline, every one in the driver
+    rather than here. Narrowing the requirement to what the code uses
+    fixes the driver without loosening anything. #1075.
+    """
+
+    def say(self, text: str, kind: str = ...) -> None: ...
+
+
+def rally(world: World, step: Says) -> None:
     """Once the fighting stops, the standing try to save the dying. #1075.
 
     Camille's design, on `#1023`:

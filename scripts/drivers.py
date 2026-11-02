@@ -48681,7 +48681,7 @@ def the_dead_leave_the_party_and_the_dying_are_stood_up(out: Result) -> None:
     def fielded(hp: int | None, failures: int = 0) -> tuple:
         """Field a party whose first sheet is at `hp`, and read it back."""
         band = story.Party.of(
-            ("fighter", "cleric", "rogue", "wizard"), 2)
+            ["fighter", "cleric", "rogue", "wizard"], 2)
         band.sheets[0].hp = hp
         band.sheets[0].failures = failures
         got = story.field_encounter(seed=3, level=2, party=band)
@@ -50223,7 +50223,7 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
         *hurt: tuple[int, int, int],
     ) -> tuple[Party, Fielded]:
         """A party with `(slot, hp, failures)` applied to its sheets."""
-        band = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+        band = Party.of(["fighter", "cleric", "rogue", "wizard"], 2)
         for slot, hp, fails in hurt:
             band.sheets[slot].hp = hp
             band.sheets[slot].failures = fails
@@ -50353,7 +50353,7 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
 
     # -- and the flag survives into the next fight, against a control ----
     def ticks(stable: bool) -> tuple[bool, int]:
-        band = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+        band = Party.of(["fighter", "cleric", "rogue", "wizard"], 2)
         band.sheets[0].hp = -10
         band.sheets[0].stable = stable
         got = field_encounter(seed=5, level=2, party=band)
@@ -50386,12 +50386,12 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
     )
 
     # -- a rest ends it, both ways round ----------------------------------
-    band = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+    band = Party.of(["fighter", "cleric", "rogue", "wizard"], 2)
     band.sheets[0].hp = -10
     band.sheets[0].stable = True
     band.rest()
     short = band.sheets[0].stable
-    band2 = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+    band2 = Party.of(["fighter", "cleric", "rogue", "wizard"], 2)
     band2.sheets[0].hp = -10
     band2.sheets[0].stable = True
     band2.rest(extended=True)
@@ -50428,7 +50428,7 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
     reached: list[int] = []
     was = run_mod.rally
 
-    def recorder(world: World, step: object) -> None:
+    def recorder(world: World, step: run_mod.Says) -> None:
         reached.append(1)
         was(world, step)
 
@@ -50521,7 +50521,7 @@ def a_dying_ally_can_be_stabilised_with_a_heal_check(out: Result) -> None:
         it is, and the encounter -- with the two placed `apart` squares
         from each other.
         """
-        band = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+        band = Party.of(["fighter", "cleric", "rogue", "wizard"], 2)
         band.sheets[0].hp = hp
         got = field_encounter(seed=seed, level=2, party=band)
         world = got.world
@@ -50535,6 +50535,12 @@ def a_dying_ally_can_be_stabilised_with_a_heal_check(out: Result) -> None:
                 break
             enc.advance()
         mate = world.turn
+        # **Narrowed, not cast.** `world.turn` is `int | None` and the
+        # loop above can run out without finding a living ally -- on a
+        # board where the whole party is down, which is a case this driver
+        # deliberately poses elsewhere. Asserting it here says so rather
+        # than letting the probe read `None` as an entity.
+        assert mate is not None, "no living ally took a turn"
         mx, my = world.need(mate, Pos).square
         place(world, low, (mx + apart, my))
         return world, low, mate, enc
@@ -50732,7 +50738,7 @@ def the_party_travels_as_far_as_its_slowest_member(out: Result) -> None:
     # pace from `Sheet.race` drops a point in the generous direction. On
     # the real dealt party the two answers genuinely differ, so this is a
     # measurement rather than a restatement.
-    party = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+    party = Party.of(["fighter", "cleric", "rogue", "wizard"], 2)
     races = chargen._races_from_the_book()
     by_race = [races[s.race].speed for s in party.sheets if s.race in races]
     board = table_mod.lay(party, seed=3)
@@ -50850,9 +50856,12 @@ def a_disease_moves_at_an_extended_rest(out: Result) -> None:
     from pathlib import Path
 
     from combat_engine.db import game
+    from combat_engine.engine.skills import CheckResult
     from combat_engine.story import affliction as af
     from combat_engine.story import module as mod
     from combat_engine.story import run as run_mod
+    from combat_engine.story import save as save_mod
+    from combat_engine.story import table as table_mod
 
     # -- the partition, which is what keeps the census from drifting -------
     whole = game().execute("SELECT COUNT(*) FROM disease").fetchone()[0]
@@ -50872,8 +50881,8 @@ def a_disease_moves_at_an_extended_rest(out: Result) -> None:
         return {"id": f"r{i}", "kind": "rest", "name": f"R{i}",
                 "exits": [nxt] if nxt else [], "extended": extended}
 
-    def walk(extended: bool, ref: str, stage: int,
-             improve: int, worsen: int) -> tuple[object, list[str]]:
+    def walk(extended: bool, ref: str, stage: int, improve: int,
+             worsen: int) -> tuple[save_mod.Campaign, list[str]]:
         """Play one rest scene with `ref` carried at `stage`.
 
         The DCs are substituted into the live cache so the outcome is
@@ -50954,16 +50963,16 @@ def a_disease_moves_at_an_extended_rest(out: Result) -> None:
     # stays green against the double-roll bug the first draft shipped --
     # one printed check resolved with two d20s. Counting the calls is the
     # only thing here that can tell the two apart.
-    from combat_engine.story import table as table_mod
 
     rolled: list[int] = []
     was = table_mod.Table.check
 
-    def counting(self: object, index: int, skill: str, dc: int) -> object:
+    def counting(self: table_mod.Table, index: int, skill: str,
+                 dc: int) -> CheckResult:
         rolled.append(index)
         return was(self, index, skill, dc)
 
-    table_mod.Table.check = counting
+    table_mod.Table.check = counting   # ty: ignore[invalid-assignment]
     try:
         walk(True, ref, 2, improve=99, worsen=-99)
     finally:
@@ -50992,7 +51001,6 @@ def a_disease_moves_at_an_extended_rest(out: Result) -> None:
     # but `Campaign.encounters` was written into `to_dict` and never read
     # back, resetting on every load, and nothing noticed until a driver
     # asked. So the question gets asked rather than reasoned about.
-    from combat_engine.story import save as save_mod
 
     carried = run_mod.begin(
         mod.parse(
