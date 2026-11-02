@@ -630,6 +630,24 @@ class Lore:
 
     fact: str
     skill: str
+    #: Found without dice, when the party can take its time. #942.
+    #:
+    #: DMG chapter 5's searching rule: *"assume that they're going to roll
+    #: a 20 eventually, and use the best possible Perception check result
+    #: for the party"*. So this row is not rolled -- it is compared against
+    #: `Table.automatic`, which is the party's best modifier plus twenty,
+    #: and either the party has it or it is out of reach.
+    #:
+    #: **It does not withhold anything a roll would have given.** With five
+    #: characters rolling, this class's own docstring measures easy and
+    #: moderate at 97-100%; making those certain changes almost nothing and
+    #: removes a die nobody was really consulting. What it changes is
+    #: **hard**, which goes from a 52-89% question to a flat yes or no --
+    #: which is what the page intends for a party that is not pressed.
+    #:
+    #: Pairs with `Scene.pressed`: under a time constraint the page's
+    #: exception applies and the row is rolled like any other.
+    certain: bool = False
     band: str = "moderate"
     #: The number the page printed, which **wins over `band`**. Zero means
     #: the module did not state one and the band is used.
@@ -808,6 +826,18 @@ class Scene:
     #: How long the scene takes, in hours. Only read when `exposure` is
     #: stated -- an Endurance check falls due every `EXPOSURE_HOURS`.
     hours: int = 0
+    #: Is the party under a time constraint here. #942.
+    #:
+    #: DMG chapter 5's searching rule is automatic *"unless the characters
+    #: are under a time constraint"*, and this is that exception. A
+    #: `certain` lore row in a pressed scene is **rolled** like any other,
+    #: because the page's whole argument for skipping the dice is that the
+    #: party can keep looking until it rolls a 20 -- and a party that
+    #: cannot keep looking does not get that.
+    #:
+    #: Default `False`, so a module that says nothing gets the automatic
+    #: result, which is what the page's "unless" implies.
+    pressed: bool = False
     #: What losing this scene costs. Any kind may carry one -- see `Cost`.
     cost: tuple[Cost, ...] = ()
 
@@ -1501,6 +1531,7 @@ def _as_lore(raw: Any, where: str, problems: list[str]) -> Lore | None:
     return Lore(fact=fact, skill=skill, band=band,
                 dc=_stated_dc(raw, where, f"lore {fact[:30]!r}", problems),
                 once=bool(raw.get("once", True)),
+                certain=bool(raw.get("certain", False)),
                 after=str(raw.get("after", "")).strip())
 
 
@@ -1867,6 +1898,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         grants=grants,
         exposure=exposure,
         hours=hours,
+        pressed=bool(raw.get("pressed", False)),
         cost=cost,
         npcs=npcs,
         affordances=affordances,

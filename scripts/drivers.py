@@ -52414,6 +52414,122 @@ UNNAMED_KINDS_OWED = frozenset(
 )
 
 
+def searching_a_room_needs_no_dice(out: Result) -> None:
+    """A party that can take its time finds what its best member would. `#942`.
+
+    DMG chapter 5, on searching a room:
+
+    > *"The PCs scour the room, rolling a lot of Perception checks. Unless
+    > the characters are under a time constraint, assume that they're going
+    > to roll a 20 eventually, and use the best possible Perception check
+    > result for the party. (Effectively, this result equals the best
+    > passive Perception check +10.)"*
+
+    So the number is **20 + the party's best modifier** -- a passive check
+    is `10 + modifier` and the rule adds ten -- and no die is thrown.
+
+    **Built on `Lore` rather than beside it**, which is what made this
+    small: a `Lore` row already carries a skill, a band, a stated DC and an
+    `after` gate that fires it once the fight is won, which is exactly the
+    printed timing. The only thing missing was *certain rather than rolled*,
+    so that is the only thing added.
+
+    **Asserting "the party found it" would prove nothing.** A rolled row at
+    an easy or moderate DC already succeeds 97-100% of the time with five
+    characters, so that assertion passes with the dice still in. So this
+    asserts the two things a rolled row cannot give: the **formula**
+    (`automatic` is exactly `20 + best modifier`, checked against the party
+    on a real board) and the **flags** reaching the scene, including the
+    page's `pressed` exception.
+
+    What it does **not** assert is the reader's branch end to end -- that a
+    certain row in a played scene comes out found without a die. That needs
+    a `Playing` and a `Director`, and is the next thing to add here rather
+    than something I am claiming.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+
+    #: The arithmetic first, in isolation: the rule is a formula and a
+    #: wrong formula would still be deterministic.
+    from combat_engine.story import table as table_mod
+
+    out.that(hasattr(table_mod.Table, "automatic"),
+             "the party has an automatic result at all -- the number the"
+             " page says to use instead of rolling")
+
+    def scene_with(certain: bool, pressed: bool, dc: int) -> object:
+        raw = {
+            "id": "probe", "party_level": 2, "party_size": 4,
+            "start": "room",
+            "scenes": [{
+                "id": "room", "kind": "roleplay", "name": "Room",
+                "exits": [], "pressed": pressed,
+                "lore": [{"fact": "a latch behind the panel",
+                          "skill": "perception", "dc": dc,
+                          "certain": certain, "once": False}],
+            }],
+        }
+        return mod.parse(raw, Path("<driver>"))
+
+    built = scene_with(True, False, 12)
+    scene = next(iter(built.scenes.values()
+                      if isinstance(built.scenes, dict) else built.scenes))
+    row = scene.lore[0]
+    out.that(getattr(row, "certain", False) is True,
+             "a module can say a fact is found without dice, and the flag"
+             " survives the parse",
+             f"certain={getattr(row, 'certain', None)}")
+    out.that(scene.pressed is False,
+             "and a scene that says nothing is not pressed, so the page's"
+             " 'unless' defaults to the automatic result",
+             f"pressed={scene.pressed}")
+
+    pressed_built = scene_with(True, True, 12)
+    pressed_scene = next(iter(
+        pressed_built.scenes.values()
+        if isinstance(pressed_built.scenes, dict) else pressed_built.scenes))
+    out.that(pressed_scene.pressed is True,
+             "while a scene under a time constraint says so -- the printed"
+             " exception the automatic result does not apply to")
+
+    # -- the formula, on a real party ------------------------------------
+    #
+    # **Checked against `modifier`, not against a number I typed.** A
+    # hard-coded expectation would pass a wrong formula on any party whose
+    # best modifier happened to match it; deriving both sides from the same
+    # board is what makes this about the rule rather than about one party.
+    from combat_engine import story as story_mod
+    from combat_engine.story import table as tm
+
+    party = story_mod.Party.of(story_mod.PARTY, 5, seed=3)
+    board = tm.lay(party, seed=3)
+    try:
+        who = board.best("perception")
+        out.that(who >= 0,
+                 "somebody on the board can try Perception, so the formula"
+                 " below is about a real party")
+        if who >= 0:
+            got = board.automatic("perception")
+            want = 20 + board.modifier(who, "perception")
+            out.that(got == want,
+                     "the automatic result is twenty plus the party's best"
+                     " modifier -- a passive check is ten plus the modifier"
+                     " and the page adds ten to that",
+                     f"{got} against {want}")
+            out.that(got == board.automatic("perception"),
+                     "and asking twice gives the same answer, which is the"
+                     " whole point of a result that is not rolled",
+                     f"{got}")
+        out.that(board.automatic("nonsense-skill") == -1,
+                 "a skill nobody has answers -1 rather than 20, so a caller"
+                 " cannot mistake 'nobody can try' for a low result",
+                 f"{board.automatic('nonsense-skill')}")
+    finally:
+        board.strike()
+
+
 def a_theme_can_grant_a_power(out: Result) -> None:
     """A reflavoured creature holds the card the module gave it. `#985`.
 
@@ -54523,6 +54639,11 @@ DRIVERS = {
     "brief_agrees": (
         the_importer_brief_and_the_parser_agree,
         "the importer brief names no value the parser refuses (#1026)",
+    ),
+    "search_certain": (
+        searching_a_room_needs_no_dice,
+        "a party that can take its time finds what its best member would,"
+        " with no dice (#942)",
     ),
     "theme_powers": (
         a_theme_can_grant_a_power,

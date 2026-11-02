@@ -97,6 +97,35 @@ class Table:
         """What this character adds to that skill, before the die."""
         return modifier(self.world, self.eids[index], skill.lower())
 
+    def automatic(self, skill: str) -> int:
+        """The result a party gets for free when it can take its time. #942.
+
+        DMG chapter 5, on searching a room:
+
+        > *"The PCs scour the room, rolling a lot of Perception checks.
+        > Unless the characters are under a time constraint, assume that
+        > they're going to roll a 20 eventually, and use the best possible
+        > Perception check result for the party. (Effectively, this result
+        > equals the best passive Perception check +10.)"*
+
+        So **20 + the party's best modifier**: a passive check is `10 +
+        modifier` and the rule adds ten to that. No dice at all, which is
+        the whole point -- it is a *certain* result, not a likely one.
+
+        `-1` when nobody can try, matching `best`, so a caller cannot
+        mistake "no party" for a low result. Somebody `down` is skipped for
+        the reason `best` gives: the best modifier in the party must not
+        come from a character bleeding out on the floor.
+
+        Not Perception-only, because the printed reasoning is about taking
+        your time rather than about one skill -- but Perception is the case
+        the page is written for.
+        """
+        who = self.best(skill)
+        if who < 0:
+            return -1
+        return 20 + self.modifier(who, skill)
+
     def best(self, skill: str, *, exclude: set[int] | None = None) -> int:
         """Which party slot is best at a skill. `-1` if nobody can try.
 

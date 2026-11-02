@@ -1493,6 +1493,33 @@ def _recall(playing: Playing, table: Table, actors: list[Actor],
         target = row.dc or dc_for(playing.scene.level or party_level, row.band)
         knew: list[tuple[int, str]] = []
         mine = False
+        # **A certain row is compared, not rolled.** #942. DMG chapter 5:
+        # *"assume that they're going to roll a 20 eventually, and use the
+        # best possible Perception check result for the party"* -- so the
+        # party's automatic result either clears the DC or does not, and no
+        # die is thrown.
+        #
+        # **Unless the scene says they are pressed**, which is the page's
+        # own exception: the argument for skipping the dice is that the
+        # party can keep looking, and a party under a time constraint
+        # cannot. Then it rolls like any other row.
+        #
+        # Credited to the one character who would have made it, through
+        # `best`, rather than to everybody: the printed result *is* the
+        # best member's, and saying the whole party found it would lose the
+        # "whose mouth it comes out of" this function exists to answer.
+        if row.certain and not playing.scene.pressed:
+            got = table.automatic(row.skill)
+            who = table.best(row.skill)
+            if got >= target and who >= 0:
+                found_by = next(
+                    (a for a in actors if a.slot == who), None)
+                if found_by is not None:
+                    knew.append((found_by.slot, found_by.name))
+                    mine = not found_by.played
+            out.append(Recalled(fact=row.fact, skill=row.skill, dc=target,
+                                knew=knew, mine=mine))
+            continue
         for actor in actors:
             if table.check(actor.slot, row.skill, target).success:
                 knew.append((actor.slot, actor.name))
