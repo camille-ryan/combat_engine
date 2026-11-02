@@ -604,10 +604,20 @@ def day(
         if not fielded.enemies:
             break
         world = fielded.world
-        world.paradigm = fielded.paradigm
+        # **Bare attributes on `World`, which is the pattern here rather
+        # than a shortcut**, and `ty` cannot see a field nothing declares.
+        # `fight.py` sets these same three the same way and carries the
+        # same diagnostics in the `types` baseline; `resolve` hangs
+        # `opportunity` on a `Hit` likewise, which `engine/`'s note calls
+        # "the same road `charge` and `as_` ride".
+        #
+        # Ignored per line rather than blessed into the baseline: an
+        # inline ignore says which write and why, where a baseline entry
+        # is a count somebody later has to go and look up. #305.
+        world.paradigm = fielded.paradigm  # ty: ignore[unresolved-attribute]
         encounter = Encounter(world)
-        world.fights_left = fights - n + 1
-        world.milestones = (n - 1) // 2
+        world.fights_left = fights - n + 1  # ty: ignore[unresolved-attribute]
+        world.milestones = (n - 1) // 2  # ty: ignore[unresolved-attribute]
         # `play` installs `pol` itself and clears `T`/`D` per fight, which
         # is the per-fight state `fight.py` gets by building a fresh
         # policy -- so there is nothing extra to reset here.
