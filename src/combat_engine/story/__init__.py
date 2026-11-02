@@ -456,19 +456,45 @@ def _wear(world: World, eid: int, sheet: Sheet) -> str:
     lands exactly as it did before any of this existed -- which is what keeps
     the six replay fixtures still pinning something.
 
-    **Returns a sentence when the floor moved somebody**, and that is the
-    whole of #923's lesson rather than a nicety. `max(0, ...)` was fielding a
-    character recorded at -26 -- below the death floor -- as a conscious
-    combatant, and the reason it went unnoticed for a month is that it did it
-    in silence. `bury` and `stabilise` mean nothing recorded by a fight
-    reaches here below zero any more, so this should be unreachable; the one
-    way it is not is a module putting two fights back to back with no rest
-    between (#947), which Camille's ruling is not about. Measured: a sheet at
-    -10 with no rest is still fielded at 0, `alive` and `can_act`.
+    **A character recorded below zero is fielded dying, not clamped to
+    zero.** `max(0, ...)` put a sheet at -26 onto the board `alive`,
+    `conscious` and able to act -- #923, which lived a month because it did
+    it in silence, then #1023 when the same thing survived on the one path
+    #923's rulings do not reach: a module putting two fights back to back
+    with no rest between (#947). Measured before this: `-10` with no rest
+    was fielded at 0, `alive` and `can_act`.
 
-    So it is printed rather than fixed here, because inventing a rest the
-    module did not write is the kind of quiet correction this component is
-    told not to make.
+    **This used to print the clamp instead of fixing it**, on the ground
+    that standing somebody up without a rest would override Camille's
+    ruling and that inventing a rest is the quiet correction this component
+    is told not to make. Both halves of that were right and the conclusion
+    was wrong: the third option is to field them **in the state the sheet
+    records**, which overrides nothing and invents nothing. Camille's
+    ruling, on #1023:
+
+    > *"Closest to death is by number of failures. The bounding is that
+    > characters continue to make death saving throws and they will either
+    > die or stabilize eventually."*
+
+    So the fix is `resolve.restore_hp`, which **already existed for this**
+    -- #1022 built it and its own docstring describes this fault -- and
+    everything else needed is already here and already correct:
+
+    * `Encounter._death_saves` rolls at each `TurnEnd` while dying, kills on
+      the third failure and spends a surge on a natural 20, which is the
+      printed rule in full;
+    * `health.failures` is carried both ways by this function and by
+      `harvest`, and `rest` zeroes it -- so *"three times before you take a
+      rest"* holds across a run of fights without one.
+
+    `restore_hp` is idempotent, applies the conditions through
+    `effects.apply` so a `ConditionApplied` fires, and **must be called
+    before `Encounter.start`** -- which it is, because `field_encounter`
+    spawns the party before `run._fight` builds the encounter.
+
+    **Returns a sentence whenever that happens**, because a party fielding a
+    dying character is a thing the player has to know: it is the difference
+    between a fight at four and a fight at three and a body.
     """
     from combat_engine.engine.components import ActionPoints, Health, Powers
 
@@ -477,11 +503,20 @@ def _wear(world: World, eid: int, sheet: Sheet) -> str:
     if health is not None:
         if sheet.hp is not None:
             if sheet.hp < 0:
+                from combat_engine.engine.resolve import restore_hp
+
+                # `restore_hp` answers in its own vocabulary -- "dropped"
+                # for a creature between zero and the floor. The player's
+                # word for that state is *dying*, which is also what the
+                # printed death-save rule calls it.
+                what = {"dropped": "dying", "dead": "dead"}.get(
+                    restore_hp(world, eid, sheet.hp), "standing")
                 said = (
                     f"{sheet.cls.title()} was recorded at {sheet.hp} and is "
-                    f"fielded at 0 -- no rest stood them up (#1023)."
+                    f"fielded {what} -- no rest stood them up (#1023)."
                 )
-            health.hp = max(0, min(sheet.hp, health.max_hp))
+            else:
+                health.hp = max(0, min(sheet.hp, health.max_hp))
         if sheet.surges is not None:
             health.surges = max(0, min(sheet.surges, health.max_surges))
         health.failures = sheet.failures

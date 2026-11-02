@@ -48665,6 +48665,91 @@ def the_dead_leave_the_party_and_the_dying_are_stood_up(out: Result) -> None:
         f"called for {called}",
     )
 
+    # == #1023: a dying character is FIELDED dying, not clamped to zero ====
+    # These exist because the assertion above could not tell the fix from
+    # the bug. It asserts the clamp is *said* -- which the new sentence
+    # also does -- and never asserted the hit points, so a plant restoring
+    # `max(0, ...)` left the whole driver green while a dying character
+    # stood up and fought. The printed state is what has to be asserted.
+    from combat_engine.engine import Ident
+    from combat_engine.engine.components import Condition as Cond
+    from combat_engine.engine.components import Health as Hp
+    from combat_engine.engine.query import alive as is_alive
+    from combat_engine.engine.query import can_act as may_act
+    from combat_engine.engine.query import is_ as has_
+
+    def fielded(hp: int | None, failures: int = 0) -> tuple:
+        """Field a party whose first sheet is at `hp`, and read it back."""
+        band = story.Party.of(
+            ("fighter", "cleric", "rogue", "wizard"), 2)
+        band.sheets[0].hp = hp
+        band.sheets[0].failures = failures
+        got = story.field_encounter(seed=3, level=2, party=band)
+        world = got.world
+        pcs = [e for e in world.entities
+               if (i := world.get(e, Ident)) and str(i.ref).startswith("c:")]
+        return world, pcs[0], got
+
+    world, who, got = fielded(-10)
+    health = world.need(who, Hp)
+    out.that(
+        health.hp == -10,
+        "a character recorded dying is fielded AT THAT TOTAL, not clamped "
+        "up to zero -- the clamp is what made #923 and #1023 the same bug "
+        "twice",
+        f"recorded -10, fielded at {health.hp}",
+    )
+    out.that(
+        has_(world, who, Cond.DYING) and not may_act(world, who)
+        and is_alive(world, who),
+        "and arrives DYING: alive, unable to act. Before this they were "
+        "fielded at 0 and `can_act` -- a dying character fighting at full "
+        "capability, which no number on the board contradicted",
+        f"dying={has_(world, who, Cond.DYING)} "
+        f"can_act={may_act(world, who)} alive={is_alive(world, who)}",
+    )
+    out.that(
+        any("fielded dying" in n for n in (got.clamped or ())),
+        "and it is said in the player's word for the state rather than in "
+        "the engine's",
+        f"{list(got.clamped or ())[:1]}",
+    )
+
+    # -- below the floor is DEAD, which is #923's original finding ---------
+    world, who, got = fielded(-26)
+    out.that(
+        has_(world, who, Cond.DEAD) and not is_alive(world, who),
+        "a character recorded BELOW the death floor is fielded dead, not "
+        "as a conscious combatant -- measured at -26, which is what #923 "
+        "found and what was printed rather than fixed until now",
+        f"dead={has_(world, who, Cond.DEAD)} alive={is_alive(world, who)}",
+    )
+
+    # -- and the death-save count carries, which is what bounds it --------
+    # Camille's ruling: *"characters continue to make death saving throws
+    # and they will either die or stabilize eventually."* The printed rule
+    # is three failures **before a rest**, so the count has to survive a
+    # fight that is not followed by one.
+    world, who, got = fielded(-10, failures=2)
+    out.that(
+        world.need(who, Hp).failures == 2,
+        "the death-save failures a character already has are carried onto "
+        "the next board, so *three before a rest* spans a run of fights "
+        "without one",
+        f"failures={world.need(who, Hp).failures}",
+    )
+
+    # -- the control: a healthy sheet is untouched by any of it -----------
+    world, who, got = fielded(5)
+    out.that(
+        world.need(who, Hp).hp == 5 and may_act(world, who)
+        and not has_(world, who, Cond.DYING) and not got.clamped,
+        "and a sheet above zero is fielded exactly as recorded, acting, "
+        "with nothing said -- which is every party in every replay fixture",
+        f"hp={world.need(who, Hp).hp} can_act={may_act(world, who)}",
+    )
+
+
 
 def a_fight_reached_without_a_rest_is_scaled_back(out: Result) -> None:
     """The sidebar "When Is an Encounter Over?":
