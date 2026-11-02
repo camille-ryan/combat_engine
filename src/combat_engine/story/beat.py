@@ -485,6 +485,10 @@ you do not describe it. The scene and the facts below are all that exists.
 mention others -- who runs the place, who is feared, who has gone missing. \
 They are elsewhere. Do not give them a line, an entrance or an action.
 
+**And the party is only the people whose lines you were given.** No other \
+adventurer is travelling with them. Do not invent a companion, and do not \
+name a kind of adventurer nobody here is.
+
 Write in English.\
 """
 

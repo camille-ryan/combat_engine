@@ -218,7 +218,47 @@ makes the trade legible.
 A closure with **no list** -- one sentence pointing at the blocks already
 present -- looked free on a synthetic beat (0 ghosts, 833c against 849c)
 and was worse than the baseline on the four real beats: 1 ghost against 0,
-16% longer. Both reverted; nothing shipped.
+16% longer. Both reverted; nothing shipped at the time.
+
+**The no-list closure has since shipped, on Camille's call, and the second
+measurement is the useful part.** Camille on `#919`: *"Let's try 1 for now.
+If we end up with more issues on this we can add a guard."* Re-measured
+over a **whole playthrough** rather than four replayed beats -- same seed,
+same canned human lines, 18 DM replies each arm:
+
+```
+                 ghost words   party members named   mean reply
+no closure            0*                12              517c
+the closure           0                 14              569c
+```
+
+\* the counter read 1 and the one hit was *"preparing to scout the area"* --
+`scout` as a **verb**. So the real baseline is **0 ghosts in 18 replies**.
+
+Two things follow and both matter more than the verdict:
+
+* **The fault did not reproduce at all.** `#919` recorded 5 in 18 from a
+  live session with a person typing; a full playthrough with canned lines
+  gives 0. So the closure cannot be shown to help, because there was
+  nothing to remove -- the ninth instance of this component's *"a
+  synthetic probe does not reproduce a fault this component produces"*,
+  arriving this time through the human's own input rather than through the
+  probe's shape.
+* **What it costs is measurable and the prior finding's direction holds**:
+  +10% reply length and two more real party members named. Smaller than
+  the 16% the four-beat replay found, same sign. One run per arm against a
+  model whose own variance is wide, so treat both as soft.
+
+It shipped because Camille asked for it, and the honest state is
+**unverified**. Reverting is one paragraph in `_DM`.
+
+**And the measurement recipe is here so nobody re-derives it**: feed a
+fixed list of player lines on stdin to
+`play.py --play <module> --seed 21 --solo --god-mode`, which keeps the two
+arms comparable, and count class words against the party line over
+`beats[].reaction` in `logs/<module>.campaign.jsonl`. Not an instrument and
+should not become one -- it needs a live model and ~15 minutes a run, which
+is the cost `scripts/CLAUDE.md --history` exists to refuse.
 
 **What stands is a structural lead, not a prompt.** `chargen` deals
 unnamed characters (#793), so the party's own names *are* class nouns and
