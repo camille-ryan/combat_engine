@@ -12,10 +12,11 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cache
 from random import Random
+from typing import Any
 
 from combat_engine.armour import ARMOUR, ARMOUR_SPEED
 from combat_engine.engine import (
@@ -1541,10 +1542,20 @@ class RaceLine:
     #: and not something the race hands over. The ones the block does name
     #: come first, because that is the order the page offers them in.
     powers: tuple[str, ...]
-    #: Is that list a **choice**? Six races print more than one and four of
-    #: those say "choose one of the following" -- and the difference
-    #: matters: one race gets two powers and one gets one of thirteen.
-    one_of: bool
+    #: **Which refs the printed fork offers**, or `()` when the block
+    #: prints no choice at all. `granted` picks one of these.
+    #:
+    #: A `bool` until #914, and the boolean could say *that* a race chooses
+    #: without saying *what between* -- so for three races whose other leg
+    #: is a **trait** rather than a power the candidate list held one
+    #: option, and 40 seeds dealt 40 identical characters. A member may be
+    #: a trait ref or a power ref; `_fork_members` derives it and carries
+    #: the three rules.
+    #:
+    #: For the five races whose alternatives are all racial powers this is
+    #: exactly `powers`, which is what keeps them dealing the same
+    #: characters they dealt before.
+    one_of: tuple[str, ...]
     #: The race this one is a **variant of**, or `""` for a race of its own.
     #:
     #: Nine of the 55 imported races carry no sheet numbers at all --
@@ -1657,10 +1668,27 @@ class RaceLine:
         # `pick=None` keeps the old answer exactly, which is what lets
         # `choices.race_options` go on ranking a **race** without a
         # particular pick entering the ranking. #680.
-        chosen = written[:1] if pick is None or not written else [
-            pick.choice(written)
-        ]
-        return [*self.traits, *self._manifestation_for(chosen), *chosen]
+        # **The options are `one_of`, which may name a trait.** This read
+        # `self.powers`, so a fork whose other leg is a trait offered one
+        # option and chose it every time -- `r6` gave the same answer for
+        # 40 seeds, and nine feats keyed to the trait it never chose. #914.
+        #
+        # Only declared refs are offered: `r6`'s second leg is an entry
+        # reading "you have the <power> power" and carries no row, so the
+        # power is the playable half and the entry drops out here.
+        options = [m for m in self.one_of if m in REGISTRY]
+        if not options:
+            return [*self.traits, *written]
+        chosen = options[:1] if pick is None else [pick.choice(options)]
+        # **And the legs not taken come off.** A trait leg is in `traits`
+        # and would otherwise be handed over beside the power that was
+        # chosen instead -- which is what the tree works around today, with
+        # `rt:r6-t3` opening `if _holds(c, "p13689"): return` because the
+        # dealer gave it both. That guard is now belt as well as braces.
+        spurned = set(self.one_of) - set(chosen)
+        kept = [t for t in self.traits if t not in spurned]
+        taken = [p for p in chosen if p in self.powers]
+        return [*kept, *self._manifestation_for(taken), *taken]
 
     def _manifestation_for(self, chosen: list[str]) -> list[str]:
         """The sub-option trait that goes with the power picked, if any.
@@ -1730,6 +1758,95 @@ _INITIATIVE = re.compile(r"\+(\d+)\s+racial bonus to initiative", re.I)
 _ONE_OF = ("choose one", "your choice of either",
            "select an option", "choose an option")
 
+#: One `<ref> : <text>` entry in a race block, which is how the importer
+#: lays a block's traits and racial powers out.
+_RACE_ENTRY = re.compile(r"^\s*((?:rt:)?r\d+(?:-[ts]\d+)?|p\d+)\s*:\s*(.*)$")
+
+
+def _racial_powers(spec: str, carded: list[str]) -> tuple[str, ...]:
+    """The race's own racial powers, in the order the block offers them.
+
+    Lifted out of the `RaceLine(...)` literal by #914 so that `one_of` can
+    be derived from the same answer rather than from a second copy of this
+    expression -- two readings of "which powers does this race print" that
+    could drift apart is exactly the shape that made `one_of` wrong.
+
+    The block's own order first, because that is the order the page offers
+    them in, then anything the power table has that the prose did not name.
+    """
+    named = [
+        ref
+        for ln in spec.splitlines()
+        if "power" in ln.lower()
+        for ref in _RACIAL_POWER.findall(ln)
+        if ref in carded
+    ]
+    return tuple(dict.fromkeys([*named, *carded]))
+
+
+def _variant_powers(row: Mapping[str, Any], cards: Mapping[str, list[str]],
+                    stock: RaceLine) -> tuple[str, ...]:
+    """A variant's own racial powers, falling back to the race it varies.
+
+    The same expression the `powers=` field uses, named so that the fork
+    derivation beside it cannot read a different answer. See #914 for why
+    two readings of this question is the shape that goes wrong.
+    """
+    return tuple(cards.get(row["ref"], ())) or stock.powers
+
+
+def _fork_members(spec: str, powers: tuple[str, ...]) -> tuple[str, ...]:
+    """The refs a race's printed fork offers a character, or `()` for none.
+
+    **This replaced a boolean, and the boolean could not say what the fork
+    was between.** `one_of` used to be `any(word in spec)`, which is enough
+    while every alternative is a racial *power* -- `granted` then chose from
+    `powers`. Three races print a fork whose other leg is a **trait**, so
+    the candidate list held one option and 40 seeds gave 40 identical
+    characters. #914, and #743's comment had named it first.
+
+    Three rules, in order, and the ordering is what keeps the five working
+    races byte-identical:
+
+    1. **No choice phrase in the block, no fork.** This is what finally
+       stops `r67` claiming one: it is a *variant*, it inherited the flag
+       from its parent through `replace()`, and its own block prints no
+       choice at all -- its entries are benefit swaps.
+    2. **More than one racial power: the fork is those powers.** The five
+       races that already worked, unchanged, which is #914's own prescription
+       -- *"the flag becomes a list, and for five races that list is just
+       `powers`"*. Load-bearing: `r44` prints three sub-option traits after
+       its heading, so rule 3 would offer six options where the card offers
+       three, and re-roll a race nobody asked to re-roll.
+    3. **Otherwise: the entries printed after the heading, plus the
+       powers.** The genuine mixed fork. The union matters because the
+       heading's legs are not all declared rows -- `r6`'s second leg is an
+       entry reading "you have the <power> power", which carries no row of
+       its own, so the *power* is the playable half and has to come in from
+       `powers`.
+
+    Returns refs in printed order with duplicates dropped, so a seeded
+    `choice` over it is stable.
+    """
+    low = spec.lower()
+    if not any(word in low for word in _ONE_OF):
+        return ()
+    if len(powers) > 1:
+        return powers
+    after: list[str] = []
+    seen_heading = False
+    for line in spec.splitlines():
+        found = _RACE_ENTRY.match(line)
+        if found is None:
+            continue
+        ref, text = found.group(1), found.group(2).lower()
+        if seen_heading:
+            after.append(ref)
+        elif any(word in text for word in _ONE_OF):
+            # The heading itself is not one of its own options.
+            seen_heading = True
+    return tuple(dict.fromkeys([*after, *powers]))
+
 
 def _races_from_the_book() -> dict[str, RaceLine]:
     """The playable races, read off the `race` table.
@@ -1797,19 +1914,10 @@ def _races_from_the_book() -> dict[str, RaceLine]:
                 ),
                 default=0,
             ),
-            powers=tuple(
-                dict.fromkeys(
-                    [
-                        ref
-                        for ln in spec.splitlines()
-                        if "power" in ln.lower()
-                        for ref in _RACIAL_POWER.findall(ln)
-                        if ref in cards.get(row["ref"], ())
-                    ]
-                    + cards.get(row["ref"], [])
-                )
+            powers=_racial_powers(spec, cards.get(row["ref"], [])),
+            one_of=_fork_members(
+                spec, _racial_powers(spec, cards.get(row["ref"], []))
             ),
-            one_of=any(word in spec.lower() for word in _ONE_OF),
         )
 
     # **The nine variants, inheriting the parent their own traits name.**
@@ -1835,6 +1943,29 @@ def _races_from_the_book() -> dict[str, RaceLine]:
             # clause that would hand it the parent's is a `replaces` entry
             # and belongs to the reader #813 writes.
             powers=tuple(cards.get(row["ref"], ())) or stock.powers,
+            # **Its own fork, and the parent's only where the parent's
+            # heading is what offers it.** `replace()` used to carry
+            # `one_of` straight down as a flag, which made `r67` claim a
+            # choice it does not print.
+            #
+            # The two variants of `r1` are the whole argument for not just
+            # re-deriving, either. Neither prints a choice phrase -- the
+            # heading is on the parent's block -- so a plain re-derivation
+            # takes the fork off **both**, and `r68` really does have one:
+            # it prints *two* racial powers, and two alternatives under an
+            # inherited heading is a choice. `r67` prints one, which is a
+            # replacement and not a fork.
+            #
+            # So: its own block first, then the parent's fork-ness over its
+            # own powers, and only when there is more than one to choose
+            # between. #914.
+            one_of=_fork_members(row["spec"] or "", _variant_powers(
+                row, cards, stock,
+            )) or (
+                _variant_powers(row, cards, stock)
+                if stock.one_of and len(_variant_powers(row, cards, stock)) > 1
+                else ()
+            ),
         )
     return out
 

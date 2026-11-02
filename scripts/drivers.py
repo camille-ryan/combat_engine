@@ -12336,17 +12336,24 @@ def a_choose_one_race_actually_chooses(out: Result) -> None:
              f" over 40 seeds), where before it was always {pinned[-1]}")
 
     # **The blast radius, stated as a measurement rather than a belief.**
-    # The new path is gated on `one_of`, and only a race with more than one
-    # *written* power can actually move -- so a diverging fixture must hold
-    # one of these five and no other race can be involved.
+    # The path is gated on `one_of`, so only a race whose fork offers more
+    # than one *declared* member can move -- a diverging fixture must hold
+    # one of these and no other race can be involved.
+    #
+    # **Five until #914, seven now, and the two newcomers are the point of
+    # that issue.** `one_of` was a boolean and `granted` chose from
+    # `powers`, so `r6` and `r7` -- whose fork's other leg is a *trait* --
+    # offered one option and answered the same thing for every seed. They
+    # move now because they finally choose. The list is asserted rather
+    # than the count, so the next race to join has to be named here.
     movable = [
         ref for ref, line in sorted(RACES.items())
         if {tuple(line.granted(Random(f"s{s}:{ref}"))) for s in range(40)}
         != {tuple(line.granted())}
     ]
-    out.that(movable == ["r1", "r16", "r33", "r44", "r68"],
-             f"exactly five races can have their hand moved by this"
-             f" ({movable}) -- the other 50 cannot, whatever the seed")
+    out.that(movable == ["r1", "r16", "r33", "r44", "r6", "r68", "r7"],
+             f"exactly seven races can have their hand moved by this"
+             f" ({movable}) -- the other 48 cannot, whatever the seed")
 
     sizes = {
         ref: (len(RACES[ref].granted()), len(RACES[ref].granted(Random("x"))))
@@ -43061,14 +43068,26 @@ def a_borrowed_row_records_which_one_was_taken(out: Result) -> None:
              "choice to record",
              f"stored_row(of=f1512) = {c3.stored_row(of='f1512')!r}")
 
-    # And the trait the two rows of #743 actually read still does not
-    # borrow, which is why they stay blocked. Asserted so the day it starts
-    # borrowing, this goes red and somebody goes and writes them.
-    _w4, _me4, pick4, _l4 = borrow("rt:r6-t3")
-    out.that(pick4 == "",
-             "rt:r6-t3 still borrows nothing, so #743's two rows stay "
-             "blocked on the race fork rather than on this reader",
+    # **The tripwire fired, and this is the assertion it became.** It used
+    # to read "rt:r6-t3 still borrows nothing, so #743's two rows stay
+    # blocked on the race fork rather than on this reader" -- written so
+    # that the day the fork started working, somebody would come and write
+    # them. #914 made `r6` choose, and it went red naming the ref it had
+    # started storing.
+    #
+    # So the question flips: the trait borrows, the pick is recorded, and
+    # `#743`'s two rows are blocked on nothing but being written.
+    world4, me4, pick4, _l4 = borrow("rt:r6-t3")
+    out.that(bool(pick4),
+             "rt:r6-t3 borrows a row and records which one, which is what "
+             "#743's two rows read -- they were blocked on the race fork "
+             "and #914 cleared it",
              f"stored_row(of=rt:r6-t3) = {pick4!r}")
+    held4 = world4.need(me4, Powers)
+    out.that(pick4 in held4.all,
+             "and the pick it recorded is a row the character actually "
+             "holds, so the record and the grant cannot disagree",
+             f"{pick4!r} in {len(held4.all)} held row(s)")
 
 
 def an_enchanted_item_is_named_after_the_base_it_is_on(out: Result) -> None:
