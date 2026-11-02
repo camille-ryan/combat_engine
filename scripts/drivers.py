@@ -50183,6 +50183,200 @@ def a_revisited_scene_does_not_raise_the_creatures_it_lost(
     )
 
 
+def a_dying_ally_can_be_stabilised_with_a_heal_check(out: Result) -> None:
+    """The printed DC 15 Heal check, and the state it sets. #1074.
+
+    Nothing in the tree could stabilise anybody, so a character who went
+    down simply ran out of death saving throws. `#1023` made that visible
+    by fielding a dying character **dying** instead of standing them up at
+    zero, which left the party watching somebody die with no roll offered.
+
+    **The DC was read in `resources/` rather than taken from the issue.**
+    Camille gave 15 and asked for it to be checked; it is exact, and the
+    page adds two things the ruling did not -- the target must be
+    **adjacent**, and success *"stops making death saving throws"* rather
+    than healing. Both are asserted below, the second one twice, because
+    "stabilise" reads like a heal and is not.
+
+    **The dice are kept out of the state assertions.** Whether a given
+    seed passes a DC 15 check is the dice; whether `STABLE` stops the
+    clock is the mechanism. So the clock assertions apply the condition
+    directly and the action assertions sweep seeds and assert over the
+    outcomes they got -- a seed-pinned success would pin the roll rather
+    than the rule.
+    """
+    from combat_engine.engine import Ident
+    from combat_engine.engine.actions import (
+        STABILISE_DC,
+        Action,
+        legal,
+        perform,
+    )
+    from combat_engine.engine.components import Condition as C
+    from combat_engine.engine.components import Health as Hp
+    from combat_engine.engine.components import Position as Pos
+    from combat_engine.engine.conditions import RULES
+    from combat_engine.engine.durations import When as W
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import is_ as has_
+    from combat_engine.engine.resolve import deal_damage
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import Party, field_encounter
+
+    out.that(
+        STABILISE_DC == 15,
+        "the check is against the printed DC 15, read off the page rather "
+        "than taken from the issue that quoted it",
+    )
+    out.that(
+        C.STABLE not in RULES,
+        "and `STABLE` imposes nothing -- it carries no `Rules` entry, like "
+        "`DEAD`, because a stabilised character is still dying and still "
+        "unconscious and those carry every penalty there is",
+    )
+
+    def board(seed: int, hp: int | None = -10, *, apart: int = 1,
+              ) -> tuple[World, int, int, Encounter]:
+        """A fielded party whose first character is at `hp`.
+
+        Returns the world, the downed character, a living ally whose turn
+        it is, and the encounter -- with the two placed `apart` squares
+        from each other.
+        """
+        band = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+        band.sheets[0].hp = hp
+        got = field_encounter(seed=seed, level=2, party=band)
+        world = got.world
+        pcs = [e for e in world.entities
+               if (i := world.get(e, Ident)) and str(i.ref).startswith("c:")]
+        low = pcs[0]
+        enc = Encounter(world)
+        enc.start()
+        for _ in range(20):
+            if world.turn in pcs and world.turn != low:
+                break
+            enc.advance()
+        mate = world.turn
+        mx, my = world.need(mate, Pos).square
+        place(world, low, (mx + apart, my))
+        return world, low, mate, enc
+
+    def offers(world: World, enc: Encounter, who: int) -> list[Action]:
+        return [a for a in legal(world, enc, who) if a.kind == "stabilise"]
+
+    # -- it is offered for an adjacent dying ally --------------------------
+    world, low, mate, enc = board(5)
+    out.that(
+        has_(world, low, C.DYING) and offers(world, enc, mate),
+        "a character standing next to a dying ally is offered the check",
+        f"{[str(a) for a in offers(world, enc, mate)]}",
+    )
+
+    # -- and refused in each of the three ways it should be ---------------
+    world, low, mate, enc = board(5, apart=3)
+    out.that(
+        not offers(world, enc, mate),
+        "but not from three squares away -- *adjacent* is the page's word "
+        "and not an inference",
+    )
+    world, low, mate, enc = board(5)
+    world.effects.apply(low, low, W.ENCOUNTER, label="stabilised",
+                        conditions=(C.STABLE,))
+    out.that(
+        not offers(world, enc, mate),
+        "and not for an ally who is already stabilised -- a second check "
+        "buys nothing and would read as a useful option",
+    )
+    world, low, mate, enc = board(5, hp=None)
+    out.that(
+        not offers(world, enc, mate),
+        "and not for an ally who is on their feet, which is the control",
+    )
+
+    # -- performing it: a success stabilises and does NOT heal ------------
+    passed = failed = 0
+    healed: list[str] = []
+    for seed in range(3, 13):
+        world, low, mate, enc = board(seed)
+        got = offers(world, enc, mate)
+        if not got:
+            continue
+        was = world.need(low, Hp).hp
+        perform(world, enc, mate, got[0])
+        if has_(world, low, C.STABLE):
+            passed += 1
+            if world.need(low, Hp).hp != was:
+                healed.append(f"seed {seed}: {was} -> "
+                              f"{world.need(low, Hp).hp}")
+        else:
+            failed += 1
+    out.that(
+        passed and failed,
+        "the check is a real roll -- across ten seeds it both passes and "
+        "fails, so neither arm is a branch that never runs",
+        f"{passed} stabilised, {failed} failed",
+    )
+    out.that(
+        not healed,
+        "and a success NEVER restores a hit point. Stabilising stops the "
+        "death saves; the character keeps their negative total and is no "
+        "use to anybody until a rest",
+        f"{healed or 'no seed healed anybody'}",
+    )
+
+    # -- STABLE stops the clock, against a control that climbs ------------
+    # Seed 5 is used because its control genuinely ticks. Measured over
+    # three seeds, seed 4 gives 0 failures either way -- so an arm run
+    # there would pass whatever `_death_saves` did, which is the shape of
+    # useless control this file keeps warning about.
+    def ticked(seed: int, *, stabilise: bool) -> int:
+        """Failures accrued **after** the condition is set, not in total.
+
+        `board` advances to a living ally's turn before handing the world
+        back, so the dying character can already have had a turn end and
+        rolled a failure by then. The first version of this measured the
+        total and read 1 against the control's 3 -- the probe's own setup
+        showing through the number it was supposed to be measuring. The
+        delta is the thing the rule is about.
+        """
+        world, low, _mate, enc = board(seed)
+        if stabilise:
+            world.effects.apply(low, low, W.ENCOUNTER, label="stabilised",
+                                conditions=(C.STABLE,))
+        was = world.need(low, Hp).failures
+        for _ in range(14):
+            enc.advance()
+        return world.need(low, Hp).failures - was
+
+    loose, held = ticked(5, stabilise=False), ticked(5, stabilise=True)
+    out.that(
+        loose > 0,
+        "the control climbs: a dying character left alone accumulates "
+        "death-save failures, so the arm below is measuring something",
+        f"{loose} further failures over 14 turns",
+    )
+    out.that(
+        held == 0,
+        "and a stabilised one accumulates none -- which is the whole of "
+        "what `STABLE` does",
+        f"{held} further failures against the control's {loose}",
+    )
+
+    # -- and being hit again restarts it ----------------------------------
+    world, low, _mate, _enc = board(5)
+    world.effects.apply(low, low, W.ENCOUNTER, label="stabilised",
+                        conditions=(C.STABLE,))
+    deal_damage(world, low, low, 1)
+    out.that(
+        not has_(world, low, C.STABLE) and has_(world, low, C.DYING),
+        "damage clears it: stabilising stops the saves, it does not make "
+        "somebody proof against being hit. Without this a stabilised "
+        "character lies there being attacked and never rolls again",
+        f"stable={has_(world, low, C.STABLE)} dying={has_(world, low, C.DYING)}",
+    )
+
+
 def the_party_travels_as_far_as_its_slowest_member(out: Result) -> None:
     """A day's travel, from the printed tables and the party's own pace. #937.
 
@@ -54211,6 +54405,10 @@ DRIVERS = {
     "stays_cleared": (
         a_revisited_scene_does_not_raise_the_creatures_it_lost,
         "a revisited scene does not raise the creatures it lost (#970)",
+    ),
+    "stabilise": (
+        a_dying_ally_can_be_stabilised_with_a_heal_check,
+        "a dying ally is stabilised by the printed DC 15 Heal check (#1074)",
     ),
     "journey": (
         the_party_travels_as_far_as_its_slowest_member,

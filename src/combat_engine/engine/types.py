@@ -246,6 +246,23 @@ class Condition(StrEnum):
     REMOVED = "removed"
     RESTRAINED = "restrained"
     SHAPED = "shaped"
+    #: Stabilised: dying, but no longer rolling death saving throws. #1074.
+    #:
+    #: **Carries no `Rules` entry, deliberately**, and for the same reason
+    #: `DEAD` carries none: it imposes nothing. A stabilised character is
+    #: still dying and still unconscious, and those two carry every penalty
+    #: there is -- this says only that the clock has stopped.
+    #:
+    #: The printed rule it exists for is the Heal skill's: *"Make a DC 15
+    #: Heal check to stabilize an adjacent dying character. If you succeed,
+    #: the character can stop making death saving throws"*. So it is
+    #: emphatically **not a heal** -- the character keeps their negative
+    #: total and is no use to anybody until a rest brings them to 1.
+    #:
+    #: Without this there was no way to stop the saves except to stop being
+    #: dying, which means hit points -- so the printed check had nothing to
+    #: set and could not be built.
+    STABLE = "stable"
     #: **Not a printed condition and it used to claim to be.** 4e has no "rooted"
     #: condition; the printed clause is "cannot shift", and *Rooted* is a monster
     #: feature name whose meaning varies from block to block -- so a chip reading

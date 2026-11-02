@@ -73,6 +73,21 @@ def features(
     f["is_move"] = float(action.kind == "move")
     f["is_stand"] = float(action.kind == "stand")
     f["is_second_wind"] = float(action.kind == "second_wind")
+    # **Named because `drivers.kinds_named` is right to insist.** The
+    # stabilise action landed in `actions.py` with nothing here
+    # naming it, and that gate went red -- which is the reload
+    # precedent two lines down repeating itself: an unnamed kind is
+    # scored by `i_am_bloodied` and `nearest_enemy`, terms that have
+    # nothing to do with it, so the choice comes out arbitrary rather
+    # than absent.
+    #
+    # **Naming is all this does.** `doctrine.py` does not yet prefer
+    # it, so the AI will not reliably reach for it -- preferring it is
+    # a balance decision and Camille is explicit about waiting on the
+    # AI portion until the engine and ETL work is done. What a dying
+    # ally actually gets helped by today is `#1075`, the story-side
+    # pass after the fight. #1074.
+    f["is_stabilise"] = float(action.kind == "stabilise")
     f["is_end"] = float(action.kind == "end")
     f["is_wield"] = float(action.kind == "wield")
     # Named for the reason the comment below gives, and it was earned the

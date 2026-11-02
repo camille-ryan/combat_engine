@@ -639,6 +639,13 @@ class Encounter:
 
         if not is_(self.world, ev.actor, Condition.DYING):
             return
+        # **Stabilised stops the clock and nothing else.** The printed Heal
+        # check says a stabilised character "can stop making death saving
+        # throws", so this is the one place `STABLE` is read -- they are
+        # still dying, still unconscious, still at a negative total, and
+        # every other reader should go on treating them as dying. #1074.
+        if is_(self.world, ev.actor, Condition.STABLE):
+            return
         health = self.world.need(ev.actor, Health)
         roll = self.world.rng.d20()
         # **`bonus=0` was written straight in**, so `c.bonus("save", ...)`

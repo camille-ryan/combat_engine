@@ -1768,6 +1768,15 @@ def _check_down(world: World, eid: int, health: Health,
     if health.hp <= health.dying_at:
         _die(world, eid)
         return
+    # **Damage restarts the clock on a stabilised character.** Stabilising
+    # stops the death saves; it does not make somebody proof against being
+    # hit again. Without this a character stabilised by a Heal check and
+    # then hit stays `STABLE` and never rolls another save -- safer, lying
+    # down, while being attacked. #1074.
+    if is_(world, eid, Condition.STABLE):
+        for eff in list(world.effects.of(eid)):
+            if Condition.STABLE in eff.conditions:
+                world.effects.end(eff, "hit again")
     if not is_(world, eid, Condition.DYING):
         world.effects.apply(
             eid, eid, When.ENCOUNTER, label="dropped", conditions=DROPPED

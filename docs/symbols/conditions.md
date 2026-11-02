@@ -139,9 +139,9 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
 - `c.exposed(self, ref: 'str' = '', *, on: 'int | None' = None, pending: 'bool' = False) -> 'bool'`
   - Has this creature caught a disease -- that one, or any?
 
-## `Condition` (24 members)
+## `Condition` (25 members)
 
-  `blinded`, `dazed`, `dead`, `deafened`, `dominated`, `dying`, `grabbed`, `helpless`, `immobilized`, `insubstantial`, `marked`, `petrified`, `pinned`, `prone`, `removed`, `restrained`, `shaped`, `cannot shift`, `slowed`, `squeezing`, `stunned`, `surprised`, `unconscious`, `weakened`
+  `blinded`, `dazed`, `dead`, `deafened`, `dominated`, `dying`, `grabbed`, `helpless`, `immobilized`, `insubstantial`, `marked`, `petrified`, `pinned`, `prone`, `removed`, `restrained`, `shaped`, `stable`, `cannot shift`, `slowed`, `squeezing`, `stunned`, `surprised`, `unconscious`, `weakened`
 
 ## `When` (11 members)
 
@@ -161,9 +161,9 @@ Generated from `Condition` and `Cast` together, so it cannot drift from either. 
 
   `c.dying` -- a **property**, so no parens: `c.dying` is the state and `c.dying()` is `TypeError: 'bool' object is not callable`.
 
-**11 have no same-named member at all**, and are reached three ways -- a differently-named verb that carries a relation too (`c.grab` for `grabbed`, `c.dominate` for `dominated`), the generic `c.condition(*conditions, until=)`, or nothing yet:
+**12 have no same-named member at all**, and are reached three ways -- a differently-named verb that carries a relation too (`c.grab` for `grabbed`, `c.dominate` for `dominated`), the generic `c.condition(*conditions, until=)`, or nothing yet:
 
-  `dead`, `deafened`, `dominated`, `grabbed`, `helpless`, `petrified`, `pinned`, `removed`, `restrained`, `squeezing`, `surprised`
+  `dead`, `deafened`, `dominated`, `grabbed`, `helpless`, `petrified`, `pinned`, `removed`, `restrained`, `squeezing`, `stable`, `surprised`
 
 So a card naming one of the last group is **not** evidence of a gap: check `c.condition()` and the relation verbs before marking a row.
 

@@ -139,6 +139,7 @@ def legal(
     out.extend(_spending(world, encounter, actor))
     out.extend(_action_points(world, encounter, actor))
     out.extend(_manoeuvres(world, encounter, actor))
+    out.extend(_stabilising(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
     out.extend(_searching(world, encounter, actor))
     out.extend(_readying(world, encounter, actor))
@@ -231,6 +232,55 @@ def _delaying(world: World, encounter: Encounter, actor: int) -> list[Action]:
         Action(kind="delay", cost=ActionType.NONE, subject=e, targets=(e,))
         for e in later
     ]
+
+#: What a Heal check has to beat to stabilise a dying ally. **Static, not a
+#: level band** -- read off the page rather than taken from the issue:
+#: *"Make a DC 15 Heal check to stabilize an adjacent dying character."*
+#: Camille's ruling on `#1023` gave the same figure and asked for it to be
+#: checked; it is exact.
+#:
+#: `dc.py` scales with level because a skill challenge is pitched at the
+#: party. This is not -- the page prints one number, and reading it off the
+#: band would make saving a friend harder for a stronger party.
+STABILISE_DC = 15
+
+
+def _stabilising(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """The Heal check that stops an adjacent dying ally's death saves. #1074.
+
+    Nothing in the tree could stabilise anybody, so a character who went
+    down simply ran out of death saving throws -- which `#1023` made
+    visible by fielding a dying character dying instead of standing them
+    up at zero.
+
+    **Adjacent only**, which is the page's word and not an inference, and
+    **not offered for an ally who is already stabilised** -- a second check
+    on the same character buys nothing and would read as a useful option.
+
+    One per turn falls out of the action economy rather than needing a
+    counter of its own: it costs a standard action, and a turn has one.
+    Camille's *"each character can only attempt to stabilize one ally per
+    turn"* is therefore already true, and an action point buying a second
+    standard is the printed economy rather than a hole in this.
+    """
+    from .query import allies as _friends
+
+    out: list[Action] = []
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return out
+    for friend in _friends(world, actor):
+        if friend == actor:
+            continue
+        if not is_(world, friend, Condition.DYING):
+            continue
+        if is_(world, friend, Condition.STABLE):
+            continue
+        if distance_between(world, actor, friend) > 1:
+            continue
+        out.append(Action(kind="stabilise", cost=ActionType.STANDARD,
+                          targets=(friend,)))
+    return out
+
 
 def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Going unseen. A minor action, and only where you could be missed.
@@ -2027,6 +2077,38 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         if action.kind == "aid_attack":
             return cast.aid_attack(foe, ally) is not None
         return cast.aid_defence(foe, ally) is not None
+
+    if action.kind == "stabilise":
+        # **No row, so no ref**, the same as a manoeuvre: nothing declares
+        # this and the `Cast` is built on the action's own name so the log
+        # says which one it was.
+        from .skills import check as roll_check
+
+        if not action.targets:
+            return False
+        friend = action.targets[0]
+        # Re-checked here rather than trusted from offer time: a creature
+        # can stop being dying between the menu being built and the action
+        # being taken -- somebody else may have stabilised them, or they
+        # may have rolled a 20 and stood up.
+        if not is_(world, friend, Condition.DYING):
+            return False
+        if is_(world, friend, Condition.STABLE):
+            return False
+        got = roll_check(world, actor, "heal", STABILISE_DC)
+        if not got.success:
+            world.bus.emit(Note(
+                text=f"{actor} fails to stabilise {friend} "
+                     f"({got.total} vs {STABILISE_DC})"))
+            return True
+        world.effects.apply(
+            friend, actor, When.ENCOUNTER, label="stabilised",
+            conditions=(Condition.STABLE,),
+        )
+        world.bus.emit(Note(
+            text=f"{actor} stabilises {friend} "
+                 f"({got.total} vs {STABILISE_DC})"))
+        return True
 
     if action.kind == "stand":
         for eff in world.effects.of(actor):
