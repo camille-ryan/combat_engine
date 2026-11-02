@@ -45,6 +45,170 @@ def scales(count: int) -> list[float]:
     return [OPENER, *([1.0] * (count - 2)), FINALE]
 
 
+#: The spike's own two numbers. DMG2 chapter 2's second pacing model,
+#: paraphrased rather than quoted: one encounter hard enough that the party
+#: needs everything it has, with a light build-up before it and an
+#: aftermath after. `SPIKE` is deliberately above `FINALE` -- a finale is
+#: the hard end of an ordinary day and a spike is the day's whole point.
+SPIKE = 1.75
+AFTERMATH = 0.75
+
+
+def spike(count: int) -> list[float]:
+    """A day built around one very hard fight. DMG2's second model. #979.
+
+    Standard build-up, the spike, then an aftermath -- so four legs come out
+    `1.0, 1.0, 1.75, 0.75`. The spike sits **second from last** rather than
+    last, because the page's shape has something after it; a spike with
+    nothing following is a finale, which is what `scales` already is.
+
+    **The printed precondition is that the party reaches the spike fresh**,
+    and this function cannot enforce it -- a curve is a list of numbers and
+    freshness is a fact about the party when it arrives. `Day` reports it
+    instead; see `spike_freshness`.
+
+    One fight is the spike alone. Two are the spike and its aftermath: a
+    build-up with no spike after it is not a build-up, which is the same
+    reasoning `scales` uses for its opener.
+
+    **A spike day totals `count + 0.5` standard encounters, not `count`,
+    and that is deliberate.** `scales` and `escalation` both come to
+    exactly `count` -- the printed shape of a day -- and this does not,
+    because the model's whole point is one fight the party cannot afford.
+    Measured: 1.75, 2.5, 3.5, 4.5, 5.5 for one to five legs.
+    """
+    if count <= 0:
+        return []
+    if count == 1:
+        return [SPIKE]
+    if count == 2:
+        return [SPIKE, AFTERMATH]
+    return [*([1.0] * (count - 2)), SPIKE, AFTERMATH]
+
+
+def escalation(count: int, level: int | None = None) -> list[float]:
+    """A steady ramp to a climax. DMG2's third model. #979.
+
+    Each fight harder than the last, ending on the hardest -- so four legs
+    come out `0.75, 1.0, 1.25, 1.5` before the cap below.
+
+    **The climax is bounded by LEVEL, not only by XP, and that bound is the
+    thing this model has that the others do not.** The page's reasoning is
+    that escalation works by draining the party, so the climax lands on
+    characters with nothing left -- and a climax more than a level or two
+    above them is a wipe rather than a scare. `FINALE = 1.25` is an XP
+    multiplier and carries no such bound, which is `#979`'s point.
+
+    So with a `level`, the last leg is clamped to `climax_cap(level)` -- the
+    scale at which the climax costs what a standard encounter two levels up
+    costs, which is the printed bound expressed in the only currency a leg
+    has. Without a level the ramp is returned unclamped and the caller is
+    on its own, which is what `scales` does too.
+    """
+    if count <= 0:
+        return []
+    if count == 1:
+        return [1.0]
+    # A ramp centred on standard, so a day of four totals four standard
+    # encounters as `scales` does -- the printed shape of a day is the same
+    # whichever model paces it.
+    step = 0.25
+    first = 1.0 - step * ((count - 1) / 2)
+    curve = [round(first + step * i, 4) for i in range(count)]
+    curve = [max(0.25, x) for x in curve]
+    if level is not None:
+        cap = climax_cap(level)
+        if cap is not None:
+            curve[-1] = min(curve[-1], cap)
+    return curve
+
+
+def climax_cap(level: int) -> float | None:
+    """The largest scale a climax may carry at this level, or `None`.
+
+    The printed bound on escalation's climax is *a level or two* above the
+    party, and a leg carries a scale rather than a level -- so the bound is
+    converted through the one function that knows both:
+    `story.budget(level + 2) / story.budget(level)`.
+
+    Measured across the band: 1.50 at level 1, 1.33 at 3, 1.50 at 5, 1.43
+    at 8, 1.40 at 10.
+
+    **It does not bite on a four-leg day, which is worth knowing before it
+    looks broken.** `escalation(4)` climaxes at 1.375 and every cap in band
+    is 1.40 or above, so the clamp is inert on the default day and starts
+    firing at five legs: `n=5` at level 10 clamps 1.5 to 1.4, and `n=6` and
+    `n=7` clamp at every level. A cap that never fires on the common path
+    reads exactly like a cap that found nothing, so it is measured here
+    rather than assumed.
+
+    **`None` above the monster ceiling, and that case is why this returns an
+    option rather than a number.** `story.budget` clamps to `ceiling()`
+    because `game.db` stops at level 13, so `budget(15) == budget(13)` and
+    the ratio collapses to **1.00** -- which would clamp an escalation
+    climax down to a *standard* encounter. That is not the printed bound
+    being respected, it is the bound becoming unexpressible, and silently
+    returning 1.0 would read as the former. The caller gets `None` and can
+    say so.
+    """
+    from combat_engine import story
+
+    here = story.budget(level)
+    above = story.budget(level + 2)
+    if not here or above <= here:
+        return None
+    return above / here
+
+
+#: The three pacing models, by the name a caller selects. `balanced` is
+#: what `scales` has always been -- named here so the default is one of
+#: three rather than the one with a name and two without.
+CURVES = {"balanced": scales, "spike": spike, "escalation": escalation}
+
+
+def spike_freshness(legs: list[_Leg], curve: list[float]) -> str:
+    """Whether the party reached the spike fresh. `""` when it did. #979.
+
+    The spike model's printed precondition is that the party arrives at the
+    big fight with its resources intact, and a day that drained them on the
+    build-up has run a different day than the one it asked for. The curve
+    cannot check that -- it is a list of numbers -- so this reads the
+    snapshot `Day` already takes entering each leg.
+
+    **Reported, never enforced.** Nothing here reshapes the day: a build-up
+    that went badly is a fact about the fights, not a mistake in the
+    pacing, and silently stiffening or softening a later leg would be this
+    layer inventing difficulty. `api/CLAUDE.md`'s rule is that the wire
+    does not recompute what the engine decided.
+
+    **The printed precondition names two resources the snapshot does not
+    carry, and this is the honest half of it.** The page asks for most of
+    their daily powers and an action point apiece; `DaySheetDTO` holds
+    `hp`, `hp_max`, `surges` and `surges_max` and neither dailies nor
+    action points. So this measures the wear it *can* see -- hit points and
+    surges -- and a party that arrives with every daily spent but full hit
+    points reads as fresh here. `#979` says both halves are checks on data
+    `_Leg` already holds; one of them is not, and the fix is two fields on
+    the DTO rather than anything in this function.
+    """
+    if not curve or SPIKE not in curve:
+        return ""
+    at = curve.index(SPIKE)
+    if at >= len(legs):
+        return ""
+    entering = legs[at].entering
+    if not entering:
+        return ""
+    worn = [s for s in entering
+            if (s.hp_max and s.hp < s.hp_max)
+            or (s.surges_max and s.surges < s.surges_max)]
+    if not worn:
+        return ""
+    return (f"{len(worn)} of {len(entering)} reached the spike already worn"
+            f" -- the model wants them fresh (hit points and surges only;"
+            f" dailies and action points are not in the snapshot)")
+
+
 # -- the day itself ---------------------------------------------------------
 #
 # **A `Day` owns a `Party` and builds one `Session` per leg.** It does not
@@ -111,6 +275,14 @@ class Day:
     scales: list[float]
     party: story.Party
     legs: list[_Leg]
+    #: Which of DMG2's three pacing models shaped `scales`, by its name in
+    #: `CURVES` -- or `""` when the caller passed its own numbers, because
+    #: an explicit curve belongs to no model and claiming one would be a
+    #: guess. Recorded rather than derived: three of the four-leg curves
+    #: are distinguishable by their numbers but a caller's own list can
+    #: coincide with one, and "which model did the user ask for" is not the
+    #: same question as "which model does this look like". #979.
+    curve: str = ""
     leg: int = 0
     #: The session being played, if one is. Cleared when its fight ends.
     session_id: str = ""
@@ -136,21 +308,46 @@ class Day:
         scaling: str = "full",
         pcs: list[str] | None = None,
         want: list[float] | None = None,
+        curve: str = "balanced",
+        fights: int = 4,
     ) -> Day:
         """Deal the party and set out the legs. No fight is built yet.
 
-        `want` is the page's four boxes. Empty or absent falls back to
-        `scales(4)`, which is the same curve those boxes ship pre-filled
-        with -- so the default lives in two places on purpose, and they are
-        asserted equal rather than one being derived from the other across
-        the wire.
+        `want` is the page's four boxes. Empty or absent falls back to the
+        named `curve` -- `balanced` by default, which is `scales(4)` and the
+        same curve those boxes ship pre-filled with, so the default lives in
+        two places on purpose and they are asserted equal rather than one
+        being derived from the other across the wire.
+
+        **`want` wins over `curve`, deliberately.** The boxes are the user
+        typing numbers and a model is a starting point; a named model that
+        overrode an explicit list would throw away the more specific
+        instruction. A day dealt from `want` records `curve=""` rather than
+        guessing which model its numbers resemble. #979.
+
+        `escalation` is handed the party's `level`, because its climax is
+        bounded by level and the other two carry no such bound -- see
+        `climax_cap`.
         """
         import uuid
 
-        curve = [float(x) for x in (want or [])] or scales(4)
-        if not curve:
+        if curve not in CURVES:
+            raise ValueError(
+                f"curve={curve!r}: not one of {', '.join(sorted(CURVES))}")
+        named = CURVES[curve]
+        # Only `escalation` takes a level, so this is not a uniform call --
+        # passing one to the other two would be a parameter they ignore,
+        # which reads as a curve that honours a bound it does not have.
+        shaped = (named(fights, level) if named is escalation
+                  else named(fights))
+        # **`picked`, not `curve`.** Reusing the parameter's name for the
+        # list shadows the model's name, and the `Day` field below needs
+        # both -- the numbers and which model asked for them.
+        picked = [float(x) for x in (want or [])] or shaped
+        model = "" if want else curve
+        if not picked:
             raise ValueError("a day needs at least one fight")
-        if any(x <= 0 for x in curve):
+        if any(x <= 0 for x in picked):
             raise ValueError("a fight's budget multiplier must be positive")
         party = story.Party.of(pcs or list(story.PARTY), level, seed=seed)
         return cls(
@@ -159,9 +356,10 @@ class Day:
             level=level,
             scaling=scaling,
             pcs=list(pcs) if pcs else None,
-            scales=curve,
+            scales=picked,
+            curve=model,
             party=party,
-            legs=[_Leg(index=i, scale=s) for i, s in enumerate(curve)],
+            legs=[_Leg(index=i, scale=s) for i, s in enumerate(picked)],
         )
 
     def build_leg(self) -> Session:
