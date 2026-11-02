@@ -50098,6 +50098,208 @@ def a_revisited_scene_does_not_raise_the_creatures_it_lost(
     )
 
 
+def a_disease_moves_at_an_extended_rest(out: Result) -> None:
+    """A carried disease improves or worsens at an extended rest. #948.
+
+    69 diseases are extracted with their check skill, both DCs and their
+    stage count, and **nothing ticked one** -- a party could catch one and
+    carry it at the same stage for the whole campaign. `story/affliction.py`
+    is the reader and `run.step` is where it fires.
+
+    **Asserted through `run.step`, never through `tick`.** This component's
+    own file records the rule and the reason: a helper-level assertion is
+    the path of least resistance and a plant that leaves the wiring out
+    stays green. The same mistake cost `#994` and `#961` five green plants
+    between them.
+
+    **The outcome is forced rather than drawn.** A real disease's roll can
+    improve, worsen or hold, so asserting on a seeded outcome would pin
+    whatever that seed happened to give. Substituting the DCs instead --
+    an improve DC nothing can miss, then a worsen DC nothing can make --
+    tests the three-way comparison itself, which is the half that was
+    wrong in the first draft: two `check` calls meant two d20s for one
+    printed check.
+    """
+    from pathlib import Path
+
+    from combat_engine.db import game
+    from combat_engine.story import affliction as af
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    # -- the partition, which is what keeps the census from drifting -------
+    whole = game().execute("SELECT COUNT(*) FROM disease").fetchone()[0]
+    known, refused = af.printed(), af.refused()
+    out.that(
+        len(known) + len(refused) == whole and not (set(known) & set(refused)),
+        "every disease is either tickable or refused with a reason, and "
+        "no row is both",
+        f"{len(known)} tickable + {len(refused)} refused = {whole}",
+    )
+    out.that(
+        all(got.skill and got.stages > 0 for got in known.values()),
+        "a tickable disease names a check skill and has at least one stage",
+    )
+
+    def scene(i: int, nxt: str, *, extended: bool) -> dict:
+        return {"id": f"r{i}", "kind": "rest", "name": f"R{i}",
+                "exits": [nxt] if nxt else [], "extended": extended}
+
+    def walk(extended: bool, ref: str, stage: int,
+             improve: int, worsen: int) -> tuple[object, list[str]]:
+        """Play one rest scene with `ref` carried at `stage`.
+
+        The DCs are substituted into the live cache so the outcome is
+        decided rather than rolled, and restored in a `finally` -- an
+        `lru_cache` hands back the same dict object every call, so this
+        mutates what every reader sees and must put it back.
+        """
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "r1", "scenes": [scene(1, "", extended=extended)]},
+            Path("<driver>"))
+        campaign = run_mod.begin(built, seed=3)
+        campaign.party.sheets[0].afflictions[ref] = stage
+        live = af.printed()
+        before = live.get(ref)
+        live[ref] = af.Printed(
+            ref=ref, level=2, skill="endurance",
+            improve_dc=improve, worsen_dc=worsen, stages=4)
+        try:
+            said: list[str] = []
+            while not campaign.finished:
+                made = run_mod.step(campaign, built, record=False, god=True)
+                said += [str(x) for x in made.lines
+                         if getattr(x, "kind", "") == "note"]
+        finally:
+            if before is None:
+                live.pop(ref, None)
+            else:
+                live[ref] = before
+        return campaign, said
+
+    ref = sorted(known)[0]
+
+    # -- it improves when the check cannot be missed -----------------------
+    got, said = walk(True, ref, 3, improve=-99, worsen=-99)
+    out.that(
+        got.party.sheets[0].afflictions.get(ref) == 2,
+        "a check that beats the improve DC moves the disease one stage "
+        "back toward cured",
+        f"stage 3 -> {got.party.sheets[0].afflictions.get(ref)}",
+    )
+    out.that(
+        any("improves" in n and ref in n for n in said),
+        "and the campaign says so, because a stage that moved in silence "
+        "is this component's own commonest fault",
+    )
+
+    # -- it worsens when the check cannot be made --------------------------
+    got, said = walk(True, ref, 1, improve=99, worsen=99)
+    out.that(
+        got.party.sheets[0].afflictions.get(ref) == 2,
+        "a check that misses the worsen DC moves the disease one stage "
+        "deeper",
+        f"stage 1 -> {got.party.sheets[0].afflictions.get(ref)}",
+    )
+
+    # -- and it holds between the two, which is the printed third outcome --
+    got, said = walk(True, ref, 2, improve=99, worsen=-99)
+    out.that(
+        got.party.sheets[0].afflictions.get(ref) == 2
+        and any("holds" in n for n in said),
+        "a check between the two DCs leaves the stage where it is, rather "
+        "than reading as a pass or a failure",
+    )
+
+    # -- cured leaves the sheet rather than sitting at zero ----------------
+    got, said = walk(True, ref, 1, improve=-99, worsen=-99)
+    out.that(
+        ref not in got.party.sheets[0].afflictions
+        and any("shakes off" in n for n in said),
+        "a disease improving past the last stage is dropped, because "
+        "`afflictions` is a state and not a history",
+    )
+
+    # -- ONE roll per disease, which the forced DCs above cannot see -------
+    # Worth its own assertion and worth saying why. With an improve DC
+    # nothing can miss, two `check` calls agree, so every assertion above
+    # stays green against the double-roll bug the first draft shipped --
+    # one printed check resolved with two d20s. Counting the calls is the
+    # only thing here that can tell the two apart.
+    from combat_engine.story import table as table_mod
+
+    rolled: list[int] = []
+    was = table_mod.Table.check
+
+    def counting(self: object, index: int, skill: str, dc: int) -> object:
+        rolled.append(index)
+        return was(self, index, skill, dc)
+
+    table_mod.Table.check = counting
+    try:
+        walk(True, ref, 2, improve=99, worsen=-99)
+    finally:
+        table_mod.Table.check = was
+    out.that(
+        len(rolled) == 1,
+        "one disease is one check -- the printed rule is a single roll "
+        "compared against both DCs, not a roll per DC",
+        f"{len(rolled)} check(s) for one carried disease",
+    )
+
+    # -- the control: a SHORT rest is not what a disease responds to -------
+    got, said = walk(False, ref, 3, improve=-99, worsen=-99)
+    out.that(
+        got.party.sheets[0].afflictions.get(ref) == 3
+        and not any("improves" in n for n in said),
+        "a short rest leaves the stage alone -- five minutes is not an "
+        "extended rest, and this is the control that says the tick is "
+        "wired to the right one",
+        f"stage 3 -> {got.party.sheets[0].afflictions.get(ref)}",
+    )
+
+    # -- the save carries it, which is where a new field dies quietly -----
+    # `Campaign` is hand-serialised and `Sheet` round-trips through
+    # `asdict` plus a tolerant filter, so this one needed no save code --
+    # but `Campaign.encounters` was written into `to_dict` and never read
+    # back, resetting on every load, and nothing noticed until a driver
+    # asked. So the question gets asked rather than reasoned about.
+    from combat_engine.story import save as save_mod
+
+    carried = run_mod.begin(
+        mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4, "start": "r1",
+             "scenes": [scene(1, "", extended=True)]},
+            Path("<driver>")),
+        seed=3)
+    carried.party.sheets[0].afflictions[ref] = 3
+    rode = save_mod.from_dict(save_mod.to_dict(carried))
+    out.that(
+        rode.party.sheets[0].afflictions == {ref: 3},
+        "a carried disease survives a save and a load, stage included",
+        f"{rode.party.sheets[0].afflictions}",
+    )
+
+    # -- and a party carrying nothing rolls nothing ------------------------
+    built = mod.parse(
+        {"id": "probe", "party_level": 2, "party_size": 4,
+         "start": "r1", "scenes": [scene(1, "", extended=True)]},
+        Path("<driver>"))
+    campaign = run_mod.begin(built, seed=3)
+    clean: list[str] = []
+    while not campaign.finished:
+        made = run_mod.step(campaign, built, record=False, god=True)
+        clean += [str(x) for x in made.lines
+                  if getattr(x, "kind", "") == "note"]
+    out.that(
+        not any("stage" in n for n in clean)
+        and all(not s.afflictions for s in campaign.party.sheets),
+        "a party carrying no disease says nothing about one -- nothing "
+        "inflicts one yet, so this is the state every party is in today",
+    )
+
+
 def an_extended_rest_is_once_per_day_and_a_refusal_is_printed(
     out: Result,
 ) -> None:
@@ -53753,6 +53955,10 @@ DRIVERS = {
     "stays_cleared": (
         a_revisited_scene_does_not_raise_the_creatures_it_lost,
         "a revisited scene does not raise the creatures it lost (#970)",
+    ),
+    "affliction": (
+        a_disease_moves_at_an_extended_rest,
+        "a carried disease moves at an extended rest (#948)",
     ),
     "rest_lockout": (
         an_extended_rest_is_once_per_day_and_a_refusal_is_printed,

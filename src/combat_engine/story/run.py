@@ -53,6 +53,7 @@ from . import (
     PARTY,
     Party,
     Shape,
+    affliction,
     arrival_squares,
     bands_of,
     field_encounter,
@@ -1953,6 +1954,18 @@ def step(
                 else "Short rest: encounter powers back, surges spent to heal.",
                 "note",
             )
+            # **A disease moves at the end of an extended rest, and only
+            # there.** The printed rule is one check per extended rest, so
+            # a short rest leaves a stage where it is -- five minutes is
+            # not what a disease responds to. Guarded on `refused` with
+            # the benefit above it for the same reason the note is: a rest
+            # the lockout refused did not happen, so nothing may improve
+            # on the strength of it. #948.
+            if scene.extended:
+                for line in affliction.tick(
+                    campaign.party, seed_for(campaign, scene, "disease")
+                ):
+                    made.say(line, "note")
 
     # **Count the encounter and pay the milestone, after the scene played.**
     # Weighted by the printed rule rather than flat -- see

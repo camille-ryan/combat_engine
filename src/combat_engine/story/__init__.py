@@ -183,6 +183,16 @@ class Sheet:
     #: it. A count would answer the wrong question and a reward awarded
     #: twice is one reward, not two.
     rewards: dict[str, int] = field(default_factory=dict)
+    #: Diseases carried, `ref -> the stage it is at`. Stages run **upward
+    #: into the disease**: `affliction.CURED` is 0 and a cured disease is
+    #: dropped from the dict rather than left at zero, because
+    #: `afflictions` is a state and not a history.
+    #:
+    #: **Nothing inflicts one yet**, so this is empty on every party today
+    #: -- the reader arriving before the writer, which is said here rather
+    #: than left for somebody to read an empty dict as a broken tick.
+    #: `affliction.tick` moves them at an extended rest. #948.
+    afflictions: dict[str, int] = field(default_factory=dict)
     #: Coins, in gold pieces. **Nothing spends them**, deliberately: an
     #: economy with nothing to buy is a separate piece of work, and the
     #: printed buying rules want rituals (#453) and a market. A visible
