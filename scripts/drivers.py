@@ -50183,6 +50183,265 @@ def a_revisited_scene_does_not_raise_the_creatures_it_lost(
     )
 
 
+def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
+    """The post-fight stabilise pass, and what carries it. #1075.
+
+    `#1023` fielded a dying character dying instead of standing them up,
+    and `#1074` built the check -- but nothing invoked it, so a party
+    watched somebody run out of death saves with no roll offered. This is
+    the pass that offers it.
+
+    **The ordering is the load-bearing part and the issue had it wrong.**
+    `#1075` proposed running after `harvest`; the check needs the board,
+    and `harvest` is what ends the board's authority, so running after it
+    would write `Sheet.stable` *before* the check and the result would be
+    thrown away. There is an assertion on exactly that, because it is the
+    mistake a reader following the issue would make.
+    """
+    from pathlib import Path
+
+    from combat_engine.engine import Ident
+    from combat_engine.engine.components import Condition as C
+    from combat_engine.engine.components import Health as Hp
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.query import is_ as has_
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import Fielded, Party, field_encounter, harvest
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    class Caught:
+        """A `Step` stand-in that only collects what was said."""
+
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        def say(self, text: str, kind: str = "note") -> None:
+            self.lines.append(text)
+
+    def fielded(
+        *hurt: tuple[int, int, int],
+    ) -> tuple[Party, Fielded]:
+        """A party with `(slot, hp, failures)` applied to its sheets."""
+        band = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+        for slot, hp, fails in hurt:
+            band.sheets[slot].hp = hp
+            band.sheets[slot].failures = fails
+        got = field_encounter(seed=5, level=2, party=band)
+        return band, got
+
+    # -- somebody tries, and it is said either way ------------------------
+    band, got = fielded((0, -10, 0))
+    said = Caught()
+    run_mod.rally(got.world, said)
+    out.that(
+        said.lines and any("stabilis" in n for n in said.lines),
+        "with a dying character and allies standing, somebody tries, and "
+        "the attempt is said -- a pass that helped nobody in silence is "
+        "indistinguishable from one that never ran",
+        f"{said.lines}",
+    )
+
+    # -- and it does not heal ---------------------------------------------
+    band, got = fielded((0, -10, 0))
+    pcs = [e for e in got.world.entities
+           if (i := got.world.get(e, Ident)) and str(i.ref).startswith("c:")]
+    before = got.world.need(pcs[0], Hp).hp
+    run_mod.rally(got.world, Caught())
+    out.that(
+        got.world.need(pcs[0], Hp).hp == before,
+        "and nobody is healed by it -- stabilising stops the death saves "
+        "and leaves the character at their negative total",
+        f"hp {before} -> {got.world.need(pcs[0], Hp).hp}",
+    )
+
+    # -- closest to death first, by failures ------------------------------
+    # Camille's rule, verbatim: *"Closest to death is by number of
+    # failures."* Two dying, and the one with two failures must be reached
+    # before the one with none.
+    band, got = fielded((0, -5, 0), (1, -5, 2))
+    said = Caught()
+    run_mod.rally(got.world, said)
+    first = said.lines[0] if said.lines else ""
+    out.that(
+        "cleric" in first,
+        "the character closest to death is tried first, measured by "
+        "failures rather than by hit points -- the sheet at -5 with two "
+        "failures comes before the sheet at -5 with none",
+        f"first line: {first!r}",
+    )
+
+    # -- one attempt per standing character, and the shortfall is printed -
+    band, got = fielded((0, -5, 0), (1, -5, 1), (2, -5, 2))
+    said = Caught()
+    run_mod.rally(got.world, said)
+    tries = [n for n in said.lines if "stabilis" in n]
+    out.that(
+        len(tries) == 1,
+        "three dying and one standing is ONE attempt, not three -- "
+        "Camille's bound is per helper, and a loop until it works would "
+        "make a failed check mean nothing",
+        f"{len(tries)} attempt(s) for 3 dying, 1 standing",
+    )
+    out.that(
+        any("more dying than there were hands" in n for n in said.lines),
+        "and the shortfall is printed, because a cap this engine does not "
+        "announce reads as having covered everybody",
+    )
+
+    # -- nobody standing is said rather than crashed ----------------------
+    band, got = fielded((0, -5, 0), (1, -5, 0), (2, -5, 0), (3, -5, 0))
+    said = Caught()
+    run_mod.rally(got.world, said)
+    out.that(
+        any("nobody standing" in n for n in said.lines),
+        "a whole party down says so and tries nothing, rather than "
+        "raising or silently doing nothing",
+        f"{said.lines}",
+    )
+
+    # -- the control: a party on its feet says nothing --------------------
+    band, got = fielded()
+    said = Caught()
+    run_mod.rally(got.world, said)
+    out.that(
+        not said.lines,
+        "and a party with nobody dying says nothing at all, which is "
+        "every fight that goes well",
+    )
+
+    # == the ordering the issue got wrong =================================
+    # `rally` must run BEFORE `harvest`. After it, the sheet is written
+    # from a board where nobody has been stabilised yet, so the result is
+    # discarded -- and nothing else here would notice.
+    band, got = fielded((0, -10, 0))
+    run_mod.rally(got.world, Caught())
+    harvest(got.world, band)
+    out.that(
+        band.sheets[0].stable,
+        "a stabilised character is carried onto the sheet by `harvest`, so "
+        "the flag the next fight reads is the one this pass set",
+        f"sheet.stable={band.sheets[0].stable}",
+    )
+
+    # -- and `_fight` calls them in that order, which the above cannot say -
+    # **This assertion exists because a plant proved the one above is not
+    # it.** Swapping `rally` and `harvest` inside `_fight` left the whole
+    # driver green: the probe calls the two itself, so it was asserting its
+    # own ordering and not the code's. Same mistake #945 and #994 record,
+    # arriving by the same route -- the probe-level version is the one that
+    # is easy to write.
+    #
+    # Asserted against the source, the way `kinds_named` asks `actions.py`
+    # what kinds exist, because the effect of getting it wrong is invisible
+    # on any board: `harvest` first simply writes the flag from a board
+    # where nobody has been helped yet.
+    body = Path("src/combat_engine/story/run.py").read_text()
+    fight = body[body.index("def _fight("):]
+    fight = fight[:fight.index("\ndef ")]
+    out.that(
+        "rally(world, step)" in fight
+        and "harvest(world, campaign.party)" in fight
+        and fight.index("rally(world, step)")
+        < fight.index("harvest(world, campaign.party)"),
+        "`_fight` runs the pass BEFORE `harvest`, which is the ordering "
+        "#1075 proposed the other way round -- the check needs the board "
+        "and `harvest` is what ends the board's authority",
+        f"rally at {fight.find('rally(world, step)')}, "
+        f"harvest at {fight.find('harvest(world, campaign.party)')}",
+    )
+
+    # -- and the flag survives into the next fight, against a control ----
+    def ticks(stable: bool) -> tuple[bool, int]:
+        band = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+        band.sheets[0].hp = -10
+        band.sheets[0].stable = stable
+        got = field_encounter(seed=5, level=2, party=band)
+        world = got.world
+        pcs = [e for e in world.entities
+               if (i := world.get(e, Ident))
+               and str(i.ref).startswith("c:")]
+        low = pcs[0]
+        enc = Encounter(world)
+        enc.start()
+        was = world.need(low, Hp).failures
+        for _ in range(14):
+            enc.advance()
+        return has_(world, low, C.STABLE), world.need(low, Hp).failures - was
+
+    loose_stable, loose = ticks(False)
+    held_stable, held = ticks(True)
+    out.that(
+        loose > 0 and not loose_stable,
+        "the control: a character carried over NOT stabilised arrives "
+        "dying and goes on accumulating failures",
+        f"{loose} further failures",
+    )
+    out.that(
+        held_stable and held == 0,
+        "and one carried over stabilised arrives stabilised and "
+        "accumulates none -- which is what the party bought with a "
+        "standard action, surviving the world that ended",
+        f"{held} further failures against the control's {loose}",
+    )
+
+    # -- a rest ends it, both ways round ----------------------------------
+    band = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+    band.sheets[0].hp = -10
+    band.sheets[0].stable = True
+    band.rest()
+    short = band.sheets[0].stable
+    band2 = Party.of(("fighter", "cleric", "rogue", "wizard"), 2)
+    band2.sheets[0].hp = -10
+    band2.sheets[0].stable = True
+    band2.rest(extended=True)
+    out.that(
+        not short and not band2.sheets[0].stable,
+        "a rest of either length clears it -- the clock it stopped is "
+        "gone, and a flag nothing clears is the fault `campaign.denied` "
+        "was shaped to avoid",
+        f"short -> {short}, extended -> {band2.sheets[0].stable}",
+    )
+
+    # -- and the whole thing through `run.step`, which is the wiring ------
+    built = mod.parse(
+        {"id": "p", "party_level": 2, "party_size": 4, "start": "f",
+         "scenes": [{"id": "f", "kind": "combat", "name": "F", "exits": [],
+                     "difficulty": "easy",
+                     "foes": [{"count": 1, "role": "soldier",
+                               "rank": "standard"}]}]},
+        Path("<driver>"))
+    camp = run_mod.begin(built, seed=5)
+    camp.party.sheets[0].hp = -10
+    # **The wiring is asserted by recording the call, not by its output.**
+    # The obvious version -- look for the note in `made.lines` -- cannot be
+    # made to pass today, and the reason is a separate bug rather than this
+    # pass: a character fielded dying ends a real fight at a negative total
+    # with **no conditions on them at all**, so `rally` correctly finds
+    # nobody to help. Measured at `rally` time: `hp=-10, dying=False,
+    # effects=[]`. That is logged on its own issue; asserting the note here
+    # would be asserting a bug fixed.
+    reached: list[int] = []
+    was = run_mod.rally
+
+    def recorder(world: World, step: object) -> None:
+        reached.append(1)
+        was(world, step)
+
+    run_mod.rally = recorder   # ty: ignore[invalid-assignment]
+    try:
+        run_mod.step(camp, built, record=False)
+    finally:
+        run_mod.rally = was    # ty: ignore[invalid-assignment]
+    out.that(
+        reached == [1],
+        "`run.step` reaches the pass once for a real fight, rather than it "
+        "only being callable by a probe -- the wiring, which is the half a "
+        "helper-level assertion never covers",
+        f"reached {len(reached)} time(s)",
+    )
+
+
 def a_dying_ally_can_be_stabilised_with_a_heal_check(out: Result) -> None:
     """The printed DC 15 Heal check, and the state it sets. #1074.
 
@@ -54405,6 +54664,10 @@ DRIVERS = {
     "stays_cleared": (
         a_revisited_scene_does_not_raise_the_creatures_it_lost,
         "a revisited scene does not raise the creatures it lost (#970)",
+    ),
+    "rally": (
+        after_a_fight_the_standing_try_to_save_the_dying,
+        "after a fight the standing try to stabilise the dying (#1075)",
     ),
     "stabilise": (
         a_dying_ally_can_be_stabilised_with_a_heal_check,

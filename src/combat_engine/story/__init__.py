@@ -193,6 +193,18 @@ class Sheet:
     #: than left for somebody to read an empty dict as a broken tick.
     #: `affliction.tick` moves them at an extended rest. #948.
     afflictions: dict[str, int] = field(default_factory=dict)
+    #: Stabilised: dying, but not rolling death saving throws. #1075.
+    #:
+    #: **Carried on the sheet because the board does not outlive the
+    #: fight.** `Condition.STABLE` is a `When.ENCOUNTER` effect, so a
+    #: character stabilised after one fight would arrive at the next one
+    #: rolling again -- which is the whole thing the Heal check buys,
+    #: undone by the world ending. `harvest` writes it and `_wear` puts it
+    #: back.
+    #:
+    #: Cleared by a rest, which brings a dying character to 1 anyway
+    #: (`stabilise`), and by damage on the board (`resolve._drop`).
+    stable: bool = False
     #: Coins, in gold pieces. **Nothing spends them**, deliberately: an
     #: economy with nothing to buy is a separate piece of work, and the
     #: printed buying rules want rituals (#453) and a market. A visible
@@ -435,8 +447,17 @@ class Party:
                 sheet.surges = None
                 sheet.action_points = 1
                 sheet.failures = 0
+                # **A rest ends stabilised, both ways round.** An extended
+                # rest sets `hp = None`, so nobody is dying any more and
+                # the flag would describe a state that no longer exists;
+                # a short rest heals and then `stabilise()` stands a dying
+                # character up at 1. Either way the clock it stopped is
+                # gone. A flag nothing clears is the shape `campaign.denied`
+                # was built to avoid. #1075.
+                sheet.stable = False
                 continue
             sheet.failures = 0
+            sheet.stable = False
             for ref in list(sheet.spent):
                 row = get(ref)
                 if row is None or row.usage is not Usage.DAILY:
@@ -511,6 +532,20 @@ def _wear(world: World, eid: int, sheet: Sheet) -> str:
                 # printed death-save rule calls it.
                 what = {"dropped": "dying", "dead": "dead"}.get(
                     restore_hp(world, eid, sheet.hp), "standing")
+                # **Stabilised survives the fight that ended.** Put back
+                # after `restore_hp`, which calls `_revive` and so clears
+                # everything a previous board left -- including this. Before
+                # it, and the restore would wipe the thing the party spent a
+                # standard action on. #1075.
+                if what == "dying" and sheet.stable:
+                    from combat_engine.engine.components import Condition
+                    from combat_engine.engine.durations import When
+
+                    world.effects.apply(
+                        eid, eid, When.ENCOUNTER, label="stabilised",
+                        conditions=(Condition.STABLE,),
+                    )
+                    what = "dying but stable"
                 said = (
                     f"{sheet.cls.title()} was recorded at {sheet.hp} and is "
                     f"fielded {what} -- no rest stood them up (#1023)."
@@ -595,6 +630,13 @@ def harvest(world: World, party: Party) -> None:
             sheet.max_hp = health.max_hp
             sheet.surges = health.surges
             sheet.failures = health.failures
+            # Read off the board rather than inferred from the numbers: a
+            # negative total says *dying*, and whether somebody has been
+            # stabilised is a separate fact that only the condition knows.
+            from combat_engine.engine.components import Condition
+            from combat_engine.engine.query import is_ as _is
+
+            sheet.stable = _is(world, eid, Condition.STABLE)
         points = world.get(eid, ActionPoints)
         if points is not None:
             sheet.action_points = points.points

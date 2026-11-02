@@ -712,6 +712,12 @@ def _fight(
 
     if written is not None:
         written.flush()
+    # **The standing try to save the dying, before the board's
+    # authority ends.** On the live world, so the Heal check reads a
+    # real modifier; before `harvest`, which is what carries the
+    # result onto the sheets; and before `bury`, so a character who
+    # could have been saved is not removed first. #1075.
+    rally(world, step)
     harvest(world, campaign.party)
     # **The party's own dead leave it, here and not at the rest.** Camille's
     # ruling, 2026-10-30: a character past the death floor is out of the
@@ -1648,6 +1654,110 @@ def stake(scene: Scene, made: Step) -> None:
                 f"{'s' if item.each != 1 else ''} each.",
                 "note",
             )
+
+
+def rally(world: World, step: Step) -> None:
+    """Once the fighting stops, the standing try to save the dying. #1075.
+
+    Camille's design, on `#1023`:
+
+    > *"after enemies are neutralized, all remaining allies should
+    > automatically attempt to stabilize their downed friends. In the event
+    > of multiple downed allies, the one closest to death should be
+    > stabilized first."*
+
+    and, on what closest to death means:
+
+    > *"Closest to death is by number of failures."*
+
+    **Automatic, because nobody is choosing anything.** The in-combat
+    action (`#1074`) is something a character decides to spend a standard
+    on while there is still a fight to lose. Here the enemies are down, so
+    there is no reason any standing character would *not* try, and no
+    decision for a policy to make. That is why this is a campaign-layer
+    pass in the shape of `weather` and `travel` rather than a doctrine
+    term.
+
+    **Before `harvest`, not after**, which corrects what `#1075` proposed.
+    The issue said after `harvest` and before `bury`; the check needs the
+    **board** -- real Heal modifiers off a live `Skills` component -- and
+    `harvest` is what ends the board's authority. So this runs on the live
+    world and `harvest` then carries `Condition.STABLE` onto the sheet,
+    where `Sheet.stable` keeps it for the next fight.
+
+    Still before `bury`, which is the half of the issue's ordering that was
+    right and is the one that matters: `bury` drops the dead, and a
+    character who could have been stabilised must get the chance before
+    anybody is removed.
+
+    One attempt per standing character, which is Camille's bound. Not one
+    per dying character and not a loop until it works -- a failed check
+    means they are still dying, which `#1023` now models honestly.
+    """
+    from combat_engine.engine import Ident, Side, Team
+    from combat_engine.engine.actions import STABILISE_DC
+    from combat_engine.engine.components import Condition, Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import alive, is_
+    from combat_engine.engine.skills import check as roll_check
+
+    mine = [
+        eid for eid, side in world.each(Side)
+        if side.team == Team.PC
+        and (ident := world.get(eid, Ident)) is not None
+        and ident.ref.startswith("c:")
+    ]
+    # **Closest to death first, by failures**, which is Camille's rule and
+    # is the number the engine already keeps. Ties go to the lower entity
+    # id so a seeded run is reproducible without the dice.
+    down = sorted(
+        (e for e in mine
+         if is_(world, e, Condition.DYING)
+         and not is_(world, e, Condition.STABLE)),
+        key=lambda e: (-(world.need(e, Health).failures), e),
+    )
+    if not down:
+        return
+    standing = [e for e in mine if alive(world, e) and e not in down]
+    if not standing:
+        step.say(
+            f"{len(down)} dying and nobody standing to help them.", "note")
+        return
+    for helper, hurt in zip(standing, down, strict=False):
+        got = roll_check(world, helper, "heal", STABILISE_DC)
+        if got.success:
+            world.effects.apply(
+                hurt, helper, When.ENCOUNTER, label="stabilised",
+                conditions=(Condition.STABLE,),
+            )
+            step.say(
+                f"After the fight, {_named(world, helper)} stabilises "
+                f"{_named(world, hurt)} ({got.total} vs {STABILISE_DC}).",
+                "note",
+            )
+        else:
+            step.say(
+                f"After the fight, {_named(world, helper)} cannot stabilise "
+                f"{_named(world, hurt)} ({got.total} vs {STABILISE_DC}) -- "
+                f"still dying.",
+                "note",
+            )
+    if len(down) > len(standing):
+        # Printed rather than silent: a party of two standing and three
+        # dying leaves somebody untried, and a clamp this engine does not
+        # announce is the fault its own rules file opens by naming.
+        step.say(
+            f"{len(down) - len(standing)} more dying than there were hands "
+            f"to help, so not everybody was tried.", "note")
+
+
+def _named(world: World, eid: int) -> str:
+    """What to call a character in a note. Its class, which is its name."""
+    from combat_engine.engine import Ident
+
+    ident = world.get(eid, Ident)
+    ref = str(ident.ref) if ident is not None else ""
+    return ref.removeprefix("c:").replace("-", " ") or f"e{eid}"
 
 
 def travel(campaign: Campaign, module: Module, scene: Scene,
