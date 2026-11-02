@@ -59,6 +59,26 @@ class Policy(Protocol):
 # --------------------------------------------------------------------------
 
 
+def _is_down(world: World, eid: int) -> bool:
+    """Is this creature already at or below 0 hit points? #328.
+
+    One reader for the question three places now ask, rather than three
+    spellings of `health.hp <= 0`. `#321` wrote the test inline for its
+    two sums and `#328`'s ruling needs the same test on two more terms --
+    a third copy is how the four drift apart.
+
+    **Hit points, not a condition.** A dying creature's conditions are
+    applied by the damage path and cleared by encounter teardown (#1076),
+    so `hp <= 0` is the fact that holds at every moment a scorer runs.
+
+    False for a creature with no `Health` at all, which is the safe
+    direction: a scorer that treated an unreadable target as down would
+    silently stop attacking it.
+    """
+    health = world.get(eid, Health)
+    return health is not None and health.hp <= 0
+
+
 def features(
     world: World, encounter: Encounter, actor: int, action: Action
 ) -> dict[str, float]:
@@ -244,8 +264,39 @@ def features(
         # **None means there is nothing to hit**, and such a row gets no
         # hit-chance feature at all rather than a phantom one. See
         # `Power.hit_chance`.
+        #
+        # **A creature already at or below 0 is not counted, which is
+        # Camille's ruling on #328**, verbatim:
+        #
+        #   > *"Enemies using attacks should not take downed PCs into
+        #   > their calculations at all."*
+        #   > *"Entities should generally not attack downed entities
+        #   > directly."*
+        #
+        # `#321` made the two "finish the wounded one" sums skip these and
+        # left the pair that measures how *easy* a target is, which is the
+        # pair that actually drove the behaviour: prone and unconscious
+        # together drop a defence by 5 and hand over combat advantage, so
+        # a dying character is 5 to 10 points easier to hit than anything
+        # else on the board. `hit_chance` at 3.0 and `expected_hits` at
+        # 4.0 correctly reported that and were worth 7.0 between them --
+        # which is how an elite spent its full standard action in rounds
+        # 12 **and** 13 on a body at -4 hp while two healthy characters
+        # stood adjacent and one of them had it marked.
+        #
+        # Skipped rather than penalised, because a weight fighting a
+        # correct measurement is a weight that loses whenever the
+        # measurement gets more correct.
+        #
+        # **`coup_de_grace` is deliberately untouched**, which is the
+        # *"generally"* in the ruling and the printed rule: finishing a
+        # helpless creature is an action the book gives, `is_coup_de_grace`
+        # is 6.0, and it scores on its own kind rather than on these two
+        # terms. So the body can still be finished on purpose; it just
+        # stops being the most attractive thing to swing at.
         chances = [c for t in action.targets
-                   if (c := p.hit_chance(world, actor, t)) is not None]
+                   if not _is_down(world, t)
+                   and (c := p.hit_chance(world, actor, t)) is not None]
         if chances:
             f["hit_chance"] = sum(chances) / len(chances)
             f["expected_hits"] = sum(chances)
