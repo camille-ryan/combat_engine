@@ -52414,6 +52414,123 @@ UNNAMED_KINDS_OWED = frozenset(
 )
 
 
+def a_theme_can_grant_a_power(out: Result) -> None:
+    """A reflavoured creature holds the card the module gave it. `#985`.
+
+    DMG2 chapter 4 is about monster themes, and what it says a theme **is**
+    was the one thing `Reflavour` could not do:
+
+    > *"Choose one attack power and one utility power from the theme and add
+    > those to the monster's stat block."*
+
+    Everything else on that list was already here -- story changes, keyword
+    and origin changes, damage types, resistances -- so the powers were the
+    single missing field in a monster-theme system.
+
+    **Asserted through `usable`, not through `Powers.known`.** Appending a
+    ref to the list is the easy half and proves nothing: `usable` is what
+    decides whether a creature can actually take the row, and a ref that
+    `dsl.get` answers `None` for is skipped there **silently**, so a
+    creature could come out holding a list and no cards. That is the
+    drawable-and-inert shape this repo keeps paying for, and the only way
+    to tell it apart is to ask whether the card can be used.
+
+    **And the refusal half is asserted too**, because it is what makes
+    `apply`'s count honest: a module naming a card that does not exist is a
+    typo, and it must be refused rather than appended. `apply` returns what
+    it laid, so counting a ref that will never resolve would make the
+    return value lie -- the same reason `adjust_level`'s own refusal is
+    recorded as 0 rather than pretended.
+
+    `THEMES` deliberately grants nothing: a theme's printed power list is
+    content that is not in `game.db`, and minting one here would be
+    inventing a card. So the field is for a module naming refs that exist,
+    and importing the printed lists is a separate gap.
+    """
+    from combat_engine.content import loader
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.story import reflavour as rf
+
+    #: A creature ref, not an ability ref. `loader.spawn` wants a stat
+    #: block and `m145a0` is a card on one -- the first version of this
+    #: rule passed `m145a0` and died on `no monster m145a0`, which is the
+    #: distinction worth keeping written down. `#1031`'s own driver spawns
+    #: this one.
+    REF = "m75"
+
+    def dressed(powers: tuple[str, ...]):  # noqa: ANN202
+        world = World(Grid(12, 12), Rng(1), Bus())
+        eid = loader.spawn(world, REF, (3, 3))
+        laid = rf.apply(world, eid, rf.Reflavour(powers=powers))
+        known = world.get(eid, Powers)
+        return world, eid, laid, list(known.known if known else [])
+
+    # -- the control: what it holds before anything is granted ------------
+    _w0, _e0, bare_laid, bare = dressed(())
+    out.that(bare_laid == 0,
+             "a reflavour granting nothing lays nothing, so the count below"
+             " is the grant and not the spawn",
+             f"{bare_laid} laid")
+
+    # A real declared row the creature does not already have.
+    spare = next((r for r in sorted(REGISTRY)
+                  if r.startswith("m") and r not in bare), "")
+    out.that(bool(spare),
+             "there is a declared row to grant that this creature does not"
+             " already know, so the grant below is observable")
+    if not spare:
+        return
+
+    world, eid, laid, after = dressed((spare,))
+    out.that(laid == 1 and spare in after,
+             "the granted card is on the creature's own list",
+             f"laid {laid}; {spare} in list: {spare in after}")
+    out.that(len(after) == len(bare) + 1,
+             "and nothing else moved -- it is an addition, not a rebuild",
+             f"{len(bare)} -> {len(after)}")
+
+    # -- what the creature is actually OFFERED is the half that matters ---
+    #
+    # **`Powers.all`, not `Powers.known`.** `all` is the list
+    # `actions.legal` reads -- "everything usable, with the basic attack
+    # included exactly once" -- so it is the surface a turn is built from.
+    # Asserting `known` only would pass for a ref nothing can resolve,
+    # which `usable` skips in silence.
+    #
+    # The first version of this asserted `usable(world, eid, spare) or
+    # True`, which is two mistakes in one line: `usable` takes a row rather
+    # than a ref, and `or True` made the assertion unfalsifiable. Recorded
+    # because an assertion that cannot fail is worse than none -- it reads
+    # as coverage.
+    known_after = world.get(eid, Powers)
+    offered = list(known_after.all if known_after else [])
+    out.that(spare in offered,
+             "the granted card is in the list a turn is actually built"
+             " from, not merely in the creature's `known`",
+             f"{spare} in Powers.all: {spare in offered}")
+    out.that(REGISTRY.get(spare) is not None,
+             "and the granted ref resolves to a declared row -- what"
+             " separates a real grant from a list that looks right",
+             f"{spare}")
+
+    # -- a ref nothing declares is refused, not appended ------------------
+    _w2, _e2, none_laid, none_after = dressed(("m00000zzz",))
+    out.that(none_laid == 0 and "m00000zzz" not in none_after,
+             "a card the module invented is refused rather than appended --"
+             " appending it would leave a ref `usable` skips in silence, so"
+             " the creature would read as themed and hold nothing",
+             f"laid {none_laid}, present: {'m00000zzz' in none_after}")
+
+    # -- and granting twice is idempotent ---------------------------------
+    _w3, _e3, twice_laid, twice_after = dressed((spare, spare))
+    out.that(twice_laid == 1 and twice_after.count(spare) == 1,
+             "naming the same card twice grants it once, so a module that"
+             " repeats itself does not hand the creature two copies",
+             f"laid {twice_laid}, count {twice_after.count(spare)}")
+
+
 def the_array_shores_up_the_weakest_defence(out: Result) -> None:
     """The six numbers, and where the second 14 goes. `#992`.
 
@@ -54317,6 +54434,10 @@ DRIVERS = {
     "brief_agrees": (
         the_importer_brief_and_the_parser_agree,
         "the importer brief names no value the parser refuses (#1026)",
+    ),
+    "theme_powers": (
+        a_theme_can_grant_a_power,
+        "a reflavoured creature holds the card its module granted (#985)",
     ),
     "array_shores_up": (
         the_array_shores_up_the_weakest_defence,

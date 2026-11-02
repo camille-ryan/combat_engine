@@ -201,6 +201,23 @@ class Reflavour:
     #: 0 means the printed level, which is what every module line that
     #: names a creature in its own tier gets.
     levels: int = 0
+    #: Powers this creature also has, by ref. #985.
+    #:
+    #: **DMG2 defines a theme as exactly this and `Reflavour` could not do
+    #: it**: *"Choose one attack power and one utility power from the theme
+    #: and add those to the monster's stat block."* Everything else on that
+    #: list — story changes, keyword and origin changes, damage types,
+    #: resistances — was already here; the powers were the one thing
+    #: missing, which made this the one field a monster-theme system most
+    #: needed.
+    #:
+    #: **Refs a module names, not a theme's printed list.** The 22 entries
+    #: in `THEMES` carry none of these and deliberately stay empty: a
+    #: theme's power list is *printed content*, it is not in `game.db`, and
+    #: minting one here would be inventing a card. So a module names refs
+    #: that already exist, which is what a hand-authored module is for, and
+    #: importing the printed lists is a separate ETL gap.
+    powers: tuple[str, ...] = ()
 
     @property
     def mechanical(self) -> bool:
@@ -208,6 +225,12 @@ class Reflavour:
         return bool(
             self.add_words or self.drop_word or self.retype
             or self.resist or self.vulnerable or self.immune
+            # **A granted power counts.** Without this, `apply` returns
+            # early for a reflavour whose only content is `powers` and the
+            # field would be silently inert -- the shape this repo calls
+            # drawable-and-inert, arriving through a guard rather than
+            # through a marker.
+            or self.powers
             # **`levels` counts, and it is the only field here that a
             # by-name creature ever carries.** The note at `_for_spec`
             # says a creature found by name "already *is* the thing" and
@@ -310,6 +333,30 @@ def apply(world: World, eid: int, flavour: Reflavour) -> int:
         from combat_engine.engine.monster_math import adjust_level
 
         laid += bool(adjust_level(world, eid, flavour.levels))
+
+    # **The powers next, before the words.** #985. A granted card is part
+    # of the stat block DMG2's step 4 adds to, so it goes on while the
+    # creature is still the thing the module named -- and before anything
+    # below reads what it can do.
+    #
+    # **Refused rather than dropped when the ref is not a declared row.**
+    # A module naming a card that does not exist is a typo, and appending
+    # it to `Powers.known` would put a ref in the list that `dsl.get`
+    # answers `None` for -- which `usable` skips silently, so the creature
+    # would come out looking themed and holding nothing. Counting only
+    # what landed is what makes `apply`'s return value honest, and it is
+    # the same reason `adjust_level`'s refusal is recorded as 0 above.
+    if flavour.powers:
+        from combat_engine.engine.components import Powers
+        from combat_engine.engine.dsl import get as get_row
+
+        known = world.get(eid, Powers)
+        if known is not None:
+            for ref in flavour.powers:
+                if get_row(ref) is None or ref in known.known:
+                    continue
+                known.known.append(ref)
+                laid += 1
 
     if flavour.add_words or flavour.drop_word:
         cast.set_origin(
