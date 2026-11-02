@@ -55051,10 +55051,23 @@ def searching_a_room_needs_no_dice(out: Result) -> None:
     on a real board) and the **flags** reaching the scene, including the
     page's `pressed` exception.
 
-    What it does **not** assert is the reader's branch end to end -- that a
-    certain row in a played scene comes out found without a die. That needs
-    a `Playing` and a `Director`, and is the next thing to add here rather
-    than something I am claiming.
+    **The reader's branch IS asserted end to end now**, and the
+    discriminator is not "was it found" -- which a rolled easy row gives
+    anyway -- but **how many characters found it.** The certain branch
+    credits only `table.best(skill)`, because the printed result *is* the
+    best member's, so a played scene separates the two cleanly and with no
+    statistics. Measured over eight seeds:
+
+    ```
+                    certain row    rolled row
+      not pressed    1 1 1 1 ...    2 3 4 3 ...
+      pressed        4 3 2 3 ...    4 3 3 4 ...
+    ```
+
+    The second row is the page's `pressed` exception working: under time
+    pressure the certain row behaves exactly like the rolled one. Both are
+    asserted, and the first is pinned to **exactly one** knower rather than
+    to a count, since "fewer" would pass for a branch that found nobody.
     """
     from pathlib import Path
 
@@ -55142,6 +55155,116 @@ def searching_a_room_needs_no_dice(out: Result) -> None:
                  f"{board.automatic('nonsense-skill')}")
     finally:
         board.strike()
+
+    # -- the reader's branch, driven end to end through `run.step` ---------
+    # **Two rows in one scene at the SAME band**, so the only difference
+    # between them is `certain` -- and the discriminator is the number of
+    # knowers rather than whether the fact arrived, because a rolled easy
+    # row arrives 97-100% of the time with five characters and would pass
+    # either way. The certain branch credits `table.best(skill)` alone.
+    from combat_engine.story import run as run_mod
+
+    # **A third row with a DC the automatic result CANNOT reach**, which is
+    # the only way to pose the branch's own success test: at an easy band
+    # `20 + best modifier` always clears the target, so a plant removing
+    # `got >= target` changed nothing and stayed green. 60 is above any
+    # heroic modifier plus twenty.
+    OUT_OF_REACH = 60
+
+    def played(pressed: bool, seed: int) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4, "start": "r",
+             "scenes": [{
+                 "id": "r", "kind": "roleplay", "name": "R", "exits": [],
+                 "sets": "A hall, and time to look at it.",
+                 "max_beats": 1, "pressed": pressed,
+                 "npcs": [{"name": "A watchman",
+                           "wants": "to be left alone"}],
+                 "lore": [
+                     {"fact": "Certainly so.", "skill": "perception",
+                      "band": "easy", "certain": True},
+                     {"fact": "Rolled for.", "skill": "perception",
+                      "band": "easy"},
+                     {"fact": "Out of reach.", "skill": "perception",
+                      "dc": OUT_OF_REACH, "certain": True},
+                 ],
+             }]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        # Without this every slot is human and, with `beat.silent`, nobody
+        # declares -- the beat still runs and `_recall` still fires, but the
+        # scene reads as empty and a later reader would not know why.
+        campaign.control = ["ai"] * len(campaign.party.sheets)
+        made = run_mod.step(campaign, built, record=False)
+        if made.played is None or not made.played.beats:
+            return (), -1
+        # **The same board the scene laid, rebuilt from the same seed**, so
+        # "the best member" can be asked rather than assumed. Never struck:
+        # `Table.strike` harvests a board's counts back over every sheet.
+        board = table_mod.lay(
+            campaign.party,
+            seed=run_mod.seed_for(campaign, built.scene("r"), "beats"))
+        best = board.best("perception")
+        return (tuple(tuple(r.knew) for r in made.played.beats[0].recalled),
+                best)
+
+    def recalled(pressed: bool, seed: int) -> tuple:
+        return played(pressed, seed)[0]
+
+    SEEDS = range(1, 9)
+    easy = [recalled(False, s) for s in SEEDS]
+    hard = [recalled(True, s) for s in SEEDS]
+    out.that(
+        all(len(got) == 3 for got in easy)
+        and all(len(got[0]) == 1 for got in easy),
+        "**a certain row, played end to end, is found by exactly ONE"
+        " character on every seed** -- the best member, because the printed"
+        " result is theirs. Pinned to one rather than to 'fewer', since"
+        " fewer would also be satisfied by a branch that found nobody",
+        f"{[len(got[0]) if got else 0 for got in easy]}",
+    )
+    out.that(
+        any(len(got[1]) > 1 for got in easy),
+        "and the rolled row beside it, at the same band, is found by SEVERAL"
+        " -- which is why 'was it found' cannot be the discriminator: a"
+        " rolled easy row arrives 97-100% of the time with five characters"
+        " and would pass whatever the certain branch did",
+        f"{[len(got[1]) if got else 0 for got in easy]}",
+    )
+    out.that(
+        any(len(got[0]) > 1 for got in hard),
+        "**and under time pressure the certain row behaves exactly like a"
+        " rolled one**, which is the page's own exception rather than a"
+        " safeguard on it: `pressed` means the party cannot take as long as"
+        " it likes, so there is nothing to settle without dice",
+        f"{[len(got[0]) if got else 0 for got in hard]}",
+    )
+    # **WHO, not how many.** A plant crediting slot 0 instead of
+    # `table.best` stayed green against the count alone -- and "the printed
+    # result is the best member's" is the whole claim, so the board is
+    # rebuilt from the scene's own seed and asked.
+    whos = [played(False, seed) for seed in SEEDS]
+    out.that(
+        all(got and got[0] and got[0][0] and got[0][0][0][0] == got[1]
+            for got in whos),
+        "**and the one who found it IS the party's best at that skill**, "
+        "asked of a board rebuilt from the scene's own seed rather than "
+        "assumed. A plant crediting slot 0 passed every count assertion, "
+        "because a count cannot tell one character from another",
+        "credited "
+        + str([g[0][0][0][0] if g[0] and g[0][0] else None for g in whos])
+        + " vs best " + str([g[1] for g in whos]),
+    )
+    out.that(
+        all(got and len(got[0]) == 3 and len(got[0][2]) == 0
+            for got in whos),
+        "**and a certain row whose DC the automatic result cannot reach is "
+        "found by NOBODY.** This is the branch's own success test and it is "
+        "unposable at an easy band -- twenty plus the best modifier always "
+        "clears an easy target, so a plant deleting the test stayed green "
+        "until a row stated a DC out of reach",
+        "unreachable row knowers: "
+        + str([len(g[0][2]) if len(g[0]) == 3 else None for g in whos]),
+    )
 
 
 def a_theme_can_grant_a_power(out: Result) -> None:
