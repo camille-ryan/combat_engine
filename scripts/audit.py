@@ -3090,6 +3090,59 @@ def _pose_cursed(world, caster: int, declared, src: str) -> None:  # noqa: ANN00
         hex_.curse(on=foe, until=When.ENCOUNTER)
 
 
+def _pose_kinds(world, declared, foe_team) -> None:  # noqa: ANN001
+    """Put a creature of the kind the row's Target names on the board.
+
+    **Read off the declaration, never off a text pattern**, and that is the
+    whole of why this is safe where `_WANTS` needed care. `#437`'s standing
+    caution is that posing from a pattern *"fired for 428 rows to help 50
+    and raised twice, because a text pattern cannot tell 'needs this state'
+    from 'creates this state'"*. A `Target`'s `kinds` is not a guess about
+    what a row needs: it is the filter the row's own target line declares,
+    so a creature of that kind is exactly what makes the row posable and
+    cannot be the other reading.
+
+    That also bounds the cost, which was the open question on `#437`.
+    Measured over all 23,068 declared rows:
+
+        rows whose Target names a creature kind      16
+        distinct kinds                                9
+        kind occurrences                             18
+        (humanoid 4, beast 3, kobold 2, undead 2, spider 2, plant 2,
+         drow 1, orc 1, construct 1)
+
+    **16 rows, not 18**, and the difference is the trap: 18 is the sum of
+    per-kind occurrences and two rows name two kinds each, so counting the
+    histogram instead of the rows overstates the population. Counted off
+    `REGISTRY` by distinct ref.
+
+    So sixteen rows gain a spawn and 23,052 are untouched -- there is no
+    new retry axis and no measurable cost, because this rides the `posed`
+    arm `_attempts` already pays for. The grab knob's 428-to-help-50 ratio
+    does not arise.
+
+    `#286` and `#437` both settled the mechanism: Camille, *"add variable
+    creature type tags to the crash test dummy and use that"*, and then
+    *"Do both? The dummy should be extensible to handle what is needed."*
+    `dummy.spawn` has taken `types=` since the grab work and nothing wired
+    it.
+
+    **(6, 9), which is free of every other placement on this board.**
+    `board` spawns the chargen ally at (5, 8) and `_pose`'s grab dummy
+    takes (6, 7) -- the grab knob's own comment records 11 rows staying
+    quiet because it first reused an occupied square and `grid.place`
+    refused it silently.
+    """
+    target = getattr(declared, "target", None)
+    kinds = tuple(getattr(target, "kinds", ()) or ())
+    if not kinds:
+        return
+    dummy.spawn(
+        world, level=max(1, getattr(declared, "level", 1)),
+        square=(6, 9), team=foe_team, types=kinds,
+    )
+
+
 def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
     """Put a configured dummy on the board when the row asks for one.
 
@@ -3108,6 +3161,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
     asking = f"{src} {getattr(declared, 'requires_text', '') or ''} " \
              f"{getattr(declared, 'target', '')}"
     _pose_conditions(world, caster, declared, src)
+    _pose_kinds(world, declared, foe_team)
     for what, pattern in _WANTS:
         if not pattern.search(asking):
             continue
