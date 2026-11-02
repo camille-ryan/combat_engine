@@ -111,10 +111,25 @@ Three orthogonal axes. Pick one from each that applies.
 * **Content type**, when it is content work — `monsters`, `powers`,
   `items`, `feats`, `features`.
 
-`claude` marks an issue opened on Camille's behalf — and it is **carried by
-400 of 400 issues**, so it distinguishes nothing and should be read as noise
-rather than as information. Either drop it or invert it to mark the ones
-Camille opens.
+`claude` marks an issue opened on Camille's behalf, and **it cannot be read
+in either direction.** Re-measured 2026-11-02 over every issue, open and
+closed:
+
+```
+1,081 issues           834 carry `claude`      247 do not
+of those 247, at least  42 carry a Claude signature in the body
+```
+
+So the conclusion is unchanged and its **reason has inverted**. This said
+*"carried by 400 of 400 issues, so it distinguishes nothing"* — universal,
+and therefore noise. It is not universal: it is **77% and inconsistently
+applied**, which is worse, because a label at 100% is at least honest noise
+while one at 77% invites the inference it cannot support. Absence does not
+mean Camille opened it — `#1057`–`#1068` is a contiguous run of Claude's own
+filings with no label at all.
+
+Either apply it on every filing or invert it to mark the ones Camille opens.
+Until then **do not infer authorship from it**, and do not quote the 400.
 
 ## Attribution: the record cannot tell Camille's words from Claude's
 
@@ -124,7 +139,7 @@ Camille asked, 2026-10-28, whether anything shows the difference. Measured:
 |---|---|
 | git commits | **yes** — author is `Claude (Camille)` |
 | issue comments | **no** — every one is authored `camille-ryan`; Claude posts via `gh` |
-| the `claude` label | **no** — 400 of 400 |
+| the `claude` label | **no** — 834 of 1,081, and 42 of the 247 without it are Claude's own |
 | in-code notes | **no** — 126 attributions, **3** carry a verbatim quote, **79** are a bare "Camille's call/rule" |
 
 So **git history is the only audit trail**, and every *"Camille's call"* in
