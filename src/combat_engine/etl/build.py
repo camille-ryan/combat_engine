@@ -1463,9 +1463,17 @@ def _monsters(
     # rewrite a stance into a disease ref. That wants the positional
     # treatment #506 describes, not this. #504.
     index = {**_disease_names(source), **_creature_names(rows, names)}
+    # **A phrase, kept out of `index` deliberately.** `index` is documented
+    # as a printed name mapped to a ref and several readers rely on that --
+    # `monster.parse` demotes a stranger's ability with a regex over the
+    # value. A phrase mapped to a phrase is a different thing, so it travels
+    # as its own argument rather than being smuggled into a map whose
+    # contract would then be two contracts. #1056.
+    phrases = _feat_phrases(source, rows)
     for row in rows:
         m = monster_parser.parse(
             row["ID"], row["Txt"], row["Source"], others=index,
+            phrases=phrases,
             printed_level=_int_or_none(row["Level"]),
             printed_role=row["Role"] or "",
         )
@@ -1648,6 +1656,66 @@ _BLOCK_MARKS = (r"\bHP\b", r"\bAC\b", r"\bInitiative\b", r"\bSpeed\b",
 def _is_stat_block(tail: str) -> bool:
     flat = " ".join(re.sub(r"<[^>]+>", " ", tail).split())
     return sum(bool(re.search(p, flat, re.I)) for p in _BLOCK_MARKS) >= 4
+
+
+def _feat_phrases(source: sqlite3.Connection, rows: list) -> dict[str, str]:
+    """`"<feat name> feat"` -> `"<feat ref> feat"`, for monster prose. #1056.
+
+    Two monster cards print a **Requirement** naming a player feat, and
+    `_opaque_shared_abilities` was minting an `x12_` token for it -- because
+    the same phrase is also a shared ability's name, so the token machinery
+    claimed it. The feat has a real ref in the `feat` table, so the token is
+    the importer declining to look in the right place.
+
+    **The discriminator is printed, which is the whole of why this is safe.**
+    46 names are *both* a shared monster ability and a feat, so preferring
+    the feat whenever a name is also a feat's name would be `#175`'s fault
+    pointed at a second table -- 46 names resolved onto whichever reading
+    was indexed. What separates these is that the page prints the word:
+    the prose says *"the `<name>` feat"*. Matching `<name>` followed by
+    `feat` takes the family from 46 candidates to **one**.
+
+    **Returned as a phrase, not a name**, so it rides `scrub`'s existing
+    longest-key-first rule: `"<name> feat"` is longer than `"<name>"`, so it
+    wins the occurrence the page disambiguated and every other occurrence of
+    the same name still goes to the token, which is the correct answer for a
+    sibling ability. No per-occurrence branch to keep honest -- the context
+    is in the key.
+
+    The value keeps the word `feat` so the sentence survives: dropping it
+    would leave *"Requirement: the f30"*.
+
+    **Pre-filtered on the raw document**, which costs one string scan:
+    **12 of 5,326** monster documents contain the word `feat` at all, so the
+    3,271-name alternation is built once and run over twelve pages rather
+    than over the corpus. Measured rather than assumed, because the whole
+    point of the phrase key is that it must not be applied widely.
+    """
+    word = re.compile(r"\bfeat\b", re.I)
+    pages = [r["Txt"] or "" for r in rows if word.search(r["Txt"] or "")]
+    if not pages:
+        return {}
+    feats: dict[str, str] = {}
+    for fid, nm in source.execute("SELECT ID, Name FROM Feat"):
+        nm = (nm or "").strip()
+        # Three characters is `scrub`'s own floor for `replacements`, and a
+        # shorter feat name would be matched out of ordinary prose.
+        if len(nm) > 3:
+            feats.setdefault(nm, f"f{fid}")
+    if not feats:
+        return {}
+    named = re.compile(
+        r"\b(" + "|".join(
+            re.escape(n) for n in sorted(feats, key=len, reverse=True))
+        + r")\s+feat\b", re.I)
+    lower = {n.lower(): n for n in feats}
+    out: dict[str, str] = {}
+    for page in pages:
+        for got in named.findall(page):
+            printed = lower.get(got.lower())
+            if printed:
+                out[f"{printed} feat"] = f"{feats[printed]} feat"
+    return out
 
 
 def _creature_names(
@@ -5161,6 +5229,47 @@ def _cross_reference_rest(
         # printed-name key must meet somewhere, and half the callers here
         # normalise to `'`.
         keys = {low, low.replace("\u2019", "'")}
+        # **A POWER whose printed name holds a colon is also indexed by its
+        # tail.** The index holds the full name; a spec naming such a power
+        # prints only the part after the colon, so the swap never fired and
+        # the phrase stayed as prose. Measured: **3 powers** in the whole
+        # compendium print a colon, every tail is unique, none collides with
+        # another power's whole name -- so this cannot resolve one name onto
+        # two readings.
+        #
+        # **Powers only, and the first draft was not, which is the whole
+        # reason this line reads `ref.startswith("p")`.** `names` is the
+        # entire index, not the Power table: **25** entries hold a colon and
+        # **22** of them are feats or class-feature sub-options whose tails
+        # are armour and shield types -- `Plate`, `Hide`, `Leather`,
+        # `Scale`, `Light`, `Heavy` -- plus eight druid forms. Registering
+        # those as aliases puts `light` and `heavy` in the substitution map,
+        # which are in thousands of specs as *dim light* and *heavy blade*.
+        #
+        # They did not fire on today's corpus, and that is luck plus the
+        # existing guards rather than a property worth resting on. What did
+        # fire was the druid tail: two rows -- `cf:druid-sentinel-f9s2` and
+        # `p16117` -- gained a sub-option ref nobody asked for. Caught by
+        # diffing every spec table against a control run rather than by
+        # reading the fifteen rows the issue is about, which all looked
+        # right.
+        #
+        # What it was costing: **15 spec rows** printed one of those three
+        # tails as prose -- 13 feats, `cf:artificer-f2`, `comp:59` -- and
+        # `leaks.py --specs` reported every one clean, because each tail is
+        # two ordinary English words and `identifies` waives that pair as
+        # coincidence by design. `#1033` found four of the fifteen and said
+        # one of the three leaked nowhere; it leaks in three rows.
+        #
+        # **And the tail means the power in all fifteen**, checked rather
+        # than assumed: the sentence is *"when you use `<tail>`"* or
+        # *"take the `<tail>` power"*, including in the parent feature's own
+        # spec, so there is no row where it labels a sub-option instead.
+        # #1033.
+        if ref.startswith("p") and ":" in low:
+            tail = low.split(":", 1)[1].strip()
+            if len(tail) > 3:
+                keys |= {tail, tail.replace("\u2019", "'")}
         for key in keys:
             if _rank(ref) > _rank(by_name.get(key, "")):
                 by_name[key] = ref

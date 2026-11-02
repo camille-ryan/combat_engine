@@ -231,6 +231,7 @@ def parse(
     source: str = "",
     others: dict[str, str] | None = None,
     *,
+    phrases: dict[str, str] | None = None,
     printed_level: int | None = None,
     printed_role: str = "",
 ) -> Monster:
@@ -387,6 +388,18 @@ def parse(
         if stranger and stranger.group(1) != m.ref_id:
             ref = stranger.group(1)
         swaps.setdefault(name, ref)
+    # **A printed phrase that disambiguates itself**, which is why these are
+    # separate from `others`: the key is `"<feat name> feat"` and the value
+    # keeps the word, so `scrub`'s longest-key-first rule gives the
+    # occurrence the page qualified to the feat and leaves every other
+    # occurrence of the same name to whatever `others` said -- a shared
+    # ability's opaque token, which is the right answer there. 46 names are
+    # both a feat and an ability; the printed word takes that to one.
+    #
+    # `update`, not `setdefault`: the phrase cannot collide with a bare name
+    # already in `swaps`, since no ability is called "<something> feat".
+    # #1056.
+    swaps.update(phrases or {})
     # What is printed beside the numbers is mechanics, not prose, and several
     # creatures are named after their own type. Scrubbing "goblin" out of a
     # goblin's rules would hide a word the spec already prints in its tags.

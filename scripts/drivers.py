@@ -51362,6 +51362,166 @@ def a_background_is_imported_without_its_product_names(out: Result) -> None:
     )
 
 
+def a_power_named_by_its_colon_tail_resolves(out: Result) -> None:
+    """A power whose printed name holds a colon, named by its tail. #1033.
+
+    Three powers in the compendium print a colon. The name index held the
+    **full** name and the specs print only the part after it, so the
+    cross-reference never fired and the phrase stayed as prose -- and
+    `leaks.py --specs` reported every one clean, because each tail is two
+    ordinary English words and `identifies` waives that pair as coincidence
+    by design. That is `#494`'s blind spot, not a matcher wanting a tune.
+
+    **15 spec rows, not the four the issue counted**: 13 feats, the parent
+    class feature and one companion. And the issue said one of the three
+    tails leaked nowhere; it leaks in three rows.
+
+    **The tail means the power in all fifteen**, checked rather than
+    assumed -- the sentence is *"when you use `<tail>`"* or *"take the
+    `<tail>` power"*, including in the parent feature's own spec, so there
+    is no row where it labels a sub-option instead.
+
+    **And the alias is scoped to powers, which a corpus-wide diff decided
+    rather than I did.** `names` is the whole index: 25 entries hold a
+    colon and 22 are feats or druid sub-options whose tails are armour and
+    shield types. The first draft registered those too, which put `light`
+    and `heavy` in the substitution map, and it moved two rows nobody asked
+    about. The assertions below are the shape of that finding: the fifteen,
+    and nothing else.
+    """
+    from combat_engine.db import game
+
+    con = game()
+    want = {
+        ("feat", r) for r in (
+            "f1416", "f2111", "f3023", "f3024", "f3026", "f3032", "f3033",
+            "f3034", "f3037", "f3038", "f3041", "f3042", "f3047")
+    } | {("class_feature", "cf:artificer-f2"), ("companion", "comp:59")}
+    got = set()
+    for table in ("feat", "class_feature", "companion", "power", "item",
+                  "item_block", "racial_trait", "monster_power"):
+        for row in con.execute(
+                f"SELECT ref FROM {table} WHERE spec LIKE '%p7635%' "
+                f"OR spec LIKE '%p10187%' OR spec LIKE '%p4128%'"):
+            got.add((table, row[0]))
+    out.that(
+        want <= got,
+        "**all fifteen rows that print one of the three tails now cite the "
+        "power** -- 13 feats, the parent class feature and one companion. "
+        "The issue found four of them and said the third tail leaked "
+        "nowhere; it leaks in three rows",
+        f"missing {sorted(want - got)}",
+    )
+    stale = []
+    for table in ("feat", "class_feature", "companion", "power"):
+        for row in con.execute(
+                f"SELECT ref, spec FROM {table} WHERE "
+                f"lower(spec) LIKE '%resistive formula%' "
+                f"OR lower(spec) LIKE '%shielding elixir%' "
+                f"OR lower(spec) LIKE '%curative admixture%'"):
+            stale.append(f"{table}/{row[0]}")
+    # **Pinned at the measured residue, which is NOT the same as accepting
+    # it.** The alias makes the tail resolvable; where it then fires is the
+    # positional pass's decision, and that pass claims specific printed
+    # frames -- *"when you use X"*, *"the X power"*. It does not claim the
+    # **continuation** of a frame: *"when you use `<first>` or `<second>`"*
+    # resolves the first and leaves the second, which is every one of the
+    # ten occurrences left. So this is a positional gap rather than an
+    # alias that half-worked, and it is filed rather than absorbed.
+    #
+    # Pinned as a list, not a count, so the assertion goes red if the
+    # residue **grows** and also if it shrinks without anybody noticing --
+    # a shrink means the positional pass changed and this comment is stale.
+    RESIDUE = {
+        "feat/f3023", "feat/f3032", "feat/f3033", "feat/f3034",
+        "feat/f3038", "feat/f3042", "feat/f3047",
+        "class_feature/cf:artificer-f2",
+    }
+    out.that(
+        set(stale) == RESIDUE,
+        "**and what still prints a tail is exactly the ten occurrences the "
+        "positional pass does not claim** -- 8 rows, every one a second "
+        "phrase in *\"when you use `<first>` or `<second>`\"*. Before this "
+        "change all 15 rows printed both as prose; now the first resolves "
+        "and the continuation does not. A partial fix, pinned rather than "
+        "rounded up",
+        f"left {sorted(set(stale))}\nexpected {sorted(RESIDUE)}",
+    )
+    # **The scope guard.** The armour and druid tails must stay unindexed.
+    loose = []
+    for table in ("feat", "class_feature", "power", "racial_trait"):
+        for row in con.execute(
+                f"SELECT ref, spec FROM {table} WHERE "
+                f"spec LIKE '%cf:druid-sentinel-f1s2%'"):
+            loose.append(f"{table}/{row[0]}")
+    out.that(
+        not loose,
+        "**and a feat or sub-option tail is NOT indexed**, which is the "
+        "assertion the first draft would have failed: it registered all 25 "
+        "colon tails, 22 of them armour types and druid forms, and moved "
+        "two rows to a sub-option ref nobody asked for. `light` and "
+        "`heavy` were in that map",
+        f"{sorted(loose)}",
+    )
+
+
+def a_feat_named_in_monster_prose_resolves_to_the_feat(out: Result) -> None:
+    """A Requirement naming a player feat, which came out as a token. #1056.
+
+    Two monster cards print *"with the `<name>` feat"* and the importer wrote
+    that feat as an `x12_` opaque shared-ability token, because the same
+    phrase is also a shared ability's name. A feat has a real ref, so the
+    token was the importer declining to look in the right table.
+
+    **The discriminator is the printed word**, and that is what makes the
+    swap narrow: 46 names are both a shared monster ability and a feat, so
+    resolving on the name alone would be `#175`'s fault pointed at a second
+    table. The swap key carries the word, so only the occurrence the page
+    qualified moves and every other occurrence of the same name keeps the
+    token -- which is the right answer for a sibling ability.
+
+    **Three specs, not the two the issue counted**, and the third is the
+    interesting one: it read *"`<creature>` is considered to have the
+    `<its own ability ref>` feat"* -- the creature's own ability standing in
+    for a feat, because `swaps` seeds its own abilities first. That was
+    nonsense rather than a leak, and nothing had reported it.
+    """
+    from combat_engine.db import game
+
+    rows = list(game().execute(
+        "SELECT ref, spec FROM monster_power WHERE spec LIKE '%f30 feat%'"))
+    out.that(
+        {r[0] for r in rows} == {"m476a2", "m4027a4", "m4032a2"},
+        "**the three abilities that print a feat Requirement cite the feat**"
+        " -- `f30`, not an `x12_` token and not the creature's own ability"
+        " ref. Two were tokens and the third named itself",
+        f"{sorted(r[0] for r in rows)}",
+    )
+    stale = list(game().execute(
+        "SELECT ref FROM monster_power "
+        "WHERE spec LIKE '%x12_fa61d3a8%' OR spec LIKE '%m4027a4 feat%'"))
+    out.that(
+        not stale,
+        "and no spec still carries the token or the self-reference it"
+        " replaced, which is the half a count of the new form cannot check:"
+        " a swap that added a ref without removing what was there would"
+        " satisfy the assertion above",
+        f"{[r[0] for r in stale]}",
+    )
+    other = list(game().execute(
+        "SELECT ref FROM monster_power WHERE spec LIKE '%f30%' "
+        "AND spec NOT LIKE '%f30 feat%'"))
+    out.that(
+        not other,
+        "**and the feat ref appears nowhere the page did not qualify it.**"
+        " The bare name is also a shared ability's name, so this is the"
+        " assertion that the key's printed word is doing its job -- a"
+        " bare-name key rewrote the ability's own sentence to the feat on a"
+        " posed page",
+        f"{[r[0] for r in other]}",
+    )
+
+
 def an_extended_rest_is_once_per_day_and_a_refusal_is_printed(
     out: Result,
 ) -> None:
@@ -55210,6 +55370,14 @@ DRIVERS = {
     "backgrounds": (
         a_background_is_imported_without_its_product_names,
         "a background is imported, and its product names are not (#456)",
+    ),
+    "colon_tail": (
+        a_power_named_by_its_colon_tail_resolves,
+        "a power named by the tail of its colon name resolves (#1033)",
+    ),
+    "feat_in_prose": (
+        a_feat_named_in_monster_prose_resolves_to_the_feat,
+        "a feat named in a monster's Requirement resolves to the feat (#1056)",
     ),
     "rest_lockout": (
         an_extended_rest_is_once_per_day_and_a_refusal_is_printed,
