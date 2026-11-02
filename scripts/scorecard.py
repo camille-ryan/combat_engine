@@ -390,7 +390,29 @@ def turn_watch(world, pol: Counted, actor: int) -> None:  # noqa: ANN001
     pol.n[f"{side}/melee_turns"] += 1
 
 
-def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
+def play(level: int, seed: int, pol: Counted, cap: int = 30) -> tuple[int, bool]:
+    """Play one seeded fight. `(rounds, finished)`.
+
+    **`finished` exists because a stall used to read as a long fight.** The
+    loop below stops on `encounter.finished` *or* on the cap, and the
+    return was `world.round` either way -- so a fight nobody won came back
+    as `cap + 1` and the summary could not tell it from a resolved fight
+    that happened to run that long.
+
+    What that cost, measured on `#473`'s own seed: one level-5 fight ending
+    with an untouched fighter and a 23-of-252 monster standing moved the
+    level-5 line from `range 4-15` to `4-31` and the mean from 7.08 to
+    10.25. **One unresolved fight in twenty-four moved the headline by
+    three rounds**, which makes every level-5 comparison unreadable until
+    somebody notices.
+
+    Same shape as the lesson `browser.py` learned the hard way and
+    `scripts/CLAUDE.md` records: a count of passes says nothing about how
+    many questions were asked, so the total has to reconcile. `measure`
+    medians the resolved fights and reports the stalls separately rather
+    than dropping them -- a silently excluded fight would be the same bug
+    pointed the other way. #473.
+    """
     world, encounter = fight.build(seed, level, "full")
     T.clear()
     D.forget()
@@ -520,7 +542,7 @@ def play(level: int, seed: int, pol: Counted, cap: int = 30) -> int:
             elif now >= gap:
                 pol.n[f"{side_of(world, actor)}/idle_melee"] += 1
         encounter.advance()
-    return world.round
+    return world.round, encounter.finished
 
 
 def measure(levels: tuple[int, ...]) -> dict:
@@ -528,11 +550,34 @@ def measure(levels: tuple[int, ...]) -> dict:
     for level in levels:
         pol = Counted()
         rounds = []
+        stalled: list[int] = []
         for seed in SEEDS:
             # Counting attacks needs a hook; the policy records them itself below.
-            rounds.append(play(level, seed, pol))
+            went, done = play(level, seed, pol)
+            if done:
+                rounds.append(went)
+            else:
+                stalled.append(seed)
+        # **The median is over the fights that finished, and the ones that
+        # did not are named.** A fight nobody won is not a long fight, and
+        # averaging it in is what made `#473`'s single level-5 stall move
+        # the headline mean from 7.08 to 10.25 and the range from 4-15 to
+        # 4-31. Naming the seeds rather than only counting them: the whole
+        # value of the old (wrong) number was that somebody noticed it,
+        # and a bare count would not say which fight to go and read.
+        #
+        # `fights` stays the number **asked**, so `resolved + stalled`
+        # reconciles against it -- `scripts/CLAUDE.md`'s rule, after
+        # `browser.py` printed `55 passed, 1 skipped` of 57.
+        if not rounds:
+            # Every fight stalled: there is no median to take, and a zero
+            # here would read as "instant wins" rather than as no data.
+            rounds = [0]
         cell: dict = {
             "fights": len(SEEDS),
+            "fights_resolved": len(SEEDS) - len(stalled),
+            "fights_stalled": len(stalled),
+            "stalled_seeds": stalled,
             "rounds_median": statistics.median(rounds),
             # **The spread, so the reader can tell an unreadable number.** Either of
             # the two wrong answers this instrument gave would have been obviously
@@ -639,6 +684,16 @@ def show(now: dict, was: dict | None) -> None:
                  if old and old.get("rounds_mean") is not None else "")
               + f", range {cell.get('rounds_low')}-{cell.get('rounds_high')}"
               + " ===")
+        # **Printed, not buried in the JSON.** A stall is the one thing
+        # that makes the line above unreadable, so it goes next to it --
+        # and the seeds come too, because the reader's next move is to
+        # play one. `fights` is how many were asked, so this reconciles
+        # against it. #473.
+        if cell.get("fights_stalled"):
+            print(f"  !! {cell['fights_stalled']} of {cell['fights']} fights"
+                  f" hit the round cap unresolved and are NOT in the median"
+                  f" or the range above -- seeds {cell.get('stalled_seeds')}."
+                  f" {cell.get('fights_resolved')} resolved. #473")
         print(f"  {'':<42} {'party':>9} {'was':>9}   {'monsters':>9} {'was':>9}")
         for key, label, want in ROWS:
             line = f"  {label:<42}"
