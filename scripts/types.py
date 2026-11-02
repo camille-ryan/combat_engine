@@ -378,11 +378,22 @@ def _compare(text: str, targets: list[str], wide: bool) -> int:
         return DRIFT if wide else 1
 
     carried = _total({f: d for f, d in now.items()})
+    # **Two populations, said separately, because conflating them is what
+    # `#1073` was**: this line used to call a count that had merely fallen
+    # "no longer occurs" and the advice "free", and taking the advice
+    # deleted the entry and reddened the instrument. Both are safe to
+    # bless now -- one clears, one tightens -- and a reader can see which
+    # is which.
     gone = _gone(base, now, targets) if wide else {}
+    fell = _fell(base, now, targets) if wide else {}
     if gone:
         print(f"  {sum(len(d) for d in gone.values())} recorded diagnostic(s)"
-              f" in {len(gone)} file(s) no longer occur -- `--bless --all`"
-              f" lowers the baseline for free")
+              f" in {len(gone)} file(s) no longer occur at all --"
+              f" `--bless --all` clears them")
+    if fell:
+        print(f"  {sum(len(d) for d in fell.values())} recorded count(s) in"
+              f" {len(fell)} file(s) are higher than what occurs now --"
+              f" `--bless --all` tightens them")
     note = f" ({carried} carried, at or below baseline)" if carried else ""
     print(f"ok: {len(targets)} file(s) checked{note}")
     return 0
@@ -390,7 +401,7 @@ def _compare(text: str, targets: list[str], wide: bool) -> int:
 
 def _gone(base: dict[str, dict[str, int]], now: dict[str, dict[str, int]],
           targets: list[str]) -> dict[str, dict[str, int]]:
-    """Recorded diagnostics that no longer occur, per file.
+    """Recorded diagnostics that no longer occur **at all**, per file.
 
     **`--all` only**, and that restriction is the whole of its safety: under
     a narrow run almost every file in `SCOPE` is absent from the report
@@ -398,14 +409,47 @@ def _gone(base: dict[str, dict[str, int]], now: dict[str, dict[str, int]],
     looked at" rather than "fixed". `--all` is the one invocation where in
     scope and silent means clean. Same reasoning the old per-file `cleared`
     pass carried, at the finer grain. #886, #891.
+
+    **"No longer occurs" means a count of zero, and this used to test
+    `n > held`** -- that a count had merely *fallen*. The two are different
+    populations and the difference broke `--bless`: a recorded 30 that now
+    occurs 13 times was reported here as gone, so the bless **deleted** the
+    entry while printing `tightened 30 -> 13`, and the 13 live occurrences
+    lost their cover. A clean instrument became a red one and the run that
+    did it said `blessed`. The entries whose count fell belong to `_fell`
+    and the tighten path, which is the mechanism for shrinking an entry
+    rather than removing it. #1073.
     """
     in_scope = _asked_about(dict.fromkeys(base, 0), list(SCOPE))
     out: dict[str, dict[str, int]] = {}
     for f in in_scope:
         held = now.get(f, {})
-        missing = {fp: n for fp, n in base[f].items() if n > held.get(fp, 0)}
+        missing = {fp: n for fp, n in base[f].items() if not held.get(fp, 0)}
         if missing:
             out[f] = missing
+    return out
+
+
+def _fell(base: dict[str, dict[str, int]], now: dict[str, dict[str, int]],
+          targets: list[str]) -> dict[str, dict[str, int]]:
+    """Recorded diagnostics that still occur, **fewer times than recorded**.
+
+    The other half of what `_gone` used to answer, and the half the clean
+    run's advice is really about: these are lowered rather than removed, so
+    `--bless --all` tightens them and nothing loses its cover. Reported
+    separately because conflating the two is what `#1073` was.
+
+    `--all` only, for `_gone`'s reason: a narrow run's silence is not
+    evidence a count fell.
+    """
+    in_scope = _asked_about(dict.fromkeys(base, 0), list(SCOPE))
+    out: dict[str, dict[str, int]] = {}
+    for f in in_scope:
+        held = now.get(f, {})
+        down = {fp: held[fp] for fp, n in base[f].items()
+                if 0 < held.get(fp, 0) < n}
+        if down:
+            out[f] = down
     return out
 
 
@@ -465,6 +509,26 @@ def _bless(text: str, targets: list[str], wide: bool) -> int:
         in_scope = _asked_about(dict.fromkeys(base, 0), list(SCOPE))
         dropped = {f: d for f, d in base.items() if f not in in_scope}
 
+    # **The clear must not eat an entry the tighten just wrote**, which is
+    # exactly what `#1073` did: `_gone`'s old predicate overlapped
+    # `lowered`, the pop ran second, and the entry went while the printed
+    # line said `tightened 30 -> 13`. With `_gone` asking about zero the
+    # two are disjoint by construction -- a tightened entry still occurs,
+    # a cleared one does not -- and this asserts it rather than relying on
+    # the order of two loops.
+    overlap = {
+        (f, fp)
+        for f, missing in cleared.items()
+        for fp in missing
+        if fp in lowered.get(f, {}) and lowered[f][fp][1]
+    }
+    if overlap:
+        raise SystemExit(
+            "refusing to write the baseline: "
+            f"{len(overlap)} entry(ies) are both tightened and cleared, "
+            "which would delete a diagnostic that still occurs -- #1073. "
+            f"{sorted(overlap)[:4]}"
+        )
     for f, down in lowered.items():
         for fp, (_was, n) in down.items():
             if n:
