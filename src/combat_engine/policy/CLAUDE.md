@@ -148,7 +148,29 @@ the rules already allow, so no row changes and the audit widens to nothing.
 uv run scripts/scorecard.py        the numbers. --save is its own commit
 uv run scripts/replay.py verify    fixtures WILL diverge; see below
 uv run scripts/fight.py            one readable fight
+uv run scripts/api_smoke.py        the day, and it is the one that catches this
 ```
+
+**`api_smoke` is on that list because omitting it cost a revert.** This
+file said a policy change cannot break a row, which is true, and a session
+read it as "cannot break anything but rows" — ran `drivers`, `replay` and
+the scorecard, and shipped a change that took `api_smoke` from 85/85 to
+83/85. "Cannot break a row" is not "cannot break the wire".
+
+What it catches is **the pinned day**, and the mechanism is worth knowing
+before it looks like your bug: `play_day` pins level 3 seed 1 against a
+recorded distribution where only **11 of 24** seeds clear all three legs,
+and 14% of decisions are tied at the top. So **any** change that moves a
+decision can flip that seed to a party wipe. Measured: three unrelated
+changes — naming the search action, an `end`-wins-the-tie tie-break, and an
+inert-row penalty — each did it **independently**. The first was reverted
+before the other two showed the weight was not the cause.
+
+So a red `api_smoke` after a policy change is usually the fixture and not
+the change, and the question to ask is *which leg*. It is no longer a
+failure: a wipe now **skips** the losing leg's snapshot comparison with a
+named reason, because `Day._settle` buries the dead before the rest and
+`rested` is empty by construction. #796, #1016.
 
 * **Fixtures diverging is expected and is not the verdict.** Say which divergences
   are tie-breaks and which are repricings: 14% of decisions are already tied at the
