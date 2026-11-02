@@ -1131,6 +1131,110 @@ def _keep(campaign: Campaign, scene: Scene,
         campaign.log.append(step_note)
 
 
+#: What a typed answer is compared as. Case, surrounding punctuation and a
+#: leading article go, because the engine is checking whether the player
+#: solved it rather than whether they typed it the way the author did.
+#: Refusing *"The crown"* against *"crown"* would be testing typing.
+_ARTICLES = ("the ", "a ", "an ")
+
+
+def _said(answer: str) -> str:
+    """One typed answer, flattened for comparison. #960."""
+    low = " ".join(answer.split()).strip().lower().strip(".,!?;:\"'")
+    for article in _ARTICLES:
+        if low.startswith(article):
+            low = low[len(article):]
+            break
+    return low
+
+
+def _puzzle(campaign: Campaign, module: Module, scene: Scene, step: Step,
+            ask_human: beat_mod.AskHuman) -> None:
+    """Pose a puzzle, take answers, and hand out hints. #960.
+
+    The printed design constraint is the book's own sentence -- a puzzle
+    *"tests the capabilities of the players at the table instead of their
+    characters"* and *"does not"* roll dice to represent what a character
+    can do. So there is one mechanic here and it is the concession to a
+    stuck player, which the page calls the **"get a clue" check**:
+
+    > *allow the player to roll Intelligence checks or various skill checks
+    > to help solve the puzzle. With a successful check (use the Difficulty
+    > Class and Damage by level table, leaning toward the hard DCs), give
+    > the player a hint*
+
+    Read off DMG page 81 rather than taken from the issue's quote, and the
+    parenthesis is the half that decides a number: **the hard band**, not
+    moderate. `dc(level, "hard")` is that, so nothing is invented.
+
+    **The plot never stops, which is Camille's standing ruling** -- *"skill
+    challenges should never prevent the plot from progressing"* -- and a
+    puzzle is the same shape: a stuck puzzle takes the scene's ordinary
+    exit, exactly as a lost challenge does. The outcome is recorded so a
+    later scene can read it; it does not reroute anybody.
+
+    **A headless run ends stuck, and that is honest rather than a gap.**
+    `check.py` plays with `beat.silent`, which types nothing, so the clue
+    checks still roll and the puzzle ends unsolved. That keeps the scene
+    deterministic in the suite and keeps the solved path out of it -- which
+    is why `drivers.puzzle` passes its own `ask_human` rather than trusting
+    a seed to produce a solver.
+    """
+    from combat_engine.dc import dc
+
+    got = scene.puzzle
+    if got is None:
+        return
+    step.say(got.prompt, "scene")
+    # One board for the clue checks, struck at the end like a challenge's.
+    # A scratch board rather than a fight: `table.lay` is what `#911` built
+    # for exactly this, so a trait that fires on a check still fires.
+    seed = _stream(campaign, scene, "puzzle").randrange(1 << 30)
+    board = table_mod.lay(campaign.party, seed=seed)
+    hard = dc(scene.level or module.party_level, "hard")
+    skills = got.skills or _CLUE_SKILLS
+    spent = 0
+    try:
+        for attempt in range(got.tries):
+            typed, _why = ask_human(
+                beat_mod.Actor(0, "", campaign.party.sheets[0].cls, "human"),
+                got.prompt,
+            )
+            if typed and _said(typed) in {_said(a) for a in got.answers}:
+                step.outcome = "solved"
+                step.say("Solved.", "note")
+                return
+            if typed:
+                step.say(f"  {typed!r} is not it.", "note")
+            # **The hint is earned, not handed over.** A check per failed
+            # answer, by the first skill the module names, and only a
+            # success buys a clue -- which is the page's rule rather than
+            # a consolation.
+            rolled = board.check(0, skills[attempt % len(skills)], hard)
+            step.say(
+                f"  {skills[attempt % len(skills)]} vs the hard DC {hard}:"
+                f" {rolled.total}", "roll")
+            if rolled.total >= hard and spent < len(got.clues):
+                step.say(f"  A hint: {got.clues[spent]}", "note")
+                spent += 1
+        step.outcome = "stuck"
+        step.say(
+            "Stuck -- the party moves on, which is the ruling that a scene"
+            " never stops the plot. The outcome is recorded.",
+            "note",
+        )
+    finally:
+        board.strike()
+
+
+#: Which checks the "get a clue" rule rolls when a module names none. The
+#: page says *"Intelligence checks or various skill checks"*, and a bare
+#: ability check is not something `skills.check` expresses -- so these are
+#: the five skills this engine reads an Intelligence score through, which
+#: is the nearest honest reading of the sentence. #960.
+_CLUE_SKILLS = ("arcana", "dungeoneering", "history", "nature", "religion")
+
+
 def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
                choose: Chooser | None) -> None:
     """Run a skill challenge on a board with nobody to fight on it."""
@@ -1427,6 +1531,30 @@ def reward(campaign: Campaign, module: Module, scene: Scene,
             why=f"{len(fought)} creatures overcome"
                 + (f", {len(made.arrived_worth)} of them reinforcements"
                    if made.arrived_worth else ""),
+        ))
+    elif scene.kind == "puzzle" and made.outcome == "solved":
+        # **Priced as a SOLO monster, which is printed.** DMG chapter 7:
+        # *"If a puzzle constitutes an encounter, treat it as a monster. If
+        # the puzzle is the entire encounter, treat it as a solo monster."*
+        # A `puzzle` scene is the whole encounter by construction -- the
+        # kind refuses `foes` -- so the solo reading is the one that
+        # applies, and `story.WORTH["solo"]` is already 5.0.
+        #
+        # **`standard(level) * 5`, not `WORTH` applied to a creature.**
+        # `for_creatures` reads each creature's own printed XP precisely
+        # because a solo's row already carries the multiplier, so routing a
+        # puzzle through it would need a creature there is none of. Five
+        # standards of its level is the same number by the printed
+        # arithmetic and needs no fictional monster. #960, #967.
+        #
+        # Only when SOLVED, for the reason the whole award section rests
+        # on: *"an encounter, by definition, has a risk of failure. If that
+        # risk isn't present, it's not an encounter."* A puzzle the party
+        # walked away from was not overcome.
+        earned.append(xp_mod.Award(
+            "puzzle", each=0,
+            total=xp_mod.standard(level) * 5,
+            why=f"solved; priced as a solo monster of level {level}",
         ))
     elif scene.kind == "skill_challenge" and made.outcome == "won":
         # **A lost challenge pays nothing, which is a reading and not a
@@ -2112,6 +2240,8 @@ def step(
             _fight(campaign, module, scene, made, record=record)
     elif scene.kind == "skill_challenge":
         _challenge(campaign, module, scene, made, choose)
+    elif scene.kind == "puzzle":
+        _puzzle(campaign, module, scene, made, ask_human)
     elif scene.kind == "rest":
         # **The camp conversation, before the sleep.** A rest scene was one
         # canned line and had nowhere to put *"you make camp and the rain

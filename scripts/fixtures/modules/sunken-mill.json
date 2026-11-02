@@ -248,8 +248,35 @@
       "brief": "Long enough to bind a wound and get your breath back. Not long enough to get a daily power back, and not long enough for the thing in the loft to lose interest.",
       "extended": false,
       "exits": [
-        "loft"
+        "sluice_gate"
       ]
+    },
+    {
+      "id": "sluice_gate",
+      "kind": "puzzle",
+      "name": "The Sluice Gate",
+      "sets": "Three iron levers stand in the silt. Two are worn smooth; the third is bright, and the water behind the gate is rising.",
+      "exits": [
+        "loft"
+      ],
+      "puzzle": {
+        "prompt": "Which lever was fitted last, and so is the one that has never been pulled?",
+        "answers": [
+          "the bright one",
+          "bright",
+          "the third",
+          "third"
+        ],
+        "clues": [
+          "Silt collects on a lever nobody touches.",
+          "The two worn levers are worn in the same direction."
+        ],
+        "skills": [
+          "dungeoneering",
+          "nature"
+        ],
+        "tries": 3
+      }
     },
     {
       "id": "loft",

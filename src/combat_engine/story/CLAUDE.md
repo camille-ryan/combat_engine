@@ -1512,6 +1512,59 @@ can check, and extracting it is what made the distinction assertable. The
 plant that followed — dropping a ref without its flavour — only became
 possible to write afterwards.
 
+## A puzzle tests the player, and being stuck does not stop the plot
+
+`module.KINDS` held four. The DMG gives a third of its noncombat chapter to
+a fifth thing whose printed design constraint is that it has **no dice**: a
+puzzle *"tests the capabilities of the players at the table instead of
+their characters"* and, unlike a trap or a skill challenge, *"does not"*
+roll to represent what a character can do.
+
+So `"puzzle"` is the kind with the least mechanism in the file: a prompt,
+the answers that count, and a way to be stuck. Four of the book's forms are
+pure text and need nothing else -- a riddle, a logic puzzle, a cryptogram, a
+message hidden in prose. The grid forms want a rendered prop and are out of
+scope for a text engine, arguably forever.
+
+Five calls worth keeping:
+
+* **The one printed mechanic is the "get a clue" check, and its DC is the
+  hard band.** DMG page 81, read in `resources/` rather than taken from the
+  issue's quote: *"use the Difficulty Class and Damage by level table …
+  leaning toward the hard DCs"*. That parenthesis is the whole number, so
+  `dc(level, "hard")` and nothing invented. A moderate DC would make the
+  hint routine, which is the opposite of a concession to somebody stuck.
+  Measured at level 1 over 12 seeds: hints arrive on roughly a sixth of
+  checks, so the field is read and the DC is felt.
+* **A hint is earned per failed answer, not per scene**, and the driver
+  asserts hints **equal** the checks that beat the DC. A range was the
+  first version and a plant handing out free hints passed inside it.
+* **An answer is matched the way a person types it** -- case, surrounding
+  punctuation and a leading article go before comparing. Refusing *"The
+  crown"* against *"crown"* would be testing typing rather than solving. A
+  module wanting one exact spelling writes one answer.
+* **A stuck puzzle takes the scene's ordinary exit**, which is Camille's
+  standing ruling applied to a fourth kind. The outcome is recorded so a
+  later scene can read it and reroutes nobody.
+* **Priced as a solo monster when solved**, which is printed: *"if the
+  puzzle is the entire encounter, treat it as a solo monster"*. A `puzzle`
+  scene is the whole encounter by construction -- the kind refuses `foes` --
+  so it is `standard(level) * 5`, computed rather than written down, and
+  **only when solved**, because an encounter without a risk of failure
+  earns nothing.
+
+**A headless run always ends stuck, and that is the suite's state.**
+`check.py` plays with `beat.silent`, which types nothing, so the solved
+path is unreachable there and `drivers.puzzle` passes its own `ask_human`
+instead of hoping a seed produces a solver. The tracked fixture carries a
+puzzle so `play` exercises the kind end to end -- it hands out a hint and
+walks on.
+
+**Not done:** a puzzle does not count toward a milestone. A solved one is
+priced as an encounter, so by the same page's logic it arguably should --
+but that moves action points and every replay fixture with them, so it is a
+separate decision rather than a silent extension.
+
 ## A rest scene can carry a conversation, and the rest is still a rest
 
 Camille, on #937: *"A rest scene is one canned line, and a journey has no
@@ -1902,11 +1955,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     dead_and_dying \
     graph_edges challenge_says fight_aftermath reinforcements \
     scene_allies trap_budget room_shape templates skill_cap \
-    treasure camp_talk
+    treasure camp_talk puzzle
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 52 drivers and prints 676 assertions**, and **each was
+**The command above is 53 drivers and prints 687 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

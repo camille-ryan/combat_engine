@@ -51647,6 +51647,241 @@ def an_extended_rest_is_once_per_day_and_a_refusal_is_printed(
     )
 
 
+def a_puzzle_tests_the_player_and_never_stops_the_plot(out: Result) -> None:
+    """The fourth noncombat kind, and the one with almost no mechanics. #960.
+
+    `module.KINDS` held four and the DMG gives a third of its noncombat
+    chapter to a fifth thing whose printed design constraint is that it has
+    no dice: a puzzle *"tests the capabilities of the players at the table
+    instead of their characters"* and *"does not"* roll to represent what a
+    character can do.
+
+    So the assertions here are about the three things that are not the
+    puzzle itself: that an answer is matched the way a person types rather
+    than the way an author spelled it, that the one printed mechanic uses
+    the **hard** DC the page names, and that being stuck does not stop the
+    plot.
+
+    **The DC is the half that decides a number.** DMG page 81, read in
+    `resources/` rather than taken from the issue's quote: *"use the
+    Difficulty Class and Damage by level table, leaning toward the hard
+    DCs"*. So `dc(level, "hard")`, and the parenthesis is why -- a moderate
+    DC would make the hint routine, which is the opposite of a concession
+    to a stuck player.
+
+    **A headless run ends stuck and that is deliberate.** `check.py` plays
+    with `beat.silent`, which types nothing, so the solved path is
+    unreachable in the suite -- which is why this rule passes its own
+    `ask_human` rather than hoping a seed produces a solver.
+
+    **Two of seven plants stayed green and both were my mistake rather
+    than a missing assertion**, which is worth keeping because they are
+    different mistakes:
+
+    * **The plant was placed where it could not stick.** Setting
+      `step.next_id = ""` to make a stuck puzzle stop the plot does
+      nothing: `run.step`'s *"Where next"* block reads `if made.next_id:`,
+      so an empty string is falsy and the exit is recomputed from the
+      module. A **truthy** reroute reddens the assertion immediately. The
+      claim was load-bearing all along and the first plant was testing
+      Python's truthiness.
+    * **The assertion's bound was looser than the fault.** The hint check
+      was `0 < hints < 36` and a plant handing out free hints passed
+      inside it, because the probe scene carried **one** clue so free
+      hints capped at 12. It asserts **equality** now -- a hint per check
+      that beat the DC and no others -- over a scene with three clues, so
+      a hint nobody earned cannot hide under a ceiling.
+    """
+    from pathlib import Path
+
+    from combat_engine.dc import dc
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    SCENE = {
+        "id": "p", "kind": "puzzle", "name": "P", "exits": ["after"],
+        "puzzle": {
+            "prompt": "Which sigil is the odd one out?",
+            "answers": ["the third"],
+            "clues": ["Two were cut by the same hand."],
+            "skills": ["history"],
+            "tries": 3,
+        },
+    }
+    AFTER = {"id": "after", "kind": "roleplay", "name": "A", "exits": []}
+
+    def play(answers: list[str], *, level: int = 3, seed: int = 5) -> tuple:
+        built = mod.parse(
+            {"id": "probe", "party_level": level, "party_size": 4,
+             "start": "p", "scenes": [SCENE, AFTER]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        said = iter(answers)
+
+        def ask(_actor: object, _situation: str) -> tuple[str, str]:
+            return (next(said, ""), "")
+
+        made = run_mod.step(campaign, built, record=False, ask_human=ask)
+        return campaign, made
+
+    _c, solved = play(["The Third."])
+    out.that(
+        solved.outcome == "solved",
+        "**a typed answer is matched the way a person types it** -- case, a "
+        "trailing stop and a leading article all go before comparing, "
+        "because the engine is checking whether the player solved it and "
+        "not whether they spelled it the author's way. The module wrote "
+        "`the third` and the player typed `The Third.`",
+        f"{solved.outcome!r}",
+    )
+    _c, stuck = play(["one", "two", "three"])
+    out.that(
+        stuck.outcome == "stuck" and stuck.next_id == "after",
+        "**and a puzzle nobody solves takes the scene's ordinary exit**, "
+        "which is Camille's standing ruling applied to a fourth kind: a "
+        "scene never stops the plot. The outcome is recorded so a later "
+        "scene can read it; it reroutes nobody",
+        f"outcome={stuck.outcome!r} next={stuck.next_id!r}",
+    )
+    rolls = [str(x) for x in stuck.lines if getattr(x, "kind", "") == "roll"]
+    out.that(
+        len(rolls) == 3 and all(f"hard DC {dc(3, 'hard')}" in r for r in rolls),
+        "**the one printed mechanic rolls against the HARD DC**, which is "
+        "the page's own parenthesis -- *leaning toward the hard DCs* -- and "
+        "a check per failed answer rather than one for the scene. A "
+        "moderate DC would make the hint routine, which is the opposite of "
+        "a concession to somebody stuck",
+        f"{rolls}",
+    )
+    _c, quiet = play([])
+    out.that(
+        quiet.outcome == "stuck"
+        and not [x for x in quiet.lines if "is not it" in str(x)],
+        "and a run where nobody types anything ends stuck without claiming "
+        "a wrong answer was given -- which is the state `check.py` plays "
+        "in, so the suite's verdict is deterministic and the solved path "
+        "is this rule's job rather than a seed's",
+        f"{quiet.outcome!r}",
+    )
+
+    # -- the hint arrives, which is what keeps `clues` from being a pool
+    #    that is written and never read -- this component's own warning
+    #    about `details` in as many words.
+    # **Counted against the checks that BEAT the DC, not against a range.**
+    # A bound was the first version and a plant handing out free hints
+    # stayed green inside it: the probe scene carries one clue, so free
+    # hints cap at 12 and 12 is inside `0 < hints < 36`. Equality is the
+    # claim -- a hint per successful check and no others -- and it cannot
+    # be satisfied by a hint nobody earned. Three clues, so the count is
+    # not capped below what free hints would produce.
+    MANY = {**SCENE, "exits": ["after"],
+            "puzzle": {**SCENE["puzzle"],
+                       "clues": ["one", "two", "three"]}}
+
+    def many(seed: int) -> tuple[int, int]:
+        built = mod.parse(
+            {"id": "probe", "party_level": 1, "party_size": 4,
+             "start": "p", "scenes": [MANY, AFTER]}, Path("<driver>"))
+        campaign = run_mod.begin(built, seed=seed)
+        made = run_mod.step(campaign, built, record=False)
+        hint = len([x for x in made.lines if "A hint:" in str(x)])
+        beat = len([
+            x for x in made.lines
+            if getattr(x, "kind", "") == "roll"
+            and int(str(x).rsplit(":", 1)[1]) >= dc(1, "hard")
+        ])
+        return hint, beat
+
+    pairs = [many(seed) for seed in range(12)]
+    hints = sum(h for h, _b in pairs)
+    beats = sum(b for _h, b in pairs)
+    out.that(
+        hints == beats and hints > 0,
+        "**a hint costs a successful check and nothing else buys one.** "
+        "Counted over 12 seeds at level 1 with three clues available: the "
+        "number of hints handed out equals the number of checks that beat "
+        "the hard DC, exactly. A range was the first version of this and a "
+        "plant handing out free hints passed inside it -- the probe had one "
+        "clue, so free hints capped below the range's own ceiling",
+        f"{hints} hint(s) for {beats} successful check(s) over 36 rolls",
+    )
+
+    # -- the price, which the page states -------------------------------
+    from combat_engine.story import xp as xp_mod
+
+    _c, paid = play(["the third"])
+    award = [str(x) for x in paid.lines if "Puzzle:" in str(x)]
+    heads = 4
+    want = xp_mod.standard(3) * 5 // heads
+    out.that(
+        award and f"{want} XP each" in award[0],
+        "**a solved puzzle is priced as a SOLO monster of its level**, "
+        "which is printed: *if the puzzle is the entire encounter, treat "
+        "it as a solo monster*. A `puzzle` scene is the whole encounter by "
+        "construction -- the kind refuses `foes` -- so five standards of "
+        "its level is the figure, computed rather than written down",
+        f"{award} wanted {want} each",
+    )
+    out.that(
+        not [x for x in stuck.lines if "Puzzle:" in str(x)],
+        "and a puzzle the party walked away from pays **nothing**, which "
+        "falls out of the same sentence the whole award section rests on: "
+        "*an encounter, by definition, has a risk of failure* -- a puzzle "
+        "nobody solved was not overcome",
+        f"{[str(x) for x in stuck.lines if 'XP' in str(x)]}",
+    )
+
+    # -- the refusals, each proven red by a plant ------------------------
+    def refused(scene: dict, *, kind: str = "puzzle") -> str:
+        try:
+            mod.parse(
+                {"id": "probe", "party_level": 3, "party_size": 4,
+                 "start": "p", "scenes": [{**scene, "kind": kind}]},
+                Path("<driver>"))
+        except mod.ModuleError as err:
+            return str(err)
+        return ""
+
+    out.that(
+        "needs at least one accepted answer" in refused(
+            {**SCENE, "exits": [], "puzzle": {**SCENE["puzzle"], "answers": []}}),
+        "**a puzzle with no accepted answer is refused**, because it can "
+        "only ever end stuck and a stuck puzzle and an unsolvable one "
+        "print the same thing -- the silently-false shape this component "
+        "is warned about",
+        refused({**SCENE, "exits": [],
+                 "puzzle": {**SCENE["puzzle"], "answers": []}})[:90],
+    )
+    out.that(
+        "is not a skill" in refused(
+            {**SCENE, "exits": [],
+             "puzzle": {**SCENE["puzzle"], "skills": ["puzzling"]}}),
+        "and a clue skill the engine does not know is refused rather than "
+        "rolled, the same check the challenge's skills already get",
+        refused({**SCENE, "exits": [],
+                 "puzzle": {**SCENE["puzzle"], "skills": ["puzzling"]}})[:90],
+    )
+    out.that(
+        "needs a 'puzzle' block" in refused(
+            {"id": "p", "name": "P", "exits": []}),
+        "and a puzzle scene with no puzzle is refused -- the kind exists "
+        "to run one, so a scene naming the kind and writing nothing is an "
+        "authoring mistake rather than an empty scene",
+        refused({"id": "p", "name": "P", "exits": []})[:90],
+    )
+    elsewhere = refused(
+        {"id": "p", "name": "P", "exits": [], "puzzle": SCENE["puzzle"]},
+        kind="roleplay")
+    out.that(
+        "must not carry 'puzzle'" in elsewhere,
+        "**and a puzzle block on any other kind is refused**, which is the "
+        "other direction and the one the `unused` table cannot express: it "
+        "is keyed by kind, and this asks about a field that belongs to one "
+        "kind only. Written and never read is the fault the whole check is "
+        "for",
+        elsewhere[:90],
+    )
+
+
 def a_rest_scene_can_carry_a_conversation(out: Result) -> None:
     """A rest scene was one canned line, which is Camille's complaint:
 
@@ -55361,6 +55596,11 @@ DRIVERS = {
     "affliction": (
         a_disease_moves_at_an_extended_rest,
         "a carried disease moves at an extended rest (#948)",
+    ),
+    "puzzle": (
+        a_puzzle_tests_the_player_and_never_stops_the_plot,
+        "a puzzle tests the player, rolls the hard DC, and never stops the "
+        "plot (#960)",
     ),
     "camp_talk": (
         a_rest_scene_can_carry_a_conversation,

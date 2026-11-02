@@ -71,7 +71,7 @@ from .objective import SHARE as OBJECTIVE_SHARE
 #: `rest` is a scene rather than a property of the edge between two, because a
 #: module says where the party may rest and that is a decision with a position
 #: in the story. `turns.short_rest` and `Party.rest` are what it runs.
-KINDS = ("roleplay", "skill_challenge", "combat", "rest")
+KINDS = ("roleplay", "skill_challenge", "combat", "rest", "puzzle")
 
 #: What shape a stated room may be. An octagon and an irregular chamber
 #: need nothing new -- a cut corner is blocking squares, the same
@@ -485,6 +485,54 @@ class Grant:
 #: exchanges is a scene the module did not finish writing, and a loop with no
 #: bound is worse than an early exit.
 MAX_BEATS = 6
+
+
+@dataclass(frozen=True)
+class Puzzle:
+    """A challenge aimed at the player rather than at the character. #960.
+
+    The DMG gives a third of its noncombat chapter to this and the design
+    constraint is its own sentence: a puzzle *"tests the capabilities of the
+    players at the table instead of their characters"* and, unlike a trap
+    or a skill challenge, *"does not"* involve die rolling to represent what
+    a character can do.
+
+    So there is almost no mechanism here: a prompt, the answers that count,
+    and a way to be stuck without the story stopping. Four of the book's
+    forms are pure text and need nothing else -- a riddle, a logic puzzle, a
+    cryptogram, a message concealed in prose. The grid forms want a rendered
+    prop and are out of scope for a text engine.
+
+    **`answers` is matched loosely and that is deliberate.** A player types
+    a word, not a key: case, surrounding punctuation and articles are
+    stripped before comparing, because refusing *"The crown"* against
+    *"crown"* would be the engine testing typing rather than solving. A
+    module that wants one exact spelling states exactly one answer; a module
+    that wants synonyms states several.
+
+    **`clues` is spent in order, one per successful check.** The printed
+    rule gives three kinds of hint -- *"a small part of the puzzle, one
+    right move, or a clue toward a new way of thinking about the puzzle"* --
+    which is a progression, so the order a module writes them in is the
+    order they arrive.
+    """
+
+    prompt: str
+    #: What counts as solved. Empty is refused at load: a puzzle nobody can
+    #: answer is a scene that can only ever end stuck, which reads exactly
+    #: like a puzzle nobody solved.
+    answers: tuple[str, ...] = ()
+    clues: tuple[str, ...] = ()
+    #: Which checks the "get a clue" rule may roll. The page says
+    #: *"Intelligence checks or various skill checks"*, so a module states
+    #: which, and the default is the five knowledge skills -- the ones an
+    #: Intelligence score is read through in this engine, since a bare
+    #: ability check is not something `skills.check` expresses.
+    skills: tuple[str, ...] = ()
+    #: How many answers before the party gives up. Three, because the
+    #: printed concession is a *hint* per check rather than an unlimited
+    #: retry, and an unbounded loop is what `#965`'s walk guard exists for.
+    tries: int = 3
 
 
 @dataclass(frozen=True)
@@ -959,6 +1007,9 @@ class Scene:
 
     # -- rest ---------------------------------------------------------------
     extended: bool = False
+
+    #: The puzzle a `puzzle` scene runs. #960.
+    puzzle: Puzzle | None = None
 
     def affordance(self, wanted: str) -> Affordance | None:
         """One by id, or `None`. `"none"` is a legal answer and means nothing."""
@@ -1663,6 +1714,60 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     primary, primary_says = _skills("primary")
     secondary, secondary_says = _skills("secondary")
     tries = tuple(primary_says + secondary_says)
+
+    # -- the puzzle, which is a block rather than a list of them ----------
+    #
+    # One per scene, because the printed thing is *the* puzzle a room holds
+    # and a scene with two is two scenes. `None` when the module writes
+    # nothing, which is what the kind check below refuses for a `puzzle`
+    # scene. #960.
+    puzzle: Puzzle | None = None
+    raw_puzzle = raw.get("puzzle")
+    if isinstance(raw_puzzle, dict):
+        answers = tuple(
+            str(a).strip() for a in (raw_puzzle.get("answers") or ())
+            if str(a).strip()
+        )
+        clues = tuple(
+            str(c).strip() for c in (raw_puzzle.get("clues") or ())
+            if str(c).strip()
+        )
+        skills = tuple(
+            str(sk).strip().lower()
+            for sk in (raw_puzzle.get("skills") or ())
+            if str(sk).strip()
+        )
+        for skill in skills:
+            if skill not in SKILLS:
+                problems.append(
+                    f"{where}: puzzle skill {skill!r} is not a skill."
+                    f" Known: {', '.join(sorted(SKILLS))}"
+                )
+        prompt = str(raw_puzzle.get("prompt", "")).strip()
+        if not prompt:
+            problems.append(f"{where}: a puzzle needs a 'prompt' to pose")
+        # **An unanswerable puzzle is refused rather than run.** A scene
+        # with no accepted answer can only ever end stuck, and a stuck
+        # puzzle and an unsolvable one print the same thing -- which is
+        # the silently-false shape this component is warned about.
+        if not answers:
+            problems.append(
+                f"{where}: a puzzle needs at least one accepted answer;"
+                f" with none it can only ever end stuck, which reads"
+                f" exactly like a puzzle nobody solved"
+            )
+        got = int(raw_puzzle.get("tries", 3) or 3)
+        if got < 1:
+            problems.append(
+                f"{where}: a puzzle needs at least one try, not {got}")
+        puzzle = Puzzle(
+            prompt=prompt, answers=answers, clues=clues,
+            skills=skills, tries=max(1, got),
+        )
+    elif raw_puzzle is not None:
+        problems.append(f"{where}: 'puzzle' must be an object, not a list")
+    if kind == "puzzle" and puzzle is None:
+        problems.append(f"{where}: a puzzle scene needs a 'puzzle' block")
     for skill in (*primary, *secondary):
         if skill not in SKILLS:
             problems.append(
@@ -1909,7 +2014,24 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         # fight, which is what this whole check is about.
         "rest": ("foes", "terrain", "complexity", "primary", "secondary",
                  "objective", "readiness"),
+        # **A puzzle tests the player, not the character**, which is the
+        # printed design constraint and decides this list: no foes, no
+        # objective, no complexity, and none of the beat-loop fields. The
+        # one check it does roll is the "get a clue" hint, which lives in
+        # the `puzzle` block rather than in `primary`/`secondary` -- those
+        # are a skill challenge's tally and a puzzle has no tally. #960.
+        "puzzle": ("foes", "terrain", "complexity", "primary", "secondary",
+                   "objective", "readiness", "affordances", "npcs", "lore",
+                   "details"),
     }[kind]
+    # **And `puzzle` belongs to the one kind that runs one.** A block on any
+    # other scene is written and never read, which is the fault the whole
+    # `unused` check is about -- it is listed here rather than in the table
+    # above because the table is keyed the other way round.
+    if kind != "puzzle" and raw.get("puzzle"):
+        problems.append(
+            f"{where}: a {kind} scene must not carry 'puzzle' --"
+            f" only a puzzle scene runs one")
     for name in unused:
         if raw.get(name):
             problems.append(f"{where}: a {kind} scene must not carry {name!r}")
@@ -1946,6 +2068,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         primary=primary,
         secondary=secondary,
         tries=tries,
+        puzzle=puzzle,
         caps=tuple(caps),
         secondary_grants=assists,
         on_success=str(raw.get("on_success", "")).strip(),
