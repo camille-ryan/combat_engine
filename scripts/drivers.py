@@ -148,10 +148,40 @@ def _at(world, eid: int) -> tuple[int, int]:  # noqa: ANN001
 
 
 def _board(ref: str = "m145a0", seed: int = 1):  # noqa: ANN202
-    """A legal world, borrowed from the auditor rather than built again."""
+    """A legal world, borrowed from the auditor rather than built again.
+
+    **The draw flag is pinned off for the build and put back.** `#1037`.
+    `audit.py` sets `chargen.SCORED_CHOICES = False` at module level
+    because its board's job is to field whatever lets the row under test
+    be used at all, and it measured what not doing so costs -- scored
+    dealing took 80 rows out of reach, 36 of them one class's. That was
+    an **import side effect**, so which draw a board got depended on
+    whether any earlier rule had imported `audit`.
+
+    Pinning it here gives all 431 call sites the board `audit.py` intends
+    regardless of what the calling rule wants afterwards, and restoring
+    rather than leaving it off is what lets `main` hand each rule the
+    production value. A rule needing the unscored draw for its whole body
+    says so in `UNSCORED_DRAW`.
+
+    **Read the old value before the import that flips it.** `isort` sorts
+    `from audit import board` above `from combat_engine import chargen`,
+    so a read taken after one import block captures the already-flipped
+    value and the restore puts the wrong one back -- a guard that
+    reproduces the bug it was written to fix. The statement between the
+    two blocks is what keeps them apart.
+    """
+    from combat_engine import chargen
+
+    was = chargen.SCORED_CHOICES
+
     from audit import board
 
-    return board(ref, seed)
+    chargen.SCORED_CHOICES = False
+    try:
+        return board(ref, seed)
+    finally:
+        chargen.SCORED_CHOICES = was
 
 
 def phasing(out: Result) -> None:
@@ -52310,6 +52340,102 @@ def the_importer_brief_and_the_parser_agree(out: Result) -> None:
                      f" parser accepts anyway",
                      f"{allowed}")
 
+def the_draw_is_declared_not_inherited(out: Result) -> None:
+    """A rule gets the draw the runner hands it, not the one before it left.
+
+    `#1037`. `chargen.SCORED_CHOICES` decides whether the dealer scores a
+    character's choices. `audit.py` turns it **off at module level** --
+    deliberately, so its board fields whatever lets the row under test be
+    used at all -- and `_board` imports `audit` lazily. So the flag was set
+    by an import side effect, which means the first rule in `DRIVERS` to
+    pose a board turned scoring off for every rule registered after it.
+
+    **What this asserts is the shape, not a symptom, and the distinction is
+    why the rule is written this way.** `#1037`'s reported symptom was
+    `fight_aftermath` raising `IndexError` out of `turns.start` -- an
+    unscored party laid into an encounter with nobody in the initiative.
+    Measured again before writing this: that crash is **no longer live**, so
+    nothing available today goes red on the order itself. The suite is green
+    at `HEAD`, and green with a board-posing rule forced ahead of the rule
+    that used to raise.
+
+    That makes the fault latent rather than absent, and a latent fault wants
+    an assertion on the invariant instead of on the symptom. Today's green
+    depends on two accidents -- that some rule poses a board early, and that
+    no rule needing the production draw runs after it. Either one changes
+    silently, and the first one changed under `#1037` already.
+
+    **The spy is what keeps this from passing vacuously**, which the first
+    version of this rule did. Asserting only "the flag is on after posing a
+    board" passes at `HEAD` whenever `audit` happens to be imported already:
+    the import flips the flag exactly **once** per process, so `_board`
+    leaves it alone on every call after the first and the assertion reads
+    green while testing nothing. Recording the value `board` is *handed*
+    asks a question with one answer either way.
+    """
+    from combat_engine import chargen
+
+    #: Read **before** importing `audit`, and that is not a style choice.
+    #: The import is what flips the flag, so taking this after it would
+    #: report `False` whenever this rule runs first -- a red on the one
+    #: ordering the rule is least suspicious of. `isort` merges the two
+    #: import blocks given the chance and would reintroduce exactly that;
+    #: the statement between them is what keeps it out of reach. The same
+    #: trap `#1037`'s first containment fell into, in the rule written to
+    #: guard against it.
+    entered = chargen.SCORED_CHOICES
+
+    import audit
+
+    out.that(
+        entered is True,
+        "a rule starts from the production draw, whatever ran before it --"
+        " the runner sets it per rule rather than letting it be inherited",
+        f"entered with SCORED_CHOICES={entered}",
+    )
+
+    seen: list[bool] = []
+    real = audit.board
+
+    def spy(ref: str, seed: int) -> object:
+        seen.append(chargen.SCORED_CHOICES)
+        return real(ref, seed)
+
+    audit.board = spy
+    try:
+        chargen.SCORED_CHOICES = True
+        world = _board()
+    finally:
+        audit.board = real
+
+    out.that(
+        seen == [False],
+        "and the board itself is still built against the UNSCORED draw, so"
+        " every call site gets the board audit.py intends rather than"
+        " whatever the calling rule wanted",
+        f"board was handed SCORED_CHOICES={seen}",
+    )
+    out.that(
+        chargen.SCORED_CHOICES is True,
+        "while the flag is put back afterwards -- posing a board is not what"
+        " decides the draw for the rest of the body",
+        f"left at SCORED_CHOICES={chargen.SCORED_CHOICES}",
+    )
+    out.that(
+        world is not None and bool(getattr(world, "creatures", True)),
+        "and the board came back populated, so the two assertions above are"
+        " about a real build rather than a spy that swallowed it",
+    )
+
+    missing = UNSCORED_DRAW - set(DRIVERS)
+    out.that(
+        not missing,
+        "every rule named as wanting the unscored draw is a rule that exists"
+        " -- a name that is not one would be a silent no-op",
+        f"no such driver: {sorted(missing)}",
+    )
+
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -53701,7 +53827,58 @@ DRIVERS = {
         the_importer_brief_and_the_parser_agree,
         "the importer brief names no value the parser refuses (#1026)",
     ),
+    "draw_declared": (
+        the_draw_is_declared_not_inherited,
+        "a rule gets the draw the runner hands it, not the one the rule"
+        " before it left behind (#1037)",
+    ),
 }
+
+
+#: Rules that want the **unscored** draw for the whole of their body, not
+#: only for the board they start from. `#1037`.
+#:
+#: `audit.py` sets `chargen.SCORED_CHOICES = False` at module level, and
+#: `_board` imports `audit` lazily -- so for as long as that was the only
+#: thing touching the flag, the first rule in `DRIVERS` to reach a board
+#: turned scoring off for every rule registered after it. The suite's
+#: verdict depended on dict order, and `fight_aftermath` raised
+#: `IndexError` from `turns.start` indexing an empty initiative when it
+#: ran second.
+#:
+#: These six are the rules that genuinely disagree with the production
+#: default, and the list is **measured rather than reasoned**: the whole
+#: suite was run with the flag pinned on, and these are the rules that
+#: went red. `#1037` estimated the work as "a per-rule audit of ~250
+#: rules for which draw they assume" -- that is what pinning the flag and
+#: reading the failures replaces, and it also named the sixth rule, which
+#: the issue could only record as "+1 unnamed in the tail".
+#:
+#: Each one poses a board and then keeps building against the same draw:
+#: a rider reachable only through a simple weapon, a character with
+#: nothing stowed, a creature's own type, the block's own weapon. A
+#: scored draw fields a different character and the clause under test
+#: stops being reachable -- which is the same reason `audit.py` turns
+#: scoring off, arriving one layer further out.
+UNSCORED_DRAW = frozenset(
+    {
+        "banked_reroll",
+        "gear_and_jump",
+        "kind_waived",
+        "simple_weapon",
+        "vestige_augment",
+        "weapon_is_mine",
+    }
+)
+
+_unknown_unscored = UNSCORED_DRAW - set(DRIVERS)
+if _unknown_unscored:
+    #: A name here that is not a rule is a silent no-op -- the rule it was
+    #: meant to name would quietly run with the wrong draw -- so it is an
+    #: error at import rather than a surprise in a verdict.
+    raise AssertionError(
+        f"UNSCORED_DRAW names no such driver: {sorted(_unknown_unscored)}"
+    )
 
 
 
@@ -53725,13 +53902,35 @@ def main() -> int:
         print(f"no such driver: {', '.join(unknown)}", file=sys.stderr)
         return 2
 
+    # **Every rule starts from the production value of the draw flag.**
+    # `#1037`: `chargen.SCORED_CHOICES` is module state, `import audit`
+    # turns it off as a side effect, and a rule that never touches it
+    # inherited whatever the rule before it left behind -- so the suite's
+    # verdict depended on registration order. Six rules crashed when one
+    # was registered first.
+    #
+    # Set here rather than left to each rule because that is what makes
+    # the order genuinely stop mattering rather than moving which order
+    # breaks: every rule starts from the production draw, and the six that
+    # want the other one name themselves in `UNSCORED_DRAW` above.
+    #
+    # `_board` pins the flag off for the board it builds and puts it back,
+    # so posing a board is not what decides this -- all 431 call sites get
+    # the draw `audit.py` intends whatever the calling rule wants after.
+    from combat_engine import chargen as _chargen
+
+    production = True
     results = []
     for name in wanted:
         fn, what = DRIVERS[name]
         if not args.quiet:
             print(f"  {name} -- {what}")
         out = Result(name)
-        fn(out)
+        _chargen.SCORED_CHOICES = name not in UNSCORED_DRAW
+        try:
+            fn(out)
+        finally:
+            _chargen.SCORED_CHOICES = production
         results.append(out)
 
     bad = [r for r in results if r.failed]
