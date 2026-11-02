@@ -1509,23 +1509,40 @@ def hoard(campaign: Campaign, module: Module, scene: Scene,
     # in and the order DMG2's alternative rewards assume -- they replace
     # "the highest-level magic items you would otherwise give out", which
     # only means anything if parcel 1 is the dearest. #969.
-    found = treasure.items(level, _stream(campaign, scene, "treasure"))
+    found = treasure.parcels_for(level, _stream(campaign, scene, "treasure"))
     if campaign.parcels < len(found):
-        ref = found[campaign.parcels]
+        ref, is_reward = found[campaign.parcels]
         campaign.parcels += 1
         # **To one character, not split.** An item is one object; the coin
         # half divides because coin does. Round-robin by parcel so a
         # four-item level does not load one sheet.
         who = campaign.party.sheets[
             (campaign.parcels - 1) % len(campaign.party.sheets)]
-        who.carried[ref] = who.carried.get(ref, 0) + 1
-        made.say(
-            f"Treasure: {ref}, a level {level + treasure.ITEM_STEPS[campaign.parcels - 1]} "
-            f"item (parcel {campaign.parcels} of "
-            f"{len(found) + len(treasure.shares(level))}) -- carried, not "
-            "worn; nothing equips it yet (#969).",
-            "note",
-        )
+        step = treasure.ITEM_STEPS[campaign.parcels - 1]
+        total = len(found) + len(treasure.shares(level))
+        if is_reward:
+            # **`rewards`, not `carried`.** A reward is not a physical
+            # object, so the noun matters: it takes no slot and nobody
+            # holds it. Keyed on the level it arrived at, because it
+            # fades five levels later and that is the only thing worth
+            # remembering about it. #1020.
+            who.rewards[ref] = level
+            made.say(
+                f"Treasure: {ref}, a level {level + step} alternative "
+                f"reward (parcel {campaign.parcels} of {total}) -- not a "
+                "physical object, so it takes no slot and nobody holds "
+                f"it. Fades at level {level + treasure.FADES_AFTER}, "
+                "which nothing reaches yet (#1013).",
+                "note",
+            )
+        else:
+            who.carried[ref] = who.carried.get(ref, 0) + 1
+            made.say(
+                f"Treasure: {ref}, a level {level + step} "
+                f"item (parcel {campaign.parcels} of {total}) -- carried, "
+                "not worn; nothing equips it yet (#969).",
+                "note",
+            )
         return
     purse = treasure.shares(level)
     if not purse:

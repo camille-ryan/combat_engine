@@ -142,11 +142,71 @@ def item_for(level: int, draw: Random) -> str:
         row[0] for row in game().execute(
             "SELECT DISTINCT i.ref FROM item i "
             "JOIN item_step s ON s.ref = i.ref "
-            "WHERE s.level = ? AND s.cost > 0 ORDER BY i.ref",
-            (max(level, 1),),
+            "WHERE s.level = ? AND s.cost > 0 "
+            "AND i.category <> ? ORDER BY i.ref",
+            (max(level, 1), REWARD),
         )
     ]
     return draw.choice(rows) if rows else ""
+
+
+#: The printed category an alternative reward carries in `item.category`.
+#: 119 rows hold it, of which 64 are priced at levels 6 to 9 -- 5.0% of
+#: that pool. **The issue said 184; that is the compendium's count and the
+#: imported number is 119**, the level ceiling accounting for the rest.
+REWARD = "Alternative Reward"
+
+
+def reward_for(level: int, draw: Random) -> str:
+    """One alternative reward of that level, or `""` if none is priced. #1020.
+
+    `item_for`'s sibling, and the two partition the pool: this one takes
+    the category and that one now excludes it. Before this existed,
+    `item_for` drew from everything and about **one parcel in twenty came
+    out a reward filed as a carried object** -- which is the wrong noun,
+    because the page's rewards are not physical.
+
+    **The filter went in with this draw and not before**, which is the
+    ordering `#1020` is explicit about: excluding the category first would
+    have removed the 5% and awarded nothing in its place.
+
+    Rewards are priced thinly and unevenly -- 6 refs at level 2, 11 at 5,
+    31 at 8, 1 at 11 -- so `""` is a normal answer at some levels and the
+    caller falls back to an item rather than pretending.
+    """
+    from combat_engine.db import game
+
+    rows = [
+        row[0] for row in game().execute(
+            "SELECT DISTINCT i.ref FROM item i "
+            "JOIN item_step s ON s.ref = i.ref "
+            "WHERE s.level = ? AND s.cost > 0 "
+            "AND i.category = ? ORDER BY i.ref",
+            (max(level, 1), REWARD),
+        )
+    ]
+    return draw.choice(rows) if rows else ""
+
+
+#: How many levels a reward lasts before it fades. The page's own number.
+FADES_AFTER = 5
+
+
+def faded(gained_at: int, level: int) -> bool:
+    """Has a reward gained at `gained_at` faded by `level`? #1020.
+
+    Five levels of play and then it goes, which is the page's rule and the
+    one thing about a reward that an item has no equivalent of.
+
+    **Unobservable today, and that is stated rather than hidden.** Nothing
+    levels a character up yet (`#1013`), so no campaign ever reaches
+    `gained_at + 5` and this reader answers `False` for every reward this
+    engine has ever awarded. The state is built and the arithmetic is
+    right; what is missing is somebody to advance the level. Building it
+    now means the fade lands with `#1013` rather than being discovered
+    missing after it.
+    """
+    return level - gained_at >= FADES_AFTER
 
 
 def items(level: int, draw: Random) -> tuple[str, ...]:
@@ -160,6 +220,46 @@ def items(level: int, draw: Random) -> tuple[str, ...]:
         item_for(level + step, draw) for step in ITEM_STEPS
     )
     return tuple(ref for ref in found if ref)
+
+
+def parcels_for(level: int, draw: Random) -> tuple[tuple[str, bool], ...]:
+    """The four item parcels, each with whether it is a reward. #1020.
+
+    `(ref, is_reward)`, best first. The page replaces **one magic item per
+    level** with an alternative reward, and it says which one: the highest
+    it would otherwise have given. So parcel 1 -- the `+4` step -- is the
+    reward and parcels 2 to 4 stay items. `run`'s own comment at the award
+    site already recorded that reading, which is why it is not a guess:
+    rewards replace *the highest-level magic items you would otherwise
+    give out*, and that only means anything if parcel 1 is the dearest.
+
+    **One per level, replacing rather than adding.** The party gets four
+    parcels either way, so this composes with `ITEM_STEPS` and changes no
+    total -- which is what makes it safe against the budget the whole
+    parcel system is set against.
+
+    **A reward never grants an enhancement bonus**, by the page's own rule,
+    which is why this is the one parcel that could later be put *in play*
+    without moving the curve `engine/scaling.py` sets monster defences
+    against. The item half of `#969` landed carried-and-not-worn precisely
+    to avoid that, and owed nothing as a result.
+
+    Falls back to an item when no reward is priced at `level + 4` -- 11 of
+    the levels in band price none -- rather than dropping the parcel or
+    retrying at another level, both of which would hide a thin spot in the
+    corpus. The caller is told which it got.
+    """
+    out: list[tuple[str, bool]] = []
+    for i, step in enumerate(ITEM_STEPS):
+        if i == 0:
+            got = reward_for(level + step, draw)
+            if got:
+                out.append((got, True))
+                continue
+        got = item_for(level + step, draw)
+        if got:
+            out.append((got, False))
+    return tuple(out)
 
 
 def per_head(parcel: int, heads: int) -> int:

@@ -169,6 +169,20 @@ class Sheet:
     #: the party, which is why it lives with the wear rather than with the
     #: request.
     carried: dict[str, int] = field(default_factory=dict)
+    #: Alternative rewards, `ref -> the level it was gained at`. **Not in
+    #: `carried`, and that separation is the whole point of the field.**
+    #: `carried` means the party is holding a thing; the page's rewards are
+    #: not physical objects -- they take no slot, nobody holds them, and
+    #: they cannot be bought, sold or disenchanted. Filing one under
+    #: `carried` is the wrong noun, and about one parcel in twenty was
+    #: being filed that way before `#1020`.
+    #:
+    #: The **level** rather than a count, because a reward is not a
+    #: quantity: it lasts five levels of play and then fades, so the one
+    #: thing worth remembering is when it arrived. `treasure.faded` reads
+    #: it. A count would answer the wrong question and a reward awarded
+    #: twice is one reward, not two.
+    rewards: dict[str, int] = field(default_factory=dict)
     #: Coins, in gold pieces. **Nothing spends them**, deliberately: an
     #: economy with nothing to buy is a separate piece of work, and the
     #: printed buying rules want rituals (#453) and a market. A visible

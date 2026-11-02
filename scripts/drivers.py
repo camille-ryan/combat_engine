@@ -44164,6 +44164,13 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
                 "AND s.cost > 0", (ref,))
         }
 
+    def _is_reward(ref: str) -> bool:
+        """The database's own category, asked per ref. #1020."""
+        from combat_engine.db import game
+        got = game().execute(
+            "SELECT category FROM item WHERE ref = ?", (ref,)).fetchone()
+        return bool(got) and got[0] == tr.REWARD
+
     out.that(
         all(5 + step in level_of(ref)
             for ref, step in zip(drawn, tr.ITEM_STEPS, strict=False)),
@@ -44179,6 +44186,53 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
         "than quietly substituting another level, which would hide the "
         "gap in the corpus",
         f"{tr.item_for(999, Random(4))!r}",
+    )
+
+    # -- the reward parcel, which is the path `run` actually takes ---------
+    #
+    # **Asserted through `parcels_for`, not `items`.** `#1020` moved
+    # `run.hoard` onto `parcels_for`, so `items` is now reached by this
+    # rule alone -- and a rule that exercises only the function production
+    # stopped calling proves the helper rather than the caller, which this
+    # repo has a standing note about. `items` keeps its assertions above
+    # because it is still a documented reader; these are the live ones.
+    pf = tr.parcels_for(5, Random(4))
+    out.that(
+        len(pf) == 4 and pf[0][1] is True
+        and not any(flag for _ref, flag in pf[1:]),
+        "**parcel 1 is the alternative reward and parcels 2 to 4 are "
+        "items** -- the page replaces one magic item per level, and the "
+        "one it names is the highest it would otherwise have given, which "
+        "is parcel 1 by `ITEM_STEPS` above",
+        f"{pf}",
+    )
+    rewards = {r for r, flag in pf if flag}
+    items_drawn = {r for r, flag in pf if not flag}
+    out.that(
+        not (rewards & items_drawn),
+        "and the two draws partition -- `item_for` excludes the category "
+        "`reward_for` selects, so no ref can arrive as both",
+        f"reward={rewards} items={items_drawn}",
+    )
+    out.that(
+        all(_is_reward(r) for r in rewards)
+        and not any(_is_reward(r) for r in items_drawn),
+        "and the flag is the database's own category rather than this "
+        "rule's opinion -- a reward flagged as an item would be filed "
+        "under `carried`, which is the wrong noun and the whole bug",
+        f"{[(r, _is_reward(r)) for r, _f in pf]}",
+    )
+    out.that(
+        tr.faded(5, 9) is False and tr.faded(5, 10) is True,
+        "a reward fades after **five** levels and not before -- gained at "
+        "5 it survives level 9 and is gone at 10",
+        f"{tr.faded(5, 9)}, {tr.faded(5, 10)}",
+    )
+    out.that(
+        tr.reward_for(999, Random(4)) == "",
+        "and a level pricing no reward yields none rather than "
+        "substituting, the same refusal `item_for` makes",
+        f"{tr.reward_for(999, Random(4))!r}",
     )
 
     # -- and through a module of fights ------------------------------------
@@ -44238,13 +44292,32 @@ def the_party_finds_the_monetary_treasure_it_is_owed(out: Result) -> None:
         f"lost {tr.monetary(5) - sum(coins)}",
     )
     carried = [dict(sheet.carried) for sheet in campaign.party.sheets]
+    held = [dict(sheet.rewards) for sheet in campaign.party.sheets]
     out.that(
-        sum(sum(c.values()) for c in carried) == 4
-        and all(len(c) == 1 for c in carried),
-        "the four items land **one per character**, round-robin by "
+        sum(sum(c.values()) for c in carried) + sum(len(r) for r in held) == 4
+        and all(len(c) + len(r) == 1
+                for c, r in zip(carried, held, strict=True)),
+        "the four parcels land **one per character**, round-robin by "
         "parcel, because an item is one object where coin divides -- a "
-        "four-item level must not load one sheet",
-        f"{carried}",
+        "four-parcel level must not load one sheet",
+        f"carried={carried} rewards={held}",
+    )
+    out.that(
+        sum(len(r) for r in held) == 1
+        and sum(sum(c.values()) for c in carried) == 3,
+        "**and exactly one of the four is a reward, filed apart from "
+        "`carried`** -- the page replaces one item per level, and a "
+        "reward is not a physical object so it must not land in the "
+        "dictionary that means held. This assertion went red when #1020 "
+        "moved parcel 1 and is what caught the split",
+        f"rewards={sum(len(r) for r in held)} carried="
+        f"{sum(sum(c.values()) for c in carried)}",
+    )
+    out.that(
+        all(lvl == 5 for r in held for lvl in r.values()),
+        "and a reward records the level it arrived at rather than a count, "
+        "because what matters about it is when it fades",
+        f"{held}",
     )
     out.that(
         all(not sheet.gear_changed() if hasattr(sheet, "gear_changed")
