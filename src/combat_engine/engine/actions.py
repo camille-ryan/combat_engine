@@ -397,6 +397,30 @@ def _searching(world: World, encounter: Encounter, actor: int) -> list[Action]:
 
     if not encounter.can_spend(actor, ActionType.MINOR):
         return []
+    # **Only the party looks.** Camille's ruling on #1064, verbatim:
+    #
+    #   > "For now, opposition just doesn't bother looking for traps. They
+    #   > should know they exist. If the party has an option to place traps,
+    #   > we can reopen that question."
+    #
+    # Measured before this, across 48 boards at levels 1, 5 and 10: the
+    # opposition was offered the search **18** times against the party's
+    # **7** -- two and a half times as often, because the four conditions
+    # below are all about whether a trap is *findable* and none of them asks
+    # whether the searcher has any reason not to know already. A creature
+    # fielded in an encounter with traps plausibly placed them.
+    #
+    # Read off `Side`, not off a monster/character distinction, so a
+    # PC-side ally that is not a character (#961) looks and a dominated
+    # character does not stop looking. The ruling's own condition for
+    # reopening -- the party being able to place traps -- is a party
+    # capability, so `Team.PC` is the axis it would turn on too.
+    from .components import Side
+    from .types import Team
+
+    side = world.get(actor, Side)
+    if side is None or side.team is not Team.PC:
+        return []
     hidden = [
         eid
         for eid, trap in world.each(Trap)

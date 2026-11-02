@@ -16224,6 +16224,59 @@ def an_active_search_finds_a_trap(out: Result) -> None:
              " would have quietly undone")
 
 
+    # == #1064: only the party looks ======================================
+    # Camille's ruling, verbatim: *"For now, opposition just doesn't bother
+    # looking for traps. They should know they exist. If the party has an
+    # option to place traps, we can reopen that question."*
+    #
+    # Measured before the gate, over 48 board-levels with traps laid: the
+    # opposition was offered the search **18** times against the party's
+    # 13. After it: 0 and 13.
+    #
+    # **The turn has to be handed to the foe first, and a plant proved it.**
+    # `_searching` opens with `can_spend(actor, MINOR)`, which is False for
+    # anybody whose turn it is not -- so asking a foe on the party's turn
+    # returns `[]` from that guard and never reaches the side test. Written
+    # that way, removing the gate entirely left all eleven assertions green.
+    # Same shape as the vacuous controls this file keeps collecting: the
+    # arm has to be reachable before it can discriminate.
+    from combat_engine.engine import Side as _Side
+    from combat_engine.engine import Team as _Team
+    from combat_engine.engine.types import ActionType as _Act
+
+    world, enc, me, eid = board_with(60)
+    out.that(
+        bool(offered(world, enc, me)),
+        "the party is still offered the search -- the control, because a "
+        "gate that refused everybody would read as a fix and would be the "
+        "action deleted",
+    )
+    for _ in range(12):
+        enc.advance()
+        standing = world.get(world.turn, _Side) if world.turn else None
+        if standing is not None and standing.team is not _Team.PC:
+            break
+    foe = world.turn
+    foe_side = world.get(foe, _Side) if foe else None
+    out.that(
+        foe_side is not None and foe_side.team is not _Team.PC
+        and enc.can_spend(foe, _Act.MINOR),
+        "a foe has the turn and a minor to spend, without which the next "
+        "assertion passes at the `can_spend` guard and says nothing about "
+        "sides",
+        f"turn={foe}, team="
+        f"{foe_side.team if foe_side else None}",
+    )
+    out.that(
+        not offered(world, enc, foe),
+        "and with the turn and the minor in hand it is offered nothing: a "
+        "creature fielded in an encounter with traps plausibly placed "
+        "them, and the four findability conditions never asked whether the "
+        "searcher had a reason not to know already",
+        f"{len(offered(world, enc, foe))} offer(s) to the foe",
+    )
+
+
 def an_ongoing_trap_takes_a_turn(out: Result) -> None:
     """A trap whose block prints an initiative acts on its own count.
 
