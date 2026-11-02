@@ -52340,6 +52340,127 @@ def the_importer_brief_and_the_parser_agree(out: Result) -> None:
                      f" parser accepts anyway",
                      f"{allowed}")
 
+def the_search_action_is_named(out: Result) -> None:
+    """Looking for a trap beats ending the turn, and loses to fighting.
+
+    `#1016`. `actions._searching` offers a minor action to look for a trap
+    the party cannot find passively, and `policy.features` named no
+    `is_search`. An unnamed kind is scored entirely by the generic terms
+    that happen to apply, which for this one came to **-0.900 against
+    ending a turn at -0.899** -- a loss by one thousandth, decided by
+    `i_am_bloodied` and `nearest_enemy`. Six kinds before it were named
+    after the fact for the same reason.
+
+    **The control is the point and the issue asked for it.** A term that
+    beats `is_end` proves nothing on its own, because the generic terms
+    nearly did too -- the whole complaint is a 0.001 margin. So this
+    measures the margin with the weight as shipped and again with it
+    zeroed, and asserts the *collapse*: it is the term doing the work or
+    the rule fails. `policy/CLAUDE.md`: "a term that passes a test the old
+    behaviour also passes has been shown nothing."
+
+    Why the rank assertion is the other half: a weight that cleared
+    `is_end` by clearing everything would be a creature searching instead
+    of fighting, which is the failure the six earlier kinds caused.
+    """
+    from combat_engine import story
+    from combat_engine.engine import Encounter, World
+    from combat_engine.engine.actions import Action, legal
+    from combat_engine.engine.components import Side
+    from combat_engine.engine.query import alive, creatures
+    from combat_engine.engine.types import Team
+    from combat_engine.policy import WEIGHTS, install
+    from combat_engine.policy.doctrine import DoctrinePolicy
+
+    named = "is_search" in WEIGHTS
+    out.that(named,
+             "the policy names a weight for the search action at all --"
+             " an unnamed kind scores zero, which beats ending a turn",
+             f"keys like it: {[k for k in WEIGHTS if 'search' in k]}")
+    if not named:
+        # **Stop here rather than raising.** Planting this rule by deleting
+        # the weight made the isolation control below die on a `KeyError`,
+        # so the suite reported a raise where the assertion above had
+        # already named the fault in words. A rule whose plant produces a
+        # traceback instead of its own message is harder to read than the
+        # bug.
+        return
+
+    def margin(world: World, enc: Encounter, pol: DoctrinePolicy,
+               actor: int, opts: list[Action]) -> tuple[float, int]:
+        scored = sorted((pol.score(world, enc, actor, o) for o in opts),
+                        reverse=True)
+        s = max(pol.score(world, enc, actor, o)
+                for o in opts if o.kind == "search")
+        e = max(pol.score(world, enc, actor, o)
+                for o in opts if o.kind == "end")
+        return s - e, 1 + sum(1 for sc in scored if sc > s)
+
+    found = None
+    for seed in range(300, 340):
+        fielded = story.field_encounter(
+            seed, 5, traps=2,
+            party=story.Party.of(story.PARTY, 5, seed=seed))
+        world = fielded.world
+        enc = Encounter(world)
+        pol = DoctrinePolicy()
+        install(world, enc, {}, default=pol)
+        enc.start()
+        for actor in [e for e in creatures(world) if alive(world, e)
+                      and (s := world.get(e, Side)) is not None
+                      and s.team is Team.PC]:
+            opts = legal(world, enc, actor)
+            if any(o.kind == "search" for o in opts) and any(
+                    o.kind == "end" for o in opts):
+                found = (seed, world, enc, pol, actor, opts)
+                break
+        if found:
+            break
+
+    out.that(found is not None,
+             "a board was posed where somebody is actually offered the"
+             " search action, so the assertions below are about a real"
+             " option list rather than an empty one")
+    if found is None:
+        return
+    seed, world, enc, pol, actor, opts = found
+
+    live, rank = margin(world, enc, pol, actor, opts)
+    out.that(live > 0.5,
+             "looking for the trap beats ending the turn by a real margin,"
+             " not by the thousandth #1016 measured",
+             f"s{seed} actor {actor}: margin {live:+.3f} over {len(opts)} options")
+    out.that(rank > 1,
+             "and still loses to something -- a weight that cleared ending"
+             " a turn by clearing everything would search instead of fight",
+             f"ranked {rank} of {len(opts)}")
+
+    # **Zeroed on the policy's own dict, not on the module constant.**
+    # `DoctrinePolicy.weights` is a dataclass field defaulting to
+    # `{**WEIGHTS, **DOCTRINE}`, so it is a *copy* taken when the policy is
+    # built -- mutating `policy.WEIGHTS` afterwards scores exactly the
+    # same. The first version of this control did that and read a margin
+    # identical to the live one, which looked like the term doing nothing
+    # and was the control measuring nothing. Isolating in the object that
+    # does the scoring is both correct and what the suite can assert.
+    was = pol.weights["is_search"]
+    try:
+        pol.weights["is_search"] = 0.0
+        blind, _ = margin(world, enc, pol, actor, opts)
+    finally:
+        pol.weights["is_search"] = was
+
+    out.that(abs(blind) < 0.01,
+             "while zeroing the weight collapses that margin to nothing --"
+             " so it is the named term deciding this and not a generic term"
+             " that would have decided it anyway",
+             f"margin with the weight off: {blind:+.4f}")
+    out.that(live - blind > 0.5,
+             "and the two readings differ, which is what makes the"
+             " assertion above falsifiable rather than a restatement",
+             f"{live:+.3f} against {blind:+.4f}")
+
+
 def the_draw_is_declared_not_inherited(out: Result) -> None:
     """A rule gets the draw the runner hands it, not the one before it left.
 
@@ -53826,6 +53947,11 @@ DRIVERS = {
     "brief_agrees": (
         the_importer_brief_and_the_parser_agree,
         "the importer brief names no value the parser refuses (#1026)",
+    ),
+    "search_named": (
+        the_search_action_is_named,
+        "looking for a trap beats ending the turn and loses to fighting"
+        " (#1016)",
     ),
     "draw_declared": (
         the_draw_is_declared_not_inherited,
