@@ -287,7 +287,17 @@ def play(
         seen_labels.update(
             (o["kind"], o["label"] or "") for o in options
         )
-        best = max(range(len(options)), key=lambda i: options[i]["score"])
+        # **A tie goes to the option that advances the turn.** #796:
+        # `max` returns the *first* maximum and the inert row is listed
+        # before `end`, so a row worth exactly as much as ending the turn
+        # won -- and being `action=FREE` it consumed nothing, so the pose
+        # recurred and the same choice was made 282 of 300 actions with the
+        # round never leaving 1. This client is the one that hit it;
+        # `DoctrinePolicy.act` carries the same tie-break for the same
+        # reason.
+        best = max(range(len(options)),
+                   key=lambda i: (options[i]["score"],
+                                  options[i]["kind"] == "end"))
         if show:
             print(f"        {state['current']}: {options[best]['label']}")
         state = server.post(f"/api/encounter/{eid}/act", {"action_index": best})
@@ -382,7 +392,17 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
             options = fight["options"]
             if not options:
                 break
-            best = max(range(len(options)), key=lambda i: options[i]["score"])
+            # **A tie goes to the option that advances the turn.** #796:
+            # `max` returns the *first* maximum and the inert row is
+            # listed before `end`, so a row worth exactly as much as
+            # ending the turn won -- and being `action=FREE` it
+            # consumed nothing, so the pose recurred and the same
+            # choice was made 282 of 300 actions with the round never
+            # leaving 1. `DoctrinePolicy.act` carries the same
+            # tie-break for the same reason.
+            best = max(range(len(options)),
+                       key=lambda i: (options[i]["score"],
+                                      options[i]["kind"] == "end"))
             if show:
                 print(f"        leg {leg_no} {fight['current']}:"
                       f" {options[best]['label']}")
@@ -400,11 +420,40 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
                    f"{done['status']}")
         check.that(done["rounds"] > 0, f"leg {leg_no} recorded its length",
                    f"{done['rounds']}")
-        check.that(len(done["ended"]) == len(done["entering"])
-                   and len(done["rested"]) == len(done["entering"]),
-                   f"leg {leg_no} has all three snapshots, same party in each",
-                   f"{len(done['entering'])}/{len(done['ended'])}"
-                   f"/{len(done['rested'])}")
+        # **A wiped party has no rest to snapshot, and that is a question
+        # that cannot be asked rather than one with a wrong answer.**
+        # `Day._settle` calls `party.bury()` before the rest -- Camille's
+        # ruling, a character past the death floor is out -- and
+        # `_from_sheets` then iterates the surviving sheets. So a total
+        # party kill makes `rested` **empty** by construction, and the two
+        # comparisons below read `4/4/0` and fail on a leg that simply
+        # ended badly.
+        #
+        # That is #889's own argument applied one level down. The skip
+        # further below covers the *legs after* the one that ended the day;
+        # nothing covered the losing leg's own snapshots, while this
+        # function's docstring claimed "the skip stays armed".
+        #
+        # **Gated on nobody surviving, not on the comparison failing**,
+        # which would be circular. A leg lost with survivors still has a
+        # real rest and is still asserted.
+        standing = [c for c in done["ended"] if c["hp"] > 0]
+        if done["entering"] and not standing:
+            check.skip(
+                f"leg {leg_no}'s three snapshots",
+                f"the party was wiped in leg {leg_no} -- `party.bury()`"
+                f" empties the sheets before the rest, so `rested` is"
+                f" {len(done['rested'])} of {len(done['entering'])} by"
+                f" construction and the board-against-sheets comparison has"
+                f" nothing to compare; the rest and the carry are"
+                f" unexercised for this leg",
+            )
+        else:
+            check.that(len(done["ended"]) == len(done["entering"])
+                       and len(done["rested"]) == len(done["entering"]),
+                       f"leg {leg_no} has all three snapshots, same party in each",
+                       f"{len(done['entering'])}/{len(done['ended'])}"
+                       f"/{len(done['rested'])}")
         check.that(bool(done["rest_text"]), f"leg {leg_no} says what the rest cost")
         # **The three snapshots must name the same people in the same order.**
         # `entering`/`ended` come off the board and `rested` off the sheets,
@@ -413,8 +462,9 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
         # character's hit points under another's name the first time they
         # did not, and nothing else here would notice.
         who = [(c["id"], c["label"]) for c in done["entering"]]
-        check.that([(c["id"], c["label"]) for c in done["ended"]] == who
-                   and [(c["id"], c["label"]) for c in done["rested"]] == who,
+        check.that(not standing
+                   or ([(c["id"], c["label"]) for c in done["ended"]] == who
+                       and [(c["id"], c["label"]) for c in done["rested"]] == who),
                    f"leg {leg_no}'s three snapshots name the same party in the"
                    " same order, board and sheets alike",
                    f"in {who} / ended"
