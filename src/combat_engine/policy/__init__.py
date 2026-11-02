@@ -133,6 +133,21 @@ def features(
     # somebody notices the AI kneeling to collect litter instead of
     # fighting. That is what an unnamed kind does.
     f["is_pick_up"] = float(action.kind == "pick_up")
+    # **The seventh kind named after the fact, and it needed no gate of its
+    # own because `legal` already is one.** #1016. `actions._searching`
+    # offers this to every creature, and with no term here it scored
+    # entirely on generic terms that have nothing to do with searching:
+    # measured at **-0.900 against ending a turn at -0.899**, so it lost by
+    # one thousandth, on a margin carried by `i_am_bloodied` and
+    # `nearest_enemy`. A board where `i_am_bloodied` is 0 flips it.
+    #
+    # No situational predicate here, unlike `is_total_defence` -- the four
+    # conditions in `_searching` are the judgement. It is offered only when
+    # a trap is unsprung, unfound, prints a Perception DC and is in line of
+    # effect, so there is no case where this is paid for searching bare
+    # ground. And it costs a **minor**, so the "never let it cost a
+    # standard" half of the question cannot arise.
+    f["is_search"] = float(action.kind == "search")
     if action.kind == "pick_up":
         # Worth doing only when it is *your* weapon on the floor, which
         # is the situation it exists for -- a creature that has just been
@@ -761,6 +776,27 @@ WEIGHTS: dict[str, float] = {
     # `is_wield` and `wield_reaches`.
     "is_pick_up": -5.0,
     "pick_up_disarmed": 12.0,
+    # **Looking for a trap the party cannot find passively.** #1016.
+    #
+    # Placed on the ladder rather than guessed at: it has to clear
+    # `is_end` at 0.001 -- which is the whole bug, a 0.001 margin carried
+    # by terms about bloodiedness -- and it must lose to anything that
+    # attacks, where `is_power` alone is 6.0 before `hp_swing`. Level with
+    # `is_item`, under `is_hide` at 2.0 and `is_escape` at 2.5, both of
+    # which answer a threat where this answers a hazard.
+    #
+    # Deliberately **not** gated on enemies being distant, which was the
+    # other reading on the issue. It spends a minor, so the question
+    # "should this cost a standard" never arises, and a creature with a
+    # minor it has no better use for has nothing to lose by looking --
+    # where `is_hide`'s and `is_total_defence`'s situational gates exist
+    # because those trade away real alternatives.
+    #
+    # A failed search leaves the trap unfound, so this is payable again
+    # next turn. That is the printed move working as printed -- you keep
+    # looking -- and it is the thing to suspect first if a creature with a
+    # spare minor starts looking every round instead of helping.
+    "is_search": 1.0,
     # A summon acting on its own is free value; the action is the
     # owner's minor, which `_instinctives` has already charged for.
     "is_instinctive": 5.0,
