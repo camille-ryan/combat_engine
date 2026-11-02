@@ -848,6 +848,90 @@ CREATE TABLE poison (
 );
 CREATE INDEX poison_level ON poison(level);
 
+-- A background: where a character comes from, and the two skills it is
+-- associated with. 817 rows, read by nobody until now -- `_ALIAS_TABLES`
+-- took `ID, Name` and nothing else, so a background was a name in the
+-- index and had no row.
+--
+-- Camille's ruling on `#456`, which is why this is imported rather than
+-- closed as unconsumable:
+--
+--     "Background should be imported. If they give skill bonuses, then
+--      they are eventually consumed in skill challenges. They should be
+--      incorporated into chargen. For party NPC backgrounds they should
+--      likely be drawn at random from valid options for the character.
+--      They should also be used by the story engine when talking to party
+--      NPCs."
+--
+-- So the columns are chosen for those three readers: `skills` for the
+-- challenge and chargen halves, `kind` and `campaign` for "valid options
+-- for the character", and `spec` for the story engine's half, which wants
+-- the prose about who this person was.
+--
+-- `skills` is a JSON array and holds **only** names in
+-- `engine.skills.SKILLS`. Measured across all 817 before this was
+-- written:
+--
+--     exactly two skills      642 printed, 641 stored
+--     one                      35 printed,  33 stored
+--     three                    33 printed,  32 stored
+--     four                      5 printed,   5 stored
+--     none at all             102 printed, 106 stored
+--
+-- The two columns differ because the filter below drops 7 entries, which
+-- moves four rows down a bucket. Both are given so a reader can tell the
+-- corpus from the filter -- the cross-check `trap_hp` already uses.
+--
+-- and 7 of the filled ones print a *sentence* in that column instead of a
+-- skill -- "a skill the other race gains a bonus to", "Any skill". Those
+-- are choices a character makes rather than skills a column can hold, so
+-- they are **not** stored as skills; the sentence survives in `spec`,
+-- which is where the rest of the page already is. Storing it in `skills`
+-- would hand a reader a skill name that names no skill, which is the
+-- `item.slot` fault pointed at a different column.
+--
+-- `kind` is **allow-listed, not echoed**, which is the `item.slot` fix
+-- applied before the same fault rather than after it. The printed Type has
+-- 27 distinct values and the head of the list is category words -- Racial,
+-- Geography, Occupation -- while its tail is **fourteen product names**:
+-- twelve "House <name>" entries, a named artefact's legacy, and a setting
+-- supplement. Echoing the column would put all fourteen in a column a
+-- brief prints. `_BACKGROUND_KINDS` names the twelve words the column may
+-- hold and everything else is NULL, which is the same reasoning the slot
+-- allow-list records: writing the deny list would itself have been the
+-- leak.
+--
+-- **`general`, not `campaign`, and that is the same decision.** The printed
+-- Campaign column reads "General" on 516 rows and names a published setting
+-- on 296 -- every one of those a product name -- with 5 blank. The
+-- distinction a reader needs is whether a background is tied to a
+-- particular setting at all, which is what `#456`'s *"valid options for the
+-- character"* asks, so it is stored as a flag and the setting is not
+-- stored. 516 general, 301 not, the 5 blanks counted as not-general
+-- because a background whose setting cannot be read is not one to deal by
+-- default.
+--
+-- Neither value is in `localization/names.json`, so `leaks.py --specs`
+-- would have reported both clean. That is the gate being blind rather than
+-- the columns being safe, which is why this is decided here.
+--
+-- **And there is no `spec` column, which `leaks.py --ingest` decided
+-- rather than me.** The first draft stored the page's prose here the way
+-- `poison` does, and `--ingest` went red with 12 name-shaped phrases the
+-- baseline did not hold -- place names, noble houses, deities, named
+-- characters. That is correct: a poison's `PlainTxt` is an attack line and
+-- a background's is **flavour**, and this component's own rule splits
+-- those -- numbers and mechanical text to `game.db`, names and flavour to
+-- `localization/`. So the prose goes to `names[ref]["rules_text"]` and
+-- nowhere else, which is what the story engine reads anyway, and the table
+-- holds only what a rule can act on. `background` is therefore **not** in
+-- `SPEC_TABLES`.
+CREATE TABLE background (
+  ref TEXT PRIMARY KEY, id INTEGER, kind TEXT, general INTEGER,
+  skills TEXT
+);
+CREATE INDEX background_kind ON background(kind);
+
 -- What each of the seventeen skills can be **used to do**, with the printed
 -- sample DC and the printed task beside it.
 --
@@ -972,6 +1056,8 @@ class Report:
     disable_many: int = 0
     disable_none: int = 0
     poisons: int = 0
+    backgrounds: int = 0
+    background_skills: int = 0
     skill_uses: int = 0
     skill_tasks: int = 0
     skill_powers: int = 0
@@ -1059,6 +1145,9 @@ class Report:
             f"(30 and 5 when whole; 0 means the printing moved -- see "
             f"`_rules_tables`)",
             f"poisons       {self.poisons:6d}",
+            f"backgrounds   {self.backgrounds:6d}  "
+            f"({self.background_skills} name at least one of the "
+            f"engine's seventeen skills)",
             f"skill uses    {self.skill_uses:6d}",
             f"skill tasks   {self.skill_tasks:6d}",
             f"skill powers  {self.skill_powers:6d}",
@@ -1177,6 +1266,13 @@ def build() -> Report:
     report.disable_none, report.disable_many = _disable_split(out)
     report.trap_hp, report.trap_hp_level = _object_stat_lines(out)
     report.poisons = _poisons(source, out, names)
+    report.backgrounds = _backgrounds(source, out, names)
+    # The cross-check beside the count, the same shape `trap_hp` uses:
+    # a shrinking total could be the corpus or the skill filter, and
+    # two numbers say which.
+    report.background_skills = out.execute(
+        "SELECT COUNT(*) FROM background WHERE skills <> '[]'"
+    ).fetchone()[0]
     report.skill_uses = _skill_uses(source, out)
     report.skill_tasks = _skill_tasks(source, out)
     report.diseases = _diseases(source, out, names)
@@ -3322,6 +3418,97 @@ def _poisons(source: sqlite3.Connection, out: sqlite3.Connection,
         # the only file allowed to hold one.
         names.setdefault(ref, {})["rules_text"] = spec
         names[ref].setdefault("name", name)
+        written += 1
+    return written
+
+
+#: The words `background.kind` may hold. An **allow-list**, for the reason
+#: `item.slot`'s is one: the printed Type column's tail is fourteen product
+#: names -- twelve noble houses, a named artefact's legacy, a setting
+#: supplement -- and echoing the column would file every one of them in a
+#: column a brief prints. A value not here is NULL, which reads as "the page
+#: says nothing this column can hold" and is checkable; a deny list would
+#: have had to name the fourteen.
+#:
+#: Twelve words, covering **652 of the 817** rows. The other 165 are NULL:
+#: 121 whose printed Type is whitespace, and 44 carrying one of the fourteen
+#: product names. Both are "the page says nothing this column can hold"
+#: rather than a failure of this list, and the two counts are given so a
+#: reader can tell them apart.
+_BACKGROUND_KINDS = frozenset({
+    "Racial", "Campaign", "Geography", "Occupation", "Society", "Birth",
+    "Divine", "Adventurers", "Origin", "Adulthood", "Regional",
+    "Psychology",
+})
+
+
+def _backgrounds(source: sqlite3.Connection, out: sqlite3.Connection,
+                 names: dict[str, dict[str, str]]) -> int:
+    """Every background, which had no table at all. #456.
+
+    Camille's ruling is quoted on the schema and decides the columns:
+    imported, consumed in skill challenges where it gives a skill bonus,
+    incorporated into chargen, drawn at random for a party NPC from the
+    valid options, and read by the story engine when talking to one.
+
+    **`x6_`, not a new prefix.** `_ALIAS_TABLES` holds "Background" at
+    index 6, so all 817 of these are *already* in the name index as
+    `x6_<id>`. Minting a new prefix would give one page two refs, which is
+    the duplicate-namespace fault `_poisons` records paying for.
+
+    **Nothing is derived and nothing is guessed.** A `Type` or `Campaign`
+    the page leaves blank is NULL; a `Skills` entry that is a sentence
+    rather than a skill is not stored as a skill. The skill filter is
+    `engine.skills.SKILLS` -- the engine's own seventeen -- rather than a
+    list written here, so the column cannot hold a name no reader knows.
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    written = 0
+    for bid, name, kind, campaign, skills, plain in source.execute(
+        "SELECT ID, Name, Type, Campaign, Skills, PlainTxt "
+        "FROM Background ORDER BY ID"
+    ):
+        # **`prose`, not `spec`, and the name is the point.** There is no
+        # `spec` column on this table -- see the schema -- so this text has
+        # exactly one destination, `localization/`.
+        prose = " ".join((plain or "").split())
+        # The page opens by repeating its own name, as a poison's does.
+        for _ in range(3):
+            if name and prose.startswith(name):
+                prose = prose[len(name):].lstrip()
+        prose = re.split(r"\s*Published in\b", prose)[0].strip()
+        ref = f"x6_{bid}"
+        # **Matched against the engine's own seventeen, lower-cased, and
+        # a non-match is dropped from this column rather than stored.**
+        # 7 rows print a sentence here -- a choice the character makes --
+        # and the sentence survives in the prose below.
+        named = [
+            part.strip() for part in (skills or "").split(",")
+            if part.strip().lower() in SKILLS
+        ]
+        out.execute(
+            "INSERT OR REPLACE INTO background VALUES (?,?,?,?,?)",
+            (
+                ref,
+                bid,
+                # Allow-listed, never echoed -- see `_BACKGROUND_KINDS`.
+                word if (word := (kind or "").strip()) in _BACKGROUND_KINDS
+                else None,
+                # **A flag, not the setting's name.** "General" is the only
+                # value of that column that is not a product name.
+                1 if (campaign or "").strip() == "General" else 0,
+                json.dumps([s.lower() for s in named]),
+            ),
+        )
+        # **One extraction, ONE destination**, which is where this differs
+        # from `_poisons`: a poison's text is mechanical and goes to both,
+        # a background's is flavour and goes only here. Merged rather than
+        # assigned, for `_poisons`' reason: the alias pass has already put
+        # a `name` on this ref and an assignment would drop it.
+        if prose:
+            names.setdefault(ref, {})["rules_text"] = prose
+            names[ref].setdefault("name", name)
         written += 1
     return written
 

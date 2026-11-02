@@ -51253,6 +51253,115 @@ def a_disease_moves_at_an_extended_rest(out: Result) -> None:
     )
 
 
+def a_background_is_imported_without_its_product_names(out: Result) -> None:
+    """The 817 backgrounds, which were a name in the index and no row. #456.
+
+    Camille's ruling, which decided that this is imported rather than
+    closed as unconsumable:
+
+    > *"Background should be imported. If they give skill bonuses, then
+    > they are eventually consumed in skill challenges. They should be
+    > incorporated into chargen. For party NPC backgrounds they should
+    > likely be drawn at random from valid options for the character. They
+    > should also be used by the story engine when talking to party NPCs."*
+
+    **The assertions here are about the two columns that could leak, not
+    about the count.** The printed Type column has 27 distinct values and
+    its tail is fourteen product names -- twelve noble houses, a named
+    artefact's legacy, a setting supplement -- and the printed Campaign
+    column names a published setting on 296 of the 817. Echoing either
+    would put a product name in a column a brief prints, which is the
+    `item.slot` fault with a different column.
+
+    **And `leaks.py --specs` would have reported both clean**, because
+    neither value is in `localization/names.json`. So the gate is blind
+    here and these assertions are what stands in for it -- the same reason
+    `item.slot`'s allow-list exists rather than a deny list.
+    """
+    import json
+
+    from combat_engine.db import game, localisation
+    from combat_engine.engine.skills import SKILLS
+    from combat_engine.etl.build import _BACKGROUND_KINDS
+
+    rows = list(game().execute(
+        "SELECT ref, kind, general, skills FROM background"))
+    out.that(
+        len(rows) == 817 and all(r[0].startswith("x6_") for r in rows),
+        "all 817 backgrounds are imported under the ref the name index "
+        "already gave them -- `x6_`, from `_ALIAS_TABLES`, never a new "
+        "prefix. Minting one would have given a page two refs, which is "
+        "the fault `_poisons` records nearly committing",
+        f"{len(rows)} row(s), prefixes "
+        f"{sorted({r[0].split('_')[0] for r in rows})}",
+    )
+    stored = {r[1] for r in rows if r[1] is not None}
+    out.that(
+        stored <= _BACKGROUND_KINDS,
+        "**`kind` holds only the allow-listed category words.** The tail "
+        "of the printed column is fourteen product names and this is the "
+        "assertion that keeps them out -- echoing the column reads as a "
+        "working import and files every one of them",
+        f"stored {sorted(stored)}, not allowed "
+        f"{sorted(stored - _BACKGROUND_KINDS)}",
+    )
+    out.that(
+        len([r for r in rows if r[1] is None]) == 165,
+        "and 165 rows store nothing there rather than a value -- 121 whose "
+        "printed Type is whitespace and 44 carrying a product name. NULL "
+        "reads as *the page says nothing this column can hold*, which is "
+        "checkable; an empty string would not be",
+        f"{len([r for r in rows if r[1] is None])} NULL",
+    )
+    out.that(
+        {r[2] for r in rows} <= {0, 1}
+        and len([r for r in rows if r[2]]) == 516,
+        "**`general` is a flag and the setting's name is not stored.** 516 "
+        "backgrounds print `General` and the other 301 print a published "
+        "setting or nothing -- the distinction a reader needs is whether a "
+        "background is tied to a setting at all, which is what *valid "
+        "options for the character* asks",
+        f"{len([r for r in rows if r[2]])} general of {len(rows)}",
+    )
+    skills = {s for r in rows for s in json.loads(r[3])}
+    out.that(
+        skills <= set(SKILLS),
+        "`skills` holds only names the engine knows, filtered against "
+        "`engine.skills.SKILLS` rather than a list written in the "
+        "importer. 7 rows print a *sentence* in that column -- a choice "
+        "the character makes -- and those are not stored as skills; the "
+        "sentence survives in `spec`",
+        f"{sorted(skills - set(SKILLS)) or 'all seventeen or fewer'}",
+    )
+    out.that(
+        len([r for r in rows if json.loads(r[3])]) == 711,
+        "711 of the 817 name at least one skill, which is the half that "
+        "reaches a skill challenge and the half chargen would read",
+        f"{len([r for r in rows if json.loads(r[3])])} with a skill",
+    )
+    out.that(
+        "spec" not in {
+            c[1] for c in game().execute("PRAGMA table_info(background)")},
+        "**and there is no `spec` column, which `leaks.py --ingest` decided "
+        "rather than I did.** The first draft stored the page's prose the "
+        "way `poison` does and `--ingest` went red with 12 name-shaped "
+        "phrases the baseline did not hold -- place names, noble houses, "
+        "deities, named characters. A poison's text is an attack line; a "
+        "background's is **flavour**, so it belongs in `localization/` and "
+        "the table holds only what a rule can act on",
+        f"{sorted(c[1] for c in game().execute('PRAGMA table_info(background)'))}",
+    )
+    out.that(
+        all((localisation().get(r[0]) or {}).get("rules_text")
+            for r in rows[:50]),
+        "and the prose **is** carried -- into `localization/names.json` as "
+        "`rules_text`, which is where the story engine reads it from "
+        "anyway. Dropping the column moved the text, it did not lose it",
+        f"{sum(1 for r in rows if (localisation().get(r[0]) or {}).get('rules_text'))}"
+        f" of {len(rows)} carry prose",
+    )
+
+
 def an_extended_rest_is_once_per_day_and_a_refusal_is_printed(
     out: Result,
 ) -> None:
@@ -55097,6 +55206,10 @@ DRIVERS = {
         a_rest_scene_can_carry_a_conversation,
         "a rest scene can carry a conversation, and the rest is still a "
         "rest (#937)",
+    ),
+    "backgrounds": (
+        a_background_is_imported_without_its_product_names,
+        "a background is imported, and its product names are not (#456)",
     ),
     "rest_lockout": (
         an_extended_rest_is_once_per_day_and_a_refusal_is_printed,
