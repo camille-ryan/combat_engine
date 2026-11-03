@@ -419,7 +419,28 @@ def p4541(c: Cast) -> None:
 )
 def p4542(c: Cast) -> None:
     """No weapon dice and no ability damage: the whole Hit line is a shove
-    and then somebody else's move or swing."""
+    and then somebody else's move or swing.
+
+    **`f995`'s clause is written in here**, which is #550's convention: a
+    feat naming one power has its clause in that power rather than
+    registering a rider against it. Camille's call on the attribution fork
+    was `c.credit`, so the effect it lays is the feat's and
+    `audit._claimed` says so even though this row laid it.
+
+    It goes **before `c.strike()`** because it changes the attack roll --
+    the rider lived in `_riders`' `used=` window for exactly that reason,
+    and a bonus laid after the roll would be too late to have decided
+    anything.
+    """
+    if c.feat("f995"):
+        with c.credit("f995"):
+            # "Add your shield bonus as a feat bonus to your attack roll."
+            # "You can" is `c.may`, and nothing is added without a shield --
+            # the card's own Requirement.
+            shield = c.shield_bonus()
+            if shield and c.may("add your shield bonus to the attack"):
+                c.bonus("attack", shield, on=c.me, until=When.EONT,
+                        kind="feat", once=True)
     if not c.strike():
         return
     foe = c.target

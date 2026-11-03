@@ -35168,6 +35168,94 @@ def dmg2_s_four_other_secondary_effects_each_do_their_own_thing(out: Result) -> 
         out.that(red, what, said)
 
 
+def a_migrated_feat_clause_is_still_credited_to_the_feat(out: Result) -> None:
+    """#550's first migrated pair, end to end on a real board.
+
+    `f995`'s *"add your shield bonus as a feat bonus to your attack roll"*
+    used to be a rider registered against `p4542`. It is now written into
+    `p4542`, gated on `c.feat("f995")` and wrapped in `c.credit("f995")`,
+    which is Camille's call on the attribution fork.
+
+    **Why this rule exists rather than the audit covering it.** The audit
+    board gives the caster no shield -- `Gear.shield` is 0 and
+    `c.shield_bonus()` answers 0 -- so the clause's own printed Requirement
+    can never be met there and the clause is invisible to every one of the
+    48 arrangements `_attempts` builds. Nothing but a rule that hands over a
+    shield can see it.
+
+    **And the feat firing is not the evidence.** `f995` still has its other
+    rider (`p1000`), so it fires either way -- which is exactly the hazard
+    `#550` warns about: credit only goes quiet when a feat's *last* rider is
+    migrated. So the assertion is on **who is credited for the effect**,
+    not on whether the feat fired.
+    """
+    import audit as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.events import EffectApplied
+
+    made = A.board("f995", 1)
+    if made is None:
+        out.skip("f995's board could not be built")
+        return
+    world, caster = made[0], made[1]
+    gear = must(world.get(caster, Gear), "the caster's gear")
+    bare = Cast(world=world, me=caster, ref="probe")
+
+    out.that(
+        bare.shield_bonus() == 0,
+        "the audit board hands out no shield, so the clause cannot be seen there",
+        f"shield_bonus={bare.shield_bonus()} -- this is why the rule exists",
+    )
+    out.that(
+        bare.feat("f995"),
+        "and f995's own board does give the caster the feat",
+        f"{bare.feat('f995')}",
+    )
+
+    gear.shield = 2
+    out.that(
+        bare.shield_bonus() == 2,
+        "with a shield held, the printed Requirement is met",
+        f"shield_bonus={bare.shield_bonus()}",
+    )
+
+    cursor = len(world.bus.log)
+    foes = sorted(A._foes(world, caster))
+    c = Cast(world=world, me=caster, ref="p4542",
+             target=foes[0] if foes else None,
+             targets=[foes[0]] if foes else [])
+    must(get("p4542"), "p4542").body(c)
+
+    landed = [e for e in world.bus.log[cursor:] if isinstance(e, EffectApplied)]
+    out.that(
+        len(landed) == 1,
+        "running p4542 lays exactly the one effect the clause describes",
+        f"{[(e.label, getattr(e, 'credit', '')) for e in landed]}",
+    )
+    out.that(
+        bool(landed) and landed[0].label.startswith("p4542"),
+        "whose label names the POWER, because the power laid it",
+        f"{landed[0].label if landed else 'nothing landed'!r}",
+    )
+    out.that(
+        bool(landed) and getattr(landed[0], "credit", "") == "f995",
+        "and whose credit names the FEAT, because the feat is why",
+        f"{getattr(landed[0], 'credit', '') if landed else '-'!r}",
+    )
+    out.that(
+        "EffectApplied" in A._claimed(world, "f995", cursor),
+        "so audit._claimed credits f995 for an effect it did not lay",
+        f"{sorted(A._claimed(world, 'f995', cursor))}",
+    )
+    out.that(
+        "EffectApplied" in A._claimed(world, "p4542", cursor),
+        "and still credits p4542, which did lay it -- both, not either",
+        f"{sorted(A._claimed(world, 'p4542', cursor))}",
+    )
+
+
 def a_block_can_credit_a_feat_for_what_the_power_lays(out: Result) -> None:
     """#550. Camille picked (b): one block-scoped attribution.
 
@@ -57521,6 +57609,10 @@ DRIVERS = {
     "feat_credit": (
         a_block_can_credit_a_feat_for_what_the_power_lays,
         "a block credits a feat for what the power lays (#550)",
+    ),
+    "migrated_clause": (
+        a_migrated_feat_clause_is_still_credited_to_the_feat,
+        "a migrated feat clause is still credited to the feat (#550)",
     ),
     "secondary_effects": (
         dmg2_s_four_other_secondary_effects_each_do_their_own_thing,
