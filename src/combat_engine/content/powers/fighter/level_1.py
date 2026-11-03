@@ -163,6 +163,15 @@ def p997(c: Cast) -> None:
         #
         # `side="enemy"` is read from the caster, so this is "an enemy of
         # mine standing next to my target" and not the target's own side.
+        #
+        # **No `c.credit` here, deliberately, and it is the one branch of
+        # this row that must not have one.** The other two clauses pay
+        # something extra and are the feat's, so #1089 wraps them. This one
+        # pays nothing extra: it *relocates* the row's own printed miss
+        # damage, as the paragraph above says. Crediting `f971` would hand
+        # the row's own damage to the feat -- `audit._dealt_by` would report
+        # the feat dealing it and the row dealing nothing -- which is the
+        # redirect trap: a row credited for damage it only moved.
         beside = [
             foe for foe in c.within(1, of=c.target, side="enemy")
             if foe != c.target
@@ -177,12 +186,14 @@ def p997(c: Cast) -> None:
     # it twice. #299's trap, and the reason this row was read before the
     # clause was written.
     if arena == "f994" and c.wielding("two-handed"):
-        c.flat(2, on=c.target)
+        with c.credit("f994"):
+            c.flat(2, on=c.target)
     # f1300 carries no bracket, so it stacks with the arena feat above
     # rather than being chained to it. This was an `elif` and was wrong.
     if (c.feat("f1300") and c.con_mod > 0
             and any(c.is_(hold, on=c.target) for hold in _HELD_FAST)):
-        c.flat(c.con_mod, on=c.target)
+        with c.credit("f1300"):
+            c.flat(c.con_mod, on=c.target)
 
 
 def _a_ranged_row(ctx: dict[str, Any]) -> bool:
@@ -500,30 +511,48 @@ def p1758(c: Cast) -> None:
 
     # **The gear read sits INSIDE the branch, and that is not tidiness.**
     # `chargen._does_more_than_damage` asks whether a body does anything
-    # beyond rolling damage, by reading the source and skipping clauses
-    # gated on `c.feat`. A `c.world` read above the gate is *not* skipped,
-    # so this row -- whose card is a plain "+2 to hit, no ability modifier
-    # on the damage" -- scored as a rider row and the draw moved. A line
-    # that only one feat's clause needs belongs in that clause.
+    # beyond rolling damage by reading the source, so a `c.world` read above
+    # the gate counts -- and this row, whose card is a plain "+2 to hit, no
+    # ability modifier on the damage", scored as a rider row and the draw
+    # moved. A line that only one feat's clause needs belongs in that clause.
+    #
+    # **This used to say the function "skips clauses gated on `c.feat`".
+    # It does not, and the claim was backwards.** It collects every `c.X`
+    # off every source line holding `c.` and subtracts a 16-name whitelist;
+    # `feat` is not in that whitelist, so a feat gate pushes a body *into*
+    # the rider bucket rather than being skipped. The conclusion above is
+    # unaffected -- the read still belongs in the branch -- but the reason
+    # given for it was false, and a migrator trusting it would expect
+    # moving a clause into a damage-only body to be free. It is not: the
+    # first clause to land flips `has_a_rider` and owes a replay re-record.
+    # #1092, and the reader's own faults are #1093.
     #
     # `c.my_weapon()` is the wrong verb here and was my first try: it
     # means "the weapon *this row's item* sits on", which a class power
     # has none of, so it answered None and this branch could never pay.
     # The row is melee-only, so the main hand is the weapon swung, which
     # is what `c.weapon_of` picked off the event before the clause moved.
+    # **Each branch wrapped in `c.credit`**, which this chain predated: it
+    # was migrated before Camille's call on the attribution fork, so what it
+    # laid was credited to this row and `audit._claimed` lost the feat's only
+    # evidence. #1089.
     if arena == "f978" and c.wielding("superior"):
-        gear = c.world.get(c.me, Gear)
-        weapon = gear.main if gear is not None else None
-        if weapon is not None:
-            c.flat(weapon.proficiency, on=c.target)
+        with c.credit("f978"):
+            gear = c.world.get(c.me, Gear)
+            weapon = gear.main if gear is not None else None
+            if weapon is not None:
+                c.flat(weapon.proficiency, on=c.target)
     elif arena == "f985" and c.wielding("shield"):
-        c.bonus(AC, 1, on=c.me, until=When.EONT, kind="feat")
+        with c.credit("f985"):
+            c.bonus(AC, 1, on=c.me, until=When.EONT, kind="feat")
     elif arena == "f981" and c.hurt_me_since():
-        # "If the target dealt you damage since the end of your last turn."
-        # `c.hurt_me_since` with no argument asks about `c.target`, and reads
-        # the bus log rather than a remembered set -- which is why this
-        # branch can live here at all. See the docstring.
-        c.flat(c.wis_mod, on=c.target)
+        with c.credit("f981"):
+            # "If the target dealt you damage since the end of your last
+            # turn." `c.hurt_me_since` with no argument asks about
+            # `c.target`, and reads the bus log rather than a remembered
+            # set -- which is why this branch can live here at all. See the
+            # docstring.
+            c.flat(c.wis_mod, on=c.target)
 
 
 def _has_shield(world: object, eid: int) -> bool:

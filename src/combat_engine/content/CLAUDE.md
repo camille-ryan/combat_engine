@@ -336,6 +336,35 @@ Three reasons, and the second is a rule the engine could otherwise break:
   missed. #554.
 * One mechanism rather than two, and the `if` was already the common one.
 
+**Moving a clause into a body changes what `chargen` reads about that
+body**, and both readers are source-level. This is the cost that is easiest
+to miss, because nothing about it looks like a feat problem:
+
+| reader | what it decides | how it fails |
+|---|---|---|
+| `_does_more_than_damage` | the `has_a_rider` draw term | flips a damage-only body to a rider row, so the draw moves and **every replay fixture diverges** |
+| `_leans_on` | a build's score | moves which build a class takes, which `replay` may not see at all |
+
+The first is loud and the second is silent, which is why the second is worth
+a line here. A clause landing in a damage-only body therefore **owes a
+replay re-record** — a baseline write, so it belongs to whoever owns the
+gate, not to an authoring agent. The 2026-11-03 wave skipped five otherwise
+ready clauses for exactly this and said so on each.
+
+The silent half has a worked case. `drivers.draw_cache_key` holds a fixed
+example pair — a class and a ref whose build differs between the scored and
+unscored draws — and migrating a clause into that ref's body made the two
+draws agree, so the rule's premise failed and its five remaining assertions
+went vacuous while still printing `ok`. Nothing about the red named a feat.
+
+And **do not trust a comment about what these readers skip.** `p1758`'s said
+`_does_more_than_damage` "skips clauses gated on `c.feat`"; it does not, and
+it is backwards — a `c.feat` gate pushes a body *into* the rider bucket.
+#1092. The reader has worse faults than that, measured on #1093: it splits
+on the substring `"c."` over the whole source including the docstring, so
+the word *"etc."* in a docstring flips the verdict, and **460 of 23,068
+bodies** are classified wrongly today.
+
 **The exception is a feat naming a class of powers** — "any implement
 attack". There is no finite list of bodies to edit, so those keep
 `c.pre_empt` / `c.instead_of`.

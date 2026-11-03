@@ -21324,14 +21324,23 @@ UNPOSABLE = {
 #: A named baseline rather than a loosened assertion, which is the shape
 #: this repo uses everywhere (`leaks.DEFERRED`, `localise.KNOWN_LABEL_DRIFT`,
 #: `keywords.py`'s per-ref list): it **may shrink and never grow**, so a
-#: fifth row joining it is red and the new wave cannot regress into it
-#: unnoticed. Retro-fitting the four is #1089.
-UNCREDITED_CHAIN = {
-    "p704": ("penalty",),
-    "p997": ("flat",),
-    "p1758": ("flat",),
-    "p2099": ("bonus",),
-}
+#: fifth row joining it is red and a new wave cannot regress into it
+#: unnoticed.
+#:
+#: **Empty: all four were paid the same day they were found.** #1089 wrapped
+#: every clause of `p704`, `p997`, `p1758` and `p2099`, and the shrink was
+#: proved by the baseline's own staleness branch -- with the entries still
+#: here and the rows fixed, all four went red naming the exact stale verb.
+#:
+#: One clause is deliberately **not** credited and is not an entry here:
+#: `p997`'s `f971` branch relocates that row's own printed miss damage
+#: rather than paying anything extra, so crediting the feat would hand the
+#: row's damage to the feat. Its reason is in the row.
+#:
+#: Kept rather than deleted, for `STILL_RIDERS`' reason: the next migration
+#: that cannot credit a clause belongs here, and an empty dict says "none
+#: known" where a missing one would say nothing at all.
+UNCREDITED_CHAIN: dict[str, tuple[str, ...]] = {}
 
 
 def at_most_one_applies(out: Result) -> None:
@@ -21509,7 +21518,21 @@ def at_most_one_applies(out: Result) -> None:
                 # and silently loses the feat's only evidence.
                 bare = [v for v, cr in paid if not cr]
                 allowed = list(UNCREDITED_CHAIN.get(ref, ()))
-                if bare and sorted(bare) == sorted(allowed):
+                # **A listed row that is now clean is RED**, which is the
+                # per-ref baseline semantics `scripts/CLAUDE.md` states: "a
+                # silent row not on the list is red, **a listed row that
+                # works is red**, a listed row still silent is named and
+                # passes". Without this branch a fixed row leaves a stale
+                # entry and the run stays green -- `not bare` is True -- so
+                # the baseline could only ever grow stale, which is the one
+                # thing a shrink-only list must not do.
+                if allowed and not bare and paid:
+                    out.that(
+                        False,
+                        f"{ref} on a {outcome}: every clause is credited"
+                        f" now, so its UNCREDITED_CHAIN entry {allowed} is"
+                        f" stale -- shrink the baseline (#1089)")
+                elif bare and sorted(bare) == sorted(allowed):
                     out.skip(f"{ref} on a {outcome}: {bare} laid outside a"
                              f" `c.credit` block -- a known pre-`c.credit`"
                              f" migration, so the feat gets no credit for"

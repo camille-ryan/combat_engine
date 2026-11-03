@@ -47,6 +47,12 @@ ROOT = Path(__file__).resolve().parent.parent
 #: `combat_engine.content`, so an argument left there would not survive.
 _ONLY: tuple[Path, ...] = ()
 
+#: Paths named on the command line that no walk here claims as a subject --
+#: anything outside `src/combat_engine/`, which in practice means `scripts/`.
+#: Reported at the end of the run rather than dropped: these checks ask
+#: questions about rows, and a file that holds none is not a pass. #1090.
+_OUTSIDE: set[str] = set()
+
 
 def _asked_for() -> tuple[Path, ...]:
     """Content files to walk: the ones named, or all of them.
@@ -60,13 +66,52 @@ def _asked_for() -> tuple[Path, ...]:
     picks up whatever half-written state somebody else is in -- one wave
     reported a tree-wide blocker that the owning agent had already fixed by
     the time anyone looked. #388.
+
+    **A named path outside `content/` is not a content file and is not
+    walked**, which is this function's own subject line enforced rather than
+    assumed. It used to return whatever it was handed, so passing a
+    `scripts/` file put an **instrument** under the row checks and its
+    deliberate negative controls came back as faults: a placeholder
+    `ref="w0000"` handed to `c.weapon_dice` by a rule asserting the writer
+    lands, and a bare `c.bonus("perception", ...)` in a rule whose own text
+    says *"the BARE key reaches nothing ... which is what the four rows were
+    doing"*. Three faults, exit 1, on a file whose checks all pass.
+
+    It only ever fired on the narrow form -- the default is `content/` and
+    `check.py` runs tree-wide -- so the false red landed on exactly the
+    per-commit invocation the root `CLAUDE.md` recommends, and cost real
+    time diagnosing whether the findings were the commit's. #1090.
     """
     if not _ONLY:
         return tuple(sorted((ROOT / "src/combat_engine/content").rglob("*.py")))
+    return _under(ROOT / "src/combat_engine/content")
+
+
+def _named() -> tuple[Path, ...]:
+    """Every file named on the command line, directories expanded."""
     out: list[Path] = []
     for p in _ONLY:
         out.extend(sorted(p.rglob("*.py")) if p.is_dir() else [p])
     return tuple(out)
+
+
+def _under(root: Path) -> tuple[Path, ...]:
+    """The named files inside `root`, recording the ones left out.
+
+    Recorded rather than dropped, because `scripts/CLAUDE.md`'s rule is that
+    an instrument must not skip itself quietly -- a reader who hands over
+    fifteen paths and sees a clean run must be able to tell that one of them
+    was not a subject of these checks at all.
+    """
+    keep: list[Path] = []
+    for p in _named():
+        try:
+            p.resolve().relative_to(root.resolve())
+        except ValueError:
+            _OUTSIDE.add(str(p))
+            continue
+        keep.append(p)
+    return tuple(keep)
 
 
 def _asked_for_package() -> tuple[Path, ...]:
@@ -88,11 +133,23 @@ def _asked_for_package() -> tuple[Path, ...]:
     to distrust."*
 
     **Named paths still win**, so the agent-scoping rule is untouched: this
-    differs from `_asked_for` only in what it does when asked for nothing.
+    differs from `_asked_for` only in which root it scopes to.
+
+    That sentence used to end *"only in what it does when asked for
+    nothing"*, and it is no longer true in that form: named paths are now
+    **scoped** rather than passed through, so this and `_asked_for` differ
+    when asked for something too -- a file under `engine/` is a subject here
+    and not there.
+
+    **Scoped to the package, not to `content/`**, which is the whole point of
+    the function -- but it is a scope rather than a pass-through, so a named
+    `scripts/` file is excluded here too. Same reason as `_asked_for`:
+    `scripts/` holds instruments, and these checks ask questions about rows.
+    #1090.
     """
     if not _ONLY:
         return tuple(sorted((ROOT / "src/combat_engine").rglob("*.py")))
-    return _asked_for()
+    return _under(ROOT / "src/combat_engine")
 
 
 def main() -> int:
@@ -360,6 +417,14 @@ def main() -> int:
               " not asked on a narrow run)")
         print("  (so does the pre_empt/instead_of pairing: a word is"
               " registered in one file and read in another)")
+        if _OUTSIDE:
+            # Named, for the same reason as the two above: these checks ask
+            # questions about rows, so a file holding none is outside their
+            # subject and a clean run says nothing about it. #1090.
+            for where in sorted(_OUTSIDE):
+                print(f"  ({where} is not under src/combat_engine/, so no"
+                      f" check here claims it -- gate an instrument by"
+                      f" running it, per scripts/CLAUDE.md)")
     else:
         _WHY = {
             0: "nothing anywhere reads that word back",

@@ -122,20 +122,28 @@ def p704(c: Cast) -> None:
         return
     c.damage(c.w(1), c.dex_mod)
 
+    # **Each clause wrapped in `c.credit`**, which this chain predated --
+    # the first #550 wave landed before Camille's call on the attribution
+    # fork, so everything here was credited to this row and
+    # `audit._claimed` lost each feat's only evidence. #1089.
     if arena == "f972" and c.crit:
-        c.penalty(AC, 2, on=c.target, until=When.EONT)
+        with c.credit("f972"):
+            c.penalty(AC, 2, on=c.target, until=When.EONT)
     elif arena == "f3188":
-        c.ignores_difficult(on=c.me, until=When.EOT)
-        c.shift(2 if c.race_of(on=c.me) == "r4" else 1)
+        with c.credit("f3188"):
+            c.ignores_difficult(on=c.me, until=When.EOT)
+            c.shift(2 if c.race_of(on=c.me) == "r4" else 1)
     elif arena == "f3234":
-        c.push(1, on=c.target)
+        with c.credit("f3234"):
+            c.push(1, on=c.target)
 
     # f1300 carries no bracket, so any number of its kind apply: a plain
     # `c.feat` outside the declaration, stacking with whichever arena feat
     # paid.
     if (c.feat("f1300") and c.con_mod > 0
             and any(c.is_(hold, on=c.target) for hold in _HELD_FAST)):
-        c.flat(c.con_mod, on=c.target)
+        with c.credit("f1300"):
+            c.flat(c.con_mod, on=c.target)
 
 
 @power(

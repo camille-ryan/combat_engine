@@ -84,27 +84,36 @@ def p2099(c: Cast) -> None:
     `f1317` and `f2363` are Lesser Style and want a second chain.
     """
     arena = c.declare("Arena Fighting", "f992", "f973", "f3245")
+    # **Each clause wrapped in `c.credit`**, which this chain predated: it
+    # was migrated before Camille's call on the attribution fork, so what
+    # it laid was credited to this row and `audit._claimed` lost each
+    # feat's only evidence. #1089.
     if arena == "f973":
-        # "If you have no temporary hit points when you use this exploit."
-        health = c.world.get(c.me, Health)
-        if health is not None and health.temp == 0:
-            c.bonus("attack", 1, on=c.me, until=When.EOT, once=True)
+        with c.credit("f973"):
+            # "If you have no temporary hit points when you use this
+            # exploit."
+            health = c.world.get(c.me, Health)
+            if health is not None and health.temp == 0:
+                c.bonus("attack", 1, on=c.me, until=When.EOT, once=True)
     if not c.strike():
         return
     c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod)
 
     if arena == "f992":
-        c.bonus(FORT, 1, on=c.me, until=When.SONT, kind="feat")
+        with c.credit("f992"):
+            c.bonus(FORT, 1, on=c.me, until=When.SONT, kind="feat")
     elif arena == "f3245":
-        # "The next saving throw you make" -- `once=True`, or the bonus is
-        # paid on every save until the duration lapses. The feat's own
-        # docstring records that and it travels with the clause.
-        c.bonus("save", 2, on=c.me, until=When.SONT, once=True)
+        with c.credit("f3245"):
+            # "The next saving throw you make" -- `once=True`, or the bonus
+            # is paid on every save until the duration lapses. The feat's
+            # own docstring records that and it travels with the clause.
+            c.bonus("save", 2, on=c.me, until=When.SONT, once=True)
     # f1298 carries no bracket and stacks with the arena feat above. This
     # was an `elif` and was wrong.
     if (c.feat("f1298") and c.int_mod > 0
             and any(c.is_kind(word, on=c.target) for word in _NAMED_KINDS)):
-        c.temp_hp(c.int_mod, on=c.me)
+        with c.credit("f1298"):
+            c.temp_hp(c.int_mod, on=c.me)
 
 
 @power(
