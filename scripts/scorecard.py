@@ -325,6 +325,19 @@ class Counted(D.DoctrinePolicy):
             # Hundredths, kept as an integer: `Counter` is integer-valued and a
             # fraction of a point either way does not change a percentage.
             self.n[f"{side}/{kind}"] += round(w * 100)
+            # **And the same magnitude per term, for `--terms`.** The aggregate
+            # above answers "how much is static"; it cannot answer "is the
+            # measured half one big term or many", and those call for different
+            # recalibrations. #314 measured a *new* derived term at 0.58 against
+            # a decision needing ~7, while the aggregate derived share is over
+            # half -- both can hold only if the derived magnitude is
+            # concentrated, and nothing reported which term.
+            #
+            # Keyed under `mag/` so it cannot collide with a counter name, and
+            # **not** added to `cell` or `ROWS`: the report prints `ROWS` and
+            # the baseline stores `cell`, so these keys are invisible to both
+            # and `scorecard.json` keeps its shape.
+            self.n[f"{side}/mag/{k}"] += round(w * 100)
         d = self.explain(world, encounter, actor, got)
         if d.get("self_harm"):
             self.n[f"{side}/self_harm"] += 1
@@ -684,7 +697,17 @@ def day(
     return rounds, stalls
 
 
-def measure(levels: tuple[int, ...], fights: int = 1) -> dict:
+def measure(levels: tuple[int, ...], fights: int = 1,
+            *, terms: dict | None = None) -> dict:
+    """Play the seeds and count. `terms`, if given, is filled per level/side
+    with each weighted term's magnitude in hundredths -- #314's per-term
+    decomposition.
+
+    An out-parameter rather than a second return value or a `cell` key,
+    deliberately: `cell` is what `--save` writes, so putting it there would
+    change `scorecard.json`'s shape and make every stored baseline
+    un-comparable for a number nothing gates on.
+    """
     out: dict = {}
     for level in levels:
         pol = Counted()
@@ -805,6 +828,15 @@ def measure(levels: tuple[int, ...], fights: int = 1) -> dict:
                 "downed_holding_wind": pol.n[f"{side}/downed_holding_wind"],
                 "ap_standard": pol.n[f"{side}/ap_standard"],
                 "melee_turns": pol.n[f"{side}/melee_turns"],
+            }
+        if terms is not None:
+            terms[str(level)] = {
+                side: {
+                    k.split("/mag/", 1)[1]: v
+                    for k, v in pol.n.items()
+                    if k.startswith(f"{side}/mag/") and v
+                }
+                for side in ("party", "monsters")
             }
         out[str(level)] = cell
     return out
@@ -928,6 +960,39 @@ def show(now: dict, was: dict | None) -> None:
         print("\n  + better than the baseline, ! worse. `--save` to re-baseline.")
 
 
+def show_terms(per_term: dict) -> None:
+    """Rank each term by the weighted magnitude it contributed. #314.
+
+    **The aggregate `static_pct` cannot answer the question this prints.**
+    #314 measured a *new* derived term at 0.58 against a decision needing
+    about 7, and separately the aggregate measured share is over half --
+    which can both hold only if the derived magnitude sits in a few large
+    terms while every new one is small. Those two situations call for
+    opposite recalibrations: raise `SHARE` so new measured terms can
+    compete, or bring the constants down to meet the measured terms that
+    already dominate. So the split has to be readable per term.
+
+    Magnitudes are |weight x value| summed over every decision, in
+    hundredths, printed as a share of that side's total so two runs with
+    different decision counts are comparable.
+    """
+    for level in sorted(per_term, key=int):
+        for side in ("party", "monsters"):
+            mags = per_term[level].get(side) or {}
+            whole = sum(mags.values())
+            if not whole:
+                continue
+            print(f"\n=== level {level}, {side}: weighted magnitude per term ===")
+            for k, v in sorted(mags.items(), key=lambda kv: -kv[1])[:12]:
+                tag = "measured" if k in DERIVED else "constant"
+                print(f"  {k:<28} {100 * v / whole:5.1f}%  {tag}")
+            shown = sum(v for _, v in
+                        sorted(mags.items(), key=lambda kv: -kv[1])[:12])
+            if shown < whole:
+                print(f"  {'(' + str(len(mags) - 12) + ' smaller terms)':<28}"
+                      f" {100 * (whole - shown) / whole:5.1f}%")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -940,11 +1005,17 @@ def main() -> int:
                          "1 (the default) is the single-fight measurement the "
                          "committed baseline holds; 4 is a day, which is what "
                          "exercises the daily reservation at all (#305)")
+    ap.add_argument("--terms", action="store_true",
+                    help="also break the static/measured split down per term, "
+                         "ranked by weighted magnitude. #314's question is "
+                         "whether the measured half is one big term or many, "
+                         "and the aggregate percentage cannot answer it")
     args = ap.parse_args()
     levels = tuple(args.level) if args.level else LEVELS
     was = json.loads(BASELINE.read_text()) if BASELINE.exists() else None
     stale = staleness(was)
-    now = measure(levels, fights=args.fights)
+    per_term: dict = {} if args.terms else None  # type: ignore[assignment]
+    now = measure(levels, fights=args.fights, terms=per_term)
     if args.fights != 1:
         # **Refuse the comparison rather than print a misleading one.** The
         # baseline is a single-fight measurement; a four-fight day spends
@@ -958,6 +1029,8 @@ def main() -> int:
     if stale:
         print(stale)
     show(now, was)
+    if args.terms:
+        show_terms(per_term)
     if stale:
         print(stale)
     if args.save:
