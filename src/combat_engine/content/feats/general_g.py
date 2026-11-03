@@ -818,44 +818,13 @@ def f923(c: Cast) -> None:
     # Reliable, recorded against the creature -- see `f921`.
     c.counts_as_keyword("p1766", Keyword.RELIABLE)
 # -- the undead-hunting riders, where a clause per power is printed ---------
-
-
-def _p1567(c: Cast, ev: Any) -> None:
-    """An adjacent ally's next damage roll against that target."""
-    if not _undead(c, ev.target):
-        return
-    for friend in allies(c.world, c.me):
-        if c.adjacent(to=friend):
-            c.bonus(
-                "damage", c.wis_mod, on=friend, until=When.ENCOUNTER, once=True,
-                when=lambda ctx, foe=ev.target: ctx.get("target") == foe,
-            )
-            return
-
-
-def _p841(c: Cast, ev: Any) -> None:
-    if _undead(c, ev.target):
-        c.push(1, on=ev.target)
-
-
-def _p835_will(c: Cast, ev: Any) -> None:
-    if _undead(c, ev.target) and c.marked(on=ev.target):
-        c.bonus(WILL, 1, on=c.me, until=When.SONT)
-
-
-def _p835_swarm(c: Cast, ev: Any) -> None:
-    """+1 for each undead standing next to me, paid as extra damage."""
-    near = sum(
-        1 for foe in enemies(c.world, c.me) if c.adjacent(to=foe) and _undead(c, foe)
-    )
-    if near:
-        c.flat(near, on=ev.target)
-
-
-def _p1758(c: Cast, ev: Any) -> None:
-    result = getattr(ev, "result", None)
-    if result is not None and result.natural >= 15 and _undead(c, ev.target):
-        c.flat(c.str_mod, on=ev.target)
+#
+# **Six of the seven clauses this section registered are written into the
+# rows they name** (#550, and `p4542` is the worked pair): p1567, p841,
+# p835 twice -- two feats name it -- p1758 and p620. The seventh is `_p87`
+# below, which is the only one not about a single blow and so the only one
+# with no moment in a body to move to. f1097's other two are a third
+# thing again: laid at arming, never registered in a window at all.
 
 
 def _p87(c: Cast, ev: Any) -> None:
@@ -899,15 +868,6 @@ def _p87(c: Cast, ev: Any) -> None:
         c.flat(c.wis_mod, on=who)
 
 
-def _p620(c: Cast, ev: Any) -> None:
-    if not _undead(c, ev.target):
-        return
-    for friend in allies(c.world, c.me):
-        if c.adjacent(to=friend):
-            c.shift(1, who=friend)
-            return
-
-
 def _f1097_necrotic(using: Cast) -> None:
     """Resist necrotic in place of p889's whole ally benefit.
 
@@ -923,8 +883,37 @@ def _f1097_necrotic(using: Cast) -> None:
                  until=When.EONT)
 
 
-def _f1097(c: Cast) -> None:
+@power("f1097", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1097(c: Cast) -> None:
     """The two riders that are not about landing a blow.
+
+    **Declared here rather than through `_riders`, because its one
+    single-blow clause has moved.** The p1567 rider is written into
+    `p1567` now -- #550's convention, gated on `c.feat("f1097")` and
+    wrapped in `c.credit("f1097")` -- so this row has no window table
+    left and `_riders` with an empty one generates the docstring *"no
+    clause of this card is writable yet; see the marker"*, which would be
+    false twice over: both remaining clauses are written, and there is no
+    marker.
+
+    **No `implemented_in=("p1567",)`.** The migration is power by power,
+    so a feat is inline in some of its rows and a rider in others while it
+    runs -- and an `implemented_in=` row is bucketed ELSEWHERE by
+    `audit.py` and never fired, which would take the two clauses below
+    out of the audit for the sake of a pointer. `p2099`'s docstring
+    settles the same question the same way: a feat that is not fully
+    migrated takes no pointer.
+
+    **The two below stay here, and not because nobody got to them.**
+    Neither is a clause in one of `_riders`' six windows: both are laid at
+    **arming**, which is a moment a power's body does not have. A `c.feat`
+    branch inside `p889` could not carry the second one at all -- the
+    substitution has to be standing *before* that row is offered, which is
+    what `c.pre_empt` is, and `p889` is already written to ask
+    `c.instead_of`. `content/CLAUDE.md`'s argument for #550 was that the
+    rider shape "only reached a power written to ask, and almost none
+    were"; p889 is one of the few that is.
 
     **`c.opt_in()` came off this card and the note that removed it dropped
     a clause.** It said f1097 has two riders, an addition and an exemption,
@@ -956,15 +945,43 @@ def _f1097(c: Cast) -> None:
     c.pre_empt("p889", "ally_benefit", _f1097_necrotic)
 
 
-_riders("f1097", {"p1567": _p1567}, setup=_f1097)
+@power("f1100", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       implemented_in=("p841", "p835"))
+def f1100(c: Cast) -> None:
+    """Both riders are written where they are read, so this is a pointer.
 
-_riders("f1100", {"p841": _p841, "p835": _p835_will})
+    #550's convention: a feat naming one power has its clause in that
+    power, gated on `c.feat("f1100")` and wrapped in `c.credit("f1100")`,
+    rather than registered through `_riders` from here. Both of this
+    card's clauses are single-blow ones in the `Hit` window, so both
+    moved -- `p841`'s push and `p835`'s bonus to Will -- and this is the
+    first of the three feats in this section to be **fully** migrated.
+    That is why it takes `implemented_in=` where `f1097` and `f1102` do
+    not: a row carrying the pointer is bucketed ELSEWHERE by `audit.py`
+    and never fired, which would hide a clause that is still a rider.
+
+    The feat is **unbracketed** (`feat.category` is empty in `game.db`),
+    so each host is a plain `if` and not a `c.declare` chain.
+
+    The Stealth bonus is the row's own printed line and is a check, so
+    nothing here is owed a body -- `f1817` and `f765` are declared the
+    same way, and the row stays drawable so `c.feat` can answer True
+    inside the two powers.
+    """
+
 
 # p87's clause is the only one of the four that is not about a single
 # blow: "if you hit with both attacks" is a question about the whole use,
-# which is the `resolved` window and nothing earlier.
-_riders("f1102", {"p835": _p835_swarm, "p1758": _p1758, "p620": _p620},
-        resolved={"p87": _p87})
+# which is the `resolved` window and nothing earlier -- and this row's
+# body runs once per *target*, so with two targets neither run can see
+# both swings. There is no moment in that body to move the clause to, so
+# it stays a rider.
+#
+# **The other three are written into their rows** (#550): p835's swarm
+# damage, p1758's natural-15 rider and p620's ally shift. No
+# `implemented_in=` while p87 is still here -- see `f1097`.
+_riders("f1102", {}, resolved={"p87": _p87})
 
 
 # -- the feats that grant a card -------------------------------------------

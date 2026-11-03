@@ -2,9 +2,15 @@
 standalone ones worth the space.
 
 `_riders` is the same machine `exploits.py` uses -- one watcher per
-feat, the clause picked by which power hit -- so the four Associated
-Powers rows here are four short entries rather than sixteen `c.watch`
-calls.
+feat, the clause picked by which power hit -- so an Associated Powers row
+is one short entry rather than four `c.watch` calls.
+
+**Three of the four such rows are left, and they are shrinking.** #550's
+convention writes a feat's clause into the body of the power it names, so
+each migration takes a power out of a registration here; `f995` has no
+registration at all any more and is a declared pointer. Each `_riders`
+call carries a note saying which of its powers moved and why the rest have
+not.
 """
 
 from __future__ import annotations
@@ -13,7 +19,6 @@ from typing import Any
 
 from combat_engine.content.feats.exploits import _riders
 from combat_engine.engine import (
-    AC,
     DAILY,
     ENCOUNTER,
     ONE_CREATURE,
@@ -27,12 +32,11 @@ from combat_engine.engine import (
     Gear,
     Keyword,
     Melee,
-    Moved,
     When,
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import allies, enemies, holding, squares
+from combat_engine.engine.query import allies, enemies, holding
 
 
 def _shift_after(c: Cast, ev: Any) -> None:
@@ -53,27 +57,11 @@ def _ally_shift(c: Cast, ev: Any) -> None:
             return
 
 
-def _intimidating(c: Cast, ev: Any) -> None:
-    """Strength on Intimidate for the rest of the fight.
-
-    A skill bonus, and a live one: `engine/skills.py` reads
-    `skill:intimidate` off `Mods` for every check, and Intimidate is
-    one of the five skills this engine actually rolls in a fight.
-    """
-    c.bonus("skill:intimidate", c.str_mod, on=c.me, until=When.ENCOUNTER,
-            kind="feat")
-
-
 def _companion_steps(c: Cast, ev: Any) -> None:
     """"Before the attack" is why this hangs on `used=` rather than a hit."""
     beast = c.companion()
     if beast is not None:
         c.shift(1, who=beast)
-
-
-def _no_long_range(c: Cast, ev: Any) -> None:
-    """Laid on the use, so it is standing by the time the row rolls."""
-    c.ignores_long_range(on=c.me, until=When.EOT)
 
 
 def _second_shot(c: Cast, ev: Any) -> None:
@@ -94,47 +82,74 @@ def _second_shot(c: Cast, ev: Any) -> None:
     c.basic(on=ev.target, ranged=True)
 
 
-def _shield_the_neighbour(c: Cast, ev: Any) -> None:
-    """A shield bonus that ends early if the target leaves its square.
-
-    Two endings, "whichever comes first": `until=` carries one and the
-    other is `Moved` plus `c.end_effect`. `Moved` is the movement event
-    that carries both ends of the step, so "left its square" is one
-    comparison rather than a remembered position.
-    """
-    foe = ev.target
-    where = squares(c.world, foe)
-    for friend in allies(c.world, c.me):
-        if friend == c.me or not c.adjacent_to(foe, friend):
-            continue
-        held = c.bonus(AC, 1, on=friend, until=When.EONT, kind="shield")
-
-        def moved(mv: Any, held: Any = held) -> None:
-            if mv.actor == foe and mv.to not in where:
-                c.end_effect(held, why=f"{c.ref} target moved")
-
-        c.watch(Moved, moved, on=c.me, until=When.EONT,
-                label=f"{c.ref} shield held")
-        return
-
-
-_riders("f990", {"p971": _shift_after, "p2105": _shift_after,
+# **`p971`'s clause is written into `p971`**, per #550: a feat naming one
+# power has its clause in that power. It did not survive the move unchanged
+# and that is the point of the move -- `_shift_after` was one bare
+# `c.shift(1)` serving two cards, and only `p2105`'s says "shift 1 square"
+# with no condition. `p971`'s says *"if you score a critical hit"*, which a
+# body reads as `c.crit` and the shared helper could not say at all.
+#
+# `_shift_after` stays for `p2105`, whose clause is **before** the attack
+# and so wants `used=` rather than this `Hit` table -- registered here it
+# pays on the hit instead, which is a window the migration fixes and a
+# rider cannot. Left as it stands rather than half-corrected: moving it is
+# a one-line edit in that row's body and belongs with the clause.
+_riders("f990", {"p2105": _shift_after,
                  "p919": _ally_shift, "p1063": _ally_shift})
 
-# The `p992` clause is **not** a rider: that power is migrated to #550's
-# shape, so its clause is written in its own body behind
-# `c.declare("Arena Fighting", "f993")`. The three below are on powers that
-# are not migrated and keep the rider. #780.
-_riders("f993", {"p4541": _temp_hp("con_mod"), "p2248": _intimidating},
+# **Two of this feat's four clauses are written in the rows they name**,
+# per #550: `p992` behind `c.declare("Arena Fighting", "f993")` (#780) and
+# now `p2248`, whose Intimidate bonus moved into that row's hit branch.
+#
+# `p4369` keeps its rider and the reason is a collision, not the clause:
+# another session is writing two other Arena Fighting feats into that body
+# at the same time, and a **second** `c.declare` call for one category in
+# one body is defeated by the memo -- `Cast.declared_feats` answers the
+# first call's pick for every later one, so the two chains would silently
+# break each other. It belongs in whichever change lands that body's chain.
+#
+# `p4541`'s clause cannot move as it stands, and it is in the wrong window
+# here as well. The card reads *"if your **ally** hits the target with the
+# granted basic attack"*, and this table is a `Hit` watcher gated on
+# `ev.attacker == me` -- so it pays on the character's own hit with the row
+# and never on the ally's. `landed=` (`PowerResolved`, `granted_by` me) is
+# the window the sentence names. Written into the body it would need the
+# ally's hit read back off the log, because `c.grant_attack` returns
+# whether the swing *happened*. Not migrated and not corrected here: it is
+# a defect in the clause rather than in its address.
+_riders("f993", {"p4541": _temp_hp("con_mod")},
         used={"p4369": _companion_steps})
 
-_riders("f991", {}, missed={"p917": _second_shot},
-        used={"p970": _no_long_range})
+# **`p970`'s half is written into `p970`**, per #550. `p917`'s is not: that
+# body is being rewritten by another session in the same hour, and the
+# clause wants the `missed=` window -- an `else` branch on a body whose
+# shape is moving under it.
+_riders("f991", {}, missed={"p917": _second_shot})
 
-# **`p4542`'s half is written into `p4542`**, per #550 and Camille's
-# `c.credit` call, so it is no longer registered here. `p1000`'s half is
-# still a rider and is the next one to move.
-_riders("f995", {"p1000": _shield_the_neighbour})
+
+# **Fully migrated, so there is no rider left and no clause here.** Both of
+# this feat's powers carry its clause in their own body -- `p4542` since
+# #550's first pair and `p1000` now -- so the row is a pointer and
+# `audit.py` buckets it ELSEWHERE rather than firing it.
+#
+# Declared by hand rather than through `_riders`, because `_riders` with
+# every table empty generates the docstring *"No clause of this card is
+# writable yet; see the marker"*, which is the opposite of what is true
+# here. The header is the one `_riders` builds, field for field.
+@power("f995", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, implemented_in=("p4542", "p1000"))
+def f995(c: Cast) -> None:
+    """Both clauses live in the rows this card names, per #550.
+
+    `p4542` adds the shield bonus to that row's attack roll, before its
+    `c.strike()`, because the clause changes the roll. `p1000` lays the
+    +1 shield bonus on an ally beside the target at the top of its hit
+    branch, with the `Moved` watcher that is the second of the two printed
+    endings.
+
+    Nothing runs here. `lint._dangling_implementations` is what checks that
+    both hosts still name this feat.
+    """
 
 
 @power("f1002", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

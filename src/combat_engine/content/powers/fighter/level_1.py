@@ -18,6 +18,7 @@ from combat_engine.engine import (
     Gear,
     Keyword,
     Melee,
+    Moved,
     When,
     power,
 )
@@ -358,7 +359,71 @@ def p992(c: Cast) -> None:
     requires_text="needs a shield",
 )
 def p1000(c: Cast) -> None:
+    """**`f995`'s second clause is written in here**, which completes that
+    feat under #550's convention: a feat naming one power has its clause in
+    that power rather than registering a rider against it from its own
+    file. `p4542` carries the other half, and `f995` is an
+    `implemented_in=` pointer now with no rider left.
+
+    **Read off `c.declare` and not off `c.feat`.** `f995` is
+    `[Arena Fighting]` and one feat of that bracket applies to one use of a
+    power, so the choice is made before the attack -- the printed rule is
+    that the declaration cannot depend on the roll. The chain is one branch
+    long: `f984`, `f986` and `f3199` also name this row and are still
+    riders in their own files, so they still stack with this one, which the
+    printed rule forbids. That is the migration being partway through.
+
+    **It sits at the top of the hit branch**, which is where its rider
+    fired: `_riders`' default table is a `Hit` watcher and `Hit` is
+    announced inside `c.strike()`, before this body pays the damage and
+    before the push below moves anybody. Both of those matter to this
+    clause, which reads where the target is standing and who is standing
+    beside it.
+
+    **The `Moved` watcher is the second of the two printed endings** --
+    *"until the end of your next turn or until the target leaves its
+    square, whichever comes first"* -- and it has to survive the move
+    intact: `until=` carries one ending and the closure carries the other,
+    with `held=held` binding the effect it is about. `Moved` carries both
+    ends of the step, so "left its square" is one comparison rather than a
+    remembered position.
+
+    `break` rather than the rider's `return`: the printed line is "an
+    ally", one of them, and this body has work after it.
+
+    **This row's own push usually ends the bonus it just laid, and that is
+    the two printed clauses meeting rather than a bug.** Driven on `f995`'s
+    board: the body lays `p1000 ac+1` and `p1000 shield held`, then the
+    push below moves the target out of its square, the watcher reads that
+    `Moved` and `EffectExpired` fires -- inside the same use. The rider
+    behaved identically, because its `Hit` watcher fired at the same point
+    in the sequence; nothing changed in the move. The bonus survives
+    whenever the push is declined or fails, which is what `c.instead_of`
+    makes an option.
+    """
+    arena = c.declare("Arena Fighting", "f995")
     if c.strike():
+        foe = c.target
+        if arena == "f995" and foe is not None:
+            with c.credit("f995"):
+                # "If you hit with this exploit, an ally adjacent to the
+                # target gains a +1 shield bonus to AC until the end of
+                # your next turn or until the target leaves its square --
+                # whichever comes first."
+                where = squares_of(c.world, foe)
+                for friend in c.allies():
+                    if friend == c.me or not c.adjacent_to(foe, friend):
+                        continue
+                    held = c.bonus(AC, 1, on=friend, until=When.EONT,
+                                   kind="shield")
+
+                    def moved(mv: Any, held: Any = held) -> None:
+                        if mv.actor == foe and mv.to not in where:
+                            c.end_effect(held, why=f"{c.ref} target moved")
+
+                    c.watch(Moved, moved, on=c.me, until=When.EONT,
+                            label=f"{c.ref} shield held")
+                    break
         c.damage(c.w(1), c.str_mod)
         def push_and_follow() -> None:
             vacated = c.there
@@ -407,11 +472,30 @@ def p1758(c: Cast) -> None:
     attack, so the choice between them cannot depend on the roll.
 
     `f1102` and six others also name this row in other categories and
-    stack legitimately.
+    stack legitimately. **`f1102`'s clause is written in now** (#550),
+    below the Arena chain and outside it: it is **unbracketed**
+    (`feat.category` is empty in `game.db`), so it is a plain `if` rather
+    than a fourth arm of the `c.declare` -- adding it to the chain would
+    have made it exclude the Arena feats, which the printed rule does not.
+
+    The clause needs the die, not just the outcome, so `c.strike()`'s
+    `AttackResult` is kept: `result.natural` is the same field the `Hit`
+    rider read off `ev.result`. It is paid before `c.damage` because that
+    is where the rider fired -- `c.flat` is a separate blow, so paying it
+    after the swing would land it on a creature this row may just have
+    dropped.
     """
     arena = c.declare("Arena Fighting", "f978", "f985", "f981")
-    if not c.strike():
+    swing = c.strike()
+    if not swing:
         return
+    if (c.feat("f1102") and swing.natural >= 15
+            and c.is_kind("undead")):
+        with c.credit("f1102"):
+            # "If you roll a natural 15 or higher when using this exploit
+            # against an undead enemy, your attack deals extra damage
+            # equal to your Strength modifier."
+            c.flat(c.str_mod, on=c.target)
     c.damage(c.w(2 if c.level >= 21 else 1))
 
     # **The gear read sits INSIDE the branch, and that is not tidiness.**

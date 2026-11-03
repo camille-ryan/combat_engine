@@ -21178,6 +21178,23 @@ MIGRATED = {
     # skip below, which is a statement about the board rather than the row:
     # `f972` and `f971` read the world, so only `f994` can be made to fire.
     "p997": {"Arena Fighting": ("f994", "f972", "f971")},
+    # -- the 2026-11-03 wave: 22 clauses off four feat files ----------------
+    #
+    # Read off the tree rather than off the migration reports, by walking
+    # each power body's own `c.declare("Arena Fighting", ...)` call. That
+    # matters because the wave ran as four parallel agents and three of them
+    # wrote into these same power files, so no single report knows the whole
+    # chain -- `p4369` took clauses from two agents and `p1063` from two.
+    "p919": {"Arena Fighting": ("f973",)},
+    "p970": {"Arena Fighting": ("f991",)},
+    "p971": {"Arena Fighting": ("f990",)},
+    "p1000": {"Arena Fighting": ("f995",)},
+    "p1063": {"Arena Fighting": ("f973", "f982")},
+    "p2248": {"Arena Fighting": ("f993",)},
+    "p2620": {"Arena Fighting": ("f983",)},
+    "p4369": {"Arena Fighting": ("f975", "f982")},
+    "p4541": {"Arena Fighting": ("f978",)},
+    "p4542": {"Arena Fighting": ("f995",)},
 }
 
 #: Rows migrated under #550 that have **no** chain yet to assert on, with
@@ -21197,9 +21214,14 @@ NO_CHAIN_YET = {
             " neither is reachable here: both forgo damage, and `c.choose`"
             " takes the first option, which is to deal it."
             " `drivers.damage_forgone_for_a_rider` exercises the trade"
-            " instead. f3188 and f987 are unwritten, as are both Lesser"
-            " Styles. Its three *unbracketed* clauses stack and are not a"
-            " chain",
+            " instead. f3188 is unwritten, as are both Lesser Styles."
+            " **f987 is written** -- this said otherwise until 2026-11-03 --"
+            " but it does not join the chain and is not a stacking rider"
+            " either: `c.as_basic(\"p992\", window=\"charge\")` files an"
+            " offer that this row may be used in place of a melee basic"
+            " attack, which is a usage window and not a clause that pays"
+            " beside one. Its three *unbracketed* clauses stack and are not"
+            " a chain",
 }
 
 #: Feats of the exclusive category that name a migrated row and are **still
@@ -21228,7 +21250,88 @@ NO_CHAIN_YET = {
 #: Kept rather than deleted: the next migrated row that cannot move a feat
 #: belongs here, and an empty dict says "none known" where a missing one
 #: would say nothing at all.
-STILL_RIDERS: dict[str, tuple[str, ...]] = {}
+#:
+#: **No longer empty, and the 2026-11-03 wave is why.** That wave chained
+#: ten more rows, and partial migration is the normal state of every one of
+#: them: `_riders` arms **one watcher per feat and gates nothing**, so a
+#: bracketed feat left as a rider stacks with whichever branch of the body's
+#: chain pays. Exclusivity on a row therefore arrives only with its **last**
+#: migration, and until then the row is honestly half-covered.
+#:
+#: That is not a regression the wave introduced -- before it, *every*
+#: bracketed clause on these rows was a rider and nothing was exclusive of
+#: anything. A chain makes the migrated clauses exclusive of each other and
+#: leaves the rest where they were.
+#:
+#: **Derived by mechanism, not by mention, and three passes were wrong before
+#: this one.** A feat belongs here only if it *stacks*. Excluded, after
+#: reading each body: `f984`->`p1000` and `f994`->`p919` are `swaps=`
+#: entries, `f976`->`p971` is a `c.pre_empt`, and `f987`->`p992` is a
+#: `c.as_basic` usage offer -- all four substitute or file an offer rather
+#: than paying alongside. An earlier pass that counted any code mention of
+#: the ref had all four in the list; a pass before that walked only
+#: `_riders` keys and so missed `f986`, which rides `p1000` and `p4542`
+#: **hand-written**, with the ref in a guard (`ev.power == "p4542"`) and the
+#: payout a bare `c.shift(1)` that names no ref at all.
+STILL_RIDERS: dict[str, tuple[str, ...]] = {
+    "p919": ("f990",),
+    "p970": ("f975", "f984"),
+    "p971": ("f973",),
+    "p1000": ("f986",),
+    "p1063": ("f980", "f990"),
+    "p2248": ("f971", "f978"),
+    "p4369": ("f993",),
+    "p4541": ("f976", "f983", "f993"),
+    "p4542": ("f971", "f984", "f986"),
+}
+
+
+#: Migrated rows whose chain pays **nothing** on this rule's board, with the
+#: world read that stops it. Reported as a skip instead of failing the
+#: reachability assertion.
+#:
+#: This is the case the rule's own comment already names and refuses to
+#: patch around -- *"what cannot be faked this way is a clause reading the
+#: world"* -- and `p992` was parked in `NO_CHAIN_YET` for it before there
+#: was anywhere better. These rows stay in `MIGRATED` so the exclusivity and
+#: credit assertions still run on them and would catch a regression the day
+#: the board can pose them; only reachability is waived, and only with a
+#: reason.
+#:
+#: **A row absent from here whose chain pays nothing still FAILS**, which is
+#: what keeps a genuinely dead chain from hiding in this bucket.
+UNPOSABLE = {
+    "p1000": "f995's clause pays an AC bonus to each ally ADJACENT to the"
+             " target (`c.adjacent_to`), and nothing places an ally there"
+             " on a drawn encounter. A position read, like p992's zone.",
+    "p4369": "both branches need a beast companion -- `c.beast()` is None"
+             " for a character that keeps none -- and then a world read on"
+             " top: f975 wants the beast to have combat advantage, f982"
+             " wants the ranger and the beast to be the pair flanking"
+             " (`query.flankers`). The drawn character has no companion.",
+}
+
+#: Migrated rows whose chain lays something **outside** a `c.credit` block,
+#: so the feat gets no credit for its own clause and `audit._claimed`
+#: attributes it to the power instead.
+#:
+#: **All four predate `c.credit`.** They were migrated in the first #550
+#: waves, before Camille's call on the attribution fork, and each uses the
+#: verb zero times -- checked, not assumed. So this is a real gap rather
+#: than a quirk of the probe, and the fix is to wrap each clause the way the
+#: 2026-11-03 wave does.
+#:
+#: A named baseline rather than a loosened assertion, which is the shape
+#: this repo uses everywhere (`leaks.DEFERRED`, `localise.KNOWN_LABEL_DRIFT`,
+#: `keywords.py`'s per-ref list): it **may shrink and never grow**, so a
+#: fifth row joining it is red and the new wave cannot regress into it
+#: unnoticed. Retro-fitting the four is #1089.
+UNCREDITED_CHAIN = {
+    "p704": ("penalty",),
+    "p997": ("flat",),
+    "p1758": ("flat",),
+    "p2099": ("bonus",),
+}
 
 
 def at_most_one_applies(out: Result) -> None:
@@ -21270,14 +21373,32 @@ def at_most_one_applies(out: Result) -> None:
     assert known is not None
     was = list(known.known)
 
-    def fire(ref: str, feats: tuple[str, ...], *, hit: bool) -> list[str]:
-        """One use of `ref` holding `feats`, reporting which clauses paid."""
+    def fire(ref: str, feats: tuple[str, ...], *,
+             hit: bool) -> list[tuple[str, str]]:
+        """One use of `ref` holding `feats`: every laying call, and who is
+        credited for it.
+
+        **The credit, not the call, is the unit -- and counting calls was a
+        bug that reported a sound chain broken.** `p1063`'s `f973` branch
+        lays one damage modifier *per ally*, so on a three-ally board one
+        clause made three `c.bonus` calls and "at most one clause pays"
+        read 3 and went red. The chain is a correct `if`/`elif` and only
+        ever ran one branch: `c.declare` picked `f973`, and all three calls
+        carried `credit='f973'`.
+
+        So the spy records the `c.credit` block in force at each call, which
+        is the grain the property is actually about and is #550's own
+        mechanism rather than a proxy for it. A clause laying N modifiers is
+        one credit; two branches paying are two.
+        """
         known.known[:] = [*was, *feats]
-        paid: list[str] = []
+        paid: list[tuple[str, str]] = []
 
         def spend(which: str):  # noqa: ANN202
             def spied(*_a: object, **_kw: object) -> object:
-                paid.append(which)
+                taking = getattr(
+                    getattr(world, "effects", None), "_credit", None)
+                paid.append((which, taking[-1] if taking else ""))
                 return 0
 
             return spied
@@ -21297,6 +21418,17 @@ def at_most_one_applies(out: Result) -> None:
         setattr(spy, "is_", lambda *_a, **_kw: True)          # noqa: B010
         setattr(spy, "is_kind", lambda *_a, **_kw: True)      # noqa: B010
         setattr(spy, "wielding", lambda *_a, **_kw: True)     # noqa: B010
+        # **Gear reads, for the same reason `wielding` is faked.** `f995`'s
+        # clause on `p4542` and `p1000` adds a *shield* bonus, and a drawn
+        # character need not carry one -- `Gear.shield` is 0 and
+        # `c.shield_bonus()` answers 0, so neither chain could be posed at
+        # all and the reachability assertion went red on two sound rows.
+        # This is a component read like `wielding`, not a world read, so it
+        # is faked rather than reported as unposable.
+        setattr(spy, "shield_bonus", lambda *_a, **_kw: 2)    # noqa: B010
+        # A printed "you can" is the player's choice, and generosity here
+        # means taking it. `p4542`'s clause is `if shield and c.may(...)`.
+        setattr(spy, "may", lambda *_a, **_kw: True)          # noqa: B010
         # **And the board reads, as far as they can be faked.** A clause
         # gate is not only about the feats: `p992`'s first branch asks
         # whether the creature hit is the only enemy near it, and on a
@@ -21312,7 +21444,8 @@ def at_most_one_applies(out: Result) -> None:
         REGISTRY[ref].body(spy)
         return paid
 
-    def added(ref: str, feats: tuple[str, ...], *, hit: bool) -> list[str]:
+    def added(ref: str, feats: tuple[str, ...], *,
+              hit: bool) -> list[tuple[str, str]]:
         """What holding `feats` adds over the row's own output.
 
         **Measured as a difference, because the spy cannot tell a feat's
@@ -21338,10 +21471,54 @@ def at_most_one_applies(out: Result) -> None:
             landed = added(ref, feats, hit=True)
             missed = added(ref, feats, hit=False)
             for outcome, paid in (("hit", landed), ("miss", missed)):
-                out.that(len(paid) <= 1,
-                         f"{ref} on a {outcome}: holding all {len(feats)}"
-                         f" [{family}] feats with every condition met, at"
-                         f" most one clause pays ({len(paid)}: {paid})")
+                # **The all-held run must equal exactly ONE branch's solo
+                # run.** That is what "at most one applies" means, and it
+                # needs neither a call count nor a credit:
+                #
+                # * counting *calls* was wrong -- `p1063`'s `f973` branch
+                #   lays one damage modifier per ally, so one clause made
+                #   three `c.bonus` calls and a sound chain read 3 and went
+                #   red;
+                # * counting distinct *credits* fixed that and introduced
+                #   the opposite fault -- the four pre-`c.credit` rows in
+                #   `UNCREDITED_CHAIN` credit nobody, so the assertion went
+                #   **vacuous** on exactly the rows a regression would hide
+                #   in. Trading a false positive for a silent false
+                #   negative is the loosening this file forbids.
+                #
+                # Comparing against the singletons has neither problem: a
+                # per-ally loop is in the solo run too, so it cancels, and
+                # two branches firing is a union that matches no singleton.
+                solo = {f: Counter(added(ref, (f,), hit=outcome == "hit"))
+                        for f in feats}
+                whole = Counter(paid)
+                same = sorted(f for f, one in solo.items() if one == whole)
+                out.that(
+                    bool(same) or not paid,
+                    f"{ref} on a {outcome}: holding all {len(feats)}"
+                    f" [{family}] feats with every condition met, the output"
+                    f" matches exactly one branch run alone"
+                    f" (matched {same}; whole"
+                    f" {sorted(whole.elements())}; solo"
+                    f" { {f: sorted(o.elements()) for f, o in solo.items()} })")
+                # **And everything a clause adds must be inside its own
+                # `c.credit` block.** `added` has already subtracted the
+                # row's own output, so an uncredited call in the difference
+                # is a migrated clause laying something outside the wrapper
+                # -- which makes `audit._claimed` attribute it to the power
+                # and silently loses the feat's only evidence.
+                bare = [v for v, cr in paid if not cr]
+                allowed = list(UNCREDITED_CHAIN.get(ref, ()))
+                if bare and sorted(bare) == sorted(allowed):
+                    out.skip(f"{ref} on a {outcome}: {bare} laid outside a"
+                             f" `c.credit` block -- a known pre-`c.credit`"
+                             f" migration, so the feat gets no credit for"
+                             f" its own clause. #1089")
+                else:
+                    out.that(not bare,
+                             f"{ref} on a {outcome}: everything the chain"
+                             f" adds is credited to a feat ({len(bare)}"
+                             f" uncredited: {bare}, baseline {allowed})")
 
             # **How many of this chain's branches can pay on THIS board.**
             # Without this the rule passes vacuously, and it did: a
@@ -21358,10 +21535,16 @@ def at_most_one_applies(out: Result) -> None:
             alone = [f for f in feats
                      if added(ref, (f,), hit=True)
                      or added(ref, (f,), hit=False)]
-            out.that(len(alone) >= 1,
-                     f"{ref} [{family}]: the chain is REACHED -- at least"
-                     f" one branch pays when its feat is held alone"
-                     f" ({alone} of {list(feats)})")
+            if not alone and ref in UNPOSABLE:
+                out.skip(f"{ref} [{family}]: no branch of"
+                         f" {list(feats)} pays here -- {UNPOSABLE[ref]}"
+                         f" Exclusivity and credit are still asserted above;"
+                         f" only reachability is waived.")
+            else:
+                out.that(len(alone) >= 1,
+                         f"{ref} [{family}]: the chain is REACHED -- at least"
+                         f" one branch pays when its feat is held alone"
+                         f" ({alone} of {list(feats)})")
             if len(alone) < 2:
                 out.skip(f"{ref} [{family}]: exclusivity NOT PROVEN -- only"
                          f" {len(alone)} of {len(feats)} branches can fire"
@@ -35173,8 +35356,15 @@ def a_migrated_feat_clause_is_still_credited_to_the_feat(out: Result) -> None:
 
     `f995`'s *"add your shield bonus as a feat bonus to your attack roll"*
     used to be a rider registered against `p4542`. It is now written into
-    `p4542`, gated on `c.feat("f995")` and wrapped in `c.credit("f995")`,
-    which is Camille's call on the attribution fork.
+    `p4542`, read off `c.declare("Arena Fighting", "f995")` and wrapped in
+    `c.credit("f995")`, which is Camille's call on the attribution fork.
+
+    **Read off `c.declare`, not `c.feat`, and the first version of this got
+    that wrong.** `f995` is `[Arena Fighting]`, so the branch has to ask
+    which feat of the category *applies* -- `c.feat` is true of every feat
+    held and a chain of those falls through, paying a second feat's clause
+    when the first one's condition missed. `content/CLAUDE.md` says so and
+    the hand-written pair in `cf7ba4aa` ignored it.
 
     **Why this rule exists rather than the audit covering it.** The audit
     board gives the caster no shield -- `Gear.shield` is 0 and
@@ -35183,11 +35373,20 @@ def a_migrated_feat_clause_is_still_credited_to_the_feat(out: Result) -> None:
     48 arrangements `_attempts` builds. Nothing but a rule that hands over a
     shield can see it.
 
-    **And the feat firing is not the evidence.** `f995` still has its other
-    rider (`p1000`), so it fires either way -- which is exactly the hazard
-    `#550` warns about: credit only goes quiet when a feat's *last* rider is
-    migrated. So the assertion is on **who is credited for the effect**,
-    not on whether the feat fired.
+    **And the feat firing is not the evidence.** This used to say `f995`
+    "still has its other rider (`p1000`), so it fires either way". Both
+    halves are now stale and in opposite directions: `p1000`'s clause was
+    migrated too, so `f995` has **no rider left**, and it now carries
+    `implemented_in=("p4542", "p1000")` -- which `audit.py` buckets as
+    ELSEWHERE and does not fire at all.
+
+    The assertion is unaffected, because it was always on **who is credited
+    for the effect** rather than on whether the feat fired. That is why this
+    rule survived its own premise expiring, and it is the argument for
+    asserting on credit in the first place: `#550`'s hazard is that credit
+    only goes quiet when a feat's *last* rider is migrated, so a rule
+    reading the feat's verdict would have reported the same thing before and
+    after every migration in the batch.
     """
     import audit as A
     from combat_engine.engine.cast import Cast
@@ -52738,11 +52937,31 @@ def the_build_cache_distinguishes_the_two_draws(out: Result) -> None:
     from combat_engine import chargen
     from combat_engine.content import loader  # noqa: F401
 
-    #: A pair whose answer genuinely differs between the draws. Measured
-    #: over five classes against `p1758`; this is the one that moves, and a
-    #: pair that does not move could not fail this rule however broken the
-    #: key was.
-    PAIR = ("ranger", "p1758")
+    #: Candidate pairs, searched for one whose answer genuinely differs
+    #: between the draws -- a pair that does not move could not fail this
+    #: rule however broken the key was, so the premise has to hold.
+    #:
+    #: **Searched rather than named, because a named one went stale the
+    #: first time anybody edited the power.** This was `("ranger",
+    #: "p1758")`, "measured over five classes against `p1758`; this is the
+    #: one that moves". #550's 2026-11-03 wave migrated a clause into
+    #: `p1758`'s body, and `chargen._leans_on` scores a build off the
+    #: ability-mod verbs it finds in a body's **source** -- so ranger then
+    #: answered `marauder` in both modes, the premise failed, and the five
+    #: assertions below went vacuous while still reporting `ok`.
+    #:
+    #: That is the rot worth engineering out rather than re-measuring: the
+    #: pair is incidental to the claim, which is about the cache **key**.
+    #: Measured over the 25 classes against these 16 refs, **20 pairs
+    #: differ**, so the search is cheap and the list is nowhere near
+    #: exhausted. The first hit wins, so the usual cost is one or two
+    #: `build_for` calls.
+    CANDIDATES = [
+        ("rogue", "p704"), ("wizard", "p919"), ("swordmage", "p970"),
+        ("fighter", "p1000"), ("warlord", "p917"), ("battlemind", "p87"),
+        ("ranger", "p919"), ("warlock", "p917"), ("rogue", "p971"),
+        ("wizard", "p2248"), ("ranger", "p1758"),
+    ]
     was = chargen.SCORED_CHOICES
     # **Guarded, so removing `@cache` reddens the structural assertion
     # instead of killing the run.** A plant that dropped the decorator made
@@ -52763,19 +52982,33 @@ def the_build_cache_distinguishes_the_two_draws(out: Result) -> None:
         f"cache_clear present: {hasattr(chargen._build_for, 'cache_clear')}",
     )
     try:
-        clear()
-        chargen.SCORED_CHOICES = True
-        scored = chargen.build_for(*PAIR)
-        chargen.SCORED_CHOICES = False
-        unscored = chargen.build_for(*PAIR)
+        # Find a pair that still moves, rather than trusting one.
+        PAIR, scored, unscored = ("", ""), "", ""
+        tried: list[str] = []
+        for pair in CANDIDATES:
+            clear()
+            chargen.SCORED_CHOICES = True
+            a = chargen.build_for(*pair)
+            clear()
+            chargen.SCORED_CHOICES = False
+            b = chargen.build_for(*pair)
+            if a and b and a != b:
+                PAIR, scored, unscored = pair, a, b
+                break
+            tried.append(f"{pair[0]}/{pair[1]}={a!r}")
         out.that(
-            scored != unscored and scored and unscored,
-            "**the two draws give this pair different builds**, which is the "
-            "premise -- a pair that answered the same either way could not "
-            "fail this rule however broken the key was, so the assertions "
-            "below would be vacuous without it",
-            f"scored={scored!r} unscored={unscored!r}",
+            bool(scored) and scored != unscored,
+            "**some candidate pair gives different builds in the two "
+            "draws**, which is the premise -- a pair that answered the same "
+            "either way could not fail this rule however broken the key "
+            "was, so the assertions below would be vacuous without it",
+            f"using {PAIR}: scored={scored!r} unscored={unscored!r}"
+            if scored else
+            f"NO candidate moves -- this rule is unfalsifiable until one "
+            f"does. Tried {len(CANDIDATES)}: {tried}",
         )
+        if not scored:
+            return
 
         # warmed in one mode, asked in the other, both ways round
         clear()

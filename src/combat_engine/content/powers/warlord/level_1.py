@@ -11,6 +11,8 @@ opportunity attack, and a conditional "cannot shift".
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -29,7 +31,7 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.events import Hit
+from combat_engine.engine.events import Hit, Moved
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 
@@ -87,8 +89,63 @@ def p1061(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p1063(c: Cast) -> None:
+    """**`f973`'s and `f982`'s clauses are written in here**, which is
+    #550's convention, with `c.credit` naming the feat for what this body
+    lays.
+
+    **One chain, not two `if`s**: both are `[Arena Fighting]`, so one of
+    them applies to one use and `c.declare` picks it before the attack.
+    `c.feat` is true of every feat held and cannot say which. `f980` also
+    prints a clause on this row and is still a rider in its own file, so
+    it stacks with whichever of these pays -- it could not come here
+    because its clause calls `_shift_beside`, a helper two other rider
+    clauses still share.
+
+    Both sit **inside the hit branch**, the window their riders were
+    registered in.
+
+    **`f982`'s effect is laid inside a watcher, so it carries its own
+    `c.credit` block.** The outer block is popped when this body returns
+    and the watcher fires later, so crediting only at the registration
+    would attribute the grant to this row -- which is the whole thing the
+    convention exists to avoid.
+    """
+    arena = c.declare("Arena Fighting", "f973", "f982")
     if c.strike():
         c.damage(c.w(1), c.str_mod)
+        victim = c.target
+        if arena == "f973":
+            with c.credit("f973"):
+                # Extra damage on the opportunity attack this row's own
+                # Effect line provokes, laid on each ally as a gated damage
+                # modifier: the damage context carries both `opportunity`
+                # and `target`, where the `Hit` event carries neither, and
+                # there is no other way to tell an opportunity swing from
+                # an ordinary one after the fact.
+                for ally in c.allies():
+                    c.bonus(
+                        "damage", c.con_mod, on=ally, until=When.EONT,
+                        when=lambda ctx, who=victim: (
+                            bool(ctx.get("opportunity"))
+                            and ctx.get("target") == who
+                        ),
+                    )
+        elif arena == "f982" and victim is not None:
+            with c.credit("f982"):
+                # The target granting combat advantage if it shifts, paid
+                # when the shift happens rather than read back later: by
+                # the character's own next turn the board no longer records
+                # that it moved. `kind_` is how `Moved` says which kind of
+                # step it was.
+                def shifted(moved: Any) -> None:
+                    if (moved.actor == victim
+                            and getattr(moved, "kind_", "") == "shift"):
+                        with c.credit("f982"):
+                            c.grants_advantage(on=victim, to="team",
+                                               until=When.EONT)
+
+                c.watch(Moved, shifted, until=When.EONT, on=c.me,
+                        label=f"{c.ref} punish {victim}")
     # The Effect line lands hit or miss. The trigger is armable, but what it
     # would fire -- an ally's opportunity attack -- is not.
     c.note(
@@ -136,11 +193,40 @@ def p315(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p620(c: Cast) -> None:
-    """The Special line comes first: a friend steps, then you swing."""
+    """The Special line comes first: a friend steps, then you swing.
+
+    **`f1102`'s clause is written in** (#550): a feat naming one power has
+    its clause in that power, gated on `c.feat` and wrapped in
+    `c.credit`, rather than registered as a rider from the feat. The
+    rider is deleted in the same change.
+
+    `f1102` is **unbracketed** (`feat.category` is empty in `game.db`), so
+    a plain `if` and not a `c.declare` chain.
+
+    It is a **second** step, not the printed Special line's one: that one
+    is taken before the swing by whichever friend `_beside` offers, and
+    this is "if your target is undead **and you hit**". So it is on the
+    hit branch, and before `c.damage` because that is where the `Hit`
+    rider fired.
+
+    **`c.allies()` and `c.adjacent`, not `_beside`.** The rider measured
+    adjacency to the caster, which is what this clause prints -- "one ally
+    adjacent to you" -- where `_beside` also offers allies standing next
+    to the *target*, which is the Special line's wider pool and not this
+    one's. The first adjacent friend takes it, as the rider did.
+    """
     helpers = _beside(c, c.target)
     if helpers:
         c.shift(1, who=c.choose(helpers, "who steps before the blow"))
     if c.strike():
+        if c.feat("f1102") and c.is_kind("undead"):
+            with c.credit("f1102"):
+                # "If your target is undead and you hit, one ally adjacent
+                # to you can shift 1 square as a free action."
+                for friend in c.allies():
+                    if c.adjacent(to=friend):
+                        c.shift(1, who=friend)
+                        break
         c.damage(c.w(1), c.str_mod)
 
 

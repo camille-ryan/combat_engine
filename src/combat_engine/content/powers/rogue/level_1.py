@@ -152,6 +152,31 @@ def p704(c: Cast) -> None:
     requires_text="needs a crossbow, a light blade or a sling",
 )
 def p970(c: Cast) -> None:
+    """**`f991`'s clause is written in here**, which is #550's convention: a
+    feat naming one power has its clause in that power rather than
+    registering a rider against it from its own file. `c.credit` is
+    Camille's call on the attribution fork, so the modifier this body lays
+    is reported as the feat's.
+
+    **Read off `c.declare` and never off `c.feat`.** `f991` is
+    `[Arena Fighting]`, and one feat of that bracket applies to one use of a
+    power -- `c.feat` is true of every feat the character holds and cannot
+    say which one is being applied. The chain is one branch long: the other
+    Arena Fighting feats naming this row are still riders in their own
+    files, so they still stack with this one, which the printed rule
+    forbids. That is the migration being partway through rather than a
+    reading of the cards.
+
+    **It goes before `c.strike()`**, which is the window its rider was
+    registered in: `_riders`' `used=` table is a `PowerUsed` watcher, and
+    `PowerUsed` is announced above the body. A waiver laid after the roll
+    would be too late to have decided anything.
+    """
+    if c.declare("Arena Fighting", "f991") == "f991":
+        with c.credit("f991"):
+            # "With this exploit, you take no penalty to your attack roll
+            # for attacking targets at long range."
+            c.ignores_long_range(on=c.me, until=When.EOT)
     if c.strike():
         c.damage(c.w(1), c.dex_mod + c.cha_mod)
 
@@ -225,16 +250,49 @@ def p971(c: Cast) -> None:
       rather than just its distance, because that card declines the move
       outright.
 
-    Both feats are `[Arena Fighting]` and so only one may apply to a use,
-    and nothing here declares between them -- which is sound rather than
-    an oversight: taking `f976`'s substitution means the walk does not
-    happen, so the lengthened distance it would have had is never asked
-    for. The two cannot both pay.
+    Both feats are `[Arena Fighting]` and so only one may apply to a use.
+    Neither is in the `c.declare` chain below, which is sound rather than
+    an oversight: both reach the walk from outside through `c.pre_empt`,
+    and taking `f976`'s substitution means the walk does not happen, so
+    the lengthened distance it would have had is never asked for. The two
+    cannot both pay.
+
+    **`f990`'s clause is written in here**, which is #550's convention: a
+    feat naming one power has its clause in that power rather than
+    registering a rider against it from its own file, with `c.credit`
+    naming the feat for what the body does.
+
+    **It is read off `c.declare` and not off `c.feat`**, because `f990` is
+    `[Arena Fighting]` too and `c.feat` is true of every feat held. The
+    chain is one branch long -- `f973`, `f976`, `f980`, `f3196` and `f3230`
+    all name this row and are still riders or substitutions in their own
+    files, so they still stack with this one, which the printed rule
+    forbids. That is the migration being partway through.
+
+    **The crit gate came with the move, and the rider did not have it.**
+    The printed clause is *"if you score a critical hit with this
+    exploit"*, and the rider was a bare `c.shift(1)` shared with a second
+    power whose card says something else entirely -- so it paid on every
+    hit on both rows. `_riders`' default table is a `Hit` watcher and
+    `ev.critical` is the crit half of that same window; in a body the
+    reader is `c.crit`, which is the shape `p704` already uses for a
+    crit-gated arena clause.
+
+    **`c.credit` lays nothing here and is kept anyway.** A shift emits
+    `Moved` and no effect, so there is nothing for the block to stamp
+    today; it is the convention's wrapper and it is what makes a later
+    effect in this clause the feat's rather than this row's.
     """
+    arena = c.declare("Arena Fighting", "f990")
     if c.first:
         c.instead_of("move", lambda: c.move(c.squares_for(c.ref, 2)))
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
+        # "If you score a critical hit with this exploit, you can shift 1
+        # square after the attack."
+        if arena == "f990" and c.crit and c.may("shift after the attack"):
+            with c.credit("f990"):
+                c.shift(1)
 
 
 @power(

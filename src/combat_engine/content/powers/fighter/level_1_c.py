@@ -20,6 +20,7 @@ from combat_engine.engine import (
     ONE_CREATURE,
     STANDARD,
     STR,
+    WILL,
     Attack,
     Cast,
     Condition,
@@ -174,10 +175,36 @@ def p2105(c: Cast) -> None:
 )
 def p2620(c: Cast) -> None:
     """The Effect line is the price: the opening is handed to the target
-    whether the swing landed or not."""
+    whether the swing landed or not.
+
+    **`f983`'s clause is written in here**, which is #550's convention: a
+    feat naming one power has its clause in that power rather than
+    registering a rider against it from its own file. `c.credit` is
+    Camille's call on the attribution fork, so the effect this body lays
+    is reported as the feat's.
+
+    **Read off `c.declare` and never off `c.feat`.** `f983` is
+    `[Arena Fighting]`, and one feat of that bracket applies to one use of
+    a power -- `c.feat` is true of every feat the character holds and
+    cannot say which one is being applied. The chain is one branch long:
+    the other Arena Fighting feats naming this row are still riders in
+    their own files, so they still stack with this one, which the printed
+    rule forbids. That is the migration being partway through rather than
+    a reading of the cards.
+
+    It sits **inside the hit branch**, which is the window its rider was
+    registered in -- `_riders`' default table is a `Hit` watcher.
+    """
+    arena = c.declare("Arena Fighting", "f983")
     victim = c.target
     if c.strike():
         c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod + heavy_rider(c))
+        if arena == "f983" and victim is not None:
+            with c.credit("f983"):
+                # A -1 penalty to the target's Will defence until the end
+                # of the character's next turn, which is the whole of the
+                # clause the rider laid.
+                c.penalty(WILL, 1, on=victim, until=When.EONT)
     if victim is not None:
         c.grants_advantage(on=c.me, to=victim, until=When.SONT)
 

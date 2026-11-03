@@ -65,20 +65,53 @@ def _marked_by_me(c: Cast) -> bool:
     attack=Attack(STR, vs=AC),
 )
 def p1567(c: Cast) -> None:
-    """The radiant swing. `f1097`'s rider is **already written elsewhere**.
+    """The radiant swing, and `f1097`'s rider written in.
 
-    Nearly duplicated here while applying #550's convention, and the near
-    miss is worth recording: `feats/general_g._p1567` registers that
-    clause through the older `_riders` shape, so writing it in as well
-    would have handed the neighbour its damage bonus **twice**. Grep for
-    the ref before writing a clause into a row -- `content/CLAUDE.md`'s
-    "most gaps filed here have turned out to exist under another name"
-    applies to clauses and not only to verbs.
+    **It is here now rather than registered from the feat**, which is
+    #550's convention: a feat naming one power has its clause in that
+    power, gated on `c.feat` and wrapped in `c.credit` so the effect the
+    power lays is still the feat's doing. `p4542` is the worked pair.
 
-    `f1097` still carries `c.ignore_insubstantial()` for its other printed
-    rider, and no longer carries `c.opt_in()`: nothing in that card is
-    forgone for anything, so there was never an opt-in in it."""
+    This docstring used to warn the opposite -- that the clause already
+    lived in `feats/general_g` through the older `_riders` shape, so
+    writing it in as well would hand the neighbour its damage bonus
+    **twice**. That warning was right while the rider stood; the rider is
+    deleted in the same change as this, which is the only way the pair can
+    be correct at once. The lesson it recorded is unchanged: grep for the
+    ref before writing a clause into a row.
+
+    **The clause goes before `c.damage`, where the rider used to fire.**
+    `_riders` hung it on `Hit`, which is announced inside `c.strike()` --
+    so the rider ran before this body resumed, and keeping that order
+    costs nothing and preserves what a reader of the log sees. Nothing in
+    it reads the damage, so the placement is about faithfulness rather
+    than about the result.
+
+    `f1097` is **unbracketed** (`feat.category` is empty in `game.db`), so
+    a plain `if` and not a `c.declare` chain. Its other two clauses are
+    laid at arming and stay on the feat row -- see `f1097` for why neither
+    is a clause a body could carry.
+
+    `c.allies()` is `query.allies(world, me)` exactly, which is what the
+    rider called; the first adjacent friend takes it, as before. The card
+    says "one ally adjacent to you", so adjacency is measured from the
+    caster and not from the target."""
     if c.strike():
+        if c.feat("f1097") and c.is_kind("undead"):
+            with c.credit("f1097"):
+                # "If your target is undead, one ally adjacent to you gains
+                # a bonus to its next damage roll against the target equal
+                # to your Wisdom modifier." `once=True` is "its next", and
+                # the gate is "against the target".
+                foe = c.target
+                for friend in c.allies():
+                    if c.adjacent(to=friend):
+                        c.bonus(
+                            "damage", c.wis_mod, on=friend,
+                            until=When.ENCOUNTER, once=True,
+                            when=lambda ctx: ctx.get("target") == foe,
+                        )
+                        break
         bonus = c.str_mod + (c.wis_mod if _marked_by_me(c) else 0)
         c.damage(c.w(1), bonus, dtype=DamageType.RADIANT)
 
@@ -144,8 +177,42 @@ def p835(c: Cast) -> None:
     The header's attack line is the printed one, for the card and for a
     policy to read; the body rolls its own, because the bonus is a count of
     the board and the header is data.
+
+    **Two feats name this row and both clauses are written in** (#550):
+    `f1100`'s bonus to Will and `f1102`'s extra damage per adjacent
+    undead. Both are **unbracketed** (`feat.category` is empty in
+    `game.db` for each), so they are two independent plain `if`s rather
+    than a `c.declare` chain -- the chain is only for the bracketed
+    categories, where one feat per bracket applies to one use, and these
+    two stack legitimately with each other and with the row.
+
+    **Both go before `c.damage`, where their riders used to fire.**
+    `_riders` hung each on `Hit`, which is announced inside `c.attack()`,
+    so a rider ran before this body resumed. For `f1100` that is
+    immaterial; for `f1102` it is not, because `c.flat` deals a separate
+    blow rather than adding to the roll -- paying it after the swing would
+    land it on a creature this row may just have dropped.
     """
     if c.attack(c.str_ + len(c.within(1, side="enemy")), AC):
+        if c.feat("f1102"):
+            with c.credit("f1102"):
+                # "You gain a +1 bonus to your damage roll for each undead
+                # enemy adjacent to you." Counted at the blow, because
+                # people move.
+                near = sum(
+                    1 for foe in c.enemies()
+                    if c.adjacent(to=foe) and c.is_kind("undead", on=foe)
+                )
+                if near:
+                    c.flat(near, on=c.target)
+        if (c.feat("f1100") and c.is_kind("undead")
+                and c.marked(on=c.target)):
+            with c.credit("f1100"):
+                # "If you hit an undead creature with this prayer and it is
+                # marked by you, you gain a +1 bonus to Will until the
+                # start of your next turn." `c.marked` is "by you" unless
+                # told otherwise, which is the printed word.
+                c.bonus(WILL, 1, on=c.me, until=When.SONT)
         c.damage(c.w(1), c.str_mod)
 
 

@@ -57,7 +57,34 @@ def _melee_at(foe: int | None) -> Callable[[dict[str, Any]], bool]:
     attack=Attack(WIS, vs=REF),
 )
 def p841(c: Cast) -> None:
+    """The opening an ally gets, and `f1100`'s push written in.
+
+    **#550's convention**: a feat naming one power has its clause in that
+    power, gated on `c.feat` and wrapped in `c.credit` so the push is
+    still the feat's doing rather than this row's. It used to be a rider
+    registered in `feats/general_g`, and the rider is deleted in the same
+    change.
+
+    `f1100` is **unbracketed** (`feat.category` is empty in `game.db`), so
+    a plain `if` and not a `c.declare` chain.
+
+    It goes before `c.damage` because that is where the rider fired:
+    `_riders` hung it on `Hit`, announced inside `c.strike()`, so the push
+    happened before this body resumed -- and a push before the damage is
+    not the same board as a push after it, since this row's blow can drop
+    the creature being shoved.
+
+    No `c.may` on it, which is the rider's reading kept rather than
+    changed: "you can also push" is an option, and nothing here records
+    one being declined. Changing that is a separate judgement from moving
+    the clause.
+    """
     if c.strike():
+        if c.feat("f1100") and c.is_kind("undead"):
+            with c.credit("f1100"):
+                # "If the target is undead, you can also push the target
+                # 1 square on a hit."
+                c.push(1, on=c.target)
         c.damage("1d8", c.wis_mod, dtype=DamageType.RADIANT)
         # An ally gets a bonus to its *next* attack roll, and only against
         # this target. Both halves of that are the `when` gate and `once`.

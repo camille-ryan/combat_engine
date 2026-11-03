@@ -132,6 +132,22 @@ def _somebody_grants_me_ca(world: World, eid: int) -> bool:
     return any(has_combat_advantage(world, eid, foe) for foe in enemies(world, eid))
 
 
+def _surprise_round(c: Cast) -> bool:
+    """Is this the surprise round?
+
+    `Encounter.start` lays `Condition.SURPRISED` on whoever was caught and
+    lifts every one of them when the round ends, so an enemy still holding
+    it *is* the surprise round. The encounter's own `_surprise` flag is
+    private and there is no query for it.
+
+    Copied from `feats/general_h.py`, where `f1306`'s other clause -- the
+    one on `p87` -- still reads it. #550's convention puts a clause in the
+    body of the row it names, and a body cannot reach a feat module's
+    privates.
+    """
+    return any(c.is_(Condition.SURPRISED, on=foe) for foe in c.enemies())
+
+
 def _escape_grab(c: Cast) -> None:
     """Whatever is holding the caster stops holding it. The reading
     `level_10.py` settled: a grab is a relation held up by an effect, so
@@ -564,8 +580,66 @@ def p13217(c: Cast) -> None:
     requires_text="needs a crossbow, a light blade or a sling",
 )
 def p2248(c: Cast) -> None:
-    if c.strike():
-        c.damage(c.w(1), c.dex_mod)
+    """Three feats write a clause into this hit, which is #550's convention:
+    a feat naming one power has its clause in that power, gated on
+    `c.feat` and credited back to the feat with `c.credit`.
+
+    **Two plain `if`s and one declared chain.** Neither `f1297` nor `f1306`
+    carries a category bracket in the compendium (`feat.category` is empty
+    for both), so nothing limits how many of them apply to one use.
+    `f993` is `[Arena Fighting]`, where one feat of the bracket applies to
+    one use, so it is read off `c.declare` and never off `c.feat` -- which
+    is true of every feat held and cannot say which one is being applied.
+    Its chain is one branch long: `f971`, `f978` and `f3245` also name this
+    row and are still riders in their own files, so they still stack with
+    it, which the printed rule forbids. That is the migration being partway
+    through rather than a reading of the cards.
+
+    **All three go after the strike**, because all three were registered in
+    `exploits._riders`' `clauses` table and that table is the `Hit`
+    window. `c.declare` is called before it, which is the printed rule:
+    the declaration cannot depend on the roll.
+
+    `f993`'s half is a skill bonus and a live one -- `engine/skills.py`
+    reads `skill:intimidate` off `Mods` for every check, and Intimidate is
+    one of the five skills this engine rolls in a fight. It reads
+    `c.str_mod` on a Dexterity row, which does not move the chargen draw:
+    `chargen._leans_on` already scores every rogue build at 1 from the
+    `c.dex_mod` below, and the build it names first is the one whose
+    secondary is Strength.
+
+    `f1297`'s half asks for the melee branch of this two-branch row and
+    for combat advantage. `c.ranged` is the branch reader, through
+    `dsl.reach_of`; the advantage is read off `c.result`, because asking
+    the board again after the roll is too late -- a one-shot grant has
+    already been spent by then.
+
+    `f1306`'s half is the surprise round and nothing else, which
+    `_surprise_round` answers off the holds `Encounter.start` laid. That
+    card's other two clauses are still marked -- the duration they want
+    has no `When` member -- and this one never depended on it.
+    """
+    arena = c.declare("Arena Fighting", "f993")
+    if not c.strike():
+        return
+    c.damage(c.w(1), c.dex_mod)
+    if arena == "f993":
+        with c.credit("f993"):
+            # "If you hit with this exploit, you can add your Strength
+            # modifier as a feat bonus to Intimidate checks until the end
+            # of the encounter."
+            c.bonus("skill:intimidate", c.str_mod, on=c.me,
+                    until=When.ENCOUNTER, kind="feat")
+    foe = c.target
+    if foe is None:
+        return
+    if (c.feat("f1297") and not c.ranged
+            and c.result is not None and c.result.advantage):
+        with c.credit("f1297"):
+            c.slide(1, on=foe)
+    if c.feat("f1306") and _surprise_round(c):
+        with c.credit("f1306"):
+            c.grants_advantage(on=foe, until=When.EONT, to="me")
 
 
 @power(

@@ -33,6 +33,7 @@ from combat_engine.engine import (
     Attack,
     Cast,
     CloseBurst,
+    Condition,
     Gear,
     Keyword,
     Melee,
@@ -50,6 +51,28 @@ MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 MARTIAL_RANGED = [Keyword.MARTIAL, Keyword.WEAPON, Keyword.RANGED]
 
 _MELEE_AGAINST_YOU = "an enemy makes a melee attack against you"
+
+#: The four holds `f1300`'s clause on `p917` names together.
+#:
+#: Copied from `feats/general_h.py`, where the same tuple still serves that
+#: feat's clause on the swing `p1061` hands an ally. #550's convention puts
+#: a clause in the body of the row it names, and a body cannot reach a feat
+#: module's privates -- four condition members is the cheap end of that
+#: duplication.
+_HELD_FAST = (
+    Condition.IMMOBILIZED,
+    Condition.RESTRAINED,
+    Condition.STUNNED,
+    Condition.UNCONSCIOUS,
+)
+
+#: The four creature types every clause of `f1298` names together. Copied
+#: from `feats/general_h.py` for the same reason as `_HELD_FAST`.
+_NAMED_KINDS = ("demon", "drow", "orc", "spider")
+
+
+def _is_named_kind(c: Cast, who: int) -> bool:
+    return any(c.is_kind(word, on=who) for word in _NAMED_KINDS)
 
 
 def _two_melee(world: World, eid: int) -> bool:
@@ -110,8 +133,45 @@ def p1505(c: Cast) -> None:
     requires_text="needs two melee weapons or a ranged weapon",
 )
 def p917(c: Cast) -> None:
-    if c.strike():
-        c.damage(c.w(1), c.attack_mod)
+    """Two feats write a clause into this hit, which is #550's convention:
+    a feat naming one power has its clause in that power rather than
+    registering a rider against it, gated on `c.feat` and credited back to
+    the feat with `c.credit`.
+
+    **Two plain `if`s rather than a chain.** Neither `f1297` nor `f1300`
+    carries a category bracket in the compendium (`feat.category` is empty
+    for both), so nothing limits how many of them apply to one use -- an
+    `if`/`elif` would hand a character holding both only one of the two it
+    is entitled to.
+
+    **Both go after the strike**, because both were registered in
+    `exploits._riders`' `clauses` table and that table is the `Hit` window.
+
+    `f1297`'s half asks for the melee branch of this two-branch row and
+    for combat advantage. `c.ranged` is the branch reader -- through
+    `dsl.reach_of`, so a creature holding a reshape gets the shape it is
+    using rather than the printed one, which is a shade better than the
+    header read the rider did. The advantage is read off `c.result`:
+    asking the board again after the roll is too late, because a one-shot
+    grant has already been spent by then.
+
+    `f1300`'s half is Constitution-gated, and the gate has to survive the
+    move -- a modifier of 0 or less pays nothing.
+    """
+    if not c.strike():
+        return
+    c.damage(c.w(1), c.attack_mod)
+    foe = c.target
+    if foe is None:
+        return
+    if (c.feat("f1297") and not c.ranged
+            and c.result is not None and c.result.advantage):
+        with c.credit("f1297"):
+            c.slowed(on=foe, until=When.EONT)
+    if (c.feat("f1300") and c.con_mod > 0
+            and any(c.is_(hold, on=foe) for hold in _HELD_FAST)):
+        with c.credit("f1300"):
+            c.flat(c.con_mod, on=foe)
 
 
 @power(
@@ -126,8 +186,27 @@ def p917(c: Cast) -> None:
     attack=Attack(DEX, vs=AC),
 )
 def p919(c: Cast) -> None:
+    """**`f973`'s clause is written in here**, which is #550's convention,
+    with `c.credit` naming the feat for the step this body takes.
+
+    Read off `c.declare` rather than `c.feat`, because `f973` is
+    `[Arena Fighting]` and one feat of that bracket applies to one use.
+    The chain is one branch long: `f980` lays a standing modifier on this
+    row from its own file and `f994` substitutes the shift below through
+    `c.pre_empt`, so neither is in the chain and both can still apply
+    alongside it.
+
+    The clause sits **inside the hit branch**, which is the window its
+    rider was registered in.
+    """
+    arena = c.declare("Arena Fighting", "f973")
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
+        if arena == "f973":
+            with c.credit("f973"):
+                # The whole of the clause the rider laid: one square, on a
+                # hit, with no further gate.
+                c.shift(1)
     # "Before or after": after is the half that can be taken here.
     c.instead_of("shift", lambda: c.shift(1))
 
@@ -156,12 +235,30 @@ def p87(c: Cast) -> None:
     The melee branch is main weapon then off-hand, as printed; the ranged
     branch is two shots from the same bow, so `hand` only matters on the
     branch that has two hands in it.
+
+    **`f1298`'s clause is written in here**, per #550: extra damage equal
+    to the character's Intelligence modifier against one of the four kinds
+    that card names. It was registered in `exploits._riders`' `clauses`
+    table, which is the `Hit` window, and this row announces one `Hit`
+    **per swing** -- so the clause goes inside the loop, where a
+    two-swing use into one creature pays it twice exactly as the rider
+    did. Outside the loop it would pay once, which is a quiet halving.
+
+    The Intelligence gate has to survive the move: a modifier of 0 or less
+    pays nothing. `foe` is read back *after* `c.strike()`, because the
+    strike writes the target it actually resolved against.
     """
     shots = 2 if (c.first and c.last) else 1
     for swing in range(shots):
         hand = "off" if (swing and c.branch == 0) else "main"
-        if c.strike():
-            c.damage(c.w(1, hand=hand), c.attack_mod)
+        if not c.strike():
+            continue
+        c.damage(c.w(1, hand=hand), c.attack_mod)
+        foe = c.target
+        if (foe is not None and c.feat("f1298") and c.int_mod > 0
+                and _is_named_kind(c, foe)):
+            with c.credit("f1298"):
+                c.flat(c.int_mod, on=foe)
 
 
 @power(

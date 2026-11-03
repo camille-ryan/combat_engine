@@ -390,9 +390,33 @@ def p4541(c: Cast) -> None:
     The combat advantage the target gets is against *you*, so it is a
     one-shot grant put on the caster; the ally's is the mirror of it. Both
     are spent by the swing they were printed for.
+
+    **`f978`'s clause is written in here**, which is #550's convention,
+    with `c.credit` naming the feat for what this body lays. Read off
+    `c.declare` and not `c.feat`: `f978` is `[Arena Fighting]` and one
+    feat of that bracket applies to one use. The chain is one branch long
+    -- `f983` prints a clause on the swing this row *hands out*, which is
+    a `granted=` rider and a different window, so it is not in the chain.
+
+    It sits **inside the hit branch**, the window its rider was registered
+    in.
     """
+    arena = c.declare("Arena Fighting", "f978")
     if c.strike():
         c.damage(c.w(1), c.str_mod)
+        if arena == "f978" and c.wielding("superior"):
+            with c.credit("f978"):
+                # The target does not have combat advantage against the
+                # character. A *gated* `no_advantage`, because the card is
+                # about this one creature and not about everybody:
+                # `ctx["attacker"]` is who is swinging, and `resolve` puts
+                # it in the defence context for exactly this.
+                c.no_advantage(
+                    on=c.me, until=When.EONT,
+                    when=lambda ctx, enemy=c.target: (
+                        ctx.get("attacker") == enemy
+                    ),
+                )
     foe = c.target
     if foe is None or not c.may("swing at the warlord", who=foe):
         return
@@ -431,8 +455,19 @@ def p4542(c: Cast) -> None:
     the rider lived in `_riders`' `used=` window for exactly that reason,
     and a bonus laid after the roll would be too late to have decided
     anything.
+
+    **Read off `c.declare`, not `c.feat`.** `f995` is `[Arena Fighting]`,
+    and the card's rule is one feat of a bracketed category per use -- so
+    the branch asks which one *applies*, which `c.feat` cannot answer
+    because it is true of every feat held. The chain names only `f995`
+    today; `f971`, `f984` and `f986` also print clauses on this row and
+    join this call as each is migrated, which is what makes them exclusive
+    of one another. Until then their riders still fire independently:
+    `_riders` arms one watcher per feat and gates nothing, so exclusivity
+    on this row arrives only with its last migration.
     """
-    if c.feat("f995"):
+    arena = c.declare("Arena Fighting", "f995")
+    if arena == "f995":
         with c.credit("f995"):
             # "Add your shield bonus as a feat bonus to your attack roll."
             # "You can" is `c.may`, and nothing is added without a shield --

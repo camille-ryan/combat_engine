@@ -1299,14 +1299,12 @@ def _surprise_round(c: Cast) -> bool:
 # -- the clauses ------------------------------------------------------------
 
 
-def _slow_if_open(c: Cast, ev: Any) -> None:
-    if _melee_half(ev) and c.had_advantage(ev):
-        c.slowed(on=ev.target, until=When.EONT)
-
-
-def _slide_if_open(c: Cast, ev: Any) -> None:
-    if _melee_half(ev) and c.had_advantage(ev):
-        c.slide(1, on=ev.target)
+# `_slow_if_open` and `_slide_if_open` were here -- f1297's entries on p917
+# and p2248 -- and are written into those two bodies now (#550). `c.ranged`
+# replaces `_melee_half` there, because a body asks its own `Cast` for the
+# branch rather than reading it off an event, and `c.result.advantage`
+# replaces `c.had_advantage(ev)` for the same reason. `_melee_half` stays:
+# `_extra_in_surprise` below still reads it.
 
 
 def _is_named_kind(c: Cast, who: int) -> bool:
@@ -1314,35 +1312,23 @@ def _is_named_kind(c: Cast, who: int) -> bool:
 
 
 # `_temp_hp_off_kind` was here, called only by f1298's entry on p2099,
-# which is written into p2099's body now (#550). `_is_named_kind` stays:
-# `_extra_off_kind` below is f1298's clause on p87, which has not migrated.
-
-
-def _extra_off_kind(c: Cast, ev: Any) -> None:
-    if c.int_mod > 0 and _is_named_kind(c, ev.target):
-        c.flat(c.int_mod, on=ev.target)
+# which is written into p2099's body now (#550). `_extra_off_kind` was here
+# too -- f1298's entry on p87 -- and is written into p87's body now, inside
+# that row's swing loop, because p87 announces one `Hit` per swing and a
+# clause outside the loop would pay once where the rider paid twice.
+#
+# `_is_named_kind` stays: `_riposte_off_kind` and `_ally_adds_half_int`
+# below both read it, and neither of those entries has migrated.
 
 
 # `_ongoing_if_alone` was here, called only by f1299's entry on p992,
 # which is written into p992's body now (#550). `lint.py` named it.
-
-
-def _beast_shifts_if_open(c: Cast, ev: Any) -> None:
-    """"Your beast companion can shift 1 square before the attack."
-
-    On the `used` window, which is what "before the attack" means: the body
-    has not run, so the shift lands before the swing it is meant to set up.
-    `c.beast` answers None for a character that keeps none, so the gate is
-    honest rather than silently true.
-    """
-    from combat_engine.engine.query import has_combat_advantage
-
-    beast = c.beast()
-    if beast is None:
-        return
-    foes = [t for t in (ev.targets or ()) if has_combat_advantage(c.world, c.me, t)]
-    if foes:
-        c.shift(1, who=beast)
+#
+# `_beast_shifts_if_open` was here as well -- f1297's entry on p4369, and
+# the only one of this file's clauses that was in the `used=` window. It is
+# written into p4369's body now, **above** that row's adjacency guard,
+# which is where `PowerUsed` is: announced before the body, so a use whose
+# target line fails still gave the beast its step.
 
 
 def _beast_ongoing_instead(c: Cast, ev: Any) -> None:
@@ -1477,18 +1463,21 @@ def _cow_on_riposte(c: Cast, ev: Any) -> None:
     c.penalty("attack", 2, on=ev.target, until=When.EONT)
 
 
-def _extra_if_held(c: Cast, ev: Any) -> None:
-    if c.con_mod > 0 and any(c.is_(hold, on=ev.target) for hold in _HELD_FAST):
-        c.flat(c.con_mod, on=ev.target)
+# `_extra_if_held` was here -- f1300's entry on p917 -- and is written into
+# p917's body now (#550). `_HELD_FAST` stays: `_ally_adds_con` below is the
+# same feat's clause on the swing p1061 hands an ally, which has not moved.
 
 
 # `_mark_the_hit` was here -- f1304's whole `clauses` leg, on p992 -- and
 # is written into p992's body now (#550).
 
 
-def _advantage_in_surprise(c: Cast, ev: Any) -> None:
-    if _surprise_round(c):
-        c.grants_advantage(on=ev.target, until=When.EONT, to="me")
+# `_advantage_in_surprise` was here -- f1306's entry on p2248 -- and is
+# written into p2248's body now (#550), with a copy of `_surprise_round`.
+# That reader stays: `_extra_in_surprise` below is the same feat's clause on
+# p87, which has **not** moved, deliberately -- it is the last live clause
+# f1306 has out here, and migrating it too would leave the trait arming no
+# watcher at all and reporting silent.
 
 
 def _extra_in_surprise(c: Cast, ev: Any) -> None:
@@ -1587,11 +1576,15 @@ def f1296(c: Cast) -> None:
 
 # p1000's clause slows *instead of* the push its row prints, and the
 # ranger's beast clause is the one name here the matcher still misses.
+#
+# **p917's, p2248's and p4369's entries have moved into those rows'
+# bodies** (#550). p1000's stays: it is the "instead of" shape, which
+# `_slow_instead_of_push` writes as a one-shot veto of this row's own
+# `ForcedMove`, and that is the exception the content rules name -- a
+# clause that *replaces* a clause of the row rather than adding to it.
 _riders("f1297", {
-    "p917": _slow_if_open,
-    "p2248": _slide_if_open,
     "p1000": _slow_instead_of_push,
-}, used={"p4369": _beast_shifts_if_open})
+})
 
 def _ally_adds_half_int(c: Cast, ev: Any) -> None:
     """Half the caster's Intelligence on the granted swing's attack roll.
@@ -1665,9 +1658,12 @@ def _cow_if_both_hit(c: Cast, ev: Any) -> None:
 # attack roll is a gated bonus and its damage roll is paid at the
 # counter's hit -- see `_riposte_off_kind` for why the two halves are
 # written in different places.
-# **p2099's entry has moved into p2099's body** (#550).
+# **p2099's and p87's entries have moved into those rows' bodies** (#550).
+# p653's stays: that clause fires on the *opening* blow and has to carry
+# the fact forward to a counter rolled later, which is a latch and a
+# watcher rather than a line of body. p1061's is a swing this row hands an
+# ally, so it is the ally's `PowerUsed` and not this row's body at all.
 _riders("f1298", {
-    "p87": _extra_off_kind,
     "p653": _riposte_off_kind,
 }, granted={"p1061": _ally_adds_half_int})
 
@@ -1687,15 +1683,15 @@ _riders("f1299", {
 # p997's clause pays out **on a miss**, which a rider hung on `Hit` never
 # sees -- and `_riders` has carried a `missed=` leg since the family was
 # written, so the marker here was naming a verb for a window that already
-# existed. `_extra_if_held` reads `ev.target`, which `Miss` carries beside
-# `Hit`, so the same clause serves both. p1061 is the granted attack.
+# existed. The clause read `ev.target`, which `Miss` carries beside `Hit`,
+# so one clause served both windows. p1061 is the granted attack.
 #
-# **p704's and p997's entries have moved into those rows' bodies** (#550),
-# and the `missed=` note above went with p997's. p917 and p1061 stay riders
-# until their own rows are migrated.
-_riders("f1300", {
-    "p917": _extra_if_held,
-}, granted={"p1061": _ally_adds_con})
+# **p704's, p997's and p917's entries have moved into those rows' bodies**
+# (#550), and the `missed=` note above went with p997's. p1061's is the
+# last one out here and stays: it is the swing that row hands an ally,
+# which arrives as the *ally's* `PowerUsed` with `granted_via` naming
+# p1061 -- not anything p1061's own body can reach.
+_riders("f1300", {}, granted={"p1061": _ally_adds_con})
 
 
 @_trait("f1301")
@@ -1903,8 +1899,15 @@ _riders("f1305", {
 # basic attack -- but only "during the surprise round", and `c.as_basic`
 # holds its swap for a stretch of time `When` cannot name. Re-aimed
 # there: it is the duration that is missing, not the substitution.
+#
+# **p2248's entry has moved into p2248's body** (#550). **p87's has
+# deliberately not**, and the reason is the trap #550 names from the other
+# side: it is this card's last clause out here, so migrating it too would
+# leave the trait arming no watcher, doing nothing, and reporting silent --
+# and `c.credit` cannot cover that, because the audit board has nobody
+# holding `Condition.SURPRISED` for the clause to pay on. One clause stays
+# a rider until the card has something else keeping it alive.
 _riders("f1306", {
-    "p2248": _advantage_in_surprise,
     "p87": _extra_in_surprise,
 }, dropped=("When.SURPRISE",))
 

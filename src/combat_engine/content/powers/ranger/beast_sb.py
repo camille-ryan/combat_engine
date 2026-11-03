@@ -64,7 +64,12 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Companion
 from combat_engine.engine.events import AttackDeclared, DamageApplied, Moved
-from combat_engine.engine.query import bloodied, squares
+from combat_engine.engine.query import (
+    bloodied,
+    flankers,
+    has_combat_advantage,
+    squares,
+)
 from combat_engine.engine.triggers import Trigger, by_melee
 
 MARTIAL = [Keyword.MARTIAL]
@@ -139,11 +144,80 @@ def _flanking(c: Cast) -> bool:
 def p4369(c: Cast) -> None:
     """"One creature adjacent to you" is narrower than the beast's reach, so
     it is asked here: the range line aims from the beast and the target line
-    wants the ranger beside it too."""
+    wants the ranger beside it too.
+
+    **`f975`'s and `f982`'s clauses are written in here**, which is #550's
+    convention, with `c.credit` naming the feat for what this body lays.
+
+    **They are one chain and not two `if`s.** Both are `[Arena Fighting]`,
+    and one feat of that bracket applies to one use of a power, so the
+    choice is made by `c.declare` before the attack -- the printed rule is
+    that the declaration cannot depend on the roll. `c.feat` is true of
+    every feat held and cannot say which one is being applied.
+
+    Both sit **inside the hit branch**, the window their riders were
+    registered in: `_riders`' default table is a `Hit` watcher.
+
+    Neither clause reads an ability modifier the ranger's builds are
+    scored on, which is deliberate -- `chargen._leans_on` reads the body's
+    source for `c.<ability>_mod`, so a clause moved into a body can move
+    the draw.
+
+    **`f1297`'s clause is in here too, and it is the one that is not in
+    the hit branch.** It was registered in `_riders`' `used=` table, which
+    is this creature's own `PowerUsed` -- announced *before* the body runs
+    -- so it goes at the very top, **above the adjacency guard**. That is
+    where the rider's moment was: a use whose target line fails still
+    announced `PowerUsed`, so the beast still got its step. Moving it
+    below the guard would be a quiet narrowing of the card rather than a
+    faithful move.
+
+    It is unbracketed, so it is a plain `if` and stacks with whichever of
+    the two Arena Fighting feats was declared.
+
+    The `c.credit` block stamps nothing today, because a shift lays no
+    `Effect` and `c.credit` reaches effects through `Effects.apply`. It is
+    written anyway: the clause is `f1297`'s, and anything laid inside it
+    later should say so.
+    """
+    if c.feat("f1297"):
+        with c.credit("f1297"):
+            # "Your beast companion can shift 1 square before the attack",
+            # when the ranger has combat advantage against a target of this
+            # use. `c.beast` answers None for a character that keeps none,
+            # so the gate is honest rather than silently true.
+            beast = c.beast()
+            if beast is not None and any(
+                has_combat_advantage(c.world, c.me, foe) for foe in c.targets
+            ):
+                c.shift(1, who=beast)
     if not c.adjacent():
         return
+    arena = c.declare("Arena Fighting", "f975", "f982")
     if c.strike():
         c.damage(c.b(2 if c.level >= 21 else 1), c.b_mod(Ability.STR) + c.wis_mod)
+        victim = c.target
+        if arena == "f975" and victim is not None:
+            with c.credit("f975"):
+                # The target falls prone if the beast companion has combat
+                # advantage against it. `c.beast` answers None for a
+                # character that keeps none, so the gate is honest rather
+                # than silently true.
+                beast = c.beast()
+                if beast is not None and has_combat_advantage(
+                    c.world, beast, victim
+                ):
+                    c.prone(on=victim)
+        elif arena == "f982" and victim is not None:
+            with c.credit("f982"):
+                # A shift after the attack when the ranger and the beast
+                # are the pair flanking the target. `query.flankers` is the
+                # list because it has to be *this* pair -- `flanked_by`
+                # answers True for any partner on the board.
+                pet = c.beast()
+                pair = flankers(c.world, victim)
+                if pet is not None and c.me in pair and pet in pair:
+                    c.shift(1)
 
 
 @power(
