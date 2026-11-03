@@ -142,6 +142,7 @@ def legal(
     out.extend(_stabilising(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
     out.extend(_searching(world, encounter, actor))
+    out.extend(_disabling(world, encounter, actor))
     out.extend(_readying(world, encounter, actor))
     out.extend(_feinting(world, encounter, actor))
     out.extend(_delaying(world, encounter, actor))
@@ -435,6 +436,64 @@ def _searching(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # is to look around, not to look at a particular trap you cannot see.
     return [Action(kind="search", cost=ActionType.MINOR,
                    targets=tuple(sorted(hidden)))]
+
+
+def _disabling(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Disarm a trap you are standing next to. A standard action. #955.
+
+    `_searching` above answers *where is it*; this answers *make it stop*.
+    The state it sets was already built -- `traps.disable` and
+    `Trap.disabled` -- and `#989` gave the numbers
+    (`disable_skill`/`disable_dc`, 130 rows printing one clause). Nothing
+    offered it, so both halves sat unreachable.
+
+    Five conditions, each ruling out a real case:
+
+    * the trap is **found**. You cannot disarm what nobody has located, and
+      this is the one that makes the search action worth taking;
+    * it is not **sprung** -- a trap that has gone off has nothing left to
+      disarm;
+    * it is not already **disabled**, so a party cannot spend standards
+      re-disarming it;
+    * it prints **both** a skill and a DC. A block naming a skill with no
+      number is as unusable as one naming neither, and inventing the
+      missing half is the fabrication `perception_dc`'s own note warns
+      about -- 477 rows genuinely print no countermeasure and 24 are
+      ambiguous and NULL on purpose;
+    * and the disarmer is **adjacent**. The printed move is done with your
+      hands.
+
+    **One action per trap, which is where this parts company with
+    `_searching`.** That one offers a single action over every candidate
+    because looking around the room is not aimed at a particular trap you
+    cannot see. This is aimed: the DCs differ, the skills differ, and a
+    character next to two traps is choosing which to work on.
+
+    **Party only**, on Camille's #1064 ruling about the search -- *"For now,
+    opposition just doesn't bother looking for traps. They should know they
+    exist."* A creature that knows where the trap is has no reason to
+    disarm it either, and the same `Team.PC` axis the ruling turns on
+    applies unchanged.
+    """
+    from .components import Side, Trap
+    from .query import adjacent
+    from .types import Team
+
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return []
+    side = world.get(actor, Side)
+    if side is None or side.team is not Team.PC:
+        return []
+    return [
+        Action(kind="disable", cost=ActionType.STANDARD, targets=(eid,))
+        for eid, trap in world.each(Trap)
+        if trap.found
+        and not trap.sprung
+        and not trap.disabled
+        and trap.disable_skill
+        and trap.disable_dc is not None
+        and adjacent(world, actor, eid)
+    ]
 
 
 def _readying(world: World, encounter: Encounter, actor: int) -> list[Action]:
@@ -1886,8 +1945,59 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
                 trap.found = True
         # **The action succeeded even when the look did not.** The minor is
         # spent either way, which is what makes searching a risk rather than
-        # a free reveal, and returning False here would read to the caller
-        # as "the action could not be taken" and hand the minor back.
+        # a free reveal.
+        #
+        # This used to say a `False` would "hand the minor back". It would
+        # not: `perform` spends before it dispatches, so the cost is gone
+        # whatever this returns. What a `False` does is make
+        # `policy.take_turn` `return`, costing the searcher its standard and
+        # move too -- which is the real reason, and a stronger one. Found
+        # while writing the disable branch below, by a plant that stayed
+        # green against the old claim. #955.
+        return True
+
+    if action.kind == "disable":
+        from . import traps
+        from .cast import Cast
+        from .components import Trap
+        from .query import adjacent
+
+        # **One trap, one roll**, which is where this parts company with the
+        # search above: that one rolls once against every candidate because
+        # looking around the room is a single look, and this is a pair of
+        # hands on one mechanism. `_disabling` offers an action per trap for
+        # the same reason.
+        eid = action.targets[0] if action.targets else None
+        if eid is None:
+            return False
+        trap = world.get(eid, Trap)
+        if (
+            trap is None
+            or not trap.found
+            or trap.sprung
+            or trap.disabled
+            or not trap.disable_skill
+            or trap.disable_dc is None
+            or not adjacent(world, actor, eid)
+        ):
+            return False
+        working = Cast(world=world, me=actor, ref="disable")
+        if working.check(trap.disable_skill, trap.disable_dc):
+            traps.disable(world, eid)
+        # **A failed check spends the standard and does nothing else**, the
+        # same shape as a failed look above. Some printed blocks spring the
+        # trap on a bad roll and some do not -- that is a per-trap detail
+        # this engine does not carry a column for, and inventing one here
+        # would apply it to all 130.
+        #
+        # **True, and the reason is `policy`'s turn loop rather than the
+        # cost.** `perform` spends before it dispatches, so a `False` here
+        # could not hand the standard back if it wanted to -- what it does
+        # instead is make `policy.take_turn` `return` outright, costing the
+        # creature its **move and minor as well**. A failed disarm must not
+        # end a turn. The `search` branch above said this the other way
+        # round for #959's whole life and a plant found it: the claim was
+        # unfalsifiable, because the cost is gone either way.
         return True
 
     if action.kind == "action_point":

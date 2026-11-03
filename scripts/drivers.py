@@ -16277,6 +16277,325 @@ def an_active_search_finds_a_trap(out: Result) -> None:
     )
 
 
+def disarming_a_found_trap(out: Result) -> None:
+    """A standard action to take a trap out of commission. #955.
+
+    `an_active_search_finds_a_trap` above answers *where is it*, and until
+    this landed that was the whole of what a party could do about one. Both
+    halves of the other end were already built and unreachable:
+    `traps.disable` and `Trap.disabled` since #956, and the printed
+    countermeasure -- a skill and a DC per block -- imported by #989. No
+    action offered either, so a found trap was a found trap for ever.
+
+    **The fields had to travel two seams to get here**, which is the part
+    worth knowing before touching it. `printed_trap`'s own docstring says
+    it "stays the only thing that knows which columns it wants", and its
+    SELECT named seven -- so the two columns #989 imported were in
+    `game.db` and in no board. The `Trap` component did not carry them
+    either. Both are additive.
+
+    **One action per trap, which is where this parts company with the
+    search.** That one rolls once against every candidate because looking
+    around a room is a single look; this is a pair of hands on one
+    mechanism, so the DC and the skill are the trap's own and a character
+    next to two of them is choosing which to work on.
+
+    Measured off the column itself: **130 of 631** rows name one, and all
+    130 that name a skill carry a DC with it -- thievery 103, arcana 17,
+    religion 6, nature 2, streetwise 1, perception 1. So the
+    skill-without-a-DC guard below cannot be reddened by any printed row
+    today, and says so where it is asserted.
+
+    **The other 501 are NULL for two different reasons and the column
+    cannot tell them apart.** `etl/build.py` stores a pair only when
+    *exactly one* of a block's printed checks says `disable`, and its own
+    comment puts 24 blocks in the several-and-the-page-does-not-say bucket
+    -- the rest print none. Re-deriving that split here off the sanitised
+    `trap.spec` lands at **23 / 127 / 481** rather than 24 / 130 / 477,
+    because the ETL reads the unsanitised compendium text through its own
+    pattern. So the 130 is measured and the split is the ETL's claim,
+    approximately reproducible and not asserted.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import actions as acts
+    from combat_engine.engine import traps as _traps
+    from combat_engine.engine.components import Budget, Position, Trap
+    from combat_engine.engine.types import ActionType
+
+    # **Named parameters rather than a `**fields` splat into `Trap`.** The
+    # splat version typed `settings` as `dict[str, object]`, so `ty` read
+    # four of the five fields as the wrong type going in and `types` went
+    # four over its baseline -- `-> tuple` and a dict splat erase a type
+    # the same way, which `scripts/CLAUDE.md` already records about the
+    # first.
+    def board_with(*, found: bool = True, sprung: bool = False,
+                   disabled: bool = False, skill: str = "thievery",
+                   dc: int | None = 10) -> tuple:
+        world, me, _armed = _posed("f1378b", 5)
+        here = world.need(me, Position).square
+        eid = world.spawn()
+        world.add(eid, Trap(ref="t:drivers", perception_dc=10, found=found,
+                            sprung=sprung, disabled=disabled,
+                            disable_skill=skill, disable_dc=dc))
+        world.add(eid, Position(square=(here[0] + 1, here[1])))
+        return world, world.encounter, me, eid
+
+    def offered(world, enc, me) -> list:  # noqa: ANN001
+        # **The standard is refilled first, and a plant proved this is not
+        # decoration.** `_disabling` opens with `can_spend(actor, STANDARD)`,
+        # so an actor who has already acted answers `[]` from that guard and
+        # every assertion below it passes while saying nothing about traps.
+        # Same shape as the `can_spend(MINOR)` trap in the party-only half
+        # of the search rule.
+        world.need(me, Budget).standard = 1
+        return [a for a in acts.legal(world, enc, me) if a.kind == "disable"]
+
+    # -- the seam first: a printed trap reaches a board carrying them ----
+    # **This is the one that was broken and that nothing else can see.**
+    # `board_with` builds its `Trap` by hand, so every assertion below it
+    # would pass over a `printed_trap` that never selected the two columns
+    # and an `arm` that never passed them -- which is exactly the state the
+    # tree was in: #989 imported them into `game.db` and no board had them.
+    from random import Random
+
+    from combat_engine.content.terrain import printed_trap
+    rows = [printed_trap(5, Random(n)) for n in range(40)]
+    rows = [r for r in rows if r is not None]
+    out.that(bool(rows) and all("disable_skill" in r and "disable_dc" in r
+                                for r in rows),
+             "a printed trap carries its countermeasure off the row --"
+             " `printed_trap`'s SELECT named seven columns and these two"
+             " were not among them, so the table held them and no board"
+             " did",
+             f"{len(rows)} rows drawn, "
+             f"keys={sorted(rows[0]) if rows else None}")
+    armed = [r for r in rows if r["disable_skill"] and r["disable_dc"]]
+    out.that(bool(armed),
+             "and at least one of them prints one, so the clause above is"
+             " not green on a column that is uniformly NULL -- 130 of the"
+             " 631 rows print a skill and all 130 print a DC with it",
+             f"{len(armed)} of {len(rows)} drawn rows print one")
+
+    # -- the floor: offered, naming the trap, for a standard -------------
+    world, enc, me, eid = board_with()
+    first = offered(world, enc, me)
+    out.that(len(first) == 1 and first[0].targets == (eid,),
+             "the floor: a disable is offered and names the one trap, without"
+             " which nothing below is being tested",
+             f"offers={[(a.kind, a.targets) for a in first]}")
+    out.that(bool(first) and first[0].cost is ActionType.STANDARD,
+             "and it costs a **standard**, not the minor a search costs --"
+             " the printed action, and the reason a party has to choose"
+             " between disarming and fighting",
+             f"cost={first[0].cost if first else None}")
+
+    # -- a check it cannot miss disables it ------------------------------
+    world, enc, me, eid = board_with(dc=1)
+    out.that(not world.need(eid, Trap).disabled,
+             "the trap starts armed, so the next assertion is a change and"
+             " not a reading of the initial state")
+    acts.perform(world, enc, me, offered(world, enc, me)[0])
+    out.that(world.need(eid, Trap).disabled,
+             "a check against a DC it cannot miss disables the trap")
+
+    # **And the board reads it**, which is the half a flag nothing consults
+    # would fail. `traps.suppressed` is the one reader and `terrain.arm`'s
+    # two branches are what call it, so a disabled trap is not there as far
+    # as anything that would go off is concerned.
+    out.that(_traps.suppressed(world, eid),
+             "and the board then treats it as not there -- `traps.suppressed`"
+             " is what `terrain.arm` asks before it attacks anybody, so this"
+             " is the flag having a reader rather than being set",
+             "disabled was set and suppressed still answers no")
+
+    # -- a check it cannot pass spends the standard and changes nothing ---
+    world, enc, me, eid = board_with(dc=60)
+    said = acts.perform(world, enc, me, offered(world, enc, me)[0])
+    out.that(not world.need(eid, Trap).disabled,
+             "a check against a DC it cannot reach leaves the trap armed --"
+             " a spent standard and nothing else, which is what makes"
+             " disarming a risk rather than a free removal",
+             "it was disabled anyway, so the roll is not being consulted")
+    out.that(not enc.can_spend(me, ActionType.STANDARD),
+             "and the standard is **spent** even so -- `perform` spends"
+             " before it dispatches, so a failed disarm cannot be free")
+    # **And `perform` still answers True**, which is the assertion that
+    # discriminates. The spend above happens whatever the branch returns, so
+    # asserting on the cost says nothing about the return value -- a plant
+    # returning `False` on a failed check left it green. What a `False`
+    # costs is the rest of the turn: `policy.take_turn` `return`s on one, so
+    # the creature loses its move and minor as well.
+    out.that(said is True,
+             "and it reports True rather than False: a `False` makes"
+             " `policy.take_turn` return outright, so a failed disarm would"
+             " cost the move and the minor too -- which is what the cost"
+             " assertion above cannot see",
+             f"perform said {said!r} on a check it could not pass")
+
+    # -- the five conditions, each on its own ----------------------------
+    world, enc, me, _ = board_with(found=False)
+    out.that(not offered(world, enc, me),
+             "a trap nobody has located is not offered: you cannot put your"
+             " hands on what you have not found, and this is what makes the"
+             " search worth its minor")
+    world, enc, me, _ = board_with(sprung=True)
+    out.that(not offered(world, enc, me),
+             "nor one that has already gone off -- there is nothing left to"
+             " disarm")
+    world, enc, me, _ = board_with(disabled=True)
+    out.that(not offered(world, enc, me),
+             "nor one already disabled, so a party cannot spend standards"
+             " re-disarming it")
+    world, enc, me, _ = board_with(skill="")
+    out.that(not offered(world, enc, me),
+             "nor one whose block prints **no** countermeasure: 477 of the"
+             " 631 rows print none, and that means it cannot be disarmed"
+             " rather than that it is easy to")
+    world, enc, me, _ = board_with(dc=None)
+    out.that(not offered(world, enc, me),
+             "nor one naming a skill with no number. **No printed row is in"
+             " this state today** -- all 130 that print a skill print a DC --"
+             " so this guard cannot be reddened by the table and is here"
+             " because supplying the missing half would be the fabrication"
+             " `perception_dc`'s own note warns against")
+
+    # -- and it has to be within arm's reach -----------------------------
+    world, enc, me, eid = board_with()
+    out.that(bool(offered(world, enc, me)),
+             "adjacent, the control: without this the next assertion passes"
+             " for a gate that refuses everybody")
+    far = world.need(me, Position).square
+    moved = (far[0] + 6, far[1])
+    world.grid.place(me, frozenset({moved}))
+    world.need(me, Position).square = moved
+    from combat_engine.engine.query import adjacent as _adjacent
+    out.that(world.need(me, Position).square == moved
+             and not _adjacent(world, me, eid),
+             "the move landed and the trap is genuinely out of reach, so the"
+             " next assertion is about distance and not about a creature"
+             " that never went anywhere",
+             f"at={world.need(me, Position).square}, "
+             f"adjacent={_adjacent(world, me, eid)}")
+    out.that(not offered(world, enc, me),
+             "and from six squares away nothing is offered -- the printed"
+             " move is done with your hands")
+
+    # == only the party disarms, on #1064's ruling about the search =======
+    # Camille, verbatim on the search: *"For now, opposition just doesn't
+    # bother looking for traps. They should know they exist."* A creature
+    # that knows where the trap is has no reason to disarm it either, and
+    # the same `Team.PC` axis carries.
+    #
+    # **The turn has to be handed to the foe first**, for the reason the
+    # search rule above records: `can_spend(actor, STANDARD)` is False for
+    # anybody whose turn it is not, so asking a foe on the party's turn
+    # returns `[]` from that guard and the side test is never reached.
+    from combat_engine.engine import Side as _Side
+    from combat_engine.engine import Team as _Team
+
+    world, enc, me, eid = board_with()
+    out.that(bool(offered(world, enc, me)),
+             "the party is still offered the disable -- the control, because"
+             " a gate refusing everybody would read as a fix and would be"
+             " the action deleted")
+    for _ in range(12):
+        enc.advance()
+        standing = world.get(world.turn, _Side) if world.turn else None
+        if standing is not None and standing.team is not _Team.PC:
+            break
+    foe = world.turn
+    foe_side = world.get(foe, _Side) if foe else None
+    out.that(foe_side is not None and foe_side.team is not _Team.PC
+             and enc.can_spend(foe, ActionType.STANDARD),
+             "a foe has the turn and a standard to spend, without which the"
+             " next assertion passes at the `can_spend` guard and says"
+             " nothing about sides",
+             f"turn={foe}, team={foe_side.team if foe_side else None}")
+    # The trap is moved to the foe's elbow, because the adjacency guard
+    # above would otherwise answer this question before the side test does
+    # -- the same vacuous-arm problem as `can_spend`, one guard along.
+    if foe is not None:
+        stands = world.need(foe, Position).square
+        world.need(eid, Position).square = (stands[0] + 1, stands[1])
+    out.that(foe is not None and _adjacent(world, foe, eid)
+             and world.need(eid, Trap).found,
+             "the trap is beside the foe and found, so the adjacency and"
+             " found guards cannot answer the next assertion first",
+             f"adjacent={foe is not None and _adjacent(world, foe, eid)}")
+    out.that(foe is not None
+             and not [a for a in acts.legal(world, enc, foe)
+                      if a.kind == "disable"],
+             "and with the turn, the standard and the trap at its elbow, the"
+             " opposition is offered nothing: a creature fielded in an"
+             " encounter with traps plausibly placed them")
+
+    # == and the AI can actually choose it, which is the half that is a =====
+    # == fault rather than a gap. #955, #1098. ============================
+    #
+    # `policy.features` naming no term for a kind leaves it decided by
+    # `i_am_bloodied` and `nearest_enemy`, and it then loses to ending the
+    # turn by the 0.001 `is_end` floor -- measured at **-0.100 against
+    # -0.099** before the term landed. That is `#1016` verbatim one action
+    # along, and `drivers.kinds_named` is the gate that caught it.
+    #
+    # **Two arms, because a flat weight would be the wrong fix.** A disable
+    # spends a standard, so the question is not "can it be disarmed" (the
+    # five conditions above) but "is it worth a round of somebody's
+    # attacks". `is_disable` is negative and `trap_in_the_way` pays for it,
+    # the `is_pick_up`/`pick_up_disarmed` shape -- so the same board scores
+    # it differently depending on whether a foe could cross the square.
+    from combat_engine.engine.query import creatures as _creatures
+    from combat_engine.policy import WEIGHTS, features
+
+    def scored(*, foe_near: bool) -> dict:
+        world, enc, me, _trap = board_with()
+        here = world.need(me, Position).square
+        foes = [e for e in _creatures(world)
+                if (sd := world.get(e, _Side)) and sd.team is not _Team.PC]
+        for n, f_ in enumerate(foes):
+            world.need(f_, Position).square = (
+                (here[0] + 3, here[1] + n) if foe_near
+                else (here[0] + 14, here[1] + n))
+        best: dict = {}
+        for a in offered(world, enc, me) + [
+                a for a in acts.legal(world, enc, me) if a.kind == "end"]:
+            got = features(world, enc, me, a)
+            tot = sum(WEIGHTS.get(k, 0.0) * v for k, v in got.items())
+            best[a.kind] = max(best.get(a.kind, tot), tot)
+        best["foes"] = len(foes)
+        return best
+
+    close = scored(foe_near=True)
+    away = scored(foe_near=False)
+    out.that(close.get("foes", 0) > 0 and "disable" in close
+             and "end" in close,
+             "the floor for the two arms: foes exist and both a disable and"
+             " an end are scorable, without which the comparisons below are"
+             " between missing numbers",
+             f"near={ {k: round(v, 3) for k, v in close.items()} }")
+    out.that(close.get("disable", 0.0) > close.get("end", 0.0),
+             "with a foe near enough to be made to cross it, disarming the"
+             " trap **beats ending the turn** -- which is what makes the"
+             " action reachable by the AI at all rather than offered and"
+             " never chosen",
+             f"disable={close.get('disable'):.3f} vs"
+             f" end={close.get('end'):.3f}")
+    out.that(away.get("disable", 0.0) < away.get("end", 0.0),
+             "and with every foe across the room it **loses** to ending the"
+             " turn: a trap nobody can step on is scenery, and a standard"
+             " spent on scenery is the inert-action fault #796 is about."
+             " A flat positive weight would pass the assertion above and"
+             " fail this one",
+             f"disable={away.get('disable'):.3f} vs"
+             f" end={away.get('end'):.3f}")
+    out.that(close.get("disable", 0.0) > away.get("disable", 0.0),
+             "so the same board scores the same action differently by where"
+             " the foes are -- the predicate is read, not merely present",
+             f"near={close.get('disable'):.3f},"
+             f" far={away.get('disable'):.3f}")
+
+
 def an_ongoing_trap_takes_a_turn(out: Result) -> None:
     """A trap whose block prints an initiative acts on its own count.
 
@@ -16308,9 +16627,15 @@ def an_ongoing_trap_takes_a_turn(out: Result) -> None:
     from combat_engine.engine.components import Health, Initiative, Position
     from combat_engine.engine.query import combatants, creatures, turn_takers
 
+    # **`*`, not a column list, and that is the fix rather than laziness.**
+    # This was a hand copy of `printed_trap`'s own SELECT -- the same seven
+    # columns -- so it was a second copy of one rule, and it drifted the
+    # moment `#955` added two columns to the real one: `terrain.arm` read
+    # `printed["disable_skill"]` off this stub and raised `KeyError`, taking
+    # the whole rule down. A stub standing in for a printed row should *be*
+    # a printed row, and then no column can be missing from it.
     printed = game().execute(
-        "SELECT ref, level, perception_dc, attack, defence, damage, "
-        "initiative FROM trap WHERE initiative IS NOT NULL "
+        "SELECT * FROM trap WHERE initiative IS NOT NULL "
         "AND attack IS NOT NULL AND level IS NOT NULL AND damage IS NOT NULL "
         "AND level <= 5 ORDER BY level DESC, ref LIMIT 1"
     ).fetchone()
@@ -54947,9 +55272,12 @@ def a_delayed_or_disabled_trap_is_not_there(out: Result) -> None:
     from combat_engine.engine.movement import step
     from combat_engine.engine.traps import delay, disable, suppressed
 
+    # `*`, for the reason `ongoing_trap`'s own SELECT now records: this was
+    # the same seven-column hand copy of `printed_trap`, and `#955` adding
+    # two columns to the real one made `terrain.arm` raise `KeyError` off
+    # this stub. A stub standing in for a printed row should be one.
     printed = game().execute(
-        "SELECT ref, level, perception_dc, attack, defence, damage, "
-        "initiative FROM trap WHERE attack IS NOT NULL AND level IS NOT NULL "
+        "SELECT * FROM trap WHERE attack IS NOT NULL AND level IS NOT NULL "
         "AND damage IS NOT NULL AND level <= 5 ORDER BY level DESC, ref "
         "LIMIT 1"
     ).fetchone()
@@ -58535,6 +58863,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "trap_disable": (
+        disarming_a_found_trap,
+        "a standard action to disarm a found trap, against the printed"
+        " skill and DC (#955)",
     ),
     "fielded_down": (
         a_downed_character_can_be_fielded,

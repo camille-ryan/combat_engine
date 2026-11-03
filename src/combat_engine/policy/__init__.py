@@ -206,6 +206,46 @@ def features(
     # ground. And it costs a **minor**, so the "never let it cost a
     # standard" half of the question cannot arise.
     f["is_search"] = float(action.kind == "search")
+    # **And disarming one, which is the same gap one action along.** #955.
+    #
+    # A situational predicate here, unlike the search immediately above,
+    # and the reason is the cost: a search spends a **minor** so a creature
+    # with nothing better to do with one loses nothing by looking, where
+    # this spends a **standard**. `_disabling`'s five conditions say the
+    # trap *can* be disarmed; they do not say it is worth a round of
+    # somebody's attacks, and on an empty board it is not.
+    #
+    # So the term asks the question the conditions cannot: is this trap
+    # between the party and the fight? A trap nobody could step on is
+    # scenery, and spending a standard on scenery is the inert-action
+    # fault `#796` is about.
+    if action.kind == "disable":
+        # **`Side` is NOT re-imported here, and that is load-bearing.**
+        # Python makes a name local to the *whole* function if it is bound
+        # anywhere in it, so a local `from ... import Side` inside this
+        # branch turned `features`' own `world.get(actor, Side)` 150 lines
+        # above into an `UnboundLocalError` -- for every action of every
+        # kind, not only this one. Module scope already has `Side`; only
+        # what is genuinely absent is imported.
+        from combat_engine.engine.components import Position, Trap
+        from combat_engine.engine.query import creatures
+
+        eid = action.targets[0] if action.targets else None
+        trap = world.get(eid, Trap) if eid is not None else None
+        near = 0
+        if trap is not None:
+            at = world.get(eid, Position)
+            for other in creatures(world):
+                side = world.get(other, Side)
+                if side is None or side.team is Team.PC or at is None:
+                    continue
+                spot = world.get(other, Position)
+                if spot is None:
+                    continue
+                near += int(max(abs(spot.square[0] - at.square[0]),
+                                abs(spot.square[1] - at.square[1])) <= _TRAP_NEAR)
+        f["is_disable"] = float(action.kind == "disable")
+        f["trap_in_the_way"] = float(near > 0)
     if action.kind == "pick_up":
         # Worth doing only when it is *your* weapon on the floor, which
         # is the situation it exists for -- a creature that has just been
@@ -691,6 +731,19 @@ class Memory:
 
 #: Hand-set weights over `features`. A fitted policy replaces this dict and
 #: nothing else, which is the point of scoring through named features.
+#: How near a foe has to be for a found trap to be worth a standard. #955.
+#:
+#: **3, which is a reach rather than a guess.** A creature's speed is 5 to 7
+#: and it spends part of a move closing, so a foe three squares from the
+#: trap is one that can plausibly be made to cross it this round or next;
+#: one across the room cannot. Not 1: adjacency would mean the foe is
+#: *already* past the trap, which is the one case disarming it buys nothing.
+#:
+#: `#1098` is where this gets measured. A distance test is the cheap proxy
+#: for "is anybody going to step on it", and the honest question involves
+#: where the foe is heading, which no constant can answer.
+_TRAP_NEAR = 3
+
 WEIGHTS: dict[str, float] = {
     # **Still here, and the measurement is why.** #314 wants this gone -- it was
     # 22.7% of all weighted magnitude, more than twice the measured term under it --
@@ -922,6 +975,26 @@ WEIGHTS: dict[str, float] = {
     # looking -- and it is the thing to suspect first if a creature with a
     # spare minor starts looking every round instead of helping.
     "is_search": 1.0,
+    # **Disarming a found trap.** #955, and placed by the same reasoning as
+    # `is_search` directly above rather than guessed at.
+    #
+    # The flat term is **negative** and the situational one pays for it,
+    # which is the `is_pick_up`/`pick_up_disarmed` and `is_wield`/
+    # `wield_reaches` shape: bending down to a trap in an empty room is a
+    # standard thrown away, and the same move with a foe beside it is a
+    # hazard removed from the fight everybody is about to have.
+    #
+    # The sum has to clear `is_end` at 0.001 when it is worth doing and sit
+    # below it when it is not -- so -0.5 + 2.0 = **1.5** against **-0.5**.
+    # The payable figure is level with `is_hide`'s 2.0 bracket and well
+    # under `is_power`'s 6.0 before `hp_swing`, so it never beats attacking;
+    # the unpayable one loses to ending the turn, which is the whole point.
+    #
+    # `#1098` holds the tuning: the predicate below is a distance test and
+    # the honest version asks whether anybody is likely to *cross* the
+    # square, which needs a measurement rather than a constant.
+    "is_disable": -0.5,
+    "trap_in_the_way": 2.0,
     # **An inert row must lose to ending the turn, not tie it.** #796.
     # Small on purpose: `is_end` is 0.001 and the whole table rests on that
     # floor, so this only has to clear it. Large enough and an inert free

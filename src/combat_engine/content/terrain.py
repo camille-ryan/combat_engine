@@ -75,7 +75,7 @@ def printed_trap(level: int, pick: Random | None = None) -> dict | None:
     try:
         rows = list(game().execute(
             "SELECT ref, level, perception_dc, attack, defence, damage, "
-            "initiative FROM trap "
+            "initiative, disable_skill, disable_dc FROM trap "
             "WHERE attack IS NOT NULL AND level IS NOT NULL "
             "AND damage IS NOT NULL AND level <= ? ORDER BY level DESC, ref",
             (max(1, level),),
@@ -207,6 +207,11 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",
         Trap(
             ref=printed["ref"] if printed else ref,
             perception_dc=printed["perception_dc"] if printed else None,
+            # The printed countermeasure, off the same row and read the same
+            # way as the Perception DC: absent means it cannot be disarmed,
+            # not that it is easy to. #955.
+            disable_skill=(printed["disable_skill"] or "") if printed else "",
+            disable_dc=printed["disable_dc"] if printed else None,
         ),
     )
     trap = world.need(eid, Trap)

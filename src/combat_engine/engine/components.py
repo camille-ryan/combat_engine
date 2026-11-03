@@ -552,6 +552,20 @@ class Trap:
     #: check would quietly undo the more careful of the two readings above.
     found: bool = False
 
+    #: The skill the printed countermeasure names, and what it has to beat.
+    #: `trap.disable_skill` / `disable_dc` in `game.db` (#989): **130** rows
+    #: print one clause, **477** genuinely print none, and **24** are
+    #: ambiguous and left NULL on purpose rather than guessed.
+    #:
+    #: Here for `perception_dc`'s reason and read the same way -- a trap
+    #: that prints no way to disarm it cannot be disarmed, so an empty skill
+    #: is a refusal rather than a default. Nothing invents a DC: a block
+    #: naming a skill without a number is as unusable as one naming
+    #: neither, which is why both have to be present for the action to be
+    #: offered. #955.
+    disable_skill: str = ""
+    disable_dc: int | None = None
+
 
 @dataclass
 class Scenery:
