@@ -697,12 +697,47 @@ def inert(world: Any, actor: int, ref: str) -> bool:
     got = _INERT.get(key)
     if got is None:
         p = get(ref) if ref else None
-        if p is None or p.attack is not None or T.row_damage(world, actor, ref) > 0:
+        # **Order is cost, and `_can_aim` goes last.** `row_damage` and
+        # `row_effects` are memoised scratch-board runs; `_can_aim` ends in
+        # `dsl.candidates`, which walks geometry. Short-circuit means it is
+        # only asked of a row that has an attack line and no damage.
+        if (p is None
+                or T.row_damage(world, actor, ref) > 0
+                or (p.attack is not None and _can_aim(world, actor, p))):
             got = False
         else:
             got = not T.row_effects(world, actor, ref)
         _INERT[key] = got
     return got
+
+
+def _can_aim(world: Any, actor: int, p: Any) -> bool:
+    """Can this row's attack actually be pointed at somebody from here?
+
+    **An `Attack` header used to exempt a row from `inert` outright**, and
+    that is the fault #314 lists fourth: *"a declared-attack row with an
+    empty target list collects full credit"*. `is_power` is `+6.0`, so a row
+    that can reach nobody scored as a live attack -- and the exemption also
+    hid it from `scripts/scorecard.py`'s `inert_chosen` counter, which is
+    `inert` itself (`inert = D.inert`), so the count could never show it.
+
+    So the header now only exempts the row when the attack has somewhere to
+    go. Everything else is unchanged: a row that reaches nobody falls
+    through to the damage and effect tests exactly as a non-attack row does,
+    so a buff or a zone is judged on what it lays, not on this.
+
+    **`side == "self"` is always aimable and must not be asked of
+    `candidates`**, which returns `[]` for a self-target of count 0 -- so
+    reading its emptiness as "cannot aim" would call every self-targeted
+    attack inert. That is the trap in this change and the reason this is a
+    named function rather than one `and` clause.
+    """
+    from combat_engine.engine.dsl import candidates
+
+    aim = p.target_of(0)
+    if getattr(aim, "side", "") == "self":
+        return True
+    return bool(candidates(world, actor, p))
 
 
 def running(world: Any, actor: int, ref: str) -> bool:
