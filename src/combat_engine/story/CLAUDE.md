@@ -917,6 +917,35 @@ the pairing** -- sheet *i* must describe the entity `characters` puts at
 Nothing uses the shared board yet; no scene kind can say "this fight also
 runs a challenge". #922.
 
+### And something now publishes on it: a challenge announces its own end
+
+`engine.events.SkillChallengeEnded(scene, won)`, emitted by `attempt` --
+which is the whole point of the borrowed board above, and `borrowed_board`'s
+own docstring named this case before it existed. #905.
+
+**In `attempt`, not in `play`.** `play` is the obvious place and is wrong:
+`dm.py` runs its own loop over `attempt` when a model is choosing, so an
+emit in `play`'s tail fires for a scripted challenge and is silent for a
+played one -- one question with two answers, which is the fault `#948`'s
+comment already paid for with the disease check. It needs no `was_over`
+flag either, because `attempt` refuses outright when `run.over` is already
+true: reaching the tally means the challenge was live.
+
+**The class is in `engine/events.py` and that is a deliberate breach of the
+"do not reach into `engine/`" rule above.** `Bus.on(etype, fn)` subscribes
+by **class**, so a `content/` row reacting to a challenge ending has to name
+it -- and a `content/` row importing from `story/` inverts a seam that runs
+the other way, worse than the four `engine -> content` sites `.importlinter`
+already waives. One additive dataclass, no behaviour. The reasoning is
+`#905`'s and is the same shape as the two `story/__init__.py` exceptions
+in **Seams**: a stated reason, not an unbroken record.
+
+`scene` is the module scene id, carried because the printed trigger on the
+one row reading it waits on **one named** challenge. No challenge has a ref
+today -- it is an adventure's structure, not a compendium entry -- so that
+row (`m5581a6`) is **broader than print** and says so in its docstring
+rather than carrying a marker for it.
+
 ## A challenge is no harder than the party is numerous
 
 > *As a guideline, make skill challenge complexity no higher than 1 above
@@ -2062,14 +2091,14 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     budget_ceiling roll_margin readiness unknown_name \
     cold_hours marching_order tension unrested lost_costs \
     scene_once module_cast complexity_bound quests story_xp \
-    dead_and_dying \
+    dead_and_dying challenge_ends \
     graph_edges challenge_says fight_aftermath reinforcements \
     scene_allies trap_budget room_shape templates skill_cap \
     treasure camp_talk puzzle vignette
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 54 drivers and prints 713 assertions**, and **each was
+**The command above is 55 drivers and prints 726 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

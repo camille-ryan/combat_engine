@@ -1643,6 +1643,34 @@ class SkillCheck(Decision):
 
 
 @dataclass
+class SkillChallengeEnded(Event):
+    """A skill challenge reached its tally -- won or failed out.
+
+    **The class lives here rather than in `story/` because subscription is
+    by type.** `Bus.on(etype, fn)` takes the event class, so a row that
+    reacts to a challenge ending has to name it -- and a `content/` row
+    naming a `story/` class would invert a seam that runs the other way,
+    a worse one than the four `engine -> content` sites already waived.
+    `story/challenge.py` emits it; nothing in this component does. #905.
+
+    `scene` is the module scene id, because the printed trigger waits on
+    **one named** challenge rather than any. No ref exists for a challenge
+    today -- it is an adventure's structure, not a compendium entry -- so a
+    row keyed to a particular one has to match on this, and a row that
+    cannot name one is broader than print and says so in its docstring.
+
+    `won` separates the two endings. The one row that reads this fires on
+    either, so nothing narrows on it yet; it is carried because a tally
+    that failed out and one that succeeded are not the same moment, and
+    recovering the difference later from `successes` nobody kept is not
+    possible.
+    """
+
+    scene: str
+    won: bool
+
+
+@dataclass
 class ActionPointSpent(Event):
     """A creature spent an action point and gained an extra action.
 

@@ -64,6 +64,7 @@ from dataclasses import dataclass, field
 
 from combat_engine.dc import BANDS
 from combat_engine.dc import dc as dc_for
+from combat_engine.engine.events import SkillChallengeEnded
 
 from . import tension
 from .module import SECONDARY_BONUS, Scene
@@ -267,6 +268,19 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
         success=success, counted=counted,
     )
     run.attempts.append(made)
+    # **Announced here rather than in `play`, because `play` is not the only
+    # driver.** `dm.py` runs its own loop over `attempt` when a model is
+    # choosing, so an emit in `play`'s tail would fire for a scripted
+    # challenge and stay silent for a played one -- two answers to one
+    # question, which is the shape `#948` already paid for once.
+    #
+    # The transition needs no `was_over`: this function refuses outright
+    # when `run.over` is already true, so reaching the tally above means it
+    # was live, and `run.over` now means it ended on *this* attempt.
+    if run.over:
+        table.world.bus.emit(
+            SkillChallengeEnded(scene=run.scene.id, won=run.won)
+        )
     return made
 
 

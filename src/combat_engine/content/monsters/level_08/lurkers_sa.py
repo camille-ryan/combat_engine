@@ -52,6 +52,7 @@ from combat_engine.content.monsters.level_03.skirmishers import _vanish_until_it
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    DEFENCES,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
@@ -97,6 +98,7 @@ from combat_engine.engine.events import (
     Hit,
     Miss,
     PowerUsed,
+    SkillChallengeEnded,
     TurnEnd,
     TurnStart,
     ZoneEntered,
@@ -1580,6 +1582,22 @@ def m5581a5(c: Cast) -> None:
     c.watch(TurnStart, rise, until=When.ENCOUNTER, on=me, once=True, label=f"{c.ref} rise")
 
 
+def _any_challenge_ended(world: World, me: int, ev: Any) -> bool:
+    """Any skill challenge resolving, won or lost.
+
+    **No `about_me` here and that is not an omission.** A challenge is not
+    an attack and names no creature -- `SkillChallengeEnded` carries a scene
+    id and an outcome, nothing with an entity in it -- so the usual "is this
+    about me" narrowing has nothing to read. What makes the row fire once
+    rather than for every creature is that only this one subscribes.
+
+    `won` is deliberately unread: the card's phase change happens either
+    way, and gating on a success the printed clause does not mention would
+    be narrower than print in a direction nothing asked for.
+    """
+    return True
+
+
 @power(
     "m5581a6",
     level=8,
@@ -1588,26 +1606,70 @@ def m5581a5(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="a skill challenge ends",
-    todo=("Trigger(SkillChallengeEnded)",),
+    on=Trigger(SkillChallengeEnded, _any_challenge_ended, "a skill challenge ends"),
+    dropped=("compendium.insubstantial_trait",),
 )
 def m5581a6(c: Cast) -> None:
-    """Refused in play: there is no event for a skill challenge ending --
-    that is a narrative structure outside the board this engine tracks, so
-    nothing can declare the trigger. Confirmed absent:
-    `grep -n "class SkillChallenge" engine/events.py` is empty, and
-    `uv run scripts/vocab.py --brief` names no such trigger.
+    """The phase change, hung on a challenge resolving. Five printed clauses,
+    four of which land.
 
-    **`trigger=` is narrower than the card, deliberately.** The printed
-    clause waits on **one named** skill challenge, and that challenge
-    carries no ref -- it is an adventure's structure, not a compendium
-    entry, so there is nothing to point at. Its printed title was sitting
-    in this string, and `trigger=` is prose the page renders, which made it
-    a tier-1 leak under `#447`'s ordering rather than a tier-2 one. #1069.
+    **`trigger=` is narrower than the card, deliberately, and so is the
+    predicate.** The printed clause waits on **one named** skill challenge,
+    and that challenge carries no ref -- it is an adventure's structure, not
+    a compendium entry, so there is nothing to point at. Its printed title
+    was sitting in this string once, and `trigger=` is prose the page
+    renders, which made it a tier-1 leak under `#447`'s ordering rather
+    than a tier-2 one. #1069.
 
-    So the string says the mechanical shape and loses the identity. When
-    `Trigger(SkillChallengeEnded)` arrives (#905) the predicate is where
-    the particular challenge belongs -- by ref if it ever gets one, and
-    otherwise this row stays broader than print and should say so here."""
+    So this row is **broader than print**: it answers any challenge ending,
+    where the card answers one. `SkillChallengeEnded.scene` is the hook the
+    narrowing would use -- a module scene id -- and the day a challenge
+    carries a ref, `_any_challenge_ended` is the one line to tighten. Said
+    here rather than left as a marker, because the row plays correctly in
+    every fight that runs one challenge, which is every fight today.
+
+    The regeneration is **ended, not suspended**, and `c.suspend_trait` is
+    the wrong verb here however convenient it looks: its own docstring says
+    it exists *because* "the trait is supposed to come back", and this card
+    takes the trait away for good. So both lost traits want `c.end_effect`.
+
+    `c.regeneration` labels its effect `"<laying ref> regeneration"`, so the
+    hold to end is found by that exact string rather than by a prefix. An
+    exact match is the safer of the two: if the engine ever relabels it, the
+    `challenge_ends` driver rule goes **red** rather than this row going
+    quietly inert, which is the failure worth engineering against -- the
+    first draft matched `"m5581a0"` alone, found nothing, and left her
+    regenerating through the whole phase change with every other clause
+    landing and nothing reporting it.
+
+    **The insubstantial half is `dropped=` because the trait does not
+    exist to lose.** The printed stat block has it and the extraction does
+    not: `m5581` declares seven rows, `a0` through `a6`, none of them an
+    insubstantial trait, and `monster` has no column for one. The only
+    mention of it in any `m5581` spec is inside *this* row's own text. So
+    she plays without it from the start, a removal has nothing to remove,
+    and writing one would be a call that does nothing -- the shape
+    `#564` is about. The other four clauses are unaffected.
+
+    The four defences take four separate penalties rather than one on
+    `Defense.ANY`: `query` resolves `ANY` to the **lowest of the four**,
+    which is what an attack line means by it and the opposite of what a
+    penalty across all of them means. They do not collapse into each other
+    -- `Mods.total` pools by key, and these are four keys.
+
+    `m5581a4` needs nothing done to it. Its `requires=_has_twisted` already
+    reads the hold this lays, so "gains access to" is the effect existing.
+    """
+    me = c.me
+    c.effect(_M5581_TWISTED, on=me, until=When.ENCOUNTER)
+    for held in list(c.world.effects.of(me)):
+        if held.label == "m5581a0 regeneration":
+            c.end_effect(held, on=me, why="m5581a6")
+    c.forbid("m5581a5", on=me, until=When.ENCOUNTER)
+    c.forbid("m5581a3", on=me, until=When.ENCOUNTER)
+    for which in DEFENCES:
+        c.penalty(which, 2, on=me, until=When.ENCOUNTER)
+    c.bonus("attack", 2, on=me, until=When.ENCOUNTER)
 
 
 # ==========================================================================

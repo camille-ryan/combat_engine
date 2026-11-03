@@ -34851,6 +34851,161 @@ def a_party_that_is_not_the_module_s_size_gets_the_page_s_rule(
     )
 
 
+def a_trait_fires_when_the_skill_challenge_it_waits_on_ends(out: Result) -> None:
+    """#905. `m5581a6` is a phase change hung on a challenge resolving.
+
+    `#911` built the shared board for this and its own docstring named this
+    row as the case -- *"a creature losing its regeneration when the
+    challenge ends is on the board the whole time"*. What was missing was
+    the event: subscription is by class, so the class has to be in
+    `engine/events.py` for a `content/` row to name it without inverting
+    the seam.
+
+    **The before/after pair is the rule, not the after.** Every clause here
+    is an effect that could have been laid at arming rather than on the
+    trigger, and a row that lays its phase change too early looks identical
+    in the after-state. So the controls read the same five things *while the
+    challenge is still running* and require them absent.
+
+    The regeneration assertion is the one that has already caught something:
+    the first draft of the row matched the effect label `"m5581a0"` where
+    `c.regeneration` lays `"m5581a0 regeneration"`, so she kept regenerating
+    through the phase change while the other four clauses landed and nothing
+    reported it. This rule reads the effect list rather than a tally, which
+    is what makes that visible.
+    """
+    from combat_engine import chargen
+    from combat_engine.content import loader
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Mods, Team
+    from combat_engine.engine.dsl import get, usable
+    from combat_engine.engine.events import SkillChallengeEnded
+    from combat_engine.engine.scaling import PRESETS
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import DEFENCES
+    from combat_engine.story import Party
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import table as tbl
+    from combat_engine.story.module import Scene
+
+    was_drawn, chargen.SCORED_CHOICES = chargen.SCORED_CHOICES, False
+    try:
+        world = World(Grid(14, 12), Rng(5), Bus())
+        world.scaling = PRESETS["full"]
+        party = Party.of(level=8, seed=7)
+        for slot, sheet in enumerate(party.sheets):
+            chargen.spawn(world, chargen.Character(sheet.cls, 8, []), (2 + slot, 2))
+        # **Adjacent to the party, deliberately.** `m5581a4` is melee 1, so
+        # standing her across the board makes `usable` refuse it for range
+        # whatever the phase change did -- which is how the first run of
+        # this rule failed, reporting `'nearest is 7 squares away'` and
+        # saying nothing either way about the unlock it exists to check.
+        her = loader.spawn(world, "m5581", (6, 2), team=Team.ENEMY)
+        encounter = Encounter(world)
+        encounter.start()
+        table = tbl.borrow(world, encounter, party)
+
+        def labels() -> list[str]:
+            return [e.label for e in world.effects.of(her)]
+
+        def defences() -> dict[str, int]:
+            mods = world.get(her, Mods)
+            return {d.value: (mods.total(d.value, {"actor": her}) if mods else 0)
+                    for d in DEFENCES}
+
+        # -- the controls: the trait has not fired, so nothing is laid -----
+        out.that(
+            "m5581a0 regeneration" in labels(),
+            "the regeneration trait is live before the challenge ends",
+            f"{[s for s in labels() if 'regen' in s]}",
+        )
+        out.that(
+            not any("twisted" in s for s in labels()),
+            "and the phase change is not laid at arming time",
+            f"{labels()}",
+        )
+        out.that(
+            all(v == 0 for v in defences().values()),
+            "and no defence is penalised yet",
+            f"{defences()}",
+        )
+        # `must`, not a bare `get`: `get` answers `Power | None` and reading
+        # straight through it is the fault that helper's docstring is about.
+        unlocked = must(get("m5581a4"), "the power m5581a6 unlocks")
+        before_a4 = usable(world, her, unlocked)
+        out.that(
+            not before_a4[0] and "m5581a6" in before_a4[1],
+            "and the power it unlocks is refused, for the requirement itself",
+            f"{before_a4}",
+        )
+
+        scene = Scene(id="backlash", kind="skill_challenge", name="B",
+                      complexity=1, level=8, primary=("athletics", "endurance"))
+        run = ch.play(scene, table, party_level=8)
+
+        # **`isinstance`, not `e.kind ==`.** The log is `list[Event]`, so a
+        # string test leaves `.scene` unknown to the type checker -- which
+        # it said, and it is right: a `kind` that no longer matches would
+        # read as "nothing emitted" rather than as a broken assertion.
+        ended = [e for e in world.bus.log if isinstance(e, SkillChallengeEnded)]
+        out.that(
+            run.over and len(ended) == 1,
+            "a finished challenge announces SkillChallengeEnded exactly once",
+            f"over={run.over} emitted={len(ended)} "
+            f"{[str(e) for e in ended]}",
+        )
+        out.that(
+            bool(ended) and ended[0].scene == "backlash",
+            "and it carries the scene it ended, which is the narrowing hook",
+            f"{ended[0].scene if ended else 'nothing emitted'}",
+        )
+        used = [e for e in world.bus.log
+                if getattr(e, "power", "") == "m5581a6"]
+        out.that(
+            bool(used),
+            "the trait fires on it",
+            f"{[str(e)[:60] for e in used]}",
+        )
+
+        # -- the five clauses, read off the board -------------------------
+        now = labels()
+        out.that(
+            "m5581a0 regeneration" not in now,
+            "she loses the regeneration trait",
+            f"{[s for s in now if 'regen' in s] or 'gone'}",
+        )
+        out.that(
+            any("twisted" in s for s in now),
+            "the phase change is laid",
+            f"{[s for s in now if 'twisted' in s]}",
+        )
+        out.that(
+            sum("forbids" in s for s in now) == 2,
+            "and both named powers are taken away",
+            f"{[s for s in now if 'forbids' in s]}",
+        )
+        after = defences()
+        out.that(
+            all(v == -2 for v in after.values()),
+            "every defence takes the -2, not just the lowest",
+            f"{after}",
+        )
+        mods = world.get(her, Mods)
+        out.that(
+            (mods.total("attack", {"actor": her}) if mods else 0) == 2,
+            "and she gains the +2 to attack rolls",
+            f"{mods.total('attack', {'actor': her}) if mods else 0:+d}",
+        )
+        after_a4 = usable(world, her, unlocked)
+        out.that(
+            after_a4[0],
+            "and the power it unlocks is offered afterwards",
+            f"{after_a4}",
+        )
+    finally:
+        chargen.SCORED_CHOICES = was_drawn
+
+
 def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     """#911. The challenge's bus and the fight's bus were different objects.
 
@@ -56787,6 +56942,10 @@ DRIVERS = {
     "borrowed_board": (
         a_challenge_can_run_on_the_fight_s_own_board,
         "a challenge runs on the fight's own board, one bus (#911)",
+    ),
+    "challenge_ends": (
+        a_trait_fires_when_the_skill_challenge_it_waits_on_ends,
+        "a trait fires when the challenge it waits on ends (#905)",
     ),
     "challenge_costs_nothing": (
         a_non_combat_scene_does_not_spend_the_party_s_powers,
