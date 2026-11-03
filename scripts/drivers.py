@@ -16633,22 +16633,46 @@ def a_policy_memo_dies_with_its_board(out: Result) -> None:
     from audit import board as _posed
     from combat_engine.engine.query import alive, enemies
     from combat_engine.policy import doctrine as D
+    from combat_engine.policy import threat as T
+
+    # **Twelve stores across two modules, not the four `#1095` named.** The
+    # issue's body lists `_FOES`, `_BEST`, `_COVER` and `_INERT` in
+    # `doctrine.py`; `threat.py` had **eight** more on the same `id(world)`
+    # key and the issue mentions none of them. Fixing only the four and
+    # saying the fault was unreachable was an overclaim, which this
+    # assertion is here to stop recurring.
+    stores = (
+        [(D, n) for n in ("FOES", "BEST", "COVER", "INERT")]
+        + [(T, n) for n in ("ROWS", "BOARDS", "EFFECTS", "PUSH", "VS",
+                            "ROUND_OF", "DENIED", "BEST_CASE")]
+    )
+    out.that(len(stores) == 12 and all(isinstance(getattr(m, n), str)
+                                      for m, n in stores),
+             "all twelve per-board stores are named rather than being module"
+             " dicts -- four in `doctrine` and eight in `threat`, and the"
+             " eight are the ones `#1095` did not list",
+             f"{len(stores)} named stores")
 
     D.forget()
-    out.that(len(D._MEMOS) == 0,
+    out.that(len(T._MEMOS) == 0,
              "the floor: the memo map starts empty, so every count below is"
              " about what this rule put there",
-             f"{len(D._MEMOS)} entries")
+             f"{len(T._MEMOS)} entries")
 
     first, me, _ = _posed("f1378b", 5)
     second, them, _ = _posed("f1378b", 7)
     warm = D.foes(first, me)
     D.foes(second, them)
-    out.that(len(D._MEMOS) == 2,
+    out.that(len(T._MEMOS) == 2,
              "two live boards hold two separate stores -- the setup, landed,"
              " without which the drop below says nothing",
-             f"{len(D._MEMOS)} entries for 2 boards")
-    out.that(D._MEMOS[first][D.FOES] is not D._MEMOS[second][D.FOES],
+             f"{len(T._MEMOS)} entries for 2 boards")
+    out.that(T._MEMOS is D.T._MEMOS,
+             "and both modules share **one** map, so a consumer that clears"
+             " cannot clear half of them -- `threat.clear` was called by four"
+             " consumers and `doctrine.forget` by five, and neither reached"
+             " the other's stores")
+    out.that(T._MEMOS[first][D.FOES] is not T._MEMOS[second][D.FOES],
              "and their stores are distinct objects rather than one shared"
              " dict with the board in the key, which is the shape that let"
              " an address be the key in the first place")
@@ -16665,18 +16689,18 @@ def a_policy_memo_dies_with_its_board(out: Result) -> None:
     # -- and nothing survives its board --------------------------------
     del second
     gc.collect()
-    out.that(len(D._MEMOS) == 1,
+    out.that(len(T._MEMOS) == 1,
              "dropping one board leaves the **other** board's memo alone --"
              " the control, because a map that simply emptied itself would"
              " pass the next assertion and have no cache at all",
-             f"{len(D._MEMOS)} entries after dropping one of two")
+             f"{len(T._MEMOS)} entries after dropping one of two")
     del first
     gc.collect()
-    out.that(len(D._MEMOS) == 0,
+    out.that(len(T._MEMOS) == 0,
              "and dropping the last one leaves nothing: a later board"
              " cannot read a dead board's answer whatever address it lands"
              " on, which is the whole of the fix",
-             f"{len(D._MEMOS)} entries after dropping both")
+             f"{len(T._MEMOS)} entries after dropping both")
 
     # -- the keys no longer carry an address ---------------------------
     # The sharpest check, because it is the one a behaviour test cannot
@@ -16686,7 +16710,7 @@ def a_policy_memo_dies_with_its_board(out: Result) -> None:
     fresh, who, _ = _posed("f1378b", 5)
     D.foes(fresh, who)
     D.inert(fresh, who, "p1")
-    keys = [k for store in D._MEMOS[fresh].values() for k in store]
+    keys = [k for store in T._MEMOS[fresh].values() for k in store]
     out.that(bool(keys),
              "the floor for the key check: something was memoised, so there"
              " are keys to inspect",
@@ -16700,15 +16724,15 @@ def a_policy_memo_dies_with_its_board(out: Result) -> None:
 
     # -- forget() still works, because five instruments call it --------
     D.foes(fresh, who)
-    out.that(len(D._MEMOS) >= 1, "warmed again before clearing")
+    out.that(len(T._MEMOS) >= 1, "warmed again before clearing")
     D.forget()
-    out.that(len(D._MEMOS) == 0,
+    out.that(len(T._MEMOS) == 0,
              "`forget()` still empties everything, so `winrate`, `scorecard`,"
              " `watch`, `doctrine` and `api/replay` keep working unchanged."
              " It is no longer **required** -- which is the point -- but it"
              " had five callers and silently becoming a no-op would be its"
              " own fault",
-             f"{len(D._MEMOS)} entries after forget()")
+             f"{len(T._MEMOS)} entries after forget()")
 
     # -- and the answer is right, not merely scoped --------------------
     last, mine, _ = _posed("f1378b", 5)

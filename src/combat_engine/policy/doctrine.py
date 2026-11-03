@@ -215,7 +215,6 @@ import inspect
 from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import Any
-from weakref import WeakKeyDictionary
 
 from combat_engine.engine.actions import Action
 from combat_engine.engine.components import Budget, Health, Position, Side
@@ -635,51 +634,41 @@ def benefits(ref: str) -> bool:
     return got
 
 
-#: Every per-board memo in this module, held **against the board object
-#: itself** rather than against its address. #1095.
+#: The per-board memos below are held against the board object itself, and
+#: the machinery for that lives in `threat.py`. #1095.
 #:
-#: **`id(world)` was the key and it is the bug `content/CLAUDE.md` forbids
-#: outright.** CPython hands a collected object's address to the next
-#: allocation, so a memo outlived its board and the next `World` at that
-#: address read it as its own. `#907` measured the same pattern in content
-#: rows rather than theorising it: **48 boards, 45 distinct `id(world)`
-#: values, 3 landing on an id already in the store** inside one
-#: `audit.audit` call.
+#: **One copy, in the lower module.** `doctrine` imports `threat` and not
+#: the other way round, so `threat.memo` is where it can be shared -- and
+#: a copy in each would be two copies of one rule, which is the thing this
+#: tree keeps paying for. `threat.memo`'s own note has the reasoning and
+#: `#907`'s measurement.
 #:
-#: Here it was worse in one way and better in another. Worse, because the
-#: clearing was **opt-in per consumer** -- `forget()`, which `api/session.py`
-#: and `api/app.py` never called, so the one path a person plays through was
-#: the unprotected one while every measurement instrument was fine. Which is
-#: also exactly why no instrument could see it. Better, because the memos
-#: carry `world.round`, so a surviving entry had to collide on the round too.
-#:
-#: A `WeakKeyDictionary` is the fix the repo's own rule implies: the entry
-#: **dies with the board**, by construction, so it cannot be inherited and
-#: `forget()` stops being mandatory. A plain dict keyed on the object would
-#: work for correctness and leak every board ever fielded.
-#:
-#: Not a field on `World`, deliberately. That is `engine/`, which is WIDE --
-#: a 21-minute audit for a cache -- and the weak map needs nothing from the
-#: engine at all. `World` is a plain class, so it is weak-referenceable.
-_MEMOS: WeakKeyDictionary[Any, dict[str, dict]] = WeakKeyDictionary()
+#: There were twelve of these between the two modules, all keyed on
+#: `id(world)`: four here and **eight in `threat.py`**, which `#1095`'s body
+#: named none of. This module's four were fixed first and the close comment
+#: said the fault was "unreachable", which was true of these four and not of
+#: the eight.
+FOES = "foes"
+BEST = "best"
+COVER = "cover"
+INERT = "inert"
 
 
-def _memo(world: Any, which: str) -> dict:
-    """This board's store for `which`, made on first ask.
+def forget() -> None:
+    """Drop every board's memos.
 
-    Keyed on the board object, so the four stores below need no `id(world)`
-    in their own keys and cannot read another board's answer.
+    **No longer required, and kept because five callers call it.** The memos
+    live on the board now, so they die with it -- the leak this used to be
+    the only defence against is gone by construction rather than by anybody
+    remembering. `scripts/winrate.py` and three other instruments still call
+    it between fights, and it is still correct to: clearing a board's memo
+    mid-process is harmless, since every entry is recomputable.
+
+    **It clears `threat`'s stores too**, because they share one weak map --
+    so a consumer that called this and not `threat.clear()` is no longer
+    half-protected.
     """
-    try:
-        mine = _MEMOS.get(world)
-    except TypeError:            # something unhashable or not weakref-able
-        return {}
-    if mine is None:
-        mine = _MEMOS[world] = {}
-    got = mine.get(which)
-    if got is None:
-        got = mine[which] = {}
-    return got
+    T.forget_all()
 
 
 #: Living enemies, per (round, creature). A board fact, and it was being
@@ -698,30 +687,13 @@ BEST = "best"
 #: for 3.6 seconds, and `Grid.cover` traces corner to corner each time.
 COVER = "cover"
 
-#: Per (caster, row): could the row accomplish anything at all?
-INERT = "inert"
-
-
-def forget() -> None:
-    """Drop every board's memos.
-
-    **No longer required, and kept because five callers call it.** The memos
-    live on the board now (`_MEMOS`), so they die with it -- the leak this
-    used to be the only defence against is gone by construction rather than
-    by anybody remembering. `scripts/winrate.py` and three other instruments
-    still call it between fights, and it is still correct to: clearing a
-    board's memo mid-process is harmless, since every entry is recomputable.
-    """
-    _MEMOS.clear()
-
-
 def _round(world: Any) -> int:
     return getattr(world, "round", 0)
 
 
 def foes(world: Any, actor: int) -> tuple[int, ...]:
     """Living enemies of `actor`, memoised for the round."""
-    store = _memo(world, FOES)
+    store = T.memo(world, FOES)
     key = (_round(world), actor)
     got = store.get(key)
     if got is None:
@@ -746,7 +718,7 @@ def inert(world: Any, actor: int, ref: str) -> bool:
     monsters did it zero times, holding three or four attack rows each against a
     character's dozens of utilities. #264.
     """
-    store = _memo(world, INERT)
+    store = T.memo(world, INERT)
     key = (actor, ref)
     got = store.get(key)
     if got is None:
@@ -1212,7 +1184,7 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
     """
     from combat_engine.engine.components import Powers
 
-    store = _memo(world, BEST)
+    store = T.memo(world, BEST)
     key = (_round(world), actor, origin)
     hit = store.get(key)
     if hit is not None:
@@ -1424,7 +1396,7 @@ def _cover_from_enemies(world: Any, actor: int, where: Any) -> int:
     from three of four is no cover at all against the fourth, and taking the
     maximum would score that square as though it were safe.
     """
-    store = _memo(world, COVER)
+    store = T.memo(world, COVER)
     key = (_round(world), actor, where)
     hit = store.get(key)
     if hit is not None:

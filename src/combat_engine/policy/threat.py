@@ -49,6 +49,7 @@ import copy
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
+from weakref import WeakKeyDictionary
 
 from combat_engine.engine.components import Health, Ident, Position, Powers, Side
 from combat_engine.engine.durations import When
@@ -106,27 +107,82 @@ ENABLE_ROUNDS: dict[When, float] = {**ROUNDS_OF, When.EOT: 0.5}
 #: How many rows make up "best case over three rounds".
 ROUNDS = 3
 
-#: Keyed on the board and the creature, because a build does not change during a
-#: fight. Spending a power does not change this figure either -- "best case" is
+#: Every per-board memo in this package, held **against the board object
+#: itself** rather than against its address. #1095.
+#:
+#: The helper lives here rather than in `doctrine.py` because `doctrine`
+#: imports `threat` and not the other way round, so this is the lower of
+#: the two and a copy in each would be two copies of one rule -- which is
+#: the thing this tree keeps paying for.
+#:
+#: **Why not `id(world)`:** CPython hands a collected object's address to
+#: the next allocation, so a memo outlives its board and the next `World`
+#: at that address reads it as its own. `#907` measured it in content rows
+#: rather than theorising it -- 48 boards, 45 distinct `id(world)` values,
+#: 3 landing on an id already in the store, inside one `audit.audit` call.
+#: `content/CLAUDE.md` forbids the pattern outright.
+#:
+#: A `WeakKeyDictionary` makes the entry **die with the board**, so it
+#: cannot be inherited and `clear()` stops being mandatory. A plain dict
+#: keyed on the object would be correct and would leak every board ever
+#: fielded.
+_MEMOS: WeakKeyDictionary[Any, dict[str, dict]] = WeakKeyDictionary()
+
+
+def memo(world: Any, which: str) -> dict:
+    """This board's store for `which`, made on first ask.
+
+    Keyed on the board object, so the stores below need no `id(world)` in
+    their own keys and cannot read another board's answer. Public because
+    `doctrine` uses it too.
+    """
+    try:
+        mine = _MEMOS.get(world)
+    except TypeError:            # unhashable, or not weak-referenceable
+        return {}
+    if mine is None:
+        mine = _MEMOS[world] = {}
+    got = mine.get(which)
+    if got is None:
+        got = mine[which] = {}
+    return got
+
+
+#: The store names. Strings rather than module-level dicts, because the dict
+#: now hangs off the board and the name is all that has to be global.
+#:
+#: Keyed on the creature, because a build does not change during a fight.
+#: Spending a power does not change this figure either -- "best case" is
 #: about what the creature can do, not what it has left.
-_CACHE: dict[tuple[int, int, int], float] = {}
+BEST_CASE = "best_case"
+ROWS = "rows"
+BOARDS = "boards"
+EFFECTS = "effects"
+PUSH = "push"
+VS = "vs"
+ROUND_OF = "round_of"
+DENIED = "denied"
 
 
 def clear() -> None:
     """Forget every cached figure. For an instrument measuring across fights.
 
-    Worth calling between fights rather than trusting the keys: a `World` that
-    has been collected frees its `id()` for the next one, so a stale entry could
-    be read as the new board's.
+    **No longer required, and kept because four consumers call it.** Every
+    store lives on the board now (`_MEMOS`), so it dies with it. This
+    docstring used to say *"worth calling between fights rather than
+    trusting the keys: a `World` that has been collected frees its `id()`
+    for the next one, so a stale entry could be read as the new board's"* --
+    which was an accurate description of a live bug, offered as a reason to
+    remember a call. `api/app.py` and `scripts/fight.py` build boards and
+    never did. #1095.
     """
-    _CACHE.clear()
-    _ROWS.clear()
-    _BOARDS.clear()
-    _EFFECTS.clear()
-    _PUSH.clear()
-    _ROUND.clear()
-    _DENIED.clear()
-    _VS.clear()
+    _MEMOS.clear()
+
+
+#: `clear()` under the name `doctrine.forget` reaches for. One weak map holds
+#: both modules' stores, so clearing is one call and a consumer can no longer
+#: clear half of them. #1095.
+forget_all = clear
 
 
 def _level_of(world: Any, eid: int) -> int:
@@ -276,11 +332,9 @@ def raw(world: Any, eid: int) -> float:
 
 #: Per (board, caster, row) expected damage against the baseline. Separate from
 #: `_CACHE` because it is keyed on three things and filled one row at a time.
-_ROWS: dict[tuple[int, int, str], float] = {}
 
 #: One scratch board per caster, kept because building it is the expensive part
 #: and every row of that caster is measured on the same one.
-_BOARDS: dict[tuple[int, int], Any] = {}
 
 
 #: Where `board` stands the two creatures. `scrub` puts them back.
@@ -356,27 +410,29 @@ def row_damage(world: Any, eid: int, ref: str) -> float:
     """
     from combat_engine.engine.expect import expected
 
-    key = (id(world), eid, ref)
-    got = _ROWS.get(key)
+    store = memo(world, ROWS)
+    key = (eid, ref)
+    got = store.get(key)
     if got is not None:
         return got
     if not _runnable(ref):
-        _ROWS[key] = 0.0
+        store[key] = 0.0
         return 0.0
-    made = _BOARDS.get((id(world), eid))
+    boards = memo(world, BOARDS)
+    made = boards.get(eid)
     if made is None:
         made = board(world, eid)
         if made is None:
-            _ROWS[key] = 0.0
+            store[key] = 0.0
             return 0.0
-        _BOARDS[(id(world), eid)] = made
+        boards[eid] = made
     w, me, foe = made
     scrub(w, me, foe)
     try:
         out = float(expected(w, me, ref, foe))
     except Exception:
         out = 0.0
-    _ROWS[key] = out
+    store[key] = out
     return out
 
 
@@ -414,12 +470,10 @@ class Laid:
 
 #: Per (board, caster, row), what that row lays. Cached because it costs a Ledger
 #: run, and a row does the same thing every time it is used.
-_EFFECTS: dict[tuple[int, int, str], tuple[Laid, ...]] = {}
 
 #: How far the row shoves its target, from the same run. Filled by `row_effects`
 #: rather than by a second Ledger pass, since the run that reads the conditions
 #: has already moved the creature.
-_PUSH: dict[tuple[int, int, str], int] = {}
 
 
 def row_effects(world: Any, eid: int, ref: str) -> tuple[Laid, ...]:
@@ -447,35 +501,41 @@ def row_effects(world: Any, eid: int, ref: str) -> tuple[Laid, ...]:
     from combat_engine.engine.conditions import RULES
     from combat_engine.engine.expect import expected
 
-    key = (id(world), eid, ref)
-    got = _EFFECTS.get(key)
+    # **Two stores, because this one function fills both.** `row_push` reads
+    # `PUSH` and never computes it -- it calls back into here -- so the two
+    # have to be written in the same pass and cannot share a binding. #1095.
+    store = memo(world, EFFECTS)
+    shoves = memo(world, PUSH)
+    key = (eid, ref)
+    got = store.get(key)
     if got is not None:
         return got
     if not _runnable(ref):
-        _EFFECTS[key] = ()
+        store[key] = ()
         return ()
-    made = _BOARDS.get((id(world), eid))
+    boards = memo(world, BOARDS)
+    made = boards.get(eid)
     if made is None:
         made = board(world, eid)
         if made is None:
-            _EFFECTS[key] = ()
+            store[key] = ()
             return ()
-        _BOARDS[(id(world), eid)] = made
+        boards[eid] = made
     w, me, foe = made
     scrub(w, me, foe)
     try:
         expected(w, me, ref, foe)
     except Exception:
-        _EFFECTS[key] = ()
+        store[key] = ()
         return ()
     # Where the row left it. `scrub` stood it on `HOME[1]`, so anything else is
     # forced movement -- which is worth knowing because shoving a creature that
     # cannot walk back is the cheapest way to take its round away. Camille's
     # suggestion, and `row_push` is the read.
     landed = w.get(foe, Position)
-    _PUSH[key] = (max(abs(landed.square[0] - HOME[1][0]),
-                      abs(landed.square[1] - HOME[1][1]))
-                  if landed is not None else 0)
+    shoves[key] = (max(abs(landed.square[0] - HOME[1][0]),
+                       abs(landed.square[1] - HOME[1][1]))
+                   if landed is not None else 0)
     out: dict[tuple, Laid] = {}
     for eff in w.effects.of(foe):
         conds = tuple(eff.conditions)
@@ -502,16 +562,17 @@ def row_effects(world: Any, eid: int, ref: str) -> tuple[Laid, ...]:
         out.setdefault(
             (laid.when, laid.conditions, laid.defences, laid.grants_ca), laid)
     scrub(w, me, foe)
-    _EFFECTS[key] = tuple(out.values())
-    return _EFFECTS[key]
+    store[key] = tuple(out.values())
+    return store[key]
 
 
 def row_push(world: Any, eid: int, ref: str) -> int:
     """How many squares this row shoves its target. Zero for most rows."""
-    key = (id(world), eid, ref)
-    if key not in _PUSH:
+    store = memo(world, PUSH)
+    key = (eid, ref)
+    if key not in store:
         row_effects(world, eid, ref)
-    return _PUSH.get(key, 0)
+    return store.get(key, 0)
 
 
 def _baseline_hit(world: Any, eid: int, ref: str) -> float | None:
@@ -522,12 +583,13 @@ def _baseline_hit(world: Any, eid: int, ref: str) -> float | None:
     """
     from combat_engine.engine.dsl import get
 
-    made = _BOARDS.get((id(world), eid))
+    boards = memo(world, BOARDS)
+    made = boards.get(eid)
     if made is None:
         made = board(world, eid)
         if made is None:
             return None
-        _BOARDS[(id(world), eid)] = made
+        boards[eid] = made
     w, me, foe = made
     p = get(ref)
     return p.hit_chance(w, me, foe) if p is not None else None
@@ -687,7 +749,6 @@ def capacity(world: Any, of: Team) -> float:
 #: taken, a condition landing -- is not seen until the next one. That is the same
 #: trade those four already make, and the alternative is a live `p.hit_chance` per
 #: candidate action per target.
-_VS: dict[tuple[int, int, int, str, int, int], float] = {}
 
 
 def expected_vs(world: Any, eid: int, ref: str, target: int,
@@ -708,12 +769,13 @@ def expected_vs(world: Any, eid: int, ref: str, target: int,
     A row with no attack line at all is damage that does not need to land, so it
     is returned unscaled rather than being scaled by a hit chance of `None`.
     """
-    key = (id(world), getattr(world, "round", 0), eid, ref, target, attack)
-    seen = _VS.get(key)
+    store = memo(world, VS)
+    key = (getattr(world, "round", 0), eid, ref, target, attack)
+    seen = store.get(key)
     if seen is not None:
         return seen
     got = _expected_vs(world, eid, ref, target, attack=attack)
-    _VS[key] = got
+    store[key] = got
     return got
 
 
@@ -852,10 +914,8 @@ def _speed_under(world: Any, eid: int, pin: Pinned | None) -> int:
 #: candidate actions, so uncached it recomputed the same figure thousands of times:
 #: one fight went from 13s under `LinearPolicy` to 25s, and an 80-seed comparison
 #: from 25 minutes to about two hours.
-_ROUND: dict[tuple[int, int, int, Pinned | None, bool, Any], float] = {}
 
 #: Per (board, round, target, the effects asked about). Same reasoning.
-_DENIED: dict[tuple[int, int, int, tuple], float] = {}
 
 
 def area_bodies(kind: str, size: int) -> int:
@@ -917,12 +977,13 @@ def per_round(world: Any, eid: int, pin: Pinned | None = None,
     """
     if pin is not None and pin.cannot_act:
         return 0.0
-    key = (id(world), getattr(world, "round", 0), eid, pin, anywhere, where)
-    hit = _ROUND.get(key)
+    store = memo(world, ROUND_OF)
+    key = (getattr(world, "round", 0), eid, pin, anywhere, where)
+    hit = store.get(key)
     if hit is not None:
         return hit
     got = _per_round(world, eid, pin, anywhere=anywhere, where=where)
-    _ROUND[key] = got
+    store[key] = got
     return got
 
 
@@ -993,10 +1054,11 @@ def potential(world: Any, eid: int) -> float:
     numerator, `per_round(target, pin)`, which is what it can manage from where it
     actually stands under what it is actually suffering.
     """
-    key = (id(world), getattr(world, "round", 0), eid)
-    got = _CACHE.get(key)
+    store = memo(world, BEST_CASE)
+    key = (getattr(world, "round", 0), eid)
+    got = store.get(key)
     if got is None:
-        got = _CACHE[key] = per_round(world, eid, None, anywhere=True)
+        got = store[key] = per_round(world, eid, None, anywhere=True)
     return got
 
 
@@ -1063,13 +1125,14 @@ def denial(world: Any, target: int, laid: Sequence[Laid],
     # every shoved call read it back. The term fired, the numbers were identical to
     # three decimals, and nothing raised -- which is this component's "silently
     # false" failure arriving through a memo rather than through a predicate.
-    key = (id(world), getattr(world, "round", 0), target,
+    store = memo(world, DENIED)
+    key = (getattr(world, "round", 0), target,
            tuple((o.when, o.conditions) for o in laid), pushed)
-    hit = _DENIED.get(key)
+    hit = store.get(key)
     if hit is not None:
         return hit
     got = _denial(world, target, laid, pushed)
-    _DENIED[key] = got
+    store[key] = got
     return got
 
 
