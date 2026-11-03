@@ -34851,6 +34851,118 @@ def a_party_that_is_not_the_module_s_size_gets_the_page_s_rule(
     )
 
 
+def a_block_can_credit_a_feat_for_what_the_power_lays(out: Result) -> None:
+    """#550. Camille picked (b): one block-scoped attribution.
+
+    A feat's clause written into the power it names is laid by the **power**,
+    so the effect's label and its `by` both say the power -- and the feat then
+    reports SILENT while working perfectly. `c.credit(ref)` says who a block
+    is for; `Effects.apply` stamps it; `audit._claimed` reads it.
+
+    **The load-bearing assertion is that `by` does not move.** `by` is what
+    `durations.keywords_of` resolves to answer "which keywords does this
+    effect have", so crediting through `by` would make a power's psychic burn
+    report the *feat's* keywords -- #580, the bug `by` exists to fix. A
+    credit that worked by overwriting `by` would pass every other assertion
+    here.
+
+    The last pair is the payoff rather than the mechanism: the audit has to
+    credit the feat for an effect it never laid, and must not credit a ref
+    that merely shares a prefix.
+    """
+    import audit as A
+    from combat_engine.engine import Bus, Grid, Rng, When, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import EffectApplied
+    from combat_engine.engine.types import Defense
+
+    def board() -> tuple[World, int, Cast]:
+        w = World(Grid(8, 8), Rng(1), Bus())
+        e = w.spawn()
+        w.add(e, Health(hp=30, max_hp=30))
+        return w, e, Cast(world=w, me=e, ref="p87")
+
+    w, me, c = board()
+    before = c.bonus(Defense.AC, 1, on=me, until=When.ENCOUNTER)
+    with c.credit("f974"):
+        inside = c.penalty(Defense.AC, 2, on=me, until=When.ENCOUNTER)
+    after = c.bonus(Defense.FORT, 1, on=me, until=When.ENCOUNTER)
+
+    out.that(
+        getattr(inside, "credit", "") == "f974",
+        "an effect laid inside the block is credited to the ref it names",
+        f"credit={getattr(inside, 'credit', '?')!r} "
+        f"label={getattr(inside, 'label', None)!r}",
+    )
+    out.that(
+        getattr(before, "credit", "x") == "" and getattr(after, "credit", "x") == "",
+        "and one laid before or after it is not",
+        f"before {getattr(before, 'credit', '?')!r}, "
+        f"after {getattr(after, 'credit', '?')!r}",
+    )
+    out.that(
+        getattr(inside, "by", "") == "p87",
+        "`by` still names the laying row, so keywords_of is untouched (#580)",
+        f"by={getattr(inside, 'by', '?')!r} -- f974 here would be the #580 bug",
+    )
+    out.that(
+        not w.effects._credit,
+        "and the block gives the credit back when it closes",
+        f"{w.effects._credit}",
+    )
+
+    # -- the event carries it, because `_claimed` reads events -------------
+    landed = [e for e in w.bus.log if isinstance(e, EffectApplied)]
+    out.that(
+        len(landed) == 3
+        and [getattr(e, "credit", "") for e in landed] == ["", "f974", ""],
+        "EffectApplied carries the credit, in order",
+        f"{[(e.label, getattr(e, 'credit', '?')) for e in landed]}",
+    )
+
+    # -- nesting, and a raising body ---------------------------------------
+    _, me2, c2 = board()
+    with c2.credit("f974"):
+        with c2.credit("f985"):
+            inner = c2.penalty(Defense.AC, 1, on=me2, until=When.ENCOUNTER)
+        outer = c2.penalty(Defense.REF, 1, on=me2, until=When.ENCOUNTER)
+    out.that(
+        getattr(inner, "credit", "") == "f985"
+        and getattr(outer, "credit", "") == "f974",
+        "an inner block gives the outer one back rather than clearing it",
+        f"inner {getattr(inner, 'credit', '?')!r}, outer {getattr(outer, 'credit', '?')!r}",
+    )
+
+    w3, me3, c3 = board()
+    try:
+        with c3.credit("f974"):
+            raise RuntimeError("the body raised")
+    except RuntimeError:
+        pass
+    spilled = c3.bonus(Defense.AC, 1, on=me3, until=When.ENCOUNTER)
+    out.that(
+        not w3.effects._credit and getattr(spilled, "credit", "x") == "",
+        "a raising body still pops, so the credit does not leak onward",
+        f"stack {w3.effects._credit}, next effect "
+        f"{getattr(spilled, 'credit', '?')!r}",
+    )
+
+    # -- the payoff: the audit credits the feat for the power's effect -----
+    got = A._claimed(w, "f974", 0)
+    out.that(
+        "EffectApplied" in got,
+        "audit._claimed credits the feat for an effect the POWER laid",
+        f"{sorted(got)}",
+    )
+    missed = A._claimed(w, "f97", 0)
+    out.that(
+        "EffectApplied" not in missed,
+        "and a ref that only shares a prefix is NOT credited",
+        f"f97 got {sorted(missed)} -- equality, not startswith",
+    )
+
+
 def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) -> None:
     """#324. Three surges were spent restoring zero hit points and nothing
     in the scorecard could say so.
@@ -57058,6 +57170,10 @@ DRIVERS = {
     "healing_waste": (
         wasted_healing_is_counted_off_the_log_and_not_off_a_listener,
         "wasted healing is read off the log, not a listener (#324)",
+    ),
+    "feat_credit": (
+        a_block_can_credit_a_feat_for_what_the_power_lays,
+        "a block credits a feat for what the power lays (#550)",
     ),
     "challenge_costs_nothing": (
         a_non_combat_scene_does_not_spend_the_party_s_powers,

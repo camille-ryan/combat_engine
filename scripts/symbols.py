@@ -270,6 +270,14 @@ CATEGORIES: dict[str, dict] = {
             # in `movement`, under `shift`. It has nothing to do with
             # shifting. See the note in `movement`'s sections.
             ("laid on a creature", [
+                # `credit` says *whose* the next thing laid is, which is a
+                # question about everything else in this section rather than
+                # a thing of its own: a feat's clause written into the power
+                # it names is laid by the power, so without it the feat
+                # reports silent while working. Here rather than under the
+                # lifecycle below because the author arrives while writing
+                # the clause, not while ending it. #550.
+                "credit",
                 "effect", "form", "in_form", "merge", "shaped", "stance",
                 "transfer",
             ]),

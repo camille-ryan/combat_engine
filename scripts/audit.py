@@ -4370,7 +4370,18 @@ def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
     # whose label and `why` carry *that* ref. See `_used_inside`. #697.
     names = (ref, *also)
     for e in world.bus.log[cursor:]:
-        if e.kind == "EffectApplied" and str(getattr(e, "label", "") or "").startswith(names):
+        # **Or an explicit credit, which is the one case the label convention
+        # cannot express.** A feat's clause written into the power it names is
+        # laid by the power, so the label says the power and the feat reports
+        # SILENT while working perfectly -- `#550`. `Cast.credit` stamps the
+        # ref on the effect and `Effects.apply` carries it onto the event.
+        #
+        # Equality, not a prefix: `credit` is set from one ref by one block,
+        # where a label is a free-text string the prefix rule exists to cope
+        # with. A prefix here would credit `f97` for `f974`'s clause.
+        if e.kind == "EffectApplied" and (
+                str(getattr(e, "label", "") or "").startswith(names)
+                or str(getattr(e, "credit", "") or "") in names):
             out.add("EffectApplied")
         # `ConditionEnded.why` is the ref for a cure: `c.cure` and
         # `Effects.end` both pass the caller's ref as the reason.

@@ -1199,6 +1199,53 @@ class Cast:
         who = self.me if on is None else on
         return on_build(self.world, who, choice)
 
+    def credit(self, ref: str) -> Any:
+        """Everything laid inside this block is `ref`'s doing, not this row's.
+
+            if c.feat("f974"):
+                with c.credit("f974"):
+                    c.penalty(AC, 2, on=victim, until=When.EONT)
+
+        **For a feat's clause written into the power it names** -- Camille's
+        call on `#550`. The effect is laid by the *power*, so its label and
+        its `by` both say the power, and the feat then reports SILENT while
+        working perfectly. One block says who it is for and every effect
+        inside carries it.
+
+        **Why a block and not a `label=` on each verb.** Measured before
+        building: of the verbs such a clause needs, `bonus` and `penalty`
+        accept a `label=` and `grants_advantage`, `ongoing`, `slowed` and
+        `condition` refuse one -- and the two that accept it put the label on
+        the **`Mod`**, for the non-stacking rule, not on the effect that
+        `audit._claimed` reads. So `label=` could not be made to mean credit
+        without breaking what it already means, and four more verbs would
+        have needed it. `Effects.apply` is one door that all 148 effect verbs
+        reach, so the stamp goes there instead.
+
+        **A stack, so blocks nest.** An inner block gives the outer one back
+        rather than clearing it, which matters the moment a credited clause
+        calls a helper that credits something else.
+
+        Reads nothing and refuses nothing: a ref that names no row still
+        stamps, because `_claimed` resolving it to nothing is the same
+        under-crediting a mislabelled effect already gets, and refusing here
+        would make a typo raise mid-fight instead of showing up as a silent
+        row in the audit.
+        """
+        from contextlib import contextmanager
+
+        @contextmanager
+        def held() -> Any:
+            self.world.effects._credit.append(ref)
+            try:
+                yield
+            finally:
+                # Popped in a `finally` so a raising body cannot leave the
+                # rest of the fight attributed to a feat that has finished.
+                self.world.effects._credit.pop()
+
+        return held()
+
     def feat(self, ref: str, *, on: int | None = None) -> bool:
         """Has this character taken that feat? `c.feat("f611")`.
 

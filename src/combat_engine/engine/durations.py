@@ -344,6 +344,15 @@ class Effects:
         #: True only while `end_encounter` is tearing the board down. Read by
         #: `Cast.aftereffect`, which must not fire then.
         self.closing = False
+        #: The ref currently taking credit for whatever is laid, or `""`.
+        #: Pushed and popped by `Cast.credit`, read once in `apply`. #550.
+        #:
+        #: **A stack, not a single value**, because a body may credit one feat
+        #: and call a helper that credits another -- and the inner block has to
+        #: give the outer one back rather than clearing it. Lists are cheap and
+        #: a lost restore would attribute the rest of a power's effects to a
+        #: feat that had finished.
+        self._credit: list[str] = []
         self._next = 0
         world.bus.on(TurnStart, self._on_turn_start)
         # Last in its window. Expiry is the close of the turn, not the start
@@ -513,6 +522,32 @@ class Effects:
         # today's behaviour and only the six in `cast.py` that label by
         # content need to say anything.
         eff.by = by or (label.split()[0] if label else "")
+        # **Which row is taking credit for this, when that is not the row that
+        # laid it.** A feat's clause written into the power it names is laid by
+        # the *power*, so `by` and the label both say the power -- and the feat
+        # then reports SILENT while working perfectly, which is the whole of
+        # #550. `Cast.credit` pushes a ref for the length of a block and this
+        # is where it lands.
+        #
+        # **Beside `by`, never instead of it.** `by` is read by `keywords_of`
+        # to answer "which keywords does this effect have", by resolving it as
+        # a ref -- so overwriting it with the feat's ref would make a power's
+        # psychic burn report the *feat's* keywords and reintroduce #580,
+        # which is the bug `by` exists to fix. Two questions, two attributes.
+        #
+        # An attribute rather than a field, for the reason `by` and
+        # `Moved.kind_` are: a field reaches the wire and every replay
+        # fixture, and who is credited is not a change in how a fight
+        # resolves.
+        # The ignore is at the site rather than blessed into the baseline.
+        # `eff.by` and `eff.weapon` above raise the identical diagnostic and
+        # are simply *carried* -- they predate the per-diagnostic baseline --
+        # so adding a third silently would grow the carried set for a pattern
+        # that is deliberate. Saying it here keeps the intent next to the
+        # code and leaves the baseline alone.
+        eff.credit = (  # ty: ignore[unresolved-attribute]
+            self._credit[-1] if self._credit else ""
+        )
         # **And which weapon the blow came through**, an attribute for the
         # reason `by` above is one. `ConditionApplied.power` answers the
         # clause's keyword and the attack's shape and says nothing about
@@ -537,12 +572,19 @@ class Effects:
         # condition. A save-ends effect carrying nothing but ongoing damage
         # said nothing at all, so "subject to an effect a save can end"
         # could only be declared on the half of the cases that daze you.
-        self.world.bus.emit(
-            EffectApplied(
-                source=source, target=owner, duration=when.value,
-                label=eff.label, save_ends=when is When.SAVE_ENDS,
-            )
+        landed = EffectApplied(
+            source=source, target=owner, duration=when.value,
+            label=eff.label, save_ends=when is When.SAVE_ENDS,
         )
+        # Carried onto the event as an attribute so `audit._claimed` can credit
+        # the feat whose clause this is -- it reads events, not the effect
+        # store, so the stamp has to travel. Same attribute-not-field reasoning
+        # as `Effect.by` above. #550.
+        # `getattr` on the read, which is the shape `ev.weapon` above uses:
+        # the *assignment* of a new attribute passes, the *read* does not, so
+        # the ignore has to sit on the side that reads.
+        landed.credit = getattr(eff, "credit", "")  # ty: ignore[unresolved-attribute]
+        self.world.bus.emit(landed)
         self._warn_sustainless(eff)
 
         self._install_conditions(eff, source, when.value)

@@ -54,6 +54,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
 
 ## laid on a creature
 
+- `c.credit(self, ref: 'str') -> 'Any'`
+  - Everything laid inside this block is `ref`'s doing, not this row's.
 - `c.effect(self, label: 'str', *, until: 'When' = <When.SAVE_ENDS: 'save ends'>, on: 'int | None' = None, sustain: 'ActionType | None' = None) -> 'Effect | None'`
   - A named hold with no mechanical content of its own.
 - `c.form(self, *, conditions: 'Iterable[Condition]' = (), modes: 'dict[str, int] | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, revert: 'ActionType | None' = <ActionType.MINOR: 'minor'>, label: 'str' = '', name: 'str' = '') -> 'Effect'`
