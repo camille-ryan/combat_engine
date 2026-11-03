@@ -3160,7 +3160,7 @@ def launcher_for(kind: str) -> Weapon | None:
 
 
 @cache
-def build_for(cls: str, ref: str) -> str:
+def _build_for(cls: str, ref: str, scored: bool) -> str:
     """The build whose gear can actually hold this row.
 
     A class's builds carry different weapons -- a ranger on the two-blade leg
@@ -3177,41 +3177,89 @@ def build_for(cls: str, ref: str) -> str:
     answer was recomputed 48 times for one row. Measured: 144 calls and 2.23s
     over three silent rows, 13% of their total.
 
-    Safe to memoise because it is a pure function of two strings:
-    `BUILDS` is a module constant, `REGISTRY` is fixed once content has
-    imported, the probe `World` is built with a fixed `Rng(1)` and discarded,
-    and the return is a `str`. Verified over 60 `(cls, ref)` pairs: 0
-    disagreements between two calls.
+    Safe to memoise because it is a pure function of two strings **and the
+    draw flag**: `BUILDS` is a module constant, `REGISTRY` is fixed once
+    content has imported, the probe `World` is built with a fixed `Rng(1)`
+    and discarded, and the return is a `str`.
+
+    **`scored` is in the key and is otherwise unused, which is `#1082`.**
+    This list used to end at "two strings", and the omission was not
+    academic: `spawn` below is character creation, which reads
+    `SCORED_CHOICES`, so the answer depends on it -- measured,
+    `("ranger", "p1758")` is `hunter` scored and `marauder` unscored. With
+    the flag outside the key, whichever draw mode asked a pair first won for
+    the whole process and a caller in the other mode was answered from it.
+
+    **And the old verification could not have caught it**: *"60 pairs, 0
+    disagreements between two calls"* compared two calls in the **same**
+    mode, and a cache insensitive to the mode agrees with itself perfectly.
+    `drivers.draw_cache_key` asserts across the two modes now.
+
+    **The parameter DRIVES the body, it is not only a key.** A first version
+    left it key-only, reasoning that `spawn` reads the live global and
+    `build_for` always passes that same value, so the two agree by
+    construction. A plant refuted it: with the parameter inert,
+    `_build_for(cls, ref, False)` called while the global is `True` computes
+    the **scored** answer and files it under the unscored key -- the cache
+    poisoned through its own front door, and invisible to any assertion that
+    reads `build_for` alone. So the flag is pinned for the body and put
+    back, which makes the key and the answer one claim.
+
+    The pin is a **no-op in production**: `build_for` passes the live value,
+    so it sets the flag to what it already is. It exists for a direct
+    caller, which today is `drivers.draw_cache_key` asserting exactly this.
+    `try/finally` covers every exit, including the early `return`.
 
     **Never cache a board or a `World`** -- `audit._run_all` requires each row
     to share nothing with any other, and a shared mutable world is the sweep
     flake that is hardest to find. This caches the *answer*, not the probe.
     """
-    from combat_engine.engine import Bus, Grid, Rng, World, usable
-    from combat_engine.engine.dsl import get, unmet_requirement
+    global SCORED_CHOICES
 
-    declared = get(ref)
-    if declared is None:
-        return ""
-    # The build whose *secondary* ability the row leans on, first. Several
-    # rows read "a number of squares equal to your Intelligence modifier",
-    # and a warlord who took the other leg has Intelligence 10 -- so the row
-    # does nothing, correctly, and reads as broken. The fork is exactly the
-    # choice of which secondary is good; picking the wrong leg to test on
-    # says nothing about the row.
-    options = sorted(
-        BUILDS.get(cls, ()),
-        key=lambda b: -_leans_on(declared, b),
-    )
-    for build in options:
-        probe = World(Grid(8, 8), Rng(1), Bus())
-        who = spawn(
-            probe, Character(cls, max(1, declared.level), [ref], build=build.name), (1, 1)
+    was_drawn, SCORED_CHOICES = SCORED_CHOICES, scored
+    try:
+        from combat_engine.engine import Bus, Grid, Rng, World, usable
+        from combat_engine.engine.dsl import get, unmet_requirement
+
+        declared = get(ref)
+        if declared is None:
+            return ""
+        # The build whose *secondary* ability the row leans on, first. Several
+        # rows read "a number of squares equal to your Intelligence modifier",
+        # and a warlord who took the other leg has Intelligence 10 -- so the row
+        # does nothing, correctly, and reads as broken. The fork is exactly the
+        # choice of which secondary is good; picking the wrong leg to test on
+        # says nothing about the row.
+        options = sorted(
+            BUILDS.get(cls, ()),
+            key=lambda b: -_leans_on(declared, b),
         )
-        ok, _why = usable(probe, who, declared)
-        if ok or not unmet_requirement(probe, who, declared):
-            return build.name
-    return ""
+        for build in options:
+            probe = World(Grid(8, 8), Rng(1), Bus())
+            who = spawn(
+                probe, Character(cls, max(1, declared.level), [ref], build=build.name), (1, 1)
+            )
+            ok, _why = usable(probe, who, declared)
+            if ok or not unmet_requirement(probe, who, declared):
+                return build.name
+        return ""
+    finally:
+        SCORED_CHOICES = was_drawn
+
+
+def build_for(cls: str, ref: str) -> str:
+    """The build whose gear can hold this row, under the live draw. #1082.
+
+    **The public signature is unchanged on purpose.** Six callers across
+    four layers ask `build_for(cls, ref)` and none of them knows or should
+    know about `SCORED_CHOICES` -- it is a module global that
+    `scripts/audit.py` sets and `drivers._board` pins and restores. So the
+    flag is read here, at the boundary, and passed into the key; no call
+    site moves and no `Cast` surface changes.
+
+    See `_build_for` for why it has to be in the key at all.
+    """
+    return _build_for(cls, ref, SCORED_CHOICES)
 
 
 def _is_class_heal(p) -> bool:  # noqa: ANN001

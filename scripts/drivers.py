@@ -51895,6 +51895,167 @@ def a_puzzle_tests_the_player_and_never_stops_the_plot(out: Result) -> None:
     )
 
 
+def the_build_cache_distinguishes_the_two_draws(out: Result) -> None:
+    """`build_for`'s answer depends on the draw flag, so the flag is in the
+    cache key. `#1082`.
+
+    `chargen.build_for` is memoised and its body calls `spawn`, which is
+    character creation, which reads `chargen.SCORED_CHOICES`. With the flag
+    outside the key, **whichever draw mode asked a `(cls, ref)` pair first
+    won for the whole process** and any later caller in the other mode was
+    answered from it.
+
+    **What that cost, and it is why this rule is here rather than a
+    comment.** `drivers.f981_branch` reached `audit.board` unpinned, so a
+    rule running earlier through the *pinned* `_board` warmed the cache in
+    the other mode and the later board got a different character: green
+    standalone, a skip inside the full suite. `#1070` spent a day
+    concluding the cause was "the second construction of the board", which
+    three measurements refute.
+
+    **And the function's own safety argument omitted the flag.** It read
+    *"a pure function of two strings: `BUILDS` is a module constant,
+    `REGISTRY` is fixed once content has imported, the probe `World` is
+    built with a fixed `Rng(1)` and discarded"* -- every clause true, the
+    list incomplete.
+
+    **The old verification could not have caught it either**, which is the
+    transferable part: *"60 pairs, 0 disagreements between two calls"*
+    compared two calls in the **same** mode, and a cache insensitive to the
+    mode agrees with itself perfectly. So this rule asserts **across** the
+    modes, which is the only arrangement that can fail.
+    """
+    from combat_engine import chargen
+    from combat_engine.content import loader  # noqa: F401
+
+    #: A pair whose answer genuinely differs between the draws. Measured
+    #: over five classes against `p1758`; this is the one that moves, and a
+    #: pair that does not move could not fail this rule however broken the
+    #: key was.
+    PAIR = ("ranger", "p1758")
+    was = chargen.SCORED_CHOICES
+    # **Guarded, so removing `@cache` reddens the structural assertion
+    # instead of killing the run.** A plant that dropped the decorator made
+    # `cache_clear()` raise and the rule died before reporting anything --
+    # a crash says something changed, not which claim broke.
+    def clear() -> bool:
+        wiped = getattr(chargen._build_for, "cache_clear", None)
+        if wiped is None:
+            return False
+        wiped()
+        return True
+
+    out.that(
+        clear(),
+        "`_build_for` is memoised at all -- asserted first, because every "
+        "claim below is about its KEY and a missing cache makes them all "
+        "vacuously true",
+        f"cache_clear present: {hasattr(chargen._build_for, 'cache_clear')}",
+    )
+    try:
+        clear()
+        chargen.SCORED_CHOICES = True
+        scored = chargen.build_for(*PAIR)
+        chargen.SCORED_CHOICES = False
+        unscored = chargen.build_for(*PAIR)
+        out.that(
+            scored != unscored and scored and unscored,
+            "**the two draws give this pair different builds**, which is the "
+            "premise -- a pair that answered the same either way could not "
+            "fail this rule however broken the key was, so the assertions "
+            "below would be vacuous without it",
+            f"scored={scored!r} unscored={unscored!r}",
+        )
+
+        # warmed in one mode, asked in the other, both ways round
+        clear()
+        chargen.SCORED_CHOICES = False
+        a_first = chargen.build_for(*PAIR)
+        chargen.SCORED_CHOICES = True
+        a_then = chargen.build_for(*PAIR)
+
+        clear()
+        chargen.SCORED_CHOICES = True
+        b_first = chargen.build_for(*PAIR)
+        chargen.SCORED_CHOICES = False
+        b_then = chargen.build_for(*PAIR)
+
+        out.that(
+            (a_first, a_then) == (unscored, scored),
+            "**a cache warmed UNSCORED still answers the scored question "
+            "correctly**, which is the bug: the flag is in the key, so the "
+            "second call misses rather than being served the first one's "
+            "answer",
+            f"{a_first!r} then {a_then!r}",
+        )
+        out.that(
+            (b_first, b_then) == (scored, unscored),
+            "and the same the other way round, so **which mode asked first "
+            "no longer decides** -- the asymmetry is what an order "
+            "dependency looks like and asserting only one direction would "
+            "miss half of it",
+            f"{b_first!r} then {b_then!r}",
+        )
+        out.that(
+            not hasattr(chargen.build_for, "cache_info")
+            and hasattr(chargen._build_for, "cache_info"),
+            "the public `build_for` is the uncached boundary that reads the "
+            "flag, and `_build_for` is the cached worker that takes it -- so "
+            "no call site had to learn about the flag and no `Cast` surface "
+            "moved",
+            "boundary uncached, worker cached",
+        )
+        # **The boundary passes the LIVE flag, not a constant and not its
+        # negation.** A plant that inverted it stayed green against every
+        # assertion above, because those compare `build_for` against values
+        # *also* obtained through `build_for` -- so the inversion cancelled
+        # out and the rule could not tell the two implementations apart.
+        # Asked against the worker directly, which is the only reading that
+        # does not go through the thing under test.
+        #
+        # Deliberately not asserting the build's *name*: build slugs are
+        # printed sub-class names (`#339`), so writing one here would put a
+        # name in a tracked file.
+        for live in (True, False):
+            chargen.SCORED_CHOICES = live
+            clear()
+            through = chargen.build_for(*PAIR)
+            clear()
+            direct = chargen._build_for(*PAIR, live)
+            out.that(
+                through == direct,
+                f"**the boundary passes the LIVE flag** -- with "
+                f"`SCORED_CHOICES` {live}, `build_for` agrees with "
+                f"`_build_for(..., {live})` asked directly. A constant or an "
+                f"inverted flag both keep the key distinct and give the "
+                f"wrong answer, and neither is visible to an assertion that "
+                f"compares `build_for` only against itself",
+                f"{through!r} vs {direct!r}",
+            )
+        # A default on the flag is a caller that can omit it and silently
+        # take the scored answer -- a latent version of the same bug.
+        import inspect
+
+        # `__wrapped__` only exists under the decorator, and the "no cache
+        # at all" plant removes it -- so fall back to the function itself
+        # rather than raising, which would kill the run instead of letting
+        # the first assertion report the missing cache.
+        inner = getattr(chargen._build_for, "__wrapped__", chargen._build_for)
+        param = inspect.signature(inner).parameters
+        out.that(
+            "scored" in param
+            and param["scored"].default is inspect.Parameter.empty,
+            "and `scored` has **no default**, so no caller can omit it and "
+            "be answered from the wrong half of the cache -- which is the "
+            "same bug one step removed, and the shape a plant adding "
+            "`= True` reproduces",
+            f"default={param['scored'].default!r}",
+        )
+    finally:
+        chargen.SCORED_CHOICES = was
+        clear()
+
+
 def an_undeclared_board_is_in_bright_light(out: Result) -> None:
     """A board that says nothing about light is in bright light. `#539`.
 
@@ -56561,6 +56722,11 @@ DRIVERS = {
         a_puzzle_tests_the_player_and_never_stops_the_plot,
         "a puzzle tests the player, rolls the hard DC, and never stops the "
         "plot (#960)",
+    ),
+    "draw_cache_key": (
+        the_build_cache_distinguishes_the_two_draws,
+        "build_for's cache key holds the draw flag its answer depends on "
+        "(#1082)",
     ),
     "bright_default": (
         an_undeclared_board_is_in_bright_light,
