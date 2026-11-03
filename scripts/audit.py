@@ -821,8 +821,6 @@ KNOWN_SILENT = {
     "m3473a1": "affects only creatures taking ongoing poison; none are",
     # Terrain the board has none of. It is a bare grid by design -- two entries
     # already record that dressing it would cost every other row its legal shift.
-    "m6662a3": "requires being in water; the board has none",
-    "m6662a4": "requires water and loose ground; the board has neither",
     # **Round 8's fifteen, and three rows that looked like these and were not.**
     # `m5373a3`/`m5373a5` returned when the chooser aimed them at a creature their
     # target line forbids, where `_restricted_to` redirects to one in reach that
@@ -898,7 +896,6 @@ KNOWN_SILENT = {
     "m822a4": ("heals undead allies in a burst; its only ally is a copy of "
                "itself and reads as humanoid, so the kind gate returns"),
     # Terrain a bare grid has not got.
-    "m960a5": "requires icy ground to teleport from; the board has none",
     # Round 11: the board carries `fire` and `object` scenery and nothing else, so
     # a row wanting a tree has none to find. `m115702a2` is the same cause.
     "m3787a2": "teleports beside a tree; the board has no tree scenery",
@@ -2167,7 +2164,8 @@ def _class_of_leg(leg: str) -> str:
 
 
 def board(ref: str, seed: int, pose: bool = False,
-          arm: str = "", element: bool = False) -> tuple[World, int, set[str]]:
+          arm: str = "", element: bool = False,
+          terrain: str = "") -> tuple[World, int, set[str]]:
     """A caster with the row, four creatures in reach, and the fight started.
 
     The third value is what got emitted while the encounter was starting,
@@ -2177,8 +2175,24 @@ def board(ref: str, seed: int, pose: bool = False,
     printed clause is "when you wield X, X gets better" -- see
     `_wanted_weapon` and `_attempts`. Off unless a row has already shown
     nothing on every other arrangement, so it carries no collateral.
+
+    `terrain` dresses the floor with **one** printed terrain word, for the
+    55 rows whose clause asks about the weather. Empty by default and the
+    board stays what it has always been: dry, bare, and lit only by
+    `#539`'s "bright unless a light word says otherwise". Off unless the
+    row has shown nothing every other way, same as `arm`. #1087.
     """
     world = World(Grid(24, 16), Rng(seed), Bus())
+    # **Before anything spawns.** `Encounter.start()` arms every trait, and
+    # a trait gated on the weather has to find the weather already there --
+    # dressing the floor afterwards would arm it on a dry board and then
+    # flood it, which is the ordering fault `#976`'s rest-scene note
+    # records in the other direction.
+    if terrain:
+        # A `set`, not a `frozenset`: `World.terrain` is declared `set[str]`
+        # and `ty` refuses the narrower type. Nothing here mutates it, so
+        # immutability bought nothing worth a diagnostic.
+        world.terrain = {terrain}
     declared = get(ref)
     named: list[str] = []
 
@@ -5464,6 +5478,43 @@ def _wanted_by_declaration(ref: str) -> tuple[str, ...]:
     return ()
 
 
+def _wants_terrain(ref: str) -> tuple[str, ...]:
+    """The printed terrain words this row's body names, if any.
+
+    **The board is dry, bare and unlit, and nothing ever changed that.**
+    `world.terrain` is an empty `set()` on every board `board()` builds, so
+    of the thirteen words in `cast.TERRAIN_WORDS` exactly one -- `bright` --
+    ever answers True, and only because `#539` made it the default when no
+    light word is present. The other twelve are False for every row in the
+    corpus, so a clause gated on one has never once been reached.
+
+    Measured: **64 rows** name `c.terrain(`. Most of them fire, because a
+    row usually has a second clause that does not need the weather -- which
+    is exactly why this was invisible. What was untested is the terrain
+    clause, not the row.
+
+    Matched against the printed vocabulary rather than guessed, the same way
+    `_wanted_by_word` matches weapon words, so a quoted string that happens
+    to read like weather cannot dress a board.
+
+    Returns every word the row names, in the order the vocabulary lists
+    them, so a row asking about two gets a board for each. Rows naming none
+    get an empty tuple and never pay the axis. #1087.
+    """
+    from combat_engine.engine.cast import TERRAIN_WORDS
+
+    row = get(ref)
+    body = _source_of(getattr(row, "body", None), ref)
+    if not body:
+        return ()
+    return tuple(
+        word for word in sorted(TERRAIN_WORDS)
+        # The call, not the bare word: `c.terrain("ice")` dresses a board
+        # and the word "ice" in a docstring does not.
+        if f'terrain("{word}")' in body or f"terrain('{word}')" in body
+    )
+
+
 def _wanted_by_word(ref: str) -> tuple[str, ...]:
     """Weapon refs for the printed weapon **words** this row's body names.
 
@@ -6237,14 +6288,14 @@ def _attempts(out: Result):  # noqa: ANN202
     # global would not travel. The header is data and every worker reads it.
     claimed = get(out.ref)
     if claimed is not None and claimed.out_of_combat:
-        yield 1, None, False, "", False, False
+        yield 1, None, False, "", False, False, ""
         return
     for posed in (False, True):
         for face in LOADED:
             for seed in range(1, TRIES + 1):
                 if out.fired and (out.events & DID_SOMETHING):
                     return
-                yield seed, face, posed, "", False, False
+                yield seed, face, posed, "", False, False, ""
     # **A third axis, on the same principle as the posed one.** A row naming
     # a weapon its board does not hold can show nothing however it is posed,
     # because the reader walks `Gear.weapons` and finds no match. Paid only
@@ -6284,7 +6335,7 @@ def _attempts(out: Result):  # noqa: ANN202
                 for seed in range(1, TRIES + 1):
                     if out.fired and (out.events & DID_SOMETHING):
                         return
-                    yield seed, face, posed, held, False, False
+                    yield seed, face, posed, held, False, False, ""
     # **Sixth: an element on the bearer's own build.** `c.element()` reads
     # `element:<type>` out of `Build.choices` and only five legs in the game
     # set one, so for a carried implement the draw never produces a bearer
@@ -6308,7 +6359,7 @@ def _attempts(out: Result):  # noqa: ANN202
                 for seed in range(1, TRIES + 1):
                     if out.fired and (out.events & DID_SOMETHING):
                         return
-                    yield seed, face, posed, "", True, False
+                    yield seed, face, posed, "", True, False, ""
     # **Seventh: somebody shoots the caster.** A row triggered on "a ranged
     # or area attack damages you" has nothing to answer on a board where no
     # creature can make one -- the foe knows `mba` and `_area_rows` reads
@@ -6324,7 +6375,29 @@ def _attempts(out: Result):  # noqa: ANN202
                 for seed in range(1, TRIES + 1):
                     if out.fired and (out.events & DID_SOMETHING):
                         return
-                    yield seed, face, posed, "", False, True
+                    yield seed, face, posed, "", False, True, ""
+    # **Eighth: the weather.** `world.terrain` is an empty `set()` on every
+    # board this file builds, so twelve of `cast.TERRAIN_WORDS`' thirteen
+    # words answer False for the whole corpus and the thirteenth only
+    # answers True because `#539` made `bright` the default. A clause gated
+    # on one has never been reached.
+    #
+    # **55 rows ask**, `aquatic` 29 of them and `sunlight` 17, and most of
+    # those rows already *fire* -- on a second clause that needs no weather,
+    # which is exactly why this was invisible. What was untested is the
+    # terrain clause, not the row.
+    #
+    # Last, and one word per board: dressing the floor with everything at
+    # once would make a row asking for `darkness` find `sunlight` too, and
+    # `TERRAIN_WORDS` holds mutually exclusive weather. A row naming two
+    # gets a board for each. #1087.
+    for weather in _wants_terrain(out.ref):
+        for posed in (False, True):
+            for face in LOADED:
+                for seed in range(1, TRIES + 1):
+                    if out.fired and (out.events & DID_SOMETHING):
+                        return
+                    yield seed, face, posed, "", False, False, weather
 
 
 @contextlib.contextmanager
@@ -6649,10 +6722,10 @@ def audit(ref: str) -> Result:
     # something on this face, the rest re-prove the same thing. Eight of them
     # meant twenty-four boards for every row, and the audit builds a hundred
     # thousand boards.
-    for seed, face, posed, held, element, shot in _attempts(out):
+    for seed, face, posed, held, element, shot, weather in _attempts(out):
         try:
             world, caster, _armed = board(ref, seed, pose=posed, arm=held,
-                                          element=element)
+                                          element=element, terrain=weather)
             world.rng.loaded = face
             if not (trait or triggered):
                 # The rows this one is printed beside, **before** the
