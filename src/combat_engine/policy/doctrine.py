@@ -546,6 +546,44 @@ def hurts(ref: str) -> bool:
     return out
 
 
+def _hits_a_downed_ally(world: Any, encounter: Any, actor: int,
+                        action: Action) -> bool:
+    """Would this action catch an ally who is already at or below 0 hp? #328.
+
+    Reads `policy.features`'s own count rather than walking the targets
+    again, so the predicate and the count cannot drift apart.
+
+    **It asks whether the row ATTACKS, not whether it `benefits`, and the
+    ruling's own wording is why.** *"should NEVER risk hitting a downed
+    PC"* -- a row with no attack line cannot hit anybody, so it risks
+    nothing and is never refused however it is aimed. That covers heals and
+    buffs without needing to recognise them, which matters because
+    `benefits` does not recognise all of them: `replay` diverged on
+    `p16415`, a no-attack-line row naming one ally that `benefits` reports
+    **False**, and a `benefits`-gated version of this predicate refused it.
+
+    It also gets the opposite case right, which a `benefits` gate had
+    backwards: `benefits`' own note records **273 rows with an attack line**
+    answering True -- drains and feed-on-what-you-hit riders. Those do
+    risk hitting, so a drain aimed at an enemy that catches a downed ally
+    is still refused.
+
+    A named function because the chooser is where the refusal has to live
+    and a comprehension there could not be asserted on.
+    """
+    if not action.targets:
+        return False
+    if not _is_attack(action.ref):
+        return False
+    # **The real encounter, not `None`.** A first version passed `None`
+    # and `features` reaches `encounter.can_spend` for some action
+    # kinds, so `replay`, `fight` and `winrate` all died on an
+    # `AttributeError` within seconds. The probe had not hit that
+    # branch, which is why it ran green on the same code.
+    return features(world, encounter, actor, action).get(
+        "allies_down_caught", 0.0) > 0.0
+
+
 def benefits(ref: str) -> bool:
     """Is this row *for* the creatures it targets, rather than against them?
 
@@ -1946,6 +1984,21 @@ class DoctrinePolicy:
             # on purpose. Cleared before `weigh` rather than compensated for after,
             # so the number is never wrong in between.
             f["allies_caught"] = 0.0
+            # **`allies_down_caught` is deliberately NOT cleared here**, and
+            # a plant is why: clearing it changed nothing, because nothing
+            # in `weigh` reads it. The exemption moved into
+            # `_hits_a_downed_ally`, which asks whether the row *attacks* --
+            # the ruling's own word is *risk hitting*, and a row with no
+            # attack line cannot. That covers every heal and buff without
+            # having to recognise one, which is just as well: `benefits`
+            # reports False for `p16415`, a no-attack-line row naming a
+            # single ally.
+            #
+            # **And `allies_down_caught` must never get a weight.** It is a
+            # refusal, not a price: a `-inf` entry would make `0.0 * -inf` a
+            # `nan` on every action catching nobody, and any finite
+            # magnitude can be out-bid, which is what *never* rules out.
+            # #328.
             # **And for the same reason, how hurt they are is the point.** #321 made
             # `target_damage_taken` and `targets_bloodied` count enemies only, since
             # a wounded *ally* in a blast was refunding most of the -7.0 above. But a
@@ -2073,6 +2126,28 @@ class DoctrinePolicy:
             options = [a for a in options
                        if a.kind not in _STEPS or a.dest is None or id(a) in keep]
         usable = [a for a in options if a.available] or options
+        # **A refusal is an option NOT OFFERED, not a score.** Camille's
+        # ruling on `#328`: *"Party members using burst attacks should NEVER
+        # risk hitting a downed PC."*
+        #
+        # Tried as `weigh` returning `-inf` first, and `api_smoke` refused
+        # it within a minute -- **JSON has no infinity**, so the score
+        # reached the wire as `null` and the client's own
+        # `max(..., key=score)` died on `'>' not supported between NoneType
+        # and float`. A large finite sentinel would cross, but
+        # `policy/CLAUDE.md` is explicit that *a cost is the wrong shape
+        # however large*, and a magnitude can be out-bid. Filtering is the
+        # only form that cannot.
+        #
+        # **`or usable` is the fallback and it is load-bearing.** If every
+        # option catches them, refusing the lot would leave `max()` an empty
+        # sequence; the party keeps the full list instead and the ordinary
+        # tie-break applies, which in practice is `end` at 0.001. Stated
+        # rather than silent because it is the one case where *never* is not
+        # absolute.
+        spared = [a for a in usable
+                  if not _hits_a_downed_ally(world, encounter, actor, a)]
+        usable = spared or usable
         # **An exact tie goes to the option that advances the turn.** #796.
         # The tie-break used to be `str(a)` alone, and `"power..."` sorts
         # above `"end..."`, so a row worth exactly as much as ending the

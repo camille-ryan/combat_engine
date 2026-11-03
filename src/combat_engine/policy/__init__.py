@@ -341,6 +341,10 @@ def features(
     friendly = 0.0
     friends_hurt = 0.0
     friends_nearly = 0.0
+    # **Counted apart from `allies_caught`, because it is not a cost.** See
+    # `allies_down_caught` below and `DoctrinePolicy.weigh`, which refuses
+    # outright on it. #328.
+    friends_down = 0.0
     mine = world.get(actor, Side)
     for t in action.targets:
         health = world.get(t, Health)
@@ -368,6 +372,25 @@ def features(
             # `allies_caught` -- so neither use has to borrow the other's number.
             friends_hurt += max(0.0, 1.0 - health.hp / max(1, health.max_hp))
             friends_nearly += float(health.bloodied)
+            # **An ally already at or below 0 is the one case that is not a
+            # trade.** Camille's ruling on `#328`, verbatim and the second
+            # of three:
+            #
+            #   > *"Party members using burst attacks should NEVER risk
+            #   > hitting a downed PC."*
+            #
+            # *Never*, so this is counted and then **refused** in
+            # `DoctrinePolicy.weigh` rather than priced. `policy/CLAUDE.md`
+            # records why a cost is the wrong shape however large: a term
+            # built as a difference of baselines cannot express "avoid
+            # this", and netting friendly fire into `best_from` was already
+            # tried and made friendly fire *worse*.
+            #
+            # Separate from `allies_caught` and never folded into it: that
+            # one is a real trade a controller may take, and merging the two
+            # would make a refusal negotiable.
+            if health.hp <= 0:
+                friends_down += 1.0
             continue
         # **The two "finish the wounded one" sums ask about an *enemy*.** #321.
         # They were accumulated over every target, so a hurt ally in a blast paid
@@ -393,6 +416,11 @@ def features(
     f["target_damage_taken"] = hurt
     f["targets_bloodied"] = nearly
     f["allies_caught"] = friendly
+    # **Not weighted, deliberately.** A `-inf` entry in `WEIGHTS` would make
+    # `0.0 * -inf` a `nan` on every action that catches nobody, which poisons
+    # the whole table -- so the refusal reads this out of the dict in
+    # `weigh` instead. #328.
+    f["allies_down_caught"] = friends_down
     # Carried for `weighed`, not scored here: neither key is in `WEIGHTS`, and
     # `weigh` reads `weights.get(k, 0.0)`, so they are inert until folded in.
     f["allies_damage_taken"] = friends_hurt

@@ -51895,6 +51895,219 @@ def a_puzzle_tests_the_player_and_never_stops_the_plot(out: Result) -> None:
     )
 
 
+def a_burst_is_never_aimed_where_a_downed_ally_stands(out: Result) -> None:
+    """The party may not risk hitting its own downed character. `#328`.
+
+    Camille's ruling, the second of three on that issue and verbatim:
+
+    > *"Party members using burst attacks should NEVER risk hitting a downed
+    > PC."*
+
+    **Never, so it is a refusal and not a cost.** `policy/CLAUDE.md` records
+    why a weight is the wrong shape however large -- *a term built as a
+    difference of baselines cannot express "avoid this"* -- and netting
+    friendly fire into `best_from` was already tried and made friendly fire
+    *worse*. `#321` had also removed the pay-back that was shrinking the
+    existing -7.0 as the ally got more hurt.
+
+    **Two implementations were tried and the first one broke the wire.**
+    `weigh` returning `float("-inf")` reads correctly and `api_smoke`
+    refused it within a minute: **JSON has no infinity**, so the score
+    reached the page as `null` and the client's own `max(..., key=score)`
+    died on `'>' not supported between NoneType and float`. A large finite
+    sentinel would cross and can be out-bid, which is the thing the ruling's
+    *never* rules out. So the refusal is a **filter on the option list** --
+    an action that is not offered cannot be chosen, whatever anything
+    scores.
+
+    **And the predicate asks whether the row ATTACKS, not whether it
+    `benefits`.** The ruling says *risk hitting*; a row with no attack line
+    cannot hit anybody. That matters in both directions and `replay` proved
+    both:
+
+    * a `benefits`-gated draft refused `p16415`, a no-attack-line row
+      naming one ally that `benefits` reports **False** -- a buff the party
+      should still be able to give somebody who is down;
+    * and `benefits` reports **True** for 273 rows that *do* have an attack
+      line (drains, feed-on-what-you-hit riders), which must stay refused.
+
+    **The fixture already contained the fault, which is the strongest
+    evidence here.** `level-5-full`, recorded play:
+
+    ```
+    [1754] Dropped(actor=2, source=7, power='m2817a2')
+    [1812] PowerUsed(actor=4, power='p1169', targets=[2, 8])
+    [1814] AttackRolled(attacker=4, target=2, natural=19, total=28, defence=15)
+    ```
+
+    A party member bursting its own downed ally 58 events after it dropped,
+    and connecting. `#328`'s part-1 comment observed that *"none of the
+    eight fixtures ever attacks a creature at or below 0"* -- true of
+    enemies attacking downed PCs, and the party doing it to its own was in
+    the fixtures the whole time.
+    """
+    from combat_engine.content.loader import REGISTRY
+    from combat_engine.engine import Encounter
+    from combat_engine.engine.actions import Action
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import ActionType
+    from combat_engine.policy import features
+    from combat_engine.policy.doctrine import (
+        DoctrinePolicy,
+        _hits_a_downed_ally,
+        benefits,
+    )
+
+    world, me, _ = _board("m145a0", 1)
+    # **A real `Encounter`, because `features` declares one.** A first draft
+    # passed `None`, which works for the action kinds this rule poses and
+    # which `ty` refused -- rightly: `features` reaches
+    # `encounter.can_spend` for other kinds, and the same `None` killed
+    # `replay`, `fight` and `winrate` when it was inside the production
+    # predicate rather than only in the probe.
+    enc = Encounter(world)
+    mates = [a for a in allies(world, me) if a != me]
+    foes = enemies(world, me)
+    out.that(bool(mates) and bool(foes),
+             "the board has an ally and a foe, so a burst can be posed that "
+             "catches one of each -- without both, every assertion below is "
+             "about a board that cannot express the fault",
+             f"allies={mates} foes={foes[:3]}")
+    if not mates or not foes:
+        return
+    mate, foe = mates[0], foes[0]
+    pol = DoctrinePolicy()
+
+    #: A row with an attack line, which is what the ruling is about.
+    ATTACK = "p1169"
+    #: A row with none. `benefits` reports False for it, which is why the
+    #: predicate asks about the attack line instead.
+    QUIET = "p16415"
+    out.that(
+        not benefits(QUIET) and REGISTRY.get(QUIET) is not None,
+        "**the no-attack-line row used below is one `benefits` does NOT "
+        "recognise**, which is what makes it the right control: a "
+        "`benefits`-gated refusal passed every other assertion here and "
+        "still refused this row",
+        f"benefits({QUIET})={benefits(QUIET)}",
+    )
+
+    def burst(ref: str) -> Action:
+        return Action(kind="power", cost=ActionType.STANDARD, ref=ref,
+                      targets=(foe, mate))
+
+    health = world.get(mate, Health)
+    out.that(health is not None and health.hp > 0,
+             "the ally starts up, which is the premise -- without it the "
+             "first assertion would pass for the wrong reason",
+             f"hp={health and health.hp}")
+    if health is None:
+        return
+
+    out.that(
+        not _hits_a_downed_ally(world, enc, me, burst(ATTACK)),
+        "a burst catching a **standing** ally is still offered -- that is a "
+        "trade a controller may take and `allies_caught` prices it at -7.0. "
+        "Refusing it would be a different and much larger change",
+        "offered",
+    )
+
+    health.hp = 0
+    out.that(
+        _hits_a_downed_ally(world, enc, me, burst(ATTACK)),
+        "**and the same burst is refused the moment the ally is at or below "
+        "0.** The ruling's word is *never*, so this is the whole claim",
+        "refused",
+    )
+    out.that(
+        not _hits_a_downed_ally(world, enc, me, burst(QUIET)),
+        "**but a row with no attack line is offered however it is aimed**, "
+        "because it cannot *risk hitting* anybody -- the ruling's own "
+        "wording, and the thing a `benefits` gate got wrong",
+        "offered",
+    )
+    out.that(
+        not _hits_a_downed_ally(
+            world, None, me,
+            Action(kind="power", cost=ActionType.STANDARD, ref=ATTACK,
+                   targets=(foe,))),
+        "and the same attack aimed only at the foe is untouched, so the "
+        "refusal is about the footprint rather than about the row",
+        "offered",
+    )
+
+    # -- the score stays FINITE, which is the wire's requirement ----------
+    scores = [pol.score(world, enc, me, burst(r)) for r in (ATTACK, QUIET)]
+    out.that(
+        all(v == v and abs(v) != float("inf") for v in scores),
+        "**every score is a finite number, including the refused action's.** "
+        "This is the assertion `api_smoke` earned: a `-inf` here crosses "
+        "JSON as `null` and kills the client's own `max`. The refusal lives "
+        "in the option list, so nothing unrepresentable ever reaches the "
+        "wire",
+        f"{scores}",
+    )
+
+    # -- and through `act`, which is the half a predicate cannot prove ----
+    # **The pairing, not the predicate.** `_hits_a_downed_ally` being right
+    # says nothing about `act` consulting it, which is the fault
+    # `Step.stood`, `Step.surprised` and `field_allies` were each written
+    # for.
+    offered = [burst(ATTACK), Action(kind="end", cost=ActionType.STANDARD)]
+    chose = pol.act(world, enc, me, offered)
+    out.that(
+        chose.kind == "end",
+        "**`act` ends the turn rather than taking the only attack on "
+        "offer**, which is the wiring and not the arithmetic: the burst "
+        "scores well above `is_end`'s 0.001 and is simply not in the list "
+        "it chooses from",
+        f"chose {chose.kind!r}",
+    )
+    only = [burst(ATTACK)]
+    # **Caught, so a broken fallback NAMES this rule instead of killing the
+    # run.** Dropping `or usable` hands `max()` an empty sequence, and a
+    # plant that crashes the probe says something changed rather than which
+    # claim broke -- which is this file's own recorded lesson from `#962`.
+    try:
+        kept = pol.act(world, enc, me, only) is only[0]
+        why = "kept"
+    except ValueError as exc:
+        kept, why = False, f"raised: {exc}"
+    out.that(
+        kept,
+        "**and when it is the ONLY option the party keeps it**, which is the "
+        "`or usable` fallback and is stated rather than silent: refusing "
+        "the whole list would hand `max()` an empty sequence. The one case "
+        "where *never* is not absolute, and it needs no choice to be made",
+        why,
+    )
+
+    # -- the two copies of the exemption agree -----------------------------
+    # The predicate repeats a gate `weighed` also applies, for a measured
+    # reason -- calling `weighed` would double the per-option work, since
+    # `act`'s own `max` already calls `score` for every option. So the
+    # agreement is asserted instead.
+    pairs = [(r, _hits_a_downed_ally(world, enc, me, burst(r)),
+              features(world, enc, me, burst(r)).get("allies_down_caught", 0.0))
+             for r in (ATTACK, QUIET)]
+    out.that(
+        all((refused is True) == (count > 0.0) or not _is_attack_ref(r)
+            for r, refused, count in pairs),
+        "the predicate and `features`' own count agree wherever the row "
+        "attacks -- the predicate is a second copy of one gate, so the two "
+        "drifting apart is the failure to watch for",
+        f"{pairs}",
+    )
+
+
+def _is_attack_ref(ref: str) -> bool:
+    """`doctrine._is_attack`, reached without importing a private name twice."""
+    from combat_engine.policy.doctrine import _is_attack
+
+    return _is_attack(ref)
+
+
 def a_vignette_is_a_conflict_and_can_end_in_an_impasse(out: Result) -> None:
     """DMG2's fifth scene kind: a conflict, two goals, and no dice. #976.
 
@@ -56266,6 +56479,10 @@ DRIVERS = {
         a_puzzle_tests_the_player_and_never_stops_the_plot,
         "a puzzle tests the player, rolls the hard DC, and never stops the "
         "plot (#960)",
+    ),
+    "downed_ally": (
+        a_burst_is_never_aimed_where_a_downed_ally_stands,
+        "the party never risks hitting its own downed character (#328)",
     ),
     "vignette": (
         a_vignette_is_a_conflict_and_can_end_in_an_impasse,
