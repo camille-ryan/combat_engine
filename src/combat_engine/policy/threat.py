@@ -162,6 +162,7 @@ PUSH = "push"
 VS = "vs"
 ROUND_OF = "round_of"
 DENIED = "denied"
+VERDICT = "verdict"
 
 
 def clear() -> None:
@@ -432,6 +433,138 @@ def row_damage(world: Any, eid: int, ref: str) -> float:
         out = float(expected(w, me, ref, foe))
     except Exception:
         out = 0.0
+    store[key] = out
+    return out
+
+
+#: What `row_damage`'s 0.0 actually means, as six distinct answers. #326.
+#:
+#: **The number collapses six meanings into one float and no caller can tell
+#: them apart.** `unarmed` already draws exactly this distinction one level
+#: up -- its own note says *"both come back as 0.0 and only one of them is a
+#: bug"* -- and `#326` measured the cost of not drawing it for a row: over
+#: the 72 corpus rows with no `attack=` header that roll one in the body, 49
+#: probe 0.0, of which **7 are correctly zero and 42 are unknown**.
+#:
+#: Six words rather than a bool, because the six want different work:
+#:
+#: * `SCORED` -- priced, and the figure is usable;
+#: * `NO_DAMAGE` -- the body ran, acted, and deals no damage. Correct at
+#:   zero, and the scorer should stop paying `is_power` for it;
+#: * `NEEDS_TRIGGER` -- the row declares `on=`, so it only runs when its
+#:   printed trigger fires. Standing still is the wrong question to ask it;
+#: * `ARMED_LATER` -- the body subscribed a closure and the event never
+#:   arrived. `#326` measured this as the **majority** cause, 26 of 49, and
+#:   it is documented nowhere else. `p916`'s own docstring names the
+#:   mechanism: *"the attack is rolled by hand rather than with
+#:   `c.strike()` because it happens outside the cast"*;
+#: * `UNEVALUABLE` -- the probe raised. `#326` first reported this firing
+#:   zero times and then retracted that: it is rare and reachable;
+#: * `UNWRITTEN` -- no declared body to run at all.
+SCORED = "scored"
+NO_DAMAGE = "deals no damage"
+NEEDS_TRIGGER = "needs a trigger"
+ARMED_LATER = "armed for later"
+UNEVALUABLE = "could not evaluate"
+UNWRITTEN = "unwritten"
+
+#: The order the verdicts are tested in, which is the order of how much each
+#: one tells you. A row can be more than one of these at once -- a
+#: trigger-driven row that also arms a closure is both -- and the first
+#: answer is the most useful one to act on.
+VERDICTS = (SCORED, NEEDS_TRIGGER, ARMED_LATER, NO_DAMAGE, UNEVALUABLE,
+            UNWRITTEN)
+
+
+def row_verdict(world: Any, eid: int, ref: str) -> str:
+    """Why `row_damage` answered what it answered. One of `VERDICTS`. #326.
+
+    **Additive, and it must stay that way.** `row_damage` returns the same
+    float it always did and nothing in the scorer reads this yet, so no
+    board moves -- which is what keeps `replay` and `winrate` still while
+    the distinction becomes available. `#326` is the stated prerequisite
+    for `#314`'s removal of `is_power`, and the thing `#314` needs is to
+    know *which* zeros are real.
+
+    Three signals, each already observable without a new engine verb,
+    which is what `#326`'s last comment specified:
+
+    * the figure `row_damage` computed;
+    * whether the row's header declares a trigger -- `Power.on`, read off
+      the decorator rather than by watching the body read `c.trigger`,
+      because the header is data and needs no run;
+    * whether running the body **subscribed** anything to the bus and
+      rolled no attack, which is the deferred-closure case. Counted off
+      `bus._subs`, since `c.watch`, `c.conjure` and `c.summon_inline` all
+      end there.
+
+    The run here is a second one, deliberately separate from
+    `row_damage`'s: that one is memoised and shared, and reaching inside it
+    to count subscriptions would make a hot path pay for a diagnostic
+    nothing in play reads.
+    """
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.expect import Ledger, _Rolled
+
+    store = memo(world, VERDICT)
+    key = (eid, ref)
+    got = store.get(key)
+    if got is not None:
+        return got
+
+    def settle() -> str:
+        if not _runnable(ref):
+            return UNWRITTEN
+        if row_damage(world, eid, ref) > 0:
+            return SCORED
+        row = get(ref)
+        # **The header, not the body.** A row with `on=` runs only when its
+        # printed trigger fires, so a standing probe is asking it the wrong
+        # question -- and that is readable off the decorator without
+        # running anything, which is what "the header is data" is for.
+        if getattr(row, "on", None) is not None:
+            return NEEDS_TRIGGER
+        made = memo(world, BOARDS).get(eid)
+        if made is None:
+            made = board(world, eid)
+            if made is None:
+                return UNEVALUABLE
+            memo(world, BOARDS)[eid] = made
+        w, me, foe = made
+        scrub(w, me, foe)
+        before = len(w.bus._subs)
+        try:
+            c = Ledger(world=w, me=me, ref=ref, target=foe, targets=[foe])
+            c._setup([])
+            try:
+                row.body(c)
+            except _Rolled:
+                # **The body reached an attack roll**, which is the one thing
+                # that rules out "armed for later": with an empty prefix the
+                # first `c.attack` raises immediately. `row_damage` already
+                # explored every path and got 0, so this row rolls and
+                # records no damage line -- `#326`'s second bucket, 7 rows.
+                return NO_DAMAGE
+            except Exception:
+                # Anything else is the raise `row_damage`'s bare `except`
+                # swallows into 0.0. `#326` reported that firing zero times
+                # and then retracted it on a wider population: rare and
+                # reachable.
+                return UNEVALUABLE
+            # It ran to the end and rolled nothing. If it left a
+            # subscription behind, the attack is in a closure waiting for an
+            # event `expect.once` never delivers -- the majority cause.
+            armed = len(w.bus._subs) > before
+        finally:
+            # **Put the bus back.** The board is shared and memoised, so a
+            # subscription left behind would fire during the next row's
+            # probe and credit its damage to the wrong ref -- which is the
+            # shape of `#690`'s provocation bug arriving through a
+            # diagnostic.
+            del w.bus._subs[before:]
+        return ARMED_LATER if armed else NO_DAMAGE
+
+    out = settle()
     store[key] = out
     return out
 

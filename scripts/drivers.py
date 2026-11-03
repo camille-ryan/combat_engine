@@ -17220,6 +17220,143 @@ def a_regions_damage_is_the_damage_it_prints(out: Result) -> None:
              f"type not on the page: {bad_type[:5]}")
 
 
+def a_zero_damage_row_says_why(out: Result) -> None:
+    """`row_damage`'s 0.0 meant six things and no caller could tell. #326.
+
+    `threat.unarmed` already draws exactly this distinction one level up --
+    its note says *"both come back as 0.0 and only one of them is a bug"* --
+    and `#326` measured what not drawing it per row costs: of the family of
+    rows with no `attack=` header that roll one in the body, most probe
+    zero, and **7 are correctly zero while the rest are unknown**.
+
+    `row_verdict` is the cheapest honest step `#326`'s last comment asks
+    for, built from three things already observable and **no new engine
+    verb**: the figure, the row's declared `on=`, and whether running the
+    body left a subscription behind without rolling.
+
+    **Additive on purpose.** `row_damage` returns the same float, nothing in
+    the scorer reads the verdict, and no board moves -- which is what lets
+    this land while `#314` is still undecided. `#326` is the stated
+    prerequisite for removing `is_power`, and what `#314` needs is to know
+    *which* zeros are real.
+    """
+    import ast
+    import inspect
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import dsl
+    from combat_engine.policy import threat as T
+
+    def rolls_in_body(row: Any) -> bool:
+        """Does the body **call** `c.attack`/`c.strike`, by AST?
+
+        Not a substring search over the source: that reads the docstring
+        too, which is the fault `#1093` records about
+        `chargen._does_more_than_damage`. Asked the lazy way here it put 17
+        extra rows in this family.
+        """
+        try:
+            tree = ast.parse(inspect.cleandoc(inspect.getsource(row.body)))
+        except (OSError, TypeError, SyntaxError, IndentationError):
+            return False
+        return any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr in ("attack", "strike")
+            for n in ast.walk(tree)
+        )
+
+    family = [
+        ref for ref, row in dsl.REGISTRY.items()
+        if getattr(row, "attack", None) is None
+        and getattr(row, "body", None) is not None
+        and rolls_in_body(row)
+    ]
+    out.that(len(family) > 50,
+             "the floor: `#326`'s family is a real population -- rows with"
+             " no `attack=` header whose body rolls one",
+             f"{len(family)} rows")
+
+    world, me, _armed = _posed("f1378b", 5)
+    verdicts = {ref: T.row_verdict(world, me, ref) for ref in family}
+    out.that(set(verdicts.values()) <= set(T.VERDICTS),
+             "every row gets one of the six named verdicts, so no caller"
+             " reads a word the vocabulary does not define",
+             f"{sorted(set(verdicts.values()))}")
+
+    # -- the verdict agrees with the number, in both directions ----------
+    priced = {r for r in family if T.row_damage(world, me, r) > 0}
+    said = {r for r, v in verdicts.items() if v == T.SCORED}
+    out.that(priced == said,
+             "`SCORED` is **exactly** the set that prices above zero -- the"
+             " verdict is a reading of the figure rather than a second"
+             " opinion about it, which is what keeps the two from drifting",
+             f"priced {len(priced)}, said scored {len(said)},"
+             f" disagreeing {sorted(priced ^ said)[:4]}")
+
+    zeros = {r for r in family if r not in priced}
+    out.that(len(zeros) > 20 and all(verdicts[r] != T.SCORED for r in zeros),
+             "and the zeros are split rather than pooled: this is the whole"
+             " of the issue, which is that one float meant six things",
+             "  ".join(f"{v}={sum(1 for r in zeros if verdicts[r] == v)}"
+                       for v in T.VERDICTS
+                       if any(verdicts[r] == v for r in zeros)))
+
+    # -- a trigger-driven row is not called damage-less -------------------
+    # The distinction that matters most for #314: a row with `on=` runs when
+    # its printed trigger fires, so standing still is the wrong question and
+    # its zero is not evidence of anything.
+    triggered = [r for r in zeros
+                 if getattr(dsl.REGISTRY[r], "on", None) is not None]
+    out.that(bool(triggered),
+             "the setup: some zero-probing rows in the family declare a"
+             " printed trigger",
+             f"{len(triggered)} of {len(zeros)}")
+    out.that(all(verdicts[r] == T.NEEDS_TRIGGER for r in triggered),
+             "and every one is `NEEDS_TRIGGER` rather than `deals no"
+             " damage`. Read off the **header**, which is data, so it costs"
+             " no run -- and it is the answer `is_power` most needs, since"
+             " a trigger-driven row's zero says nothing at all",
+             f"{[(r, verdicts[r]) for r in triggered if verdicts[r] != T.NEEDS_TRIGGER][:3]}")
+
+    # -- the deferred-closure case, which was documented nowhere ----------
+    armed = [r for r, v in verdicts.items() if v == T.ARMED_LATER]
+    out.that(bool(armed),
+             "rows whose attack is in a closure the probe never fires are"
+             " identified. `#326` found this cause documented nowhere and"
+             " `p916`'s own docstring names the mechanism -- *the attack is"
+             " rolled by hand because it happens outside the cast*",
+             f"{len(armed)} armed for later, e.g. {' '.join(sorted(armed)[:4])}")
+
+    # -- and the probe leaves the shared board as it found it -------------
+    # The board is memoised and shared between every row's probe, so a
+    # subscription left behind would fire during the next row's run and
+    # credit its damage to the wrong ref -- `#690`'s provocation bug
+    # arriving through a diagnostic.
+    made = T.memo(world, T.BOARDS).get(me)
+    out.that(made is not None,
+             "the setup: the scratch board was built and memoised, so there"
+             " is a shared bus to check")
+    if made is not None:
+        w = made[0]
+        before = len(w.bus._subs)
+        for ref in sorted(armed)[:5]:
+            T.memo(world, T.VERDICT).pop((me, ref), None)
+            T.row_verdict(world, me, ref)
+        out.that(len(w.bus._subs) == before,
+                 "and asking for a verdict leaves no subscription behind on"
+                 " it. Five deferred rows re-probed, which are exactly the"
+                 " ones that subscribe -- so this is posed rather than"
+                 " passing because nothing subscribed",
+                 f"{before} subs before, {len(w.bus._subs)} after")
+
+    # -- the figure is untouched -----------------------------------------
+    out.that(all(T.row_damage(world, me, r) > 0 for r in sorted(priced)[:8]),
+             "and `row_damage` still answers what it answered -- the verdict"
+             " is additive, which is what keeps `replay` and `winrate` still"
+             " while `#314` is undecided")
+
+
 def an_ongoing_trap_takes_a_turn(out: Result) -> None:
     """A trap whose block prints an initiative acts on its own count.
 
@@ -59497,6 +59634,10 @@ DRIVERS = {
         a_charge_can_go_through_one_body,
         "a charge may pass through one Medium-or-smaller body and stamp it,"
         " where the path used to go round (#1057)",
+    ),
+    "row_verdict": (
+        a_zero_damage_row_says_why,
+        "a row that prices at zero says which of six reasons it is (#326)",
     ),
     "policy_memo": (
         a_policy_memo_dies_with_its_board,
