@@ -256,6 +256,17 @@ TERRAIN_WORDS = frozenset({
     "sunlight", "moonlight", "starlight",
 })
 
+#: Every word that declares a light level. A board naming none of these is
+#: read as **bright**, which is Camille's ruling on `#539` -- see
+#: `Cast.terrain`. Named rather than inlined so the default and the
+#: vocabulary cannot drift: adding a seventh light word to `TERRAIN_WORDS`
+#: and forgetting it here would make a declared light level read as bright
+#: as well as itself.
+_LIGHT_WORDS = frozenset({
+    "bright", "dim light", "darkness",
+    "sunlight", "moonlight", "starlight",
+})
+
 #: What sort of going a square is, which `Grid.difficult` holds one of per
 #: square. A **closed set for the same reason `TERRAIN_WORDS` is**: `kind=`
 #: took any string, and 29 calls across the tree named a word no square ever
@@ -5329,7 +5340,31 @@ class Cast:
                 f"{self.ref}: c.terrain({word!r}) is not a terrain word. "
                 f"Known: {', '.join(sorted(TERRAIN_WORDS))}."
             )
-        return word.lower() in getattr(self.world, "terrain", frozenset())
+        here = getattr(self.world, "terrain", frozenset())
+        # **A board that declares no light level is in bright light.**
+        # Camille's ruling on `#539`, asked directly and quoted:
+        #
+        #   > *"Default should be bright light without sun/star/moon."*
+        #
+        # Read here rather than written into `World.terrain`, which is the
+        # narrower of the two and is why: stuffing `bright` into the set
+        # would make `terrain` non-empty on **every** board, and anything
+        # that iterates it -- a note, a report, a future reader -- would
+        # start describing a light level nobody declared. Answering the
+        # question is what the ruling asks for; inventing a declaration is
+        # not.
+        #
+        # **Only when no light word is declared at all.** A board that says
+        # `darkness` or `dim light` is not also bright, and the three are
+        # deliberately unmerged in `TERRAIN_WORDS` for that reason.
+        #
+        # And *without* sun, star or moon, which is the ruling's own second
+        # half: those stay False, so the 36 `sunlight` gates in content are
+        # unaffected. Measured, this moves exactly **one** row -- the single
+        # `c.terrain("bright")` gate in the tree.
+        if word.lower() == "bright" and not (here & _LIGHT_WORDS):
+            return True
+        return word.lower() in here
 
     def milestone(self) -> int:
         """How many milestones the party has reached today. `c.milestone()`.

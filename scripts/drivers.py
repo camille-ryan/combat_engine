@@ -51895,6 +51895,88 @@ def a_puzzle_tests_the_player_and_never_stops_the_plot(out: Result) -> None:
     )
 
 
+def an_undeclared_board_is_in_bright_light(out: Result) -> None:
+    """A board that says nothing about light is in bright light. `#539`.
+
+    Camille's ruling, asked directly and quoted:
+
+    > *"Default should be bright light without sun/star/moon."*
+
+    Both halves are load-bearing. `bright` answers True where nothing was
+    declared, and `sunlight`, `moonlight` and `starlight` stay **False** --
+    which matters more than it looks, because **36 of the tree's 37 light
+    gates ask for `sunlight`** and defaulting those on would arm them all
+    on every board there is.
+
+    **Read in `Cast.terrain` rather than written into `World.terrain`**, and
+    that is the narrower of the two: stuffing `bright` into the set would
+    make `terrain` non-empty on every board, so anything that iterates it --
+    a note, a report, a later reader -- would start describing a light level
+    nobody declared. Answering the question is what the ruling asks for;
+    inventing a declaration is not.
+
+    Measured before landing: this moves exactly **one** row, the single
+    `c.terrain("bright")` gate in the tree. The 36 `sunlight` gates, 4
+    `darkness` and 3 `dim light` are all unchanged.
+    """
+    from combat_engine.engine.cast import _LIGHT_WORDS, TERRAIN_WORDS, Cast
+
+    world, me, _ = _board("m145a0", 1)
+    c = Cast(world=world, me=me, ref="drivers:539")
+
+    out.that(
+        not (_LIGHT_WORDS - TERRAIN_WORDS) and len(_LIGHT_WORDS) == 6,
+        "every light word the default consults is in the terrain vocabulary "
+        "-- the two are separate frozensets, so a seventh light word added "
+        "to one and not the other would make a DECLARED level read as "
+        "bright as well as itself",
+        f"{sorted(_LIGHT_WORDS)}",
+    )
+    out.that(
+        c.terrain("bright") and not world.terrain,
+        "**a board that declares nothing is in bright light**, which is the "
+        "ruling -- and `World.terrain` is still empty, so nothing has been "
+        "written into it",
+        f"terrain={sorted(world.terrain)}",
+    )
+    dark = [w for w in ("sunlight", "moonlight", "starlight")
+            if c.terrain(w)]
+    out.that(
+        not dark,
+        "**and without sun, star or moon**, which is the ruling's second "
+        "half and the half that matters at scale: 36 of the tree's 37 light "
+        "gates ask for `sunlight`, so defaulting those on would arm every "
+        "one of them on every board",
+        f"wrongly on: {dark}",
+    )
+    out.that(
+        not c.terrain("dim light") and not c.terrain("darkness"),
+        "nor dim nor dark, so the three levels stay the unmerged set "
+        "`TERRAIN_WORDS` deliberately keeps them as",
+        "both False",
+    )
+
+    for level in ("darkness", "dim light", "sunlight"):
+        world.terrain = {level}
+        out.that(
+            not c.terrain("bright") and c.terrain(level),
+            f"**a board that declares {level!r} is NOT also bright** -- the "
+            f"default is for a board that said nothing, and a declared "
+            f"level suppressing it is the whole difference between a "
+            f"default and a constant",
+            f"bright={c.terrain('bright')} {level}={c.terrain(level)}",
+        )
+
+    world.terrain = {"aquatic", "ice"}
+    out.that(
+        c.terrain("bright"),
+        "and a board that declares only NON-light words is still bright -- "
+        "underwater is not dark, and the suppression is keyed on the light "
+        "words rather than on the set being non-empty",
+        f"terrain={sorted(world.terrain)} bright={c.terrain('bright')}",
+    )
+
+
 def a_burst_is_never_aimed_where_a_downed_ally_stands(out: Result) -> None:
     """The party may not risk hitting its own downed character. `#328`.
 
@@ -56479,6 +56561,10 @@ DRIVERS = {
         a_puzzle_tests_the_player_and_never_stops_the_plot,
         "a puzzle tests the player, rolls the hard DC, and never stops the "
         "plot (#960)",
+    ),
+    "bright_default": (
+        an_undeclared_board_is_in_bright_light,
+        "a board that declares no light level is in bright light (#539)",
     ),
     "downed_ally": (
         a_burst_is_never_aimed_where_a_downed_ally_stands,
