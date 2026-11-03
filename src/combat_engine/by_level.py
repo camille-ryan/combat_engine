@@ -126,11 +126,23 @@ def minion_damage(level: int, *, brute: bool = False) -> int:
     direction. `#1010`.
 
     **`brute` is a separate printed column**, running 1 to 3 points above
-    standard -- `+2.0` on average -- and nothing in the engine can ask for it
-    yet: `Table.target` takes a three-valued `kind` with no notion of role.
-    The parameter exists because the table prints the column and leaving it
-    out would make this a partial transcription; the engine side of it is
-    open on **`#1047`**, which is `#1010`'s successor.
+    standard -- `+2.0` on average -- and the engine **can** ask for it now:
+    `Table.target(level, kind, *, role="")` carries the role, and
+    `Cast` passes `Ident.role` straight through, which reaches the 79
+    monsters that are both brute and minion.
+
+    **That sentence said the opposite until 2026-11-03** -- *"nothing in the
+    engine can ask for it yet: `Table.target` takes a three-valued `kind`
+    with no notion of role"* -- and by then `monster_math`'s own docstring
+    for that method said **"Now it does"**. Two files in one package
+    disagreeing about whether a parameter exists is worse than either being
+    wrong alone, because whichever a reader opens first looks authoritative.
+
+    What is still open on **`#1047`** -- `#1010`'s successor -- is the
+    artillery discount, and the issue's own title says why it is different in
+    kind: *a third axis, not a third value*. It needs the shape of the attack
+    as well as the role, and nothing on that path carries whether an attack
+    is melee or multitarget.
 
     **This said `#1010` until 2026-11-02 and `#1010` is closed**, which is
     the stale-pointer-in-code case the root `CLAUDE.md` is about: a closed

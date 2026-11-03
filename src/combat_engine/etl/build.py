@@ -760,8 +760,12 @@ CREATE INDEX trap_countermeasure_ref ON trap_countermeasure(ref);
 -- `combat_engine/dc.py` -- below every component, beside `armour.py` --
 -- reads these thirty rows, so the DC copy is gone rather than gated and
 -- `check.py --only rules` asks whether that *reader* returns what this
--- table holds. `story/module.py:COMPLEXITY` is still a copy and still
--- reconciled. #949.
+-- table holds. **`story/module.py:COMPLEXITY` is gone too**, migrated onto
+-- this table by #1049 -- `grep COMPLEXITY src/combat_engine/story/module.py`
+-- returns nothing. This said it "is still a copy and still reconciled"
+-- until 2026-11-03, which was false from the day #1049 landed: a reader
+-- trusting it would have gone looking for a second copy to reconcile
+-- against and found none. #949, #1049.
 --
 -- A glossary entry is mechanical vocabulary -- see `_VOCABULARY_TABLE`,
 -- which keeps `Glossary` out of the name index for exactly this reason --
@@ -790,11 +794,13 @@ CREATE TABLE rules_condition (
   ref TEXT PRIMARY KEY, name TEXT
 );
 
--- `advantages` is the column the hand copy drops. The printed table has
--- four and `COMPLEXITY` keeps three, so a reader wanting the advantages a
--- challenge grants has nowhere to look -- the same shape of loss #988
--- found in a quoted table. Stored whether or not anything reads it yet,
--- because the column is what makes the omission visible.
+-- `advantages` is the column the hand copy **dropped**, past tense: there
+-- is no hand copy any more (#1049), so this column is now the only place
+-- the advantages a challenge grants are recorded rather than the place they
+-- were missing from. The printed table has four and the retired
+-- `COMPLEXITY` kept three -- the same shape of loss #988 found in a quoted
+-- table, which is why the column was stored whether or not anything read
+-- it yet. Keeping the history because it is the argument for the column.
 CREATE TABLE rules_complexity (
   complexity INTEGER PRIMARY KEY, successes INTEGER, advantages INTEGER,
   moderate INTEGER, hard INTEGER

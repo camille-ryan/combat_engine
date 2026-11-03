@@ -3942,7 +3942,8 @@ class Cast:
         # **The role, for the brute minion column.** DMG2 prints two damage
         # columns and `Table.target` could only reach the first; `Ident.role`
         # was already here for `book`'s sake and nothing asked it. 79 monsters
-        # are both brute and minion. #1010.
+        # are both brute and minion. #1047, which is #1010's successor --
+        # this cited the closed one until 2026-11-03.
         role = getattr(ident, "role", "") if ident else ""
         return self.world.monster_math.convert(
             d.dice, book=book, level=self.stats.level, kind=d.kind, role=role

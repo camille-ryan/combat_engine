@@ -47,11 +47,6 @@ ROOT = Path(__file__).resolve().parent.parent
 #: `combat_engine.content`, so an argument left there would not survive.
 _ONLY: tuple[Path, ...] = ()
 
-#: Paths named on the command line that no walk here claims as a subject --
-#: anything outside `src/combat_engine/`, which in practice means `scripts/`.
-#: Reported at the end of the run rather than dropped: these checks ask
-#: questions about rows, and a file that holds none is not a pass. #1090.
-_OUTSIDE: set[str] = set()
 
 
 def _asked_for() -> tuple[Path, ...]:
@@ -96,22 +91,45 @@ def _named() -> tuple[Path, ...]:
 
 
 def _under(root: Path) -> tuple[Path, ...]:
-    """The named files inside `root`, recording the ones left out.
+    """The named files inside `root`. Silent, deliberately.
 
-    Recorded rather than dropped, because `scripts/CLAUDE.md`'s rule is that
-    an instrument must not skip itself quietly -- a reader who hands over
-    fifteen paths and sees a clean run must be able to tell that one of them
-    was not a subject of these checks at all.
+    **This used to record every exclusion in `_OUTSIDE` and that was wrong**
+    -- it conflated two different things and reported the common one with
+    the rare one's wording. A file under `engine/` is legitimately outside
+    `_asked_for`'s `content/` root *and* legitimately a subject of
+    `_asked_for_package`'s checks, so excluding it here is routine. Saying
+    "no check here claims it" about `cast.py` was false, and it printed
+    that for four engine and ETL files on its first real use.
+
+    Being genuinely unclaimed is a different question with one answer for
+    the whole run, so `_unclaimed` asks it once against the package root
+    rather than once per walk.
     """
-    keep: list[Path] = []
+    inside: list[Path] = []
     for p in _named():
         try:
             p.resolve().relative_to(root.resolve())
         except ValueError:
-            _OUTSIDE.add(str(p))
             continue
-        keep.append(p)
-    return tuple(keep)
+        inside.append(p)
+    return tuple(inside)
+
+
+def _unclaimed() -> list[str]:
+    """Named paths no walk here speaks for -- outside the package entirely.
+
+    In practice that means `scripts/`, and it is the case #1090 is about: an
+    instrument handed to `lint.py` was judged by the row checks and its
+    deliberate negative controls came back as faults.
+    """
+    package = (ROOT / "src/combat_engine").resolve()
+    out: list[str] = []
+    for p in _named():
+        try:
+            p.resolve().relative_to(package)
+        except ValueError:
+            out.append(str(p))
+    return out
 
 
 def _asked_for_package() -> tuple[Path, ...]:
@@ -417,14 +435,17 @@ def main() -> int:
               " not asked on a narrow run)")
         print("  (so does the pre_empt/instead_of pairing: a word is"
               " registered in one file and read in another)")
-        if _OUTSIDE:
-            # Named, for the same reason as the two above: these checks ask
-            # questions about rows, so a file holding none is outside their
-            # subject and a clean run says nothing about it. #1090.
-            for where in sorted(_OUTSIDE):
-                print(f"  ({where} is not under src/combat_engine/, so no"
-                      f" check here claims it -- gate an instrument by"
-                      f" running it, per scripts/CLAUDE.md)")
+        # Named, for the same reason as the two above: these checks ask
+        # questions about rows, so a file holding none is outside their
+        # subject and a clean run says nothing about it. #1090.
+        #
+        # Asked once against the package root rather than accumulated per
+        # walk -- `_under`'s docstring records why that distinction matters:
+        # an `engine/` file is outside `content/` and still a subject here.
+        for where in sorted(_unclaimed()):
+            print(f"  ({where} holds no rows, so no check here claims it"
+                  f" -- gate an instrument by running it, per"
+                  f" scripts/CLAUDE.md)")
     else:
         _WHY = {
             0: "nothing anywhere reads that word back",

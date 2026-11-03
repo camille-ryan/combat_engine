@@ -73,8 +73,13 @@ class Table:
         """What a `kind` of attack should average at this level.
 
         **`role` reaches the brute column**, which is the second of the two
-        printed axes `#1010` lists and the only one this signature can
-        carry. DMG2 p133 prints two damage columns, standard and brute, and
+        printed axes `#1047` lists and the only one this signature can
+        carry. (`#1010` is closed; `#1047` is its successor, and this
+        docstring deferred to the dead one until 2026-11-03 -- a pointer in
+        code goes stale exactly the way a pointer in an issue does, and
+        reads identically whether or not it is still live.)
+
+        DMG2 p133 prints two damage columns, standard and brute, and
         `by_level.minion_damage` has taken `brute=` since it was written with
         nothing able to ask for it -- *"`Table.target` takes a three-valued
         `kind` with no notion of role"*, in its own words. Now it does.
@@ -87,7 +92,7 @@ class Table:
         minions deal 25% less damage on multitarget and melee attacks"* needs
         the role **and the shape of the attack**, and nothing on this path
         carries whether the attack is melee or multitarget. A third axis, not
-        a third value -- left on `#1010`.
+        a third value -- left on `#1047`.
 
         **A minion reads a printed table rather than half this curve.** This
         used to be `out / 2`, which was quoting the book -- DMG2 prints
@@ -98,7 +103,7 @@ class Table:
         over 30 levels, worst `+0.99` at level 9 against `-0.60` at level 10.
 
         So this follows `etl/CLAUDE.md`'s rule one layer up: never derive a
-        number the page prints. `#1010`.
+        number the page prints. `#1047`.
         """
         if kind == LIMITED:
             return float(self.limited(level))
