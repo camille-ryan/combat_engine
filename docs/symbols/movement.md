@@ -11,6 +11,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - is this use a charge?
 - `c.charge_at(self, victim: 'int', ref: 'str' = '', *, who: 'int | None' = None) -> 'bool'`
   - Run at somebody and swing, with the swing marked as a charge.
+- `c.charge_through(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Let this creature's **charge** pass straight through one body.
 - `c.dismount(self, *, to: 'Square | None' = None) -> 'bool'`
   - Get off, into an adjacent square. `c.ride`'s missing inverse.
 - `c.flee(self, squares_: 'int', *, on: 'int | None' = None) -> 'int'`

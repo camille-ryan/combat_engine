@@ -135,9 +135,10 @@ CATEGORIES: dict[str, dict] = {
             # `c.hide`/`c.unhide` went to `modifiers` for a duller reason:
             # both docstrings are about being seen, not about moving.
             ("voluntary -- the creature spends its own movement", [
-                "charge", "charge_at", "dismount", "flee", "hover",
-                "jump", "move", "moving_as", "overrun", "ride", "rise",
-                "run_at", "shift", "shift_as", "teleport", "walk_toward",
+                "charge", "charge_at", "charge_through", "dismount",
+                "flee", "hover", "jump", "move", "moving_as", "overrun",
+                "ride", "rise", "run_at", "shift", "shift_as", "teleport",
+                "walk_toward",
             ]),
             ("forced -- somebody else moves it", [
                 "bull_rush", "pull", "push", "slide",

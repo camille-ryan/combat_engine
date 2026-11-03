@@ -41,8 +41,10 @@ copy rather than a parameter bent to take two numbers.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
+from combat_engine.content.monsters.conjured import _while_ridden
 from combat_engine.content.monsters.forms import _not_in, _shapechange, _shapes
 from combat_engine.content.monsters.level_01.artillery_sa import (
     _recharge_when_bloodied,
@@ -88,6 +90,7 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Defense,
+    Effect,
     Gear,
     Ident,
     Keyword,
@@ -116,6 +119,7 @@ from combat_engine.engine.events import (
     Hit,
     Miss,
     Moved,
+    Trampled,
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
@@ -312,35 +316,39 @@ def m1064a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("actions.charge_through_a_body",),
 )
 def m1064a2(c: Cast) -> None:
-    """**Re-pointed: the gap is the charge's PATH, not `c.overrun`.** `#1057`
+    """A charge that goes through somebody, and stamps them on the way.
 
-    The marker said `c.overrun(during_charge=)` and that parameter was
-    built and reverted, because it is inert. Measured:
+    *"When charging, this creature can move through one Medium or smaller
+    creature\'s space and make a stamp attack against that creature. It must
+    end its move in an unoccupied space, and the rider still attacks at the end of the
+    mount\'s movement."* `#1057`.
 
-    * `movement.overrun` already does the whole printed clause -- it walks
-      the line through bodies, returns everyone trampled in order so the
-      body can attack them, and already insists *"the mover must end
-      somewhere free"*, which is the clause's own last sentence. It also
-      already takes a `kind`.
-    * so `during_charge=` could only thread `kind="charge"` down, and on a
-      real board that changes **nothing**: `reachable` at `kind="walk"` and
-      at `kind="charge"` return the identical 152 squares, because the only
-      thing `kind` buys is a difficult-terrain waiver.
+    The same card as `m1804c0a1`, where the reasoning is written out in
+    full: the permission, the stamp as a separate printed row heard through
+    `Trampled`, and *"must end unoccupied"* which `movement.overrun`
+    already did. `_while_ridden` rather than `_on_the_rider`, because the
+    Requirement is about the rider and the permission is the mount\'s.
 
-    And the first half of what this docstring used to say is **false**: a
-    charge *is* visible while it happens. `actions.execute` calls
-    `walk(..., kind="charge")`, so `ctx["move_kind"]` says so -- `#301`
-    opened that window and four content files already read it.
-
-    What is genuinely missing is the half this docstring got right: the
-    charge's **path** is built refusing occupied squares, so by the time
-    any trait sees the move it has gone round the creature it was supposed
-    to trample. A trample mid-charge needs the path to be allowed through a
-    body, which is `actions._charges`/`execute`, not a `Cast` verb.
+    The one number that differs between the three is the rider\'s level:
+    **8** here.
     """
+    me = c.me
+
+    def stamped(ev: Trampled) -> None:
+        if ev.actor != me or ev.by != c.ref:
+            return
+        c.use_power("m1064a1", on=ev.victim, spend=False)
+
+    def arm() -> Sequence[Effect | None]:
+        c.watch(
+            Trampled, stamped, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} stamp",
+        )
+        return [c.charge_through()]
+
+    _while_ridden(c, 8, arm)
 
 
 # ==========================================================================

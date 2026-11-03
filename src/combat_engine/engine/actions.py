@@ -1125,6 +1125,117 @@ def _granted(world: World, actor: int) -> dict[tuple[str, ActionType], int]:
     return out
 
 
+def _bodies_on(world: World, actor: int, path: list[Square]) -> list[int]:
+    """Who is standing on this path, in order. #1057.
+
+    Used to decide whether a trampler's charge needs `overrun` at all. The
+    answer is almost always empty -- `_charges` offers ordinary charges
+    round obstacles, so only the straight line `_trample_charge` computes
+    ever has anybody on it -- and that is the point: a charge that crosses
+    nobody must still take its searched path, or every ordinary charge
+    would start walking a worse route.
+    """
+    from .query import creatures, squares
+
+    bodies = {
+        s: other
+        for other in creatures(world) if other != actor
+        for s in squares(world, other)
+    }
+    seen: list[int] = []
+    for sq in path:
+        who = bodies.get(sq)
+        if who is not None and who not in seen:
+            seen.append(who)
+    return seen
+
+
+def _trample_charge(
+    world: World, actor: int, here: Square,
+    lands: frozenset[Square] | set[Square], swing: Any,
+) -> tuple[Square, list[Square], int] | None:
+    """The straight line that charges **through** one body, or None. #1057.
+
+    Returns `(destination, the line walked, who got trampled)`.
+
+    The printed clause is one sentence and every clause of it is a
+    condition here: *"When charging, the creature can move through one
+    Medium or smaller creature's space and make a stamp attack against
+    that creature. The creature must end its move in an unoccupied
+    space."*
+
+    * **the straight line**, because that is what `movement.overrun`
+      walks. A charge's ordinary path comes from `reachable_paths`, which
+      searches round obstacles; a trample does not get to search, so the
+      geometry is `movement._line` and nothing else;
+    * **exactly one** body crossed. Not "at most one" -- a line crossing
+      two is a line the card does not permit, so it is not offered rather
+      than offered and truncated. And not zero: that is an ordinary charge
+      and `_charges` already has it, so offering it here would duplicate
+      every charge in the menu;
+    * **Medium or smaller**, by `Size.order`, which exists for this
+      comparison;
+    * **ending somewhere free**, which rules out stopping on the body;
+    * and the same three constraints an ordinary charge carries -- within
+      the swing's reach of the target, at least 2 squares travelled, and
+      every step closing.
+
+    Closest first, because a trample is a charge and a charge takes the
+    shortest line it can.
+    """
+    from .components import Position
+    from .grid import distance
+    from .movement import _line
+    from .query import creatures, speed, squares
+    from .types import Size
+
+    mine = world.get(actor, Position)
+    if mine is None:
+        return None
+    reach = speed(world, actor, {"charge": True})
+    bodies = {
+        s: other
+        for other in creatures(world) if other != actor
+        for s in squares(world, other)
+    }
+    best: tuple[Square, list[Square], int] | None = None
+    for dest in sorted(lands):
+        line = _line(here, dest)
+        steps = line[1:]
+        if not steps or len(steps) > reach or distance(here, dest) < 2:
+            continue
+        # Every step closes on the target, the same test an ordinary charge
+        # makes -- a line that wanders is not a charge however straight it
+        # is.
+        was = min(distance(here, s) for s in lands)
+        closing = True
+        for step_at in steps:
+            now = min(distance(step_at, s) for s in lands)
+            if now > was:
+                closing = False
+                break
+            was = now
+        if not closing:
+            continue
+        crossed = {bodies[s] for s in steps if s in bodies}
+        # The destination must be free. It is in `bodies` when somebody is
+        # standing there, and `crossed` would then hold them -- but the
+        # test is stated separately because "ends unoccupied" is its own
+        # printed sentence and a future change to `crossed` must not
+        # silently drop it.
+        if dest in bodies:
+            continue
+        if len(crossed) != 1:
+            continue
+        victim = next(iter(crossed))
+        theirs = world.get(victim, Position)
+        if theirs is None or theirs.size.order > Size.MEDIUM.order:
+            continue
+        if best is None or len(steps) < len(best[1]) - 1:
+            best = (dest, line, victim)
+    return best
+
+
 def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Run at somebody and swing. One option per enemy, not per square.
 
@@ -1182,6 +1293,14 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
     reachable = world.reachable_paths(
         actor, speed(world, actor, {"charge": True}), kind="charge"
     )
+    # Armed by `c.charge_through()`; "" for everything that is not one of
+    # the three printed mount traits, which is the whole corpus bar three.
+    # Read once rather than per swing, since it is a property of the
+    # creature and the loops below are per foe and per swing. #1057.
+    from .components import Movement
+
+    _move = world.get(actor, Movement)
+    trample = _move.tramples if _move is not None else ""
     mine = world.get(actor, Position)
     here = mine.square if mine is not None else None
     if here is None:
@@ -1226,6 +1345,29 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
                 ),
                 default=None,
             )
+            # **A trample charge is offered as well, not instead.** #1057.
+            #
+            # `reachable_paths` refuses an occupied square, so a creature
+            # standing between the charger and its target made the charge
+            # go **round** -- and three printed mount traits are entirely
+            # about going through. Those destinations are not in
+            # `reachable` at all, so no amount of re-ranking it would find
+            # them; they are computed from the straight line, which is
+            # what `movement.overrun` actually walks.
+            if trample:
+                through = _trample_charge(world, actor, here, lands, swing)
+                if through is not None:
+                    dest, line, _victim = through
+                    out.append(
+                        Action(
+                            kind="charge",
+                            cost=ActionType.STANDARD,
+                            ref=ref,
+                            targets=(foe,),
+                            dest=dest,
+                            path=tuple(line),
+                        )
+                    )
             if best is None:
                 continue
             _n, dest, path = best
@@ -1714,8 +1856,9 @@ def _manoeuvres(world: World, encounter: Encounter, actor: int) -> list[Action]:
 
 def perform(world: World, encounter: Encounter, actor: int, action: Action) -> bool:
     """Spend the action and carry it out. False if it was not available."""
-    from .events import Note
-    from .movement import walk
+    from .events import Note, Trampled
+    from .movement import overrun, walk
+    from .types import Size
 
     if action.kind == "end":
         return True
@@ -2074,7 +2217,46 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         if mover is not None:
             mover.charging = True
         try:
-            walk(world, actor, list(action.path), kind="charge")
+            # **Through a body rather than round it, when the card allows
+            # it and somebody is actually in the way.** #1057.
+            #
+            # Both halves of that condition matter. `tramples` alone is not
+            # enough -- the overwhelming majority of a trampler's charges
+            # cross nobody, and `overrun` walks a straight line where
+            # `walk` follows the searched path, so using it unconditionally
+            # would make every ordinary charge take a worse route. And a
+            # body in the way without the permission is the normal case,
+            # which still goes round.
+            #
+            # `movement.overrun` already does the rest of the printed
+            # clause: it steps `through=True`, returns everyone entered in
+            # order, and shuffles the mover into a free square if it ends
+            # on somebody -- *"must end its move in an unoccupied space"*.
+            crossed: list[int] = []
+            if mover is not None and mover.tramples and action.dest:
+                blocked = _bodies_on(world, actor, list(action.path))
+                if blocked:
+                    crossed = overrun(world, actor, action.dest, kind="charge")
+                else:
+                    walk(world, actor, list(action.path), kind="charge")
+            else:
+                walk(world, actor, list(action.path), kind="charge")
+            # **One, and the first.** The card says "one Medium or smaller
+            # creature", and `_trample_charge` only ever offers a line
+            # crossing exactly one -- but `overrun` reports whatever it
+            # really walked over, which is the honest number and can differ
+            # if the board moved between the menu and the action. So the
+            # limit is applied here, against what happened, rather than
+            # trusted from what was offered.
+            if crossed and mover is not None:
+                for victim in crossed:
+                    theirs = world.get(victim, Position)
+                    if theirs is None or theirs.size.order > Size.MEDIUM.order:
+                        continue
+                    world.bus.emit(
+                        Trampled(actor=actor, victim=victim,
+                                 by=mover.tramples))
+                    break
         # The move goes with it, and so does everything else: a charge ends your
         # turn whatever you have left. Spent after the walk so that an opportunity
         # attack on the way in still resolves normally.

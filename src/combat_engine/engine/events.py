@@ -195,6 +195,37 @@ class EnterSquare(Event):
 
 
 @dataclass
+class Trampled(Event):
+    """A charge went straight through somebody. #1057.
+
+    **An event because the effect is otherwise unobservable.** The three
+    printed cards say *"the creature can move through one Medium or smaller
+    creature's space and make a stamp attack against that creature"*, and
+    the stamp is a **separate printed row** on the same stat block. So the
+    trait permitting the trample and the attack paying it out are two
+    different cards, and the trait has to hear that the move happened in
+    order to swing. Nothing else in the move chain says it: `EnterSquare`
+    fires per square of a footprint and names the **mover**, so a row
+    watching it cannot tell being walked over from somebody walking past.
+
+    `by` is the ref of the trait that allowed it, off `Movement.tramples`,
+    so a row can match its own permission rather than reacting to anybody's
+    trample.
+
+    Emitted by `actions.execute`'s charge branch and **not** by
+    `movement.overrun`, deliberately: ten content rows already call
+    `c.overrun()` and handle the returned list themselves, so emitting
+    there would add an event to ten working paths and move every fixture
+    that reaches one, for no reader. The new path is where the new event
+    belongs.
+    """
+
+    actor: int
+    victim: int
+    by: str
+
+
+@dataclass
 class Moved(Event):
     """One step, with both ends of it.
 

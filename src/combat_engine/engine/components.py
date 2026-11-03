@@ -279,6 +279,20 @@ class Movement:
     #: Kinds of difficult terrain this creature crosses for nothing, by the
     #: label `Grid.difficult` gives them. `"*"` is all of it.
     ignores: set[str] = field(default_factory=set)
+    #: The ref of a trait letting this creature's **charge** pass straight
+    #: through one body, trampling it. `""` for the overwhelming majority.
+    #: #1057.
+    #:
+    #: **The ref rather than a bool**, for two reasons. The payout has to be
+    #: attributable -- `Trampled.by` names it, so the event says which card
+    #: allowed the move -- and the row is what makes the stamp attack, so
+    #: something has to know which row to run.
+    #:
+    #: Why a field and not `ignores`: that set is strictly about difficult
+    #: **terrain**, by the label `Grid.difficult` gives it. A body is not
+    #: terrain, and overloading the set would make
+    #: `c.ignores_difficult("*")` grant a trample.
+    tramples: str = ''
     #: The same exemption, but only for one **kind of going**, keyed by the
     #: `kind` a move is made with -- "ignores difficult terrain when it
     #: shifts", which 23 rows print and `ignores` could only say by granting

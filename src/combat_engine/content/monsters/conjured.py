@@ -87,6 +87,7 @@ from combat_engine.engine.events import (
     MoveEnd,
     RelationCleared,
     RelationSet,
+    Trampled,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import adjacent, alive, creatures
@@ -146,6 +147,73 @@ def _on_the_rider(
     c.watch(RelationSet, mounted, until=When.ENCOUNTER, on=me, label=f"{c.ref} on")
     c.watch(
         RelationCleared, dismounted, until=When.ENCOUNTER, on=me, label=f"{c.ref} off"
+    )
+    rider = c.rider()
+    if rider is not None:
+        up(rider)
+
+
+def _while_ridden(
+    c: Cast,
+    need: int,
+    lay: Callable[[], Sequence[Effect | None]],
+) -> None:
+    """Hold a benefit on the **mount**, while a qualifying rider is up.
+
+    `_on_the_rider` above is the same watch pair with the benefit landing
+    on whoever is in the saddle. This is the other half of that family: a
+    trait whose printed Requirement is about the rider and whose *effect*
+    is about the horse. `#1057`'s trampling charge is the case -- "while
+    mounted by a friendly rider of Nth level or higher ... **the mount** can
+    move through one Medium or smaller creature's space" -- and laying it
+    on the rider would permit the rider's own charge to trample, which is
+    not what any of the three cards say.
+
+    Everything else is `_on_the_rider`'s reasoning unchanged and is quoted
+    here rather than re-derived: the Requirement is asked of whoever
+    mounts rather than once at arming, because a trait arms at the start
+    of the fight and a rider climbing on in round three would otherwise
+    get nothing for the rest of the encounter. Whoever is already up when
+    the trait arms is caught at the end.
+
+    `lay` takes no argument, which is the visible difference: there is
+    nobody to hand it, because the benefit is the mount's own.
+    """
+    me = c.me
+    held: list[Effect] = []
+    riders: set[int] = set()
+
+    def up(who: int) -> None:
+        stats = c.world.get(who, Stats)
+        if who in riders or who not in c.allies():
+            return
+        if stats is None or stats.level < need:
+            return
+        riders.add(who)
+        # Only the first qualifying rider lays it. A second one would hand
+        # the mount the same permission twice and the first dismount would
+        # take it away while somebody qualifying is still aboard.
+        if len(riders) == 1:
+            held.extend(eff for eff in lay() if eff is not None)
+
+    def mounted(ev: RelationSet) -> None:
+        if ev.kind_ is Relation.RIDDEN_BY and ev.source == me:
+            up(ev.target)
+
+    def dismounted(ev: RelationCleared) -> None:
+        if ev.kind_ is not Relation.RIDDEN_BY or ev.source != me:
+            return
+        riders.discard(ev.target)
+        if riders:
+            return
+        for eff in held:
+            c.world.effects.end(eff, "dismounted")
+        held.clear()
+
+    c.watch(RelationSet, mounted, until=When.ENCOUNTER, on=me, label=f"{c.ref} on")
+    c.watch(
+        RelationCleared, dismounted, until=When.ENCOUNTER, on=me,
+        label=f"{c.ref} off",
     )
     rider = c.rider()
     if rider is not None:
@@ -437,35 +505,62 @@ def m1804c0a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("actions.charge_through_a_body",),
 )
 def m1804c0a1(c: Cast) -> None:
-    """**Re-pointed: the gap is the charge's PATH, not `c.overrun`.** `#1057`
+    """A charge that goes through somebody, and stamps them on the way.
 
-    The marker said `c.overrun(during_charge=)` and that parameter was
-    built and reverted, because it is inert. Measured:
+    *"When charging, this creature can move through one Medium or smaller
+    creature's space and make a stamp attack against that creature. It must
+    end its move in unoccupied squares, and the rider still attacks at the
+    end of the mount's movement."* `#1057`.
 
-    * `movement.overrun` already does the whole printed clause -- it walks
-      the line through bodies, returns everyone trampled in order so the
-      body can attack them, and already insists *"the mover must end
-      somewhere free"*, which is the clause's own last sentence. It also
-      already takes a `kind`.
-    * so `during_charge=` could only thread `kind="charge"` down, and on a
-      real board that changes **nothing**: `reachable` at `kind="walk"` and
-      at `kind="charge"` return the identical 152 squares, because the only
-      thing `kind` buys is a difficult-terrain waiver.
+    Three parts, and only the first was missing from the engine:
 
-    And the first half of what this docstring used to say is **false**: a
-    charge *is* visible while it happens. `actions.execute` calls
-    `walk(..., kind="charge")`, so `ctx["move_kind"]` says so -- `#301`
-    opened that window and four content files already read it.
+    * **the permission.** `c.charge_through()` sets it, and
+      `actions._trample_charge` then offers the straight-line destination
+      that an ordinary charge refuses -- `reachable_paths` will not route
+      through an occupied square, so before this the charge went *round*
+      the creature it was meant to trample and no trait could see it. That
+      is the half `#1057` re-pointed to after `c.overrun(during_charge=)`
+      was built and measured inert;
+    * **the stamp**, which is a separate printed card on this stat block,
+      so the trample has to be heard rather than done. `Trampled` names the
+      victim and the permitting ref, and `c.use_power(..., spend=False)`
+      swings the printed line -- the mount's stamp, not a new attack
+      invented here;
+    * **"must end in unoccupied squares"**, which `movement.overrun`
+      already did and still does: it shuffles the mover into the nearest
+      free square if the walk ends on a body.
 
-    What is genuinely missing is the half this docstring got right: the
-    charge's **path** is built refusing occupied squares, so by the time
-    any trait sees the move it has gone round the creature it was supposed
-    to trample. A trample mid-charge needs the path to be allowed through a
-    body, which is `actions._charges`/`execute`, not a `Cast` verb.
+    **`_while_ridden`, not `_on_the_rider`**, and the difference is the
+    whole reason that helper exists: the Requirement is about the rider and
+    the *permission* is the mount's. Laying it on the rider would let the
+    rider's own charge trample, which this card does not say.
+
+    **"The rider still attacks" needs nothing.** The mount's charge and the
+    rider's attack are separate actions on separate creatures, which is
+    already how a mounted pair works -- there was never a place for that
+    sentence to be implemented, and it is recorded here so the next reader
+    does not look for one.
+
+    `by` is matched rather than ignored, so this trait pays out for **its
+    own** trample and not for another trampler's on the same board.
     """
+    me = c.me
+
+    def stamped(ev: Trampled) -> None:
+        if ev.actor != me or ev.by != c.ref:
+            return
+        c.use_power("m1804c0a0", on=ev.victim, spend=False)
+
+    def arm() -> Sequence[Effect | None]:
+        c.watch(
+            Trampled, stamped, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} stamp",
+        )
+        return [c.charge_through()]
+
+    _while_ridden(c, 10, arm)
 
 
 # ==========================================================================

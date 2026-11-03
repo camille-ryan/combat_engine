@@ -16720,6 +16720,366 @@ def a_policy_memo_dies_with_its_board(out: Result) -> None:
              f"memo={D.foes(last, mine)}")
 
 
+def a_charge_can_go_through_one_body(out: Result) -> None:
+    """Three mount traits trample mid-charge. `#1057`.
+
+    *"When charging, the creature can move through one Medium or smaller
+    creature's space and make a stamp attack against that creature. The
+    creature must end its move in an unoccupied space. The rider still
+    attacks at the end of the mount's movement."*
+
+    **The gap was the path, and `#1057` found that by building the wrong
+    thing first.** `c.overrun(during_charge=)` was written and reverted as
+    inert -- `movement.overrun` already walks through bodies, already
+    returns who was trampled, and already insists the mover ends somewhere
+    free, so the parameter could only thread `kind="charge"` down and that
+    changed nothing measurable. What no verb could reach is that
+    `reachable_paths` **refuses an occupied square**, so the charge went
+    *round* the creature it was meant to trample and no trait ever saw a
+    trample to react to.
+
+    So the permission is `c.charge_through()`, `_trample_charge` computes
+    the straight line an ordinary charge will not route, and
+    `execute` walks it with `overrun` and emits `Trampled`.
+
+    **The assertion that matters is the negative one**, and `#1057` named it
+    before any of this was built: *"the plant that matters is the one where
+    the trample is armed and the creature takes an ordinary move -- it must
+    **not** trample. A rule that only checks the charge case cannot tell the
+    gate from an unconditional trample."* Both halves are here.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content import loader
+    from combat_engine.engine import actions as acts
+    from combat_engine.engine.components import (
+        Budget,
+        Health,
+        Movement,
+        Position,
+    )
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import Bus, Trampled
+    from combat_engine.engine.grid import Grid, Square
+    from combat_engine.engine.movement import walk
+    from combat_engine.engine.rng import Rng
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import Relation, Size, Team
+
+    def _straight(a: tuple, b: tuple) -> set:
+        """The squares `movement.overrun` would walk between two points."""
+        from combat_engine.engine.movement import _line
+
+        return set(_line(a, b))
+
+    def board(seed: int = 0, *, mounted: bool = True,
+              rider: str = "m1000") -> tuple:
+        """A mount, a rider, a body in the way, and a target behind it.
+
+        `m1000` is level 10, which clears the 10th-level Requirement the
+        card prints. The body and the far target are the same stat block,
+        so the two differ only in where they stand.
+        """
+        world = World(Grid(24, 16), Rng(seed), Bus())
+        mount = loader.spawn(world, "m1804c0", (3, 8), team=Team.ENEMY)
+        up = loader.spawn(world, rider, (3, 9), team=Team.ENEMY)
+        if mounted:
+            world.relations.set(Relation.RIDDEN_BY, mount, up)
+        body = loader.spawn(world, "m1000", (6, 8), team=Team.PC)
+        far = loader.spawn(world, "m1000", (9, 8), team=Team.PC)
+        enc = Encounter(world)
+        enc.start()
+        world.turn = mount
+        budget = world.need(mount, Budget)
+        budget.standard = budget.move = 1
+        return world, enc, mount, body, far
+
+    # -- the permission is armed, and only while ridden ------------------
+    world, enc, mount, body, far = board()
+    out.that(world.need(mount, Movement).tramples == "m1804c0a1",
+             "the floor: a qualifying rider arms the trample, naming the"
+             " trait that allowed it -- without this every assertion below"
+             " is about an unarmed creature",
+             f"tramples={world.need(mount, Movement).tramples!r}")
+
+    alone, _enc, solo, _b, _f = board(mounted=False)
+    out.that(alone.need(solo, Movement).tramples == "",
+             "an unridden mount is NOT armed, which is the printed"
+             " Requirement rather than decoration -- all three cards say"
+             " 'while mounted by a friendly rider of Nth level or higher'",
+             f"tramples={alone.need(solo, Movement).tramples!r}")
+
+    # **And it comes off when the rider gets down**, which is the half a
+    # plant found missing: `never_comes_off` -- making `_while_ridden`'s
+    # dismount stop ending what it laid -- passed every other assertion
+    # here. A riderless mount that kept trampling is strictly stronger
+    # than print, and I had checked this by hand in a shell and never
+    # written it down.
+    world, enc, mount, body, far = board()
+    up = next(iter(world.relations.targets(Relation.RIDDEN_BY, mount)))
+    out.that(world.need(mount, Movement).tramples != "",
+             "armed before the dismount -- the setup for the next one")
+    world.relations.clear(Relation.RIDDEN_BY, mount, up)
+    out.that(world.need(mount, Movement).tramples == "",
+             "and getting down takes the permission away. The Requirement is"
+             " 'while mounted', so a mount whose rider has dismounted and"
+             " goes on trampling is stronger than its card",
+             f"tramples={world.need(mount, Movement).tramples!r}")
+    out.that(not [a for a in acts.legal(world, enc, mount)
+                  if a.kind == "charge" and (6, 8) in a.path],
+             "and the line through the body stops being offered with it, so"
+             " the permission coming off is read rather than merely stored")
+
+    # The level gate: a rider too junior arms nothing. `m1000` is level 10
+    # and the card wants 10; `m1063` is level 1.
+    junior, _e, jm, _b, _f = board(rider="m1063")
+    out.that(junior.need(jm, Movement).tramples == "",
+             "and a rider under the printed level arms nothing either, so"
+             " the Requirement is read as a level and not as 'somebody is"
+             " aboard'",
+             f"tramples={junior.need(jm, Movement).tramples!r}")
+
+    # -- the charge is offered THROUGH the body, as well as round it -----
+    world, enc, mount, body, far = board()
+    charges = [a for a in acts.legal(world, enc, mount) if a.kind == "charge"]
+    through = [a for a in charges if (6, 8) in a.path]
+    out.that(bool(through),
+             "a charge whose path crosses the body is offered -- the whole"
+             " of the gap, since `reachable_paths` refuses an occupied"
+             " square and so could never produce this line",
+             f"{len(charges)} charge(s), {len(through)} through the body")
+    out.that(any((6, 8) not in a.path for a in charges),
+             "and the ordinary way round is **still** offered, so the"
+             " trample is an extra option rather than a replacement -- a"
+             " creature that should walk round is not forced through",
+             f"{sum(1 for a in charges if (6, 8) not in a.path)} round")
+
+    # the unarmed control: the same board offers no line through the body
+    bare, benc, bmount, _b, _f = board(mounted=False)
+    out.that(not [a for a in acts.legal(bare, benc, bmount)
+                  if a.kind == "charge" and (6, 8) in a.path],
+             "and an unarmed mount is offered **no** line through the body"
+             " on the identical board -- the control that separates the"
+             " permission from the geometry")
+
+    # -- it trample-charges, announces it, and stamps --------------------
+    world, enc, mount, body, far = board()
+    want = [a for a in acts.legal(world, enc, mount)
+            if a.kind == "charge" and a.targets == (far,) and (6, 8) in a.path]
+    out.that(bool(want),
+             "the setup for the walk: a trample charge at the far creature"
+             " exists to perform",
+             f"{len(want)} candidate(s)")
+    heard: list = []
+    world.bus.on(Trampled, heard.append)
+    acts.perform(world, enc, mount, want[0])
+    out.that(len(heard) == 1 and heard[0].victim == body,
+             "performing it announces exactly one `Trampled`, naming the"
+             " creature in the way -- `EnterSquare` fires per square of a"
+             " footprint and names the **mover**, so a row watching that"
+             " cannot tell being walked over from somebody walking past",
+             f"{[(e.actor, e.victim, e.by) for e in heard]}")
+    out.that(bool(heard) and heard[0].by == "m1804c0a1",
+             "and `by` names the trait that permitted it, so a row pays out"
+             " for **its own** trample rather than for anybody's")
+    stamps = [
+        ev for ev in world.bus.log
+        if type(ev).__name__ == "AttackRolled"
+        and getattr(ev, "target", None) == body
+        and getattr(ev, "power", "") == "m1804c0a0"
+    ]
+    out.that(bool(stamps),
+             "the printed **stamp** swings at the trampled creature -- it is"
+             " a separate card on the same stat block, which is why the"
+             " trample had to be an event the trait could hear rather than"
+             " something the engine did itself",
+             f"{len(stamps)} stamp roll(s) at the trampled creature")
+
+    # -- the stamp really lands, on the seeds where it hits ---------------
+    # Not asserted on one seed: one roll of a d20 against a level-10 AC
+    # misses most of the time, and an assertion that the hit points moved
+    # would be a 4-in-12 flake. Counted over twelve instead.
+    landed = 0
+    for seed in range(12):
+        w, e, m, b, f = board(seed)
+        shot = [a for a in acts.legal(w, e, m)
+                if a.kind == "charge" and a.targets == (f,) and (6, 8) in a.path]
+        if not shot:
+            continue
+        was = w.need(b, Health).hp
+        acts.perform(w, e, m, shot[0])
+        landed += int(w.need(b, Health).hp < was)
+    out.that(landed > 0,
+             "and over twelve seeds the stamp takes hit points off the"
+             " trampled creature on at least one of them, so the attack"
+             " resolves rather than merely rolling",
+             f"the stamp landed on {landed} of 12 seeds")
+
+    # == the negative half, which #1057 named before any of this existed ==
+    # "the plant that matters is the one where the trample is armed and the
+    # creature takes an ordinary move: it must NOT trample."
+    world, enc, mount, body, far = board()
+    out.that(world.need(mount, Movement).tramples != "",
+             "armed, for the ordinary-move case -- stating it again because"
+             " an unarmed creature would pass the next two for the wrong"
+             " reason")
+    quiet: list = []
+    world.bus.on(Trampled, quiet.append)
+    walk(world, mount, [(4, 8), (5, 8)], kind="walk")
+    out.that(not quiet,
+             "an armed creature taking an ORDINARY walk tramples nobody."
+             " `#1057` named this as the assertion that matters: a rule"
+             " checking only the charge cannot tell the gate from an"
+             " unconditional trample",
+             f"{len(quiet)} Trampled on a plain walk")
+    out.that(world.need(body, Position).square == (6, 8),
+             "and the body is still standing where it was, so the walk"
+             " genuinely happened near it rather than being refused"
+             " outright -- a move that never started would pass the"
+             " assertion above saying nothing")
+
+    # -- and an ordinary charge, armed, that crosses nobody ---------------
+    world, enc, mount, body, far = board()
+    nobody = [a for a in acts.legal(world, enc, mount)
+              if a.kind == "charge" and (6, 8) not in a.path]
+    out.that(bool(nobody),
+             "the setup: an armed mount has a charge crossing nobody",
+             f"{len(nobody)} such charge(s)")
+    silent: list = []
+    world.bus.on(Trampled, silent.append)
+    acts.perform(world, enc, mount, nobody[0])
+    out.that(not silent,
+             "and taking it tramples nobody -- the permission alone does not"
+             " make a charge a trample")
+    # **And it ends where an UNARMED mount would end**, which is the
+    # assertion that discriminates. A plant making `execute` use `overrun`
+    # unconditionally stayed green against the event check above: with
+    # nobody on the line there is nothing to trample, so no event fires
+    # either way. What it really costs is the **route** -- `overrun` walks a
+    # straight line where `walk` follows the searched path, so every
+    # ordinary charge an armed creature makes would quietly take a
+    # different one.
+    armed_at = world.need(mount, Position).square
+    plain, penc, pmount, _b, _f = board(mounted=False)
+    same = [a for a in acts.legal(plain, penc, pmount)
+            if a.kind == "charge" and a.dest == nobody[0].dest
+            and a.targets == nobody[0].targets]
+    out.that(bool(same),
+             "the setup: an unarmed mount is offered the identical charge,"
+             " so the two routes are comparable",
+             f"dest={nobody[0].dest}, {len(same)} match(es)")
+    acts.perform(plain, penc, pmount, same[0])
+    out.that(armed_at == plain.need(pmount, Position).square,
+             "and an armed mount's ordinary charge ends on the **same**"
+             " square as an unarmed one's -- so the permission does not"
+             " reroute a charge that crosses nobody. `overrun` walks a"
+             " straight line and `walk` follows the searched path, so an"
+             " unconditional overrun would move every ordinary charge, and"
+             " the event assertion above cannot see that at all",
+             f"armed ended {armed_at}, unarmed"
+             f" {plain.need(pmount, Position).square}")
+
+    # -- exactly one, not "at most one" ----------------------------------
+    # The card permits moving through **one** creature, so a line crossing
+    # two is a line it does not allow -- not offered, rather than offered
+    # and truncated. The one-body board above cannot pose this, and a plant
+    # relaxing `len(crossed) != 1` to `not crossed` passed every assertion
+    # until this board existed.
+    world, enc, mount, body, far = board()
+    second = loader.spawn(world, "m1000", (7, 8), team=Team.PC)
+    world.grid.index(world) if hasattr(world.grid, "index") else None
+    out.that(world.need(second, Position).square == (7, 8)
+             and world.need(body, Position).square == (6, 8),
+             "the setup: two Medium creatures stand in the line, at (6,8)"
+             " and (7,8)",
+             f"second at {world.need(second, Position).square}")
+    out.that(not [a for a in acts.legal(world, enc, mount)
+                  if a.kind == "charge"
+                  and (6, 8) in a.path and (7, 8) in a.path],
+             "and no charge is offered through **both** of them: the card"
+             " says one Medium or smaller creature, so a line crossing two"
+             " is refused rather than silently trampling the first and"
+             " walking over the second")
+
+    # -- `overrun` is NOT used for a charge that crosses nobody -----------
+    # **A recorded call, because no board can see this.** The plant --
+    # making `execute` always use `overrun` for an armed creature -- stayed
+    # green against two separate assertions: on an open board the straight
+    # line and the searched path are the same squares, so the mount ends in
+    # the same place either way, and with nobody on the line there is
+    # nothing to trample so no event fires. A wall board was tried and is
+    # worse: this mount is **huge**, so the detour destinations are not
+    # reachable by its footprint and the charge fails identically with and
+    # without the plant.
+    #
+    # So the question becomes which function was called, which is `#1014`'s
+    # technique and the only thing that separates the two readings.
+    world, enc, mount, body, far = board()
+    crossing_nobody = [a for a in acts.legal(world, enc, mount)
+                       if a.kind == "charge" and (6, 8) not in a.path]
+    out.that(bool(crossing_nobody),
+             "the setup: an armed mount has a charge whose path crosses"
+             " nobody",
+             f"{len(crossing_nobody)} such charge(s)")
+    # The spy goes on `movement` itself, not on a name `actions` holds:
+    # `perform` does `from .movement import overrun, walk` inside the
+    # function, so it re-reads the module attribute on every call. Patching
+    # the wrong one of two names is the trap `#1014` paid for.
+    called: list[str] = []
+    import combat_engine.engine.movement as _mv
+    was_over, was_walk = _mv.overrun, _mv.walk
+
+    # **The real signatures, not `*a, **k`.** `ty` types a module attribute
+    # as the function that defines it, so a loose stand-in is an
+    # `invalid-assignment` -- and `-> tuple`/`*a` erases exactly the type
+    # the gate exists to check, which `scripts/CLAUDE.md` records about
+    # driver helpers.
+    def spy_overrun(world_: Any, eid: int, to: Square, *,
+                    kind: str = "walk") -> list[int]:
+        called.append("overrun")
+        return was_over(world_, eid, to, kind=kind)
+
+    def spy_walk(world_: Any, eid: int, path: list[Square], *,
+                 kind: str = "walk", mode: str | None = None) -> int:
+        called.append("walk")
+        return was_walk(world_, eid, path, kind=kind, mode=mode)
+
+    # `ty` types a module attribute as the **function that defines it**, so
+    # nothing but that object satisfies the assignment -- the same refusal
+    # `ongoing_trap`'s `printed_trap` patch and `minion_missed`'s
+    # `is_minion` patch both record, and waived here for the same reason.
+    # The signatures above are the real ones anyway, so the contract is
+    # documented even though the gate cannot check it.
+    _mv.overrun = spy_overrun  # ty: ignore[invalid-assignment]
+    _mv.walk = spy_walk  # ty: ignore[invalid-assignment]
+    try:
+        acts.perform(world, enc, mount, crossing_nobody[0])
+    finally:
+        _mv.overrun, _mv.walk = was_over, was_walk
+    out.that("walk" in called and "overrun" not in called,
+             "and it is walked with `walk`, never `overrun` -- the searched"
+             " path is honoured. `overrun` goes in a straight line, so"
+             " using it whenever a creature *could* trample would reroute"
+             " every ordinary charge it ever makes, and no assertion about"
+             " the end square or the events can see that",
+             f"called={called}")
+
+    # -- the size gate ---------------------------------------------------
+    # The card says "one Medium or smaller creature". Nothing on the board
+    # above is larger, so the gate is posed by growing the body rather than
+    # by finding a Large creature that happens to stand in the right place.
+    world, enc, mount, body, far = board()
+    world.need(body, Position).size = Size.LARGE
+    out.that(world.need(body, Position).size is Size.LARGE,
+             "the setup for the size gate landed",
+             f"size={world.need(body, Position).size}")
+    out.that(not [a for a in acts.legal(world, enc, mount)
+                  if a.kind == "charge" and (6, 8) in a.path],
+             "a **Large** creature in the way is not trampled: the card says"
+             " 'one Medium or smaller', and `Size.order` exists for exactly"
+             " this comparison -- `squares` would not do, since Tiny, Small"
+             " and Medium all occupy one")
+
+
 def an_ongoing_trap_takes_a_turn(out: Result) -> None:
     """A trap whose block prints an initiative acts on its own count.
 
@@ -58987,6 +59347,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "trample_charge": (
+        a_charge_can_go_through_one_body,
+        "a charge may pass through one Medium-or-smaller body and stamp it,"
+        " where the path used to go round (#1057)",
     ),
     "policy_memo": (
         a_policy_memo_dies_with_its_board,

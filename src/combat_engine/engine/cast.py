@@ -8842,6 +8842,69 @@ class Cast:
             to = self.world.decide(self.me, "overrun", ranked, "trample to")
         return trample(self.world, self.me, to)
 
+    def charge_through(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """Let this creature's **charge** pass straight through one body.
+
+        `c.overrun` above is a move a body makes **for itself**, and three
+        printed mount traits want the opposite: the creature does not move,
+        the engine's charge does, and the trample happens inside that walk.
+        A standing trait cannot reach into `actions.execute`, so the only
+        thing it can do at arming time is say it is **allowed** -- which is
+        what this records. `#1057`.
+
+        **Why the charge needed it and a verb parameter would not do.**
+        `c.overrun(during_charge=)` was built and reverted as inert: the
+        charge's **path** is built refusing occupied squares, so by the time
+        any trait saw the move it had already gone round the creature it was
+        meant to trample. `actions._trample_charge` now offers the
+        straight-line destination as well, and `execute` walks it with
+        `movement.overrun`.
+
+        Three things follow from the permission, all in `actions.py`: the
+        charge may be offered through one Medium-or-smaller body, the walk
+        goes through rather than round, and a `Trampled` event names the
+        victim and this row -- which is what lets the trait make its printed
+        stamp attack, since the stamp is a separate card on the same stat
+        block.
+
+        **An `Effect`, not a bare flag, because the permission has to come
+        off.** All three cards print it as *"while mounted by a friendly
+        rider of Nth level or higher"*, and `monsters/conjured.py`'s
+        `_on_the_rider` ends whatever it laid when the rider dismounts. A
+        flag would leave a riderless mount trampling for the rest of the
+        fight, which is stronger than print and is exactly the kind of
+        silently-wrong row this component produces.
+
+        `on_suspend` rather than `on_end`, for the reason
+        `c.ignores_difficult` records: `Effects._lift` runs it for an expiry
+        *and* for a suspension, so the permission comes off exactly once
+        either way.
+        """
+        from .components import Movement
+
+        who = self.me if on is None else on
+        move = self.world.get(who, Movement)
+        if move is None:
+            return None
+        if move.tramples == self.ref:
+            return None
+        was = move.tramples
+        move.tramples = self.ref
+
+        def off() -> None:
+            if move.tramples == self.ref:
+                move.tramples = was
+
+        def back() -> None:
+            move.tramples = self.ref
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} tramples",
+            on_suspend=[off], on_resume=[back], by=self.ref,
+        )
+
     def summon(
         self, ref: str, at: Square | None = None, *, team: Team | None = None,
         after: int | None = None,
