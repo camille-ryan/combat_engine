@@ -1014,8 +1014,16 @@ def main() -> int:
     levels = tuple(args.level) if args.level else LEVELS
     was = json.loads(BASELINE.read_text()) if BASELINE.exists() else None
     stale = staleness(was)
-    per_term: dict = {} if args.terms else None  # type: ignore[assignment]
-    now = measure(levels, fights=args.fights, terms=per_term)
+    # **Always a dict, passed only when asked.** The first version was
+    # `{} if args.terms else None` carrying an mypy-style suppression
+    # comment, and `lint.py` is right to refuse those: `ty` does not honour
+    # that syntax, so it suppressed nothing and the annotation was simply
+    # wrong. Keeping the type honest removes the need for either -- and the
+    # first attempt at this very comment tripped the same check by quoting
+    # the forbidden spelling, which is #883's own lesson about prose. #883.
+    per_term: dict = {}
+    now = measure(levels, fights=args.fights,
+                  terms=per_term if args.terms else None)
     if args.fights != 1:
         # **Refuse the comparison rather than print a misleading one.** The
         # baseline is a single-fight measurement; a four-fight day spends

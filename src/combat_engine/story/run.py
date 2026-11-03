@@ -727,6 +727,34 @@ def _fight(
     # result onto the sheets; and before `bury`, so a character who
     # could have been saved is not removed first. #1075.
     rally(world, step)
+    # **End the encounter, because three of the four ways out of the loop
+    # above do not.** `Encounter.finish` is the only caller of
+    # `effects.end_encounter`, and `encounter.advance()` is the only path to
+    # it -- so the `while` condition reaches it and the three `break`s do
+    # not. On a `break` the encounter is *necessarily* unfinished: a
+    # finished one would have left through the condition instead.
+    #
+    # ```
+    # while not encounter.finished ...   a side wiped      -> finish() ran
+    # world.round > MAX_ROUNDS           the cap           -> did not
+    # watch.resolved                     objective decided -> did not
+    # actor is None                                        -> did not
+    # ```
+    #
+    # Everything hanging off a `When.ENCOUNTER` effect's `on_end` was
+    # skipped on those exits. `c.expose` is the worked case: its whole
+    # design rides this moment -- the saving throw that decides whether an
+    # exposure becomes a contracted disease is an `on_end` -- so on a
+    # completed objective or a capped fight nothing was ever contracted.
+    #
+    # **After `rally`**, which the comment above requires to run while the
+    # board still has its authority, and **before `harvest`**, which is
+    # what carries the result onto the sheets: a disease settled here has
+    # to be on the creature before the sheets are read.
+    #
+    # Idempotent -- `finish` returns early when already finished -- so the
+    # one exit that did reach it pays nothing. #1097.
+    encounter.finish()
     harvest(world, campaign.party)
     # **The party's own dead leave it, here and not at the rest.** Camille's
     # ruling, 2026-10-30: a character past the death floor is out of the
