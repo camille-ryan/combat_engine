@@ -130,7 +130,14 @@ def minion_damage(level: int, *, brute: bool = False) -> int:
     yet: `Table.target` takes a three-valued `kind` with no notion of role.
     The parameter exists because the table prints the column and leaving it
     out would make this a partial transcription; the engine side of it is
-    still open on `#1010`.
+    open on **`#1047`**, which is `#1010`'s successor.
+
+    **This said `#1010` until 2026-11-02 and `#1010` is closed**, which is
+    the stale-pointer-in-code case the root `CLAUDE.md` is about: a closed
+    blocker reads exactly like a live one, so a reader following it lands on
+    a dead answer and may stop there. `#1047` also sharpens the claim --
+    the artillery discount below is *a third axis, not a third value*, which
+    is that issue's own title.
 
     Not modelled here, and stated so it is not mistaken for an omission:
     *"Artillery minions deal 25% less damage on multitarget and melee
