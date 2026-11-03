@@ -596,6 +596,7 @@ def harvest(world: World, party: Party) -> None:
     """
     from combat_engine.engine.components import (
         ActionPoints,
+        Afflictions,
         Health,
         Ident,
         Powers,
@@ -644,6 +645,35 @@ def harvest(world: World, party: Party) -> None:
         if powers is not None:
             sheet.spent = dict(powers.used)
             sheet.per_day = dict(powers.per_day)
+        # **What the fight left in them.** `Afflictions` lives on a creature
+        # in a `World` that does not outlive the encounter, and
+        # `affliction.tick()` reads `Sheet.afflictions` at the extended
+        # rest. Nothing connected the two, so a disease caught in a fight
+        # was forgotten the moment the board went -- and `tick()` returned
+        # `[]` for every party, which looks exactly like a party that
+        # caught nothing. #948 step 4.
+        #
+        # **`contracted` only, never `pending`.** An exposure whose saving
+        # throw is still owed is not a disease yet: `c.expose` settles it on
+        # the encounter ending and either moves it across or drops it. A
+        # pending entry surviving the fight would be a disease nobody ever
+        # failed a save against. (That settling is why #1097 had to land
+        # first -- three of `run._fight`'s four exits never finished the
+        # encounter, so nothing was ever contracted for this to carry.)
+        #
+        # **Merged rather than assigned**, because a sheet carries diseases
+        # between fights: a character who caught one in scene two and
+        # another in scene five holds both, and `tick()` advances each on
+        # its own track. Assignment would make the newest fight the whole
+        # history.
+        afflictions = world.get(eid, Afflictions)
+        if afflictions is not None and afflictions.contracted:
+            for ref, stage in afflictions.contracted.items():
+                # The worse of the two, so re-catching something already
+                # advanced does not reset it to stage 1 -- which is what
+                # every card's stage 1 would do on a second exposure.
+                sheet.afflictions[ref] = max(
+                    stage, sheet.afflictions.get(ref, 0))
 
 
 def mixed(pool: list[str]) -> list[str]:
