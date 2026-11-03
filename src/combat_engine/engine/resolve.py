@@ -1288,6 +1288,19 @@ def deal_damage(
         amount = amount // 2
         parts = _rescale(parts, amount)
 
+    # **Who is taking credit for this blow, when it is not the row dealing
+    # it.** A feat's damage clause written into the power it names is dealt
+    # *by the power*, so `detail` is the power's ref and the feat goes
+    # uncredited -- the damage half of #550, where `Cast.credit` covers the
+    # effect half.
+    #
+    # **Beside `detail`, never instead of it.** `detail` is read by content
+    # riders keyed to the power ("damage from this power", #731 watches the
+    # applied event for exactly that), so substituting the feat's ref would
+    # stop those matching -- the same overloading trap `Effect.by` has, and
+    # the reason credit is its own channel there too.
+    taking = getattr(getattr(world, "effects", None), "_credit", None)
+    credited = taking[-1] if taking else ""
     announce = DamageRolled(
         source=source, target=target, amount=amount, dtype=dtype, detail=detail,
         # Empty for a one-type blow, so a listener that retypes by setting
@@ -1295,6 +1308,7 @@ def deal_damage(
         # meaning what it has always meant.
         dtypes=types if len(types) > 1 else (),
     )
+    announce.credit = credited  # ty: ignore[unresolved-attribute]
     # The context these mods were read with, for the same reason the attack
     # roll carries its own: `c.bonus(once=True)` decides whether the bonus
     # it is watching applied, and it was rebuilding a two-key context here.
@@ -1592,6 +1606,7 @@ def deal_damage(
         dtypes=types if len(types) > 1 else (),
         resisted=resisted,
     )
+    landed_ev.credit = credited  # ty: ignore[unresolved-attribute]
     # **The same provenance on the applied event**, because that is the one
     # the three rows of #731 watch: the printed trigger is damage that
     # *landed*, and a blow a resistance ate whole is not it. Attaching it

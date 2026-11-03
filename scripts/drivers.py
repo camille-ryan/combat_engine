@@ -34948,6 +34948,36 @@ def a_block_can_credit_a_feat_for_what_the_power_lays(out: Result) -> None:
         f"{getattr(spilled, 'credit', '?')!r}",
     )
 
+    # -- and the damage half, which is what the proof rows actually use ---
+    # `p992`, `p997`, `p704` and `p2099` -- the four rows #550 names as
+    # already mis-crediting -- all deal their feat's clause with `c.flat`,
+    # not with an effect verb. So a credit that covered only `Effects.apply`
+    # would have missed every one of them, and the issue's own proof case
+    # would have been the one case it could not prove.
+    w4, _me4, c4 = board()
+    foe = w4.spawn()
+    w4.add(foe, Health(hp=30, max_hp=30))
+    c4.flat(3, on=foe)
+    with c4.credit("f1300"):
+        c4.flat(5, on=foe)
+    hit_by = [e for e in w4.bus.log if e.kind in ("DamageRolled", "DamageApplied")]
+    out.that(
+        any(getattr(e, "credit", "") == "f1300" for e in hit_by)
+        and any(getattr(e, "credit", "") == "" for e in hit_by),
+        "a damage clause inside the block is credited, and one outside is not",
+        f"{[(e.kind, getattr(e, 'detail', ''), getattr(e, 'credit', '?')) for e in hit_by][:4]}",
+    )
+    out.that(
+        all(str(getattr(e, "detail", "")) == "p87" for e in hit_by),
+        "and `detail` still names the power, so a rider keyed to it still matches",
+        f"{sorted({str(getattr(e, 'detail', '')) for e in hit_by})}",
+    )
+    out.that(
+        A._dealt_by(w4, ("f1300",), 0) and not A._dealt_by(w4, ("f999",), 0),
+        "audit._dealt_by credits the feat for damage the POWER dealt",
+        f"f1300 {A._dealt_by(w4, ('f1300',), 0)}, f999 {A._dealt_by(w4, ('f999',), 0)}",
+    )
+
     # -- the payoff: the audit credits the feat for the power's effect -----
     got = A._claimed(w, "f974", 0)
     out.that(

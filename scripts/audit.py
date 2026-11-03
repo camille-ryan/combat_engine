@@ -4303,6 +4303,13 @@ def _dealt_by(world, refs: tuple[str, ...], cursor: int) -> bool:  # noqa: ANN00
         return False
     return any(
         str(getattr(e, "detail", "") or "").startswith(refs)
+        # **Or an explicit credit**, for a feat's damage clause written into
+        # the power it names: `detail` is the power's, so the feat would go
+        # uncredited on the half of #550's clauses that deal damage rather
+        # than lay an effect. Equality for the reason `_claimed` gives --
+        # `credit` is one ref set by one block, where `detail` is free text
+        # the prefix rule exists to cope with.
+        or str(getattr(e, "credit", "") or "") in refs
         for e in world.bus.log[cursor:]
         if e.kind in ("DamageRolled", "DamageApplied")
     )
