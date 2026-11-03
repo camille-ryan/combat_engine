@@ -329,6 +329,10 @@ def main() -> int:
         )
         faults += 1
 
+    for race, what, cost in _narrowed_forks():
+        print(f"chargen.RACES[{race!r}]: {what} -- {cost}. #1084.")
+        faults += 1
+
     for where, why in _caster_is_a_printed_target():
         print(f"{where}: {why}")
         faults += 1
@@ -1879,6 +1883,75 @@ PREDICATE_FIELDS = {
     "targets_me": ("target",),
     "hits_me": ("attacker", "target"),
 }
+
+
+#: Fork options left out of `_narrowed_forks` with a reason, not a pass.
+#:
+#: **`rt:r6-t4` may not be a missing row at all**, and the question needs a
+#: page this repo does not hold. Its extracted spec is self-referential --
+#: *"You have the rt:r6-t4 power"* -- because the scrub replaced a power's
+#: printed name with the trait's own ref, which happens when the trait and
+#: the power share a name (#528's family). Measured:
+#:
+#:     r6.one_of        ('rt:r6-t3', 'rt:r6-t4', 'p13689')
+#:     r6.traits        ['rt:r6-t0', 'rt:r6-t1', 'rt:r6-t3']
+#:     rt:r6-t2's spec  "Select an option for your r6 character"
+#:                      -- the fork's HEADER, not an option
+#:     every r6 power   p13689 lvl 0, p14387 lvl 2, p14388 lvl 6,
+#:                      p14389 lvl 10 -- the standard racial ladder
+#:     refs sharing rt:r6-t4's printed name   none
+#:
+#: So the likely reading is that `rt:r6-t4` is the **trait** and `p13689`
+#: the **power it grants**, listed as two options by the extraction -- which
+#: would make the printed fork genuinely two-way and `granted`'s filter
+#: accidentally right. The other reading is a real third option whose power
+#: was never extracted.
+#:
+#: `Heroes of the Forgotten Kingdoms` is `p13689`'s book and is **not** in
+#: `resources/` (six PDFs, checked), so the page cannot settle it here.
+#: Waived rather than reported, so the check stays live for the next hole
+#: instead of being red on an undecided one. #1084.
+FORK_UNDECIDED = frozenset({"rt:r6-t4"})
+
+
+def _narrowed_forks() -> list[tuple[str, str, str]]:
+    """A race's `one_of` naming an option no row declares.
+
+    `chargen.granted` filters its options on `m in REGISTRY`, which is the
+    right defence -- offering a ref nothing declares would raise at spawn --
+    and it filters **silently**. So a printed three-way choice is dealt as a
+    two-way one, a reader of `one_of` sees three options, and a dealt
+    character can only ever hold two. Nothing anywhere reported the narrowed
+    fork.
+
+    That is the shape this repo already has a rule about: a silent cap reads
+    as "covered everything" when it did not, which is why `cast_list` prints
+    its clamps and `run` prints a budget that moved.
+
+    Found by hand while re-triaging `#505`, which is the half of `#1084`
+    worth fixing first: the declaration is one row somebody has to write,
+    and this is what turns the next missing option from "found by accident"
+    into "reported". Measured at the time: **7** races declare a fork and
+    one of the seven had a hole. #1084.
+    """
+    from combat_engine.chargen import RACES
+    from combat_engine.engine.dsl import REGISTRY
+
+    out: list[tuple[str, str, str]] = []
+    for name, line in sorted(RACES.items()):
+        fork = tuple(getattr(line, "one_of", ()) or ())
+        missing = [m for m in fork if m not in REGISTRY
+                   and m not in FORK_UNDECIDED]
+        if not missing:
+            continue
+        out.append((
+            name,
+            f"one_of names {len(fork)} option(s) and {len(missing)} of them "
+            f"are declared by no row: {', '.join(missing)}",
+            f"so the printed fork is dealt as a {len(fork) - len(missing)}-way "
+            f"choice and nothing says so",
+        ))
+    return out
 
 
 def _dangling_implementations() -> list[tuple[str, str, str]]:
