@@ -2891,13 +2891,25 @@ default chooser**, since the chooser filters first. Posing it needed a
 `choose=` that insists on the capped skill — the same trick #932's driver
 needed, and for the same reason.
 
-**`secondary_grants: "success"` is still there and probably should not be.**
-DMG2's list of what a secondary check can do does not include it, the tree
-already measured it as degenerate (5 wins in 5, three of four successes from
-easy secondary rolls), and **no converted scene sets it** — measured, the one
-challenge in `modules/` uses `bonus`. Retiring it is a one-line deletion plus
-three sites in `challenge.py`; left for a decision rather than taken, because
-removing an authoring option is not a thing to do silently.
+**`secondary_grants: "success"` is gone**, retired in `b2d63e85` on
+2026-10-30 — *"which had never once fired"*. `SECONDARY_GRANTS` is
+`("bonus",)` and a module spelling `"success"` is now **refused** rather
+than silently reinterpreted. DMG2's list of what a secondary check can do
+does not include it, the tree had already measured it as degenerate (5 wins
+in 5, three of four successes from easy secondary rolls), and nothing used
+it.
+
+**This paragraph said it was "still there and probably should not be" for
+four days after it was removed**, which is worth leaving visible: the
+retirement cites `#984`, and a reader working from this file would have
+gone to delete a constant that is already a single-element tuple. Camille's
+later *"go with the DMG2"* on `#984` reads as authorising a decision that
+had in fact already been taken on the same reasoning.
+
+What is genuinely left of `#984` is the rest of its census: **four of
+DMG2's five secondary effects** (cancel a failure, grant a reroll, open
+another skill, raise a primary's cap) and **group checks** with a
+threshold. The per-skill cap — the fifth — landed as `Scene.cap_for`.
 
 ## The party finds the treasure it is owed (#969)
 
