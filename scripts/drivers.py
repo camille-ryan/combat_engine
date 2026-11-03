@@ -38590,28 +38590,41 @@ def f981s_branch_on_p1758_pays_when_the_target_hurt_you(out: Result) -> None:
     `c.hurt_me_since` reads `world.bus.log` through `query.damaged_since`,
     bounded by `since_turn_ended`, so **there is nothing to arm**.
     """
-    from audit import board as _posed
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Powers
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import DamageApplied, TurnEnd
     from combat_engine.engine.query import damaged_since, enemies
 
-    # **This rule's board depends on state it does not set, and that is
-    # filed rather than patched here.** It reaches `audit.board` directly
-    # instead of through `_board`, and importing `audit` sets
-    # `chargen.SCORED_CHOICES = False` at module scope (`audit.py:99`), so
-    # which character it is handed depends on what ran before it. Measured
-    # on this tree: green standalone, red inside the full suite, and in a
-    # single process the two draw modes disagree.
+    # **`_board`, not `audit.board` directly, and that is the whole of
+    # `#1070`.** This rule used to reach the auditor's board unpinned,
+    # which made its verdict depend on what ran before it in the process:
+    # green standalone, a skip inside the full suite.
     #
-    # A pin here was tried and withdrawn: it has to sit after the import
-    # block above, `isort` reorders that block, and this file's own
-    # `_board` docstring records that exact trap -- a guard that reproduces
-    # the bug it was written to fix. The cause needs settling before the
-    # fix, so the setup assertion below is what stops it reporting a
-    # content fault in the meantime. #1070.
-    world, me, _started = _posed("p1758", 1)
+    # The cause is **not** a second construction of the board, which is
+    # what `#1070` concluded and what three measurements refute -- the rule
+    # called three times running passes three times, the same board built
+    # beforehand changes nothing, and the two fights' bus logs are
+    # byte-identical over 88 events. The discriminator is whether the
+    # earlier caller **pinned the draw**:
+    #
+    #     a prelude through `_board`      -> this rule SKIPPED
+    #     the same through `audit.board`  -> green
+    #
+    # both refs tried, deterministic. And the reason is one layer down:
+    # `chargen.build_for` is `@cache`d on `(cls, ref)` and its answer
+    # depends on `chargen.SCORED_CHOICES`, which is **not in the key** --
+    # measured, `("ranger", "p1758")` is `hunter` scored and `marauder`
+    # unscored, and a cache warmed in one mode answers the other from it.
+    # So whichever draw mode touches a `(cls, ref)` pair first wins for the
+    # whole process, and an unpinned caller gets whatever the last pinned
+    # one left. That is a `chargen` bug and is filed separately; using
+    # `_board` here is the right fix regardless, because every other rule
+    # already does and `#1037` built it for exactly this.
+    #
+    # The skip below stays: it is still the honest answer if the setup ever
+    # lands nothing, and it is no longer reachable through import order.
+    world, me, _started = _board("p1758", 1)
     foe = enemies(world, me)[0]
     known = world.get(me, Powers)
     if known is not None:
