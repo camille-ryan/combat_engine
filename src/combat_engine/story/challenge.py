@@ -94,6 +94,18 @@ class Attempt:
     #: The +2 a prior secondary success handed this check, if any.
     carried: int = 0
     success: bool = False
+    #: How many characters rolled, how many beat the DC, and how many had
+    #: to -- for a group check, where `natural` and `total` are one
+    #: character's and say nothing about the party's. Zero on an ordinary
+    #: check.
+    #:
+    #: Recorded for the reason `rerolled` is: a group check that reports a
+    #: single d20 is unobservable **as** a group check, so a driver would
+    #: have to count `table.check` calls to see it happened and a player
+    #: would be shown one roll out of five. #984.
+    rolled_by: int = 0
+    beat_it: int = 0
+    needed: int = 0
     #: True when a banked `reroll` was spent on this check. Recorded rather
     #: than left implicit: a reroll that leaves no trace is an effect
     #: nothing can observe, so a driver would have to diff `run.rerolls`
@@ -112,6 +124,13 @@ class Attempt:
         mark = {"success": "+", "failure": "-", "assist": ">"}.get(self.counted, ".")
         if not self.rolled:
             return f"{mark} {self.cls:<9} {self.skill:<13} ({self.counted})"
+        if self.rolled_by:
+            mark = {"success": "+", "failure": "-"}.get(self.counted, ".")
+            return (
+                f"{mark} {'the party':<9} {self.skill:<13} {self.band:<8} "
+                f"{self.beat_it} of {self.rolled_by} beat {self.dc} "
+                f"(needed {self.needed})"
+            )
         carry = f" +{self.carried} carried" if self.carried else ""
         again = " (rerolled)" if self.rerolled else ""
         return (
@@ -246,6 +265,12 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
         return refuse("not a listed skill")
     if is_secondary and skill in run.spent:
         return refuse("secondary already used")
+    # **A group check may not come through here.** Rolled per character it
+    # would score the challenge on *one* character's die, which is strictly
+    # easier than the printed rule and indistinguishable in the output from
+    # a legitimate success. `group_attempt` is the door. #984.
+    if is_primary and run.scene.group_of(skill):
+        return refuse("a group check, not one character's")
     # **A primary that has given all it can.** Refused before the roll,
     # like every other refusal here, so a capped skill does not spend a
     # draw from the scene's stream and move every roll after it.
@@ -358,6 +383,91 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
     return made
 
 
+def needed_of(threshold: str, standing: int) -> int:
+    """How many characters have to beat the DC, for `half` or `one`.
+
+    `half` rounds **up** -- "at least half" of five is three, not two -- and
+    is floored at one so a party of none cannot score by rolling nothing.
+    """
+    if threshold == "one":
+        return 1
+    return max(1, -(-standing // 2))
+
+
+def group_attempt(run: Running, table: Table, skill: str) -> Attempt:
+    """Everybody rolls one skill; the party scores if enough of them beat it.
+
+    DMG2's group check. A **separate door from `attempt`** rather than a
+    parameter on it, because every other move here is per character --
+    `attempt` takes a slot, `Table.check` rolls for one index -- and a group
+    check has no slot. A slot argument that is ignored is the one-symbol-two-
+    needs shape the root `CLAUDE.md` forbids.
+
+    **It refuses a skill the module did not mark**, which is the other half
+    of `attempt`'s refusal: without it a chooser could make any primary
+    party-wide, which is strictly harder at `half` and strictly easier at
+    `one`. Neither is what the module wrote.
+
+    The party scores **one** success or one failure however many dice are
+    thrown -- that is what the threshold is for -- so the tally, the cap and
+    a carried `pending_bonus` all move exactly as they do for a single
+    check.
+    """
+    skill = skill.lower()
+    threshold = run.scene.group_of(skill)
+
+    def refuse(why: str) -> Attempt:
+        made = Attempt(slot=-1, cls="the party", skill=skill, band="-",
+                       dc=0, counted=why)
+        run.attempts.append(made)
+        return made
+
+    if run.over:
+        return refuse("over")
+    if not threshold:
+        return refuse("not a group check")
+    cap = run.scene.cap_for(skill)
+    if cap:
+        cap += run.cap_bonus.get(skill, 0)
+    if cap and run.won_with.get(skill, 0) >= cap:
+        return refuse("skill capped")
+
+    band = tension.band(run.band_now, run.record, BANDS)
+    carried = run.pending_bonus
+    target = dc_for(run.level, band)
+    # Only the standing characters roll, for #808's reason: a character at or
+    # below 0 hit points is not participating in the scene.
+    rolling = [i for i, sheet in enumerate(table.party.sheets) if not sheet.down]
+    need = needed_of(threshold, len(rolling))
+    beat = sum(
+        1 for i in rolling
+        if table.check(i, skill, target - carried if carried else target).total
+        + carried >= target
+    )
+    success = beat >= need
+
+    run.primaries += 1
+    run.pending_bonus = 0
+    if success:
+        run.successes += 1
+        run.won_with[skill] = run.won_with.get(skill, 0) + 1
+    else:
+        run.failures += 1
+
+    made = Attempt(
+        slot=-1, cls="the party", skill=skill, band=band, dc=target,
+        carried=carried, success=success,
+        rolled_by=len(rolling), beat_it=beat, needed=need,
+        counted="success" if success else "failure",
+    )
+    run.attempts.append(made)
+    if run.over:
+        table.world.bus.emit(
+            SkillChallengeEnded(scene=run.scene.id, won=run.won)
+        )
+    return made
+
+
 #: `(run, table) -> (slot, skill)`. `(-1, "")` gives up.
 Chooser = Callable[[Running, Table], tuple[int, str]]
 
@@ -453,5 +563,13 @@ def play(
         slot, skill = picker(run, table)
         if slot < 0 or not skill:
             break
-        attempt(run, table, slot, skill)
+        # **`play` routes, not the chooser.** A group check has no slot, so
+        # making the chooser express one would need a sentinel beside its
+        # `(-1, "")` give-up and would make `dm.py`'s model loop learn a new
+        # shape. Asking the scene after the skill is named keeps every
+        # chooser -- including the model's -- exactly as it is.
+        if run.scene.group_of(skill):
+            group_attempt(run, table, skill)
+        else:
+            attempt(run, table, slot, skill)
     return run

@@ -219,6 +219,21 @@ SECONDARY_EFFECTS = ("bonus", "cancel", "reroll", "open", "raise_cap")
 #: The effects that name another skill. The rest are refused one.
 SECONDARY_NEEDS_TARGET = ("open", "raise_cap")
 
+#: DMG2's two printed group-check thresholds, as `Try.group`.
+#:
+#: > *"In a group check, everyone makes a specified skill check, and the
+#: > group scores a success if at least a certain number of characters beats
+#: > the set DC. For example, you might call for a group Endurance check,
+#: > with the group succeeding if at least half the characters succeed [...]
+#: > but if even just one character succeeds, the group gets [the success]."*
+#:
+#: **Words, not a count.** `half` depends on how many characters are
+#: standing, which a module cannot know when it is written -- and these two
+#: are what the page prints. "A certain number" would allow an arbitrary
+#: threshold; that is a house rule rather than a fidelity gap and is left
+#: out deliberately. #984.
+GROUP_THRESHOLDS = ("half", "one")
+
 
 class ModuleError(Exception):
     """A module file that cannot be played, with every reason at once."""
@@ -699,6 +714,14 @@ class Try:
     #: rather than dropped, so a module that writes one in the wrong place
     #: hears about it.
     grants: str = ""
+    #: **Everybody rolls this one**, from `GROUP_THRESHOLDS` -- `half` or
+    #: `one`. Empty is the ordinary per-character check, which is every
+    #: skill in every converted challenge.
+    #:
+    #: Only on a **primary**: a group check scores the challenge, and a
+    #: secondary assists. Refused at parse on a secondary rather than
+    #: ignored there.
+    group: str = ""
     #: Which skill the effect is aimed at, for the two that need a target:
     #: `open` says which skill becomes usable, `raise_cap` says whose cap
     #: rises. Empty for the three that do not. Refused at parse if the
@@ -1197,6 +1220,19 @@ class Scene:
             if said.skill == skill.lower() and said.grants:
                 return said.grants, said.grants_to
         return self.secondary_grants, ""
+
+    def group_of(self, skill: str) -> str:
+        """The group-check threshold for this skill, or `""` for a normal one.
+
+        Answers `""` for every skill of every converted challenge, so a
+        caller that routes on it keeps rolling exactly as it did. The two
+        values are `half` and `one`; `needed_of` turns one into a count once
+        the party size is known, which a `Scene` cannot be.
+        """
+        for said in self.tries:
+            if said.skill == skill.lower() and said.group:
+                return said.group
+        return ""
 
     def counts_toward(self, party_level: int) -> int:
         """How many encounters this scene is worth toward a milestone.
@@ -1885,13 +1921,31 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                         f"but grants {grants or 'nothing'!r}, which aims at "
                         f"no skill")
                     aimed = ""
+                group = str(item.get("group", "")).strip().lower()
+                if group and group not in GROUP_THRESHOLDS:
+                    problems.append(
+                        f"{where}: {key} '{skill}' is a group check needing "
+                        f"{group!r}, which is not one of "
+                        f"{', '.join(GROUP_THRESHOLDS)}")
+                    group = ""
+                # **A secondary may not be a group check.** A group check
+                # scores the challenge; a secondary assists one. Accepting it
+                # here would field a party-wide roll whose success buys a +2,
+                # which is neither of the two printed things.
+                if group and key == "secondary":
+                    problems.append(
+                        f"{where}: secondary '{skill}' is marked as a group "
+                        f"check -- a group check scores the challenge, so it "
+                        f"belongs on a primary")
+                    group = ""
                 said.append(Try(
                     skill=skill,
                     win=str(item.get("win", "")).strip(),
                     lose=str(item.get("lose", "")).strip(),
                     what=str(item.get("what", "")).strip(),
                     grants=grants,
-                    grants_to=aimed))
+                    grants_to=aimed,
+                    group=group))
                 continue
             if str(item).strip():
                 names.append(str(item).strip().lower())

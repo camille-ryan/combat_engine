@@ -34851,6 +34851,146 @@ def a_party_that_is_not_the_module_s_size_gets_the_page_s_rule(
     )
 
 
+def a_group_check_scores_the_party_once_against_a_threshold(out: Result) -> None:
+    """#984's other half. DMG2's group check.
+
+    > *"In a group check, everyone makes a specified skill check, and the
+    > group scores a success if at least a certain number of characters beats
+    > the set DC. For example [...] at least half the characters succeed
+    > [...] but if even just one character succeeds, the group gets [the
+    > success]."*
+
+    **The refusals come first and they are the point.** A group skill rolled
+    through `attempt` would score the challenge on *one* character's die --
+    strictly easier than the printed rule and indistinguishable in the output
+    from a legitimate success. And `group_attempt` on a skill the module did
+    not mark would make any primary party-wide, which is strictly harder at
+    `half` and easier at `one`. Neither is what the module wrote, and both
+    would be silent.
+
+    Seeds measured over nine rather than guessed: **seed 4 puts 1 of 4 over
+    the DC**, which fails `half` (needs 2) and succeeds at `one` (needs 1),
+    so the two thresholds are separated by a real roll rather than by
+    arithmetic this rule did itself. Seed 8 is 0 of 4 and fails both.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import Party
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import table as tbl
+    from combat_engine.story.module import ModuleError, parse
+
+    def built(scene: dict) -> Any:
+        doc = {"id": "m", "name": "M", "party_size": 5, "start": "c",
+               "scenes": [{"id": "c", "kind": "skill_challenge", "name": "C",
+                           "complexity": 1, **scene}]}
+        return parse(doc, Path("<driver>")).scenes["c"]
+
+    party = Party.of(level=2, seed=7)
+    half = built({"primary": [{"skill": "athletics", "group": "half"}],
+                  "secondary": ["insight"]})
+    one = built({"primary": [{"skill": "athletics", "group": "one"}],
+                 "secondary": ["insight"]})
+    plain = built({"primary": ["athletics"], "secondary": ["insight"]})
+
+    out.that(
+        half.group_of("athletics") == "half" and plain.group_of("athletics") == "",
+        "a module marks a primary as a group check, and others are untouched",
+        f"marked {half.group_of('athletics')!r}, plain {plain.group_of('athletics')!r}",
+    )
+
+    # -- the refusal, both ways ------------------------------------------
+    run = ch.open_challenge(half, party_level=2)
+    made = ch.attempt(run, tbl.lay(party, seed=4), 0, "athletics")
+    out.that(
+        made.counted == "a group check, not one character's"
+        and run.successes == 0 and run.failures == 0,
+        "`attempt` refuses a group skill, and the tally does not move",
+        f"counted={made.counted!r} {run.tally}",
+    )
+    run = ch.open_challenge(plain, party_level=2)
+    made = ch.group_attempt(run, tbl.lay(party, seed=4), "athletics")
+    out.that(
+        made.counted == "not a group check"
+        and run.successes == 0 and run.failures == 0,
+        "and `group_attempt` refuses a skill the module did not mark",
+        f"counted={made.counted!r} {run.tally}",
+    )
+
+    # -- the thresholds differ on a measured roll ------------------------
+    lost = ch.open_challenge(half, party_level=2)
+    at_half = ch.group_attempt(lost, tbl.lay(party, seed=4), "athletics")
+    won = ch.open_challenge(one, party_level=2)
+    at_one = ch.group_attempt(won, tbl.lay(party, seed=4), "athletics")
+    out.that(
+        at_half.beat_it == at_one.beat_it == 1
+        and at_half.counted == "failure" and at_one.counted == "success",
+        "1 of 4 over the DC fails `half` and passes `one`, same roll",
+        f"half {at_half.beat_it}/{at_half.rolled_by} needed "
+        f"{at_half.needed} -> {at_half.counted}; one needed "
+        f"{at_one.needed} -> {at_one.counted}",
+    )
+
+    # -- the tally moves by ONE, whatever the roll count -----------------
+    # **Seed 3, where all four beat it, and the seed matters.** The first
+    # draft asserted this on seed 4 -- where exactly **one** character
+    # succeeded -- so `successes += 1` and `successes += beat` are the same
+    # number and a plant scoring per character stayed **green** against all
+    # ten assertions. Four of four is the maximum separation available.
+    plenty = ch.open_challenge(half, party_level=2)
+    all_four = ch.group_attempt(plenty, tbl.lay(party, seed=3), "athletics")
+    out.that(
+        all_four.beat_it == 4 and all_four.rolled_by == 4
+        and plenty.successes == 1 and plenty.failures == 0,
+        "four of four beat it and the party still scores exactly ONE success",
+        f"beat {all_four.beat_it} of {all_four.rolled_by}, {plenty.tally}",
+    )
+    out.that(
+        plenty.won_with.get("athletics", 0) == 1,
+        "and it counts once against the per-skill cap, not four times",
+        f"won_with={plenty.won_with}",
+    )
+    out.that(
+        lost.failures == 1 and lost.successes == 0,
+        "and a lost group check is one failure, not four",
+        f"{lost.tally}",
+    )
+
+    # -- it is observable AS a group check -------------------------------
+    out.that(
+        at_one.needed == 1 and at_half.needed == 2
+        and "of 4 beat" in str(at_half),
+        "the Attempt records who rolled, who beat it, and how many had to",
+        f"{at_half}",
+    )
+
+    # -- the arithmetic of `half`, which rounds up -----------------------
+    out.that(
+        [ch.needed_of("half", n) for n in (1, 2, 3, 4, 5)] == [1, 1, 2, 2, 3]
+        and [ch.needed_of("one", n) for n in (1, 5)] == [1, 1],
+        "`half` is at least half, rounded up, and `one` is always one",
+        f"half {[ch.needed_of('half', n) for n in (1, 2, 3, 4, 5)]}",
+    )
+
+    # -- the parse refusals ----------------------------------------------
+    def refuses(scene: dict, because: str) -> tuple[bool, str]:
+        try:
+            built(scene)
+        except ModuleError as ex:
+            return because in str(ex).lower(), str(ex)[:140]
+        return False, "parsed without complaint"
+
+    for spec, because, what in (
+        ({"primary": [{"skill": "athletics", "group": "most"}]},
+         "not one of", "a threshold the book does not print is refused"),
+        ({"primary": ["athletics"],
+          "secondary": [{"skill": "insight", "group": "half"}]},
+         "belongs on a primary", "a SECONDARY marked as a group check is refused"),
+    ):
+        red, said = refuses(spec, because)
+        out.that(red, what, said)
+
+
 def dmg2_s_four_other_secondary_effects_each_do_their_own_thing(out: Result) -> None:
     """#984. DMG2 prints five things a successful secondary check can buy and
     one was built.
@@ -57385,6 +57525,10 @@ DRIVERS = {
     "secondary_effects": (
         dmg2_s_four_other_secondary_effects_each_do_their_own_thing,
         "DMG2's other four secondary effects each do their own thing (#984)",
+    ),
+    "group_check": (
+        a_group_check_scores_the_party_once_against_a_threshold,
+        "a group check scores the party once against a threshold (#984)",
     ),
     "challenge_costs_nothing": (
         a_non_combat_scene_does_not_spend_the_party_s_powers,
