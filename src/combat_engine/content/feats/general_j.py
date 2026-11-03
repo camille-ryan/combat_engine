@@ -105,6 +105,7 @@ from combat_engine.engine.query import (
     team,
 )
 
+from .general_l import _borrowed
 from .styles import among
 
 DIVINE = [Keyword.DIVINE]
@@ -1263,25 +1264,76 @@ def f1545(c: Cast) -> None:
 
 
 @power("f1552", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.race_option()",))
+       reach=PERSONAL, target=SELF, todo=("c.borrow_row(source=)",))
 def f1552(c: Cast) -> None:
     """Swaps between a chosen at-will of another class and the one the
     r6 racial feature already granted.
 
-    The chosen half plays: `c.borrow_row` reads the set off the registry,
-    `keyword=` narrows it to the divine ones, and `uses=1` is the printed
-    "as an encounter power". It already skips rows the character holds,
-    which is most of "other than your own".
+    **Re-marked, and the previous two markers were both wrong.** The
+    exclusivity half is written below and is correct; what does not work is
+    the half every earlier note called finished.
 
-    **Re-aimed, and the marker was naming the wrong half.** It said
-    `spec.power_ref()`, as though the other power were a name the ETL had
-    failed to resolve. It is not: `rt:r6-t3` is declared, and
-    what it is short of is the *choice* -- the card the player picked,
-    which nothing records. So the pair cannot be made exclusive. Granting
-    the chosen power alone is not over-generous; the card does give it as
-    an encounter power, and the limit it cannot honour is "not both in
-    the same encounter"."""
-    c.borrow_row(keyword=Keyword.DIVINE, level=1, usage=AT_WILL, uses=1)
+    `c.race_option()` was the marker, on the premise that the trait's pick
+    "nothing records" so the pair could not be made exclusive. #914
+    falsified that -- `rt:r6-t3` borrows a card and `c.borrow_row` records
+    it, so `c.stored_row` answers. Before that it said `spec.power_ref()`,
+    as though the other power were a name the ETL failed to resolve. Both
+    named the wrong half.
+
+    **The half that does not work is the borrow, and this docstring used to
+    assert it did** -- *"the chosen half plays"*. Measured: the pool it asks
+    for is **empty, on every board**. `c.borrow_row`'s filter is
+    `p.cls == cls`, this call passes no `cls`, so it demands `p.cls == ""`
+    and no class power has that. The 64 rows the card is about live under
+    five classes:
+
+        avenger 8   cleric 30   invoker 9   paladin 13   runepriest 4
+
+    So the verb cannot say *"a divine class other than your own"*: it takes
+    one `cls`, and the card names a **power source** minus the character's
+    own class. `among=` would take the 64 refs, but assembling them needs to
+    know which classes are divine -- and no power-source data exists
+    anywhere (no column on `power`, no field on `ClassLine`), which is the
+    same gap as #1094. So this is `c.borrow_row(source=)` and is blocked
+    behind that data rather than behind a racial choice.
+
+    `todo=` and not `dropped=`: with an empty pool the row grants nothing
+    and lays nothing, so there is no clause that plays.
+
+    **The clause that was missing is the parenthesis**, which is the whole
+    of what this feat adds over the two powers existing: *"but you can't
+    use both in the same encounter"*. So using either one bars the other
+    for the rest of the fight, in whichever order they are reached.
+
+    `_borrowed` rather than a bare `c.stored_row`, for the arming-order
+    reason its own docstring records: a feat can arm before the trait, and
+    then the store is empty and the row returns having done nothing.
+
+    `once=True` on the watch is load-bearing and is not "fire once". It
+    reads whether the handler *did* anything, so an unrelated power being
+    used leaves the hold up and only the pair spends it."""
+    mine = c.borrow_row(keyword=Keyword.DIVINE, level=1, usage=AT_WILL,
+                        uses=1)
+
+    def pair(theirs: str) -> None:
+        # Nothing to be exclusive against if the trait took the same card,
+        # or if this feat found none to borrow.
+        if not mine or not theirs or theirs == mine:
+            return
+        me = c.me
+
+        def spent(ev: PowerUsed) -> None:
+            if ev.actor != me:
+                return
+            other = (theirs if ev.power == mine
+                     else mine if ev.power == theirs else "")
+            if other:
+                c.forbid(other, on=me, until=When.ENCOUNTER)
+
+        c.watch(PowerUsed, spent, until=When.ENCOUNTER, on=me, once=True,
+                label=c.ref)
+
+    _borrowed(c, pair)
 
 
 @power("f1557", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
