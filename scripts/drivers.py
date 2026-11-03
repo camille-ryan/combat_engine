@@ -17080,6 +17080,122 @@ def a_charge_can_go_through_one_body(out: Result) -> None:
              " and Medium all occupy one")
 
 
+def a_regions_damage_is_the_damage_it_prints(out: Result) -> None:
+    """`terrain.damage` was 9 of 14 wrong, not merely incomplete. #1096.
+
+    The issue is titled as a coverage gap -- *"populated for 14 of the 28
+    rows that print a damage expression"* -- and its comment says *"nothing
+    was mis-parsed; the parser simply reached half the population"*. Both
+    halves of that are false, and the measurement is the reason this rule
+    exists.
+
+    The pattern was a bare dice expression searched over the whole of
+    `spec`, which is the entire page including the flavour paragraph. So it
+    stored whatever dice came first. Of the 14 rows that had a value,
+    **5 were damage and 9 were not**:
+
+    * six slide distances -- *"slides N squares in a random direction"*;
+    * one push distance, on a row whose real damage is a flat number;
+    * one creature's extra hit points.
+
+    A content author writing a zone off that column would have given a
+    region a damage figure that is really how far it shoves you.
+
+    **And the missing half prints a different kind of expression**, which is
+    why a wider dice pattern could never have reached it: the commonest
+    shape by far is *"N <type> damage per tier"* -- a flat number with the
+    tier scaling the page states. A column holding only `5` loses two
+    thirds of the damage at epic, so `damage_tier` is not decoration.
+
+    Three things are asserted: the amount sits in a damage phrase, the
+    scaling is carried, and nothing that prints no damage has a figure.
+    """
+    import re
+
+    from combat_engine.db import game
+
+    con = game()
+    rows = list(con.execute(
+        "SELECT ref, damage, damage_tier, damage_type, effect, spec "
+        "FROM terrain WHERE kind = 'fantastic terrain'"))
+    out.that(len(rows) > 100,
+             "the floor: the fantastic-terrain rows are in the database, so"
+             " every count below is over a real population",
+             f"{len(rows)} rows")
+
+    carried = [r for r in rows if (r["damage"] or "")]
+    out.that(len(carried) > 30,
+             "and most of the rows that print damage now carry it -- 14"
+             " before this landed, and the 14 were not the right 14",
+             f"{len(carried)} of {len(rows)} carry a figure")
+
+    # -- every figure sits in a damage phrase ----------------------------
+    # The whole of the old bug: the amount has to be the number the page
+    # attaches to the word `damage`, not the first number on the page.
+    near = re.compile(r"[^.;]{0,44}\bdamage\b", re.I)
+    stray = []
+    for r in carried:
+        text = f"{r['effect'] or ''} {r['spec'] or ''}"
+        if not any(r["damage"] in frag for frag in near.findall(text)):
+            stray.append((r["ref"], r["damage"]))
+    out.that(not stray,
+             "every stored figure appears inside a phrase about **damage**."
+             " Nine did not before -- six slide distances, a push distance"
+             " and a creature's hit points -- and each read as a working"
+             " column",
+             f"not in a damage phrase: {stray[:6]}")
+
+    # -- nothing that prints no damage carries a figure ------------------
+    # The other direction, and the one a coverage count cannot see: five of
+    # the nine wrong rows print the word `damage` **nowhere** on the page,
+    # so the correct value is empty and a parser that fills them in is
+    # worse than one that misses them.
+    invented = [
+        r["ref"] for r in carried
+        if "damage" not in f"{r['effect'] or ''} {r['spec'] or ''}".lower()
+    ]
+    out.that(not invented,
+             "and no row carries a figure while printing no damage at all --"
+             " `x2_8`, `x2_11`, `x2_37`, `x2_38` and `x2_56` each did, and"
+             " each is a slide, difficult terrain or a healing surge",
+             f"invented a figure: {invented[:6]}")
+
+    # -- the tier scaling is carried -------------------------------------
+    tiered = [r for r in carried if r["damage_tier"]]
+    out.that(len(tiered) > 20,
+             "the printed *per tier* scaling is stored rather than dropped."
+             " It is the majority shape, and a bare `5` is a third of the"
+             " damage at epic -- so this is the column that makes the"
+             " figure usable rather than merely present",
+             f"{len(tiered)} of {len(carried)} scale per tier")
+    says_tier = [
+        r["ref"] for r in tiered
+        if "per tier" not in f"{r['effect'] or ''} {r['spec'] or ''}".lower()
+    ]
+    out.that(not says_tier,
+             "and every row flagged per-tier says so on the page, so the"
+             " flag is read off the print rather than assumed from the"
+             " shape of the number",
+             f"flagged without the phrase: {says_tier[:5]}")
+
+    # -- the type, where the page names one ------------------------------
+    typed = [r for r in carried if (r["damage_type"] or "")]
+    out.that(len(typed) > 10,
+             "the printed damage type is kept, so a region that deals cold"
+             " is not written as untyped",
+             f"{len(typed)} of {len(carried)} name a type")
+    bad_type = [
+        (r["ref"], r["damage_type"]) for r in typed
+        if r["damage_type"].split(" and ")[0] not in
+        f"{r['effect'] or ''} {r['spec'] or ''}".lower()
+    ]
+    out.that(not bad_type,
+             "and every stored type is a word the page prints -- the guard"
+             " against ordinary English arriving in the column, which is"
+             " what `_TR_NOT_A_TYPE` is for",
+             f"type not on the page: {bad_type[:5]}")
+
+
 def an_ongoing_trap_takes_a_turn(out: Result) -> None:
     """A trap whose block prints an initiative acts on its own count.
 
@@ -59347,6 +59463,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "terrain_damage": (
+        a_regions_damage_is_the_damage_it_prints,
+        "a region's damage column holds the damage it prints, and the tier"
+        " scaling with it (#1096)",
     ),
     "trample_charge": (
         a_charge_can_go_through_one_body,

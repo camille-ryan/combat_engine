@@ -584,7 +584,29 @@ CREATE TABLE terrain (
   ref TEXT PRIMARY KEY, id INTEGER, kind TEXT, effect TEXT, usage TEXT,
   requirement TEXT, check_skill TEXT, check_band TEXT, check_dc INTEGER,
   attack_level INTEGER, attack_flat INTEGER, defence TEXT, damage TEXT,
-  spec TEXT
+  spec TEXT,
+  -- #1096. `damage` above was **9 of 14 wrong**, not merely incomplete, and
+  -- the issue's own census said "nothing was mis-parsed". `_TR_DAMAGE` was
+  -- a bare dice pattern searched over the whole of `spec`, so it stored
+  -- the first dice expression anywhere in the text: six slide distances
+  -- ("slides N squares in a random direction"), one push distance, and one
+  -- lot of extra hit points.
+  -- A content author writing a zone off that column would give
+  -- a region a damage figure that is really how far it shoves you.
+  --
+  -- So the amount is now anchored to the word `damage`, read out of
+  -- `effect` (the mechanics) in preference to `spec` (flavour prose), and
+  -- the two columns below carry what a single dice string could not say.
+  --
+  -- `damage_tier` is the printed *"per tier"* scaling, which is the
+  -- majority shape: 5 at heroic, 10 at paragon, 15 at epic. A column
+  -- holding only "5" loses two thirds of the damage at epic, so the flag
+  -- is not decoration.
+  damage_tier INTEGER,
+  -- The printed damage type, when the phrase names one -- "5 lightning
+  -- damage per tier". Empty where the page says only "damage", which is
+  -- untyped and is what `DamageType.UNTYPED` is for.
+  damage_type TEXT
 );
 CREATE INDEX terrain_kind ON terrain(kind);
 
@@ -3083,7 +3105,35 @@ _TR_BAND = re.compile(r"\bCheck\s*:\s*(\w+)[^.]*?\((easy|moderate|hard) DC\)", r
 _TR_DC = re.compile(r"\bCheck\s*:\s*(\w+)[^.]*?DC\s*(\d+)", re.I)
 _TR_ATK_LVL = re.compile(r"\bAttack\s*:\s*Level\s*\+\s*(\d+)\s+vs\.?\s+(\w+)", re.I)
 _TR_ATK_FLAT = re.compile(r"\bAttack\s*:\s*\+?(\d+)\s+vs\.?\s+(\w+)", re.I)
-_TR_DAMAGE = re.compile(r"(\d+d\d+)")
+#: The damage a region deals, **anchored to the word it is about**. #1096.
+#:
+#: The old pattern was `(\d+d\d+)` searched over the whole of `spec`, so it
+#: stored whatever dice came first. Measured over the 14 rows that had a
+#: value: **5 were damage and 9 were not** -- six slide distances, a push
+#: distance, and a creature's extra hit points.
+#:
+#: Two amounts, because the page prints two shapes and the commoner one is
+#: not dice at all: `1d6 poison damage per tier` and `5 lightning damage per
+#: tier`. A type word may sit between the amount and `damage`, and may be
+#: two words joined by `and` -- "1d8 cold and fire damage per tier".
+#:
+#: `extra` and `ongoing` are allowed between the amount and the type
+#: because the page writes both and neither changes what the number is.
+_TR_DAMAGE = re.compile(
+    r"\b(\d+d\d+|\d+)\s+(?:extra\s+|ongoing\s+)*"
+    r"((?:\w+(?:\s+and\s+\w+)?)\s+)?damage"
+    r"(?P<tier>\s+per\s+tier)?",
+    re.I)
+
+#: Words that look like a damage type and are not one. Anything else before
+#: `damage` is taken as the printed type, so this list is what keeps
+#: ordinary English out of the column.
+_TR_NOT_A_TYPE = frozenset({
+    "of", "the", "a", "an", "and", "or", "that", "this", "its", "their",
+    "more", "less", "additional", "extra", "ongoing", "half", "full",
+    "points", "point", "damage", "takes", "take", "deals", "deal", "in",
+    "to", "from", "on", "per", "tier", "no", "any", "all", "same",
+})
 
 
 def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
@@ -3117,9 +3167,29 @@ def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
         lvl, flat_atk = _TR_ATK_LVL.search(spec), _TR_ATK_FLAT.search(spec)
         eff, use, req = (_TR_EFFECT.search(spec), _TR_USAGE.search(spec),
                          _TR_REQ.search(spec))
-        dmg = _TR_DAMAGE.search(spec)
+        # **`effect` first, then `spec`, and never anywhere else.** #1096.
+        # The mechanics live in the `Effect:` line; `spec` is the whole page
+        # including the flavour paragraph, and reading the flavour is how
+        # "slides 1d4 squares in a random direction" became a damage figure
+        # on six rows. Falling back to `spec` keeps the rows whose damage is
+        # stated outside an `Effect:` line.
+        effect_txt = eff.group(1).strip() if eff else ""
+        dmg = _TR_DAMAGE.search(effect_txt) or _TR_DAMAGE.search(spec)
+        dmg_type = ""
+        if dmg and dmg.group(2):
+            words = [w for w in dmg.group(2).lower().split()
+                     if w not in _TR_NOT_A_TYPE]
+            dmg_type = " and ".join(words)
         out.execute(
-            "INSERT OR REPLACE INTO terrain VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            # **Named, not positional**, for the reason the `trap` insert
+            # below records: `hp` and `hp_each` went in beside `disable_dc`
+            # and the positional `?` list then wrote `dialect` into `hp`.
+            # #1096 adds two columns and names every one.
+            "INSERT OR REPLACE INTO terrain "
+            "(ref, id, kind, effect, usage, requirement, check_skill, "
+            " check_band, check_dc, attack_level, attack_flat, defence, "
+            " damage, spec, damage_tier, damage_type) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 ref,
                 tid,
@@ -3136,6 +3206,8 @@ def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
                  if (lvl or flat_atk) else ""),
                 (dmg.group(1) if dmg else ""),
                 sanitise.scrub(spec, {name: ref}),
+                int(bool(dmg and dmg.group("tier"))),
+                dmg_type,
             ),
         )
         names.setdefault(ref, {})
@@ -6045,17 +6117,23 @@ _CITE_STOP = (
 #:
 #: Found by the measurement that widening the capture needs: the first run
 #: fixed `f3032` -- *"when you use p7635 or p10187"*, the swap the issue is
-#: about -- and in the same pass turned *"when you use a arcane or divine
-#: power"* into *"a arcane or p929"*, because a power really is printed with
-#: that name and it collides with the phrase for its own source. 1 right and
-#: 1 wrong, which is not shippable.
+#: about -- and in the same pass rewrote a clause on `i1071p1` that names
+#: two **power sources** as alternatives, turning the second one into
+#: `p929`. `p929` is a card printed under the very phrase that names its
+#: own source, so the two collide. 1 right and 1 wrong, which is not
+#: shippable.
 #:
 #: **Nothing already in the tree separates them.** `sanitise.cited` answers
-#: True for both ("divine power" is two words and neither is an ordinary
-#: word the corpus waives), and case cannot help -- the stored spec reads
-#: both in lower case. So the guard is the printed list of the six sources,
-#: which is closed and is already written down once in
-#: `etl/power.py:_KEYWORDS`.
+#: True for the source phrase as readily as for a real name -- it is two
+#: words and neither is one the corpus waives -- and case cannot help,
+#: because the stored spec reads both in lower case. So the guard is the
+#: printed list of the six sources, which is closed and is already written
+#: down once in `etl/power.py:_KEYWORDS`.
+#:
+#: **This note leaked twice before it read like this**, which is worth
+#: leaving visible: the first two drafts quoted the colliding phrase to
+#: make the collision concrete, and the phrase *is* the name, so
+#: `leaks.py` caught both. Describe the collision and cite the ref.
 #:
 #: Checked both ways: with this guard the `when you use` position swaps
 #: `f3032` and nothing else, and the false swap on `i1071p1` is gone.
@@ -6195,8 +6273,9 @@ def _granted(
             if not sanitise.cited(name, rules, whole_name=True):
                 continue
             # **A power source, not a power.** See `_POWER_SOURCE_PHRASE`:
-            # a card really is printed `Divine Power`, so the phrase for the
-            # source collides with it and `cited` cannot tell them apart.
+            # one card is printed under the same phrase that names its own
+            # source -- `p929` -- so the two collide and `cited` cannot tell
+            # them apart.
             if _POWER_SOURCE_PHRASE.match(name):
                 continue
             kept = " ".join(head)
