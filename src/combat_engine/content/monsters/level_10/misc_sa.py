@@ -236,13 +236,35 @@ def m1460a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.overrun(during_charge=)",),
+    todo=("actions.charge_through_a_body",),
 )
 def m1460a1(c: Cast) -> None:
-    """A charge's own movement is a straight run to the target, with no seam
-    for a mount to swap in trampling through an occupied square instead --
-    nothing in `Cast` lets a trait rewrite how a charge moves. `c.rider()`
-    and the level gate would be trivial; there is nothing for them to arm."""
+    """**Re-pointed: the gap is the charge's PATH, not `c.overrun`.** `#1057`
+
+    The marker said `c.overrun(during_charge=)` and that parameter was
+    built and reverted, because it is inert. Measured:
+
+    * `movement.overrun` already does the whole printed clause -- it walks
+      the line through bodies, returns everyone trampled in order so the
+      body can attack them, and already insists *"the mover must end
+      somewhere free"*, which is the clause's own last sentence. It also
+      already takes a `kind`.
+    * so `during_charge=` could only thread `kind="charge"` down, and on a
+      real board that changes **nothing**: `reachable` at `kind="walk"` and
+      at `kind="charge"` return the identical 152 squares, because the only
+      thing `kind` buys is a difficult-terrain waiver.
+
+    And the first half of what this docstring used to say is **false**: a
+    charge *is* visible while it happens. `actions.execute` calls
+    `walk(..., kind="charge")`, so `ctx["move_kind"]` says so -- `#301`
+    opened that window and four content files already read it.
+
+    What is genuinely missing is the half this docstring got right: the
+    charge's **path** is built refusing occupied squares, so by the time
+    any trait sees the move it has gone round the creature it was supposed
+    to trample. A trample mid-charge needs the path to be allowed through a
+    body, which is `actions._charges`/`execute`, not a `Cast` verb.
+    """
 
 
 # ==========================================================================
