@@ -16596,6 +16596,130 @@ def disarming_a_found_trap(out: Result) -> None:
              f" far={away.get('disable'):.3f}")
 
 
+def a_policy_memo_dies_with_its_board(out: Result) -> None:
+    """Four memos in `doctrine.py` were keyed on `id(world)`. #1095.
+
+    `content/CLAUDE.md` forbids that outright, and the reason is not
+    hypothetical: CPython hands a collected object's address to the next
+    allocation, so a memo outlives its board and the next `World` at that
+    address reads it as its own. `#907` measured the same pattern in
+    content rows -- **48 boards, 45 distinct `id(world)` values, 3 landing
+    on an id already in the store** inside one `audit.audit` call -- and
+    the visible cost was an audit verdict that moved on every call in one
+    process.
+
+    **What made this copy worse is that the clearing was opt-in.**
+    `forget()` existed and five instruments called it;
+    `api/session.py`, `api/app.py`, `api/wire.py` and `scripts/fight.py`
+    build boards and call it **zero** times. So every measurement
+    instrument was protected and the one path a person plays through was
+    not -- which is also precisely why no instrument could see it.
+
+    The memos live on the board now, in a `WeakKeyDictionary`, so the
+    entry dies with it **by construction** rather than because somebody
+    remembered.
+
+    **This asserts the property rather than the incident, deliberately.**
+    A probe of 80 consecutive boards produced **zero** address collisions
+    here, so "I did not observe one" is worth nothing as evidence -- the
+    failure needs an allocation pattern this rule cannot arrange on
+    demand. What it can assert is the thing that makes the collision
+    impossible whatever the allocator does: no entry survives its board.
+    That is strictly stronger than a non-observation.
+    """
+    import gc
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.query import alive, enemies
+    from combat_engine.policy import doctrine as D
+
+    D.forget()
+    out.that(len(D._MEMOS) == 0,
+             "the floor: the memo map starts empty, so every count below is"
+             " about what this rule put there",
+             f"{len(D._MEMOS)} entries")
+
+    first, me, _ = _posed("f1378b", 5)
+    second, them, _ = _posed("f1378b", 7)
+    warm = D.foes(first, me)
+    D.foes(second, them)
+    out.that(len(D._MEMOS) == 2,
+             "two live boards hold two separate stores -- the setup, landed,"
+             " without which the drop below says nothing",
+             f"{len(D._MEMOS)} entries for 2 boards")
+    out.that(D._MEMOS[first][D.FOES] is not D._MEMOS[second][D.FOES],
+             "and their stores are distinct objects rather than one shared"
+             " dict with the board in the key, which is the shape that let"
+             " an address be the key in the first place")
+
+    # -- it is still a cache, which is the half a correctness fix can lose -
+    out.that(D.foes(first, me) is warm,
+             "a second ask returns the identical object, so this is still a"
+             " **hit** and not a recompute. `foes` was memoised because"
+             " `query.enemies` was called 226,472 times for 5.2 of 18.6"
+             " seconds in one level-5 profile -- a fix that quietly turned"
+             " the cache off would be a worse bug than the one it fixed",
+             "the memo recomputed instead of hitting")
+
+    # -- and nothing survives its board --------------------------------
+    del second
+    gc.collect()
+    out.that(len(D._MEMOS) == 1,
+             "dropping one board leaves the **other** board's memo alone --"
+             " the control, because a map that simply emptied itself would"
+             " pass the next assertion and have no cache at all",
+             f"{len(D._MEMOS)} entries after dropping one of two")
+    del first
+    gc.collect()
+    out.that(len(D._MEMOS) == 0,
+             "and dropping the last one leaves nothing: a later board"
+             " cannot read a dead board's answer whatever address it lands"
+             " on, which is the whole of the fix",
+             f"{len(D._MEMOS)} entries after dropping both")
+
+    # -- the keys no longer carry an address ---------------------------
+    # The sharpest check, because it is the one a behaviour test cannot
+    # make: a key still holding `id(world)` would pass every assertion
+    # above -- the weak map would scope it correctly anyway -- while
+    # leaving the address in the tuple for somebody to key on again.
+    fresh, who, _ = _posed("f1378b", 5)
+    D.foes(fresh, who)
+    D.inert(fresh, who, "p1")
+    keys = [k for store in D._MEMOS[fresh].values() for k in store]
+    out.that(bool(keys),
+             "the floor for the key check: something was memoised, so there"
+             " are keys to inspect",
+             f"{len(keys)} key(s)")
+    out.that(all(id(fresh) not in k for k in keys),
+             "and no key carries the board's **address** any more. A key"
+             " that still did would pass every assertion above, because the"
+             " weak map scopes it correctly regardless -- so this is the"
+             " only assertion that sees the thing #1095 is named after",
+             f"keys={keys}")
+
+    # -- forget() still works, because five instruments call it --------
+    D.foes(fresh, who)
+    out.that(len(D._MEMOS) >= 1, "warmed again before clearing")
+    D.forget()
+    out.that(len(D._MEMOS) == 0,
+             "`forget()` still empties everything, so `winrate`, `scorecard`,"
+             " `watch`, `doctrine` and `api/replay` keep working unchanged."
+             " It is no longer **required** -- which is the point -- but it"
+             " had five callers and silently becoming a no-op would be its"
+             " own fault",
+             f"{len(D._MEMOS)} entries after forget()")
+
+    # -- and the answer is right, not merely scoped --------------------
+    last, mine, _ = _posed("f1378b", 5)
+    out.that(D.foes(last, mine)
+             == tuple(e for e in enemies(last, mine) if alive(last, e)),
+             "and what the memo hands back is what the board actually says"
+             " -- a scoping fix that returned a correctly-scoped wrong"
+             " answer would pass everything above",
+             f"memo={D.foes(last, mine)}")
+
+
 def an_ongoing_trap_takes_a_turn(out: Result) -> None:
     """A trap whose block prints an initiative acts on its own count.
 
@@ -58863,6 +58987,11 @@ DRIVERS = {
         an_active_search_finds_a_trap,
         "a minor action to look for a trap, where a party under the passive"
         " DC had no way to find one at all (#959)",
+    ),
+    "policy_memo": (
+        a_policy_memo_dies_with_its_board,
+        "a per-board policy memo dies with its board rather than being"
+        " keyed on its address (#1095)",
     ),
     "trap_disable": (
         disarming_a_found_trap,

@@ -215,6 +215,7 @@ import inspect
 from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import Any
+from weakref import WeakKeyDictionary
 
 from combat_engine.engine.actions import Action
 from combat_engine.engine.components import Budget, Health, Position, Side
@@ -634,29 +635,84 @@ def benefits(ref: str) -> bool:
     return got
 
 
-#: Living enemies, per (board, round, creature). A board fact, and it was being
+#: Every per-board memo in this module, held **against the board object
+#: itself** rather than against its address. #1095.
+#:
+#: **`id(world)` was the key and it is the bug `content/CLAUDE.md` forbids
+#: outright.** CPython hands a collected object's address to the next
+#: allocation, so a memo outlived its board and the next `World` at that
+#: address read it as its own. `#907` measured the same pattern in content
+#: rows rather than theorising it: **48 boards, 45 distinct `id(world)`
+#: values, 3 landing on an id already in the store** inside one
+#: `audit.audit` call.
+#:
+#: Here it was worse in one way and better in another. Worse, because the
+#: clearing was **opt-in per consumer** -- `forget()`, which `api/session.py`
+#: and `api/app.py` never called, so the one path a person plays through was
+#: the unprotected one while every measurement instrument was fine. Which is
+#: also exactly why no instrument could see it. Better, because the memos
+#: carry `world.round`, so a surviving entry had to collide on the round too.
+#:
+#: A `WeakKeyDictionary` is the fix the repo's own rule implies: the entry
+#: **dies with the board**, by construction, so it cannot be inherited and
+#: `forget()` stops being mandatory. A plain dict keyed on the object would
+#: work for correctness and leak every board ever fielded.
+#:
+#: Not a field on `World`, deliberately. That is `engine/`, which is WIDE --
+#: a 21-minute audit for a cache -- and the weak map needs nothing from the
+#: engine at all. `World` is a plain class, so it is weak-referenceable.
+_MEMOS: WeakKeyDictionary[Any, dict[str, dict]] = WeakKeyDictionary()
+
+
+def _memo(world: Any, which: str) -> dict:
+    """This board's store for `which`, made on first ask.
+
+    Keyed on the board object, so the four stores below need no `id(world)`
+    in their own keys and cannot read another board's answer.
+    """
+    try:
+        mine = _MEMOS.get(world)
+    except TypeError:            # something unhashable or not weakref-able
+        return {}
+    if mine is None:
+        mine = _MEMOS[world] = {}
+    got = mine.get(which)
+    if got is None:
+        got = mine[which] = {}
+    return got
+
+
+#: Living enemies, per (round, creature). A board fact, and it was being
 #: recomputed per candidate action: a profile of one level-5 fight found
 #: `query.enemies` called **226,472 times** for 5.2 of 18.6 seconds, with
 #: `query.creatures` behind it at 332,776. Nothing about the answer changes between
 #: two candidate actions on the same turn.
-_FOES: dict[tuple[int, int, int], tuple[int, ...]] = {}
+FOES = "foes"
 
-#: `best_from` per (board, round, creature, origin). The other half of the same
+#: `best_from` per (round, creature, origin). The other half of the same
 #: profile: 28,278 calls for 4.7 seconds, and it is asked twice per action for the
 #: same two squares over and over.
-_BEST: dict[tuple[int, int, int, Any], float] = {}
+BEST = "best"
 
-#: Cover from the nearest enemy, per (board, round, creature, square). 29,798 calls
+#: Cover from the nearest enemy, per (round, creature, square). 29,798 calls
 #: for 3.6 seconds, and `Grid.cover` traces corner to corner each time.
-_COVER: dict[tuple[int, int, int, Any], int] = {}
+COVER = "cover"
+
+#: Per (caster, row): could the row accomplish anything at all?
+INERT = "inert"
 
 
 def forget() -> None:
-    """Drop the per-board memos. `scripts/winrate.py` calls this between fights."""
-    _FOES.clear()
-    _BEST.clear()
-    _COVER.clear()
-    _INERT.clear()
+    """Drop every board's memos.
+
+    **No longer required, and kept because five callers call it.** The memos
+    live on the board now (`_MEMOS`), so they die with it -- the leak this
+    used to be the only defence against is gone by construction rather than
+    by anybody remembering. `scripts/winrate.py` and three other instruments
+    still call it between fights, and it is still correct to: clearing a
+    board's memo mid-process is harmless, since every entry is recomputable.
+    """
+    _MEMOS.clear()
 
 
 def _round(world: Any) -> int:
@@ -665,16 +721,13 @@ def _round(world: Any) -> int:
 
 def foes(world: Any, actor: int) -> tuple[int, ...]:
     """Living enemies of `actor`, memoised for the round."""
-    key = (id(world), _round(world), actor)
-    got = _FOES.get(key)
+    store = _memo(world, FOES)
+    key = (_round(world), actor)
+    got = store.get(key)
     if got is None:
-        got = _FOES[key] = tuple(
+        got = store[key] = tuple(
             e for e in enemies(world, actor) if alive(world, e))
     return got
-
-
-#: Per (board, caster, row): could the row accomplish anything at all?
-_INERT: dict[tuple[int, int, str], bool] = {}
 
 
 def inert(world: Any, actor: int, ref: str) -> bool:
@@ -693,8 +746,9 @@ def inert(world: Any, actor: int, ref: str) -> bool:
     monsters did it zero times, holding three or four attack rows each against a
     character's dozens of utilities. #264.
     """
-    key = (id(world), actor, ref)
-    got = _INERT.get(key)
+    store = _memo(world, INERT)
+    key = (actor, ref)
+    got = store.get(key)
     if got is None:
         p = get(ref) if ref else None
         # **Order is cost, and `_can_aim` goes last.** `row_damage` and
@@ -707,7 +761,7 @@ def inert(world: Any, actor: int, ref: str) -> bool:
             got = False
         else:
             got = not T.row_effects(world, actor, ref)
-        _INERT[key] = got
+        store[key] = got
     return got
 
 
@@ -1158,8 +1212,9 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
     """
     from combat_engine.engine.components import Powers
 
-    key = (id(world), _round(world), actor, origin)
-    hit = _BEST.get(key)
+    store = _memo(world, BEST)
+    key = (_round(world), actor, origin)
+    hit = store.get(key)
     if hit is not None:
         return hit
     known = world.get(actor, Powers)
@@ -1197,7 +1252,7 @@ def best_from(world: Any, actor: int, origin: Any) -> float:
     # anything beside a hit-point figure, and the pool shrinks as the fight goes on,
     # so the same reposition was worth more in round six than in round one for no
     # tactical reason whatever.
-    _BEST[key] = best
+    store[key] = best
     return best
 
 
@@ -1369,8 +1424,9 @@ def _cover_from_enemies(world: Any, actor: int, where: Any) -> int:
     from three of four is no cover at all against the fourth, and taking the
     maximum would score that square as though it were safe.
     """
-    key = (id(world), _round(world), actor, where)
-    hit = _COVER.get(key)
+    store = _memo(world, COVER)
+    key = (_round(world), actor, where)
+    hit = store.get(key)
     if hit is not None:
         return hit
     worst: int | None = None
@@ -1378,8 +1434,8 @@ def _cover_from_enemies(world: Any, actor: int, where: Any) -> int:
         for sq in squares(world, foe):
             got = int(world.grid.cover(sq, where))
             worst = got if worst is None else min(worst, got)
-    _COVER[key] = worst or 0
-    return _COVER[key]
+    store[key] = worst or 0
+    return store[key]
 
 
 
