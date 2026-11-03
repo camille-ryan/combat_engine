@@ -1708,18 +1708,47 @@ def f1652(c: Cast) -> None:
 
 
 @power("f1656", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.race_option()",))
+       reach=PERSONAL, target=SELF)
 def f1656(c: Cast) -> None:
     """Grants a second race's feature and lets an encounter pick between
     that feature's power and `p8278`.
 
-    **Re-aimed.** Races are declared now, so "there is no race to hold
-    it" is no longer true and the marker was naming a gap that closed.
-    `rt:r6-t3` is declared -- and is one of the twenty-one rows
-    `_option` leaves on `c.race_option()`, because the feature is a
-    *pick* from a printed set and nothing records which card was taken.
-    An either/or between `p8278` and a card nobody can name has no
-    second half."""
+    **Written.** The old note was right that an either/or has no second
+    half while nothing can name the card `rt:r6-t3` hands over. #914 made
+    that trait's printed fork real, so it borrows, and `c.borrow_row`
+    records the pick under the trait's own ref.
+
+    `c.grant_row` is the first sentence, and a trait handed over while
+    traits are being armed is armed -- `turns.arm_traits_of` re-reads
+    between passes -- so the trait runs and makes its own pick rather than
+    arriving inert. Which is why the pick is read inside the watch and not
+    here: at this point in the pass the trait may not have run yet.
+
+    The fork is a forbid in each direction and not a budget. "In a given
+    encounter you can use one or the other" is about which card stays
+    reachable, where a budget would be about how many uses either has, and
+    the trait's own `uses=1` already says that. `When.ENCOUNTER` rather
+    than `c.forbid`'s save-ends default, because the printed window is the
+    fight.
+
+    Forbidding a row the character does not hold costs nothing, which is
+    what keeps the `p8278` arm honest on a board that was never dealt
+    it."""
+    me = c.me
+    c.grant_row("rt:r6-t3", on=me, until=When.ENCOUNTER)
+
+    def exclusive(ev: PowerUsed) -> None:
+        if ev.actor != me:
+            return
+        pick = c.stored_row(of="rt:r6-t3")
+        if not pick:
+            return
+        if ev.power == "p8278":
+            c.forbid(pick, on=me, until=When.ENCOUNTER)
+        elif ev.power == pick:
+            c.forbid("p8278", on=me, until=When.ENCOUNTER)
+
+    c.watch(PowerUsed, exclusive, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f1659", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

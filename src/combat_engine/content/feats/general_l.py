@@ -32,6 +32,7 @@ first blow of the fight.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
@@ -89,13 +90,21 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Health
-from combat_engine.engine.events import PowerResolved, PowerUsed, SecondWind
+from combat_engine.engine.events import (
+    PowerResolved,
+    PowerUsed,
+    RowStored,
+    SecondWind,
+)
 from combat_engine.engine.query import alive, allies, distance_between, holding, team
 
-#: The `rt:r6-t3` choice: a 1st-level at-will borrowed from
-#: another class, picked when the character is built and recorded
-#: nowhere. Same symbol `features/racial._option` carries.
-RACE_OPTION = ("c.race_option()",)
+#: The trait the five cards below are about. It hands over a 1st-level
+#: at-will borrowed from another class, and **which one is recorded**:
+#: `c.borrow_row` stores the pick under the trait's own ref, so
+#: `c.stored_row(of=BORROWED)` is the answer those cards need. `""` for a
+#: character who took the other leg of the trait's printed fork, where the
+#: trait itself stands down. #914.
+BORROWED = "rt:r6-t3"
 #: The three racial powers of `r44`, which the page offers as a choice.
 R44 = ("p7441", "p7442", "p7443")
 #: Which weapons a character may pick up is settled when it is built.
@@ -953,61 +962,232 @@ def f2842(c: Cast) -> None:
     c.watch(AttackRolled, stop, until=When.ENCOUNTER, on=me, once=True)
 
 
+def _borrowed(c: Cast, lay: Callable[[str], None]) -> None:
+    """Hand `lay` the row `rt:r6-t3` chose, whenever that becomes known.
+
+    **Arming order, and it is the reason this is a function rather than
+    one line in five bodies.** All five cards below read the pick as they
+    arm, and `turns.arm_traits` walks the creature's rows in its own order:
+    on the audit board for `f2871` the feat arms *before* the trait, so
+    the pick is `""` and every one of the five took its early return
+    through all 48 attempts. Reading the store at arming time is correct
+    only for the half of the orders where the trait went first, and nothing
+    says which this build has.
+
+    So: lay now if the pick is already recorded, and otherwise wait for
+    the write. `c.store_row` announces `RowStored`, which `c.borrow_row`
+    reaches at the end of its own arming -- so the watch is armed in the
+    first order and the event has already passed in the second. `once=`
+    spends the hold on the arrangement it lays, and a trait arms once a
+    fight, so there is nothing for a second firing to do.
+
+    `lay` is never called at all for a character on the other leg of the
+    trait's printed fork: the trait stands down there, borrows nothing and
+    stores nothing, and so do these five cards.
+    """
+    pick = c.stored_row(of=BORROWED)
+    if pick:
+        lay(pick)
+        return
+    me = c.me
+
+    def stored(ev: RowStored) -> None:
+        if ev.actor == me and ev.holder == BORROWED and ev.row:
+            lay(ev.row)
+
+    c.watch(RowStored, stored, until=When.ENCOUNTER, on=me, label=c.ref,
+            once=True)
+
+
 @power("f2871", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=RACE_OPTION)
+       reach=PERSONAL, target=SELF)
 def f2871(c: Cast) -> None:
     """Swaps which ability the `rt:r6-t3` power attacks with.
 
-    **One hold now.** `c.rolls_with` exists and would say this in a line, but
-    it takes a ref: `rt:r6-t3` deals a 1st-level at-will borrowed
-    from another class, picked when the character is built and recorded
-    nowhere, so there is no ref to name. `c.race_option()` was always the
-    real hold and is now the only one on the marker.
+    **Written, and the hold that was here is spent.** The old note had
+    `c.rolls_with` as existing and the *ref* as the blocker: the trait
+    picks a 1st-level at-will from another class and nothing said which.
+    #914 made that printed fork real, so the trait borrows, and
+    `c.borrow_row` records the pick -- `c.stored_row(of=BORROWED)`.
 
-    The card offers a choice of three abilities, which is `c.choose` once
-    there is a row to choose for."""
+    `c.rolls_with` carries both halves of "attack rolls and damage rolls"
+    in one call: `Attack.ability_for` reads the swap before the header, and
+    `Cast.attack_mod` -- which is the modifier a weapon power's damage line
+    adds -- resolves through the same method rather than off the header.
+
+    Three abilities and no way to read which was taken, so `c.choose`.
+    The decline arm is not `optional=`: the card makes you pick one of the
+    three, and `c.choose` returns `None` only for an empty list.
+
+    The Special line is multiclass bookkeeping -- which class this counts
+    as for a later feat -- which is `chargen.meets` and not a thing that
+    happens in a fight."""
+
+    def swap(pick: str) -> None:
+        ability = c.choose([Ability.CON, Ability.WIS, Ability.CHA])
+        if ability is not None:
+            c.rolls_with(pick, ability, on=c.me, until=When.ENCOUNTER)
+
+    _borrowed(c, swap)
 
 
 @power("f2873", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACE_OPTION)
+       reach=PERSONAL, target=SELF)
 def f2873(c: Cast) -> None:
-    """A mark on hitting with the `rt:r6-t3` power. Which row
-    that is, is the build choice nothing records."""
+    """A mark on hitting with the `rt:r6-t3` power.
+
+    Written for the reason `f2871` is: the pick is recorded now and
+    `c.stored_row` reads it.
+
+    A watch rather than a declared `on=`, because the row the trigger is
+    about is not knowable at import -- a predicate would have to reach
+    `Powers.stored` off `(world, me, ev)` to find out, and the ref is
+    settled once per fight rather than once per event.
+
+    `c.mark` defaults its marker to the caster, which is what "you can mark
+    the target" says, and `When.EONT` is the printed duration."""
+    me = c.me
+
+    def arm(pick: str) -> None:
+        def marks(ev: Hit) -> None:
+            if ev.attacker == me and ev.power == pick:
+                c.mark(on=ev.target, until=When.EONT)
+
+        c.watch(Hit, marks, until=When.ENCOUNTER, on=me, label=c.ref)
+
+    _borrowed(c, arm)
 
 
 @power("f2875", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACE_OPTION)
+       reach=PERSONAL, target=SELF)
 def f2875(c: Cast) -> None:
-    """Uses that borrowed power as a melee basic attack on a charge or
-    an opportunity attack. `c.as_basic` says that now; what is still
-    missing is the row itself -- the racial trait this names picks a
-    power at build time and nothing records which, so there is no ref
-    to hand over."""
+    """Offers that borrowed power where a melee basic attack is granted.
+
+    `c.as_basic` files the stand-in under the window that hands the swing
+    out, and the card names two of them, so two calls. `dsl.basic_options`
+    is what reads them back, at the moment of the swing rather than now.
+
+    **The printed "once per encounter" is already enforced, upstream, and
+    that is measured rather than assumed.** The trait borrows with
+    `uses=1`, so `c.grant_row`'s counter forbids the ref the moment it is
+    used at all -- however it was used. On a board for this feat: one use
+    puts the ref in `Powers.forbidden` and `Powers.spent_out` and `usable`
+    refuses it afterwards. So there is at most one swing of it per fight
+    and the substitution cannot be taken twice.
+
+    Said out loud because it is a *borrowed* limit. If the same card ever
+    reached a character holding the row freely -- its own class's at-will,
+    say -- this row would be more generous than print, and the cap would
+    have to be written here. Nothing can write it today: a swing taken in
+    place of a granted basic is not distinguishable afterwards, since
+    `use(opportunity=True)` puts the flag on the `Cast` and on no event --
+    `triggers.by_opportunity` reads `ev.opportunity`, which no event in
+    `events.py` carries.
+
+    "Against a single target" is not enforced either. The borrowed set is
+    every 1st-level at-will of another class, which includes close and
+    area shapes, and there is no reshape to one creature here."""
+
+    def offer(pick: str) -> None:
+        for window in ("charge", "opportunity"):
+            c.as_basic(pick, window=window, on=c.me, until=When.ENCOUNTER)
+
+    _borrowed(c, offer)
 
 
 @power("f2877", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACE_OPTION)
+       reach=PERSONAL, target=SELF)
 def f2877(c: Cast) -> None:
-    """Radiant damage from that borrowed power.
+    """Radiant damage from that borrowed power, once a fight.
 
-    **`c.deals(ref=)` came off: it exists now and this row's half of it is
-    one line.** The old note said the verb "overrides what a creature's
-    *weapon* rolls and has no way to name a row" -- the second half was the
-    blocker and `ref=` answers it.
+    **Both halves exist now.** `c.deals(ref=)` names one row, and the row
+    it has to name is recorded -- the two sentences the old note was
+    waiting on. `ref=` also stands `through=` aside, which matters here:
+    the borrowed card may carry neither `WEAPON` nor `IMPLEMENT`, and a
+    retype scoped to one of those would have skipped it silently.
 
-    What is left is the whole of `RACE_OPTION`: the card recolours "the
-    power you chose for your `rt:r6-t3` racial trait", and which power that
-    is is the choice nothing records. Without the ref there is nothing to
-    pass to `ref=`, so the row still cannot be written -- but it is waiting
-    on the choice and not on the retype, and the marker says so now."""
+    `PowerUsed` is announced *above* the body, so a retype laid in this
+    handler is standing before the blow is rolled -- the same ordering
+    `f2842` depends on -- and `PowerResolved` is what takes it off again.
+
+    **Not `c.deals(once=True)`, and that was the first version.** That
+    flag is spent by the blow it recolours, and the printed limit is on
+    the *use*: the borrowed set includes close and area at-wills, so a
+    use can roll damage more than once. Measured on this board -- the
+    pick hits three creatures, and with `once=` the first came out
+    radiant and the other two came out in the card's own type. One use,
+    one colour, which is the whole sentence.
+
+    The latch is what carries "once per encounter" over a declined offer:
+    `c.may` is a printed *can*, and a no should leave the card unspent
+    rather than burn it."""
+    me = c.me
+    taken: list[int] = []
+
+    def arm(pick: str) -> None:
+        def recolour(ev: PowerUsed) -> None:
+            if taken or ev.actor != me or ev.power != pick:
+                return
+            if not c.may("deal radiant damage instead"):
+                return
+            taken.append(1)
+            hold = c.deals(DamageType.RADIANT, ref=pick, until=When.ENCOUNTER)
+            if hold is None:
+                return
+
+            def done(end: PowerResolved) -> None:
+                if end.actor == me and end.power == pick:
+                    c.end_effect(hold, on=me, why=f"{c.ref}: the use is over")
+
+            c.watch(PowerResolved, done, until=When.ENCOUNTER, on=me,
+                    label=c.ref, once=True)
+
+        c.watch(PowerUsed, recolour, until=When.ENCOUNTER, on=me, label=c.ref)
+
+    _borrowed(c, arm)
 
 
 @power("f2879", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RACE_OPTION)
+       reach=PERSONAL, target=SELF)
 def f2879(c: Cast) -> None:
-    """Extra healing after hitting with the `rt:r6-t3` power,
-    which is the build choice nothing records."""
+    """Extra healing for a turn after hitting with the `rt:r6-t3` power.
+
+    `Healed` is a `Decision` with a mutable `amount`, so the top-up is
+    read in `Window.BEFORE` -- the seam `f1404` already uses for the same
+    sentence on a different trigger. `c.healed_by` is what "one of your
+    healing powers" is asked with; it refuses an unnamed heal, so a surge
+    nobody asked for and a rest do not pay this out.
+
+    "Any creature", so the window is not narrowed to allies and not to the
+    caster -- only `ev.source` is, which is the "**your** healing powers"
+    half.
+
+    `once=True` on the outer watch is the printed "at least one target":
+    the first hit of the use arms the window, and a second target of the
+    same blow must not arm a second one, which would pay 6. Arming an
+    effect is what `watch(once=)` counts as having done something, so the
+    hold is spent there and then.
+
+    It also means a later fresh window is never armed -- correct here for
+    the reason `f2875` gives: the borrowed row has one use per fight, so
+    there is no second hit with it to re-arm from."""
+    me = c.me
+
+    def topped(ev: Healed) -> None:
+        if (ev.source == me and ev.amount > 0
+                and c.healed_by(ev, keyword=Keyword.HEALING)):
+            ev.amount += 3
+
+    def arm(pick: str) -> None:
+        def landed(ev: Hit) -> None:
+            if ev.attacker == me and ev.power == pick:
+                c.watch(Healed, topped, until=When.EONT, on=me, label=c.ref,
+                        window=Window.BEFORE)
+
+        c.watch(Hit, landed, until=When.ENCOUNTER, on=me, label=c.ref,
+                once=True)
+
+    _borrowed(c, arm)
 
 
 @power("f2753", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
