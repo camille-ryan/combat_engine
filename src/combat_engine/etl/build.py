@@ -6026,6 +6026,47 @@ _CITE_STOP = (
     r"|[.,;:)]|$)"
 )
 
+#: The same stop **without `and` and `or`**, for a position that wants the
+#: whole conjunction. #1080.
+#:
+#: `_granted.swap` already splits a captured run on `,`, `and` and `or` and
+#: resolves each conjunct -- so the thing that left *"when you use <first>
+#: or <second>"* half-resolved was never the split, it was the **capture**:
+#: `_CITE_STOP` ended the group at ` or `, so the second phrase was outside
+#: `m.group(1)` entirely and `swap` never saw it.
+#:
+#: **Scoped to one position, deliberately.** All ten residues `#1080`
+#: measured are `when you use`, so widening the other four citing positions
+#: would be a change with no evidence behind it -- which is the mistake this
+#: file's own notes record twice (`(see ...)` left owed rather than
+#: automated, and the first draft of the colon alias moving two rows nobody
+#: asked about).
+#: `<power source> power` is a **power source**, never a citation. #1080.
+#:
+#: Found by the measurement that widening the capture needs: the first run
+#: fixed `f3032` -- *"when you use p7635 or p10187"*, the swap the issue is
+#: about -- and in the same pass turned *"when you use a arcane or divine
+#: power"* into *"a arcane or p929"*, because a power really is printed with
+#: that name and it collides with the phrase for its own source. 1 right and
+#: 1 wrong, which is not shippable.
+#:
+#: **Nothing already in the tree separates them.** `sanitise.cited` answers
+#: True for both ("divine power" is two words and neither is an ordinary
+#: word the corpus waives), and case cannot help -- the stored spec reads
+#: both in lower case. So the guard is the printed list of the six sources,
+#: which is closed and is already written down once in
+#: `etl/power.py:_KEYWORDS`.
+#:
+#: Checked both ways: with this guard the `when you use` position swaps
+#: `f3032` and nothing else, and the false swap on `i1071p1` is gone.
+_POWER_SOURCE_PHRASE = re.compile(
+    r"^(?:martial|arcane|divine|primal|psionic|shadow)\s+powers?$", re.I)
+
+_CITE_STOP_THROUGH_AND = (
+    r"(?=\s+(?:until|while|that|for|to|in|on|with|as|when|if|from)\b"
+    r"|[.,;:)]|$)"
+)
+
 #: Where the name may sit inside a captured run. `_elsewhere` anchors at the
 #: **end** -- right for `<name> ritual`, where the noun follows -- and that
 #: is wrong for a position where the name comes *after* the verb: the run
@@ -6068,8 +6109,12 @@ _OWN_THING = frozenset({"this", "these", "its", "his", "her", "their"})
 #: owed in `leaks.POSITION_OWED` rather than automated. #340.
 _CITING: tuple[tuple[re.Pattern[str], str], ...] = (
     (_GRANTS, _AT_END),
+    # **Captures through `and`/`or`**, so a conjunction reaches `swap`'s
+    # splitter. The run is longer, which is why the length bound went with
+    # it: two names and a conjunction do not fit in 46 characters. #1080.
     (re.compile(
-        r"\bwhen you use\s+(?:the|your|a|an)?\s*(.{0,46}?)" + _CITE_STOP,
+        r"\bwhen you use\s+(?:the|your|a|an)?\s*(.{0,92}?)"
+        + _CITE_STOP_THROUGH_AND,
         re.I | re.S), _AT_START),
     (re.compile(
         r"\buses? of (?:your|the)\s+(.{0,46}?)" + _CITE_STOP,
@@ -6148,6 +6193,11 @@ def _granted(
             if _MONSTER_ABILITY.match(ref):
                 continue
             if not sanitise.cited(name, rules, whole_name=True):
+                continue
+            # **A power source, not a power.** See `_POWER_SOURCE_PHRASE`:
+            # a card really is printed `Divine Power`, so the phrase for the
+            # source collides with it and `cited` cannot tell them apart.
+            if _POWER_SOURCE_PHRASE.match(name):
                 continue
             kept = " ".join(head)
             pieces = (kept, ref) if anchor == _AT_END else (ref, kept)
