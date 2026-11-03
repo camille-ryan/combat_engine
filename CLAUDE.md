@@ -35,6 +35,39 @@ The rest of the policy:
   verified. "Done" is worth nothing to the next reader. Say what you did
   *not* do, too.
 * **Triage before working.** Prefer the issue that unblocks others.
+* **Check a cited blocker's state before planning around it.** An issue
+  saying *"blocked on #N"* is a claim about #N **on the day it was
+  written**, and nothing re-checks it. A triage sweep of the 63 open
+  non-`question` issues on 2026-11-02 found **nine** citing a blocker or
+  tracker that had since closed:
+
+  | the issue | cites | state |
+  |---|---|---|
+  | `#312` | `#313` | closed — it had been idle on a false premise |
+  | `#505` | `#914` | closed, and the title still cites `#235` before that |
+  | `#955` | `#1016` | closed; the action half was unblocked and unnoticed |
+  | `#599` | `#132`, `#157` | both closed — the batch it waited for is gone |
+  | `#981` | `#539`, `#956`, `#959`, `#974` | all four closed |
+  | `#1039` | `#539` | closed |
+  | `#1011` | `#964` | closed |
+  | `#988` | `#786` | closed, leaving its finding homeless |
+  | `#1047` | `#1010` | closed — and the in-code pointer says so too |
+  | `#581` | `#812` | closed, and five rows were tracked against it |
+
+  It is **one command** — `gh issue view N --json state` — and it is the
+  cheapest check on this list by an order of magnitude. Do it for every
+  blocker an issue names *before* believing the issue is held, and before
+  concluding anything is blocked.
+
+  Two things make this worse than ordinary staleness. A closed blocker
+  reads exactly like a live one, so the issue looks correctly parked rather
+  than wrong. And the pointers **chain**: `#505` was re-pointed from `#235`
+  to `#914` and both are now dead, so a reader following the thread lands
+  on a second stale answer and may stop there.
+
+  The same applies to a pointer **in code**. `#1047`'s own
+  `Table.target` docstring still defers to `#1010`, which is closed and of
+  which `#1047` is the successor.
 * **A rules table quoted in an issue is evidence a table exists, not
   evidence of its contents.** Read the page in `resources/` before writing
   one into code — the PDF extracts with `pypdf`. Five issues, measured:
