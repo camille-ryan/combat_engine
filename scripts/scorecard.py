@@ -86,6 +86,7 @@ from combat_engine.engine.dsl import get
 from combat_engine.engine.events import (
     DamageApplied,
     Dropped,
+    Healed,
     Hit,
     OpportunityWindow,
     SurgeSpent,
@@ -551,7 +552,60 @@ def play(
             elif now >= gap:
                 pol.n[f"{side_of(world, actor)}/idle_melee"] += 1
         encounter.advance()
+    _count_healing(world, pol)
     return world.round, encounter.finished
+
+
+def _count_healing(world: World, pol: Counted) -> None:
+    """How much the healing actually restored, read off the log afterwards.
+
+    **Off `world.bus.log`, and never from a `bus.on(Healed, ...)` listener.**
+    `Healed` is a `Decision` -- a proposal -- so `resolve.heal` announces it,
+    lets a row refuse or halve it, and only *then* assigns the real figures
+    back onto the event:
+
+        offered.amount = health.hp - before
+        offered.hp = health.hp
+
+    So a listener reads what was **offered** and the log reads what actually
+    **happened**, and the two differ by exactly the quantity this counter
+    exists to find. Measured on a target at full hit points:
+
+        target 61/61, heal for 10
+          a bus.on(Healed) listener saw   amount=10  hp=61
+          the LOGGED event says           amount= 0  hp=61
+
+    A subscribed counter would therefore report ten hit points restored for
+    a heal that restored nothing -- blind to the waste, and reporting the
+    party's healing as efficient in exactly the fights where it is not.
+    #324, and the scorecard's other counters (`surged`, `went_down`) all
+    subscribe, so subscribing is the natural thing to write here and is the
+    wrong one.
+
+    `restored` is in hit points and pairs with the existing `surges` count:
+    a surge spent is only worth what it put back. `wasted_heals` counts the
+    heals aimed at somebody who did not need one -- **above half** hit
+    points, which is the band the printed second-wind rule itself treats as
+    healthy -- and is the discriminating number, because a heal for 0 and a
+    heal for 6 on a nearly-full ally are the same mistake made twice.
+
+    Pre-heal hit points are `hp - amount`, which needs care at one edge and
+    is asserted in `drivers.healing_waste`: healing from below zero starts
+    at **zero**, not at the deficit, so a character revived from -5 reads a
+    pre-heal of 0 and is correctly not counted as wasteful.
+    """
+    for ev in world.bus.log:
+        if not isinstance(ev, Healed) or ev.cancelled:
+            continue
+        side = side_of(world, ev.target)
+        pol.n[f"{side}/restored"] += ev.amount
+        hurt = world.get(ev.target, Health)
+        if hurt is None:
+            continue
+        before = ev.hp - ev.amount
+        if before * 2 > hurt.max_hp:
+            pol.n[f"{side}/wasted_heals"] += 1
+            pol.n[f"{side}/wasted_hp"] += ev.amount
 
 
 def day(
@@ -720,6 +774,32 @@ def measure(levels: tuple[int, ...], fights: int = 1) -> dict:
                 "could_not_act": pol.n[f"{side}/could_not_act"],
                 "ap_spent": pol.n[f"{side}/ap_spent"],
                 "surges": pol.n[f"{side}/surges"],
+                # **Hit points per surge, not hit points.** A party that heals
+                # more because it was hurt more is not playing worse, so the
+                # raw total cannot be read as a quality. What a surge *bought*
+                # can: #267 makes surges the currency, and a surge spent for 0
+                # is the whole of #324.
+                #
+                # **Zero surges prints nothing rather than a rate**, and the
+                # first version of this got it wrong in the way that matters.
+                # `max(1, surges)` made the monster side -- which spends no
+                # surges at all -- report "0 surges spent, 30.0 hit points
+                # per surge", which is the raw total wearing a rate's label
+                # and is exactly the kind of number this file's own history
+                # says to distrust. `None` is rendered blank.
+                #
+                # And the honest limit, stated because the label cannot carry
+                # it: the numerator is **all** healing, not only the healing a
+                # surge paid for. Separating those needs `Healed` and
+                # `SurgeSpent` linked, which `spend_surge(healed=)` may
+                # already allow and which is not done here. So read this as
+                # "hit points of healing the party got per surge it burned",
+                # not as the efficiency of a single surge.
+                "hp_per_surge": (
+                    round(pol.n[f"{side}/restored"] / pol.n[f"{side}/surges"], 1)
+                    if pol.n[f"{side}/surges"] else None),
+                "wasted_heals": pol.n[f"{side}/wasted_heals"],
+                "wasted_hp": pol.n[f"{side}/wasted_hp"],
                 "dailies": pol.n[f"{side}/dailies"],
                 "downed": pol.n[f"{side}/downed"],
                 "downed_holding_wind": pol.n[f"{side}/downed_holding_wind"],
@@ -764,6 +844,20 @@ ROWS = [
     # question is not whether the party wins -- it should -- but what winning
     # cost it, because 4e is an attrition game and a day is four fights.
     ("surges", "healing surges spent", "lower"),
+    # **What the surges bought, which the count above cannot say.** #324
+    # found three surges spent restoring **zero** hit points and
+    # `Healed(amount=0)` twice in one log, with none left when two
+    # characters later dropped and died. "Lower is better" is wrong for
+    # this one -- a surge is spent either way, so more hit points off it is
+    # strictly better play.
+    ("hp_per_surge", "...hit points restored per surge", "higher"),
+    # **The discriminating pair.** A heal for 0 and a heal for 6 on a
+    # nearly-full ally are the same mistake, so the count is the signal and
+    # the hit points are how much was thrown away with it. Above half is
+    # the band, which is the printed second-wind threshold rather than a
+    # number invented here.
+    ("wasted_heals", "heals on an ally above half hit points", "lower"),
+    ("wasted_hp", "...hit points spent on them", "lower"),
     ("dailies", "daily powers spent", "lower"),
     ("downed", "dropped to 0 hp", "lower"),
     # **The signal, and the reason the pair is printed together.** #303: dropping
@@ -812,10 +906,21 @@ def show(now: dict, was: dict | None) -> None:
                 new = cell[side][key]
                 prev = old.get(side, {}).get(key)
                 mark = ""
-                if prev is not None and want != "-" and new != prev:
+                # **`None` is a real value here and means "the question does
+                # not apply on this side".** `hp_per_surge` is `None` when no
+                # surge was spent, which is every monster side -- and the
+                # alternative was `max(1, surges)`, which printed the raw
+                # total wearing a rate's label. So it has to render, and it
+                # has to not be compared: `None < prev` raises, and the first
+                # version of this crashed the whole report after the surges
+                # line rather than printing a blank.
+                if (prev is not None and new is not None
+                        and want != "-" and new != prev):
                     better = (new < prev) if want == "lower" else (new > prev)
                     mark = "+" if better else "!"
-                line += f" {new:>9}{mark:<1}{'' if prev is None else f'{prev:>8}'}"
+                cell_now = "-" if new is None else f"{new}"
+                cell_was = "" if prev is None else f"{prev:>8}"
+                line += f" {cell_now:>9}{mark:<1}{cell_was}"
             print(line)
     if was is None:
         print("\nNo baseline recorded. --save to write one.")

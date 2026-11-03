@@ -34851,6 +34851,114 @@ def a_party_that_is_not_the_module_s_size_gets_the_page_s_rule(
     )
 
 
+def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) -> None:
+    """#324. Three surges were spent restoring zero hit points and nothing
+    in the scorecard could say so.
+
+    **The load-bearing assertion is the first pair, not the counts.**
+    `Healed` is a `Decision`: `resolve.heal` announces the *proposal*, lets a
+    row refuse or halve it, and only then assigns the real figures back onto
+    the event. So a `bus.on(Healed, ...)` listener and the logged event give
+    **different numbers for the same field**, and the difference is exactly
+    the waste this counter exists to find -- a listener reads ten hit points
+    restored for a heal that restored nothing.
+
+    Every other counter in `scorecard.py` subscribes (`surged`, `went_down`),
+    so subscribing is the natural thing to write here and is the wrong one.
+    This rule pins the distinction rather than the arithmetic, because an
+    assertion on the totals alone passes either way on a board where nothing
+    is at full hit points.
+
+    The last assertion is the edge that would be wrong in the quiet
+    direction: healing from below zero starts at **zero**, not at the
+    deficit, so a character revived from -5 has a pre-heal of 0 and is
+    correctly not counted as a wasteful heal.
+    """
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import Healed
+    from combat_engine.engine.resolve import heal
+
+    # -- the proposal/outcome split, which is the whole premise -----------
+    world = World(Grid(8, 8), Rng(1), Bus())
+    who = world.spawn()
+    world.add(who, Health(hp=61, max_hp=61))
+    heard: list[tuple[int, int]] = []
+    world.bus.on(Healed, lambda ev: heard.append((ev.amount, ev.hp)))
+    put_back = heal(world, who, who, 10, power="probe")
+    logged = [e for e in world.bus.log if isinstance(e, Healed)]
+
+    out.that(
+        put_back == 0 and bool(logged) and logged[0].amount == 0,
+        "a heal on a full-hp creature restores nothing, and the LOG says so",
+        f"returned {put_back}, logged amount "
+        f"{logged[0].amount if logged else 'nothing logged'}",
+    )
+    out.that(
+        bool(heard) and heard[0][0] == 10,
+        "while a listener saw the PROPOSAL -- so a subscribed counter is blind",
+        f"listener saw amount={heard[0][0] if heard else '-'}, "
+        f"log says amount={logged[0].amount if logged else '-'}",
+    )
+
+    def tally(cases: list[tuple[int, int, int]]) -> dict[str, int]:
+        """Run `_count_healing` over a board posed with the given heals."""
+        import scorecard as sc
+        w = World(Grid(8, 8), Rng(1), Bus())
+        pol = sc.Counted()
+        for start, mx, ask in cases:
+            e = w.spawn()
+            w.add(e, Health(hp=start, max_hp=mx))
+            heal(w, e, e, ask, power="probe")
+        sc._count_healing(w, pol)
+        side = sc.side_of(w, next(iter(w.entities)))
+        return {
+            "restored": pol.n[f"{side}/restored"],
+            "wasted": pol.n[f"{side}/wasted_heals"],
+            "wasted_hp": pol.n[f"{side}/wasted_hp"],
+        }
+
+    # -- a heal nobody needed, against one somebody did -------------------
+    full = tally([(61, 61, 10)])
+    out.that(
+        full["restored"] == 0 and full["wasted"] == 1,
+        "a heal on a full ally counts as wasted and as 0 restored",
+        f"{full}",
+    )
+    hurt = tally([(10, 60, 20)])
+    out.that(
+        hurt["restored"] == 20 and hurt["wasted"] == 0,
+        "and a heal on a badly hurt ally is neither",
+        f"{hurt}",
+    )
+
+    # -- the band is half, so just-over and just-under must differ -------
+    over = tally([(31, 60, 5)])
+    under = tally([(29, 60, 5)])
+    out.that(
+        over["wasted"] == 1 and under["wasted"] == 0,
+        "the band is half max hit points: 31/60 is wasteful, 29/60 is not",
+        f"over {over['wasted']}, under {under['wasted']}",
+    )
+
+    # -- the top-off: restores something, and is still the mistake -------
+    topped = tally([(42, 48, 10)])
+    out.that(
+        topped["restored"] == 6 and topped["wasted"] == 1
+        and topped["wasted_hp"] == 6,
+        "a 6-point top-off on a 42/48 ally restores 6 and is still counted",
+        f"{topped}",
+    )
+
+    # -- the edge that would be wrong quietly ----------------------------
+    revived = tally([(-5, 43, 12)])
+    out.that(
+        revived["restored"] == 12 and revived["wasted"] == 0,
+        "healing from below zero starts at 0, so a revive is not wasteful",
+        f"{revived}",
+    )
+
+
 def a_trait_fires_when_the_skill_challenge_it_waits_on_ends(out: Result) -> None:
     """#905. `m5581a6` is a phase change hung on a challenge resolving.
 
@@ -56946,6 +57054,10 @@ DRIVERS = {
     "challenge_ends": (
         a_trait_fires_when_the_skill_challenge_it_waits_on_ends,
         "a trait fires when the challenge it waits on ends (#905)",
+    ),
+    "healing_waste": (
+        wasted_healing_is_counted_off_the_log_and_not_off_a_listener,
+        "wasted healing is read off the log, not a listener (#324)",
     ),
     "challenge_costs_nothing": (
         a_non_combat_scene_does_not_spend_the_party_s_powers,
