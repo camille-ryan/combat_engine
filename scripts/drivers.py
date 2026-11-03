@@ -34851,6 +34851,183 @@ def a_party_that_is_not_the_module_s_size_gets_the_page_s_rule(
     )
 
 
+def dmg2_s_four_other_secondary_effects_each_do_their_own_thing(out: Result) -> None:
+    """#984. DMG2 prints five things a successful secondary check can buy and
+    one was built.
+
+    > *"a successful check with a secondary skill can accomplish one of the
+    > following effects: cancel out a failure with another skill; give one or
+    > more characters a bonus to a check with a primary skill; allow a
+    > character to reroll another skill check; open up the use of another
+    > skill in the challenge; increase the maximum number of successes that a
+    > primary skill can contribute."*
+
+    `Try.grants` is where a module picks -- **per skill**, because the book
+    lists them as alternatives for one check rather than a setting for the
+    whole challenge.
+
+    **Everything here goes through `module.parse`, not through a hand-built
+    `Scene`.** The first draft constructed `Scene(secondary=({"skill": ...},))`
+    directly and two assertions failed reading `bonus`: a dict only becomes a
+    `Try` inside `parse`, so `scene.tries` was empty and `grants_of` fell
+    back. Asserting through the caller is the only version that tests the
+    parse and the runtime agreeing.
+
+    **The control is that `bonus` is unchanged**, because `grants_of` falls
+    back to the scene's `secondary_grants` when a skill says nothing -- which
+    is every converted challenge.
+    """
+    import dataclasses
+    from pathlib import Path
+
+    from combat_engine.story import Party
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import table as tbl
+    from combat_engine.story.module import ModuleError, parse
+
+    def built(scene: dict) -> Any:
+        """The parsed scene, through the real door."""
+        doc = {"id": "m", "name": "M", "party_size": 5, "start": "c",
+               "scenes": [{"id": "c", "kind": "skill_challenge", "name": "C",
+                           "complexity": 1, **scene}]}
+        return parse(doc, Path("<driver>")).scenes["c"]
+
+    # -- the control: a challenge written the old way is untouched --------
+    plain = built({"primary": ["athletics"], "secondary": ["insight"]})
+    out.that(
+        plain.grants_of("insight") == ("bonus", ""),
+        "a secondary that names no effect still grants the +2",
+        f"{plain.grants_of('insight')}",
+    )
+
+    # -- cancel, driven through `attempt` so the ENGINE does the work ----
+    # **The first draft did this arithmetic in the assertion** --
+    # `run.failures = max(0, run.failures - 1)` -- which tests the test. A
+    # plant removing the effect from `attempt` would have stayed green. Seed
+    # 3 is a comfortable secondary success (d20 12, total 15 vs 9); seed 5 is
+    # a failure (d20 1), measured over eleven seeds.
+    party = Party.of(level=2, seed=7)
+    cancels = built({"primary": ["athletics"],
+                     "secondary": [{"skill": "insight", "grants": "cancel"}]})
+    out.that(
+        cancels.grants_of("insight") == ("cancel", ""),
+        "a skill can name `cancel`, and it aims at nothing",
+        f"{cancels.grants_of('insight')}",
+    )
+    run = ch.open_challenge(cancels, party_level=2)
+    run.failures = 2
+    made = ch.attempt(run, tbl.lay(party, seed=3), 0, "insight")
+    out.that(
+        made.counted == "assist" and run.failures == 1,
+        "a successful `cancel` takes a failure back off, through attempt",
+        f"counted={made.counted} failures 2 -> {run.failures}",
+    )
+    bare = ch.open_challenge(cancels, party_level=2)
+    made = ch.attempt(bare, tbl.lay(party, seed=3), 0, "insight")
+    out.that(
+        made.counted == "assist" and bare.failures == 0,
+        "and with none on the tally it floors at zero, not below",
+        f"counted={made.counted} failures={bare.failures}",
+    )
+
+    # -- open, also through `attempt` ------------------------------------
+    opens = built({"primary": ["athletics"],
+                   "secondary": [{"skill": "insight", "grants": "open",
+                                  "grants_to": "arcana"}]})
+    run = ch.open_challenge(opens, party_level=2)
+    out.that(
+        ch.band_of(run, "arcana") == "",
+        "a skill on neither list rolls against nothing to begin with",
+        f"{ch.band_of(run, 'arcana')!r}",
+    )
+    made = ch.attempt(run, tbl.lay(party, seed=3), 0, "insight")
+    out.that(
+        made.counted == "assist"
+        and ch.band_of(run, "arcana") == run.band_now
+        and "arcana" in run.opened,
+        "and a successful `open` makes it a primary at the band reached",
+        f"counted={made.counted} opened={sorted(run.opened)} "
+        f"band {ch.band_of(run, 'arcana')!r} vs {run.band_now!r}",
+    )
+    shut = ch.open_challenge(opens, party_level=2)
+    made = ch.attempt(shut, tbl.lay(party, seed=5), 0, "insight")
+    out.that(
+        made.counted == "failure" and not shut.opened,
+        "while a FAILED secondary opens nothing",
+        f"counted={made.counted} opened={sorted(shut.opened)}",
+    )
+
+    # -- raise_cap, asserted by what the cap then REFUSES ----------------
+    lifts = built({"primary": ["athletics", "endurance"],
+                   "secondary": [{"skill": "insight", "grants": "raise_cap",
+                                  "grants_to": "athletics"}],
+                   "caps": [["athletics", 1]]})
+    out.that(
+        lifts.cap_for("athletics") == 1,
+        "a capped primary may contribute once",
+        f"{lifts.cap_for('athletics')}",
+    )
+    # Spent its one success, so the next try is refused.
+    run = ch.open_challenge(lifts, party_level=2)
+    run.won_with["athletics"] = 1
+    made = ch.attempt(run, tbl.lay(party, seed=3), 0, "athletics")
+    out.that(
+        made.counted == "skill capped",
+        "and once spent, a further try is refused",
+        f"counted={made.counted!r}",
+    )
+    # Same state, but a successful `raise_cap` first.
+    run = ch.open_challenge(lifts, party_level=2)
+    helped = ch.attempt(run, tbl.lay(party, seed=3), 0, "insight")
+    run.won_with["athletics"] = 1
+    made = ch.attempt(run, tbl.lay(party, seed=3), 1, "athletics")
+    out.that(
+        helped.counted == "assist" and made.counted != "skill capped",
+        "after `raise_cap` the same try is allowed -- the refusal is the proof",
+        f"assist={helped.counted} then counted={made.counted!r}, "
+        f"cap_bonus={run.cap_bonus}",
+    )
+
+    # -- reroll, which is the one with its own record ---------------------
+    again = built({"primary": ["athletics"],
+                   "secondary": [{"skill": "insight", "grants": "reroll"}]})
+    out.that(
+        again.grants_of("insight") == ("reroll", ""),
+        "a skill can name `reroll`",
+        f"{again.grants_of('insight')}",
+    )
+    out.that(
+        "rerolled" in {f.name for f in dataclasses.fields(ch.Attempt)},
+        "and an Attempt records that one was spent, so it is observable",
+        f"{sorted(f.name for f in dataclasses.fields(ch.Attempt))}",
+    )
+
+    # -- the refusals, each a mistake that would otherwise be silent -----
+    def refuses(scene: dict, because: str) -> tuple[bool, str]:
+        try:
+            built(scene)
+        except ModuleError as ex:
+            return because in str(ex).lower(), str(ex)[:140]
+        return False, "parsed without complaint"
+
+    for spec, because, what in (
+        ({"primary": ["athletics"],
+          "secondary": [{"skill": "insight", "grants": "nonsense"}]},
+         "not one of", "an effect the book does not print is refused"),
+        ({"primary": ["athletics"],
+          "secondary": [{"skill": "insight", "grants": "open"}]},
+         "no grants_to", "`open` with nothing to open is refused"),
+        ({"primary": ["athletics"],
+          "secondary": [{"skill": "insight", "grants": "cancel",
+                         "grants_to": "arcana"}]},
+         "aims at no skill", "`cancel` aimed at a skill is refused"),
+        ({"primary": [{"skill": "athletics", "grants": "cancel"}]},
+         "secondary", "a PRIMARY carrying an effect is refused"),
+    ):
+        red, said = refuses(spec, because)
+        out.that(red, what, said)
+
+
 def a_block_can_credit_a_feat_for_what_the_power_lays(out: Result) -> None:
     """#550. Camille picked (b): one block-scoped attribution.
 
@@ -57204,6 +57381,10 @@ DRIVERS = {
     "feat_credit": (
         a_block_can_credit_a_feat_for_what_the_power_lays,
         "a block credits a feat for what the power lays (#550)",
+    ),
+    "secondary_effects": (
+        dmg2_s_four_other_secondary_effects_each_do_their_own_thing,
+        "DMG2's other four secondary effects each do their own thing (#984)",
     ),
     "challenge_costs_nothing": (
         a_non_combat_scene_does_not_spend_the_party_s_powers,

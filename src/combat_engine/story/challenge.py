@@ -39,8 +39,13 @@ named first barely come up. Capping each secondary at one use does not fix it:
 there are usually three of them and complexity 1 needs four successes.
 
 So the default is `bonus`: a secondary success adds +2 to the next primary
-check and the challenge is still decided on its own skills. A module that
-plainly means otherwise sets `secondary_grants: "success"`.
+check and the challenge is still decided on its own skills.
+
+**The `success` reading is gone**, retired in `b2d63e85` -- this paragraph
+used to end "a module that plainly means otherwise sets
+`secondary_grants: \"success\"`", and such a module is now refused. What a
+module writes instead is `grants` on the skill itself, from DMG2's five
+printed effects: `bonus`, `cancel`, `reroll`, `open`, `raise_cap`. #984.
 
 ## A skill on neither list is refused, not failed
 
@@ -89,6 +94,11 @@ class Attempt:
     #: The +2 a prior secondary success handed this check, if any.
     carried: int = 0
     success: bool = False
+    #: True when a banked `reroll` was spent on this check. Recorded rather
+    #: than left implicit: a reroll that leaves no trace is an effect
+    #: nothing can observe, so a driver would have to diff `run.rerolls`
+    #: to see it and a player would never be told it happened.
+    rerolled: bool = False
     #: `"success"`, `"failure"`, `"assist"` (a secondary success under
     #: `bonus`), or why it counted for nothing -- `"not a listed skill"`,
     #: `"secondary already used"`, `"over"`.
@@ -103,9 +113,11 @@ class Attempt:
         if not self.rolled:
             return f"{mark} {self.cls:<9} {self.skill:<13} ({self.counted})"
         carry = f" +{self.carried} carried" if self.carried else ""
+        again = " (rerolled)" if self.rerolled else ""
         return (
             f"{mark} {self.cls:<9} {self.skill:<13} {self.band:<8} "
-            f"d20={self.natural:<2} total={self.total:<3} vs {self.dc}{carry}"
+            f"d20={self.natural:<2} total={self.total:<3} vs {self.dc}"
+            f"{carry}{again}"
         )
 
 
@@ -136,6 +148,18 @@ class Running:
     #: *"if only one skill does the heavy lifting for the challenge, you
     #: need to rethink the challenge."* #984.
     won_with: dict[str, int] = field(default_factory=dict)
+    #: Skills a secondary's `open` effect has made usable as primaries.
+    #: DMG2: *"open up the use of another skill in the challenge."* Kept
+    #: here rather than mutating `scene.primary`, because a `Scene` is
+    #: frozen and is the module's statement -- what the party unlocked is a
+    #: fact about this run. #984.
+    opened: set[str] = field(default_factory=set)
+    #: Extra successes a skill may contribute, over `Scene.cap_for`, from a
+    #: secondary's `raise_cap`. DMG2's fifth printed effect.
+    cap_bonus: dict[str, int] = field(default_factory=dict)
+    #: Rerolls banked by a secondary's `reroll` effect, each spent on the
+    #: next primary check that would otherwise fail.
+    rerolls: int = 0
 
     @property
     def over(self) -> bool:
@@ -178,9 +202,16 @@ def open_challenge(scene: Scene, *, party_level: int = 1,
 
 
 def band_of(run: Running, skill: str) -> str:
-    """Which DC a skill would roll against, or `""` if it is not listed."""
+    """Which DC a skill would roll against, or `""` if it is not listed.
+
+    **`run.opened` counts as primary**, which is what DMG2's *"open up the
+    use of another skill in the challenge"* buys: the skill was not listed
+    and now scores, at the band the challenge has reached. Read off the run
+    rather than the scene because a `Scene` is frozen and states what the
+    module wrote; what the party unlocked belongs to this playthrough. #984.
+    """
     skill = skill.lower()
-    if skill in run.scene.primary:
+    if skill in run.scene.primary or skill in run.opened:
         return run.band_now
     if skill in run.scene.secondary:
         return "easy"
@@ -198,8 +229,11 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
     """
     skill = skill.lower()
     cls = table.party.sheets[slot].cls
-    is_primary = skill in run.scene.primary
-    is_secondary = skill in run.scene.secondary
+    # An `open`ed skill is a primary for the rest of the challenge -- see
+    # `band_of`, which has to agree with this or a skill would roll at a band
+    # it cannot score at.
+    is_primary = skill in run.scene.primary or skill in run.opened
+    is_secondary = skill in run.scene.secondary and not is_primary
 
     def refuse(why: str) -> Attempt:
         made = Attempt(slot=slot, cls=cls, skill=skill, band="-", dc=0, counted=why)
@@ -215,7 +249,13 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
     # **A primary that has given all it can.** Refused before the roll,
     # like every other refusal here, so a capped skill does not spend a
     # draw from the scene's stream and move every roll after it.
+    # `cap_bonus` is DMG2's fifth printed effect -- a secondary that raises
+    # how much a primary may contribute. Added to the module's figure rather
+    # than replacing it, and only when there is a cap to raise: lifting an
+    # uncapped skill is meaningless and would read as a cap of 1.
     cap = run.scene.cap_for(skill) if is_primary else 0
+    if cap:
+        cap += run.cap_bonus.get(skill, 0)
     if cap and run.won_with.get(skill, 0) >= cap:
         return refuse("skill capped")
 
@@ -239,6 +279,23 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
     total = rolled.total + carried
     success = total >= target
 
+    # **A banked reroll is spent on a primary that would otherwise fail**, and
+    # the second roll stands whatever it is -- DMG2: *"allow a character to
+    # reroll another skill check"*, which is a reroll and not a best-of-two
+    # with a floor. Spent before the tally so the failure never lands.
+    #
+    # Rolled through `table.check` again rather than re-reading the first
+    # roll, because a reroll is a new die: the carry is already inside
+    # `target` and the band has not moved, so the second attempt faces
+    # exactly the same number as the first.
+    rerolled = False
+    if is_primary and not success and run.rerolls:
+        run.rerolls -= 1
+        rerolled = True
+        rolled = table.check(slot, skill, target - carried if carried else target)
+        total = rolled.total + carried
+        success = total >= target
+
     if is_primary:
         run.primaries += 1
         run.pending_bonus = 0
@@ -253,8 +310,25 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
         # was retired on Camille's call -- see `module.SECONDARY_GRANTS`
         # for the three reasons -- so there is one branch here where there
         # were two.
+        #
+        # **Which assistance, from DMG2's five.** `grants_of` answers
+        # `("bonus", "")` for every converted challenge, so this reads as
+        # it always did until a module writes a `grants`. #984.
         run.spent.add(skill)
-        run.pending_bonus = SECONDARY_BONUS
+        effect, aimed = run.scene.grants_of(skill)
+        if effect == "cancel":
+            # *"Cancel out a failure with another skill."* Floored at zero:
+            # a challenge with no failures yet has none to take back, and a
+            # negative tally would make the next real failure free.
+            run.failures = max(0, run.failures - 1)
+        elif effect == "reroll":
+            run.rerolls += 1
+        elif effect == "open":
+            run.opened.add(aimed)
+        elif effect == "raise_cap":
+            run.cap_bonus[aimed] = run.cap_bonus.get(aimed, 0) + 1
+        else:
+            run.pending_bonus = SECONDARY_BONUS
         counted = "assist"
     else:
         # A failed secondary costs a failure and does **not** burn the cap.
@@ -265,7 +339,7 @@ def attempt(run: Running, table: Table, slot: int, skill: str) -> Attempt:
     made = Attempt(
         slot=slot, cls=cls, skill=skill, band=band, dc=target,
         natural=rolled.natural, total=total, carried=carried,
-        success=success, counted=counted,
+        success=success, rerolled=rerolled, counted=counted,
     )
     run.attempts.append(made)
     # **Announced here rather than in `play`, because `play` is not the only

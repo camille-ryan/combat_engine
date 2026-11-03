@@ -197,6 +197,28 @@ SECONDARY_GRANTS = ("bonus",)
 #: What a secondary success adds to the next primary check under `bonus`.
 SECONDARY_BONUS = 2
 
+#: DMG2's five printed effects a successful secondary check can accomplish,
+#: as `Try.grants`. The book lists them as alternatives for one check, so a
+#: module picks one **per skill** rather than one per challenge -- which is
+#: the difference between this and `SECONDARY_GRANTS`, the older scene-wide
+#: field that now holds only `bonus`.
+#:
+#: * `bonus` -- +2 to the next primary check. The default and the only one
+#:   any converted challenge uses.
+#: * `cancel` -- take a failure back off the tally.
+#: * `reroll` -- the next primary check that fails is rolled again.
+#: * `open` -- `grants_to` becomes usable as a primary for the rest of the
+#:   challenge.
+#: * `raise_cap` -- `grants_to`'s success cap goes up by one.
+#:
+#: **Two of them need a `grants_to` and three must not have one**, which is
+#: checked at parse: an effect aimed at nothing, or carrying a target it
+#: cannot use, is an authoring mistake that would otherwise be silent.
+SECONDARY_EFFECTS = ("bonus", "cancel", "reroll", "open", "raise_cap")
+
+#: The effects that name another skill. The rest are refused one.
+SECONDARY_NEEDS_TARGET = ("open", "raise_cap")
+
 
 class ModuleError(Exception):
     """A module file that cannot be played, with every reason at once."""
@@ -662,6 +684,26 @@ class Try:
     #: challenge with no phrasings simply cannot run beats; it still rolls
     #: exactly as it does today. #932.
     what: str = ""
+    #: **What a successful check with this secondary skill accomplishes**,
+    #: from `SECONDARY_EFFECTS`. DMG2: *"a successful check with a secondary
+    #: skill can accomplish one of the following effects"* -- so the choice
+    #: is printed **per skill**, not per challenge, which is why it lives
+    #: here and not beside `Scene.secondary_grants`.
+    #:
+    #: Empty means *use the scene's `secondary_grants`*, which is `bonus`
+    #: and is what every converted challenge gets. So this field changes
+    #: nothing until a module writes it. #984.
+    #:
+    #: Ignored on a **primary** skill: the printed list is about what a
+    #: secondary buys, and a primary already scores. Refused at parse
+    #: rather than dropped, so a module that writes one in the wrong place
+    #: hears about it.
+    grants: str = ""
+    #: Which skill the effect is aimed at, for the two that need a target:
+    #: `open` says which skill becomes usable, `raise_cap` says whose cap
+    #: rises. Empty for the three that do not. Refused at parse if the
+    #: effect needs one and it is missing, or carries one it cannot use.
+    grants_to: str = ""
 
 
 @dataclass(frozen=True)
@@ -1137,6 +1179,24 @@ class Scene:
             if said.skill == skill.lower():
                 return said.win if won else said.lose
         return ""
+
+    def grants_of(self, skill: str) -> tuple[str, str]:
+        """What a successful secondary check with this skill buys.
+
+        `(effect, aimed_at)`, from `SECONDARY_EFFECTS`. Falls back to the
+        scene's `secondary_grants` -- `bonus` -- when the skill said
+        nothing, which is every converted challenge, so this answers
+        `("bonus", "")` for all of them and changes nothing until a module
+        writes a `grants`.
+
+        A sibling of `means` rather than part of it, because that one
+        answers what to *say* and this one what to *do*, and a caller
+        wanting one almost never wants the other.
+        """
+        for said in self.tries:
+            if said.skill == skill.lower() and said.grants:
+                return said.grants, said.grants_to
+        return self.secondary_grants, ""
 
     def counts_toward(self, party_level: int) -> int:
         """How many encounters this scene is worth toward a milestone.
@@ -1797,11 +1857,41 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                         f"{where}: a {key} entry has no skill: {item!r}")
                     continue
                 names.append(skill)
+                grants = str(item.get("grants", "")).strip().lower()
+                aimed = str(item.get("grants_to", "")).strip().lower()
+                if grants and grants not in SECONDARY_EFFECTS:
+                    problems.append(
+                        f"{where}: {key} '{skill}' grants {grants!r}, which is "
+                        f"not one of {', '.join(SECONDARY_EFFECTS)}")
+                    grants = ""
+                # **A primary may not carry one.** DMG2's list is about what a
+                # *secondary* buys; a primary already scores. Dropping it
+                # silently would leave a module believing a written effect
+                # fires, which is the shape the `unused` table exists for.
+                if grants and key == "primary":
+                    problems.append(
+                        f"{where}: primary '{skill}' carries grants "
+                        f"{grants!r} -- the printed effects are what a "
+                        f"SECONDARY check buys, and a primary scores already")
+                    grants = ""
+                if grants in SECONDARY_NEEDS_TARGET and not aimed:
+                    problems.append(
+                        f"{where}: {key} '{skill}' grants {grants!r} and names "
+                        f"no grants_to -- that effect is aimed at a skill")
+                    grants = ""
+                if aimed and grants not in SECONDARY_NEEDS_TARGET:
+                    problems.append(
+                        f"{where}: {key} '{skill}' names grants_to {aimed!r} "
+                        f"but grants {grants or 'nothing'!r}, which aims at "
+                        f"no skill")
+                    aimed = ""
                 said.append(Try(
                     skill=skill,
                     win=str(item.get("win", "")).strip(),
                     lose=str(item.get("lose", "")).strip(),
-                    what=str(item.get("what", "")).strip()))
+                    what=str(item.get("what", "")).strip(),
+                    grants=grants,
+                    grants_to=aimed))
                 continue
             if str(item).strip():
                 names.append(str(item).strip().lower())
