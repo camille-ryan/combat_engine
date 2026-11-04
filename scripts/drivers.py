@@ -56598,6 +56598,157 @@ def a_brute_minion_reads_the_brute_column(out: Result) -> None:
              " passing because nothing converts at all")
 
 
+def a_weapon_clause_reaches_every_power(out: Result) -> None:
+    """A substituted clause speaks at `c.damage`, not only where a row
+    happened to wrap it. `#954`.
+
+    `#928` built the key shape -- `c.pre_empt(weapon="w3661", ...)` keys a
+    clause on the weapon in hand, so it reaches every attack made with it
+    without being written into any row. `#954` is the half it was missing,
+    and `f959`'s docstring has the measurement: **34** `instead_of` call
+    sites across the tree, of which **2** are `instead_of("damage")` -- one
+    of them `engine/basic.py:87`. So a weapon's trade was consulted for a
+    basic attack and skipped by every other weapon power, which is why
+    `f959` carries `dropped=`.
+
+    `c.damage` now consults the registry itself, **through `instead_of`**
+    rather than with a second lookup, so the keys, the ordering, the 1-based
+    index, the forced-clause path and the `picked_what != what` guard are
+    all the same code.
+
+    **THE assertion is `NO_MATCH`, and the first draft of this rule did not
+    have it.** Three plants were run against a probe that only exercised the
+    case where a clause *applies*, and the two latch plants came back
+    **green** -- because when a clause applies the default never runs. The
+    latch exists for the opposite case: a variant that names a clause for
+    some *other* `what` falls through to the default, and the default **is**
+    `self.damage`, which re-enters. Without the latch that recurses until
+    Python stops it, and with the reading added both plants raise
+    `RecursionError`.
+
+    Two things a plant also corrected, recorded so they are not re-argued:
+
+    * **`self.variant` in `c.damage` is a fast path, not the guard.**
+      Removing it leaves every reading here identical, because
+      `_instead_of`'s range check rejects variant 0 on its own -- exactly
+      what `instead_of`'s own equivalent line says of itself. What it buys
+      is not taking an extra call through `instead_of` on each of the 4,776
+      damage sites.
+    * **the latch has one owner.** The first draft set it in `c.damage`
+      *and* in `instead_of`; the second write was redundant because the very
+      next call makes the first. `c.damage` reads it, `instead_of` writes it.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content import loader
+    from combat_engine.engine import Bus, Rng, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.types import Team
+
+    def board(what: str = "damage") -> tuple:
+        """A hero, a victim, and one clause keyed on a weapon in hand.
+
+        `what` names the clause's slot, so the non-matching case is the same
+        board with one word changed rather than a second fixture.
+        """
+        world = World(Grid(24, 16), Rng(3), Bus())
+        hero = loader.spawn(world, "m1000", (2, 8), team=Team.PC)
+        foe = loader.spawn(world, "m1000", (3, 8), team=Team.ENEMY)
+        ran: list[int] = []
+
+        def clause(using: Cast) -> int:
+            """The registered substitution. Returns 0 damage, like a real one.
+
+            A named function rather than `lambda using: ran.append(1) or 0`,
+            which `ty` reads as passing `append`'s return into a position
+            that wants an `int`. The `or 0` was load-bearing only because a
+            lambda cannot hold two statements.
+            """
+            ran.append(1)
+            return 0
+
+        world.need(hero, Powers).pre_empts.setdefault(
+            ("w:probe", what), []).append((clause, "probe"))
+        return world, hero, foe, ran
+
+    def swinging(world, hero: int, foe: int, variant: int):  # noqa: ANN001, ANN202
+        c = Cast(world=world, me=hero, ref="probe:row", target=foe)
+        # The weapon key, as `_clause_keys` would build it from `Gear.held`.
+        # Stubbed rather than equipped so the reading is about the *read* and
+        # not about chargen handing over the right arm.
+        #
+        # Ignored inline with the reason rather than blessed into the
+        # baseline: `ty` types an instance attribute holding a method as the
+        # defining function, so any replacement is "not assignable" however
+        # well it matches. #305's rule -- an inline ignore says which write
+        # and why, where a baseline entry is a count somebody has to go and
+        # look up.
+        c._clause_keys = lambda: ["probe:row", "w:probe"]  # ty: ignore[invalid-assignment]
+        c.variant = variant
+        return c
+
+    # -- the printed card, when nobody chose a substitution ---------------
+    world, hero, foe, ran = board()
+    was = world.need(foe, Health).hp
+    swinging(world, hero, foe, 0).damage(5, 0)
+    plain = was - world.need(foe, Health).hp
+    out.that(plain == 5 and not ran,
+             "the floor: variant 0 deals the printed damage and does NOT"
+             " consult the registry -- the card as printed, which is what"
+             " every call in every fight does bar the handful where a"
+             " substitution was picked",
+             f"dealt {plain}, clause ran {len(ran)}x")
+
+    # -- THE central read: a plain c.damage honours the clause ------------
+    w2, h2, f2, ran2 = board()
+    had = w2.need(f2, Health).hp
+    swinging(w2, h2, f2, 1).damage(5, 0)
+    out.that(ran2 == [1] and w2.need(f2, Health).hp == had,
+             "THE assertion -- a plain `c.damage` call runs the substituted"
+             " clause and deals NO damage. Before this the registration was"
+             " consulted only where a row wrote `instead_of(\"damage\")`,"
+             " which is 2 of 34 call sites",
+             f"clause ran {len(ran2)}x, hp {had} -> {w2.need(f2, Health).hp}")
+
+    # -- the wrapped row still applies it exactly once --------------------
+    w3, h3, f3, ran3 = board()
+    c3 = swinging(w3, h3, f3, 1)
+    c3.instead_of("damage", lambda: c3.damage(5, 0))
+    out.that(ran3 == [1],
+             "a row that ALREADY wraps its damage -- `basic.py:87` is one of"
+             " two -- applies the clause once and not twice, which is the"
+             " double-application hazard `#954` named first",
+             f"clause ran {len(ran3)}x")
+
+    # -- THE latch's own case: a variant naming a different clause --------
+    w4, h4, f4, _ran4 = board(what="pull")
+    c4 = swinging(w4, h4, f4, 1)
+    left = w4.need(f4, Health).hp
+    recursed = False
+    try:
+        c4.damage(5, 0)
+    except RecursionError:
+        recursed = True
+    out.that(not recursed and left - w4.need(f4, Health).hp == 5,
+             "THE latch assertion -- a variant naming a clause for some"
+             " OTHER slot falls through to the default, and the default IS"
+             " `self.damage`. Without the latch that re-enters and recurses"
+             " until Python stops it; the printed damage must simply land."
+             " The first draft of this rule had no such reading and two"
+             " latch plants came back GREEN",
+             f"recursed={recursed},"
+             f" dealt {left - w4.need(f4, Health).hp}")
+
+    # -- the latch is never left set --------------------------------------
+    out.that(c3._substituting is False and c4._substituting is False,
+             "and the latch is clear afterwards on both paths -- one left"
+             " set would silence every later damage substitution in the"
+             " fight, which is why `instead_of` writes it under"
+             " `try`/`finally`",
+             f"{c3._substituting} / {c4._substituting}")
+
+
 def a_party_wears_the_same_kit_all_day(out: Result) -> None:
     """A party's magic items survive the day. `#1101`.
 
@@ -61069,6 +61220,12 @@ DRIVERS = {
         a_regions_damage_is_the_damage_it_prints,
         "a region's damage column holds the damage it prints, and the tier"
         " scaling with it (#1096)",
+    ),
+    "weapon_clause": (
+        a_weapon_clause_reaches_every_power,
+        "a clause keyed on a weapon speaks at `c.damage`, so it reaches"
+        " every weapon power and not only the 2 of 34 rows that wrapped"
+        " their damage (#954, #928)",
     ),
     "party_kit": (
         a_party_wears_the_same_kit_all_day,

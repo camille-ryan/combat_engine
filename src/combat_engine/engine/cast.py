@@ -428,6 +428,27 @@ class Cast:
     #: body is not. A body never compares this directly -- `c.instead_of`
     #: is the read.
     variant: int = 0
+    #: True while a `"damage"` substitution is being resolved, so the central
+    #: read in `c.damage` does not fire a second time.
+    #:
+    #: **A per-call latch and not a per-row flag**, which `#954` named as the
+    #: first of its two hazards. Two call sites already wrap their damage in
+    #: `c.instead_of("damage", ...)` -- `engine/basic.py:87`, the basic
+    #: attack, is one -- so without this the inner `c.damage` consults the
+    #: registry again, finds the same clause, and applies it twice. Set for
+    #: the whole of `instead_of("damage", ...)`, the default branch
+    #: included: when no clause applies, the default *is* the `c.damage`
+    #: call, and that call must not go looking on its own behalf.
+    #:
+    #: **Underscored, so it is not row vocabulary.** `scripts/symbols.py`
+    #: refuses an uncategorised public member of `Cast` -- *"a verb nobody
+    #: can find is a verb somebody files a gap for"* -- and it was right to
+    #: red on the first draft's bare name: this is an internal latch, not
+    #: something a card is written against. Describing it in
+    #: `vocab.CONTEXT` would have made it findable as a verb, which is the
+    #: opposite of what it is. `c.instead_of` and `c.damage` are the only
+    #: two readers. #954.
+    _substituting: bool = False
     #: Which feat of each bracketed category this use is applying, by
     #: category. Written by `c.declare` and read by nothing else -- see
     #: there for why the answer is settled once per use rather than once
@@ -4028,6 +4049,48 @@ class Cast:
         # onto this.
         def _reprice(total: int, _b: int = bonus, _e: int = enh) -> int:
             return total + _b + _e
+        # **The central read: a clause registered against "damage" speaks
+        # here, not only where a row happened to call `instead_of`.** `#928`
+        # built the key shape -- `c.pre_empt(weapon=...)` reaches every
+        # attack made with a weapon -- and `#954` is the half it was missing:
+        # measured across the tree, 34 `instead_of` call sites and only
+        # **2** of them `instead_of("damage")`, so a weapon's trade was
+        # consulted for a basic attack and skipped by every other power.
+        #
+        # **`self.variant` here is a fast path and NOT the guard**, which a
+        # plant proved and which `instead_of`'s own equivalent line says of
+        # itself in the same words: removing it leaves every reading
+        # identical, because `_instead_of`'s range check rejects variant 0 on
+        # its own. What it buys is the cost argument -- without it every one
+        # of the 4,776 damage calls would take an extra call through
+        # `instead_of` and back. Do not read it as the thing enforcing
+        # "variant 0 is the card as printed".
+        #
+        # **Through `instead_of` rather than a second lookup**, so the keys,
+        # the ordering, the 1-based index, the forced-clause path and the
+        # `picked_what != what` guard are the same code the row-level read
+        # uses. A parallel implementation here is how the two would come to
+        # disagree about what a variant means.
+        #
+        # **The latch is READ here and WRITTEN by `instead_of`**, which is
+        # the other thing a plant found: setting it here too was redundant,
+        # because the very next call sets it. One owner for the flag, read
+        # in two places. Without the read, the two existing
+        # `instead_of("damage")` wrappers would apply a clause twice --
+        # their default branch is itself a `c.damage`.
+        #
+        # And the decision stays the menu's: this reads `self.variant`,
+        # which `dsl.use` settled from the chosen `Action` before the body
+        # ran. It asks nobody anything, so nothing is smuggled past the
+        # scorer -- `#954`'s second hazard.
+        if self.variant and not self._substituting:
+            return self.instead_of(
+                "damage",
+                lambda: self.damage(
+                    dice, bonus, dtype=dtype, dtypes=dtypes, on=on,
+                    detail=detail),
+                on=on,
+            )
         # A card naming two types has said what it deals, so the weapon's
         # own type gets no vote -- the rule `_typed` already applies to one
         # named type. A *standing* retype of two types answers here, and
@@ -10678,6 +10741,24 @@ class Cast:
         target substitutes for every one of them without asking again,
         which is the bug a mid-body prompt would have had.
         """
+        # **The latch, for the whole call and both branches.** See
+        # `Cast._substituting`: the default branch of a `"damage"` call is
+        # itself a `c.damage`, and the central read there must not consult
+        # the registry on its own behalf. `try/finally` because a clause may
+        # raise and a latch left set would silence every later damage
+        # substitution in the fight. #954.
+        if what == "damage" and not self._substituting:
+            self._substituting = True
+            try:
+                return self._instead_of(what, default, on=on)
+            finally:
+                self._substituting = False
+        return self._instead_of(what, default, on=on)
+
+    def _instead_of(
+        self, what: str, default: Callable[[], Any], *, on: int | None = None
+    ) -> Any:
+        """`instead_of`'s body, with the latch already decided."""
         from .components import Powers
 
         # **An imposed substitution is read first and is not a choice.**

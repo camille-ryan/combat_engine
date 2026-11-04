@@ -1338,7 +1338,14 @@ class Powers:
     #: clause -- `p10439`'s shift is replaced by two of them. They do not
     #: combine: substituting one clause twice is a choice among them, which
     #: is why the menu is a flat list and not a product.
-    pre_empts: dict[tuple[str, str], list[tuple[Callable[[], Any], str]]] = field(
+    #: **The clause takes the using `Cast`, and this said it took nothing.**
+    #: `Cast._instead_of` calls `clause(self)` and `picked(self)` -- a
+    #: substitution has to know who is being hit -- so `Callable[[], Any]`
+    #: was wrong from the start and nothing noticed, because every caller
+    #: passed a bare `lambda using: ...` that `ty` never had to reconcile
+    #: against a typed append. `#954`'s driver rule appends a properly
+    #: annotated function and the declaration went red at once. #954.
+    pre_empts: dict[tuple[str, str], list[tuple[Callable[[Any], Any], str]]] = field(
         default_factory=dict
     )
     #: The same substitutions, **imposed rather than offered**.
@@ -1358,7 +1365,9 @@ class Powers:
     #: it cannot be one of the options a variant indexes.
     #:
     #: Written by `c.pre_empt(forced=True)`. #712.
-    forced_clauses: dict[tuple[str, str], list[tuple[Callable[[], Any], str]]] = field(
+    #: Same correction as `pre_empts` above and for the same reason: the
+    #: clause is handed the using `Cast`. #954.
+    forced_clauses: dict[tuple[str, str], list[tuple[Callable[[Any], Any], str]]] = field(
         default_factory=dict
     )
     #: A spellbook: rows the creature **owns and has not prepared**.
