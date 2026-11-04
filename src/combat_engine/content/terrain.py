@@ -31,12 +31,15 @@ from combat_engine.engine.components import (
     Ident,
     Initiative,
     Position,
+    Scenery,
     Trap,
 )
 from combat_engine.engine.events import EnterSquare, RoundStart, TurnStart
 from combat_engine.engine.grid import Square
+from combat_engine.engine.movement import place
 from combat_engine.engine.resolve import attack
 from combat_engine.engine.traps import suppressed
+from combat_engine.engine.types import Size
 
 #: What rough going is made of. `Grid.difficult` carries a label and
 #: `c.ignores_difficult(kind)` reads it, so a board where every rough
@@ -152,6 +155,61 @@ def dress(
                 arm(world, sq, level=level, pick=pick)
 
     world.bus.on(RoundStart, lay, once=True)
+
+
+def put(world: World, square: Square, *, kind: str = "object",
+        hp: int = 0, size: Size = Size.MEDIUM, fastened: bool = False,
+        solid: bool = True, by: int = 0, ref: str = "") -> int:
+    """Stand something in the room that no power put there. #988.
+
+    A crate, a statue, a barricade. `Scenery` has been declared and
+    documented since `#714` and **constructed nowhere** -- zero call sites
+    outside its own definition, which is what `#988` is filed about and
+    what kept four encounter objectives unbuildable: destroy the thing,
+    carry the thing, escort a ward, protect another.
+
+    **`hp` is what makes it destructible, and it is opt-in.** With `hp=0`
+    the thing has no `Health`, which is `Scenery`'s documented default --
+    *"no turn, no initiative slot, no vote on whether the fight is over,
+    and nothing can attack it"*. A statue nobody can break is the common
+    case and costs nothing.
+
+    With `hp`, it gets `Health` so it can be aimed at and broken -- and
+    `query.combatants` subtracts `Scenery` for exactly that reason, the
+    fourth subtraction after a companion, a barrier and a conjuration.
+    Without that subtraction a crate with hit points lands in the
+    initiative roster and is asked what it wants to do.
+
+    **No `Side`, ever.** That is what keeps it out of
+    `Encounter.winner`'s reckoning: `team()` answers `None` for a thing
+    with no side and `None` is discarded, so a crate left standing cannot
+    stop a fight ending.
+
+    `hp` is the caller's, not a curve: the printed DCs for breaking a thing
+    are **flat rather than by level** -- 16 for a wooden door at every tier
+    -- so there is no level maths to apply here and inventing one would be
+    the fabrication this repo keeps warning about. A module or an
+    objective states what the thing can take.
+    """
+    bits: list[object] = [
+        Ident(ref=ref or f"scenery:{kind}"),
+        Position(square=square, size=size),
+        Scenery(kind=kind, fastened=fastened, by=by),
+    ]
+    if hp > 0:
+        bits.append(Health(hp=hp, max_hp=hp, dies_at_zero=True))
+    eid = world.spawn(*bits)
+    if solid:
+        place(world, eid, square)
+    else:
+        # **The square is where it is, not something it owns** -- the
+        # conjuration spawner's words, and the same distinction: a crate
+        # blocks its square, a campfire is stood in. Setting `Position`
+        # without indexing `grid.occupants` is the whole difference, and
+        # indexing is what the index is for -- `Position.square` alone
+        # leaves `squares_of` empty while the position names the square.
+        world.need(eid, Position).square = square
+    return eid
 
 
 def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",

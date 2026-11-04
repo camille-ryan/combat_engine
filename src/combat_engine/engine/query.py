@@ -27,6 +27,7 @@ from .components import (
     Movement,
     Position,
     Powers,
+    Scenery,
     Shapes,
     Side,
     Stats,
@@ -183,6 +184,18 @@ def combatants(world: World) -> list[int]:
         # Added here rather than tested at every call site, which is what
         # the paragraph above asks for. #714.
         and world.get(e, Conjuration) is None
+        # **A destructible thing in the room** -- a crate, a statue, a
+        # barricade. The fourth subtraction, and `#714`'s note above is its
+        # design argument word for word: it has `Health` so that it can be
+        # aimed at and broken, that is the only reason, and it takes no
+        # turn.
+        #
+        # Without this a `Scenery` given `Health` lands in the initiative
+        # roster and gets **asked what it wants to do**. `Encounter.winner`
+        # was already safe -- it reads `team()`, which is `None` for a thing
+        # with no `Side`, and `None` is discarded -- so the fault is a crate
+        # taking a turn rather than a fight that cannot end. #988.
+        and world.get(e, Scenery) is None
     ]
 
 
@@ -411,8 +424,6 @@ def scenery(
     gate is handed `(world, eid)` and no `Cast` -- the same split
     `moving_as` has.
     """
-    from .components import Scenery
-
     out = []
     for eid, thing in sorted(world.each(Scenery)):
         if kind and thing.kind != kind:
@@ -457,8 +468,6 @@ def targetable(world: World, eid: int) -> bool:
     false for it forever, so a row aimed at a crate was dropped between
     being chosen and being run without a word.
     """
-    from .components import Scenery
-
     return alive(world, eid) or world.get(eid, Scenery) is not None
 
 

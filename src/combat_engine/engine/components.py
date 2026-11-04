@@ -587,10 +587,23 @@ class Scenery:
 
     A crate, a statue, a campfire. It has a `Position`, so it has a square,
     a size and a footprint, and everything that measures to a thing --
-    adjacency, a burst, line of effect -- measures to it for free. It has no
-    `Health` and no `Side`, which is what keeps it out of `query.creatures`:
-    no turn, no initiative slot, no vote on whether the fight is over, and
-    nothing can attack it.
+    adjacency, a burst, line of effect -- measures to it for free.
+
+    **It has no `Side`, ever**, and that is what keeps it out of
+    `query.creatures` and out of `Encounter.winner`'s reckoning: no vote on
+    whether the fight is over, so a crate left standing cannot stop a fight
+    ending.
+
+    **`Health` is optional and the two cases differ.** Without it, nothing
+    can attack the thing -- a statue nobody can break, which is the common
+    case. **With it**, the thing can be aimed at and destroyed, which is
+    what the "destroy the object" objective wants, and then
+    `query.combatants` has to subtract it: that is the **fourth
+    subtraction**, after a companion, a barrier and a conjuration, and
+    `#988` is what it was added for. This docstring said *"it has no
+    `Health` ... and nothing can attack it"* as an invariant for as long as
+    nothing constructed a `Scenery` at all, so the invariant was never
+    tested. `content.terrain.put` is the writer, and `hp` is the opt-in.
 
     Not a `Conjuration`, which is a power's own doing and dies with the
     effect holding it up; not a `Trap`, which attacks. Scenery is what was

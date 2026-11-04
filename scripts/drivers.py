@@ -16744,6 +16744,163 @@ def a_policy_memo_dies_with_its_board(out: Result) -> None:
              f"memo={D.foes(last, mine)}")
 
 
+def a_destructible_thing_takes_no_turn(out: Result) -> None:
+    """A crate with hit points can be broken and is not in the order. `#988`.
+
+    `Scenery` has been declared and documented since `#714` and was
+    **constructed nowhere** -- zero call sites outside its own definition --
+    so four encounter objectives had no thing to destroy, carry, escort or
+    protect. `content.terrain.put` is the writer and `#988`'s whole engine
+    half is one more clause in `query.combatants`.
+
+    **The negative assertion is the one that matters and the positive one
+    is nearly free.** A thing with `Health` is aimable by construction --
+    `targetable` asks for `Health` and nothing else -- so proving a crate
+    can be attacked proves almost nothing. What had never been true is that
+    a crate with hit points stays **out of the initiative roster**:
+    `turn_takers` is built from `combatants`, so without the subtraction the
+    crate gets an `Initiative` rolled and a slot, and the policy is asked
+    what the crate would like to do.
+
+    **`Encounter.winner` was already safe and this rule says so rather than
+    claiming credit for it.** `over` and `winner` read `team()`, which is
+    `None` for a thing with no `Side`, and both discard `None` -- so a crate
+    left standing could never stop a fight ending, with or without the
+    clause. Asserting that here would be
+    [a row credited for an event it relocated]: green either way. The
+    assertions below are scoped to the roster, which is the only thing the
+    clause decides.
+    """
+    from combat_engine.content.terrain import put
+    from combat_engine.engine import Bus, Rng, World
+    from combat_engine.engine.components import Health, Position, Scenery
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.query import (
+        combatants,
+        squares,
+        targetable,
+        turn_takers,
+    )
+    from combat_engine.engine.types import Size, Team
+
+    def board(*, hp: int = 20, solid: bool = True) -> tuple:
+        """One PC, one enemy, and a crate standing in the room."""
+        from combat_engine.content import loader
+
+        world = World(Grid(24, 16), Rng(5), Bus())
+        hero = loader.spawn(world, "m1000", (2, 8), team=Team.PC)
+        foe = loader.spawn(world, "m1000", (12, 8), team=Team.ENEMY)
+        crate = put(world, (6, 8), kind="object", hp=hp, solid=solid)
+        return world, hero, foe, crate
+
+    # -- the floor: the writer builds a thing at all ---------------------
+    world, hero, foe, crate = board()
+    scen = world.get(crate, Scenery)
+    out.that(scen is not None and scen.kind == "object",
+             "the floor: `terrain.put` constructs a `Scenery`, which before"
+             " `#988` nothing in the tree did -- without this every"
+             " assertion below is about an entity that does not exist",
+             f"scenery={scen!r}")
+    out.that(world.get(crate, Health) is not None
+             and world.need(crate, Health).hp == 20,
+             "`hp=` gives it `Health`, which is what makes it breakable",
+             f"health={world.get(crate, Health)!r}")
+    out.that(world.get(crate, Position) is not None
+             and squares(world, crate) == frozenset({(6, 8)}),
+             "and a `Position` indexed on the grid, so everything that"
+             " measures to a thing measures to it",
+             f"squares={squares(world, crate)!r}")
+    out.that(world.grid.occupant((6, 8)) == crate,
+             "a solid thing OWNS its square -- `Position.square` alone"
+             " leaves `grid.occupants` empty while the position names the"
+             " square, which is the stale-index bug `place` exists for",
+             f"occupant={world.grid.occupant((6, 8))!r}")
+
+    # -- the positive: it can be aimed at --------------------------------
+    #
+    # **`targetable` was already written for this and had nothing to
+    # answer about.** Its docstring says so -- *"Scenery has none [no hit
+    # points] and is still a legitimate target ... so a row aimed at a
+    # crate was dropped between being chosen and being run without a
+    # word"* -- which is the shape `#988` is really about: the readers were
+    # built and the writer never was.
+    out.that(targetable(world, crate) is True,
+             "a destructible crate is targetable, which is what the"
+             " destroy-the-object objective needs",
+             f"crate={crate} targetable={targetable(world, crate)}")
+
+    # -- THE assertion: it is not in the order ---------------------------
+    roster = list(turn_takers(world))
+    fighting = list(combatants(world))
+    out.that(crate not in fighting,
+             "THE assertion -- the crate is absent from `combatants`, the"
+             " fourth subtraction after a companion, a barrier and a"
+             " conjuration",
+             f"crate={crate} combatants={fighting}")
+    out.that(crate not in roster,
+             "and therefore absent from the initiative roster, which is"
+             " built from `combatants` -- without the clause the crate is"
+             " rolled a d20 and asked what it wants to do",
+             f"crate={crate} roster={roster}")
+    out.that(hero in roster and foe in roster and len(roster) == 2,
+             "the negative control: the two real creatures are still in the"
+             " order, so the clause subtracts the crate and not the board."
+             " A subtraction that emptied the roster would pass the two"
+             " assertions above for the wrong reason",
+             f"roster={roster} hero={hero} foe={foe}")
+
+    # -- a statue nobody can break ---------------------------------------
+    plain, _h, _f, statue = board(hp=0)
+    out.that(plain.get(statue, Health) is None,
+             "`hp=0` is the common case and the documented default: no"
+             " `Health`, so nothing can attack it",
+             f"health={plain.get(statue, Health)!r}")
+    out.that(statue not in list(combatants(plain)),
+             "and it is out of `combatants` -- though NOT because of the"
+             " new clause, which the plant proves: `creatures` already"
+             " wants `Health`, so an unbreakable statue was never in the"
+             " set. Dropping the clause leaves this assertion green and"
+             " reds the crate's, which is the honest division of what the"
+             " clause is for",
+             f"statue={statue} combatants={list(combatants(plain))}")
+
+    # -- solid=False is a thing stood in, not owned ----------------------
+    soft, _h2, _f2, fire = board(hp=0, solid=False)
+    out.that(soft.grid.occupant((6, 8)) is None
+             and soft.need(fire, Position).square == (6, 8),
+             "`solid=False` sets the square without indexing it -- a"
+             " campfire is stood in where a crate is walked round, and the"
+             " conjuration spawner draws exactly this distinction",
+             f"occupant={soft.grid.occupant((6, 8))!r}"
+             f" square={soft.need(fire, Position).square!r}")
+
+    # -- the knobs the printed target lines ask about --------------------
+    bolted, _h3, _f3, _c3 = board()
+    held = put(bolted, (7, 8), kind="object", hp=5, by=_h3)
+    out.that(bolted.need(held, Scenery).by == _h3,
+             "`by` is whoever holds or controls it, which one printed"
+             " target line asks about",
+             f"by={bolted.need(held, Scenery).by} hero={_h3}")
+    down = put(bolted, (8, 8), kind="object", hp=5, fastened=True)
+    out.that(bolted.need(down, Scenery).fastened is True,
+             "`fastened` is a thing bolted down, which another printed"
+             " target line excludes",
+             f"fastened={bolted.need(down, Scenery).fastened}")
+
+    # -- a size other than Medium ----------------------------------------
+    big, _h4, _f4, _c4 = board()
+    huge = put(big, (14, 4), kind="object", hp=40, size=Size.LARGE)
+    out.that(len(squares(big, huge)) == 4,
+             "size lives on the `Position` with everybody else's, so a"
+             " Large crate has a Large footprint and nothing had to be"
+             " taught about it",
+             f"squares={sorted(squares(big, huge))}")
+    out.that(huge not in list(combatants(big)),
+             "and a bigger thing is still not a combatant -- the clause"
+             " does not read size",
+             f"huge={huge} combatants={list(combatants(big))}")
+
+
 def a_charge_can_go_through_one_body(out: Result) -> None:
     """Three mount traits trample mid-charge. `#1057`.
 
@@ -59987,6 +60144,12 @@ DRIVERS = {
         a_regions_damage_is_the_damage_it_prints,
         "a region's damage column holds the damage it prints, and the tier"
         " scaling with it (#1096)",
+    ),
+    "board_scenery": (
+        a_destructible_thing_takes_no_turn,
+        "a crate with hit points can be broken and takes no turn -- the"
+        " fourth subtraction, and the first thing ever to construct a"
+        " Scenery (#988)",
     ),
     "trample_charge": (
         a_charge_can_go_through_one_body,
