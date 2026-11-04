@@ -179,6 +179,50 @@ class Zone:
     #:
     #: Written by `c.difficult_for`, read in `World.difficult`. #831.
     difficult_for: set[int] = field(default_factory=set)
+    #: A row **any** creature in or adjacent to this region may use, as its
+    #: own action. The board's power rather than anybody's -- "a terrain
+    #: power", the book's name for it -- and the one thing on this dataclass
+    #: that is not a property of the squares.
+    #:
+    #: **Why it is a ref on the zone and not a component on a creature.**
+    #: The printed requirement is *"you must be adjacent to the <feature>"*,
+    #: so eligibility is recomputed every time anybody looks and cannot be
+    #: frozen onto a creature when the region is laid -- the same argument
+    #: `obscured_for` makes two fields up, and for the same reason: a set of
+    #: ids decided at lay time is wrong by the next turn. 16 of the 24
+    #: printed rows say *adjacent* and 4 say *in*, which `squares` answers
+    #: directly.
+    #:
+    #: Offered by `actions._terrain`, run by `perform` through
+    #: `dsl.use(board=True)`. The row's own header carries the action cost
+    #: and the attack line, because the interface and the AI read a header
+    #: without running anything -- so none of that belongs here. #980.
+    power: str = ""
+    #: How many times `power` may still be used, or 0 for no limit.
+    #:
+    #: **The printed distinction, which the ETL dropped.** The spec heading
+    #: is either `Single-Use Terrain` (15 rows) or `At-Will Terrain` (9), and
+    #: neither reaches a column -- `terrain.usage` is empty on all 24 and
+    #: holds a paragraph of placement advice on the rest. So the count is
+    #: hand-written per row off the heading, which is #1104.
+    #:
+    #: **On the region, not on the user's `Powers`.** A single-use feature is
+    #: spent for *everybody* once anybody uses it, and `Powers.used` counts
+    #: per creature -- so the per-creature grain would let a second character
+    #: shove the same boulder down the same slope. Decremented in `perform`
+    #: after the row runs, not before: a row refused mid-body must not
+    #: consume the feature.
+    power_uses: int = 0
+    #: How far from these squares a creature may stand and still use
+    #: `power`. 1 is adjacent, which is what 20 of the 24 printed rows say.
+    #:
+    #: **A number because the printed requirements are a number.** 16 say
+    #: *"adjacent to"*, 4 say *"in"* or *"on"* -- both reach 1, since a
+    #: creature in the region is within 1 of its own square -- and one says
+    #: *"within 5 squares of"*. A boolean could not have held that row and
+    #: it would have been offered at the wrong distance, which is a rule
+    #: that reads correct and plays wrong: this component's named failure.
+    power_reach: int = 1
     #: The effect whose duration this zone lives on.
     effect: Effect | None = field(default=None, repr=False)
 
@@ -225,6 +269,9 @@ class Zones:
         hindering: str = "",
         hindering_type: str = "",
         burn: Callable[[int, str, str], None] | None = None,
+        power: str = "",
+        power_uses: int = 0,
+        power_reach: int = 1,
     ) -> int:
         if obscured:
             # **Checked, because the alternative is silent.** `difficult=`
@@ -271,6 +318,9 @@ class Zones:
             exempt=frozenset(exempt or ()),
             hindering=hindering,
             hindering_type=hindering_type,
+            power=power,
+            power_uses=power_uses,
+            power_reach=power_reach,
         )
         made = self._spawn(zone, when, sustain)
         if hindering:

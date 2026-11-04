@@ -46,7 +46,8 @@ class Action:
     #: power | move | run | shift | charge | stand | escape | second_wind |
     #: total_defence | coup_de_grace |
     #: bull_rush | grab | aid_attack | aid_defence |
-    #: sustain | move_zone | drop | wield | item | instinctive | command | end
+    #: sustain | move_zone | drop | wield | item | instinctive | command |
+    #: terrain | end
     kind: str
     cost: ActionType
     ref: str = ""
@@ -136,6 +137,7 @@ def legal(
     out.extend(_wielding(world, encounter, actor))
     out.extend(_loading(world, encounter, actor))
     out.extend(_picking_up(world, encounter, actor))
+    out.extend(_terrain(world, encounter, actor))
     out.extend(_spending(world, encounter, actor))
     out.extend(_action_points(world, encounter, actor))
     out.extend(_manoeuvres(world, encounter, actor))
@@ -1542,6 +1544,90 @@ def _spending(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _terrain(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """The board's own powers: a region a creature standing by it may use.
+
+    **The printed shape, which is why this is an offer and not a verb.**
+
+        Single-Use Terrain
+        Standard Action      Requirement: You must be adjacent to the <x>.
+        Check: Athletics check (hard DC) to shove the rock.
+
+    Nobody owns it and nobody casts it. It is on the floor, and any creature
+    that can reach it may spend an action on it -- so the only place it can
+    enter the game is the action menu, the same route `move_zone` takes and
+    for the same reason. 24 rows print this and **none of them could be
+    written**: `usable` refuses a row that is in no `Powers.all`, which is
+    every one of these. #980.
+
+    **In *or* adjacent to, which is both printed wordings.** 16 of the 24
+    say *"you must be adjacent to"* and 4 say *"in"* or *"on"*; `spread(sq,
+    1)` covers both, and a creature standing in the region is adjacent to
+    its own square by that reckoning. The remaining 4 print a requirement
+    this cannot express (one wants a free hand, one a specific carried
+    item) and those rows carry a marker rather than being offered wrongly.
+
+    **The cost comes off the row's header, not from a constant.** 19 of 24
+    are a standard action and 5 are not -- 2 minor, 2 move, 1 free -- so a
+    hard-coded `STANDARD` would be wrong on a fifth of them. That is the
+    header-is-data rule: the UI and the AI both price this entry without
+    running the body, so the cost has to be declared.
+
+    **`usable` is asked, with `board=True`.** That is what keeps a `todo=`
+    row out of the menu, and it applies every prohibition about the *user*
+    -- a creature barred from fire powers may not tip a brazier over. What
+    it does not check is the feature's own limit, which is
+    `Zone.power_uses` and is checked here: a spent single-use feature is
+    not offered, and `perform` is what decrements it.
+
+    No `targets`: the row's own header carries its range and target line,
+    so the attack is aimed by `dsl.use` the way every other row's is. The
+    zone is not carried on the `Action` either -- `perform` finds it back by
+    ref, for the reason the `move_zone` note gives: a field on `Action`
+    widens a structure two readers consume without running anything.
+    """
+    from .dsl import get, usable
+    from .zones import Zone
+
+    out: list[Action] = []
+    here = world.get(actor, Position)
+    if here is None:
+        return out
+    # Every square the actor could be reaching from -- its own and the eight
+    # around it. Compared against the zone's squares rather than walked per
+    # square of the region, because a region is much the larger of the two.
+    for _eid, zone in world.each(Zone):
+        if not zone.power or not zone.squares or zone.power_uses < 0:
+            continue
+        reach = max(1, zone.power_reach)
+        near = {here.square} | set(spread({here.square}, reach))
+        if not (near & zone.squares):
+            continue
+        p = get(zone.power)
+        if p is None:
+            continue
+        if not encounter.can_spend(actor, p.action):
+            continue
+        ok, _why = usable(world, actor, p, board=True)
+        if not ok:
+            continue
+        # **The attack comes out of the feature, not out of the user.** The
+        # printed lines are "making an attack in a close blast 3" and "one
+        # creature you choose in a close burst 5" -- both centred on the
+        # thing on the floor, which may be five squares away. `Action.origin`
+        # is what `dsl.area_of` reads for exactly this, so a blast aimed off
+        # the user's own square would be the wrong squares rather than a
+        # missing feature.
+        #
+        # Nearest square of the region, because a feature a creature is
+        # standing beside is the one it is reaching for, and the printed
+        # requirement is about that adjacency.
+        origin = min(zone.squares, key=lambda sq: distance(here.square, sq))
+        out.append(Action(kind="terrain", cost=p.action, ref=zone.power,
+                          origin=origin))
+    return out
+
+
 def _picking_up(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Taking something up off the floor. A minor action, as printed.
 
@@ -2516,6 +2602,32 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # this neither duplicates the destination search nor trusts the
         # menu's view of a board that may have moved since it was drawn.
         return Cast(world=world, me=actor, ref="move_zone").move_zone(zone, reach)
+
+    if action.kind == "terrain":
+        from .dsl import use as _use
+        from .zones import Zone as _TZone
+
+        # Found back by ref rather than carried on the `Action` -- see the
+        # offer. The board may have moved since the menu was drawn, so a
+        # region that has gone, or been spent by somebody else acting first,
+        # refuses here rather than being trusted.
+        holder = next(
+            (z for _e, z in world.each(_TZone)
+             if z.power == action.ref and z.power_uses >= 0),
+            None,
+        )
+        if holder is None:
+            return False
+        ran = _use(world, actor, action.ref, spend=False, board=True,
+                   origin=action.origin)
+        # **Decremented after, and only on a use that happened.** A row that
+        # refuses in its own body -- a failed requirement it checks itself --
+        # must not consume a single-use feature, and this is the printed
+        # reading: the card spends the terrain on the attack, not on the
+        # attempt. `power_uses` of 0 is no limit and stays 0.
+        if ran and holder.power_uses > 0:
+            holder.power_uses -= 1
+        return ran
 
     if action.kind == "sustain":
         eff = world.effects.live.get(action.subject or -1)

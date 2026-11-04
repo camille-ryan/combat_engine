@@ -172,6 +172,12 @@ def features(
     f["is_open_lock"] = float(action.kind == "open_lock")
     f["is_move_zone"] = float(action.kind == "move_zone")
     f["is_crawl"] = float(action.kind == "crawl")
+    # **The board's own power.** `#980`'s terrain powers: a row a region
+    # carries, offered to whoever stands by it. Named here because
+    # `kinds_named` is right that an unnamed kind scores zero and becomes
+    # the idle default -- and measured, because the value is not the
+    # obvious one.
+    f["is_terrain"] = float(action.kind == "terrain")
     # **The last six.** Every kind `actions.legal` can produce is named
     # here now, because an unnamed one scores zero -- which beats ending
     # a turn at -2 and beats a move that closes nothing -- and so becomes
@@ -796,6 +802,32 @@ WEIGHTS: dict[str, float] = {
     "is_open_lock": 0.0,
     "is_move_zone": 0.0,
     "is_crawl": 0.0,
+    # **A fourth declared zero, and the reason is a measurement rather than
+    # the argument above.** A terrain power's payoff is **not priced at
+    # all** today, so a positive weight here would be paying for a benefit
+    # nothing has valued. Measured on a board with the dune laid under the
+    # caster, same creature, same turn:
+    #
+    #     terrain   score -0.9000    no `hp_swing`, no `targets`
+    #     power     score  3.6500    `hp_swing` -1.45, `is_power` 6.0
+    #     end       score -0.8990    `is_end` 0.001
+    #
+    # The `hp_swing` loop keys on `action.ref`, which a terrain offer
+    # **does** carry -- so the obvious guess is that the payoff is already
+    # priced and a flat bonus would double-count. It is not: the loop walks
+    # `action.targets`, and `actions._terrain` enumerates none, leaving the
+    # row's own header to aim it inside `dsl.use`. So the payoff is
+    # invisible and ending the turn wins by 0.001.
+    #
+    # Declared 0.0 rather than guessed upward, because the honest fix is to
+    # price it and not to bid against `is_end`: a number large enough to
+    # beat ending a turn would also beat it on a board where the feature is
+    # worthless, which is the `is_power = 6.0` problem `#314` is already
+    # about. Filed as #1108, with #1107 for the other half -- nothing
+    # places a terrain power on a board yet, so this is inert in play
+    # today and **cannot be measured in a fight**. That is why there is no
+    # scorecard number beside it.
+    "is_terrain": 0.0,
     # **An automatic critical on a helpless creature, which usually ends it.**
     # Priced above a standing attack rather than merely level with one: the
     # alternative on the same standard action is an ordinary swing at something

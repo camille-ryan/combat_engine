@@ -3282,6 +3282,7 @@ def keywords_of(world: Any, actor: int, p: Any) -> frozenset[Keyword]:
 def usable(
     world: World, actor: int, p: Power, *, dying: bool = False, spent_ok: bool = False,
     augment: int = 0, aimed: bool = False, borrowed: bool = False,
+    board: bool = False,
 ) -> tuple[bool, str]:
     """Can this power be used, and if not, why not?
 
@@ -3353,7 +3354,19 @@ def usable(
 
     powers = world.get(actor, Powers)
     if powers is not None:
-        if p.ref not in powers.all:
+        # **`board` is the board's own power, which nobody knows.** A
+        # terrain power belongs to a region rather than to a creature --
+        # "any creature adjacent to it can use it" -- so it is in no
+        # `Powers.all` and this gate refused every one of the 24 printed
+        # rows. #980.
+        #
+        # It exempts **this gate only**, deliberately. Everything below --
+        # the prohibitions, the barred keywords, the usage bans -- is about
+        # what the *user* may do and applies in full: a creature barred from
+        # fire powers may not shove a brazier over either. The single-use
+        # limit is not here at all, because it is a property of the feature:
+        # `Zone.power_uses`, decremented by `perform`.
+        if p.ref not in powers.all and not board:
             return False, "not known"
         # **"Can only make a melee basic attack."** Checked before the
         # `forbidden` list below because it is the same kind of answer and
@@ -3895,6 +3908,7 @@ def use(
     reentrant: bool = False,
     reached: bool = False,
     borrowed: bool = False,
+    board: bool = False,
 ) -> bool:
     """Use a power. Returns False if it could not be used.
 
@@ -3939,7 +3953,7 @@ def use(
     # `usable` that this turns off, and `_within_reach` further down, which is
     # the question that replaces it. #429.
     ok, _why = usable(world, actor, p, dying=dying, spent_ok=reentrant,
-                      borrowed=borrowed,
+                      borrowed=borrowed, board=board,
                       augment=augment, aimed=targets is not None)
     if not ok:
         return False

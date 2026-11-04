@@ -62,3 +62,16 @@ _load("monsters")
 _load("items")
 _load("feats")
 _load("races")
+
+# **A top-level module is not walked and so registers nothing.** `_load`
+# takes a *package* and walks it; `terrain_powers.py` sits beside this file
+# rather than under one of the six, so without this line its rows are
+# absent from `REGISTRY` and every instrument reports a tree that does not
+# hold them -- `audit.board` raises `NoneType has no attribute 'cls'`,
+# which is how this was found rather than by reading.
+#
+# Imported by name instead of adding a seventh `_load`: there is no
+# `terrain_powers/` package and inventing one for a module would be the
+# wrong shape. `terrain.py` and `dummy.py` beside it declare no rows at
+# all, which is why nothing had needed this before. #980.
+from combat_engine.content import terrain_powers  # noqa: E402

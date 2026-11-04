@@ -16937,6 +16937,262 @@ def a_printed_region_reaches_the_floor(out: Result) -> None:
              f"row-then-board={seen}")
 
 
+def a_terrain_power_is_offered_to_whoever_stands_by_it(out: Result) -> None:
+    """The board's own power reaches the action menu. `#980`.
+
+    24 compendium rows print a power that **nobody owns**: a thing on the
+    floor, with an action, that any creature near enough may use. None of
+    them could be written. `dsl.usable` refuses a row absent from the
+    user's `Powers.all` with *"not known"*, and a terrain power is in
+    nobody's -- so the gap was one gate, not a mechanism.
+
+    Three parts: `Zone.power` carries the ref, `actions._terrain` offers it
+    to whoever is standing within `Zone.power_reach`, and `perform` runs it
+    through `dsl.use(board=True)`. `x2_124` is the first row and the live
+    caller.
+
+    **Every negative control here is taken on the SAME creature on the SAME
+    turn**, because the first version of them was not and read 0 for the
+    wrong reason entirely: an adjacent *enemy* is offered nothing, and that
+    is because it is not its turn -- `encounter.can_spend` -- rather than
+    because of any distance. A control that cannot fail for the reason it
+    names is not a control. So the geometry is isolated by moving the
+    **region**, not the creature, and the far case is then re-asked with
+    `power_reach=5` on the same board to prove the control was live.
+
+    **And the row itself had a bug of exactly the kind this component is
+    named for.** `x2_124` grants total concealment *"until you move or
+    attack"* and was written watching `MoveStart`. The same body knocks the
+    creature **prone**; a prone creature cannot walk; so the first
+    attempted walk was **refused** -- 0 squares, same square -- and the
+    concealment was already gone. The effect ending is what the card says
+    should happen, so nothing could have reported it. `Moved` is the
+    printed reading and is asserted both ways below: a refused move keeps
+    it, a landed one takes it.
+
+    The landed-move control uses **forced** movement, because the walk it
+    would otherwise use is the one the prone condition refuses -- which is
+    how the bug above was found in the first place.
+    """
+    import audit as _audit
+    from combat_engine.engine import World
+    from combat_engine.engine import actions as A
+    from combat_engine.engine import dsl as _DSL
+    from combat_engine.engine import movement as M
+    from combat_engine.engine.actions import Action
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.components import Powers as _POWERS
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import combatants, concealment_of
+    from combat_engine.engine.types import ActionType, Cover
+    from combat_engine.engine.zones import Zone
+
+    REF = "x2_124"
+
+    def square_of(world: World, who: int) -> tuple[int, int]:
+        stood = world.get(who, Position)
+        assert stood is not None, "the creature has no Position"
+        return stood.square
+
+    def laid(offset: tuple[int, int], *, reach: int = 1, uses: int = 0,
+             run: bool = True) -> tuple[World, int, tuple[int, int]]:
+        world, me, _ = _audit.board(REF, 7)
+        here = square_of(world, me)
+        where = (here[0] + offset[0], here[1] + offset[1])
+        world.zones.create(0, REF, frozenset({where}), When.ENCOUNTER,
+                           power=REF, power_uses=uses, power_reach=reach)
+        if run:
+            offers = [a for a in A.legal(world, world.encounter, me)
+                      if a.kind == "terrain"]
+            if len(offers) == 1:
+                A.perform(world, world.encounter, me, offers[0])
+        return world, me, here
+
+    def offered(world: World, who: int) -> list[Action]:
+        return [a for a in A.legal(world, world.encounter, who)
+                if a.kind == "terrain"]
+
+    # 1. Standing in the region.
+    world, me, here = laid((0, 0), run=False)
+    inside = offered(world, me)
+    out.that(len(inside) == 1,
+             "a creature standing in the region is offered its power -- the"
+             " printed `you must be in a square of the dune` (#980)",
+             f"offers={len(inside)}")
+    out.that(inside and inside[0].ref == REF,
+             "the offer names the region's row, so `perform` knows what to"
+             " run without a second lookup",
+             f"ref={inside[0].ref if inside else None}")
+    out.that(inside and inside[0].origin == here,
+             "the offer carries the region's square as `origin`, because the"
+             " attack comes out of the FEATURE and not out of the user -- a"
+             " blast aimed off the user's own square is the wrong squares",
+             f"origin={inside[0].origin if inside else None} square={here}")
+    out.that(bool(inside) and inside[0].cost is ActionType.STANDARD,
+             "the cost comes off the row's own header -- 19 of the 24 are a"
+             " standard action and 5 are not, so a constant would be wrong"
+             " on a fifth of them",
+             f"cost={inside[0].cost if inside else None}")
+
+    # 1b. **The `board=` gate itself, which the menu above cannot test.**
+    # `audit.board` puts the row under test into the caster's own `Powers`
+    # so the audit can exercise it -- so on that board the row IS known,
+    # `dsl.usable`'s "not known" gate never fires, and `board=True` is
+    # redundant. Planting `board=False` on the dispatch left all 16 of the
+    # first version of this rule GREEN: the one gate the whole mechanism
+    # turns on was invisible to every assertion about it.
+    #
+    # So the row is taken back out of the caster's list, which is the state
+    # a real board is in -- nobody owns a terrain power -- and the gate is
+    # asked both ways through `usable`, the function the menu and `use`
+    # both consult.
+    world, me, here = laid((0, 0), run=False)
+    known = world.get(me, _POWERS)
+    had = REF in (known.known if known else [])
+    if known is not None and had:
+        known.known = [r for r in known.known if r != REF]
+    declared = _DSL.get(REF)
+    assert declared is not None, f"{REF} is not declared"
+    allowed, _why_ok = _DSL.usable(world, me, declared, board=True)
+    refused, why_no = _DSL.usable(world, me, declared, board=False)
+    out.that(had,
+             "the setup landed: `audit.board` really does hand the row to"
+             " the caster, which is why the menu assertions above cannot"
+             " see the gate -- if this goes red the harness changed and the"
+             " next two assertions stop meaning anything",
+             f"was in Powers.known={had}")
+    out.that(allowed,
+             "a creature that does NOT know the row may still use it with"
+             " `board=True` -- the whole mechanism is this one gate, since"
+             " a terrain power is in nobody's `Powers.known`",
+             f"usable(board=True)={allowed}")
+    out.that(not refused and why_no == "not known",
+             "and without `board=` the same creature is refused `not"
+             " known`, which is what had refused all 24 printed rows",
+             f"usable(board=False)={refused} why={why_no!r}")
+    out.that(len(offered(world, me)) == 1,
+             "the menu offers it to a creature that does not know the row,"
+             " so the gate is reached through `legal` and not only by"
+             " asking `usable` directly",
+             f"offers={len(offered(world, me))}")
+    # **And it has to be PERFORMED on that board too, which was a third
+    # hole.** `perform` passes `board=True` to `dsl.use` of its own accord,
+    # and planting that to `False` left 20 of 20 green -- because every
+    # other assertion here performs on a board where `audit.board` has
+    # already handed the caster the row, so the dispatch's gate is
+    # redundant on all of them. The menu and the dispatch ask separately
+    # and a rule has to break both.
+    stripped = offered(world, me)
+    did = A.perform(world, world.encounter, me, stripped[0]) if stripped else False
+    cov = concealment_of(world, me, {})
+    out.that(did and cov is not Cover.NONE,
+             "and `perform` RUNS it for a creature that does not know the"
+             " row -- the dispatch asks `dsl.use(board=True)` separately"
+             " from the menu, so a rule that only checks the menu leaves"
+             " half the gate untested",
+             f"performed={did} concealment={cov}")
+
+    # 2. Adjacent -- the other printed wording, same creature, same turn.
+    world, me, here = laid((1, 0), run=False)
+    out.that(len(offered(world, me)) == 1,
+             "a creature ADJACENT to the region is offered it too -- 16 of"
+             " the 24 rows say `adjacent to` and 4 say `in`, and reach 1 is"
+             " both",
+             f"offers={len(offered(world, me))}")
+
+    # 3. Out of reach -- and the SAME board proves the control is live.
+    world, me, here = laid((3, 0), run=False)
+    far = offered(world, me)
+    out.that(len(far) == 0,
+             "a region 3 squares away is NOT offered at reach 1 -- same"
+             " creature, same turn, so the only thing that changed is the"
+             " distance",
+             f"offers={len(far)}")
+    for _e, zone in world.each(Zone):
+        if zone.power:
+            zone.power_reach = 5
+    widened = offered(world, me)
+    out.that(len(widened) == 1,
+             "the same board offers it at `power_reach=5`, so the refusal"
+             " above was the distance and not a turn the creature could not"
+             " spend -- the first draft of this control read 0 because it"
+             " asked an enemy on somebody else's turn",
+             f"offers at reach 5={len(widened)}")
+
+    # 4. Single-use is spent on the feature, not on the user.
+    world, me, here = laid((0, 0), uses=1, run=False)
+    first = offered(world, me)
+    ran = A.perform(world, world.encounter, me, first[0]) if first else False
+    left = next((z.power_uses for _e, z in world.each(Zone) if z.power), None)
+    out.that(ran and left == 0,
+             "a `Single-Use` feature is decremented by `perform` after the"
+             " row runs -- 15 of the 24 print that heading and the limit is"
+             " the FEATURE's, so `Powers.used` is the wrong grain: it would"
+             " let a second character shove the same boulder",
+             f"ran={ran} uses_left={left}")
+    out.that(len(offered(world, me)) == 0,
+             "and a spent feature is no longer offered at all",
+             f"offers={len(offered(world, me))}")
+
+    # 5. The row's own clauses, with a control that says the row ran.
+    world, me, here = laid((0, 0))
+    buried = concealment_of(world, me, {})
+    bare, me_bare, _ = laid((0, 0), run=False)
+    none_yet = concealment_of(bare, me_bare, {})
+    out.that(buried is not Cover.NONE and none_yet is Cover.NONE,
+             "the row grants total concealment, and a board where it did not"
+             " run has none -- so the reading is the row's and not the"
+             " board's",
+             f"ran={buried} control={none_yet}")
+
+    # 6. A REFUSED move keeps it. This is the bug the rule was written for.
+    world, me, here = laid((0, 0))
+    before = concealment_of(world, me, {})
+    stepped = M.walk(world, me, [(here[0] + 1, here[1])])
+    at = square_of(world, me)
+    after = concealment_of(world, me, {})
+    out.that(stepped == 0 and at == here,
+             "the setup landed: a prone creature's walk is REFUSED, which is"
+             " what makes the next assertion a real question",
+             f"walked={stepped} at={at} was={here}")
+    out.that(before is not Cover.NONE and after is before,
+             "a refused move does NOT end the concealment -- `Moved`, not"
+             " `MoveStart`. Written as `MoveStart` first, and the creature"
+             " lost its cover for a move that never happened",
+             f"{before} -> {after}")
+
+    # 7. A move that LANDS does end it. Forced, because a walk is refused.
+    world, me, here = laid((0, 0))
+    before = concealment_of(world, me, {})
+    foe = next(e for e in combatants(world) if e != me)
+    slid = Cast(world=world, me=foe, ref="drivers:terrain").slide(2, on=me)
+    at = square_of(world, me)
+    after = concealment_of(world, me, {})
+    out.that(at != here,
+             "the setup landed: forced movement moves a prone creature where"
+             " a walk cannot",
+             f"slid={slid} {here} -> {at}")
+    out.that(before is not Cover.NONE and after is Cover.NONE,
+             "a move that LANDS ends the concealment, which is the printed"
+             " `until you move`",
+             f"{before} -> {after}")
+
+    # 8. The attack half.
+    world, me, here = laid((0, 0))
+    before = concealment_of(world, me, {})
+    foe = next(e for e in combatants(world) if e != me)
+    swung = Cast(world=world, me=me, ref="drivers:terrain").basic(on=foe)
+    after = concealment_of(world, me, {})
+    out.that(swung,
+             "the setup landed: the buried creature did swing",
+             f"swung={swung}")
+    out.that(before is not Cover.NONE and after is Cover.NONE,
+             "attacking ends it as well -- `Hit` and `Miss` both, since an"
+             " attack that misses is still an attack",
+             f"{before} -> {after}")
+
+
 def a_destructible_thing_takes_no_turn(out: Result) -> None:
     """A crate with hit points can be broken and is not in the order. `#988`.
 
@@ -61254,6 +61510,12 @@ DRIVERS = {
         "a printed region is drawn from the table and burns whoever walks"
         " in -- the region half of the terrain table had no reader at all"
         " (#1039, #458)",
+    ),
+    "terrain_power": (
+        a_terrain_power_is_offered_to_whoever_stands_by_it,
+        "a power the BOARD owns is offered to whoever stands by it, spent on"
+        " the feature rather than the user -- 24 rows that `usable` refused"
+        " outright (#980)",
     ),
     "board_scenery": (
         a_destructible_thing_takes_no_turn,
