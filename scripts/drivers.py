@@ -16744,6 +16744,199 @@ def a_policy_memo_dies_with_its_board(out: Result) -> None:
              f"memo={D.foes(last, mine)}")
 
 
+def a_printed_region_reaches_the_floor(out: Result) -> None:
+    """A printed region is laid from the table and burns. `#1039`, `#458`.
+
+    **The region half of the terrain table had no reader in the package at
+    all.** 145 rows sit in `game.db`; the only `FROM terrain` in the whole
+    tree was a driver rule counting them. The trap half has had
+    `printed_trap` -> `arm` for a while, so a printed trap could reach a
+    board and a printed region could not reach one by any route.
+
+    `content.terrain.printed_region` draws one, bounded by **tier** because
+    `damage_tier` is the column the table has, and `lay` puts it down as a
+    hindering zone.
+
+    **Four bugs on the way, every one found by probe and every one silent.**
+    They are the assertions below, and the order matters because each hid
+    the next:
+
+    1. `owner=0` -- the board laying a region, with no caster -- made
+       `Zones.refresh` end the zone **the instant it was created**, because
+       the owner-death test asks whether the owner has a `Position` and 0 is
+       not an entity. `create` returned a real id, `hindering_at` answered
+       `False`, nothing raised. The only witness was `ZoneEnded.why`, which
+       a probe had to subscribe to in order to read *"its owner died"* about
+       an owner that never existed.
+    2. The burn lived in `Cast._hinders`, which only a row could reach, so
+       even a live region recorded `hindering` and burned nobody. Measured
+       before moving it: **zero** content rows call `c.zone(hindering=)`, so
+       `#952`'s facility had no caller at all and this is its first.
+    3. `Rng.roll("5")` raises -- it takes `str | int` and treats a bare
+       `int` as a constant, but a database column arrives as a `str`. **32
+       of the 47** eligible rows carry a flat number, so this was two thirds
+       of the population rather than an edge.
+    4. And a *wrong* fix in between, recorded because it looked right:
+       making the zone own itself (`zone.owner or eid`) fails the same
+       `Position` test one line down, since the zone entity has no
+       `Position` either.
+
+    **The assertion that must not be lost is the caster path's retype.**
+    `Zones._burns` takes the damage policy from the caller precisely so a
+    row's hindering damage still goes through `c.flat` and keeps `#795`'s
+    standing retype. Had the move hard-coded `deal_damage`, the row path
+    would have lost it and **nothing would have gone red**, because no row
+    uses the facility. That is the regression this rule exists to refuse.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content import loader
+    from combat_engine.content.terrain import lay, printed_region
+    from combat_engine.engine import Bus, Rng, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import TurnEnd, ZoneEnded
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.movement import walk
+    from combat_engine.engine.query import hindering_at
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import DamageType, Team
+    from combat_engine.engine.zones import Zone
+
+    def board(seed: int = 3) -> tuple:
+        world = World(Grid(24, 16), Rng(seed), Bus())
+        hero = loader.spawn(world, "m1000", (2, 8), team=Team.PC)
+        enc = Encounter(world)
+        enc.start()
+        return world, enc, hero
+
+    # -- the reader -------------------------------------------------------
+    row = printed_region(1, Random(7))
+    out.that(row is not None and row.get("ref"),
+             "the floor: `printed_region` draws a row out of the table, which"
+             " before this nothing in the package read at all",
+             f"row={None if row is None else row.get('ref')}")
+    assert row is not None
+    out.that(str(row.get("damage") or "") != "",
+             "and it carries damage, which is the one `Zone` field a column"
+             " can fill on its own -- the reader asks for exactly those",
+             f"damage={row.get('damage')!r}")
+    out.that(int(row.get("damage_tier") or 9) <= 1,
+             "and a heroic board draws a HEROIC row: the band does not cross"
+             " a tier boundary, which is the same rule one table over from"
+             " where it is usually applied",
+             f"tier={row.get('damage_tier')!r}")
+
+    high = printed_region(30, Random(7))
+    out.that(high is not None,
+             "an epic board draws something too, so the bound is a ceiling"
+             " and not a filter that empties",
+             f"ref={None if high is None else high.get('ref')}")
+
+    # -- THE first assertion: a casterless zone stays alive ---------------
+    world, _enc, hero = board()
+    ended: list = []
+    world.bus.on(ZoneEnded, lambda ev: ended.append((ev.zone, ev.why)))
+    z = lay(world, row, {(4, 8), (5, 8)})
+    out.that(world.get(z, Zone) is not None,
+             "THE assertion -- a region with NO owner survives being laid."
+             " `owner=0` used to fail the owner-death test, which asks for a"
+             " `Position`, so the zone was created and ended in the same"
+             " call with nothing raised",
+             f"zone={z} Zone={world.get(z, Zone) is not None} ended={ended}")
+    out.that(ended == [],
+             "and nothing reported it as ended -- asserted on"
+             " `ZoneEnded.why` because that was the ONLY witness: the id"
+             " came back real and `hindering_at` came back False",
+             f"ended={ended}")
+    out.that(hindering_at(world, (4, 8)) and not hindering_at(world, (1, 1)),
+             "its own squares read as hindering and nothing else does",
+             f"in={hindering_at(world, (4, 8))}"
+             f" out={hindering_at(world, (1, 1))}")
+
+    # -- THE second: it burns, on entry -----------------------------------
+    before = world.need(hero, Health).hp
+    walk(world, hero, [(3, 8), (4, 8)])
+    after = world.need(hero, Health).hp
+    out.that(after < before,
+             "THE second assertion -- walking in HURTS. A live region that"
+             " burns nobody is what the move out of `Cast._hinders` was for,"
+             " and it reads identically to a working one from the outside",
+             f"hp {before} -> {after}")
+    out.that(before - after == int(str(row.get("damage")).strip()),
+             "and for exactly the printed number, which also says"
+             " `Rng.roll` took a FLAT value -- 32 of 47 rows carry one and"
+             " `roll(\"5\")` used to raise",
+             f"burned {before - after}, printed {row.get('damage')!r}")
+
+    # -- and again at a turn's end ----------------------------------------
+    standing = world.need(hero, Health).hp
+    world.bus.emit(TurnEnd(actor=hero, round=world.round))
+    out.that(world.need(hero, Health).hp < standing,
+             "and ending a turn standing in it burns again -- both moments,"
+             " because the printed line names both: entry alone lets a"
+             " creature end its turn in fire for nothing",
+             f"hp {standing} -> {world.need(hero, Health).hp}")
+
+    # -- the negative control: outside it, nothing ------------------------
+    clean, _e2, safe = board()
+    lay(clean, row, {(20, 2)})
+    was = clean.need(safe, Health).hp
+    walk(clean, safe, [(3, 8), (4, 8)])
+    clean.bus.emit(TurnEnd(actor=safe, round=clean.round))
+    out.that(clean.need(safe, Health).hp == was,
+             "the negative control: a creature that never enters the region"
+             " takes nothing, on either moment. Without this the two"
+             " assertions above would pass for a region that burns"
+             " everybody on the board",
+             f"hp {was} -> {clean.need(safe, Health).hp}")
+
+    # -- THE third: the caster path keeps its own damage policy -----------
+    #
+    # The one that would have been silent. `Zones._burns` takes a callback so
+    # a row's hindering damage still goes through `c.flat`; hard-coding
+    # `deal_damage` would have dropped `#795`'s retype and reddened nothing,
+    # because no content row uses the facility.
+    seen: list = []
+    paid, _e3, victim = board()
+    original = paid.zones._burns
+
+    def watched(zone: int, dice: str, dtype: str,
+                burn: Callable[[int, str, str], None] | None) -> None:
+        seen.append(burn is not None)
+        original(zone, dice, dtype, burn)
+
+    paid.zones._burns = watched            # ty: ignore[invalid-assignment]
+    # **Through `Cast.zone`, not through `zones.create`.** The first draft
+    # called `create` directly for both arms and read `[False, False]` --
+    # correctly, because `create` is where the callback *arrives* and
+    # `Cast.zone` is the only thing that supplies one. Asserting on the
+    # helper instead of the caller cannot see the caller's behaviour, which
+    # is the standing rule about proving a fix through the thing that uses
+    # it.
+    Cast(world=paid, me=victim, ref="drivers:region").zone(
+        [(9, 9)], until=When.ENCOUNTER, hindering="1d6",
+        hindering_type=DamageType.FIRE)
+    lay(paid, row, {(10, 10)})
+    out.that(len(seen) == 2,
+             "the probe is wired: `_burns` is reached by BOTH a row-laid"
+             " and a board-laid region, so one set of handlers serves both"
+             " -- without this the two assertions below are vacuous",
+             f"calls={len(seen)}")
+    out.that(seen == [True, False],
+             "THE third assertion -- a ROW hands down its own damage"
+             " policy and the BOARD hands down none. That is what keeps"
+             " `#795`'s standing retype on the row path: `c.flat` can"
+             " apply it and `deal_damage` cannot. Hard-coding"
+             " `deal_damage` in `_burns` would drop the retype and red"
+             " NOTHING, because no content row calls"
+             " `c.zone(hindering=)` -- which is why this is asserted on"
+             " the callback rather than on a number",
+             f"row-then-board={seen}")
+
+
 def a_destructible_thing_takes_no_turn(out: Result) -> None:
     """A crate with hit points can be broken and is not in the order. `#988`.
 
@@ -60392,6 +60585,12 @@ DRIVERS = {
         "an artillery minion deals a quarter less on a melee or multitarget"
         " attack and the full figure on a ranged shot -- the third axis"
         " (#1047)",
+    ),
+    "board_region": (
+        a_printed_region_reaches_the_floor,
+        "a printed region is drawn from the table and burns whoever walks"
+        " in -- the region half of the terrain table had no reader at all"
+        " (#1039, #458)",
     ),
     "board_scenery": (
         a_destructible_thing_takes_no_turn,

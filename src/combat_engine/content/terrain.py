@@ -34,6 +34,7 @@ from combat_engine.engine.components import (
     Scenery,
     Trap,
 )
+from combat_engine.engine.durations import When
 from combat_engine.engine.events import EnterSquare, RoundStart, TurnStart
 from combat_engine.engine.grid import Square
 from combat_engine.engine.movement import place
@@ -155,6 +156,94 @@ def dress(
                 arm(world, sq, level=level, pick=pick)
 
     world.bus.on(RoundStart, lay, once=True)
+
+
+def printed_region(level: int = 1, pick: Random | None = None) -> dict | None:
+    """A printed hindering region worth this board's tier, or None. `#1039`.
+
+    **The region half of the table, which had no reader at all.** `#1039`
+    and `#458` are both about this: 145 terrain rows are in `game.db` and
+    before this the whole package read the table in **zero** places -- the
+    one `FROM terrain` in the tree was a driver rule counting rows. The trap
+    half has had `printed_trap` -> `arm` for a while; the region half had
+    nothing, so a printed region could not reach a board by any route.
+
+    **Only the rows that carry damage**, which is 47 of the 121 fantastic
+    rows, because `hindering` is the one `Zone` field a database column can
+    fill on its own. The other 74 want either a mechanism that does not
+    exist yet or a `narrative=` marker, and `#1039`'s comment thread has the
+    row-by-row read -- six of the residue are one modifier seam, eight are
+    flavour, and two are genuinely novel. Nothing here guesses at them.
+
+    **Bounded by tier, not level**, because that is the column the table
+    has: `damage_tier` is 1 for heroic, and a heroic board must not lay a
+    paragon region. The root rule is *"the level band does not cross a tier
+    boundary"* and this is the same arithmetic one table over.
+
+    `pick` is the board's own generator, so a board stays reproducible from
+    its seed; without one the lowest eligible row is taken, which is what a
+    caller with no seed deserves and is at least in range. Both choices are
+    `printed_trap`'s, deliberately -- the two halves of one table should not
+    draw differently.
+
+    Returns a plain dict, so `lay` stays the only thing that knows which
+    columns it wants. Again `printed_trap`'s shape.
+    """
+    from combat_engine.db import game
+
+    tier = max(1, min(3, (max(1, level) + 9) // 10))
+    try:
+        rows = list(game().execute(
+            "SELECT ref, effect, damage, damage_type, damage_tier "
+            "FROM terrain "
+            "WHERE kind = 'fantastic terrain' "
+            "  AND damage IS NOT NULL AND damage != '' "
+            "  AND damage_tier IS NOT NULL AND damage_tier <= ? "
+            "ORDER BY damage_tier DESC, ref",
+            (tier,),
+        ))
+    except Exception:            # no database, or a build without the table
+        return None
+    if not rows:
+        return None
+    return dict(pick.choice(rows) if pick is not None else rows[0])
+
+
+def lay(world: World, row: dict, squares: set[Square] | frozenset[Square],
+        *, until: When = When.ENCOUNTER) -> int:
+    """Put a printed region on the floor as a hindering zone. `#1039`.
+
+    **The first casterless `hindering` zone, and it needed an engine move to
+    work at all.** `c.zone(hindering=)` wired its burn in `Cast._hinders`,
+    which only a row could reach -- so laying one from here would have
+    recorded the field and burned nobody, which is this component's named
+    *silently false* failure. The handlers now live in `Zones._burns` and
+    take the damage policy from the caller. Measured before moving it:
+    **zero** content rows call `c.zone(hindering=)`, so `#952`'s facility
+    had no caller and this is its first.
+
+    `owner=0`, because nobody laid it. That is not a sentinel creature: it
+    is read back only for `deal_damage`'s source, and the floor burning you
+    has no attacker. `label` is the **ref**, so the burn is attributed to
+    the printed row rather than to a card.
+
+    **`damage_type` may name two types** -- one row prints a region dealing
+    damage of two kinds at once -- and this passes the column through
+    unchanged. `Zones._burns` falls back to untyped on a word it does not
+    recognise rather than raising, which is the right side to fail on for a
+    database string: a region that burns untyped is nearer the printed row
+    than one that refuses to exist. The two-type case is **not** modelled
+    here and wants `deal_damage`'s `dtypes=`, which this path has no way to
+    reach yet.
+    """
+    return world.zones.create(
+        0,
+        str(row.get("ref") or "terrain"),
+        frozenset(squares),
+        until,
+        hindering=str(row.get("damage") or ""),
+        hindering_type=str(row.get("damage_type") or ""),
+    )
 
 
 def put(world: World, square: Square, *, kind: str = "object",

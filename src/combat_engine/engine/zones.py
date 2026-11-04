@@ -15,6 +15,7 @@ own id and is told.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -223,6 +224,7 @@ class Zones:
         sustain: ActionType | None = None,
         hindering: str = "",
         hindering_type: str = "",
+        burn: Callable[[int, str, str], None] | None = None,
     ) -> int:
         if obscured:
             # **Checked, because the alternative is silent.** `difficult=`
@@ -270,7 +272,101 @@ class Zones:
             hindering=hindering,
             hindering_type=hindering_type,
         )
-        return self._spawn(zone, when, sustain)
+        made = self._spawn(zone, when, sustain)
+        if hindering:
+            self._burns(made, hindering, hindering_type, burn)
+        return made
+
+    def _burns(self, zone: int, dice: str, dtype: str,
+               burn: Callable[[int, str, str], None] | None) -> None:
+        """Burn whoever is in `zone`, on arriving and again at a turn's end.
+
+        **Lifted out of `Cast._hinders`, which was its only home and could
+        only be reached by a row.** A printed board region has no caster --
+        nothing lays it, no `Cast` exists -- so a hindering region on the
+        floor recorded the field and burned nobody. `#952` built the
+        facility and **zero content rows call `c.zone(hindering=)`**, so
+        moving it costs nothing and gives it its first real caller.
+
+        **Both moments, because the printed line names both** -- a creature
+        that walks in takes it, and one that stays takes it again when its
+        turn ends. Watching only the entry lets a creature end its turn
+        standing in fire for nothing; watching only the turn end lets one
+        walk through the whole region untouched.
+
+        Entry is `ZoneEntered`, which this class already emits and which
+        `c.zone_condition` reads for the same reason. The turn's end is read
+        off the zone's own occupant list rather than by tracking arrivals,
+        so a creature pushed in by somebody else is burned too -- the
+        printed line is about being there, not about choosing to be.
+
+        **`burn` is the damage policy and the caller owns it**, which is the
+        one thing this move must not flatten. `Cast.zone` passes its own, so
+        a row's hindering damage still goes through `c.flat` and keeps the
+        standing-retype (`#795`) that only a caster can apply. A board
+        region has no retype to apply and gets the default below, which is
+        `resolve.deal_damage` -- the same function `c.flat` ends in.
+
+        Had this taken no callback and always used `deal_damage`, the row
+        path would have silently lost its retype. Zero rows use it today, so
+        nothing would have gone red: that is the shape of a regression this
+        component's rules file calls *silently false*.
+        """
+        from .events import TurnEnd, ZoneEntered
+        from .query import alive
+
+        def hurt(who: int) -> None:
+            if burn is not None:
+                burn(who, dice, dtype)
+                return
+            from .resolve import deal_damage
+            from .types import DamageType
+            try:
+                kind = DamageType(dtype) if dtype else DamageType.UNTYPED
+            except ValueError:
+                # **Untyped rather than raising.** `hindering_type` arrives
+                # as a bare string -- `Cast.zone` hands over
+                # `DamageType.value` and a board region hands over a
+                # database column -- so an unrecognised word is a data
+                # problem, and a region that burns for untyped damage is
+                # closer to the printed row than one that refuses to exist.
+                kind = DamageType.UNTYPED
+            mine = self.world.get(zone, Zone)
+            # **A flat number is not a dice expression, and the common case
+            # is flat.** `Rng.roll` takes `str | int` and treats a bare
+            # `int` as a constant *"which keeps callers that sometimes have
+            # flat damage from having to special-case it"* -- but a database
+            # column arrives as `"5"`, a `str`, and `roll("5")` raises
+            # `not a dice expression`.
+            #
+            # Measured over the rows this path exists for: **32 of 47**
+            # printed regions carry a flat number. So the raise was not an
+            # edge case, it was two thirds of the population, and the first
+            # end-to-end probe hit it on the row the draw happened to pick.
+            amount = self.world.rng.roll(
+                int(dice) if dice.strip().lstrip("+-").isdigit() else dice
+            ).total
+            deal_damage(
+                self.world,
+                mine.owner if mine else 0,
+                who,
+                amount,
+                kind,
+                mine.label if mine else "",
+                from_attack=False,
+            )
+
+        def on_enter(ev: ZoneEntered) -> None:
+            if getattr(ev, "zone", None) == zone and alive(self.world, ev.actor):
+                hurt(ev.actor)
+
+        def at_turn_end(ev: TurnEnd) -> None:
+            standing = self.inside.get(zone) or set()
+            if ev.actor in standing and alive(self.world, ev.actor):
+                hurt(ev.actor)
+
+        self.world.bus.on(ZoneEntered, on_enter)
+        self.world.bus.on(TurnEnd, at_turn_end)
 
     def aura(
         self,
@@ -418,12 +514,31 @@ class Zones:
             # `Health` at all, so routing through it would end a zone owned
             # by something that was never a living creature. An owner with
             # no `Health` keeps exactly its old behaviour here. #998.
-            health = self.world.get(zone.owner, Health)
-            if self.world.get(zone.owner, Position) is None or (
-                health is not None and health.hp <= health.dying_at
-            ):
-                self.end(eid, "its owner died")
-                continue
+            # **A zone nobody laid has no owner to die.** `owner=0` is the
+            # board laying a printed region -- `content.terrain.lay`, the
+            # region half of `#1039` -- and 0 is not an entity, so it has no
+            # `Position` and the test below ended the zone the instant it
+            # was created.
+            #
+            # That was silent in the worst way: `create` returned a real id,
+            # `hindering_at` answered `False`, and nothing raised. The only
+            # thing that said so was `ZoneEnded.why`, which a probe had to
+            # subscribe to in order to read `"its owner died"` about an
+            # owner that never existed.
+            #
+            # **Two wrong fixes first, recorded because each looked
+            # right.** Making the zone own itself (`zone.owner or eid`) does
+            # not help -- the zone entity has no `Position` either, so it
+            # fails the same test one line down. And routing through
+            # `query.alive` is what `#998`'s note below already forbids.
+            # The discriminator is the owner, not the health. #1039.
+            if zone.owner:
+                health = self.world.get(zone.owner, Health)
+                if self.world.get(zone.owner, Position) is None or (
+                    health is not None and health.hp <= health.dying_at
+                ):
+                    self.end(eid, "its owner died")
+                    continue
             if zone.aura is not None:
                 zone.squares = spread(squares(self.world, zone.owner), zone.aura)
             was = self.inside.setdefault(eid, set())
