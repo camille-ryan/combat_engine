@@ -28,8 +28,11 @@ What is counted, and what each is for:
   is already running.
 * **tied** -- decisions where the top score was a tie, so the choice fell to
   `str(action)`. 14.8% when first measured.
-* **charge_taken / charge_offered**, by role -- #265's acceptance test. A melee
-  creature should charge often and a wizard never.
+* **charge_taken / charge_offered** -- #265's and #293's acceptance test. A melee
+  creature should charge often and a wizard never. **Two reports**: the baselined
+  pair is per *side*, and `--roles` prints the per-role breakdown the acceptance
+  test actually asks for. This bullet said "by role" while the counter was keyed
+  on side alone, which is why the test went unrun -- see `act`.
 * **idle_melee** -- a melee creature out of reach that did not close. **The approach
   guard**: the fix for #265 changes what rewards closing, and this is what catches it
   going wrong.
@@ -243,11 +246,36 @@ class Counted(D.DoctrinePolicy):
             self.ties[side].append(tied)
             if tied > 1:
                 self.n[f"{side}/tied"] += 1
+        # **By role as well as by side, because the docstring has claimed
+        # "by role" for as long as the counter has been keyed on side
+        # alone.** `#293`'s acceptance test -- *"a melee-only skirmisher's
+        # charge take rate should rise toward the brute's, and the wizard
+        # should keep charging zero times"* -- is the stated guard on seven
+        # open issues and could not be read off this instrument at all. The
+        # word "role" appeared exactly once in this file and it was in the
+        # docstring saying the opposite.
+        #
+        # `Ident.role` carries it for **both** sides: a monster gets its
+        # printed role (`brute`, `skirmisher`, `artillery`) and a character
+        # gets its 4e one (`defender`, `striker`, `controller`, `leader`),
+        # so one field answers for the whole board and nothing had to be
+        # taught about classes.
+        #
+        # **Kept out of the baselined figures deliberately.** These are
+        # printed as their own block rather than added to the 52 compared
+        # against `scorecard.json`: a new baselined figure changes the
+        # file's shape and forces a re-bless, and a re-bless is how 310
+        # entries were once lost. The acceptance test wants to be *read*,
+        # not gated.
+        ident = world.get(actor, Ident)
+        role = (ident.role if ident and ident.role else "none")
         if any(a.kind == "charge" for a in options if a.available):
             self.n[f"{side}/charge_offered"] += 1
+            self.n[f"{side}/charge_offered/{role}"] += 1
         got = super().act(world, encounter, actor, options)
         if got.kind == "charge":
             self.n[f"{side}/charge_taken"] += 1
+            self.n[f"{side}/charge_taken/{role}"] += 1
         if got.kind == "end":
             # **Passed the turn with a standard action still in hand.** The guard on
             # Camille's rule that `end` is the floor: once it sits at +0.001 instead
@@ -698,7 +726,8 @@ def day(
 
 
 def measure(levels: tuple[int, ...], fights: int = 1,
-            *, terms: dict | None = None) -> dict:
+            *, terms: dict | None = None,
+            roles: dict | None = None) -> dict:
     """Play the seeds and count. `terms`, if given, is filled per level/side
     with each weighted term's magnitude in hundredths -- #314's per-term
     decomposition.
@@ -828,6 +857,29 @@ def measure(levels: tuple[int, ...], fights: int = 1,
                 "downed_holding_wind": pol.n[f"{side}/downed_holding_wind"],
                 "ap_standard": pol.n[f"{side}/ap_standard"],
                 "melee_turns": pol.n[f"{side}/melee_turns"],
+            }
+        if roles is not None:
+            # **Keyed off `pol.n` the same way `terms` is**, so the two
+            # harvests cannot disagree about what a level's figures are.
+            # Offered and taken are collected together rather than as two
+            # passes, because a take rate needs both and a role that was
+            # never offered a charge must read `0 of 0` rather than vanish
+            # -- "never charged" and "never asked" are the two answers the
+            # acceptance test has to tell apart.
+            roles[str(level)] = {
+                side: {
+                    role: (
+                        pol.n[f"{side}/charge_taken/{role}"],
+                        pol.n[f"{side}/charge_offered/{role}"],
+                    )
+                    for role in sorted({
+                        k.rsplit("/", 1)[1]
+                        for k in pol.n
+                        if k.startswith(f"{side}/charge_offered/")
+                        or k.startswith(f"{side}/charge_taken/")
+                    })
+                }
+                for side in ("party", "monsters")
             }
         if terms is not None:
             terms[str(level)] = {
@@ -960,6 +1012,47 @@ def show(now: dict, was: dict | None) -> None:
         print("\n  + better than the baseline, ! worse. `--save` to re-baseline.")
 
 
+def show_roles(per_role: dict) -> None:
+    """Charges offered and taken per role. `#293`'s acceptance test.
+
+    **The test this prints has been cited as a guard on seven issues and
+    has never been run**, because the counter it needs was keyed on side
+    and this file's own docstring said it was keyed on role. `#293`:
+
+        a melee-only skirmisher's charge take rate should rise toward the
+        brute's, and **the wizard should keep charging zero times**. If the
+        wizard starts charging, the term has gone too far.
+
+    So the two readings that matter are a **melee role's rate** and the
+    **controller's count**, and the second is the one that fails loudly:
+    a controller charging at all means a look-ahead term has overpaid.
+
+    `0 of 0` is printed rather than omitted. A role never offered a charge
+    and a role that refused every charge offered are different findings and
+    a missing row conflates them -- which is the same distinction
+    `could_not_act` exists to keep elsewhere in this file.
+
+    Not compared against the baseline and not part of the 52 figures: this
+    is a reading, and a new baselined figure would force a re-bless.
+    """
+    print("\n  charges, per role -- #293's acceptance test")
+    print("  a melee role should take them; a CONTROLLER should take none")
+    for level in sorted(per_role, key=int):
+        print(f"\n  level {level}")
+        for side in ("party", "monsters"):
+            got = per_role[level].get(side) or {}
+            if not got:
+                print(f"    {side:9s} -- no charge was offered to anybody")
+                continue
+            for role, (taken, offered) in sorted(got.items()):
+                rate = f"{100 * taken / offered:5.1f}%" if offered else "    --"
+                flag = ""
+                if role == "controller" and taken:
+                    flag = "  <- a controller CHARGED; the test says zero"
+                print(f"    {side:9s} {role:12s} {taken:4d} of {offered:4d}"
+                      f"  {rate}{flag}")
+
+
 def show_terms(per_term: dict) -> None:
     """Rank each term by the weighted magnitude it contributed. #314.
 
@@ -1005,6 +1098,12 @@ def main() -> int:
                          "1 (the default) is the single-fight measurement the "
                          "committed baseline holds; 4 is a day, which is what "
                          "exercises the daily reservation at all (#305)")
+    ap.add_argument("--roles", action="store_true",
+                    help="print charges offered and taken PER ROLE, which is "
+                         "#293's and #265's stated acceptance test -- a "
+                         "melee-only skirmisher's take rate against the "
+                         "brute's, and the controller at zero. The baselined "
+                         "pair is per side and cannot answer it")
     ap.add_argument("--terms", action="store_true",
                     help="also break the static/measured split down per term, "
                          "ranked by weighted magnitude. #314's question is "
@@ -1022,8 +1121,10 @@ def main() -> int:
     # first attempt at this very comment tripped the same check by quoting
     # the forbidden spelling, which is #883's own lesson about prose. #883.
     per_term: dict = {}
+    per_role: dict = {}
     now = measure(levels, fights=args.fights,
-                  terms=per_term if args.terms else None)
+                  terms=per_term if args.terms else None,
+                  roles=per_role if args.roles else None)
     if args.fights != 1:
         # **Refuse the comparison rather than print a misleading one.** The
         # baseline is a single-fight measurement; a four-fight day spends
@@ -1039,6 +1140,8 @@ def main() -> int:
     show(now, was)
     if args.terms:
         show_terms(per_term)
+    if args.roles:
+        show_roles(per_role)
     if stale:
         print(stale)
     if args.save:
