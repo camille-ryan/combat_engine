@@ -157,3 +157,63 @@ produces a challenge that reads correctly, narrates well, and is scored by
 rules nobody chose. That wants the plant written before the feature, which
 is the order `scripts/CLAUDE.md` asks for and not the order a rushed change
 takes.
+
+---
+
+## Landed, `1927924e`. All 29 instruments clean.
+
+Every step of this plan is in, and three things it got wrong are worth
+leaving on the record.
+
+**Step 2 was already done.** The plan asked `challenge` for `start` and
+`ended`; `open_challenge` and `run.over` already were those. What was
+genuinely missing was the **router** -- `play` did the `group_of` test
+inline -- so `challenge.resolve` is the one new function there, and it
+exists so the automatic and narrated paths cannot disagree about which
+door a skill goes through.
+
+**The plan missed the phrasing gate.** `_narratable` has to require
+`scene.tries` as well as a director. Without it, every converted challenge
+-- all of them bare today -- would be narrated against a matcher measured
+at **3 of 12**, with failures that stretch an intent onto the wrong skill.
+The plan treated phrasings as a prerequisite that was already met and did
+not notice they are met only for the fixture.
+
+**And three of its specified plants could not be posed on the fixture.**
+Each needed a board built:
+
+* the `stop` hook -- a director naming one skill never finishes the
+  challenge, so `max_beats` bounds the loop and the check is invisible. A
+  **cycling** director resolves it in 3 beats of 6;
+* the group router -- `Scene.group_of` answers `""` for every skill of
+  every converted challenge, so the group skill is a
+  `dataclasses.replace` copy rather than something read off the tree;
+* the phrasing gate -- posed on a copy with `tries=()`.
+
+## The four-round diagnosis, which is the transferable part
+
+The wiring assertion read "0 declared lines" and I took it for the hook
+not being called. It was the probe each time:
+
+1. `control` held the class name; `Campaign.controls` reads anything
+   unrecognised as `"human"`, so nobody declared;
+2. `Director.joins` is a **model** call and gates who is asked at all;
+3. `declare` and `react` are two more -- the first probe spent 58 seconds
+   reaching for an ollama that was not serving;
+4. and `Line.__new__` silently relabels a kind outside `KINDS` as
+   `"scene"`, so 18 `"say"` lines existed under another name.
+
+Four separate reasons a correct implementation reports as an unwired one.
+The rule now asserts that every emitted kind is in `KINDS`, which would
+have collapsed rounds 1-4 into one.
+
+The `"say"` caption was also contradicting a documented decision:
+`_roleplay` does not print a companion's declaration on purpose. Read the
+convention before adding to it.
+
+## Not done
+
+The chapter-1 challenge in `modules/` has no phrasings and that one is
+Camille's -- `#932` is tagged `question` for it. Until it has them the
+adventure she plays runs the automatic path, so the loop is live and her
+campaign has not changed.
