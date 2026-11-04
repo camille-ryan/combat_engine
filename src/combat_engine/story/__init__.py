@@ -120,6 +120,34 @@ class Sheet:
     max_hp: int = 0
     #: Healing surges left. `None` is the full pool.
     surges: int | None = None
+    #: What a fresh pool holds, read off the board the way `max_hp` is and
+    #: for the same reason: the chassis decides it, so this is a record and
+    #: not a request. Needed because `withheld` below has to be subtracted
+    #: from a *full* pool and a sheet that only says `None` cannot do the
+    #: arithmetic.
+    max_surges: int = 0
+    #: Surges that an extended rest does **not** give back, by what took
+    #: them. The printed rule, verbatim from DMG p159:
+    #:
+    #: > *"If a character takes an extended rest while in an area of
+    #: > environmental danger, he recovers healing surges lost in combat but
+    #: > not those lost from failed endurance checks."*
+    #:
+    #: and again for deprivation:
+    #:
+    #: > *"a character cannot regain healing surges lost to starvation,
+    #: > thirst, or suffocation until he eats a meal, drinks, or gains
+    #: > access to air again"*
+    #:
+    #: **A dict and not an integer, because the two halves are relieved by
+    #: different things.** A surge lost to cold comes back when the party
+    #: leaves the cold; one lost to thirst comes back when they drink. One
+    #: counter could not say which, and that is the whole reason `#971`
+    #: names new state rather than a new function.
+    #:
+    #: Keyed by the danger or the deprivation, so the words are the same
+    #: ones `module.DANGERS` holds and a reader can see what is owed.
+    withheld: dict[str, int] = field(default_factory=dict)
     #: Unspent action points. One at the start of a day; a milestone grants
     #: more, and `extended_rest` does not carry them over.
     action_points: int = 1
@@ -500,7 +528,45 @@ class Party:
                 sheet.spent.clear()
                 sheet.per_day.clear()
                 sheet.hp = None
-                sheet.surges = None
+                # **A full pool, minus what the rest does not give back.**
+                # The printed rule is explicit and the shipped half of
+                # `#971` got it wrong: a surge lost to a failed Endurance
+                # check is *not* recovered by an extended rest, and
+                # `surges = None` gave every one of them back. So a party
+                # could stand in the cold all night, fail check after
+                # check, and wake up whole -- the cost `run.weather`
+                # charges was being refunded by the next rest.
+                #
+                # `None` still means a full pool and is what a party with
+                # nothing owed gets, so the common case is unchanged.
+                owed = sum(sheet.withheld.values())
+                # **`None` when the pool cannot be measured, not zero.**
+                # `max_surges` is read off a board, so a sheet that has
+                # never been fielded holds 0 -- and `0 - owed` floored at 0
+                # would take every surge from a character whose pool nobody
+                # knows. Zeroing a number you cannot measure is the worse
+                # of the two errors.
+                #
+                # It is also unreachable through the only writer, and the
+                # reason is **not** the one first written here. That said
+                # `weather` strikes before it writes a debt, so the ordering
+                # inside `weather` was the guarantee -- and a plant moving
+                # the strike after the debt left `drivers.cold_debt`
+                # entirely green, which is how the mistake showed.
+                #
+                # The ordering is irrelevant: this branch reads
+                # `max_surges` at **rest** time, not at debt time, and
+                # `weather` lays and strikes a board in the same call that
+                # writes a debt. So by the time any rest looks, a harvest
+                # has happened and the pool is measured, whichever order
+                # the two statements sit in. `drivers.cold_debt` asserts
+                # the thing that matters -- every sheet that owes a surge
+                # has a measured pool -- rather than an ordering that does
+                # not.
+                sheet.surges = (
+                    None if not owed or sheet.max_surges <= 0
+                    else max(0, sheet.max_surges - owed)
+                )
                 sheet.action_points = 1
                 sheet.failures = 0
                 # **A rest ends stabilised, both ways round.** An extended
@@ -686,6 +752,7 @@ def harvest(world: World, party: Party) -> None:
             sheet.hp = health.hp
             sheet.max_hp = health.max_hp
             sheet.surges = health.surges
+            sheet.max_surges = health.max_surges
             sheet.failures = health.failures
             # Read off the board rather than inferred from the numbers: a
             # negative total says *dying*, and whether somebody has been

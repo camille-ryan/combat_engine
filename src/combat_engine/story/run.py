@@ -2288,6 +2288,46 @@ def travel(campaign: Campaign, module: Module, scene: Scene,
     )
 
 
+def _out_of_the_cold(campaign: Campaign, scene: Scene, made: Step) -> None:
+    """Give back surges owed to a danger this scene is not in. #971.
+
+    The printed withholding is **conditional on still being there**:
+
+    > *"If a character takes an extended rest **while in an area of
+    > environmental danger**, he recovers healing surges lost in combat but
+    > not those lost from failed endurance checks."*
+
+    So a party that walks out of the cold and sleeps somewhere warm gets
+    them back, and `Sheet.withheld` has to be cleared for the dangers the
+    new scene does not name. Without this the first cold night would cost
+    surges for the rest of the campaign, which is worse than the bug this
+    whole change fixes.
+
+    **A reading, not a quotation.** The page says plainly when the surges
+    are *withheld* and does not say in so many words when they return; the
+    conditional *"while in an area of"* is the whole of the argument, and
+    the deprivation paragraph three paragraphs down states the same shape
+    explicitly -- *"cannot regain ... until he eats a meal, drinks, or gains
+    access to air again"*. Said here so the next reader knows which half is
+    printed.
+
+    **Called before the rest, not after.** `run` charges `weather` at the
+    end of the scene, so a cold night's own failures are recorded after this
+    has run and are correctly still owed in the morning.
+    """
+    here = set(scene.exposure)
+    for sheet in campaign.party.sheets:
+        gone = [d for d in sheet.withheld if d not in here]
+        for danger in gone:
+            del sheet.withheld[danger]
+        if gone:
+            made.say(
+                f"{sheet.cls} is out of {', '.join(sorted(gone))} and the "
+                "surges it cost come back with this rest.",
+                "note",
+            )
+
+
 def weather(campaign: Campaign, module: Module, scene: Scene,
             made: Step) -> None:
     """Spend the party's surges on the hours they stood in the cold. #971.
@@ -2365,6 +2405,14 @@ def weather(campaign: Campaign, module: Module, scene: Scene,
         left = sheet.surges or 0
         if left > 0:
             sheet.surges = left - 1
+            # **Recorded as owed, not merely spent.** *"he recovers healing
+            # surges lost in combat but not those lost from failed endurance
+            # checks"* -- so `Party.rest(extended=True)` has to know this one
+            # was an Endurance failure rather than a fight, and
+            # `Sheet.withheld` is where it looks. Without this the night's
+            # rest gave every one of them back and the whole cost this
+            # function charges was refunded.
+            sheet.withheld[danger] = sheet.withheld.get(danger, 0) + 1
             made.say(
                 f"{sheet.cls} fails Endurance {target} against {danger} "
                 "and spends a healing surge.",
@@ -2595,6 +2643,7 @@ def step(
                 "note",
             )
         else:
+            _out_of_the_cold(campaign, scene, made)
             campaign.party.rest(extended=scene.extended and not refused)
         if denied:
             pass

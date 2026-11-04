@@ -387,6 +387,14 @@ DANGERS = {
     "extreme altitude": 26,
     "frigid cold": 26,
     "stifling heat": 26,
+    # **Two rows this table was short of, read off the page rather than off
+    # the issue that quoted it.** `#971` quoted the rule and seven
+    # conditions; the printed table has **nine**. Found by extracting the
+    # page from `resources/` before writing the deprivation half, which is
+    # the standing rule about a quoted table -- and here it was the code
+    # that was short rather than the quote that was wrong.
+    "pervasive smoke or ash": 26,
+    "pervasive necromantic energy": 31,
 }
 
 #: *"Every eight hours within an area of environmental danger, the character

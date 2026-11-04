@@ -52564,6 +52564,191 @@ def the_party_stands_where_its_marching_order_says(out: Result) -> None:
     )
 
 
+def a_surge_lost_to_the_cold_is_not_given_back_by_a_rest(out: Result) -> None:
+    """An extended rest does not refund a failed Endurance check. `#971`.
+
+    The printed rule, DMG p159, read off the page rather than off the issue
+    that quotes it:
+
+    > *"If a character takes an extended rest while in an area of
+    > environmental danger, he recovers healing surges lost in combat but
+    > **not** those lost from failed endurance checks."*
+
+    **`#971`'s shipped half got this wrong and nothing could see it.**
+    `run.weather` charges a surge per failed check and
+    `Party.rest(extended=True)` set `surges = None`, which is a full pool --
+    so a party could stand in the cold all night, fail check after check,
+    and wake up whole. The cost the function charges was refunded by the
+    next rest, and both halves read correct on their own.
+
+    `Sheet.withheld` is the fix: a dict keyed by what took the surge, so the
+    rest can tell a fight from an Endurance failure, and so the two kinds of
+    debt are relieved by different things -- leaving the cold, against
+    eating a meal.
+
+    **The ordering premise is asserted here and not assumed**, because a
+    branch in `rest` rests on it: `max_surges` is read off a board, so a
+    sheet never fielded holds 0, and the arithmetic falls back to a full
+    pool rather than zeroing a number nobody has measured. That fallback is
+    only sound because the single writer of a debt cannot reach it --
+    `weather` calls `board.strike()`, which harvests, and harvesting is what
+    sets `max_surges`, **before** it writes any debt. Asserted off the
+    source, the way `kinds_named` asks `actions.py`.
+
+    And the table itself: the page prints **nine** conditions and
+    `module.DANGERS` held **seven**. Found by extracting the page before
+    writing this, which is the standing rule about a quoted table -- and
+    here it was the code that was short rather than the quote that was
+    wrong. Both figures are pinned to literals so a tenth row has to be
+    deliberate.
+    """
+    from pathlib import Path as _Path
+
+    from combat_engine.story import Party, Sheet
+    from combat_engine.story import module as _mod
+    from combat_engine.story import run as _run
+    from combat_engine.story.module import DANGERS
+    from combat_engine.story.run import Step as _Step
+    from combat_engine.story.save import Campaign as _Campaign
+
+    # Pinned to a literal, not read off the module: an expected value taken
+    # from the constant under test shrinks with the plant.
+    out.that(len(DANGERS) == 9,
+             "the printed environmental table has nine conditions and"
+             " `module.DANGERS` holds nine -- it held seven, and the two"
+             " missing rows were found by reading the page rather than the"
+             " issue that quoted it",
+             f"{len(DANGERS)} conditions")
+    out.that(DANGERS.get("pervasive smoke or ash") == 26
+             and DANGERS.get("pervasive necromantic energy") == 31,
+             "and the two added rows carry the DCs the page prints, 26 and"
+             " 31 -- the second is the highest in the table and the only one"
+             " above 26, so a default would have been wrong",
+             f"smoke={DANGERS.get('pervasive smoke or ash')}"
+             f" necrotic={DANGERS.get('pervasive necromantic energy')}")
+
+    def sheeted(owed: dict[str, int] | None, *, surges: int = 3,
+                mx: int = 9) -> Sheet:
+        made = Sheet(cls="fighter", level=5)
+        made.max_surges = mx
+        made.surges = surges
+        made.withheld = dict(owed or {})
+        return made
+
+    def after(owed: dict[str, int] | None, *, extended: bool = True,
+              mx: int = 9) -> Sheet:
+        made = sheeted(owed, mx=mx)
+        Party(sheets=[made]).rest(extended=extended)
+        return made
+
+    out.that(after(None).surges is None,
+             "a party with nothing owed still gets a full pool from an"
+             " extended rest -- the common case is unchanged, which is what"
+             " makes the next assertion a change and not a rewrite",
+             f"surges={after(None).surges}")
+    out.that(after({"cold": 2}).surges == 7,
+             "two surges owed to the cold leaves a pool of nine at SEVEN"
+             " after an extended rest -- the printed `not those lost from"
+             " failed endurance checks`",
+             f"surges={after({'cold': 2}).surges}")
+    out.that(after({"cold": 2, "frigid cold": 20}).surges == 0,
+             "and more owed than the pool holds floors at nought rather"
+             " than going negative",
+             f"surges={after({'cold': 2, 'frigid cold': 20}).surges}")
+    out.that(after({"cold": 1}, mx=0).surges is None,
+             "a sheet whose pool has never been measured falls back to a"
+             " full one rather than being zeroed -- `max_surges` comes off"
+             " a board, and taking every surge from a character nobody has"
+             " measured is the worse of the two errors",
+             f"surges={after({'cold': 1}, mx=0).surges}")
+
+    short = after({"cold": 2}, extended=False)
+    out.that(short.withheld == {"cold": 2},
+             "a SHORT rest neither refunds the debt nor clears it -- the"
+             " printed sentence is about an extended rest, and five minutes"
+             " is not a meal or a warm room",
+             f"withheld={short.withheld}")
+
+    # **The premise the fallback rests on, asserted by playing it rather
+    # than by reading the source** -- and the premise is not the one I first
+    # wrote. Three mistakes, each caught by a plant:
+    #
+    # 1. The first version compared `str.index` positions inside
+    #    `inspect.getsource(run.weather)`. It **raised** `ValueError`
+    #    instead of failing when a plant removed the debt line -- a raise is
+    #    a louder red than a FAIL but prints no FAIL line, so a grep for one
+    #    reports the plant as green.
+    # 2. `run.py` holds **two** `finally: board.strike()` blocks, so a plant
+    #    aimed at the ordering replaced the first and landed in another
+    #    function. The rule passed on an unplanted file.
+    # 3. And when the plant finally did land in `weather`, the rule **still**
+    #    passed -- correctly. The ordering is irrelevant: `rest` reads
+    #    `max_surges` at rest time, and `weather` lays and strikes a board in
+    #    the same call, so a harvest has always happened by the time
+    #    anything looks. The stated reason was wrong and the assertion was
+    #    measuring the right thing for the wrong reason.
+    #
+    # So this asserts that a sheet which owes a surge has a measured pool,
+    # which is what the fallback actually depends on.
+    # **Annotated, not `-> object`.** That erases the type and every
+    # `camp.party` below reads as an attribute on `object` -- nine `types`
+    # diagnostics, which is the second time in this session the same
+    # shortcut has cost a red run. `ruff` passes either way, which is why it
+    # keeps happening.
+    def trek(exposure: list[str], hours: int, *, kind: str = "roleplay",
+             seed: int = 5) -> _Campaign:
+        scene: dict = {"id": "trek", "kind": kind, "name": "Trek",
+                       "exits": [], "hours": hours, "exposure": exposure}
+        if kind == "rest":
+            scene["extended"] = True
+        built = _mod.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "trek", "scenes": [scene]}, _Path("<driver>"))
+        camp = _run.begin(built, seed=seed)
+        _run.step(camp, built, record=False)
+        return camp
+
+    cold = trek(["frigid cold"], 24)
+    owing = [s for s in cold.party.sheets if s.withheld]
+    out.that(owing,
+             "a day of frigid cold leaves at least one character owing a"
+             " surge -- the premise of everything below, and it comes from"
+             " playing the scene rather than from reading the source",
+             f"{len(owing)} of {len(cold.party.sheets)} owe something")
+    out.that(owing and all(s.max_surges > 0 for s in owing),
+             "and every sheet that owes one has a measured pool, so the"
+             " full-pool fallback in `rest` is unreachable through the only"
+             " writer -- `weather` lays and strikes a board in the same call"
+             " that writes a debt, and striking harvests, which is what sets"
+             " `max_surges`",
+             f"max_surges={[s.max_surges for s in owing]}")
+
+    before = {id(s): (s.surges, dict(s.withheld)) for s in cold.party.sheets}
+    cold.party.rest(extended=True)
+    kept = [s for s in cold.party.sheets
+            if before[id(s)][1] and s.surges is not None
+            and s.surges < s.max_surges]
+    out.that(len(kept) == len(owing),
+             "and an extended rest after that day leaves every one of them"
+             " short -- which is the whole bug: `surges = None` gave them"
+             " all back and the night in the cold cost nothing by morning",
+             f"{len(kept)} of {len(owing)} still short")
+
+    # Relief, played the same way: a second scene out of the cold.
+    warm = trek(["frigid cold"], 24)
+    for sheet in warm.party.sheets:
+        sheet.withheld["frigid cold"] = 2
+        sheet.max_surges = 9
+    inn = _mod.Scene(id="inn", kind="rest", name="Inn")
+    _run._out_of_the_cold(warm, inn, _Step(scene=inn))
+    out.that(all(not s.withheld for s in warm.party.sheets),
+             "a rest somewhere the danger is NOT clears the debt -- the"
+             " printed withholding is conditional on resting `while in an"
+             " area of environmental danger`, so a first cold night must"
+             " not cost surges for the rest of the campaign",
+             f"{[s.withheld for s in warm.party.sheets]}")
+
+
 def hours_in_the_cold_cost_the_party_healing_surges(out: Result) -> None:
     """A healing surge could only ever be lost to a fight, and the printed
     rules have another way to spend one:
@@ -61001,6 +61186,12 @@ DRIVERS = {
     "marching_order": (
         the_party_stands_where_its_marching_order_says,
         "the party stands where its marching order says (#994)",
+    ),
+    "cold_debt": (
+        a_surge_lost_to_the_cold_is_not_given_back_by_a_rest,
+        "an extended rest does not refund a surge lost to a failed Endurance"
+        " check, and the printed table has nine conditions rather than seven"
+        " (#971)",
     ),
     "cold_hours": (
         hours_in_the_cold_cost_the_party_healing_surges,
