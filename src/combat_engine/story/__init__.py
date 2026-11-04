@@ -211,6 +211,27 @@ class Sheet:
     #: number that cannot be spent is honest; awarding nothing was not.
     #: #969.
     coins: int = 0
+    #: The magic items this character owns, as plain dicts. **The kit is
+    #: part of who the character is, not part of the wear**, which is why it
+    #: sits beside `powers` and `feats` in spirit even though it is written
+    #: here.
+    #:
+    #: Dealt once by `Party.of` and handed back by `character`, so a party
+    #: walks into every encounter wearing the same things. Before this it was
+    #: dealt off `world.rng.seed` -- the FIGHT's seed -- so a party's kit
+    #: changed between encounters: measured over four fights in one day,
+    #: **zero item overlap**. That silently refreshed every item daily and
+    #: made `_wear`'s `spent` filter discard every item spend, correctly, as
+    #: belonging to a row the character no longer held.
+    #:
+    #: Exactly the bug `Party.of` already fixed for the hand, one field over
+    #: -- its docstring has the argument.
+    #:
+    #: **Dicts and not `Magic`**, because this is the type `save.py`
+    #: round-trips without an encoder: `Magic` is flat strings, ints and
+    #: tuples, and `Sheet(**{k: v ...})` rebuilds anything JSON-native by
+    #: field name. #1101.
+    kit: list[dict] = field(default_factory=list)
 
     def per_day_left(self, ref: str, limit: int) -> int:
         """How many uses of that row are left today."""
@@ -279,9 +300,22 @@ class Sheet:
     @property
     def character(self) -> chargen.Character:
         """The build request this sheet is a record of."""
+        from combat_engine.chargen import Magic
+
         return chargen.Character(
             self.cls, self.level, build=self.build, race=self.race,
             powers=list(self.powers), feats=list(self.feats),
+            # **Rebuilt from the stored dicts, not re-dealt.** `Magic` takes
+            # tuples where JSON gives lists, so `base` and `powers` are
+            # coerced back -- without that an item compares unequal to the
+            # one that was stored and `drivers` would be asserting on a
+            # near-miss. #1101.
+            gear=tuple(
+                Magic(**{**item,
+                         "powers": tuple(item.get("powers") or ()),
+                         "base": tuple(item.get("base") or ())})
+                for item in self.kit
+            ),
         )
 
 
@@ -313,15 +347,18 @@ class Party:
         The same three dealers `spawn` uses, in the same order and off the same
         shape of key, so a dealt party is one `spawn` would have dealt.
         """
+        from dataclasses import asdict
         from random import Random
 
         from combat_engine.chargen import (
             DEAL_RACES,
+            Character,
             build_of,
             deal_race,
             dealt_hand,
             feats_for,
             power_swap,
+            treasure,
         )
 
         sheets: list[Sheet] = []
@@ -341,9 +378,28 @@ class Party:
             # that hands over a card takes one back, so a hand pinned before the
             # swap is a hand `spawn` would then alter -- which is the drift this
             # method exists to stop.
+            kept = power_swap(list(hand), list(taken))
+            # **The kit, dealt here for the same reason the hand is.** It was
+            # dealt inside `spawn` off `world.rng.seed` -- the fight's seed --
+            # so a party walked into every encounter wearing different things:
+            # measured over four fights in one day, **zero item overlap**.
+            #
+            # Its own stream, keyed the way the others are, so dealing gear
+            # moves neither the hand nor the feats nor the fight's dice.
+            #
+            # Stored as dicts because that is what `save.py` round-trips with
+            # no encoder, and rebuilt by `Sheet.character`.
+            kit = [
+                asdict(magic)
+                for magic in treasure(
+                    Character(key, level, build=build.name, race=race,
+                              powers=list(kept), feats=list(taken)),
+                    Random(f"{seed}:{key}:gear"),
+                )
+            ]
             sheets.append(Sheet(
                 cls=key, level=level, build=build.name, race=race,
-                powers=power_swap(list(hand), list(taken)), feats=taken,
+                powers=kept, feats=taken, kit=kit,
             ))
         return cls(sheets=sheets)
 

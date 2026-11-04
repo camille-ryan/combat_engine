@@ -45,7 +45,7 @@ player cares most about.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from random import Random
 
 from combat_engine import chargen
@@ -214,10 +214,27 @@ def interview(
     # **The same swap `spawn` and `Party.of` both make.** A feat that hands
     # over a card takes one back, so a hand pinned before the swap is a hand
     # `spawn` would then alter -- the drift `Sheet.powers` exists to stop.
+    kept = chargen.power_swap(list(hand), list(taken))
+    # **The kit too, because this is the second dealer and they must not
+    # fork.** `drivers.chargen_defaults` asserts that `dealt()` and
+    # `Party.of` produce the identical `Sheet`, and it caught exactly this:
+    # `#1101` pinned the kit in `Party.of` and left the maker dealing none,
+    # so all four classes came back `kit: dealt [...] made []`.
+    #
+    # Keyed the same way, off the same stream, so the two agree by
+    # construction rather than by being checked -- which is this function's
+    # whole job, and why its docstring calls itself "the control".
+    kit = [
+        asdict(magic)
+        for magic in chargen.treasure(
+            chargen.Character(cls, level, build=build.name, race=race,
+                              powers=list(kept), feats=list(taken)),
+            Random(f"{seed}:{cls}:gear"),
+        )
+    ]
     return Sheet(
         cls=cls, level=level, build=build.name, race=race,
-        powers=chargen.power_swap(list(hand), list(taken)),
-        feats=taken,
+        powers=kept, feats=taken, kit=kit,
     )
 
 

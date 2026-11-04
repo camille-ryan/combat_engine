@@ -2151,6 +2151,20 @@ class Character:
     #: used `race=""` as its raceless control and the control had a race.
     #: #688.
     race: str = ""
+    #: The magic items this character arrives wearing, as `Magic` records.
+    #: Empty means "deal me a kit", the same as `powers` and `feats` above
+    #: and read at the same place in `spawn`.
+    #:
+    #: **A record and not a request, which is why it holds `Magic` and not
+    #: refs.** `treasure` settles four things per item -- the slot, the
+    #: enhancement, the critical dice and *which power rows the item grants*
+    #: -- and `magic_for(ref, plus=...)` re-derives only the first three.
+    #: Measured over 4 classes x 3 levels: a refs-only pin brings every item
+    #: back with `powers=()` and an implement back as a `weapon`, so the
+    #: character keeps the enhancement bonus and silently loses every item
+    #: power. That is the version of this fix that looks right and removes
+    #: the thing it was built for. #1101.
+    gear: tuple[Magic, ...] = ()
     #: Which **feature chassis** this character has, as the ref spells it --
     #: `arcanist`, `templar`, `warpriest`. Empty takes the class's first,
     #: which is `chassis_of`'s business and is the only chassis for 23 of
@@ -3767,7 +3781,22 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         world.add(eid, PowerPoints(points=line.power_points, maximum=line.power_points))
     # Gear last, so it has a `Gear` and a `Mods` to write into. Its own
     # stream again -- dealing treasure must not move the fight's dice.
-    for magic in treasure(who, Random(f"{world.rng.seed}:{who.ref}:{who.level}:gear")):
+    # **The pinned kit if the caller brought one, dealt here if not.** Exactly
+    # the shape of `who.powers or dealt_hand(...)` above, and for the identical
+    # reason -- `Party.of`'s own docstring says it about the hand:
+    #
+    #     The hand is dealt once, now, off `seed` rather than off whichever
+    #     fight the party walks into [...] so leaving it to the fight meant a
+    #     party that changed shape between two encounters.
+    #
+    # Gear was left out of that fix. `world.rng.seed` is the FIGHT's seed, so
+    # a party walked into every encounter with a different kit -- measured
+    # over four fights in one day, **zero item overlap** -- which silently
+    # refreshed every item daily and made `story._wear`'s `spent` filter drop
+    # every item spend as belonging to a row the character no longer held.
+    # #1101.
+    for magic in (who.gear or treasure(
+            who, Random(f"{world.rng.seed}:{who.ref}:{who.level}:gear"))):
         equip(world, eid, magic)
     place(world, eid, square)
     return eid

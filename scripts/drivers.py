@@ -56598,6 +56598,206 @@ def a_brute_minion_reads_the_brute_column(out: Result) -> None:
              " passing because nothing converts at all")
 
 
+def a_party_wears_the_same_kit_all_day(out: Result) -> None:
+    """A party's magic items survive the day. `#1101`.
+
+    `chargen.spawn` dealt the kit off `world.rng.seed` -- the **fight's**
+    seed -- so a party walked into every encounter wearing different things.
+    Measured before the fix, four fights in one day with one `Party` and
+    `harvest`/`rest` between each: **zero item overlap**.
+
+    That is the identical bug `Party.of` already fixed for the hand, and its
+    docstring is the argument:
+
+        The hand is dealt once, now, off `seed` rather than off whichever
+        fight the party walks into [...] so leaving it to the fight meant a
+        party that changed shape between two encounters.
+
+    Gear was simply left out of it. `Sheet.kit` is the field and
+    `who.gear or treasure(...)` in `spawn` is the read, four lines from
+    `who.powers or dealt_hand(...)`.
+
+    **THE assertion is the spent daily**, because that is what the churn was
+    hiding and it is not the same statement as "the kit is stable". An item
+    daily was refreshed every encounter -- not by a broken counter, but
+    because `story._wear` correctly drops a spend for a row the character no
+    longer holds:
+
+        Only what the character actually has [...] must not carry a spend
+        for a row it no longer holds.
+
+    That filter is right and is untouched. With a stable kit it starts doing
+    what it was written for.
+
+    **A refs-only pin was tried and rejected, measured.** Storing item refs
+    and rebuilding with `magic_for(ref, plus=band(level))` brings every item
+    back with `powers=()` and an implement back as a `weapon`, over 4 classes
+    x 3 levels -- so the character keeps the enhancement and silently loses
+    every item power. The record is stored whole for that reason, and the
+    list/tuple coercion in `Sheet.character` is why: `Magic` holds tuples
+    where JSON gives lists, and without the coercion an item compares
+    unequal to the one that was stored.
+    """
+    import json
+    from dataclasses import asdict
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.chargen import Character as Who
+    from combat_engine.chargen import Magic, band, magic_for, treasure
+    from combat_engine.engine import dsl
+    from combat_engine.engine.components import Ident, Powers
+    from combat_engine.story import Party, Sheet, field_encounter, harvest
+
+    def the_fighter(world: object) -> int:
+        """The fighter's id, or an assertion rather than a `None` deref.
+
+        Four sites read `world.get(e, Ident).ref` directly and `get` is
+        `Ident | None`, so `ty` refused all four -- and a bare `.ref` on a
+        board that somehow fielded nobody would raise an `AttributeError`
+        five lines from the thing being tested. One accessor instead.
+        """
+        for eid, _ in world.each(Ident):          # ty: ignore[unresolved-attribute]
+            got = world.get(eid, Ident)           # ty: ignore[unresolved-attribute]
+            if got is not None and got.ref == "c:fighter":
+                return eid
+        raise AssertionError("no fighter was fielded")
+
+    party = Party.of(level=5, seed=5)
+    sheet = next(s for s in party.sheets if s.cls == "fighter")
+
+    # -- the floor: the sheet pins a kit at all ---------------------------
+    out.that(len(sheet.kit) >= 3,
+             "the floor: `Party.of` deals a kit onto the sheet. It held"
+             " NOTHING before this -- `sheet.powers` had zero item rows and"
+             " `carried` and `rewards` were both empty",
+             f"{len(sheet.kit)} item(s)")
+    out.that(all(m.get("powers") for m in sheet.kit),
+             "and every item carries its power rows, which is what puts an"
+             " item's card into `Powers.known` at all",
+             f"powers={[m.get('powers') for m in sheet.kit]}")
+
+    # -- the record round-trips, tuples and all ---------------------------
+    rebuilt = sheet.character.gear
+    out.that(len(rebuilt) == len(sheet.kit)
+             and all(isinstance(m, Magic) for m in rebuilt),
+             "`Sheet.character` rebuilds `Magic` records from the dicts",
+             f"{len(rebuilt)} rebuilt")
+    out.that([asdict(m) for m in rebuilt] == list(sheet.kit),
+             "and the in-memory round-trip is exact",
+             "asdict(rebuilt) == kit")
+
+    # **Through JSON, which is where the coercion actually bites.** The
+    # assertion above used to carry the tuple-versus-list reasoning and was
+    # the wrong place for it: `dataclasses.asdict` *preserves* tuples, so a
+    # plant removing the coercion left it green. Only `save.py`'s JSON hop
+    # turns a tuple into a list, so that is the hop to make.
+    saved = json.loads(json.dumps({"cls": sheet.cls, "level": sheet.level,
+                                   "build": sheet.build, "race": sheet.race,
+                                   "powers": list(sheet.powers),
+                                   "feats": list(sheet.feats),
+                                   "kit": list(sheet.kit)}))
+    out.that(all(isinstance(m.get("powers"), list) for m in saved["kit"]),
+             "the setup landed: after a JSON hop every item's `powers` is a"
+             " LIST, which is the state `Magic` must be rebuilt from",
+             f"types={[type(m.get('powers')).__name__ for m in saved['kit']]}")
+    revived = Sheet(**saved)
+    out.that(revived.character.gear == sheet.character.gear,
+             "THE round-trip assertion -- a sheet through JSON and back"
+             " rebuilds the IDENTICAL kit. `Magic` holds tuples and JSON"
+             " gives lists, so without the coercion in `Sheet.character` a"
+             " loaded party's items compare unequal to the ones it saved and"
+             " every spend against them is silently dropped",
+             f"{len(revived.character.gear)} item(s) identical")
+
+    # -- THE first assertion: the kit is the same all day -----------------
+    worn: list[list[str]] = []
+    for n in (1, 2, 3, 4):
+        fielded = field_encounter(5 + n, 5, scaling="full", party=party)
+        world = fielded.world
+        hero = the_fighter(world)
+        known = world.need(hero, Powers)
+        worn.append(sorted(r for r in known.known if r.startswith("i")))
+        harvest(world, party)
+        if n < 4:
+            party.rest()
+    out.that(len(worn) == 4 and all(w == worn[0] for w in worn),
+             "THE first assertion -- four fights in one day and the same"
+             " items every time. This was FOUR DIFFERENT kits with zero"
+             " overlap, which is what refreshed every item daily",
+             f"{worn[0]} across all four" if all(w == worn[0] for w in worn)
+             else f"differs: {worn}")
+    out.that(len(worn[0]) > 0,
+             "and the kit is non-empty, or the assertion above passes for a"
+             " character wearing nothing four times",
+             f"{len(worn[0])} item row(s)")
+
+    # -- THE second: a spent item daily stays spent -----------------------
+    party2 = Party.of(level=5, seed=5)
+    first = field_encounter(6, 5, scaling="full", party=party2)
+    w1 = first.world
+    hero1 = the_fighter(w1)
+    kn1 = w1.need(hero1, Powers)
+    dailies = [r for r in kn1.known
+               if r.startswith("i") and dsl.REGISTRY.get(r)
+               and dsl.REGISTRY[r].usage == "daily"]
+    out.that(len(dailies) > 0,
+             "the setup landed: the fighter holds an item DAILY, which is"
+             " the row the next two assertions are about",
+             f"dailies={dailies}")
+    ref = dailies[0]
+    out.that(kn1.available(ref) is True,
+             "it is available before anything spends it",
+             f"available={kn1.available(ref)}")
+    kn1.note_use(ref, 1)
+    out.that(kn1.available(ref) is False,
+             "and refused after one use -- the budget was never the broken"
+             " part, which is why `#1100` was closed as filed on a false"
+             " premise",
+             f"available={kn1.available(ref)}")
+
+    harvest(w1, party2)
+    party2.rest()
+    second = field_encounter(7, 5, scaling="full", party=party2)
+    w2 = second.world
+    hero2 = the_fighter(w2)
+    kn2 = w2.need(hero2, Powers)
+    out.that(ref in kn2.all,
+             "after a short rest the character STILL HOLDS the item, which"
+             " is the precondition `_wear`'s spend filter needs and which"
+             " nothing satisfied before",
+             f"{ref} in known = {ref in kn2.all}")
+    out.that(kn2.available(ref) is False,
+             "THE second assertion -- and the daily is STILL SPENT. A short"
+             " rest returns encounter powers and leaves dailies spent, which"
+             " `Party.rest` has always said and nothing could demonstrate",
+             f"available={kn2.available(ref)}")
+
+    # -- the negative control: an EXTENDED rest gives it back -------------
+    harvest(w2, party2)
+    party2.rest(extended=True)
+    third = field_encounter(8, 5, scaling="full", party=party2)
+    w3 = third.world
+    hero3 = the_fighter(w3)
+    kn3 = w3.need(hero3, Powers)
+    out.that(kn3.available(ref) is True,
+             "the negative control: an EXTENDED rest hands it back. Without"
+             " this the assertion above passes for a daily that is spent"
+             " forever, which is a different bug wearing the same clothes",
+             f"available={kn3.available(ref)}")
+
+    # -- why the record is stored whole rather than as refs ---------------
+    thin = [magic_for(m["ref"], plus=band(5)) for m in sheet.kit]
+    lost = [m for m in thin if m is not None and not m.powers]
+    out.that(len(lost) == len(thin) and len(thin) > 0,
+             "a refs-only pin loses EVERY item's power rows -- measured"
+             " here rather than argued, so the next reader does not try the"
+             " cheaper version. `magic_for`'s `powers=` is pass-through, not"
+             " derived from the row",
+             f"{len(lost)} of {len(thin)} come back with powers=()")
+    assert Who is not None
+    assert treasure is not None
+
+
 def stepping_into_a_found_trap_costs_something(out: Result) -> None:
     """A trap the party has found is priced, and an unfound one is not. `#981`.
 
@@ -60869,6 +61069,11 @@ DRIVERS = {
         a_regions_damage_is_the_damage_it_prints,
         "a region's damage column holds the damage it prints, and the tier"
         " scaling with it (#1096)",
+    ),
+    "party_kit": (
+        a_party_wears_the_same_kit_all_day,
+        "a party wears the same magic items all day, so a spent item daily"
+        " stays spent -- it used to get a fresh kit every fight (#1101)",
     ),
     "into_hazard": (
         stepping_into_a_found_trap_costs_something,
