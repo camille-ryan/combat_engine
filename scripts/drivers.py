@@ -56598,6 +56598,142 @@ def a_brute_minion_reads_the_brute_column(out: Result) -> None:
              " passing because nothing converts at all")
 
 
+def a_creature_with_no_melee_gets_no_charge_bonus(out: Result) -> None:
+    """The wizard charged, and the look-ahead was innocent. `#293`.
+
+    `#293`'s stop condition, in its own words:
+
+        a melee-only skirmisher's charge take rate should rise toward the
+        brute's, and **the wizard should keep charging zero times**. If the
+        wizard starts charging, the term has gone too far.
+
+    It could not be read off `scorecard` until `c3171db1` -- the counter was
+    keyed on side while the docstring said role -- and the first run of it
+    showed the party controller taking **20.8%** of the charges offered at
+    level 1 and **17.0%** at level 5.
+
+    **The obvious fix was inert and finding that out is the point of this
+    rule.** `best_from`'s charge step looked like the culprit, and
+    `fights_in_melee` is the established gate for exactly this symptom --
+    its own docstring records the flank term *"sending the wizard walking
+    into contact to stand in a flanking square it could not use"*. But
+    `charge_reach` **already** calls `fights_in_melee` and returns 0, so the
+    look-ahead never paid the wizard a square. Gating it again would have
+    changed nothing and shipped as a fix.
+
+    What pays is `policy.features`' flat `is_charge = 6.0`, which fires for
+    any charge by anybody and is one of the 51 hand-set constants `#314` is
+    about. `charge_without_melee` cancels it at **exactly** -6.0, leaving the
+    charge scored on its own damage.
+
+    Measured, 5 seeds, before and after:
+
+        party controller   L1  20.8% -> 7.1%     L5  17.0% -> 3.7%
+        party defender     L1  50.8% -> 50.0%    L5  49.4% -> 47.3%
+        monsters skirmisher L1 41.7% -> 42.9%    L5  50.0% -> 49.0%
+        monsters brute     L1  59.4% -> 62.5%    L5  46.0% -> 47.8%
+
+    So the controller falls 3-5x and every melee role stays inside noise --
+    which is the control, and without it a term that simply suppressed
+    charging would look identical on the first line.
+
+    **Not zero, and this rule does not pretend otherwise.** The residual is
+    the charge winning on its damage alone with no bonus for being a charge,
+    which is a different claim from the one the term was blamed for.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.components import Ident
+    from combat_engine.engine.events import Bus
+    from combat_engine.policy import WEIGHTS as FLAT
+    from combat_engine.policy import doctrine as D
+    from combat_engine.policy.doctrine import DOCTRINE
+
+    # -- the two weights cancel, exactly ---------------------------------
+    out.that(DOCTRINE.get("charge_without_melee") == -FLAT["is_charge"],
+             "THE floor: the doctrine term is exactly minus the flat"
+             " `is_charge`, so a creature with no melee attack gets NO"
+             " bonus for the action being a charge -- not a smaller one,"
+             " which would be a second hand-set constant arguing with the"
+             " first",
+             f"doctrine={DOCTRINE.get('charge_without_melee')}"
+             f" flat={FLAT['is_charge']}")
+
+    # -- the gate reads the rows, and is live on the wizard --------------
+    from combat_engine import story
+
+    fielded = story.field_encounter(5, 1, scaling="full")
+    world = fielded.world
+    by_role = {}
+    for eid, _ in world.each(Ident):
+        ident = world.get(eid, Ident)
+        if ident and ident.ref.startswith("c:"):
+            by_role[ident.role] = eid
+    out.that(set(by_role) >= {"controller", "defender"},
+             "the board is posed: the party has a controller and a"
+             " defender, which are the two arms of the acceptance test",
+             f"roles={sorted(by_role)}")
+
+    caster = by_role.get("controller")
+    melee = by_role.get("defender")
+    assert caster is not None and melee is not None
+    out.that(D.fights_in_melee(world, caster) is False,
+             "the controller has NO melee attack row, which is what the gate"
+             " reads -- off the rows in hand rather than off the role label",
+             f"fights_in_melee={D.fights_in_melee(world, caster)}")
+    out.that(D.fights_in_melee(world, melee) is True,
+             "and the defender does, so the gate distinguishes them. Without"
+             " this the assertion above passes for a gate that answers False"
+             " to everybody",
+             f"fights_in_melee={D.fights_in_melee(world, melee)}")
+
+    # -- THE assertion the obvious fix would have failed ------------------
+    out.that(D.charge_reach(world, caster) == 0,
+             "THE assertion that redirected this fix: `charge_reach` is"
+             " ALREADY 0 for the controller, because it already calls"
+             " `fights_in_melee`. So `best_from`'s charge step never paid"
+             " the wizard a square and gating it again would have been"
+             " inert -- a green plant on a dead branch",
+             f"charge_reach={D.charge_reach(world, caster)}")
+    out.that(D.charge_reach(world, melee) > 0,
+             "and it is non-zero for the defender, so the branch is live"
+             " for somebody and the zero above is a gate rather than a"
+             " broken helper",
+             f"charge_reach={D.charge_reach(world, melee)}")
+
+    # -- the feature fires, and only for a charge by a non-melee creature -
+    from combat_engine.engine.actions import Action
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+
+    enc = Encounter(world)
+    enc.start()
+
+    def term(who: int, kind: str) -> float:
+        got = D.doctrine_features(
+            world, enc, who, Action(kind=kind, cost=ActionType.STANDARD))
+        return got.get("charge_without_melee", 0.0)
+
+    out.that(term(caster, "charge") == 1.0,
+             "the term fires for the controller's charge, which is what"
+             " cancels the flat bonus",
+             f"value={term(caster, 'charge')}")
+    out.that(term(melee, "charge") == 0.0,
+             "the negative control: it does NOT fire for the defender's"
+             " charge, so a melee creature keeps the bonus and the measured"
+             " 50% take rate above is left alone",
+             f"value={term(melee, 'charge')}")
+    out.that(term(caster, "walk") == 0.0,
+             "and it does not fire for the controller's WALK -- it is scoped"
+             " to the kind of action, not to the creature, so it cannot"
+             " become a flat penalty on being a wizard",
+             f"value={term(caster, 'walk')}")
+    out.that(term(caster, "end") == 0.0,
+             "nor for ending the turn, which is the action every unvalued"
+             " term loses to by the `is_end` floor",
+             f"value={term(caster, 'end')}")
+    assert Bus is not None
+
+
 def an_artillery_minion_is_discounted_up_close(out: Result) -> None:
     """The third axis: the shape of the attack, not a third value. `#1047`.
 
@@ -60579,6 +60715,12 @@ DRIVERS = {
         a_regions_damage_is_the_damage_it_prints,
         "a region's damage column holds the damage it prints, and the tier"
         " scaling with it (#1096)",
+    ),
+    "charge_gate": (
+        a_creature_with_no_melee_gets_no_charge_bonus,
+        "a creature with no melee attack gets no bonus for the action being"
+        " a charge, which is what had the wizard charging a fifth of the"
+        " time offered (#293)",
     ),
     "artillery_shape": (
         an_artillery_minion_is_discounted_up_close,

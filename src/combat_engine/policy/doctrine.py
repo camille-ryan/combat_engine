@@ -436,6 +436,21 @@ DOCTRINE: dict[str, float] = {
     "into_enemy_zone": -0.6,
     # Difficult going costs a square of movement, which is small and real.
     "into_difficult": -0.2,
+    # **Cancels `policy.features`' flat `is_charge` for a creature that has no
+    # melee attack to charge with.** -6.0 against +6.0, exactly, so the charge
+    # is left scored on its own damage rather than on a bonus for the kind of
+    # action it is.
+    #
+    # Modulating the flat term rather than replacing it is the house pattern
+    # -- `threat_conceded` does the same to `provokes_now`, and the note there
+    # says why it was measured rather than assumed.
+    #
+    # **Exactly cancelling is a choice and the alternative was worse.** Picking
+    # some smaller number would be a second hand-set constant arguing with the
+    # first; zeroing the sum says the thing that is actually true, which is
+    # that "it is a charge" is worth nothing to a creature whose charge swings
+    # a melee basic it has no business making. #293.
+    "charge_without_melee": -6.0,
     # What a heal puts back, as a share of the **party's** pool -- the same
     # currency as the three above, so mending the fighter and killing the brute
     # are weighed against one another rather than on two different scales.
@@ -1450,6 +1465,30 @@ def doctrine_features(
     f: dict[str, float] = {}
     mine = world.get(actor, Side)
     here = _square_of(world, actor)
+
+    # **The wizard was charging, and the look-ahead was not what paid for
+    # it.** `#293`'s stop condition is *"the wizard should keep charging zero
+    # times -- if the wizard starts charging, the term has gone too far"*, and
+    # once `scorecard --roles` could read it the party controller came in at
+    # 20.8% of charges offered at level 1 and 17.0% at level 5.
+    #
+    # **The derived term was innocent, and checking that is what found the real
+    # payer.** `best_from`'s charge step is already gated: `charge_reach`
+    # returns 0 for a creature failing `fights_in_melee`, and the wizard fails
+    # it -- measured, `charge_reach(wizard) == 0`. So gating `reach_gained` on
+    # `fights_in_melee`, which was the obvious fix and which this function's own
+    # `takes_flank` note is the precedent for, would have been **inert**: the
+    # branch is already dead for exactly the creature in question.
+    #
+    # What pays is `policy.features`' flat `is_charge = 6.0`, which fires for
+    # any charge by anybody. That is a hand-set constant and `#314`'s
+    # territory, so this is not a scale problem of the derived currency -- it
+    # is a flat term that was never scoped.
+    #
+    # Set for the action, not for a destination, because a charge is a kind of
+    # action rather than a square.
+    if action.kind == "charge" and not fights_in_melee(world, actor):
+        f["charge_without_melee"] = 1.0
 
     # -- threat removal, in rounds: hit points and control in one currency ----
     removed = 0.0
