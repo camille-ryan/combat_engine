@@ -563,13 +563,26 @@ def play(
         slot, skill = picker(run, table)
         if slot < 0 or not skill:
             break
-        # **`play` routes, not the chooser.** A group check has no slot, so
-        # making the chooser express one would need a sentinel beside its
-        # `(-1, "")` give-up and would make `dm.py`'s model loop learn a new
-        # shape. Asking the scene after the skill is named keeps every
-        # chooser -- including the model's -- exactly as it is.
-        if run.scene.group_of(skill):
-            group_attempt(run, table, skill)
-        else:
-            attempt(run, table, slot, skill)
+        resolve(run, table, slot, skill)
     return run
+
+
+def resolve(run: Running, table: Table, slot: int, skill: str) -> Attempt:
+    """Score one named skill, routing a group check to the group door.
+
+    **The router, so there is one of it.** `play` did this inline and
+    `#932`'s beat loop needs the identical routing -- two copies would be
+    two rulebooks, and the thing they would disagree about is exactly what
+    `attempt`'s own refusals exist to catch: a group skill through the
+    per-character door is a roll that looks like a success and was scored
+    by the wrong rule.
+
+    **The caller routes, not the chooser.** A group check has no slot, so
+    making the chooser express one would need a sentinel beside its
+    `(-1, "")` give-up and would make `dm.py`'s model loop learn a new
+    shape. Asking the scene after the skill is named keeps every chooser --
+    including the model's -- exactly as it is.
+    """
+    if run.scene.group_of(skill):
+        return group_attempt(run, table, skill)
+    return attempt(run, table, slot, skill)

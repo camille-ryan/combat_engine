@@ -39,7 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from random import Random
-from typing import Protocol
+from typing import Any, Protocol
 
 from combat_engine.engine import Ident, Side, Team
 from combat_engine.engine.components import Condition, Conditions, Position, Trap
@@ -1366,14 +1366,177 @@ def _vignette(campaign: Campaign, module: Module, scene: Scene, step: Step,
 _CLUE_SKILLS = ("arcana", "dungeoneering", "history", "nature", "religion")
 
 
+def _narratable(scene: Scene, director: beat_mod.Director | None) -> bool:
+    """Can this challenge be played as a conversation? #932.
+
+    Two conditions and both are load-bearing:
+
+    * **a director**, because the loop's whole point is that a declared
+      intent is matched to a skill. Without one there is nobody to declare
+      and `taking_turns` is the honest fallback;
+    * **phrasings**, because `Try.what` is *"the only thing the matcher
+      compares a declared intent against"*. Measured on `#932`: a bare
+      skill name scores **3 of 12** against a written phrasing's 12 of 12,
+      and the failures are the dangerous kind -- an intent with nothing to
+      match stretched onto a skill, and the one that plainly was athletics
+      refused. So a challenge written as bare strings runs the automatic
+      path rather than being narrated badly.
+
+    `module.parse` already refuses a half-phrased challenge, so `tries`
+    either covers every skill or is empty.
+    """
+    return bool(director and not director.scripted and scene.tries)
+
+
+def _challenge_options(scene: Scene) -> tuple:
+    """A challenge's skills, as the things the matcher can be offered. #932.
+
+    `Director.match` is handed `Affordance`s and asks which one an intent
+    means. A challenge's attemptables are its **skills**, so each becomes
+    one -- `id` is the skill and `what` is the phrasing a player would
+    type.
+
+    **`once=False`**, because a challenge's own per-skill cap governs reuse
+    (`Scene.cap_for`, `#984`) and a second mechanism counting the same
+    thing would make the printed cap wrong.
+
+    **No band, and that is deliberate rather than a default.** The band a
+    challenge rolls against is the one `challenge.band_of` works out from
+    the standing tally, and it moves as the challenge goes -- so there is
+    no single value to put here. Nothing reads it either: `Affordance.band`
+    is consulted by `beat.roll_affordance`, which the resolver replaces, so
+    writing `"moderate"` in would be a number that looks load-bearing and
+    is not. Left at the dataclass default.
+    """
+    from .module import Affordance
+
+    return tuple(
+        Affordance(id=t.skill, what=t.what, skill=t.skill, once=False)
+        for t in scene.tries
+    )
+
+
+def _challenge_beats(campaign: Campaign, module: Module, scene: Scene,
+                     step: Step, table: table_mod.Table,
+                     director: beat_mod.Director,
+                     ask_human: beat_mod.AskHuman) -> Any:
+    """Play the challenge as a conversation, scoring through `challenge`.
+
+    The resolver is the whole of it: `one_beat` does declare, match and
+    react, and hands the roll to `challenge.resolve` -- the same function
+    the automatic path calls. Nothing about bands, caps or the tally is
+    reproduced here.
+    """
+    from combat_engine.engine.skills import CheckResult
+
+    from . import challenge as ch
+
+    run = ch.open_challenge(scene, party_level=module.party_level,
+                            record=campaign.record)
+    meant: set[str] = set()
+
+    def resolve(playing: Any, tbl: Any, intent: Any, chosen: Any,
+                party_level: int) -> beat_mod.Ruling:
+        made = ch.resolve(run, tbl, intent.slot, chosen.skill)
+        # **The fact comes off the challenge, once.** `scene.means` is the
+        # printed sentence for that result, and a fact does not become true
+        # again on the second success with the same skill -- the probe that
+        # found that printed one brazier toppling into the sand three times.
+        fact = ""
+        if made.rolled:
+            said = scene.means(made.skill, won=made.success)
+            if said and said not in meant:
+                meant.add(said)
+                fact = said
+        # **The roll is rebuilt, not synthesised.** `Attempt` flattens the
+        # check into `natural`/`total`/`dc`/`success`, and `Ruling.roll`
+        # wants the `CheckResult` those came out of -- so the numbers go
+        # back into one. Every field maps one-for-one; nothing is invented.
+        #
+        # It matters because `beat`'s `margin()` reads `roll.total` against
+        # `dc` to tell the DM how narrowly the check went (#943), and a
+        # `None` here would silently drop that for every challenge roll
+        # while the transcript still read correctly.
+        return beat_mod.Ruling(
+            slot=intent.slot, name=intent.name, affordance=chosen.id,
+            skill=made.skill, dc=made.dc,
+            roll=CheckResult(skill=made.skill, natural=made.natural,
+                             bonus=made.total - made.natural,
+                             total=made.total, dc=made.dc,
+                             success=made.success) if made.rolled else None,
+            won=made.success, fact=fact)
+
+    def tell(made: beat_mod.Beat) -> None:
+        """Print the beat the way `_roleplay` prints one.
+
+        **A companion's declaration is not printed, and that is
+        `_roleplay`'s own rule rather than a shortcut**: it goes to the DM,
+        which writes it into the paragraph, *"so what a reader sees is one
+        piece of prose in which those things happened, not four captioned
+        declarations and then a reply to them"*. The person's own line is
+        printed because they typed it.
+
+        My first version captioned every intent under a `"say"` kind. Two
+        faults in one line: it contradicted that rule, and `"say"` is not
+        in `KINDS`, so `Line.__new__` **silently relabelled all 18 of them
+        `"scene"`** -- which read exactly like the resolver never being
+        called. See the commit message; it cost four rounds of diagnosis
+        aimed at the wrong half.
+        """
+        if made.situation and made.n == 1:
+            step.say(made.situation, "scene")
+        for intent in made.intents:
+            if not intent.played:
+                step.say(f"  {intent}", "mine")
+        if made.reaction:
+            step.say(f"  {made.reaction}", "dm")
+        # The fact after the prose, like the roll in `_roleplay`: what the
+        # check *meant* is the result of the moment and reads as one.
+        for ruling in made.rulings:
+            if ruling.fact:
+                step.say(f"    {ruling.fact}", "scene")
+
+    beat_mod.play_scene(
+        scene, table, actors_for(campaign), director,
+        ask_human=ask_human, party_level=module.party_level,
+        after=tell, options=_challenge_options(scene),
+        resolve=resolve, stop=lambda: run.over,
+    )
+    return run
+
+
 def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
-               choose: Chooser | None) -> None:
-    """Run a skill challenge on a board with nobody to fight on it."""
+               choose: Chooser | None,
+               director: beat_mod.Director | None = None,
+               ask_human: beat_mod.AskHuman | None = None) -> None:
+    """Run a skill challenge on a board with nobody to fight on it.
+
+    **Through the beat loop when there is a director and the challenge
+    carries phrasings**, which is Camille's ask on `#932`: *"skill
+    challenges look to be currently automatic. They should be based on the
+    actions the player (and NPCs) decide to do."*
+
+    Two paths, one rulebook. Both end in `challenge.resolve`, which is why
+    it exists as a function: the band reached, the per-skill cap, a carried
+    bonus, a spent reroll, the secondary effects and the tally all live in
+    `challenge.py` and neither path may re-implement them. The beat loop
+    supplies the *conversation*; the scoring is the same code the automatic
+    path runs.
+
+    `taking_turns` stays the fallback, and it is not a stub: with `--no-dm`
+    and no local model there is nobody to declare an intent, so a
+    deterministic rotation is the printed intent rather than a placeholder.
+    """
     seed = _stream(campaign, scene, "challenge").randrange(1 << 30)
     table = table_mod.lay(campaign.party, seed=seed)
-    run = play_challenge(
-        scene, table, party_level=module.party_level, choose=choose,
-        record=campaign.record)
+    narrated = _narratable(scene, director)
+    if narrated:
+        run = _challenge_beats(campaign, module, scene, step, table,
+                               director, ask_human or beat_mod.silent)
+    else:
+        run = play_challenge(
+            scene, table, party_level=module.party_level, choose=choose,
+            record=campaign.record)
     table.strike()
     if tension.footing(campaign.record):
         step.say(tension.says(campaign.record), "note")
@@ -2370,7 +2533,8 @@ def step(
         else:
             _fight(campaign, module, scene, made, record=record)
     elif scene.kind == "skill_challenge":
-        _challenge(campaign, module, scene, made, choose)
+        _challenge(campaign, module, scene, made, choose,
+                   director, ask_human)
     elif scene.kind == "puzzle":
         _puzzle(campaign, module, scene, made, ask_human)
     elif scene.kind == "vignette":

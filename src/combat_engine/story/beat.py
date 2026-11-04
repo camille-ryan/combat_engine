@@ -364,6 +364,14 @@ class Playing:
     """A roleplay scene in progress."""
 
     scene: Scene
+    #: What can be attempted, when it is **not** the scene's own
+    #: affordances. Empty for every roleplay scene, which is why nothing
+    #: moves for them. #932 sets it to a challenge's skills, so
+    #: `Director.match` turns a declared intent into one of those instead.
+    #:
+    #: A field rather than a subclass because `one_beat` is handed a
+    #: `Playing` and nothing else, and the matcher asks it what is open.
+    options: tuple[Affordance, ...] = ()
     beats: list[Beat] = field(default_factory=list)
     #: Affordance ids already taken, for the `once` rule.
     spent: set[str] = field(default_factory=set)
@@ -424,9 +432,21 @@ class Playing:
 
     def open_affordances(self) -> list[Affordance]:
         return [
-            a for a in self.scene.affordances
+            a for a in (self.options or self.scene.affordances)
             if not (a.once and a.id in self.spent)
         ]
+
+    def affordance(self, wanted: str) -> Affordance | None:
+        """One by id, honouring `options`. `"none"` means nothing.
+
+        `Scene.affordance` reads the scene's own list and is right for a
+        roleplay scene. A challenge's attemptables are its **skills**, which
+        live on the challenge and not on `scene.affordances`, so the lookup
+        has to ask the same place the matcher was offered. #932.
+        """
+        if self.options:
+            return next((a for a in self.options if a.id == wanted), None)
+        return self.scene.affordance(wanted)
 
     def recent(self) -> str:
         """The last few beats, for a prompt."""
@@ -1401,11 +1421,64 @@ class Director:
 # -- the loop ---------------------------------------------------------------
 
 
+#: How a matched intent becomes a `Ruling`. #932.
+#:
+#: Handed `(playing, table, intent, chosen, party_level)` and returns the
+#: ruling, so a caller can score the roll by its own rules. The default is
+#: `roll_affordance` below and is what every existing caller gets.
+Resolver = Callable[["Playing", Table, "Intent", Any, int], "Ruling"]
+
+
+def roll_affordance(
+    playing: Playing, table: Table, intent: Intent, chosen: Any,
+    party_level: int,
+) -> Ruling:
+    """The ordinary way an affordance resolves: one check against its DC.
+
+    **A module function rather than four lines inside `one_beat`**, so the
+    default path and a caller's own resolver cannot drift. `#932` needs the
+    second: a skill challenge's roll applies the band reached, the per-skill
+    cap, a carried bonus, a spent reroll, the secondary effects and the
+    tally, and **none** of that is here. Presenting a challenge's skills as
+    ordinary affordances would roll them through this door and silently lose
+    every one -- a roll that looks like a success and was scored by the
+    wrong rule, which is the shape `challenge.attempt`'s own group refusal
+    exists to prevent.
+
+    So the scoring stays in `challenge.py` and the conversation stays here.
+    A flag would have put challenge vocabulary into this module, which knows
+    nothing about bands or tallies and should not start.
+    """
+    scene = playing.scene
+    if not chosen.rolls:
+        # A thing a character can simply do. It still matters: the module
+        # said it was possible, so its `win` text is now a fact.
+        won, rolled, target = True, None, 0
+    else:
+        level = scene.level or party_level
+        target = chosen.dc or dc_for(level, chosen.band)
+        rolled = table.check(intent.slot, chosen.skill, target)
+        won = rolled.success
+    leaving = bool(chosen.leads_to) and won
+    return Ruling(
+        slot=intent.slot, name=intent.name, affordance=chosen.id,
+        skill=chosen.skill if chosen.rolls else "",
+        dc=target, roll=rolled, won=won,
+        fact=chosen.win if won else chosen.lose,
+        exit=leaving)
+
+
 def one_beat(
     playing: Playing, table: Table, actors: list[Actor], director: Director,
     *, ask_human: AskHuman, party_level: int,
+    resolve: Resolver | None = None,
 ) -> Beat:
-    """Declare, match, roll, react. One exchange."""
+    """Declare, match, roll, react. One exchange.
+
+    `resolve` is how a matched intent becomes a `Ruling`; see `Resolver`.
+    `None` is `roll_affordance`, which is what every caller but `#932`'s
+    challenge loop wants.
+    """
     scene = playing.scene
     situation = (
         playing.beats[-1].reaction if playing.beats else scene.seen
@@ -1488,7 +1561,7 @@ def one_beat(
     picks = director.match(playing, beat.intents)
     for intent in beat.intents:
         wanted = picks.get(intent.slot, "none")
-        chosen = scene.affordance(wanted) if wanted != "none" else None
+        chosen = playing.affordance(wanted) if wanted != "none" else None
         if (chosen is not None and chosen.leads_to and intent.played):
             # **A companion does not decide the party leaves.** Playing solo,
             # both transitions in a scene were taken by model-played
@@ -1516,22 +1589,10 @@ def one_beat(
             beat.rulings.append(Ruling(slot=intent.slot, name=intent.name))
             continue
         playing.spent.add(chosen.id)
-        if not chosen.rolls:
-            # A thing a character can simply do. It still matters: the module
-            # said it was possible, so its `win` text is now a fact.
-            won, rolled, target = True, None, 0
-        else:
-            level = scene.level or party_level
-            target = chosen.dc or dc_for(level, chosen.band)
-            rolled = table.check(intent.slot, chosen.skill, target)
-            won = rolled.success
-        leaving = bool(chosen.leads_to) and won
-        beat.rulings.append(Ruling(
-            slot=intent.slot, name=intent.name, affordance=chosen.id,
-            skill=chosen.skill if chosen.rolls else "",
-            dc=target, roll=rolled, won=won,
-            fact=chosen.win if won else chosen.lose,
-            exit=leaving))
+        ruling = (resolve or roll_affordance)(
+            playing, table, intent, chosen, party_level)
+        beat.rulings.append(ruling)
+        leaving = ruling.exit
         if leaving:
             beat.leads_to = chosen.leads_to
             # **A transition's `win` is a stage direction, not a note.** It
@@ -1717,6 +1778,9 @@ def play_scene(
     canon: Any = None,
     told: Any = None,
     carried: str = "",
+    options: tuple[Affordance, ...] = (),
+    resolve: Resolver | None = None,
+    stop: Callable[[], bool] | None = None,
 ) -> Playing:
     """Run a roleplay scene to its end.
 
@@ -1728,12 +1792,19 @@ def play_scene(
     conversation that has not visibly started.
     """
     playing = Playing(scene=scene, asked=set(asked or ()), carried=carried,
-                      canon=canon, told=told)
+                      canon=canon, told=told, options=options)
     while not playing.over:
         made = one_beat(playing, table, actors, director,
-                        ask_human=ask_human, party_level=party_level)
+                        ask_human=ask_human, party_level=party_level,
+                        resolve=resolve)
         if after is not None:
             after(made)
+        # **A second stop, asked after the beat.** A challenge ends when its
+        # tally says so, not when the scene runs out of beats -- and asking
+        # before the beat would run one exchange past the win. `playing.over`
+        # stays the backstop, so a caller passing nothing is unchanged. #932.
+        if stop is not None and stop():
+            break
     return playing
 
 

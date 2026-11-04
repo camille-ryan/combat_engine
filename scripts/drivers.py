@@ -57607,6 +57607,7 @@ def the_fixture_challenge_can_run_beats(out: Result) -> None:
     """
     from pathlib import Path
 
+    from combat_engine.story import beat as beat_mod
     from combat_engine.story import module as mod
 
     here = Path(__file__).resolve().parent.parent
@@ -57648,6 +57649,363 @@ def the_fixture_challenge_can_run_beats(out: Result) -> None:
         out.that(True,
                  "and the reader `run.py` uses returns both facts for every"
                  " skill on the challenge")
+
+    # == the loop itself, which is what #932 asked for =====================
+    # Camille: *"skill challenges look to be currently automatic. They
+    # should be based on the actions the player (and NPCs) decide to do."*
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import run as run_mod
+
+    out.that(run_mod._narratable(scene, beat_mod.Director(scripted=False)),
+             "the fixture challenge is narratable: a director exists and"
+             " every skill carries a phrasing. Without both, the automatic"
+             " path is the honest one -- a bare skill name scores 3 of 12"
+             " against a phrasing's 12 of 12, and its failures are an"
+             " intent stretched onto the wrong skill",
+             f"tries={len(scene.tries)}")
+    out.that(not run_mod._narratable(scene, beat_mod.Director(scripted=True)),
+             "and a scripted director is NOT narratable, so `taking_turns`"
+             " stays the fallback rather than being replaced by a loop with"
+             " nobody to declare anything")
+    out.that(not run_mod._narratable(scene, None),
+             "nor is no director at all")
+    # **A challenge written as bare strings is not narratable**, and this
+    # needs posing rather than reading: the fixture carries phrasings on
+    # every skill, so dropping the `tries` condition changes nothing on
+    # this board and a plant that removed it stayed green. Every converted
+    # module's challenge is bare today, so this is the common case rather
+    # than a contrived one.
+    import dataclasses as _dc
+    bare = _dc.replace(scene, tries=())
+    out.that(not bare.tries,
+             "the setup: a copy of the challenge with no phrasings at all",
+             f"tries={len(bare.tries)}")
+    out.that(not run_mod._narratable(bare, beat_mod.Director(scripted=False)),
+             "and it is NOT narratable even with a director. `Try.what` is"
+             " *the only thing the matcher compares a declared intent"
+             " against*, and `#932` measured a bare skill name at **3 of"
+             " 12** against a phrasing's 12 of 12 -- with failures that"
+             " stretch an intent onto the wrong skill. So a bare challenge"
+             " runs the automatic path rather than being narrated badly")
+
+    # -- the options the matcher is offered are the challenge's skills ----
+    options = run_mod._challenge_options(scene)
+    out.that(len(options) == len(scene.tries)
+             and {o.id for o in options} == {t.skill for t in scene.tries},
+             "each of the challenge's skills becomes one thing the matcher"
+             " can be offered, keyed by the skill -- `Director.match` takes"
+             " affordances and a challenge's attemptables live on the"
+             " challenge, not on `scene.affordances`",
+             f"{len(options)} options for {len(scene.tries)} skills")
+    out.that(all(o.what and o.what != o.skill for o in options),
+             "and each carries the **phrasing** rather than the skill name."
+             " `#932` measured a bare name at 3 of 12 -- naming the skill"
+             " to the matcher is the mistake `Try.what` exists to prevent")
+    out.that(all(not o.once for o in options),
+             "and none is `once`: a challenge's per-skill cap governs reuse"
+             " (`Scene.cap_for`, #984) and a second mechanism counting the"
+             " same thing would make the printed cap wrong")
+
+    # -- THE PLANT THE PLAN NAMED FIRST ----------------------------------
+    # `#932`'s plan: *"the plant that matters is the one where the resolver
+    # falls back to `one_beat`'s own roll and the challenge's tally does
+    # NOT move. If that stays green the hook is not wired and every other
+    # assertion is vacuous."* So it is measured here as a comparison rather
+    # than asserted from one side.
+    def tally_after(*, wired: bool) -> tuple[int, int, int]:
+        """One beat on the fixture challenge. `(successes, failures, rolls)`.
+
+        Both arms are identical but for the resolver, which is the only way
+        to read the plant: the same party, the same seed, the same director
+        naming the same skill.
+        """
+        from combat_engine.story import Party
+        from combat_engine.story import table as tbl
+
+        want = next(t.skill for t in scene.tries
+                    if not scene.group_of(t.skill))
+
+        class Names(beat_mod.Director):
+            """Declares and matches without a model.
+
+            `scripted=False`, because `_narratable` turns on exactly that
+            -- but every model call is overridden, so this driver needs no
+            network. `story/CLAUDE.md`: *"an instrument that needs a
+            network goes red for the wrong reason"*, and the first version
+            of this probe took **58 seconds** reaching for an ollama that
+            was not serving.
+
+            `match` always names the one skill, so the match is not the
+            variable under test: the question is whether the roll goes
+            through `challenge.resolve`.
+            """
+
+            def declare(self, actor, playing, situation):  # noqa: ANN001, ANN202
+                return beat_mod.Intent(
+                    slot=actor.slot, name=actor.name, played=True,
+                    speech=want, doing=want)
+
+            def joins(self, playing, actors) -> list:  # noqa: ANN001
+                return [a.slot for a in actors]
+
+            def match(self, playing, intents) -> dict:  # noqa: ANN001
+                return {i.slot: want for i in intents}
+
+            def react(self, *a, **kw):  # noqa: ANN002, ANN003, ANN202
+                return ""
+
+        party = Party.of(["fighter", "cleric", "rogue"], level=1, seed=5)
+        actors = [beat_mod.Actor(i, n, c, "ai") for i, (n, c) in
+                  enumerate([("A", "fighter"), ("B", "cleric"),
+                             ("C", "rogue")])]
+        table = tbl.lay(party, seed=5)
+        run = ch.open_challenge(scene, party_level=1)
+        rolled: list = []
+
+        def through_challenge(playing, tbl_, intent, chosen, level):  # noqa: ANN001, ANN202
+            made = ch.resolve(run, tbl_, intent.slot, chosen.skill)
+            rolled.append(made)
+            return beat_mod.Ruling(slot=intent.slot, name=intent.name,
+                                   affordance=chosen.id, skill=made.skill,
+                                   dc=made.dc, won=made.success)
+
+        # **Bounded at three beats, not `max_beats`.** The fixture scene
+        # allows 40 and two arms of 40 beats cost two minutes of the
+        # suite for a claim three beats settle -- the question is whether
+        # the tally moves at all, which the first beat answers. The cap is
+        # a `stop`, so `run.over` still ends it earlier when it wins.
+        seen: list[int] = []
+        beat_mod.play_scene(
+            scene, table, actors, Names(scripted=False),
+            ask_human=beat_mod.silent, party_level=1,
+            options=run_mod._challenge_options(scene),
+            resolve=through_challenge if wired else None,
+            after=lambda made: seen.append(made.n),
+            stop=lambda: run.over or len(seen) >= 3)
+        return (run.successes, run.failures, len(rolled))
+
+    wired = tally_after(wired=True)
+    unwired = tally_after(wired=False)
+    out.that(wired[0] + wired[1] > 0,
+             "wired to `challenge.resolve`, a declared intent moves the"
+             " challenge's tally -- which `table.check` alone cannot do,"
+             " because the band, the per-skill cap, the carried bonus and"
+             " the tally all live in `challenge.py`",
+             f"successes+failures={wired[0] + wired[1]}, rolls={wired[2]}")
+    out.that(unwired[0] + unwired[1] == 0,
+             "and with the resolver left at the default the tally does NOT"
+             " move. This is the plant `#932`'s plan named before the"
+             " feature: if it ever reads non-zero the hook is not what is"
+             " scoring the challenge and every assertion above is vacuous",
+             f"default resolver moved the tally to {unwired[:2]}")
+
+    # -- and `run._challenge` is what uses it, not just the hook ----------
+    # **The wiring-level claim**, which the two arms above cannot make:
+    # they build their own resolver, so they prove the hook works while
+    # `_challenge` could quietly still be running the automatic path. That
+    # is the hole `#994`'s `Step.stood` records in as many words, and five
+    # green plants there came from asserting on a helper instead of the
+    # caller.
+    from combat_engine.story import Party
+    from combat_engine.story import save as save_mod
+
+    want2 = next(t.skill for t in scene.tries if not scene.group_of(t.skill))
+
+    class Narrator(beat_mod.Director):
+        """The same no-model director, for the production path."""
+
+        def declare(self, actor, playing, situation):  # noqa: ANN001, ANN202
+            return beat_mod.Intent(slot=actor.slot, name=actor.name,
+                                   played=True, speech=want2, doing=want2)
+
+        def joins(self, playing, actors) -> list:  # noqa: ANN001
+            # **The fourth model call, and the one that hid the other
+            # three.** `one_beat` only asks an actor to declare if `joins`
+            # named their slot, and the base `joins` is a model
+            # classification -- so with nothing serving it named nobody,
+            # the beat produced zero intents, and that reads exactly like
+            # `_challenge` ignoring the hook. Everybody joins here.
+            return [a.slot for a in actors]
+
+        def match(self, playing, intents) -> dict:  # noqa: ANN001
+            return {i.slot: want2 for i in intents}
+
+        def react(self, *a, **kw):  # noqa: ANN002, ANN003, ANN202
+            return "The water keeps rising."
+
+    def through_challenge_scene(director) -> list:  # noqa: ANN001
+        party = Party.of(["fighter", "cleric", "rogue"], level=1, seed=9)
+        # **`control` is "ai" per slot, not the class name.** My first
+        # version put the class there and `Campaign.controls` reads
+        # anything it does not recognise as `"human"` -- so every character
+        # waited for a person, `ask_human` was `silent`, and nobody
+        # declared anything. The narrated path ran perfectly and produced
+        # six DM replies and **no intents**, which read exactly like the
+        # hook not being wired. The probe was wrong, not the code.
+        camp = save_mod.Campaign(
+            module=loaded.id, party=party,
+            personas=[save_mod.Persona(name=sh.cls.upper())
+                      for sh in party.sheets],
+            control=["ai"] * len(party.sheets),
+            formation=[f"band-{i}" for i in range(len(party.sheets))])
+        made = run_mod.Step(scene=scene)
+        run_mod._challenge(camp, loaded, scene, made, None,
+                           director, beat_mod.silent)
+        return made.lines
+
+    narrated = through_challenge_scene(Narrator(scripted=False))
+    automatic = through_challenge_scene(beat_mod.Director(scripted=True))
+    out.that(any(ln.kind == "dm" for ln in narrated),
+             "the setup landed: the narrated path ran beats at all. Without"
+             " this the next assertion cannot tell an unwired hook from a"
+             " party nobody asked -- which is what happened on the first"
+             " run, six DM replies and no intents because every character"
+             " read as human-controlled",
+             f"{sum(1 for ln in narrated if ln.kind == 'dm')} replies")
+    # **A `"dm"` line is the observable, not a captioned declaration.**
+    # `_roleplay`'s own rule is that a companion's intent is *not* printed
+    # -- it goes to the DM, which writes it into the paragraph -- so a
+    # narrated challenge is one with a DM reply per beat. My first version
+    # asserted on captioned intents, which the design forbids, and which
+    # `Line.__new__` was silently relabelling anyway because `"say"` is not
+    # in `KINDS`.
+    out.that(any(ln.kind == "dm" for ln in narrated),
+             "`run._challenge` with a director plays the challenge as a"
+             " **conversation**: a DM reply per beat. This is Camille's ask"
+             " on `#932` -- *skill challenges should be based on the actions"
+             " the player (and NPCs) decide to do* -- and it is asserted"
+             " through `_challenge` rather than through the hook, which is"
+             " the `#994` wiring hole",
+             f"{sum(1 for ln in narrated if ln.kind == 'dm')} replies"
+             f" of {len(narrated)} lines")
+    out.that(not any(ln.kind == "dm" for ln in automatic),
+             "and with a scripted director it stays automatic -- the"
+             " control, because a `_challenge` that narrated unconditionally"
+             " would pass the assertion above and break every headless run",
+             f"{sum(1 for ln in automatic if ln.kind == 'dm')} replies"
+             f" of {len(automatic)} lines")
+    out.that(bool(automatic) and any(ln.kind == "roll" for ln in automatic),
+             "and the automatic path still prints its rolls, so the fallback"
+             " is intact rather than merely silent")
+
+    # -- the router sends a group skill through the group door ------------
+    # **The plan's second named plant**, and it needed posing: `Names`
+    # only ever declares a non-group skill, so a `resolve` that always
+    # used `attempt` stayed green. A group check has no slot -- it is the
+    # party -- so `slot == -1` is the tell, and `attempt`'s own refusal is
+    # what makes picking the wrong door a roll scored by the wrong rule.
+    # **Built rather than found.** The fixture challenge marks **no** skill
+    # as a group check -- and `Scene.group_of`'s own note says that is true
+    # of *"every skill of every converted challenge"*, so there is nowhere
+    # in the tree this could be read off. Perturbing the fixture to get one
+    # would move `play` and three other drivers, so the group skill is a
+    # copy of the scene with one `Try` marked.
+    first = scene.tries[0]
+    withgroup = _dc.replace(
+        scene,
+        tries=(_dc.replace(first, group="half"), *scene.tries[1:]))
+    grouped = [t.skill for t in withgroup.tries if withgroup.group_of(t.skill)]
+    out.that(grouped == [first.skill],
+             "the setup: a copy of the challenge with exactly one skill"
+             " marked as a group check, since no converted challenge marks"
+             " any",
+             f"group skills: {grouped}")
+    if grouped:
+        scene_g = withgroup
+        from combat_engine.story import Party as _P
+        from combat_engine.story import table as _tbl
+        one = _tbl.lay(_P.of(["fighter", "cleric", "rogue"], level=1,
+                             seed=11), seed=11)
+        made = ch.resolve(ch.open_challenge(scene_g, party_level=1),
+                          one, 0, grouped[0])
+        out.that(made.slot == -1 and made.cls == "the party",
+                 "and `challenge.resolve` sends it to `group_attempt`: the"
+                 " result belongs to the party rather than to a slot. One"
+                 " router, so the beat loop and the automatic path cannot"
+                 " disagree about which door a skill goes through",
+                 f"slot={made.slot}, cls={made.cls!r}")
+        solo = next(t.skill for t in scene_g.tries
+                    if not scene_g.group_of(t.skill))
+        mine = ch.resolve(ch.open_challenge(scene_g, party_level=1),
+                          one, 0, solo)
+        out.that(mine.slot == 0,
+                 "and a per-character skill keeps its slot -- the control,"
+                 " since a router that sent everything to `group_attempt`"
+                 " would pass the assertion above")
+
+    # -- the challenge ends on its tally, not on `max_beats` --------------
+    # **The `stop` hook, posed.** A director naming one skill every beat
+    # never finishes the challenge, so `playing.over` bounds the loop at
+    # `max_beats` and a plant deleting the `stop` check stayed green. A
+    # director that **cycles** the skills avoids the per-skill cap and the
+    # challenge resolves early -- which is the only board on which the
+    # hook is observable.
+    import itertools
+
+    from combat_engine.story import Party as _P2
+    from combat_engine.story import table as _tbl2
+
+    rotation = itertools.cycle(
+        [t.skill for t in scene.tries if not scene.group_of(t.skill)])
+
+    class Cycles(beat_mod.Director):
+        """Names a different skill each beat, so the cap never bites."""
+
+        def joins(self, playing, actors) -> list:  # noqa: ANN001
+            return [a.slot for a in actors]
+
+        def declare(self, actor, playing, situation):  # noqa: ANN001, ANN202
+            return beat_mod.Intent(slot=actor.slot, name=actor.name,
+                                   played=True, speech="x", doing="x")
+
+        def match(self, playing, intents) -> dict:  # noqa: ANN001
+            return {i.slot: next(rotation) for i in intents}
+
+        def react(self, *a, **kw):  # noqa: ANN002, ANN003, ANN202
+            return "ok"
+
+    early = ch.open_challenge(scene, party_level=1)
+    beats: list[int] = []
+
+    def score(playing, tbl_, intent, chosen, level):  # noqa: ANN001, ANN202
+        got = ch.resolve(early, tbl_, intent.slot, chosen.skill)
+        return beat_mod.Ruling(slot=intent.slot, name=intent.name,
+                               affordance=chosen.id, skill=got.skill,
+                               dc=got.dc, won=got.success)
+
+    beat_mod.play_scene(
+        scene, _tbl2.lay(_P2.of(["fighter", "cleric", "rogue"], level=1,
+                                seed=3), seed=3),
+        [beat_mod.Actor(i, n, c, "ai") for i, (n, c) in
+         enumerate([("A", "fighter"), ("B", "cleric"), ("C", "rogue")])],
+        Cycles(scripted=False), ask_human=beat_mod.silent, party_level=1,
+        options=run_mod._challenge_options(scene), resolve=score,
+        after=lambda made: beats.append(made.n), stop=lambda: early.over)
+    out.that(early.over,
+             "the setup: a cycling director finishes the challenge, which"
+             " one naming a single skill never does -- the per-skill cap"
+             " stops it",
+             f"over={early.over}, tally={early.successes}/{early.failures}")
+    out.that(len(beats) < scene.max_beats,
+             "and the loop stops on the **tally** rather than running to"
+             " `max_beats`. `playing.over` is the backstop and would end it"
+             " eventually, so without a board where the challenge resolves"
+             " early this hook is invisible -- a plant deleting it stayed"
+             " green until this arm existed",
+             f"{len(beats)} beats of a possible {scene.max_beats}")
+    out.that(any(ln.kind == "scene" and ln.strip() for ln in narrated),
+             "and the narrated path carries the printed **facts** through --"
+             " `scene.means` is what says the fires went out or spread, and"
+             " `#932` is titled for that half rather than for the dice")
+    # Every line in both arms carries a kind the vocabulary defines, which
+    # is the check that would have caught the `"say"` coercion immediately.
+    bad = {ln.kind for ln in narrated + automatic} - set(run_mod.KINDS)
+    out.that(not bad,
+             "and every line either path emits carries a kind `KINDS`"
+             " defines. `Line.__new__` silently relabels an unknown kind"
+             " `\"scene\"`, so an invented one is invisible -- which cost"
+             " four rounds of diagnosis aimed at the resolver",
+             f"not in KINDS: {sorted(bad)}")
 
 
 def searching_a_room_needs_no_dice(out: Result) -> None:
