@@ -151,7 +151,17 @@ def _other_holds(world: World, actor: int, state: str) -> bool:
 class Range:
     """How far a power reaches, and what shape it arrives in."""
 
-    kind: str  # melee | ranged | close_burst | close_blast | area_burst | personal
+    #: **Seven words, histogrammed off every row and every branch** -- this
+    #: was a six-word comment omitting `wall`, and a first draft of
+    #: `shape_of` guessed `area_wall` from it and matched nothing:
+    #:
+    #:     personal 10,359   melee 6,939   ranged 2,942   close_burst 1,761
+    #:     close_blast 619   area_burst 577   wall 9
+    #:
+    #: `wall` is nine rows, which is exactly why a comment could lose it and
+    #: nothing would notice. Count it off `REGISTRY` rather than trusting
+    #: this list.
+    kind: str
     size: int = 1
     #: For an area burst: how far away the origin square may be.
     within: int = 10
@@ -2367,6 +2377,90 @@ def provokes_for(
     return not p.no_provoke and reach_of(
         world, actor, p, branch, augment
     ).kind in PROVOKING_KINDS
+
+
+#: The `Range.kind` words that describe an **area**, as against a single
+#: aimed attack. Multitarget by shape, whatever is standing on the board --
+#: see `shape_of`, which is the only reader. `wall` is in it and is nine
+#: rows; it was missing from `Range.kind`'s own comment, which is how a
+#: first draft came to test for a word the corpus does not contain.
+AREA_KINDS = frozenset({"close_burst", "close_blast", "area_burst", "wall"})
+
+
+def shape_of(p: Power, branch: int = 0, augment: int = 0) -> tuple[str, ...]:
+    """The printed shape of an attack: melee, multitarget, or both. `#1047`.
+
+    One printed sentence needs this, verbatim from DMG2 p133, directly under
+    the minion damage table `monster_math` reads:
+
+        Artillery minions deal 25% less damage on multitarget and melee
+        attacks.
+
+    So it is the **third axis** of that table -- the other two, level and
+    role, are properties of the creature, where this one is a property of
+    the row being used. One cell has to answer differently for an artillery
+    minion's melee swing and its ranged shot, which is why a third *value*
+    keyed on role could not work.
+
+    **Nothing new is recorded or measured.** `monster_math`'s own docstring
+    said the rule was out of reach because *"nothing on this path carries
+    whether the attack is melee or multitarget"*, which was true of that
+    signature and false of the path: `reach_of` and `target_of` have
+    answered both halves for as long as either existed, and `Cast.hit`
+    already holds the `Power` because it has to read `damage_of(branch)`.
+    This function is the derivation, in one place, so no caller has to
+    re-decide what counts.
+
+    **Melee** is `Range.kind`, and `branch` matters: a "Melee or Ranged
+    weapon" row is melee on branch 0 and not on branch 1, and seventy-two
+    PHB1 rows print exactly that. Asking the unbranched `reach` would
+    discount every such row's ranged half.
+
+    **Multitarget** is three separate printed things, and reading only one
+    of them is the trap:
+
+    * `Target.everyone` -- an area decides who is hit, so a burst with no
+      count cap is still multitarget. **Measured: this is never the sole
+      route.** Over every row and branch, 0 are multitarget by `everyone`
+      alone, against 404 by `count` and 747 by shape -- every `everyone` row
+      also has an area `kind`, which makes sense, since "the area decides"
+      presupposes an area. Kept because a hand-built `Power` in a driver or
+      a probe can set it without one, but **it is not load-bearing and a
+      plant on it stays green**, so do not treat it as the test that proves
+      this branch works;
+    * `Target.count > 1` -- "two creatures", declared on the target line.
+      404 rows are multitarget by this alone;
+    * an **area or close shape** -- `AREA_KINDS`, which is histogrammed off
+      the live corpus rather than read off a comment. A burst that happens
+      to catch one creature
+      on this board is still a multitarget attack, because the shape is what
+      the printed word describes and not the head count. Deriving this from
+      who is actually standing there would make the same row's damage move
+      with the board, which is the kind of silent variance this component's
+      own rules file warns about.
+
+    A close burst is therefore multitarget **and** adjacent, which is why
+    this returns a tuple rather than one word: the discount is the same
+    either way, but a reader asking why a number moved gets the real answer
+    rather than whichever test happened to run first.
+
+    `personal` is neither, and a ranged single-target shot is neither --
+    which is the whole point of the sentence it serves. An artillery minion
+    is meant to be good at shooting and bad up close.
+    """
+    out: list[str] = []
+    reach = p.reach_of(branch, augment)
+    kind = reach.kind
+    if kind == "melee":
+        out.append("melee")
+    aimed = p.target_of(augment)
+    if (
+        aimed.everyone
+        or aimed.count > 1
+        or kind in AREA_KINDS
+    ):
+        out.append("multitarget")
+    return tuple(out)
 
 
 def reach_of(

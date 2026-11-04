@@ -34,6 +34,7 @@ Nothing is converted unless asked for. The default is `AS_PRINTED`.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -47,6 +48,34 @@ if TYPE_CHECKING:
 NORMAL = "normal"
 LIMITED = "limited"
 MINION = "minion"
+
+#: **The attack's shape**, which is the third axis `#1047` is named for and
+#: the only one of the three that is not a property of the creature.
+#:
+#: One printed sentence needs it, verbatim from DMG2 p133, directly under
+#: the minion damage table this file already reads:
+#:
+#:     Artillery minions deal 25% less damage on multitarget and melee
+#:     attacks.
+#:
+#: So `role` alone cannot answer it -- an artillery minion's melee swing and
+#: its ranged shot want different numbers from the same cell. A *value*
+#: keyed on role would have to pick one and be wrong about the other, which
+#: is what the issue's title means by *a third axis, not a third value*.
+#:
+#: A **tuple**, not one word, because a close burst is multitarget and a
+#: melee burst is both, and collapsing them would make the derivation lossy
+#: for no gain -- the discount is the same either way, but a reader asking
+#: *"why was this discounted"* gets the real answer.
+MELEE = "melee"
+MULTITARGET = "multitarget"
+
+#: What an artillery minion keeps of its printed damage on a shape the rule
+#: names. 25% less, so three quarters.
+ARTILLERY_KEEPS = 0.75
+
+#: The shapes the artillery sentence names.
+ARTILLERY_DISCOUNTED = frozenset({MELEE, MULTITARGET})
 
 
 @dataclass(frozen=True)
@@ -69,7 +98,8 @@ class Table:
     #: Hit points as a multiple of a standard monster's, by rank.
     rank_hp: dict[str, float] = field(default_factory=dict)
 
-    def target(self, level: int, kind: str, *, role: str = "") -> float:
+    def target(self, level: int, kind: str, *, role: str = "",
+               shape: Sequence[str] = ()) -> float:
         """What a `kind` of attack should average at this level.
 
         **`role` reaches the brute column**, which is the second of the two
@@ -88,11 +118,26 @@ class Table:
         caller keeps its meaning: no role is the standard column, which is
         what they were already getting.
 
-        **The artillery rule is still out of reach and this is why.** *"Artillery
-        minions deal 25% less damage on multitarget and melee attacks"* needs
-        the role **and the shape of the attack**, and nothing on this path
-        carries whether the attack is melee or multitarget. A third axis, not
-        a third value -- left on `#1047`.
+        **`shape` is the third axis, and the path did carry it.** DMG2 p133
+        prints, directly under the table:
+
+            Artillery minions deal 25% less damage on multitarget and melee
+            attacks.
+
+        This docstring said that rule was *"still out of reach"* because
+        *"nothing on this path carries whether the attack is melee or
+        multitarget"*. **That was true of this signature and false of the
+        path.** `Cast.hit` already holds the `Power` -- it has to, to read
+        `damage_of(branch)` -- and `Power.reach_of(branch)` and
+        `target_of()` have answered the shape question for as long as either
+        existed. `dsl.shape_of` derives the words; nothing new had to be
+        recorded, measured or plumbed through. The gap was one parameter
+        wide, one layer above where the note put it.
+
+        The discount is **not** applied to a ranged single-target shot,
+        which is the whole point of the sentence: an artillery minion is
+        meant to be good at shooting and bad up close, so one cell of the
+        table has to answer differently depending on what the row does.
 
         **A minion reads a printed table rather than half this curve.** This
         used to be `out / 2`, which was quoting the book -- DMG2 prints
@@ -117,12 +162,22 @@ class Table:
         from combat_engine.by_level import minion_damage
 
         try:
-            return float(minion_damage(level, brute=role == "brute"))
+            printed = float(minion_damage(level, brute=role == "brute"))
         except ValueError:
             # Outside the printed bands. The old approximation is the honest
             # fallback -- it is what the book's own prose says -- rather than
             # clamping to the top band, which would under-deal silently.
+            #
+            # **The discount is not applied here**, deliberately. The
+            # sentence it comes from is printed under the table and is about
+            # the table's numbers; applying a published percentage to a
+            # number the book never printed would be stacking one
+            # approximation on another, and the fallback is already the less
+            # trustworthy of the two.
             return out / 2
+        if role == "artillery" and ARTILLERY_DISCOUNTED & set(shape):
+            return printed * ARTILLERY_KEEPS
+        return printed
 
 
 #: Attack bonus over level, by role, as published. Reported by
@@ -209,7 +264,7 @@ class Math:
 
     def convert(
         self, expr: str, *, book: str, level: int, kind: str = NORMAL,
-        role: str = "",
+        role: str = "", shape: Sequence[str] = (),
     ) -> str:
         """Rescale a printed damage expression to the target maths.
 
@@ -223,7 +278,7 @@ class Math:
         source = BOOKS.get(book, OLD)
         if source is self.to:
             return expr
-        want = self.to.target(level, kind, role=role)
+        want = self.to.target(level, kind, role=role, shape=shape)
         have = average(expr)
         if have <= 0:
             return expr

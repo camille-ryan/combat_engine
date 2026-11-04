@@ -56405,6 +56405,248 @@ def a_brute_minion_reads_the_brute_column(out: Result) -> None:
              " passing because nothing converts at all")
 
 
+def an_artillery_minion_is_discounted_up_close(out: Result) -> None:
+    """The third axis: the shape of the attack, not a third value. `#1047`.
+
+    Printed verbatim on DMG2 p133, immediately under the minion damage
+    table `monster_math` already reads:
+
+        Artillery minions deal 25% less damage on multitarget and melee
+        attacks.
+
+    Verified from `resources/Dungeon Masters Guide 2.pdf` before it was
+    written into code -- a quoted rule is evidence a rule exists and not
+    evidence of its contents, and this repo has paid for the difference five
+    times. Found by grepping the table's **body**, not its heading.
+
+    **Why this is an axis and not a value.** The other two inputs -- level
+    and role -- are properties of the creature, so a table keyed on them can
+    be read once per monster. This one is a property of the row being used,
+    so the same cell has to answer differently for an artillery minion's
+    melee swing and its ranged shot. A third column keyed on role would have
+    to pick one and be wrong about the other.
+
+    **And the path already carried it**, which is the finding rather than
+    the fix. `monster_math.Table.target`'s docstring said the rule was *"out
+    of reach"* because *"nothing on this path carries whether the attack is
+    melee or multitarget"*. That was true of the signature and false of the
+    caller: `Cast.hit` holds the `Power` because it has to read
+    `damage_of(branch)`, and `reach_of`/`target_of` have answered the shape
+    question for as long as either existed. Nothing had to be recorded,
+    measured or plumbed -- the gap was one keyword wide.
+
+    **THE assertion is the negative one.** A discount that fires on every
+    artillery minion would pass every positive check here and be wrong about
+    the shape the rule exists to reward: an artillery minion is meant to be
+    good at shooting. So a ranged single-target shot must come out
+    **undiscounted**, and the melee and multitarget arms must each fire on
+    their own, since a test that only ever poses both together cannot tell a
+    conjunction from a disjunction.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.by_level import minion_damage
+    from combat_engine.engine import dsl
+    from combat_engine.engine.monster_math import (
+        ARTILLERY_KEEPS,
+        BOOKS,
+        MINION,
+        NORMAL,
+        Math,
+    )
+
+    mm3 = BOOKS["MM3"]
+    std = float(minion_damage(11))
+    out.that(mm3 is not None and std == 8.0,
+             "the floor: the printed 10th-12th standard minion cell is 8,"
+             " which every number below is measured against",
+             f"std={std}")
+
+    # -- the three arms of the rule --------------------------------------
+    shot = mm3.target(11, MINION, role="artillery", shape=())
+    out.that(shot == std,
+             "THE assertion -- a ranged single-target shot by an artillery"
+             " minion is NOT discounted. A flat role-keyed discount would"
+             " pass every positive check below and be wrong here, which is"
+             " the whole point of the printed sentence",
+             f"shot={shot} std={std}")
+    swing = mm3.target(11, MINION, role="artillery", shape=("melee",))
+    out.that(swing == std * ARTILLERY_KEEPS,
+             "a melee attack is discounted a quarter -- the first of the"
+             " two shapes the sentence names",
+             f"swing={swing} want={std * ARTILLERY_KEEPS}")
+    burst = mm3.target(11, MINION, role="artillery", shape=("multitarget",))
+    out.that(burst == std * ARTILLERY_KEEPS,
+             "and so is a multitarget attack, on its own -- asserted"
+             " separately from melee because a rule posed only on both at"
+             " once cannot tell an `and` from an `or`",
+             f"burst={burst} want={std * ARTILLERY_KEEPS}")
+    both = mm3.target(11, MINION, role="artillery",
+                      shape=("melee", "multitarget"))
+    out.that(both == std * ARTILLERY_KEEPS,
+             "both at once is still one quarter off, not two -- 262 rows in"
+             " the corpus are a melee burst and would otherwise be"
+             " discounted twice",
+             f"both={both}")
+
+    # -- the other roles are untouched -----------------------------------
+    for role in ("soldier", "brute", "skirmisher", "controller", "lurker", ""):
+        want = float(minion_damage(11, brute=role == "brute"))
+        got = mm3.target(11, MINION, role=role, shape=("melee", "multitarget"))
+        out.that(got == want,
+                 f"the negative control: role={role!r} is NOT discounted on"
+                 " a melee multitarget attack -- the sentence names"
+                 " artillery and nobody else, and a discount keyed on the"
+                 " shape alone would red exactly here",
+                 f"got={got} want={want}")
+
+    # -- and a standard creature is untouched ----------------------------
+    plain = mm3.target(11, NORMAL, role="artillery",
+                       shape=("melee", "multitarget"))
+    out.that(plain == mm3.target(11, NORMAL),
+             "a non-minion artillery creature is untouched: the sentence is"
+             " printed under the MINION table and is about minions. Asked"
+             " through `target` rather than `Table.damage`, which is typed"
+             " `object` and trips `ty` at the call",
+             f"plain={plain} curve={mm3.target(11, NORMAL)}")
+
+    # -- the fallback outside the printed bands --------------------------
+    # **Deliberately undiscounted**, and the rule says so rather than
+    # leaving it to be read off the code: out there the number is already an
+    # approximation from the book's prose, and applying a published
+    # percentage to a figure the book never printed would stack one estimate
+    # on another.
+    far = mm3.target(99, MINION, role="artillery", shape=("melee",))
+    out.that(far == mm3.target(99, NORMAL) / 2,
+             "outside the printed bands the fallback is half the curve and"
+             " is NOT discounted -- the percentage belongs to the table's"
+             " own numbers",
+             f"far={far}")
+
+    # -- shape_of derives the words, and branch matters ------------------
+    counts: dict = {}
+    for power in dsl.REGISTRY.values():
+        for b in power.reach.branches:
+            got = dsl.shape_of(power, b)
+            counts[got] = counts.get(got, 0) + 1
+    out.that(set(counts) == {(), ("melee",), ("multitarget",),
+                             ("melee", "multitarget")},
+             "`shape_of` answers one of exactly four tuples over every row"
+             " and every branch -- a fifth would mean a `Range.kind` the"
+             " derivation does not know, which is how the first draft tested"
+             " for `area_wall` and matched nothing",
+             f"seen={sorted(counts)}")
+    out.that(counts.get(("melee", "multitarget"), 0) > 0
+             and counts.get((), 0) > 0,
+             "and both the both-shapes and the neither-shape buckets are"
+             " non-empty, so the tuple is earning itself rather than"
+             " collapsing to one word",
+             f"both={counts.get(('melee', 'multitarget'))}"
+             f" neither={counts.get(())}")
+
+    # -- each multitarget route, separately -------------------------------
+    #
+    # **Needed because the set-of-four assertion above could not tell the
+    # three routes apart.** A plant dropping *two* of them -- the count cap
+    # and the area shape -- left `Target.everyone` firing and the rule stayed
+    # **green at 17 of 17**, because the four tuples were still all present.
+    # So the routes get counted one at a time.
+    #
+    # And the measurement that came out of fixing it: `everyone` is the sole
+    # route for **0** rows, so it cannot be asserted on at all. Every row
+    # carrying it also has an area `kind`. That is recorded in `shape_of`'s
+    # docstring so the clause is not mistaken for load-bearing.
+    # **Each count is paired with what `shape_of` says about those rows**,
+    # and the second half is the assertion. Counting the corpus is not a
+    # test of the derivation: a first draft read `target_of` and `reach_of`
+    # directly, so dropping *both* live clauses out of `shape_of` left all
+    # four plants **green at 20 of 20** -- it was measuring the data, not the
+    # code. The rule has to go through the function it is about.
+    # **The vocabulary is a literal here, not `dsl.AREA_KINDS`**, and that
+    # is load-bearing rather than tidy. A first draft derived `sole` from the
+    # constant, so a plant *removing* `"wall"` from it shrank both the
+    # expected set and the answer together and stayed **green at 20 of 20**.
+    # A rule that reads the thing it is testing cannot see a change to it.
+    #
+    # `wall` is nine rows and eight of them are multitarget by shape alone,
+    # so dropping it silently un-discounts eight artillery minion walls.
+    AREA_WORDS = ("close_burst", "close_blast", "area_burst", "wall")
+    out.that(set(dsl.AREA_KINDS) == set(AREA_WORDS),
+             "the four area words, pinned to a literal: a close burst, a"
+             " close blast, an area burst and a wall. `Range.kind` has"
+             " seven words and this is which of them are an area",
+             f"AREA_KINDS={sorted(dsl.AREA_KINDS)}")
+
+    walls = [(ref, b) for ref, p_ in dsl.REGISTRY.items()
+             for b in p_.reach.branches
+             if p_.reach_of(b).kind == "wall"
+             and not p_.target_of().everyone and p_.target_of().count <= 1]
+    said_wall = [(ref, b) for ref, b in walls
+                 if "multitarget" in dsl.shape_of(dsl.REGISTRY[ref], b)]
+    out.that(len(walls) > 0 and len(said_wall) == len(walls),
+             "and a wall with no count cap is multitarget by its shape"
+             " alone -- keyed off the literal word, so removing `wall` from"
+             " the constant reds here instead of shrinking the question",
+             f"{len(said_wall)} of {len(walls)} wall row(s)")
+
+    sole = {"everyone": [], "count": [], "area": []}
+    for ref, power in dsl.REGISTRY.items():
+        for b in power.reach.branches:
+            aimed, reach = power.target_of(), power.reach_of(b)
+            e, c, a = (bool(aimed.everyone), aimed.count > 1,
+                       reach.kind in AREA_WORDS)
+            if e and not c and not a:
+                sole["everyone"].append((ref, b))
+            if c and not e and not a:
+                sole["count"].append((ref, b))
+            if a and not e and not c:
+                sole["area"].append((ref, b))
+
+    for route in ("count", "area"):
+        rows = sole[route]
+        said = [(ref, b) for ref, b in rows
+                if "multitarget" in dsl.shape_of(dsl.REGISTRY[ref], b)]
+        out.that(len(rows) > 0 and len(said) == len(rows),
+                 f"every row multitarget by {route} ALONE is reported"
+                 " multitarget by `shape_of` -- asserted through the"
+                 " function rather than off the data, which is what makes"
+                 " dropping this one clause red",
+                 f"{len(said)} of {len(rows)} row(s)"
+                 f"{', e.g. ' + str(rows[0]) if rows else ''}")
+
+    out.that(sole["everyone"] == [],
+             "and `Target.everyone` is the sole route for NOBODY, so it"
+             " cannot be asserted on at all: every row carrying it also has"
+             " an area kind. Recorded rather than removed -- a hand-built"
+             " Power can still set it, and a plant on that clause stays"
+             " green",
+             f"everyone-alone={len(sole['everyone'])}")
+
+    dual = [
+        (ref, p) for ref, p in dsl.REGISTRY.items()
+        if len(p.reach.branches) > 1
+        and "melee" in dsl.shape_of(p, 0)
+        and "melee" not in dsl.shape_of(p, 1)
+    ]
+    out.that(len(dual) > 0,
+             "a dual-range row is melee on branch 0 and not on branch 1, so"
+             " asking the unbranched reach would discount every such row's"
+             " ranged half -- `_converted` passes `self.branch` for this"
+             " reason",
+             f"{len(dual)} such row(s), e.g. {dual[0][0] if dual else None}")
+
+    # -- the preset still has to be on -----------------------------------
+    live = Math("probe", to=mm3)
+    on = live.convert("1d4", book="MM1", level=11, kind=MINION,
+                      role="artillery", shape=("melee",))
+    off = live.convert("1d4", book="MM1", level=11, kind=MINION,
+                       role="artillery", shape=())
+    out.that(on != off,
+             "and the shape reaches `convert`, not only `target` -- the two"
+             " expressions differ, so the keyword is threaded the whole way"
+             " down rather than stopping at the table",
+             f"melee={on!r} ranged={off!r}")
+
+
 def the_vestige_pact_bargains_with_one_of_its_two(out: Result) -> None:
     """A vestige-pact warlock arrives with an active remnant. #1034.
 
@@ -60144,6 +60386,12 @@ DRIVERS = {
         a_regions_damage_is_the_damage_it_prints,
         "a region's damage column holds the damage it prints, and the tier"
         " scaling with it (#1096)",
+    ),
+    "artillery_shape": (
+        an_artillery_minion_is_discounted_up_close,
+        "an artillery minion deals a quarter less on a melee or multitarget"
+        " attack and the full figure on a ranged shot -- the third axis"
+        " (#1047)",
     ),
     "board_scenery": (
         a_destructible_thing_takes_no_turn,

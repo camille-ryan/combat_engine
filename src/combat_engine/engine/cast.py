@@ -3919,7 +3919,7 @@ class Cast:
         d = p.damage_of(self.branch) if p is not None else None
         if p is None or d is None:
             raise ValueError(f"{self.ref} declared no damage; call c.damage(...)")
-        dice = self._converted(d)
+        dice = self._converted(d, p)
         bonus = self._bonus_of(d.bonus)
         # `dtypes` as well as `dtype`: a header naming two types is one blow
         # that is both, and resistance reads it as a unit. Passing only the
@@ -3931,7 +3931,7 @@ class Cast:
             )
         return self.damage(dice, bonus, dtype=d.dtype, dtypes=d.dtypes, on=on)
 
-    def _converted(self, d: Damage) -> str:
+    def _converted(self, d: Damage, p: Power | None = None) -> str:
         """The declared dice, under whichever edition's maths is in force."""
         from .components import Ident
 
@@ -3945,8 +3945,23 @@ class Cast:
         # are both brute and minion. #1047, which is #1010's successor --
         # this cited the closed one until 2026-11-03.
         role = getattr(ident, "role", "") if ident else ""
+        # **The shape of the attack, which is the third axis.** One printed
+        # sentence under DMG2 p133's minion table wants it: an artillery
+        # minion deals a quarter less on a multitarget or melee attack, so
+        # the same cell has to answer differently for its swing and its
+        # shot.
+        #
+        # `monster_math` said this was *"out of reach"* because *"nothing on
+        # this path carries whether the attack is melee or multitarget"* --
+        # true of that signature, false of this method's caller, which holds
+        # the `Power` already because it has to read `damage_of(branch)`.
+        # `self.branch` is the half in play, and it matters: a dual-range
+        # row is melee on one branch and not the other. #1047.
+        from .dsl import shape_of
+        shape = shape_of(p, self.branch) if p is not None else ()
         return self.world.monster_math.convert(
-            d.dice, book=book, level=self.stats.level, kind=d.kind, role=role
+            d.dice, book=book, level=self.stats.level, kind=d.kind,
+            role=role, shape=shape,
         )
 
     def _bonus_of(self, bonus: str | int) -> int:
