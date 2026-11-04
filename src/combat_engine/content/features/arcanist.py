@@ -39,7 +39,8 @@ from combat_engine.engine.cast import MANOEUVRE_GRANTED_ATTACK
 from combat_engine.engine.components import Companion, Weapon
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import AttackDeclared, Hit, Miss, Summoned
-from combat_engine.engine.query import distance_between
+from combat_engine.engine.query import concealment_of, distance_between
+from combat_engine.engine.types import Cover
 
 # -- the cleric ------------------------------------------------------------
 
@@ -1249,3 +1250,85 @@ def mage_master_s3(c: Cast) -> None:
         dtype=DamageType.NECROTIC, on=c.me, until=When.ENCOUNTER,
         when=arcane_necromancy,
     )
+
+
+@power(
+    "cf:wizard-mage-f6s4",
+    level=10,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def mage_master_s4(c: Cast) -> None:
+    """Concealment of mine turns into combat advantage of mine.
+
+    **`gains_advantage` and not `grants_advantage`**, which is the half to
+    get right and is the distinction that verb's own docstring exists for:
+    the card is about *me* -- what I have against a creature -- so the
+    modifier sits on the attacker and `query.has_combat_advantage` reads it
+    there. `grants_advantage` is the other sentence, laid on the creature
+    that concedes it, and there is no creature to lay this on: the set is
+    whoever I happen to be hard to see by at the moment of the swing.
+
+    **The gate reads MY concealment, not the target's.** Concealment is a
+    fact about the creature being looked at -- `query.concealment_of`'s own
+    docstring says so -- and the printed line is "while **you** have any
+    concealment against a creature". Reading the target's would be a
+    different and much commoner card.
+
+    **"Any" is `is not Cover.NONE`, which is three values rather than two.**
+    `PARTIAL` is the ordinary -2 and `SUPERIOR` is total concealment at -5,
+    and the card asks for either, so testing for one would silently drop
+    the stronger case. This was written as `== Cover.PARTIAL` first.
+
+    Undeclared until now, and the reason is recorded on `#581`: it was read
+    as "concealment as a state, not the penalty it confers" and filed as an
+    engine gap. Both readers it needs have existed since `#500` and the
+    concealment work -- `concealment_of` reads the state and
+    `gains_advantage` grants the advantage -- so the row was writable and
+    nothing had looked again.
+    """
+    def hard_to_see(ctx: dict[str, Any]) -> bool:
+        return concealment_of(c.world, c.me, ctx) is not Cover.NONE
+
+    c.gains_advantage(hard_to_see, until=When.ENCOUNTER, on=c.me)
+
+
+@power(
+    "cf:wizard-mage-f6s5",
+    level=10,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+    todo=("events.PowerUsed(area=)",),
+)
+def mage_master_s5(c: Cast) -> None:
+    """An area fire attack's own area becomes a burning zone after the fact.
+
+    **The zone half is built and the AREA is what is missing.** `c.zone`
+    takes `hindering=` and `hindering_type=`, and `Zones._burns` applies it
+    on entry and at a turn's end, so "creatures that end their turns within
+    the zone take fire damage" needs no new mechanism -- `#1039`'s printed
+    regions use exactly that path.
+
+    What cannot be written is *where*. The card turns **the area of the
+    attack** into the zone, and `events.PowerUsed` carries
+    `actor, power, targets, trigger, granted_by, granted_via` and **no
+    area**. The squares an area attack covered are not recoverable from
+    `targets`: a burst that caught two creatures covered its whole radius,
+    and a zone laid on the two occupied squares is a different and much
+    weaker rule than the one printed.
+
+    So the marker names the event field rather than a verb, because a verb
+    would be the wrong place -- `dsl.aim_points` already computes the
+    squares at targeting time and nothing carries them forward to a watcher.
+
+    `todo=` and not `dropped=`: the zone is the whole row, so with nowhere
+    to put it the row cannot play at all.
+    """

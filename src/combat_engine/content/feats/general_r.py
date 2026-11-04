@@ -1006,16 +1006,36 @@ def f3586(c: Cast) -> None:
 
 @power("f3587", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*FEATURE_CHOICE, "cf:wizard-mage-f6s4", "cf:wizard-mage-f6s5"))
+       todo=(*FEATURE_CHOICE, "cf:wizard-mage-f6s5"))
 def f3587(c: Cast) -> None:
     """The third step of the `f3585` chain: `cf:wizard-mage-f6`'s benefit
     for the school `f3585` chose.
 
     The same unrecorded choice as `f3586`, **and** a second gap of its own:
-    four of the six options under that feature are declared and two are
-    not. `c.borrow_row` drops an option with no registry row silently, so
-    with only the first symbol closed this row would quietly offer four
-    schools out of six."""
+    `c.borrow_row` drops an option with no registry row silently, so this
+    row would quietly offer fewer schools than the card prints.
+
+    **The census was wrong in both directions and is now measured.** This
+    said *"four of the six options are declared and two are not"*. Counted:
+
+        s1 s2 s3   declared before
+        s4         declared now -- it needed no engine work, see below
+        s5         declared, `todo=("events.PowerUsed(area=)",)`
+        s6         NOT IN THE COMPENDIUM at all -- `class_feature` has no
+                   such ref, so the feature prints five options and not six
+
+    So it was three declared rather than four, and the sixth was never a
+    writing gap. `s4` was filed on `#581` as *"concealment as a state, not
+    the penalty it confers"* and read as an engine gap; both readers it
+    needs have existed since `#500` -- `query.concealment_of` reads the
+    state and `c.gains_advantage` grants the advantage -- so it was
+    writable and nothing had looked again.
+
+    `s5` is the real hold and the marker now names the event field rather
+    than a verb: the card turns **the area of the attack** into a zone, and
+    `events.PowerUsed` carries no area. The squares an area attack covered
+    cannot be recovered from `targets` -- a burst that caught two creatures
+    covered its whole radius."""
 
 
 @power("f3588", level=1, cls="", usage=ENCOUNTER, action=NONE,
