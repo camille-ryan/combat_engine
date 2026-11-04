@@ -13260,6 +13260,92 @@ def disease(out: Result) -> None:
              "and a DC shape, because the pages print four of them")
 
 
+def a_feature_chain_reads_its_own_earlier_choice(out: Result) -> None:
+    """The later steps of `f3585`'s chain grant the chosen school's benefit.
+
+    `#1085`. `f3586` and `f3587` carried `chargen.feature_choice()` -- a
+    per-character sub-choice store said not to exist -- and the choice **is**
+    recorded: `f3585` takes one of six schools with `c.borrow_row`, which
+    stores what it took, and `c.stored_row(of="f3585")` reads it.
+
+    **The index mapping is the thing asserted, and it is asserted for all
+    six**, because the default draw cannot test it: `world.decide` with no
+    decider takes the first option, so every seed picks `s0` and an
+    off-by-one in the mapping would read green on every one of them. The
+    pick is written directly here and the benefit checked per school.
+
+    That is not a hypothetical. The same off-by-one was made **in prose**
+    on these very rows earlier the same day: the option refs are zero-based
+    `s0`..`s5`, a census was taken as `s1`..`s6`, and a correct note was
+    "corrected" into a wrong one on the strength of it. The arithmetic the
+    rule checks is the arithmetic that went wrong.
+
+    **And a second school must not leak.** The old note on `f3586` named
+    exactly this -- offering the six over again would let a character take
+    another school's benefit, "a row stronger than its printed line" -- so
+    the grant is asserted to be the matching one *and* to be the only one.
+
+    The no-pick case lays nothing, which is the honest direction: a
+    character on another build never took `f3585`, so there is no school.
+    """
+    import audit as _audit
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import use
+
+    CHAIN = ("f3586", "f3587")
+    FAMILIES = ("cf:wizard-mage-f4s", "cf:wizard-mage-f6s")
+
+    def armed(pick: str | None) -> list[str]:
+        world, me, _ = _audit.board("f3586", 2)
+        known = world.get(me, Powers)
+        assert known is not None
+        known.known = [r for r in known.known
+                       if not r.startswith("cf:wizard-mage-f")]
+        for ref in CHAIN:
+            if ref not in known.known:
+                known.known.append(ref)
+        if pick is None:
+            known.stored.pop("f3585", None)
+        else:
+            known.stored["f3585"] = pick
+        for ref in CHAIN:
+            use(world, me, ref, spend=False)
+        return sorted(r for r in known.known
+                      if r.startswith("cf:wizard-mage-f"))
+
+    for n in range(6):
+        got = armed(f"cf:wizard-mage-f0s{n}")
+        want = [f"{fam}{n}" for fam in FAMILIES]
+        out.that(sorted(got) == sorted(want),
+                 f"school s{n}: the chain grants that school's own benefits"
+                 " and ONLY those -- the mapping is by index and the default"
+                 " draw always picks s0, so nothing but a forced pick can"
+                 " tell a correct mapping from an off-by-one",
+                 f"got={got} want={want}")
+
+    out.that(armed(None) == [],
+             "and with no school recorded the chain grants nothing -- a"
+             " character on another build never took `f3585`, so inventing"
+             " a benefit would be a row stronger than its printed line",
+             f"got={armed(None)}")
+
+    # The store itself, through the caller rather than by reaching in.
+    world, me, _ = _audit.board("f3586", 2)
+    known = world.get(me, Powers)
+    assert known is not None
+    known.known = [r for r in known.known
+                   if not r.startswith("cf:wizard-mage-f")]
+    if "f3585" not in known.known:
+        known.known.append("f3585")
+    use(world, me, "f3585", spend=False)
+    took = known.stored.get("f3585", "")
+    out.that(took.startswith("cf:wizard-mage-f0s"),
+             "`f3585` really does record which school it borrowed -- the"
+             " claim the two markers denied, and the whole reason they came"
+             " off",
+             f"stored={took!r}")
+
+
 def a_school_decides_which_creature_is_summoned(out: Result) -> None:
     """`p13984` summons one of two creatures, chosen by the school benefit.
 
@@ -61628,6 +61714,12 @@ DRIVERS = {
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "forms": (forms, "which shape a creature is in, and two at once"),
+    "feature_chain": (
+        a_feature_chain_reads_its_own_earlier_choice,
+        "a feature chain grants the benefit of the school its own first step"
+        " chose, by index, for all six -- the default draw always picks the"
+        " first, so only a forced pick can see an off-by-one (#1085)",
+    ),
     "school_summon": (
         a_school_decides_which_creature_is_summoned,
         "which creature a wizard's school benefit summons (#826)",

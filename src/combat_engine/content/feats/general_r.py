@@ -104,6 +104,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.basic import MELEE as BASIC_MELEE
 from combat_engine.engine.components import Health, Mods
+from combat_engine.engine.events import RowStored
 from combat_engine.engine.query import (
     creatures,
     defence,
@@ -990,52 +991,125 @@ def f3585(c: Cast) -> None:
     )
 
 
-@power("f3586", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE_CHOICE)
-def f3586(c: Cast) -> None:
-    """The second step of the `f3585` chain: no cost, and one of the six
-    benefits printed under `cf:wizard-mage-f4`.
+#: The six schools `f3585` may borrow, in the order their refs number them.
+#: Read as a **prefix plus index** rather than parsed, because the three
+#: families are parallel by construction: the school chosen as
+#: `cf:wizard-mage-f0sN` has its later benefits at `-f4sN` and `-f6sN`.
+_MAGE_SCHOOL = "cf:wizard-mage-f0s"
 
-    All six are declared, so the list is not the hold any more. The card
-    says the benefit is the one belonging to *the school chosen for
-    `f3585`*, and that choice is not recorded anywhere this row can read
-    it. Offering the six over again is the shape to avoid: it would let a
-    character take a second school's benefit, which is a row stronger than
-    its printed line."""
+
+def _chose_a_school(c: Cast, family: str) -> None:
+    """Grant the `family` benefit for the school `f3585` borrowed.
+
+    **The pick is recorded and this reads it**, which is the correction that
+    unblocked `f3586` and `f3587`. Their marker said
+    `chargen.feature_choice()` -- a per-character sub-choice store that did
+    not exist -- and `f3585` is written, unmarked, and calls
+    `c.borrow_row(among=(the six schools))`, which **stores** what it took.
+    `c.stored_row(of="f3585")` is the reader. #1085.
+
+    **Arming order is why this is a function and not one line in two
+    bodies**, and it is `_borrowed`'s problem in `general_l.py` exactly:
+    all three rows of this chain arm as traits, `turns.arm_traits` walks
+    them in its own order, and on some orders `f3585` has not borrowed yet
+    when these two arm. Reading the store at arming time is right for only
+    half the orders and nothing says which this build got.
+
+    So: lay now if the pick is recorded, and otherwise wait for the write.
+    `c.borrow_row` announces `RowStored` at the end of its own arming, so
+    the watch is armed in time in the first order and the event has already
+    passed in the second.
+
+    A school with no recorded pick lays nothing, which is the honest
+    direction: a character on another build never took `f3585`, so there is
+    no school and no benefit. **That comes from `lay` never being called,
+    not from the `startswith` guard inside it** -- a plant that broke the
+    guard stayed green, because with no pick neither branch reaches `lay`
+    at all. The guard is defensive against a store holding something
+    `f3585` never writes, and nothing exercises it today.
+    """
+    me = c.me
+
+    def lay(pick: str) -> None:
+        if not pick.startswith(_MAGE_SCHOOL):
+            return
+        c.grant_row(f"{family}{pick[len(_MAGE_SCHOOL):]}", on=me,
+                    until=When.ENCOUNTER)
+
+    held = c.stored_row(of="f3585")
+    if held:
+        lay(held)
+        return
+
+    def stored(ev: RowStored) -> None:
+        if ev.actor == me and ev.holder == "f3585" and ev.row:
+            lay(ev.row)
+
+    c.watch(RowStored, stored, until=When.ENCOUNTER, on=me, label=c.ref,
+            once=True)
+
+
+@power("f3586", level=1, cls="", usage=ENCOUNTER, action=NONE,
+       reach=PERSONAL, target=SELF)
+def f3586(c: Cast) -> None:
+    """The second step of the `f3585` chain: no cost, and the one of the six
+    benefits under `cf:wizard-mage-f4` that belongs to the chosen school.
+
+    **Written, and the marker it carried was pointed at a facility that did
+    not need to exist.** It said `chargen.feature_choice()` -- *"that
+    choice is not recorded anywhere this row can read it"* -- and the
+    choice **is** recorded: `f3585` takes its school with `c.borrow_row`,
+    which stores the pick, and `c.stored_row(of="f3585")` reads it. #1085
+    has the measurement.
+
+    The old note's warning stands and is honoured: offering the six over
+    again would let a character take a second school's benefit, which is a
+    row stronger than its printed line. This grants exactly the one the
+    school names, by index, so a second school is unreachable by
+    construction rather than by a guard.
+
+    `_chose_a_school` carries the arming-order half; see its note."""
+    _chose_a_school(c, "cf:wizard-mage-f4s")
 
 
 @power("f3587", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*FEATURE_CHOICE, "cf:wizard-mage-f6s5"))
+       dropped=("cf:wizard-mage-f6s5",))
 def f3587(c: Cast) -> None:
     """The third step of the `f3585` chain: `cf:wizard-mage-f6`'s benefit
     for the school `f3585` chose.
 
-    The same unrecorded choice as `f3586`, **and** a second gap of its own:
-    `c.borrow_row` drops an option with no registry row silently, so this
-    row would quietly offer fewer schools than the card prints.
+    Written, by the same reading as `f3586` -- the school is recorded and
+    `_chose_a_school` grants the matching option. `dropped=` rather than
+    finished, because **one of the six options it may grant is itself
+    unfinished**: `cf:wizard-mage-f6s5` carries
+    `todo=("events.PowerUsed(area=)",)`, so a character who chose that
+    school gets a grant that is refused in play. Five of six schools play.
 
-    **The census was wrong in both directions and is now measured.** This
-    said *"four of the six options are declared and two are not"*. Counted:
+    **This docstring carried a census of my own that was wrong, and
+    correcting it is worth more than the census was.** It said the original
+    note -- *"four of the six options are declared and two are not"* -- was
+    wrong in both directions, on the strength of a count that read:
 
-        s1 s2 s3   declared before
-        s4         declared now -- it needed no engine work, see below
-        s5         declared, `todo=("events.PowerUsed(area=)",)`
-        s6         NOT IN THE COMPENDIUM at all -- `class_feature` has no
-                   such ref, so the feature prints five options and not six
+        s1 s2 s3 declared, s4 and s5 written now, s6 absent from the
+        compendium, so the feature prints five options and not six
 
-    So it was three declared rather than four, and the sixth was never a
-    writing gap. `s4` was filed on `#581` as *"concealment as a state, not
-    the penalty it confers"* and read as an engine gap; both readers it
-    needs have existed since `#500` -- `query.concealment_of` reads the
-    state and `c.gains_advantage` grants the advantage -- so it was
-    writable and nothing had looked again.
+    Every option ref is **zero-based**: the family is `s0` through `s5`,
+    which **is** six. So `s6` was never supposed to exist, "absent from the
+    compendium" was a tautology rather than a finding, and the four that
+    were declared before this chain was touched were `f6s0` through
+    `f6s3` -- exactly four of six. **The original note was right and the
+    correction was the error.** Measured off `dsl.REGISTRY` and against
+    `064369be~1`, not reasoned about a second time.
 
-    `s5` is the real hold and the marker now names the event field rather
-    than a verb: the card turns **the area of the attack** into a zone, and
-    `events.PowerUsed` carries no area. The squares an area attack covered
-    cannot be recovered from `targets` -- a burst that caught two creatures
-    covered its whole radius."""
+    What is true and did come out of that pass: `f6s4` was filed on `#581`
+    as an engine gap -- *"concealment as a state, not the penalty it
+    confers"* -- and both readers it needed had existed since `#500`
+    (`query.concealment_of` and `c.gains_advantage`), so it was writable
+    and nothing had looked again. `f6s5` is the real hold, and its marker
+    names an **event field** rather than a verb: the card turns the area of
+    the attack into a zone and `events.PowerUsed` carries no area. #1103."""
+    _chose_a_school(c, "cf:wizard-mage-f6s")
 
 
 @power("f3588", level=1, cls="", usage=ENCOUNTER, action=NONE,
