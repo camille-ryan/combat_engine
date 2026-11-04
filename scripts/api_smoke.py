@@ -449,11 +449,41 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
                 f" unexercised for this leg",
             )
         else:
+            # **A single casualty is not a wipe, and the equality above could
+            # not say so.** This asserted all three snapshots had the same
+            # *count*, with a skip for the total wipe only -- and the comment
+            # above says why that skip is narrow: "a leg lost with survivors
+            # still has a real rest and is still asserted."
+            #
+            # What it missed is one character dying while the others live.
+            # `Party.bury` takes the dead out before the rest, on Camille's
+            # ruling -- *"they leave the party [...] the party plays on
+            # short-handed"* -- so `rested` is legitimately shorter and the
+            # equality is simply the wrong statement.
+            #
+            # Replaced with the stronger one: `rested` must be `entering`
+            # minus **exactly** the characters that died. Identical when
+            # nobody does, and it catches a snapshot losing somebody who was
+            # still alive, which the count test could not. First exercised by
+            # `#1101` -- a persistent kit means spent dailies carry across a
+            # day, so the pinned day's leg 2 now kills one character.
+            #
+            # `down` read the way `Sheet.down` reads it, off the wire's own
+            # numbers rather than a second definition.
+            buried = [(c["id"], c["label"]) for c in done["ended"]
+                      if c["hp"] <= -(c["hp_max"] // 2)]
+            survivors = [p for p in
+                         [(c["id"], c["label"]) for c in done["entering"]]
+                         if p not in buried]
             check.that(len(done["ended"]) == len(done["entering"])
-                       and len(done["rested"]) == len(done["entering"]),
-                       f"leg {leg_no} has all three snapshots, same party in each",
+                       and [(c["id"], c["label"]) for c in done["rested"]]
+                       == survivors,
+                       f"leg {leg_no} has all three snapshots, and `rested` is"
+                       f" the party minus exactly the dead",
                        f"{len(done['entering'])}/{len(done['ended'])}"
-                       f"/{len(done['rested'])}")
+                       f"/{len(done['rested'])}"
+                       + (f", buried {[b[1] for b in buried]}" if buried
+                          else ", nobody died"))
         check.that(bool(done["rest_text"]), f"leg {leg_no} says what the rest cost")
         # **The three snapshots must name the same people in the same order.**
         # `entering`/`ended` come off the board and `rested` off the sheets,
@@ -462,14 +492,23 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
         # character's hit points under another's name the first time they
         # did not, and nothing else here would notice.
         who = [(c["id"], c["label"]) for c in done["entering"]]
+        # `rested` is compared against the **survivors** for the reason above:
+        # a buried character is gone from the sheets and present on the board,
+        # so `ended` keeps the full roll and `rested` does not.
+        gone = [(c["id"], c["label"]) for c in done["ended"]
+                if c["hp"] <= -(c["hp_max"] // 2)]
+        left = [p for p in who if p not in gone]
         check.that(not standing
                    or ([(c["id"], c["label"]) for c in done["ended"]] == who
-                       and [(c["id"], c["label"]) for c in done["rested"]] == who),
+                       and [(c["id"], c["label"]) for c in done["rested"]]
+                       == left),
                    f"leg {leg_no}'s three snapshots name the same party in the"
-                   " same order, board and sheets alike",
+                   " same order, board and sheets alike -- minus the dead, in"
+                   " the surviving order",
                    f"in {who} / ended"
                    f" {[(c['id'], c['label']) for c in done['ended']]} / rested"
-                   f" {[(c['id'], c['label']) for c in done['rested']]}")
+                   f" {[(c['id'], c['label']) for c in done['rested']]}"
+                   f" / expected {left}")
         check.that(len(set(c["id"] for c in done["entering"])) == len(who),
                    "and each character has its own wire id rather than two"
                    " sharing one, which positional matching would hide",
