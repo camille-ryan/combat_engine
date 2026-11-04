@@ -333,19 +333,15 @@ class Zones:
                 kind = DamageType.UNTYPED
             mine = self.world.get(zone, Zone)
             # **A flat number is not a dice expression, and the common case
-            # is flat.** `Rng.roll` takes `str | int` and treats a bare
-            # `int` as a constant *"which keeps callers that sometimes have
-            # flat damage from having to special-case it"* -- but a database
-            # column arrives as `"5"`, a `str`, and `roll("5")` raises
-            # `not a dice expression`.
-            #
-            # Measured over the rows this path exists for: **32 of 47**
-            # printed regions carry a flat number. So the raise was not an
-            # edge case, it was two thirds of the population, and the first
-            # end-to-end probe hit it on the row the draw happened to pick.
-            amount = self.world.rng.roll(
-                int(dice) if dice.strip().lstrip("+-").isdigit() else dice
-            ).total
+            # is flat** -- 32 of the 47 printed regions this path exists for
+            # carry one, so the raise was two thirds of the population
+            # rather than an edge. `rng.dice_or_flat` is the normaliser and
+            # its docstring has the whole account; it lives there because
+            # the hazard term hit the identical wall on `Trap.damage` and
+            # two copies of one read is the real bug. #1039, #981.
+            from .rng import dice_or_flat
+
+            amount = self.world.rng.roll(dice_or_flat(dice)).total
             deal_damage(
                 self.world,
                 mine.owner if mine else 0,

@@ -359,6 +359,12 @@ def arm(world: World, square: Square, *, level: int = 1, ref: str = "trap",
             # not that it is easy to. #955.
             disable_skill=(printed["disable_skill"] or "") if printed else "",
             disable_dc=printed["disable_dc"] if printed else None,
+            # **Only the printed expression, never the fallback.** `hurts`
+            # below falls back to an invented `1d10+level` when there is no
+            # row; storing that here would hand `policy/` a number the book
+            # never printed and no way to tell. Empty says "unpriced", which
+            # is a reading the hazard term can act on. #981.
+            damage=(printed["damage"] or "") if printed else "",
         ),
     )
     trap = world.need(eid, Trap)

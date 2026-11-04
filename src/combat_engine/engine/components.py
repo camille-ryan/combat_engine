@@ -566,6 +566,26 @@ class Trap:
     #: check would quietly undo the more careful of the two readings above.
     found: bool = False
 
+    #: **What it hits for, so somebody other than the trap can price it.**
+    #: `arm` read this column into a local and captured it in the `strike`
+    #: closure, which meant the expression was correct, live, and
+    #: **unreachable** -- `policy/` could not ask how much a trap hurts, so
+    #: `#981`'s hazard term had no number to derive a price from and a
+    #: creature stepped into a trap for free.
+    #:
+    #: A **string**, as printed and as the column holds it: `"5"` as readily
+    #: as `"1d10+3"`. The reader has to cope with both -- `Rng.roll` takes
+    #: `str | int` and raises on a digit-only `str`, which is two thirds of
+    #: the printed region population one table over, so the same care
+    #: applies here.
+    #:
+    #: Empty for a trap `arm` had no row for, where the invented fallback
+    #: stands in. Empty rather than that fallback's text, deliberately: a
+    #: term pricing off this should be able to tell a printed number from a
+    #: guessed one, and a non-empty string that was never printed is the
+    #: kind of thing this repo keeps paying for. #981.
+    damage: str = ""
+
     #: The skill the printed countermeasure names, and what it has to beat.
     #: `trap.disable_skill` / `disable_dc` in `game.db` (#989): **130** rows
     #: print one clause, **477** genuinely print none, and **24** are

@@ -82,6 +82,39 @@ class Rng:
         return out
 
 
+def dice_or_flat(expr: str | int) -> str | int:
+    """Normalise a printed damage value so `roll` and `average` accept it.
+
+    **Both of those take `str | int` and treat a bare `int` as a constant** --
+    `roll`'s own docstring says it is there "to keep callers that sometimes
+    have flat damage from having to special-case it". But a *database column*
+    arrives as a `str`, so `"5"` matches neither the dice pattern nor the
+    `int` branch and raises `not a dice expression`.
+
+    That has now bitten two readers of two different printed tables:
+
+    * `Zones._burns`, laying a printed hindering region -- **32 of the 47**
+      eligible rows carry a flat number, so it was two thirds of the
+      population rather than an edge (`#1039`);
+    * the hazard term pricing a trap off `Trap.damage` (`#981`).
+
+    Each had written its own `isdigit()` guard, which is one read
+    hand-rolled in two files and is the shape of bug this repo keeps
+    finding. One normaliser, named, so the next printed-number column has
+    somewhere to go.
+
+    An empty string passes through unchanged and still raises downstream,
+    deliberately: "nothing printed" is a caller's question to answer, not
+    something to silently price at zero.
+    """
+    if isinstance(expr, int):
+        return expr
+    bare = expr.strip()
+    if bare.lstrip("+-").isdigit():
+        return int(bare)
+    return expr
+
+
 def average(expr: str | int) -> float:
     """What a dice expression is worth on average. For ordering choices
     without spending a draw -- calling `roll` to preview would desync replay."""

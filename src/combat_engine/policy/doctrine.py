@@ -436,6 +436,13 @@ DOCTRINE: dict[str, float] = {
     "into_enemy_zone": -0.6,
     # Difficult going costs a square of movement, which is small and real.
     "into_difficult": -0.2,
+    # **A found, armed trap in the destination square.** The value is the
+    # trap's printed damage through `threat.risked` -- hit points of this
+    # creature's own output put at risk -- so the weight is the sign and the
+    # scale, not the price. 1.0 for the same reason `threat_conceded` is:
+    # the figure already means something, and a multiplier other than one
+    # would be a second opinion about a number that is derived. #981.
+    "into_hazard": -1.0,
     # **Cancels `policy.features`' flat `is_charge` for a creature that has no
     # melee attack to charge with.** -6.0 against +6.0, exactly, so the charge
     # is left scored on its own damage rather than on a bonus for the kind of
@@ -1373,6 +1380,59 @@ def _would_be_flanked(world: Any, actor: int, dest: Any) -> bool:
     return False
 
 
+def _hazard_at(world: Any, actor: int, dest: Any) -> float:
+    """What a found, armed trap in `dest` would cost this creature. `#981`.
+
+    **Hit points of its own output put at risk**, through `threat.risked`,
+    which is the currency `conceded` and `threat_conceded` already work in.
+    So the number is *derived from the printed damage* and the weight beside
+    it only carries the sign -- which is what `#314` requires of a new term
+    and what `into_enemy_zone` and `into_difficult` are not.
+
+    Four gates, and each one is a reading rather than a convenience:
+
+    * **`found`** -- DMG2's *"terrain they know about"*, twice. Without it
+      every creature dodges every trap on the board whether anyone has
+      noticed it or not, which `#981`'s own knowability note rules out and
+      which is why that issue stayed open after the term was first proposed.
+    * **not `sprung`, not `disabled`** -- a trap that has fired or been
+      disarmed is scenery. `engine.traps.suppressed` answers both and is the
+      existing reader, so this does not invent a second opinion.
+    * **a printed `damage`** -- empty means `arm` had no row and fell back
+      to an invented expression. `Trap.damage` deliberately stores only the
+      printed value, so an empty string is "unpriced" and this returns 0
+      rather than pricing a guess.
+    * **the square** -- a trap is a thing in a square, so only a destination
+      standing on one counts.
+
+    Returns a **positive** magnitude; the weight is negative. That matches
+    `threat_conceded`'s shape rather than signing the feature, so a reader
+    comparing two costs is comparing two positive figures.
+    """
+    from combat_engine.engine.components import Position, Trap
+    from combat_engine.engine.rng import average, dice_or_flat
+
+    worst = 0.0
+    for eid, trap in world.each(Trap):
+        if not trap.found or trap.sprung or trap.disabled:
+            continue
+        if not trap.damage:
+            continue
+        spot = world.get(eid, Position)
+        if spot is None or dest not in spot.squares:
+            continue
+        try:
+            hurts = average(dice_or_flat(trap.damage))
+        except ValueError:
+            # A column this reader cannot parse is not a reason to refuse an
+            # answer about the board. Skipped rather than priced at zero for
+            # the whole square, because another trap in the same square may
+            # still be readable.
+            continue
+        worst = max(worst, T.risked(world, actor, hurts))
+    return worst
+
+
 def _enemy_zone_squares(world: Any, actor: int) -> set[Any]:
     """Every square it would hurt to stand in.
 
@@ -1622,6 +1682,27 @@ def doctrine_features(
             # equally and change no decision, while looking like it did.
             f["into_enemy_zone"] = float(dest in _enemy_zone_squares(world, actor))
             f["into_difficult"] = float(dest in world.difficult(actor))
+            # **What stepping into a trap is worth, derived rather than
+            # chosen.** `#981`: the policy searches *for* traps -- `#1016`
+            # put nine mentions in this package -- and could not price
+            # walking into one, so a creature stepped onto an armed trap for
+            # free against `into_difficult: -0.2` for inconvenient footing.
+            #
+            # **Priced through `risked`, so this satisfies `#314` instead of
+            # waiting for it.** The figure is the trap's printed damage put
+            # through the same health-share currency `conceded` uses, which
+            # is what `#314` asks of a new term; `into_enemy_zone: -0.6` and
+            # `into_difficult: -0.2` beside it are numbers somebody picked.
+            #
+            # **Only a trap the party has FOUND**, which is the whole of
+            # `#981`'s knowability note -- DMG2 says *"terrain they know
+            # about"* twice, so this is not omniscience. `Trap.found` is the
+            # bit `#1016`/`#959` added and without it this term would make
+            # every creature dodge every trap on the board, armed or not,
+            # seen or not.
+            hazard = _hazard_at(world, actor, dest)
+            if hazard:
+                f["into_hazard"] = hazard
             # **What the move costs and what it buys, in one currency.** Both are
             # shares of a side's health, so they are directly comparable and the
             # trade is arithmetic rather than a pair of hand-set constants.

@@ -56598,6 +56598,160 @@ def a_brute_minion_reads_the_brute_column(out: Result) -> None:
              " passing because nothing converts at all")
 
 
+def stepping_into_a_found_trap_costs_something(out: Result) -> None:
+    """A trap the party has found is priced, and an unfound one is not. `#981`.
+
+    `#981`: the policy **searches for** traps -- `#1016` put nine mentions of
+    them in this package -- and could not price walking into one. So a
+    creature stepped onto an armed trap for free, against `into_difficult:
+    -0.2` for inconvenient footing.
+
+    **The price is derived, which is why this does not wait on `#314`.**
+    `into_enemy_zone: -0.6` and `into_difficult: -0.2` are numbers somebody
+    picked; this one is the trap's **printed** damage through
+    `threat.risked`, the same health-share currency `conceded` works in. The
+    weight carries the sign and the scale, not the price -- `#314`'s stated
+    requirement of any new term.
+
+    **Two things had to land first and the issue had given up on both.**
+
+    `Trap.damage` did not exist: `content.terrain.arm` read the printed
+    column into a local and captured it in the `strike` closure, so the
+    expression was correct, live and **unreachable from anywhere**. `#981`'s
+    second comment concluded the hazard half was not executable; the half it
+    named -- a noticed/unnoticed state -- had since been built by `#1016`
+    and `#959` without either issue noticing, and the half it did not name
+    was this field.
+
+    **THE assertion is the unfound one.** `#981`'s knowability note is the
+    whole reason that issue stayed open after the term was first proposed:
+
+        DMG2 says *"terrain they know about"* twice, so it is not
+        omniscience.
+
+    A term priced without `Trap.found` makes every creature dodge every trap
+    on the board, seen or not, which is strictly worse than stepping on them
+    -- so a rule that only checks the found case cannot tell a correct term
+    from an omniscient one.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content import loader
+    from combat_engine.content.terrain import arm
+    from combat_engine.engine import Bus, Rng, World
+    from combat_engine.engine.components import Trap
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.rng import average, dice_or_flat
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import Team
+    from combat_engine.policy import doctrine as D
+    from combat_engine.policy.doctrine import DOCTRINE
+    from combat_engine.policy.threat import risked
+
+    def board() -> tuple:
+        world = World(Grid(24, 16), Rng(3), Bus())
+        hero = loader.spawn(world, "m1000", (2, 8), team=Team.PC)
+        loader.spawn(world, "m1000", (12, 8), team=Team.ENEMY)
+        enc = Encounter(world)
+        enc.start()
+        eid = arm(world, (4, 8), level=3, pick=Random(11))
+        return world, hero, eid
+
+    world, hero, eid = board()
+    trap = world.need(eid, Trap)
+
+    # -- the field that had to exist ---------------------------------------
+    out.that(trap.damage != "",
+             "the floor: `arm` writes the printed damage onto the component."
+             " It used to live only in the `strike` closure, so the number"
+             " was correct and unreachable -- which is what made `#981`'s"
+             " hazard half look unbuildable",
+             f"damage={trap.damage!r}")
+    out.that(average(dice_or_flat(trap.damage)) > 0,
+             "and it parses, through the shared normaliser rather than a"
+             " second hand-rolled `isdigit` guard -- `average` raises on a"
+             " flat string and a database column is a string",
+             f"average={average(dice_or_flat(trap.damage))}")
+
+    # -- THE assertion: an unfound trap is not priced -----------------------
+    out.that(trap.found is False,
+             "the trap starts UNFOUND, which is the state the assertion"
+             " below is about",
+             f"found={trap.found}")
+    out.that(D._hazard_at(world, hero, (4, 8)) == 0.0,
+             "THE assertion -- an unfound trap costs NOTHING. Pricing it"
+             " would make every creature dodge every trap on the board seen"
+             " or not, which is the omniscience `#981`'s knowability note"
+             " rules out and is worse than the bug being fixed",
+             f"hazard={D._hazard_at(world, hero, (4, 8))}")
+
+    # -- and a found one does -----------------------------------------------
+    trap.found = True
+    cost = D._hazard_at(world, hero, (4, 8))
+    out.that(cost > 0,
+             "a FOUND trap costs something, which is the whole term",
+             f"hazard={cost:.3f}")
+    out.that(cost == risked(world, hero, average(dice_or_flat(trap.damage))),
+             "and the figure is exactly the printed damage through"
+             " `threat.risked` -- derived, not chosen, which is what lets"
+             " this land without waiting on `#314`",
+             f"term={cost:.4f}")
+
+    # -- the three other gates ----------------------------------------------
+    out.that(D._hazard_at(world, hero, (9, 9)) == 0.0,
+             "the negative control: a square with no trap in it costs"
+             " nothing. Without this the assertion above passes for a term"
+             " that charges everywhere",
+             f"hazard={D._hazard_at(world, hero, (9, 9))}")
+
+    trap.sprung = True
+    out.that(D._hazard_at(world, hero, (4, 8)) == 0.0,
+             "a SPRUNG trap is scenery and costs nothing -- it has already"
+             " fired",
+             f"hazard={D._hazard_at(world, hero, (4, 8))}")
+    trap.sprung = False
+    trap.disabled = True
+    out.that(D._hazard_at(world, hero, (4, 8)) == 0.0,
+             "and so is a DISABLED one, which is what `#955`'s disable"
+             " action buys: the party pays an action and the square stops"
+             " being a reason to walk round",
+             f"hazard={D._hazard_at(world, hero, (4, 8))}")
+    trap.disabled = False
+    trap.damage = ""
+    out.that(D._hazard_at(world, hero, (4, 8)) == 0.0,
+             "and a trap with NO printed damage is unpriced rather than"
+             " priced at a guess -- `arm` stores only the printed value, so"
+             " empty means the invented fallback is in play. **Covered"
+             " twice**, which a plant showed: removing the explicit `if not"
+             " trap.damage` guard leaves this green, because `average('')`"
+             " raises and the `except ValueError` catches it. Both are kept"
+             " -- the explicit guard says the intent, the parse guard is"
+             " what a malformed column needs -- so neither plant reds and"
+             " the caption says so rather than claiming one cause",
+             f"hazard={D._hazard_at(world, hero, (4, 8))}")
+    trap.damage = "not dice at all"
+    out.that(D._hazard_at(world, hero, (4, 8)) == 0.0,
+             "and an UNPARSEABLE column is skipped rather than raising"
+             " inside a scorer -- which is the half the explicit guard"
+             " cannot cover, and the reason both are there",
+             f"hazard={D._hazard_at(world, hero, (4, 8))}")
+
+    # -- the weight carries the sign, not the price -------------------------
+    out.that(DOCTRINE.get("into_hazard") == -1.0,
+             "the weight is -1.0: the sign and nothing else. The figure"
+             " already means hit points at risk, so any other multiplier"
+             " would be a second opinion about a derived number -- the same"
+             " reasoning as `threat_conceded`",
+             f"weight={DOCTRINE.get('into_hazard')}")
+    out.that(abs(DOCTRINE["into_hazard"]) > abs(DOCTRINE["into_difficult"]),
+             "and it outweighs `into_difficult`, which is the comparison"
+             " `#981` is really about: stepping into a trap used to cost"
+             " less than stepping into mud",
+             f"hazard={DOCTRINE['into_hazard']}"
+             f" difficult={DOCTRINE['into_difficult']}")
+
+
 def a_creature_with_no_melee_gets_no_charge_bonus(out: Result) -> None:
     """The wizard charged, and the look-ahead was innocent. `#293`.
 
@@ -60715,6 +60869,11 @@ DRIVERS = {
         a_regions_damage_is_the_damage_it_prints,
         "a region's damage column holds the damage it prints, and the tier"
         " scaling with it (#1096)",
+    ),
+    "into_hazard": (
+        stepping_into_a_found_trap_costs_something,
+        "a trap the party has FOUND costs something to step into, priced"
+        " off its printed damage, and an unfound one costs nothing (#981)",
     ),
     "charge_gate": (
         a_creature_with_no_melee_gets_no_charge_bonus,
