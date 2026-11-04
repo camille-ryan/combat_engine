@@ -88,7 +88,7 @@ from .module import (
     # needs both.
     Side as VignetteSide,
 )
-from .objective import watcher
+from .objective import field_thing, watcher
 from .reflavour import Dressed
 from .reflavour import apply as apply_flavour
 from .save import Campaign
@@ -629,6 +629,12 @@ def _fight(
         for ref, flavour in zip(dressed.refs, dressed.flavours, strict=False)
         if flavour.name
     }
+    # **Fielded before the watcher**, because `Watch.attach` captures the
+    # thing's id and anything placed afterwards reads to the verdict as never
+    # fielded. Same ordering as the transcript above and the same reason.
+    # Returns 0 and does nothing for the five objectives that are about the
+    # opposition rather than about a thing. #1099.
+    field_thing(world, scene.objective, module.party_level)
     watch = watcher(world, scene.objective, len(campaign.party.sheets),
                     named=named)
     # **How many milestones the party brings in.** A fact about the day, so

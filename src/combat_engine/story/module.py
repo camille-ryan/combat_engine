@@ -61,7 +61,7 @@ from combat_engine.engine.skills import SKILLS
 from combat_engine.story.journey import GOING
 
 from .objective import KINDS as OBJECTIVES
-from .objective import POSITIONS, Objective
+from .objective import POSITIONS, THING_KINDS, Objective
 from .objective import ROUNDS as OBJECTIVE_ROUNDS
 from .objective import SHARE as OBJECTIVE_SHARE
 
@@ -1381,7 +1381,23 @@ def _as_objective(raw: Any, where: str,
             f"{where}: objective {kind!r} is not one of {', '.join(OBJECTIVES)}")
         return None
     position = str(raw.get("position", "")).strip().lower()
-    if kind == "hold":
+    if kind in THING_KINDS:
+        # **`escort` is the only one of the four that takes a position**, and
+        # it needs one: it is the band the thing has to reach. Defaulted to
+        # `east` rather than refused, which mirrors `hold` defaulting to
+        # `west` -- the party spawns in the west, so it holds its own end and
+        # escorts toward the other.
+        if kind == "escort":
+            if not position:
+                position = "east"
+            if position not in POSITIONS:
+                problems.append(
+                    f"{where}: position {position!r} is not one of "
+                    f"{', '.join(POSITIONS)}")
+                position = ""
+        elif position:
+            problems.append(f"{where}: objective {kind!r} takes no position")
+    elif kind == "hold":
         if not position:
             # Defaulted rather than refused: the party spawns in the west, so
             # it defends its own end. `objective.py` explains the placement.
@@ -1419,10 +1435,27 @@ def _as_objective(raw: Any, where: str,
     if leaks is not None and (not isinstance(leaks, int) or leaks < 0):
         problems.append(f"{where}: objective leaks must be a whole number")
         leaks = None
+    # **Refused when a thing-kind names no thing**, because every one of the
+    # four would otherwise be fielded with nothing and judged against
+    # nothing. `Watch._judge`'s never-fielded guard would report it honestly
+    # unmet, but a module that cannot ever win is a module fault and belongs
+    # in `problems` where the author sees it.
+    thing = str(raw.get("thing", "")).strip().lower()
+    if kind in THING_KINDS and not thing:
+        problems.append(f"{where}: objective {kind!r} needs a thing to act on")
+    elif kind not in THING_KINDS and thing:
+        problems.append(f"{where}: objective {kind!r} takes no thing")
+    hp = raw.get("hp", 0)
+    if not isinstance(hp, int) or hp < 0:
+        problems.append(f"{where}: objective hp must be a whole number")
+        hp = 0
+    elif hp and kind not in THING_KINDS:
+        problems.append(f"{where}: objective {kind!r} takes no hp")
+        hp = 0
     return Objective(
         kind=kind, foes=foes, share=float(share), rounds=rounds,
         position=position, leaks=leaks, harder=harder, easier=easier,
-        says=str(raw.get("says", "")).strip(),
+        says=str(raw.get("says", "")).strip(), thing=thing, hp=hp,
     )
 
 

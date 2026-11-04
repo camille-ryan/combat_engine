@@ -77,13 +77,40 @@ from combat_engine.engine.query import alive, combatants
 #: the old code path runs untouched; the second means the watcher runs and
 #: agrees with it. Keeping both is what makes the no-objective control in
 #: `drivers.py` worth anything.
+#: The last four are about a **thing on the floor** rather than about the
+#: opposition, which is the axis the first five do not have: `#988` made a
+#: `Scenery` constructible, breakable, holdable and measurable-to, and these
+#: are the four printed objectives that read it. `#1099`.
 KINDS = (
     "defeat_all",
     "diminish",
     "defeat_foe",
     "survive",
     "hold",
+    "destroy",
+    "carry",
+    "escort",
+    "protect",
 )
+
+#: The kinds that name a `Scenery` in `Aim.thing` rather than a creature.
+THING_KINDS = frozenset({"destroy", "carry", "escort", "protect"})
+
+#: Hit points a fielded thing gets, per level of the party.
+#:
+#: **Unfitted, and saying so is the point.** `#988` recorded the shape -- a
+#: multiple of party level -- and recorded that the multiplier has to be
+#: measured against *this* engine's damage output rather than carried over
+#: from the system the shape came from, because the two hit-point scales are
+#: not the same. One `winrate` run over the party's rounds-to-kill settles
+#: it and has not been run.
+#:
+#: A module may state `hp` outright, which is what a converted adventure
+#: with a printed figure should do -- the printed row wins over a derived
+#: number, which is the standing rule. This is only the default for a module
+#: that says *"destroy it"* and declines to price it, which is the whole
+#: reason the issue asked for a formula.
+HP_PER_LEVEL = 8
 
 #: Where on the floor an objective's area is. Resolved against the grid by
 #: `area`, never written as squares by a module.
@@ -137,8 +164,21 @@ class Objective:
     share: float = SHARE
     #: For `survive` and `hold`: how many rounds.
     rounds: int = ROUNDS
-    #: For `hold`: which part of the floor.
+    #: For `hold` and `escort`: which part of the floor.
     position: str = ""
+    #: For the four `THING_KINDS`: the printed word for the thing on the
+    #: floor -- "crate", "brazier", "idol". Matched against `Scenery.kind`,
+    #: which `content.terrain.put` writes.
+    #:
+    #: **A word, not a ref**, for exactly the reason `foes` is the module's
+    #: own word: an author converting a published adventure writes what the
+    #: page calls the thing. Unlike `foes` there is no draw to resolve
+    #: against -- the thing is fielded *because* the objective names it, so
+    #: the word is both the request and the key.
+    thing: str = ""
+    #: For the four `THING_KINDS`: how many hit points the fielded thing
+    #: has, or `0` for `HP_PER_LEVEL * party level`. A printed figure wins.
+    hp: int = 0
     #: For `hold`: how many enemies may reach the position before the party
     #: has failed. Defaults to the party's own size at fielding time, which is
     #: the figure the source uses and the only one that scales with the table.
@@ -182,6 +222,44 @@ def area(world: World, position: str) -> frozenset[tuple[int, int]]:
     else:
         return frozenset()
     return frozenset((x, y) for x in xs for y in ys)
+
+
+def _stands(world: World, eid: int) -> bool:
+    """Is the thing still there and still whole?
+
+    Two questions because a `Scenery` can fail either. `alive` reads
+    `Health` and a thing `put` with `hp=0` carries **no** `Health` at all --
+    `alive` answers True for it, which is correct: an indestructible crate is
+    always standing. So a `destroy` objective naming an unbreakable thing can
+    never be met, and the verdict says so rather than pretending.
+
+    `Position` is checked as well because a thing can leave the board without
+    being broken -- `Zones` and the despawn paths both lift things -- and a
+    `protect` objective should fail for a ward that vanished.
+    """
+    from combat_engine.engine.components import Position
+
+    return alive(world, eid) and world.get(eid, Position) is not None
+
+
+def _held_by(world: World, eid: int) -> int:
+    """Who has charge of the thing, or 0 for nobody.
+
+    `Scenery.by` is one field for *held* and *controlled*, deliberately --
+    `components.py` says so -- because held and controlled are the same
+    question asked by two different cards. `Cast.take_control` is the writer.
+    """
+    from combat_engine.engine.components import Scenery
+
+    thing = world.get(eid, Scenery)
+    return thing.by if thing is not None else 0
+
+
+def _square_of(world: World, eid: int) -> tuple[int, int] | None:
+    from combat_engine.engine.components import Position
+
+    pos = world.get(eid, Position)
+    return pos.square if pos is not None else None
 
 
 def _side(world: World, eid: int) -> Team | None:
@@ -253,6 +331,18 @@ class Watch:
     #: began with six. An objective quietly easier than it was written is the
     #: exact failure mode this component's own notes warn about.
     began_with: int = 0
+    #: The `Scenery` ids this objective is about, captured at `attach`.
+    #:
+    #: **Captured, for the reason `began_with` is**, and here the argument is
+    #: sharper: a destroyed thing is *not* removed from the board --
+    #: measured, it keeps its `Position` and stays in `query.scenery`, with
+    #: `hp` negative and `alive()` False -- but a thing that was **never
+    #: fielded** also answers an empty list. Reading the board at verdict
+    #: time could not tell "broken" from "never there", and
+    #: `defeat_foe`'s note already names that as the quiet failure this
+    #: whole mechanism exists to avoid: an objective met because it was
+    #: never possible to fail.
+    things: tuple[int, ...] = ()
     #: Enemies that have been inside the area at any round boundary. A set, so
     #: that one creature walking in and out does not count twice -- "fewer
     #: enemies who get through, the better" is about bodies, not crossings.
@@ -273,6 +363,10 @@ class Watch:
         boundary -- see `began_with`.
         """
         self.began_with = len(_standing(self.world, Team.ENEMY))
+        if self.objective.kind in THING_KINDS and self.objective.thing:
+            from combat_engine.engine.query import scenery as _scenery
+
+            self.things = tuple(_scenery(self.world, self.objective.thing))
         self.world.bus.on(RoundEnd, self._round)
         # **A breach is counted when it happens, not at the next round
         # boundary.** `RoundEnd` alone could not see one: on these boards
@@ -480,9 +574,142 @@ class Watch:
                 f"the {aim.position}",
             )
 
+        if aim.kind in THING_KINDS:
+            # **The never-fielded guard, and it is the load-bearing line of
+            # all four.** `self.things` is captured at `attach`; empty means
+            # the scene named a thing it did not field. Every one of these
+            # four would otherwise satisfy itself on an empty board --
+            # `destroy` and `carry` because `all()` of nothing is True,
+            # `protect` because nothing is broken, `escort` because nothing
+            # is outside the band. That is exactly the failure
+            # `defeat_foe`'s own note is written about, four times over.
+            if not self.things:
+                return Verdict(
+                    False, False,
+                    f"the objective names {aim.thing or 'a thing'!r}, which "
+                    "this scene did not field")
+
+            standing = [e for e in self.things if _stands(self.world, e)]
+            broken = [e for e in self.things if not _stands(self.world, e)]
+
+            if aim.kind == "destroy":
+                met = not standing
+                return Verdict(
+                    met, met and not self.anyone_down,
+                    f"{len(broken)} of {len(self.things)} "
+                    f"{aim.thing or 'thing'}(s) destroyed")
+
+            if aim.kind == "protect":
+                # **Not `not destroy`.** Both fail on an unfielded thing, so
+                # the two are not complements -- and a ward that was lifted
+                # off the board without being broken fails this and would
+                # pass a naive `hp > 0`.
+                met = not broken
+                return Verdict(
+                    met, met and not self.anyone_down,
+                    f"{len(standing)} of {len(self.things)} "
+                    f"{aim.thing or 'thing'}(s) still standing")
+
+            if aim.kind == "carry":
+                # Held **by the party**, not merely held: `Scenery.by` is a
+                # creature id either side can write, and an objective met by
+                # the opposition carrying the thing off is the inverse of
+                # what the card says.
+                ours = [
+                    e for e in standing
+                    if _side(self.world, _held_by(self.world, e)) is Team.PC
+                ]
+                met = len(ours) == len(self.things)
+                return Verdict(
+                    met, met and not self.anyone_down,
+                    f"the party has {len(ours)} of {len(self.things)} "
+                    f"{aim.thing or 'thing'}(s)")
+
+            # `escort`: alive, and inside the band it had to reach.
+            band = area(self.world, aim.position)
+            if not band:
+                # Same answer `area` gives for a word it does not know, and
+                # the same reason: an objective watching nowhere is reported
+                # unmet rather than taking the fight down with it.
+                return Verdict(False, False,
+                               f"the objective wants the {aim.thing} taken "
+                               f"to {aim.position!r}, which is nowhere on "
+                               "this board")
+            arrived = [e for e in standing if _square_of(self.world, e) in band]
+            met = len(arrived) == len(self.things)
+            return Verdict(
+                met, met and not self.anyone_down,
+                f"{len(arrived)} of {len(self.things)} "
+                f"{aim.thing or 'thing'}(s) reached the {aim.position}"
+                + ("" if not broken else f", and {len(broken)} did not survive"))
+
         # An unknown kind cannot reach here through the loader, which refuses
         # one. Unmet rather than raising, for the reason `area` gives.
         return Verdict(False, False, f"unknown objective {aim.kind!r}")
+
+
+def field_thing(world: World, objective: Objective | None,
+                party_level: int) -> int:
+    """Put the thing an objective is about on the floor. Returns its id, or 0.
+
+    **The piece that makes the four `THING_KINDS` reachable at all.** `#988`
+    built the board half -- `Scenery` is constructible, breakable, holdable
+    and measurable-to -- and `content.terrain.put` is its writer, but nothing
+    in `story/` ever called it. So the objectives could be declared and could
+    never be met, which is the facility-without-a-caller shape this tree
+    keeps finding.
+
+    Called **before** `watcher`, because `Watch.attach` captures the thing's
+    id and an objective whose thing is fielded afterwards reads as never
+    fielded. That ordering is the same one the transcript and the watcher
+    already share and for the same reason.
+
+    **Where it goes depends on the objective, and only `escort` is
+    interesting.** The other three go to the centre, which is where a fight
+    happens and is the one band `terrain.dress` does not keep clear.
+    `escort` goes to the band **opposite** the one it has to reach -- a ward
+    that starts where it is going is an objective met before the first round,
+    which is a trivially-satisfied verdict rather than a scene.
+
+    `hp` is the module's figure when it states one and `HP_PER_LEVEL * level`
+    otherwise; see that constant for why the multiplier is unfitted and what
+    settles it. `fastened=False`, because all four of these are things that
+    can be picked up or knocked over -- a bolted-down thing cannot be carried
+    or escorted, and `query.scenery(loose=True)` is the reader that cares.
+    """
+    if objective is None or objective.kind not in THING_KINDS:
+        return 0
+    if not objective.thing:
+        # Refused quietly rather than raising: the loader already refuses a
+        # thing-kind with no `thing`, so reaching here means a hand-built
+        # `Objective` in a probe, and `_judge`'s never-fielded guard gives
+        # that an honest unmet verdict.
+        return 0
+    from combat_engine.content.terrain import put
+
+    want = (_opposite(objective.position) if objective.kind == "escort"
+            else "centre")
+    squares = sorted(area(world, want) or area(world, "centre"))
+    free = [sq for sq in squares if world.grid.occupant(sq) is None]
+    if not free:
+        return 0
+    hp = objective.hp or max(1, HP_PER_LEVEL * max(1, party_level))
+    return put(world, free[len(free) // 2], kind=objective.thing, hp=hp,
+               fastened=False, ref=f"objective:{objective.kind}")
+
+
+#: Which band faces which, for `escort`'s starting placement.
+_FACING = {"west": "east", "east": "west", "north": "south", "south": "north"}
+
+
+def _opposite(position: str) -> str:
+    """The band across the board from this one; the centre has no opposite.
+
+    `centre` maps to `west`, which is where the party spawns -- so "escort
+    the ward to the middle of the room" starts it with the party rather than
+    nowhere.
+    """
+    return _FACING.get(position, "west")
 
 
 def watcher(world: World, objective: Objective | None,

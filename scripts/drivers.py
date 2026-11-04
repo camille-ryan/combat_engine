@@ -46742,6 +46742,237 @@ def a_combat_scene_is_judged_on_the_objective_its_module_states(
     )
 
 
+def a_thing_on_the_floor_can_be_an_objective(out: Result) -> None:
+    """The four objectives about a thing rather than about the opposition.
+
+    `#1099`. `objective.KINDS` held five and all five were about the other
+    side -- beat them, thin them, beat a named one, outlast, hold a line.
+    `#988` made a `Scenery` constructible, breakable, holdable and
+    measurable-to, and nothing in `story/` ever placed one, so the four
+    printed objectives that read a thing could not be stated at all.
+
+    Four kinds and a fielder: `destroy`, `carry`, `escort`, `protect`, with
+    `objective.field_thing` calling `content.terrain.put` before the watcher
+    attaches.
+
+    **The never-fielded guard is the load-bearing assertion here and it is
+    checked for all four.** Every one of them satisfies itself on an empty
+    board if the guard is missing -- `destroy` and `carry` because `all()`
+    of nothing is True, `protect` because nothing is broken, `escort`
+    because nothing is outside the band. That is `defeat_foe`'s own recorded
+    failure mode ("an objective that reports met because it was never
+    possible to fail") arriving four more times, so the guard is asserted
+    rather than trusted.
+
+    **A destroyed thing is not removed from the board**, which is why the
+    ids are captured at `attach` rather than read at verdict time. Measured:
+    after 200 damage a crate keeps its `Position`, stays in
+    `query.scenery`, and reads `hp` negative with `alive()` False. So
+    "broken" and "never there" are only distinguishable against a captured
+    list.
+
+    **Two controls are about the wrong party rather than about nothing**,
+    and they are the ones a weaker rule would miss:
+
+    * `carry` with the **opposition** holding it. `Scenery.by` is a creature
+      id either side can write, so a rule that only asks "is it held" passes
+      for the thing being carried off by the enemy -- the inverse of the
+      card.
+    * `escort` with the ward **arriving broken**. It is standing in the
+      right square, so a rule that only asks about the square passes for a
+      ward that was escorted to its destination in pieces.
+
+    And the five old kinds are asserted to field nothing and capture
+    nothing, because `field_thing` runs on every combat scene now.
+    """
+    import audit as _audit
+    from combat_engine.engine import World, movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position, Scenery
+    from combat_engine.engine.query import combatants, scenery
+    from combat_engine.engine.resolve import deal_damage
+    from combat_engine.engine.types import DamageType
+    from combat_engine.story.objective import (
+        HP_PER_LEVEL,
+        KINDS,
+        THING_KINDS,
+        Objective,
+        Verdict,
+        Watch,
+        area,
+        field_thing,
+        watcher,
+    )
+
+    LEVEL, THING = 7, "crate"
+
+    # Pinned to literals, not read off the module: a rule whose expected
+    # vocabulary comes from the constant a plant edits shrinks with the
+    # plant and reports green.
+    WANTED = ("destroy", "carry", "escort", "protect")
+    out.that(set(THING_KINDS) == set(WANTED) and all(k in KINDS for k in WANTED),
+             "the four thing-objectives are declared and are exactly the four"
+             " this rule knows about -- a fifth added without an assertion"
+             " here would be unchecked",
+             f"THING_KINDS={sorted(THING_KINDS)}")
+
+    def board(kind: str, *, position: str = "", place: bool = True,
+              hp: int = 0) -> tuple[World, int, Watch, int]:
+        world, me, _ = _audit.board("x2_124", LEVEL)
+        aim = Objective(kind=kind, thing=THING, position=position, hp=hp)
+        eid = field_thing(world, aim, LEVEL) if place else 0
+        watch = watcher(world, aim, 4)
+        assert watch is not None
+        watch.attach()
+        return world, me, watch, eid
+
+    def verdict(watch: Watch, world: World) -> Verdict:
+        return watch._judge(None, ())
+
+    def square(world: World, eid: int) -> tuple[int, int]:
+        pos = world.get(eid, Position)
+        assert pos is not None, "the thing has no Position"
+        return pos.square
+
+    def smash(world: World, by: int, eid: int) -> None:
+        deal_damage(world, by, eid, 200, DamageType.UNTYPED,
+                    detail="drivers:objective")
+
+    # --- the fielder ------------------------------------------------------
+    world, me, watch, eid = board("destroy")
+    held = world.get(eid, Health)
+    out.that(eid and watch.things == (eid,),
+             "the thing is fielded and its id is captured at `attach` --"
+             " captured, because a destroyed thing stays on the board and"
+             " only a captured list can tell `broken` from `never there`",
+             f"eid={eid} things={watch.things}")
+    out.that(held is not None and held.hp == HP_PER_LEVEL * LEVEL,
+             "and its hit points are HP_PER_LEVEL x party level, which is"
+             " the unfitted default a module may override with a printed"
+             " figure",
+             f"hp={held.hp if held else None} want={HP_PER_LEVEL * LEVEL}")
+    stated = board("destroy", hp=3)
+    pinned = stated[0].get(stated[3], Health)
+    out.that(pinned is not None and pinned.hp == 3,
+             "a module's own `hp` wins over the formula, which is the"
+             " printed-rows rule applied to a number a page may state",
+             f"hp={pinned.hp if pinned else None}")
+
+    # --- destroy ----------------------------------------------------------
+    world, me, watch, eid = board("destroy")
+    before = verdict(watch, world)
+    smash(world, me, eid)
+    after = verdict(watch, world)
+    out.that(not before.met and after.met,
+             "destroy is unmet while the thing stands and met once it is"
+             " broken",
+             f"before={before.met} after={after.met} | {after.why}")
+
+    # --- protect ----------------------------------------------------------
+    world, me, watch, eid = board("protect")
+    before = verdict(watch, world)
+    smash(world, me, eid)
+    after = verdict(watch, world)
+    out.that(before.met and not after.met,
+             "protect is met while the ward stands and fails once it is"
+             " broken -- the inverse reading of the same field",
+             f"before={before.met} after={after.met} | {after.why}")
+
+    # --- carry ------------------------------------------------------------
+    world, me, watch, eid = board("carry")
+    loose = verdict(watch, world)
+    Cast(world=world, me=me, ref="drivers:objective").control(on=eid)
+    thing = world.get(eid, Scenery)
+    out.that(thing is not None and thing.by == me,
+             "the setup landed: `c.control` wrote `Scenery.by`, so the next"
+             " assertion is a real question",
+             f"by={thing.by if thing else None} me={me}")
+    mine = verdict(watch, world)
+    out.that(not loose.met and mine.met,
+             "carry is unmet for a loose thing and met once the party has"
+             " it",
+             f"loose={loose.met} held={mine.met} | {mine.why}")
+
+    world, me, watch, eid = board("carry")
+    foe = next(e for e in combatants(world) if e != me)
+    Cast(world=world, me=foe, ref="drivers:objective").control(on=eid)
+    taken = world.get(eid, Scenery)
+    out.that(taken is not None and taken.by == foe,
+             "the setup landed: the OPPOSITION took the thing",
+             f"by={taken.by if taken else None} foe={foe}")
+    out.that(not verdict(watch, world).met,
+             "and the party's carry objective is NOT met by the opposition"
+             " carrying it off -- `Scenery.by` is an id either side can"
+             " write, so asking only `is it held` inverts the card",
+             f"{verdict(watch, world).why}")
+
+    # --- escort -----------------------------------------------------------
+    world, me, watch, eid = board("escort", position="east")
+    band = area(world, "east")
+    start = square(world, eid)
+    out.that(start not in band,
+             "the setup landed: the ward starts OUTSIDE the band it has to"
+             " reach -- fielded opposite on purpose, since a ward that"
+             " starts where it is going is met before round one",
+             f"start={start}")
+    before = verdict(watch, world)
+    dest = sorted(sq for sq in band if world.grid.occupant(sq) is None)[0]
+    movement.place(world, eid, dest)
+    out.that(square(world, eid) in band,
+             "the setup landed: the ward is now inside the band",
+             f"at={square(world, eid)}")
+    after = verdict(watch, world)
+    out.that(not before.met and after.met,
+             "escort is unmet before the ward arrives and met once it is"
+             " standing in the band",
+             f"before={before.met} after={after.met} | {after.why}")
+
+    world, me, watch, eid = board("escort", position="east")
+    dest = sorted(sq for sq in area(world, "east")
+                  if world.grid.occupant(sq) is None)[0]
+    movement.place(world, eid, dest)
+    smash(world, me, eid)
+    out.that(square(world, eid) in band,
+             "the setup landed: the broken ward is in the right square, so"
+             " the next assertion is about being alive and not about place",
+             f"at={square(world, eid)}")
+    out.that(not verdict(watch, world).met,
+             "and a ward that arrives BROKEN has not been escorted -- a rule"
+             " that asks only about the square passes a ward delivered in"
+             " pieces",
+             f"{verdict(watch, world).why}")
+
+    # --- the never-fielded guard, all four --------------------------------
+    for kind in WANTED:
+        world, me, watch, eid = board(
+            kind, position="east" if kind == "escort" else "", place=False)
+        got = verdict(watch, world)
+        out.that(eid == 0 and watch.things == ()
+                 and not got.met and "did not field" in got.why,
+                 f"{kind} on a board where the thing was never fielded is"
+                 " UNMET and says so -- every one of the four satisfies"
+                 " itself on an empty board without this guard",
+                 f"met={got.met} | {got.why}")
+
+    # --- the five old kinds are untouched ---------------------------------
+    for kind in ("defeat_all", "diminish", "defeat_foe", "survive", "hold"):
+        world, me, _ = _audit.board("x2_124", LEVEL)
+        aim = Objective(
+            kind=kind, position="west" if kind == "hold" else "",
+            foes=("m258",) if kind == "defeat_foe" else ())
+        placed = field_thing(world, aim, LEVEL)
+        watch = watcher(world, aim, 4)
+        assert watch is not None
+        watch.attach()
+        out.that(placed == 0 and not scenery(world, THING)
+                 and watch.things == (),
+                 f"{kind} fields no thing and captures none -- `field_thing`"
+                 " runs on every combat scene now, so the five objectives"
+                 " that are about the opposition have to be provably"
+                 " unaffected",
+                 f"placed={placed} things={watch.things}")
+
+
 def an_objective_moves_the_budget_one_band_and_says_so(out: Result) -> None:
     """The difficulty step, which is the design half of an objective.
 
@@ -60579,6 +60810,12 @@ DRIVERS = {
     "line_kinds": (
         every_printed_line_says_what_kind_of_thing_it_is,
         "every printed line says what kind of thing it is (#930)",
+    ),
+    "objective_thing": (
+        a_thing_on_the_floor_can_be_an_objective,
+        "destroy, carry, escort and protect: four objectives about a thing on"
+        " the floor rather than about the opposition, and the guard that"
+        " stops each satisfying itself on an empty board (#1099)",
     ),
     "objective_verdict": (
         a_combat_scene_is_judged_on_the_objective_its_module_states,
