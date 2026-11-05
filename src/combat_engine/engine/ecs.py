@@ -42,6 +42,39 @@ class World:
         #: Where this fight is happening -- "aquatic", "underground". Words
         #: rather than a type, because the engine never needs to know what
         #: any of them mean: a row asks `c.terrain("aquatic")`.
+        #:
+        #: **Empty on an arcade board, deliberately, and that is a decision
+        #: rather than a gap.** `#1083`/`#539`. The only writer is
+        #: `story.run.ground`, from a module scene's `terrain` field, so a
+        #: board built straight through `story.field_encounter` -- which is
+        #: every arcade fight (`api/session.py`) and every `replay` fixture
+        #: -- never gets one. Terrain lives in **modules and only in
+        #: modules**.
+        #:
+        #: Said here because this is the field a reader lands on, and the
+        #: alternative was drawing terrain on arcade boards: aquatic and icy
+        #: floors change movement, so it re-baselines `winrate`, `scorecard`
+        #: and all eight `replay` fixtures, and `#958` makes it owe an
+        #: encounter-budget decision too, because a dressed board is harder.
+        #: Not worth that to animate clauses the story engine already
+        #: reaches. Reversible; nothing here forecloses it.
+        #:
+        #: **The census, measured, because it has been stated at five
+        #: different values across `#1083` and `#539`** -- including once by
+        #: me in that issue's own plain-English summary:
+        #:
+        #:     82  `c.terrain(` call sites under `content/`
+        #:     76  of them inside a declared row's own source
+        #:     59  declared rows hold one          <- the figure people want
+        #:      6  sites in shared helpers, in no row's source
+        #:     10  distinct words: aquatic 37, sunlight 31, ice 3,
+        #:         darkness 3, snow 2, dim light 2, forest/moonlight/
+        #:         starlight/bright 1 each
+        #:
+        #: Count it off `dsl.REGISTRY` -- rows whose `inspect.getsource`
+        #: holds the call -- not with a tree-wide grep. The two answers
+        #: differ by the six helper sites, and mixing call sites with rows
+        #: is what produced every one of the five wrong numbers.
         self.terrain: set[str] = set()
         #: Whose turn it is. None between rounds and before combat starts.
         self.turn: int | None = None
