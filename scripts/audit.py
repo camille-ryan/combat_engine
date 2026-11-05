@@ -4348,6 +4348,49 @@ def _dealt_by(world, refs: tuple[str, ...], cursor: int) -> bool:  # noqa: ANN00
 _REF_LABEL = re.compile(r"(?:[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)")
 
 
+#: A sub-option's ref is its parent's plus `s<digits>` -- `cf:shaman-f0s0`
+#: is the first option of `cf:shaman-f0`, and `cf:wizard-mage-f6s5` the
+#: sixth of `cf:wizard-mage-f6`. The root `CLAUDE.md` records the slug.
+_SUB_OPTION = re.compile(r"(?:s\d+)+$")
+
+
+def _its_own(by: str, ref: str) -> bool:
+    """Was this effect laid by `ref`, or by one of `ref`'s own sub-options?
+
+    **The second half is what makes the prefix rule sound rather than
+    merely tighter.** A class feature's work is usually done by the option
+    the character *chose*: `cf:shaman-f0`'s board carries ten live effects
+    and every one is laid by `cf:shaman-f0s0` ... `s4`. The feature has no
+    body that lays anything -- it delegates -- so crediting the parent is
+    right, and **six class features reported SILENT** on a wide sweep when
+    an exact `by == ref` test took that away.
+
+    And it is still not a bare prefix, which is the bug this exists for:
+    `f139` was credited for effects labelled `f1397 speed+1`, because
+    `"f1397"` starts with `"f139"`. Two unrelated feats.
+
+    The two cases are told apart by the **shape of the remainder**:
+
+        cf:shaman-f0  + "s0"   its own sub-option   -> credit
+        f139          + "7"    a different ref      -> do not
+
+    So the remainder must be `s<digits>`, repeated for a nested option.
+    Anything else -- a digit, a letter, more of a ref -- is somebody else.
+
+    Only the **trait** path needs this. The item path below has used `by`
+    exactly since `#580` and an item's second card is `i601p1`/`i601x1`,
+    which is not an `s<digits>` suffix, so widening it there would buy
+    nothing and risk the 23 rows its own note records.
+    """
+    if not by:
+        return False
+    if by == ref:
+        return True
+    if not by.startswith(ref):
+        return False
+    return bool(_SUB_OPTION.fullmatch(by[len(ref):]))
+
+
 def _labelled(text: str, names: tuple[str, ...]) -> bool:
     """Does this label belong to one of `names`? A prefix **with a boundary**.
 
@@ -6861,7 +6904,7 @@ def audit(ref: str) -> Result:
                 # takes the boundary instead.
                 mine_eff = {
                     i for i, e in world.effects.live.items()
-                    if getattr(e, "by", "") == ref
+                    if _its_own(str(getattr(e, "by", "") or ""), ref)
                 }
                 if mine_eff - world.setup_effects:
                     out.events.add("ConditionApplied")

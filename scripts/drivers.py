@@ -60646,27 +60646,36 @@ def the_at_will_gains_the_active_remnants_augment(out: Result) -> None:
     use(worldB, meB, REF, targets=[victimB], spend=False)
 
     def ally_hits_B(at: int) -> bool:
+        """The ally swings at `at` with its **basic attack**, and hits.
+
+        **`mba` rather than a scan of the ally's hand, and that is a
+        correction.** This used to walk every attack row the ally knew
+        until one landed -- which makes the control depend on the dealt
+        hand twice over: on there being a row that hits, and on that row
+        having no riders of its own.
+
+        The second bit it. `#1094` widened the feat pool, the ally drew a
+        different hand, and the first row that landed **granted a saving
+        throw by itself** -- so the assertion below read a save that the
+        clause under test had nothing to do with, and reported the clause
+        broken.
+
+        A melee basic attack is a plain hit with no riders, is on every
+        creature by construction (`mba` is the engine's own row), and is
+        single-target -- which is what the old comment about bursts was
+        reaching for. So the control says exactly what it means: an ally
+        hit the other enemy, and nothing else happened.
+        """
         if not stand_beside(worldB, mateB, at):
             return False
-        known = worldB.get(mateB, Powers)
-        rows = [r for r in (known.known if known else ())
-                if r in REGISTRY and REGISTRY[r].attack is not None
-                # **Single-target rows only.** A close burst aimed at the
-                # bystander also catches the real target standing nearby,
-                # which would pay the clause and make this control report
-                # the opposite of what it means.
-                and "burst" not in str(REGISTRY[r].reach).lower()]
-        for ref in rows:
-            before = len([e for e in worldB.bus.log
-                          if isinstance(e, Hit) and e.attacker == mateB
-                          and e.target == at])
-            use(worldB, mateB, ref, targets=[at], spend=False)
-            now = len([e for e in worldB.bus.log
-                       if isinstance(e, Hit) and e.attacker == mateB
-                       and e.target == at])
-            if now > before:
-                return True
-        return False
+        before = len([e for e in worldB.bus.log
+                      if isinstance(e, Hit) and e.attacker == mateB
+                      and e.target == at])
+        use(worldB, mateB, "mba", targets=[at], spend=False)
+        now = len([e for e in worldB.bus.log
+                   if isinstance(e, Hit) and e.attacker == mateB
+                   and e.target == at])
+        return now > before
 
     out.that(ally_hits_B(bystanderB),
              "on a fresh board the ally can hit the OTHER enemy -- a swing"
