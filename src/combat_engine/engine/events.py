@@ -101,6 +101,22 @@ class Event:
         for f in fields(self):
             if f.name in skip:
                 continue
+            # **`repr=False` is honoured**, which this emulation of a
+            # dataclass repr did not do. `#1103` added `PowerUsed.area` as
+            # a field for rows to read and not for the transcript -- a
+            # burst 3 is 49 squares -- and marking it `repr=False` had no
+            # effect here, so all 8 `replay` fixtures diverged on lines
+            # whose actor, power and targets were identical.
+            #
+            # The "at its default" skip below could not cover it either: it
+            # tests `f.default`, and a field with a `default_factory` has
+            # `default is MISSING`, so an empty frozenset printed too.
+            #
+            # Honouring the flag rather than special-casing the field,
+            # because this function is pretending to be a repr and that is
+            # the flag a repr takes.
+            if not f.repr:
+                continue
             value = getattr(self, f.name)
             if f.default is not MISSING and value == f.default:
                 continue
@@ -498,6 +514,39 @@ class PowerUsed(Event):
     trigger: Any = None
     granted_by: int = -1
     granted_via: str = ""
+    #: **The squares this use covered**, for an area or close power. `#1103`.
+    #:
+    #: `dsl.aim_points` enumerates exactly which squares an area covers, at
+    #: targeting time, and nothing carried them past that call -- so the
+    #: area was computed and thrown away on every use. `targets` is **not**
+    #: it: a burst that caught two creatures covered its whole radius, and
+    #: most of those squares held nobody.
+    #:
+    #: Two rows want the same datum from opposite sides -- one writing a
+    #: lasting hazard over the area it just attacked, one asking whether a
+    #: square is still inside it -- and neither could be written.
+    #:
+    #: **Empty for the shapes that have no area**, which is most of the
+    #: corpus: melee 6,939, personal 10,361 and ranged 2,808 against
+    #: close_burst 1,761, close_blast 618, area_burst 575 and wall 9. So
+    #: this is populated for about 13% of rows and costs the rest nothing
+    #: -- an empty frozenset rather than `None`, so a reader never has to
+    #: ask which kind of nothing it got.
+    #: **`repr=False`, and that is what keeps the regression net still.**
+    #: `replay.py` records `str(event)`, so a field appearing in the repr
+    #: diverges every fixture that carries the event -- measured, **8 of 8**
+    #: before this, on lines whose actor, power and targets were identical.
+    #: That is a re-record for a field no fixture is about.
+    #:
+    #: It would also be unreadable: a burst 3 is 49 squares, and
+    #: `replay._settled` canonicalises a frozenset by splitting its members
+    #: on commas and sorting them -- which is stable but scrambles tuples,
+    #: so the recorded line reads `{(10, (10, ... 10), 10)}`.
+    #:
+    #: A row reading `ev.area` is unaffected: `repr` is the transcript's
+    #: business and the field is the rows'.
+    area: frozenset[tuple[int, int]] = field(
+        default_factory=frozenset, repr=False)
 
 
 @dataclass

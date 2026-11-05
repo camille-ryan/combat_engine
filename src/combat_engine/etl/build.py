@@ -635,7 +635,30 @@ CREATE TABLE terrain (
   -- The printed damage type, when the phrase names one -- "5 lightning
   -- damage per tier". Empty where the page says only "damage", which is
   -- untyped and is what `DamageType.UNTYPED` is for.
-  damage_type TEXT
+  damage_type TEXT,
+  -- #1104. **The two things a terrain row's header needs, and neither was
+  -- in a column.** `usage` above is empty on all 24 `terrain power` rows
+  -- or a paragraph of placement advice, so `#980` concluded an
+  -- at-will/encounter distinction could not be read. It can: both are in
+  -- the spec **heading and body**, which the importer kept verbatim and
+  -- parsed nothing out of.
+  --
+  -- Measured over the 24, and both patterns match 24 of 24 with no
+  -- misses:
+  --
+  --     uses    15 `Single-Use Terrain`     9 `At-Will Terrain`
+  --     action  19 Standard   2 Minor   2 Move   1 Free
+  --
+  -- `uses` is **1 for single-use and 0 for at-will**, which is the
+  -- convention `Zone.power_uses` and `story.module.Feature.uses` already
+  -- carry -- 0 means no limit -- so this is read across rather than
+  -- translated at every site.
+  uses INTEGER,
+  -- The action a use costs, spelled as `ActionType` spells it. 5 of 24 are
+  -- not Standard, so a default would be wrong on 21% of them -- which is
+  -- the header-is-data rule: the UI and the AI price the entry without
+  -- running the body.
+  action TEXT
 );
 CREATE INDEX terrain_kind ON terrain(kind);
 
@@ -3229,6 +3252,12 @@ _AS_LINE = re.compile(
 #: reason this table is not shaped like `trap`. #458.
 _TR_EFFECT = re.compile(r"\bEffect\s*:\s*(.+?)(?=\s+(?:Usage|Published)\s*:|$)", re.S | re.I)
 _TR_USAGE = re.compile(r"\bUsage\s*:\s*(.+?)(?=\s+Published\b|$)", re.S | re.I)
+#: `Single-Use Terrain` / `At-Will Terrain`, the printed heading. #1104.
+#: Matches 24 of 24 `terrain power` rows.
+_TR_HEAD = re.compile(r"\b(Single-Use|At-Will)\s+Terrain\b", re.I)
+#: The action a use costs, from the body. 24 of 24, and 5 are not Standard.
+_TR_ACTION = re.compile(
+    r"\b(Standard|Move|Minor|Free)\s+Action\b", re.I)
 _TR_REQ = re.compile(
     r"\bRequirement\s*:\s*(.+?)(?=\s+(?:Check|Target|Attack|Effect)\s*:|$)",
     re.S | re.I)
@@ -3298,6 +3327,8 @@ def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
         lvl, flat_atk = _TR_ATK_LVL.search(spec), _TR_ATK_FLAT.search(spec)
         eff, use, req = (_TR_EFFECT.search(spec), _TR_USAGE.search(spec),
                          _TR_REQ.search(spec))
+        head, cost = _TR_HEAD.search(spec), _TR_ACTION.search(spec)
+        is_power = (kind or "").strip().lower() == "terrain power"
         # **`effect` first, then `spec`, and never anywhere else.** #1096.
         # The mechanics live in the `Effect:` line; `spec` is the whole page
         # including the flavour paragraph, and reading the flavour is how
@@ -3319,8 +3350,8 @@ def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
             "INSERT OR REPLACE INTO terrain "
             "(ref, id, kind, effect, usage, requirement, check_skill, "
             " check_band, check_dc, attack_level, attack_flat, defence, "
-            " damage, spec, damage_tier, damage_type) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " damage, spec, damage_tier, damage_type, uses, action) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 ref,
                 tid,
@@ -3339,6 +3370,27 @@ def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
                 sanitise.scrub(spec, {name: ref}),
                 int(bool(dmg and dmg.group("tier"))),
                 dmg_type,
+                # **1 for single-use, 0 for at-will**, which is the
+                # `Zone.power_uses` convention: 0 is no limit. None where
+                # the heading says neither, so a reader can tell "not
+                # stated" from "unlimited". #1104.
+                # **Both scoped to `terrain power`, which is a correction
+                # found by the rebuild diff.** The heading pattern only
+                # matches a power, so `uses` was already NULL on the 121
+                # regions -- but the action pattern matched prose on **18
+                # fantastic-terrain rows**, where a `Minor Action` is
+                # something a creature does *with* the region and not the
+                # cost of using the feature.
+                #
+                # A column that means one thing on 24 rows and another on
+                # 18 is exactly the fault this issue is about: `usage` is
+                # unusable because it holds placement advice on these very
+                # rows. Writing `action` the same way would have reproduced
+                # it one column along.
+                (1 if is_power and head
+                 and head.group(1).lower() == "single-use"
+                 else 0 if is_power and head else None),
+                (cost.group(1).lower() if is_power and cost else ""),
             ),
         )
         names.setdefault(ref, {})

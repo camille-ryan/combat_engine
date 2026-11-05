@@ -1094,18 +1094,25 @@ def f3586(c: Cast) -> None:
 
 
 @power("f3587", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("cf:wizard-mage-f6s5",))
+       reach=PERSONAL, target=SELF)
 def f3587(c: Cast) -> None:
     """The third step of the `f3585` chain: `cf:wizard-mage-f6`'s benefit
     for the school `f3585` chose.
 
     Written, by the same reading as `f3586` -- the school is recorded and
-    `_chose_a_school` grants the matching option. `dropped=` rather than
-    finished, because **one of the six options it may grant is itself
-    unfinished**: `cf:wizard-mage-f6s5` carries
-    `todo=("events.PowerUsed(area=)",)`, so a character who chose that
-    school gets a grant that is refused in play. Five of six schools play.
+    `_chose_a_school` grants the matching option.
+
+    **Finished now, and the hold cleared from underneath it.** This carried
+    `dropped=("cf:wizard-mage-f6s5",)` because one of the six options it
+    may grant was itself unfinished, so a character who chose that school
+    got a grant refused in play -- five of six schools played. `#1103` put
+    the area on `events.PowerUsed`, `cf:wizard-mage-f6s5` is written, and
+    **all six play**.
+
+    Worth noting as a chain rather than a coincidence: an engine field
+    unblocked a class feature, which unblocked this feat. `todo.py` is what
+    said so -- it reported the feature arriving the moment the marker came
+    off, and then reported this row still holding the feature's own ref.
 
     **This docstring carried a census of my own that was wrong, and
     correcting it is worth more than the census was.** It said the original
@@ -1127,9 +1134,10 @@ def f3587(c: Cast) -> None:
     as an engine gap -- *"concealment as a state, not the penalty it
     confers"* -- and both readers it needed had existed since `#500`
     (`query.concealment_of` and `c.gains_advantage`), so it was writable
-    and nothing had looked again. `f6s5` is the real hold, and its marker
-    names an **event field** rather than a verb: the card turns the area of
-    the attack into a zone and `events.PowerUsed` carries no area. #1103."""
+    and nothing had looked again. `f6s5` **was** the real hold, and its
+    marker named an **event field** rather than a verb: the card turns the
+    area of the attack into a zone and `events.PowerUsed` carried no area.
+    It carries one now. #1103."""
     _chose_a_school(c, "cf:wizard-mage-f6s")
 
 

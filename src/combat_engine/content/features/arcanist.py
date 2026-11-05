@@ -37,8 +37,14 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.cast import MANOEUVRE_GRANTED_ATTACK
 from combat_engine.engine.components import Companion, Weapon
-from combat_engine.engine.dsl import get
-from combat_engine.engine.events import AttackDeclared, Hit, Miss, Summoned
+from combat_engine.engine.dsl import get, keywords_of
+from combat_engine.engine.events import (
+    AttackDeclared,
+    Hit,
+    Miss,
+    PowerUsed,
+    Summoned,
+)
 from combat_engine.engine.query import concealment_of, distance_between
 from combat_engine.engine.types import Cover
 
@@ -1306,29 +1312,54 @@ def mage_master_s4(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    todo=("events.PowerUsed(area=)",),
 )
 def mage_master_s5(c: Cast) -> None:
     """An area fire attack's own area becomes a burning zone after the fact.
 
-    **The zone half is built and the AREA is what is missing.** `c.zone`
-    takes `hindering=` and `hindering_type=`, and `Zones._burns` applies it
-    on entry and at a turn's end, so "creatures that end their turns within
-    the zone take fire damage" needs no new mechanism -- `#1039`'s printed
-    regions use exactly that path.
+    **Finished by `#1103`**, which put the area on the event. This waited
+    on `events.PowerUsed(area=)` and the marker named the event field
+    rather than a verb, deliberately: `dsl.aim_points` already computed
+    the squares at targeting time and nothing carried them forward, so a
+    verb would have been the wrong place to put the answer.
 
-    What cannot be written is *where*. The card turns **the area of the
-    attack** into the zone, and `events.PowerUsed` carries
-    `actor, power, targets, trigger, granted_by, granted_via` and **no
-    area**. The squares an area attack covered are not recoverable from
-    `targets`: a burst that caught two creatures covered its whole radius,
-    and a zone laid on the two occupied squares is a different and much
-    weaker rule than the one printed.
+    The squares are **not** recoverable from `targets`, which is why the
+    row could not be approximated meanwhile: a burst that caught two
+    creatures covered its whole radius, and a zone laid on the two
+    occupied squares is a different and much weaker rule than the printed
+    one.
 
-    So the marker names the event field rather than a verb, because a verb
-    would be the wrong place -- `dsl.aim_points` already computes the
-    squares at targeting time and nothing carries them forward to a watcher.
+    The zone half needed no new mechanism -- `c.zone(hindering=)` and
+    `Zones._burns` apply the burn on entry and at a turn's end, which is
+    the path `#1039`'s printed regions already use.
 
-    `todo=` and not `dropped=`: the zone is the whole row, so with nowhere
-    to put it the row cannot play at all.
+    **Keyed on the caster's own area FIRE attacks**, which is three tests
+    and each is in the printed sentence: it is this character's use
+    (`ev.actor`), it covered squares (`ev.area` is empty for melee,
+    ranged and personal, which is 20,108 of the 23,071 rows), and it is
+    fire (`keywords_of`, which honours a granted keyword where reading
+    `Power.keywords` directly would not).
+
+    `once=True` on the watch and a `spent` latch anyway: the card gives
+    one zone a fight, and `once=` reads the log to see whether the
+    handler *did* anything -- so a non-fire area attack does not spend
+    the hold.
     """
+    me = c.me
+    spent: list[bool] = []
+
+    def burns(ev: Any) -> None:
+        if spent or ev.actor != me or not ev.area:
+            return
+        if Keyword.FIRE not in keywords_of(c.world, me, get(ev.power)):
+            return
+        spent.append(True)
+        c.zone(
+            ev.area,
+            label=c.ref,
+            until=When.ENCOUNTER,
+            hindering="5",
+            hindering_type=DamageType.FIRE,
+        )
+
+    c.watch(PowerUsed, burns, until=When.ENCOUNTER, on=me, once=True,
+            label=c.ref)

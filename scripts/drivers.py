@@ -38741,6 +38741,208 @@ def _in_combat_board(
     return world, encounter
 
 
+def an_area_attack_announces_the_squares_it_covered(out: Result) -> None:
+    """`PowerUsed.area`, and the chain it unblocked. `#1103`.
+
+    `dsl.aim_points` enumerates exactly which squares an area or close
+    attack covers, at targeting time, and **nothing carried them past that
+    call** -- so the area was computed and thrown away on every use.
+
+    `targets` is not a stand-in and that is the whole reason the rows could
+    not be approximated: a burst that caught two creatures covered its
+    whole radius, and most of those squares held nobody. A zone laid on the
+    two occupied squares is a different and much weaker rule than the
+    printed one.
+
+    **Recomputed in `Cast.used` rather than plumbed down from
+    `_auto_targets`**, because everything `area_of` needs is already on the
+    `Cast` -- world, caster, ref, origin, branch, augment -- and
+    `Grid.aims` memoises the geometry, so a second path to the same answer
+    would be the thing `#1014` is about.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.zones import Zone
+
+    def area_of_use(ref: str, seed: int = 1):  # noqa: ANN202
+        world, me, _ = _board(ref, seed)
+        mark = len(world.bus.log)
+        use(world, me, ref, targets=sorted(enemies(world, me))[:1],
+            spend=False)
+        evs = [e for e in world.bus.log[mark:] if isinstance(e, PowerUsed)]
+        return world, me, (evs[0] if evs else None)
+
+    # -- which shapes carry one, and which deliberately do not ------------
+    import collections
+
+    kinds = collections.Counter(
+        p.reach.kind for p in REGISTRY.values() if p.reach)
+    flat = sum(kinds[k] for k in ("melee", "ranged", "personal"))
+    shaped = sum(kinds[k] for k in
+                 ("close_burst", "close_blast", "area_burst", "wall"))
+    out.that(flat > shaped * 4,
+             "most of the corpus names a target and no area -- melee,"
+             " ranged and personal against the four shaped kinds -- which"
+             " is why this is computed for the shapes that have one rather"
+             " than for every use",
+             f"{flat} flat against {shaped} shaped")
+
+    # **A FIRE burst**, because the card the feature prints is *an area
+    # fire attack* and the row's guard reads the keyword. The first draft
+    # took any area burst, the feature laid nothing, and the
+    # "zone is inside the area" assertion passed on **zero zones** -- an
+    # `or not laid` escape hatch hiding a vacuous arm. 73 finished rows
+    # qualify, so this is not a narrowing to find a green one.
+    from combat_engine.engine.types import Keyword as _Kw
+
+    burst = next((r for r, p in REGISTRY.items()
+                  if p.reach and p.reach.kind == "area_burst"
+                  and not p.unfinished
+                  and _Kw.FIRE in (p.keywords or ())), None)
+    out.that(burst is not None,
+             "the setup landed: a finished area-burst row to aim",
+             f"{burst}")
+    if burst is None:
+        return
+    world, _me, ev = area_of_use(burst)
+    out.that(ev is not None and len(ev.area) > 1,
+             "an area attack announces the squares it covered -- more than"
+             " one, which a target list could never be",
+             f"{len(ev.area) if ev else '-'} square(s)")
+
+    # **The claim that makes the field worth having.** The area is not the
+    # targets: a burst covers squares that held nobody.
+    occupied = {world.need(t, Position).square
+                for t in (ev.targets if ev else [])
+                if world.get(t, Position)}
+    out.that(ev is not None and len(ev.area) > len(occupied),
+             "and it is NOT the targets: the burst covered squares that"
+             " held nobody, which is exactly why `targets` could not stand"
+             " in for it and why both rows waiting on this were blocked",
+             f"{len(ev.area)} square(s) against {len(occupied)} occupied")
+
+    _mba_world, _mba_me, mba_ev = area_of_use("mba")
+    out.that(mba_ev is not None and not mba_ev.area,
+             "while a melee basic attack announces NO area -- an empty"
+             " frozenset rather than `None`, so a reader never has to ask"
+             " which kind of nothing it got. The control, and it is 20,000"
+             " rows' worth of the corpus",
+             f"{len(mba_ev.area) if mba_ev else '-'} square(s)")
+
+    # -- the row that waited for it, and the chain it unblocked ------------
+    FEAT = "cf:wizard-mage-f6s5"
+    held = REGISTRY[FEAT]
+    out.that(not held.todo and not held.dropped,
+             f"{FEAT} is finished -- it carried"
+             " `todo=(\"events.PowerUsed(area=)\",)`, which is a marker"
+             " naming an **event field** rather than a verb, because"
+             " `aim_points` already computed the squares and nothing"
+             " carried them to a watcher",
+             f"todo={held.todo} dropped={held.dropped}")
+    chain = REGISTRY["f3587"]
+    out.that(not chain.todo and not chain.dropped,
+             "and `f3587` with it: it held `dropped=(\"" + FEAT + "\",)`"
+             " because one of the six schools it may grant was unfinished,"
+             " so five of six played. An engine field unblocked a class"
+             " feature which unblocked a feat, and `todo.py` is what said"
+             " so at each step",
+             f"todo={chain.todo} dropped={chain.dropped}")
+
+    # -- and the row lays its zone over that area --------------------------
+    world2, me2, _ = _board(FEAT, 1)
+    # **The caster has to KNOW the burst**, or `usable` refuses it on the
+    # "not known" gate and the arm below poses nothing: `_board` builds the
+    # board for the *feature* under test and grants only that, so the
+    # attack it is supposed to answer was never made. First draft read
+    # `0 PowerUsed`.
+    from combat_engine.engine.components import Powers as _Powers
+
+    known2 = world2.need(me2, _Powers)
+    if burst not in known2.known:
+        known2.known.append(burst)
+    if burst not in known2.all:
+        known2.all.append(burst)
+    # **The feature is NOT used here, and that is the correction.** It is
+    # an `action=NONE` trait, so `turns.arm_traits` arms it inside
+    # `Encounter.start()` -- which `_board` has already done. Calling
+    # `use` again armed a **second** watch with its own `spent` latch, and
+    # the board then laid **two** zones where the card gives one.
+    #
+    # A driver artifact rather than a row bug, and worth the note: the
+    # `once=True` and the latch are per-watch, so arming twice doubles the
+    # effect however careful the row is.
+    mark2 = len(world2.bus.log)
+    use(world2, me2, burst, targets=sorted(enemies(world2, me2))[:1],
+        spend=False)
+    evs2 = [e for e in world2.bus.log[mark2:]
+            if isinstance(e, PowerUsed) and e.power == burst]
+    laid = [z for _e, z in world2.each(Zone) if z.label == FEAT]
+    out.that(bool(evs2),
+             "the setup landed: the area attack was announced on this"
+             " board, so the watch below had something to answer",
+             f"{len(evs2)} PowerUsed for {burst}")
+    # **No `or not laid`.** The zone has to land, be non-empty, and sit
+    # inside the announced area -- three claims, because the first draft's
+    # `not laid or ...` passed on zero zones and so asserted nothing at
+    # all.
+    out.that(len(laid) == 1 and bool(laid[0].squares)
+             and bool(evs2) and set(laid[0].squares) <= set(evs2[0].area),
+             "and the feature lays exactly one zone, non-empty, every"
+             " square of it inside the area the attack announced -- never"
+             " a square the attack did not cover, which is the printed"
+             " *the area of the attack becomes a zone*",
+             f"{len(laid)} zone(s)"
+             + (f", {len(laid[0].squares)} squares inside"
+                f" {len(evs2[0].area)}" if laid and evs2 else ""))
+    out.that(laid and laid[0].hindering,
+             "and it burns -- `hindering` is what `Zones._burns` applies"
+             " on entry and at a turn's end, so a zone laid without it"
+             " would be a region that records the damage and deals none",
+             f"hindering={laid[0].hindering if laid else '-'}")
+
+    # -- the two negative arms, and the row's guards are invisible without
+    # -- them. A single fire-burst arm cannot see either: plants removing
+    # -- the fire test and the `not ev.area` test both stayed GREEN,
+    # -- because the posed attack is a fire attack *with* an area.
+    def lays_for(ref: str) -> int:
+        world_, me_, _ = _board(FEAT, 1)
+        known_ = world_.need(me_, _Powers)
+        for lst in (known_.known, known_.all):
+            if ref not in lst:
+                lst.append(ref)
+        use(world_, me_, ref, targets=sorted(enemies(world_, me_))[:1],
+            spend=False)
+        return len([z for _e, z in world_.each(Zone) if z.label == FEAT])
+
+    cold = next((r for r, q in REGISTRY.items()
+                 if q.reach and q.reach.kind == "area_burst"
+                 and not q.unfinished and _Kw.FIRE not in (q.keywords or ())),
+                None)
+    hot_flat = next((r for r, q in REGISTRY.items()
+                     if q.reach and q.reach.kind in ("melee", "ranged")
+                     and not q.unfinished
+                     and _Kw.FIRE in (q.keywords or ())), None)
+    out.that(cold is not None and hot_flat is not None,
+             "the setup landed: a non-fire AREA attack and a fire attack"
+             " with NO area, which are the two halves of the row's guard",
+             f"cold={cold}, flat={hot_flat}")
+    out.that(cold is not None and lays_for(cold) == 0,
+             "an area attack that is NOT fire lays no zone -- the card"
+             " says *an area fire attack*, and `keywords_of` is what"
+             " answers it rather than reading `Power.keywords` directly,"
+             " so a granted keyword counts",
+             f"{lays_for(cold) if cold else '-'} zone(s) for {cold}")
+    out.that(hot_flat is not None and lays_for(hot_flat) == 0,
+             "and a FIRE attack with no area lays none either -- `ev.area`"
+             " is empty for melee, ranged and personal, so the guard is"
+             " what stops an empty zone being laid over nothing",
+             f"{lays_for(hot_flat) if hot_flat else '-'} zone(s)"
+             f" for {hot_flat}")
+
+
 def a_scene_places_a_terrain_power_on_its_floor(out: Result) -> None:
     """An author puts a usable feature in a room. `#1107`.
 
@@ -38967,6 +39169,46 @@ def a_printed_check_gates_a_power_and_an_attack_rides_the_level(
     from combat_engine.engine.zones import Zone
 
     REF = "x2_125"
+
+    # -- the two columns, which is `#1104` ---------------------------------
+    import collections as _c
+
+    from combat_engine.db import game as _g2
+
+    g2 = _g2()
+    pw = list(g2.execute(
+        "SELECT uses, action FROM terrain WHERE kind='terrain power'"))
+    uses_c = _c.Counter(r[0] for r in pw)
+    act_c = _c.Counter(r[1] for r in pw)
+    out.that(len(pw) == 24 and uses_c[1] == 15 and uses_c[0] == 9,
+             "`terrain.uses` is in a column -- 15 `Single-Use` and 9"
+             " `At-Will`, read off the printed **heading**. `#980`"
+             " concluded the distinction could not be read because `usage`"
+             " is empty on all 24 or holds placement advice; it is in the"
+             " spec, which the importer kept verbatim. 1 and 0 rather than"
+             " words, which is the `Zone.power_uses` convention -- 0 is no"
+             " limit. #1104",
+             f"{len(pw)} rows, uses={dict(uses_c)}")
+    out.that(act_c["standard"] == 19 and act_c["minor"] == 2
+             and act_c["move"] == 2 and act_c["free"] == 1,
+             "and `terrain.action` likewise -- 19 Standard, 2 Minor, 2"
+             " Move, 1 Free. **5 of 24 are not Standard**, so a default"
+             " would be wrong on 21% of them, which is the header-is-data"
+             " rule: the UI and the AI price the entry without running the"
+             " body",
+             f"action={dict(act_c)}")
+    stray = g2.execute(
+        "SELECT count(*) FROM terrain WHERE kind != 'terrain power'"
+        " AND (uses IS NOT NULL OR action != '')").fetchone()[0]
+    out.that(stray == 0,
+             "and **neither column is written on a row that is not a"
+             " power** -- the rebuild diff caught 18 `fantastic terrain`"
+             " rows taking an `action` from their prose, where a `Minor"
+             " Action` is something a creature does *with* the region and"
+             " not the cost of using a feature. A column meaning one thing"
+             " on 24 rows and another on 18 is the fault this issue is"
+             " about, one column along",
+             f"{stray} non-power row(s) with a value")
 
     # -- the census, so the claims above are checkable ---------------------
     import re as _re
@@ -63419,6 +63661,12 @@ DRIVERS = {
         "DMG2's in-combat challenge: a combat scene that also rolls, on the"
         " fight's own board -- priced OUT of the budget, capped at"
         " complexity 2, and every check paying a named action (#922)",
+    ),
+    "power_area": (
+        an_area_attack_announces_the_squares_it_covered,
+        "an area attack announces the squares it covered, which is not its"
+        " target list -- and the class feature and feat that waited on it"
+        " are finished (#1103)",
     ),
     "scene_feature": (
         a_scene_places_a_terrain_power_on_its_floor,

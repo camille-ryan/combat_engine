@@ -13363,12 +13363,43 @@ class Cast:
     def note(self, text: str) -> None:
         self.world.bus.emit(Note(text=text))
 
+    #: The reach kinds that cover squares rather than reaching a creature.
+    #: `#1103`. Melee, ranged and personal name a target and no area, so
+    #: computing one for them would be an answer to a question the card
+    #: does not ask -- and 20,108 of the 23,071 rows are one of those three.
+    _HAS_AREA = ("close_burst", "close_blast", "area_burst", "wall")
+
     def used(self) -> None:
+        # **The area this use covered, recomputed rather than plumbed.**
+        # `#1103`. Everything `area_of` needs is already on this `Cast` --
+        # the world, the caster, the ref, the origin, the branch and the
+        # augment -- so threading the squares down from `_auto_targets`
+        # would be a second path to the same answer, and `Grid.aims`
+        # memoises the geometry so asking again is cheap.
+        #
+        # Guarded on the shape, not computed for everything: see
+        # `_HAS_AREA`.
+        area: frozenset = frozenset()
+        try:
+            from .dsl import area_of, get
+
+            p = get(self.ref)
+            if p is not None and p.reach and p.reach.kind in self._HAS_AREA:
+                area = area_of(self.world, self.me, p, self.origin,
+                               self.branch, self.augment)
+        except Exception:
+            # **Never let the announcement fail over a derived field.** A
+            # row whose aiming cannot be resolved on this board still
+            # happened, and `PowerUsed` is what the dispatcher offers
+            # reactions to -- losing the emit would silence them all to
+            # decorate one.
+            area = frozenset()
         self.world.bus.emit(
             PowerUsed(
                 actor=self.me, power=self.ref, targets=list(self.targets),
                 trigger=self.trigger,
                 granted_by=self.granted_by, granted_via=self.granted_via,
+                area=area,
             )
         )
         owner = self._item_owner()
