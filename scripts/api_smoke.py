@@ -340,15 +340,44 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
         one or none               7
 
     So the party clears a day a little under half the time, and seed 7 sat
-    in the bottom third. Seed 1 clears. The distribution is recorded here
-    rather than in a commit message because the number is the reason the
-    seed is allowed to be chosen, and a later balance change will move it.
+    in the bottom third. The distribution is recorded here rather than in a
+    commit message because the number is the reason the seed is allowed to
+    be chosen, and a later balance change will move it.
+
+    **A later balance change moved it, which is this paragraph's own
+    prediction coming true.** `#1094` taught `chargen.meets` to read a
+    power source and a given skill, which widens the level-1 feat pool
+    from a mean of 231.6 to 244.3 -- and the party got stronger, measured
+    at 92 to 98 per cent over 40 seeds at level 5. Re-measured here over
+    twelve seeds, each played out over HTTP through this instrument rather
+    than through a probe:
+
+        cleared all three legs    8 of 12   seeds 3,4,5,7,8,9,10,11
+        lost a leg                4 of 12   seeds 1,2,6,12
+
+    **Seed 1 stopped clearing** -- it is wiped in the *last* leg now -- so
+    it is re-pinned to **seed 3**, the lowest that clears. Chosen as the
+    first of eight rather than for being the greenest, which is the
+    condition `#1025` attaches to re-pinning at all.
+
+    Two honest notes. The carry itself was never lost: `#1025`'s refusal
+    ("the pinned seed got far enough to ask the carry at all") passed on
+    seed 1 throughout, and what the wipe cost was the final leg's own
+    rest-and-snapshot comparison. And the re-measured rate is *higher*
+    than the 11-of-24 above, so seed 1 moving sides is one seed inside a
+    distribution that improved, not a party that got worse.
+
+    **Widening the sample is also what found a stale assertion**, which is
+    the better reason to do it than picking a seed: at seed 12 a character
+    dies for good and leg 2's roster is legitimately shorter, so the
+    "same party as leg 0" check was asserting against Camille's `#923`
+    ruling. See the subsequence check below.
 
     **The skip stays armed.** If a future change makes even this seed lose a
     leg, the run says so and names what went unexercised instead of quietly
     testing less -- which is the whole of #889.
     """
-    state = server.post("/api/day", {"level": 3, "seed": 1, "scales": [0.75, 1, 1.25]})
+    state = server.post("/api/day", {"level": 3, "seed": 3, "scales": [0.75, 1, 1.25]})
     did = state["id"]
     check.that(len(state["legs"]) == 3, "the day laid out the legs it was asked for",
                f"{len(state['legs'])}")
@@ -516,11 +545,41 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
         if roll_call is None:
             roll_call = who
         else:
-            check.that(who == roll_call,
-                       f"leg {leg_no} is the same party as leg 0 -- it is one"
+            # **A SUBSEQUENCE of leg 0, not an equality**, and the
+            # difference is Camille's `#923` ruling: a character past the
+            # death floor leaves the party and the rest play on
+            # short-handed (`Party.bury`). So a leg after a fatal one has
+            # a *shorter* roster by design, and `who == roll_call` asserts
+            # the opposite of what the engine was told to do.
+            #
+            # It only fails on a seed where somebody actually dies for
+            # good, which the pinned one does not -- found by running this
+            # instrument over twelve seeds rather than one. At seed 12 the
+            # wizard is gone and the old assertion read
+            # `[Fighter, Cleric, Rogue] vs [Fighter, Cleric, Rogue,
+            # Wizard]` and called the engine wrong.
+            #
+            # The claim the name makes is still the claim worth making --
+            # *one `story.Party` dealt once, not a fresh draw per fight* --
+            # and a fresh draw is distinguishable from a burial in two
+            # ways this now asserts separately: nobody **new** appears, and
+            # those who remain keep their **order** and their ids. A fresh
+            # draw would change the labels; burial only removes.
+            gone = [c for c in roll_call if c not in who]
+            newcomers = [c for c in who if c not in roll_call]
+            check.that(not newcomers,
+                       f"leg {leg_no} introduces nobody new -- it is one"
                        " `story.Party` dealt once and handed to every leg,"
-                       " not a fresh draw per fight",
-                       f"{who} vs {roll_call}")
+                       " not a fresh draw per fight. A burial may SHORTEN"
+                       " the roster (#923) and that is the one difference"
+                       " allowed",
+                       f"{who} vs {roll_call}"
+                       + (f"; buried {gone}" if gone else ""))
+            check.that(who == [c for c in roll_call if c in who],
+                       "and the survivors keep leg 0's order and ids --"
+                       " which is what tells a burial from a re-draw, since"
+                       " a fresh party would renumber and relabel",
+                       f"{who} against {[c for c in roll_call if c in who]}")
         check.that(all(s["surges_max"] > 0 for s in done["rested"]),
                    "and every character has a surge track to draw -- the page"
                    " renders one pip per maximum, so a zero would print an"
