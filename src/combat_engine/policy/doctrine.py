@@ -193,10 +193,21 @@ Both *modulate* `policy.features`'s flat `provokes_now` and `provokes_avoidably`
 rather than replacing them -- see `threat_conceded`'s weight for why that was
 measured rather than assumed.
 
-**Healing.** Two separate problems, and the first is why healing scores badly
-today: `allies_caught: -7.0` is the term that stops a wizard dropping a burst on
-its own party, and a heal targets allies on purpose, so the scorer reads mending
-the fighter as friendly fire. `heals` identifies a healing row by reading its body
+**Healing.** Two separate problems, and the first *was* why healing scored
+badly: friendly fire and a heal are the same shape to the scorer, because a
+heal targets allies on purpose.
+
+**The term that did it is gone and this paragraph used to name it as live.**
+It named `allies_caught` and a negative constant as *"the term that stops a
+wizard dropping a burst on its own party"*. The figure is deliberately not
+repeated here: a number beside a dead name is exactly what a later reader
+copies when sizing a new term, which is how this misled `#266`. `81e89b30`
+retired it into the signed `hp_swing`
+loop -- *"catching an ally now costs exactly what catching an enemy earns,
+measured the same way, so there is no deterrent constant to outbid"* -- so
+`weights.get("allies_caught")` is `None` and the feature is multiplied by
+zero. The counter still works and `scorecard` still reads it; the weight
+does not exist. #1110. `heals` identifies a healing row by reading its body
 for `c.heal`, `c.surge` or `c.temp_hp`, the same way `chargen._pays_off_through`
 reads a body for `c.<ability>_mod` and for the same stated reason -- no header
 field says so. `score` then clears `allies_caught` for such a row.
@@ -2162,10 +2173,17 @@ class DoctrinePolicy:
         """
         f = features(world, encounter, actor, action)
         if action.ref and benefits(action.ref):
-            # **Help is not friendly fire.** `allies_caught` is -7.0 and exists to
-            # stop a burst landing on your own party; a heal or a buff names allies
-            # on purpose. Cleared before `weigh` rather than compensated for after,
-            # so the number is never wrong in between.
+            # **Help is not friendly fire.** A heal or a buff names allies on
+            # purpose, so the feature is cleared before `weigh` rather than
+            # compensated for after -- the number is never wrong in between.
+            #
+            # **The weight it was clearing no longer exists**, and this
+            # comment used to state a figure for `allies_caught` as live.
+            # `weights.get("allies_caught")` is `None` since `81e89b30`
+            # retired it into `hp_swing`, so the clear is now belt and
+            # braces: it keeps `scorecard`'s `allies_clipped` counter
+            # honest for a healing row, which still reads the feature.
+            # Kept for that, not for the weight. #1110.
             f["allies_caught"] = 0.0
             # **`allies_down_caught` is deliberately NOT cleared here**, and
             # a plant is why: clearing it changed nothing, because nothing

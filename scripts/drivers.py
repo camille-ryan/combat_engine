@@ -37891,6 +37891,135 @@ def a_module_gets_the_party_size_it_asked_for(out: Result) -> None:
     )
 
 
+def prose_does_not_quote_a_weight_the_tables_lack(out: Result) -> None:
+    """No comment under `policy/` puts a number beside a dead weight. `#1110`.
+
+    `DoctrinePolicy.weights` is `{**WEIGHTS, **DOCTRINE}` and `weigh` is
+    `weights.get(k, 0.0) * v`, so **a feature key in neither table is
+    multiplied by zero**. That is fine -- most of the 24 such keys are
+    inputs other terms read. What is not fine is the documentation
+    presenting one as the live reference point a new term should be sized
+    against.
+
+    Three were, and the worst was in `policy/CLAUDE.md`:
+
+    > *"a blast catching three enemies is worth about 1.3 after weighting,
+    > against `is_power` at 6.0 and `allies_caught` at -7.0"*
+
+    Two of those three numbers could not fire. `allies_caught` and
+    `threat_removed` were retired into `hp_swing` by `81e89b30`, and
+    `SHARE` -- the weighting the whole sentence turns on -- is assigned
+    once and read by **no code at all**. A term fitted to that paragraph
+    would have been fitted to an October table.
+
+    **It cost a wrong conclusion on a live issue.** `#266`'s most recent
+    comment states *"`allies_caught` is -7.0 and **is** consulted ... it is
+    simply out-bid"*, and the differential that issue asks Camille for
+    turns out to be built. The prose was the only evidence for the claim.
+
+    **And two of the three were found by this check rather than by
+    reading.** I filed `#1110` naming `allies_caught` and `SHARE`; the
+    detector added `hit_chance` and `provokes_now`, both quoted with a
+    number in `policy/__init__.py` and both in neither table.
+
+    The pattern is deliberately narrow -- a **backticked name** next to a
+    **decimal** -- because the alternative is flagging every sentence that
+    mentions a term. Three spellings, because the tree uses all three:
+    `` `name` is -7.0 ``, `` `name: -7.0` ``, and the same with a Unicode
+    minus, which `CLAUDE.md` used and an ASCII-only pattern missed.
+    """
+    import re
+    from pathlib import Path
+
+    from combat_engine.policy import WEIGHTS
+    from combat_engine.policy.doctrine import DOCTRINE, DoctrinePolicy
+
+    live = set(DoctrinePolicy().weights)
+    out.that(len(live) == len(set(WEIGHTS) | set(DOCTRINE)) and len(live) > 50,
+             "the setup landed: the live table is the union of the two, so"
+             " `weights.get` is what decides whether a name can fire at all",
+             f"{len(WEIGHTS)} + {len(DOCTRINE)} -> {len(live)}")
+
+    # **The Unicode minus is in the class on purpose and `ruff` is told so.**
+    # `policy/CLAUDE.md` wrote one of these figures with U+2212, and an
+    # ASCII-only pattern missed it -- which is the kind of near-miss this
+    # whole rule exists to catch.
+    NUM = r"[-\u2212]?\d+\.\d+"
+    PATTERNS = (
+        re.compile(rf"`([a-z_]{{4,}})`\s*(?:is|at|=|:)\s*`?({NUM})"),
+        re.compile(rf"`([a-z_]{{4,}}):\s*({NUM})`"),
+        re.compile(rf"`([a-z_]{{4,}})`\s*(?:is|at)\s*\*\*({NUM})\*\*"),
+    )
+    looked = [
+        *sorted(Path("src/combat_engine/policy").rglob("*.py")),
+        *sorted(Path("src/combat_engine/policy").rglob("*.md")),
+    ]
+    out.that(len(looked) >= 4,
+             "and the files it reads are there -- a glob that found nothing"
+             " would make the assertion below vacuous",
+             f"{[f.name for f in looked]}")
+
+    # **The detector's own coverage, asserted against known inputs.** A
+    # plant that dropped the Unicode branch from `NUM` left this rule GREEN
+    # against a Unicode-minus violation -- so nothing protected the one
+    # spelling that was actually missed in the tree. The patterns are now
+    # tested on three fixed strings before being trusted on the files.
+    SAMPLES = (
+        "`allies_caught` is -7.0 and stops friendly fire",
+        "`threat_removed` at \u22123.5 is the reference",
+        "the term `allies_caught: -7.0` exists to",
+    )
+    for sample in SAMPLES:
+        found = any(pat.findall(sample) for pat in PATTERNS)
+        out.that(found,
+                 "the detector matches a known dead-weight sentence before"
+                 " it is trusted on the tree -- one of these uses a Unicode"
+                 " minus, which an ASCII-only class misses, and that is"
+                 " exactly the spelling `policy/CLAUDE.md` had used",
+                 f"{sample[:46]!r} -> matched={found}")
+
+    quoted: list[tuple[str, int, str, str]] = []
+    for path in looked:
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            for pattern in PATTERNS:
+                for name, value in pattern.findall(line):
+                    if name not in live:
+                        quoted.append((path.name, number, name, value))
+    seen = sorted({(f, n, k) for f, n, k, _v in quoted})
+    out.that(not seen,
+             "no comment or docstring under `policy/` puts a number beside a"
+             " weight the tables do not hold -- a sentence like that is what"
+             " a new term gets sized against, and two of them were being"
+             " quoted onward as live",
+             "; ".join(f"{f}:{n} {k}" for f, n, k in seen) or "none")
+
+    # **`SHARE` is the inverse case**: a live constant with no code reader,
+    # presented for sixty lines as the exchange rate everything shares.
+    #
+    # Read with `ast` and not by splitting on `#`, which was the first
+    # attempt and counted **two** references that are both inside
+    # **docstrings** -- a line-based reader cannot tell a docstring from
+    # code, so it measured the opposite of what it claimed.
+    import ast
+
+    reads = 0
+    for path in looked:
+        if path.suffix != ".py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Name) and node.id == "SHARE" \
+                    and isinstance(node.ctx, ast.Load):
+                reads += 1
+            if isinstance(node, ast.Attribute) and node.attr == "SHARE":
+                reads += 1
+    out.that(reads == 0,
+             "and `SHARE` is loaded by no code, which is what makes the"
+             " historical note on it correct -- if somebody wires it up this"
+             " goes red and the note gets rewritten, rather than silently"
+             " becoming wrong in the other direction",
+             f"{reads} load(s) of SHARE outside its assignment")
+
+
 def a_bonus_can_be_gated_on_what_a_check_is_for(out: Result) -> None:
     """A standing skill bonus narrowed to the purpose of the check. `#1111`.
 
@@ -61669,6 +61798,12 @@ DRIVERS = {
     "campaign_replays": (
         a_campaign_replays_in_a_fresh_process,
         "the same seed plays the same campaign, across processes (#789)",
+    ),
+    "weights_named": (
+        prose_does_not_quote_a_weight_the_tables_lack,
+        "no comment under `policy/` quotes a number beside a weight the"
+        " tables do not hold -- three did, and one was being quoted onward"
+        " as live on an open issue (#1110)",
     ),
     "check_purpose": (
         a_bonus_can_be_gated_on_what_a_check_is_for,

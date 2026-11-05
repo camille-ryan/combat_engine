@@ -347,8 +347,10 @@ def features(
         # pair that actually drove the behaviour: prone and unconscious
         # together drop a defence by 5 and hand over combat advantage, so
         # a dying character is 5 to 10 points easier to hit than anything
-        # else on the board. `hit_chance` at 3.0 and `expected_hits` at
-        # 4.0 correctly reported that and were worth 7.0 between them --
+        # else on the board. `hit_chance` and `expected_hits` -- then
+        # weighted 3.0 and 4.0, and **neither is in a weight table now**;
+        # `hp_swing` reads the same facts in hit points -- correctly
+        # reported that and were worth 7.0 between them at the time --
         # which is how an elite spent its full standard action in rounds
         # 12 **and** 13 on a body at -4 hp while two healthy characters
         # stood adjacent and one of them had it marked.
@@ -897,9 +899,14 @@ WEIGHTS: dict[str, float] = {
     # make "step out, then shoot" beat "shoot from inside melee" without making a
     # ranged character spend its whole turn backing away.
     #
-    # The arithmetic it has to win: a ranged attack from inside melee scores
-    # `provokes_now` at -5.0, so stepping out first is worth up to that much on
-    # the following action. 3.0 against the shift's own -0.5 nets +2.5, which
+    # The arithmetic it has to win, **as it stood when this was written**: a
+    # ranged attack from inside melee scored on `provokes_now`, so stepping
+    # out first was worth up to that much on the following action.
+    # `provokes_now` is in **no weight table** today -- `provokes_avoidably`
+    # is the priced one -- so the figures below are the reasoning that
+    # produced the 3.0 rather than a live comparison. #1110.
+    #
+    # 3.0 against the shift's own -0.5 nets +2.5, which
     # beats a walk that closes one square (+2.0) and loses to one that closes
     # two -- so a character still advances when advancing is the point.
     "leaves_melee": 3.0,

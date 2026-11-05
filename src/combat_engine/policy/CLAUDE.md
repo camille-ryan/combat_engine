@@ -109,11 +109,32 @@ made.
 
 ## The currency is small, and that is the usual reason a term does nothing
 
-`threat_removed`, `threat_conceded`, `reach_gained` and four others are shares of a
-side's threat pool, weighted by `SHARE`. A share is a small number: a blast catching
-three enemies is worth about 1.3 after weighting, against `is_power` at 6.0 and
-`allies_caught` at −7.0. **Seven terms are derived this way and 51 are hand-set
-constants** (#314).
+**This section described a weighting that no longer exists, and it was the
+sentence a new term got sized against.** It said `threat_removed`,
+`threat_conceded`, `reach_gained` *"and four others are shares of a side's
+threat pool, weighted by `SHARE`"*, and that a blast catching three enemies
+*"is worth about 1.3 after weighting"*, sized against `is_power` and a
+negative constant on `allies_caught`. The figures are not repeated: a
+number beside a dead name is what a later reader copies.
+
+Three of those four claims are dead:
+
+* **`SHARE` is read by no code.** It is assigned at `doctrine.py:311` and
+  every other mention of it in the tree is a comment -- including two that
+  record its retirement in the past tense.
+* **`allies_caught` has no weight.** `81e89b30` retired it into `hp_swing`,
+  so it is multiplied by zero.
+* **`threat_removed` likewise**, by the same commit.
+
+What is live: `hp_swing` at **1.0**, measuring hit points of advantage
+directly, with nothing to convert and so nothing to fit. `is_power` is
+still 6.0. The union of the two tables is **61** weights, not 51, of which
+8 are declared zeros.
+
+So the old sizing sentence would fit a new term to an October table.
+`scripts/doctrine.py`'s per-term firing report is the live reference, and
+`drivers.weights_named` now refuses any prose under `policy/` that puts a
+number beside a weight the tables do not hold. (#314, #1110.)
 
 So **a principled term in this currency routinely cannot carry a decision.**
 Measured on a differential threat term built for #266 and then reverted: worth
