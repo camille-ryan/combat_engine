@@ -4348,6 +4348,58 @@ def _dealt_by(world, refs: tuple[str, ...], cursor: int) -> bool:  # noqa: ANN00
 _REF_LABEL = re.compile(r"(?:[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)")
 
 
+def _labelled(text: str, names: tuple[str, ...]) -> bool:
+    """Does this label belong to one of `names`? A prefix **with a boundary**.
+
+    The label convention is `"<ref>"` or `"<ref> <something>"` --
+    `c.bonus` stamps `label or self.ref`, `half_damage` stamps
+    `"<ref> (half)"`, a zone burn `"<ref> zone"` -- so a bare equality
+    under-credits and a bare `startswith` **over**-credits whenever one
+    ref is a prefix of another.
+
+    That is not hypothetical and it is what this function was written for:
+    `f139`'s emptied body was credited with `EffectApplied` from labels
+    reading `f1397 speed+1` and `f1397 trigger`. A different feat, and
+    `"f1397".startswith("f139")`. `audit.py`'s own comment two lines below
+    the old test made exactly this argument about the `credit` field --
+    *"Equality, not a prefix ... a prefix here would credit `f97` for
+    `f974`'s clause"* -- and the label test beside it committed the error
+    the comment names.
+
+    The boundary is "the next character cannot be part of a ref". Refs
+    carry letters, digits, `:` and `-` (`cf:ardent-f0`, `rt:r33-t1`,
+    `m1932c0a`), so those continue a ref and anything else ends one. A
+    space and an opening bracket are what the real labels use.
+
+    Found by `#1094` widening the feat pool, which drew `f1397` onto a
+    board that had never held it. So the bug is as old as the prefix rule
+    and it took a draw change to show -- which is why this takes a
+    boundary rather than a longer list of suffixes.
+
+    **Measured: no working row loses credit.** Over a 500-row sample the
+    counts are identical either way -- 428 of 457 fire, 0 newly silent --
+    so this only removes credit nobody earned. That matters because the
+    item path's note records an earlier label attempt that *"silenced 23
+    working rows"*; this is the opposite direction and was checked rather
+    than assumed.
+
+    **What gates it, and the honest limit.** `audit.py --verdicts` is the
+    gate: with the bare prefix it reports **12 of 13** pinned rows and with
+    the boundary **13 of 13**. But it only catches this while a board
+    happens to deal a ref that prefixes a pinned one -- `f1397` beside
+    `f139` here -- so a future draw change could take the catch away
+    without taking the bug back. Said rather than left implicit, because
+    the alternative is a unit test and this tree does not have those.
+    """
+    for name in names:
+        if not name or not text.startswith(name):
+            continue
+        rest = text[len(name):]
+        if not rest or not (rest[0].isalnum() or rest[0] in ":-_"):
+            return True
+    return False
+
+
 def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
              also: tuple[str, ...] = (), own: list | None = None) -> set[str]:
     """The `BY_NAME` kinds this row can be shown to have caused.
@@ -4414,12 +4466,13 @@ def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
         # where a label is a free-text string the prefix rule exists to cope
         # with. A prefix here would credit `f97` for `f974`'s clause.
         if e.kind == "EffectApplied" and (
-                str(getattr(e, "label", "") or "").startswith(names)
+                _labelled(str(getattr(e, "label", "") or ""), names)
                 or str(getattr(e, "credit", "") or "") in names):
             out.add("EffectApplied")
         # `ConditionEnded.why` is the ref for a cure: `c.cure` and
         # `Effects.end` both pass the caller's ref as the reason.
-        elif e.kind == "ConditionEnded" and str(getattr(e, "why", "") or "").startswith(names):
+        elif e.kind == "ConditionEnded" and _labelled(
+                str(getattr(e, "why", "") or ""), names):
             out.add("ConditionEnded")
     for e in own or ():
         if e.kind != "EffectApplied":
@@ -6789,13 +6842,26 @@ def audit(ref: str) -> Result:
                 # moment and are sourced to it too -- so a trait that
                 # installed nothing was credited with an effect one of its
                 # neighbours laid. `durations.keywords_of` records the
-                # convention this relies on: an effect's label is the ref of
-                # the row that laid it, stamped by `c.effect`, `c.bonus` and
-                # `c.condition` alike. Prefix, because several sites stamp
-                # `"<ref> trigger"` or `"<ref> on attack"`.
+                # **`Effect.by`, which is the laying ref outright (#580),
+                # not the label.** This read `str(e.label).startswith(ref)`
+                # and that is unsound in the direction that over-credits:
+                # `f139`'s emptied body was credited `ConditionApplied` for
+                # an effect labelled `f1397 speed+1`, because `"f1397"`
+                # starts with `"f139"`. A different feat.
+                #
+                # The item path below already makes this exact argument and
+                # already uses `by` -- *"`Effect.by` is the laying ref
+                # outright (#580), so the same test is exact instead of a
+                # guess"* -- so this is the established pattern in this
+                # file arriving at the one path that still guessed.
+                #
+                # Exact rather than boundary-prefixed, because `by` holds
+                # one ref and needs no convention. `_claimed` reads the
+                # *event's* label, where there is no `by` to read, and
+                # takes the boundary instead.
                 mine_eff = {
                     i for i, e in world.effects.live.items()
-                    if str(e.label or "").startswith(ref)
+                    if getattr(e, "by", "") == ref
                 }
                 if mine_eff - world.setup_effects:
                     out.events.add("ConditionApplied")
