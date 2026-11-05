@@ -16628,21 +16628,25 @@ def disarming_a_found_trap(out: Result) -> None:
              " opposition is offered nothing: a creature fielded in an"
              " encounter with traps plausibly placed them")
 
-    # == and the AI can actually choose it, which is the half that is a =====
-    # == fault rather than a gap. #955, #1098. ============================
+    # == and the AI deliberately does NOT choose it, which is Camille's ====
+    # == call rather than a gap. #955, #1098. =============================
     #
-    # `policy.features` naming no term for a kind leaves it decided by
-    # `i_am_bloodied` and `nearest_enemy`, and it then loses to ending the
-    # turn by the 0.001 `is_end` floor -- measured at **-0.100 against
-    # -0.099** before the term landed. That is `#1016` verbatim one action
-    # along, and `drivers.kinds_named` is the gate that caught it.
+    # **This whole section used to assert the opposite, and the inversion is
+    # the honest fix rather than a loosening.** It asserted that a disable
+    # beats ending the turn with a foe nearby and loses with the foes across
+    # the room -- true of the two weights that were here, `is_disable` at
+    # -0.5 and `trap_in_the_way` at +2.0. Both numbers were Claude's and
+    # were taken against a standing deferral (`#1065`: *"Defer until these
+    # can be scored dynamically"*). Asked directly, Camille took option C:
     #
-    # **Two arms, because a flat weight would be the wrong fix.** A disable
-    # spends a standard, so the question is not "can it be disarmed" (the
-    # five conditions above) but "is it worth a round of somebody's
-    # attacks". `is_disable` is negative and `trap_in_the_way` pays for it,
-    # the `is_pick_up`/`pick_up_disarmed` shape -- so the same board scores
-    # it differently depending on whether a foe could cross the square.
+    # > *"C. Revert them and add `disable` to the owed list, to be priced
+    # > with the other seven once `#314` lands."*
+    #
+    # So the claim that is true now is the uncomfortable one, and it is
+    # asserted rather than left implicit: the action is **offered and
+    # unchoosable**. Saying so out loud is the point -- an action a player
+    # can take and the AI never will is a real state of this engine, and the
+    # alternative was keeping two invented constants.
     from combat_engine.engine.query import creatures as _creatures
     from combat_engine.policy import WEIGHTS, features
 
@@ -16672,26 +16676,62 @@ def disarming_a_found_trap(out: Result) -> None:
              " an end are scorable, without which the comparisons below are"
              " between missing numbers",
              f"near={ {k: round(v, 3) for k, v in close.items()} }")
-    out.that(close.get("disable", 0.0) > close.get("end", 0.0),
-             "with a foe near enough to be made to cross it, disarming the"
-             " trap **beats ending the turn** -- which is what makes the"
-             " action reachable by the AI at all rather than offered and"
-             " never chosen",
-             f"disable={close.get('disable'):.3f} vs"
-             f" end={close.get('end'):.3f}")
-    out.that(away.get("disable", 0.0) < away.get("end", 0.0),
-             "and with every foe across the room it **loses** to ending the"
-             " turn: a trap nobody can step on is scenery, and a standard"
-             " spent on scenery is the inert-action fault #796 is about."
-             " A flat positive weight would pass the assertion above and"
-             " fail this one",
-             f"disable={away.get('disable'):.3f} vs"
+    out.that(close.get("disable", 0.0) < close.get("end", 0.0)
+             and away.get("disable", 0.0) < away.get("end", 0.0),
+             "a disable **loses to ending the turn on both boards** -- with"
+             " a foe three squares from the trap and with every foe across"
+             " the room. It carries no scoring term, so it is decided by"
+             " `i_am_bloodied` and `nearest_enemy` and then loses by the"
+             " 0.001 `is_end` floor. That is `#1098` option C working, and"
+             " it is the same state `stabilise` is in",
+             f"near: disable={close.get('disable'):.3f} vs"
+             f" end={close.get('end'):.3f}; far:"
+             f" disable={away.get('disable'):.3f} vs"
              f" end={away.get('end'):.3f}")
-    out.that(close.get("disable", 0.0) > away.get("disable", 0.0),
-             "so the same board scores the same action differently by where"
-             " the foes are -- the predicate is read, not merely present",
-             f"near={close.get('disable'):.3f},"
-             f" far={away.get('disable'):.3f}")
+    #: **The feature dict, not the total**, and the first draft of this
+    #: assertion got it wrong in a way worth keeping. It claimed the two
+    #: boards score a disable *identically* now that the predicate is gone,
+    #: and they do not -- -0.300 against -1.400 -- because an unnamed kind
+    #: is scored by the generic board terms and `nearest_enemy` moves when
+    #: the foes do. The comment three paragraphs up says exactly that, so
+    #: the assertion was contradicting its own stated reasoning.
+    #:
+    #: What is actually claimable is narrower and stronger: the action's
+    #: own feature dict holds **neither key**. That is independent of every
+    #: generic term and cannot be satisfied by a coincidence of totals.
+    world_n, enc_n, me_n, _t_n = board_with()
+    disables = [a for a in offered(world_n, enc_n, me_n)
+                if a.kind == "disable"]
+    out.that(bool(disables),
+             "the setup landed: a disable is offered on the probe board, so"
+             " the feature dict below is a real action's and not an empty"
+             " one",
+             f"{len(disables)} disable(s) offered")
+    got_f = features(world_n, enc_n, me_n, disables[0]) if disables else {}
+    out.that(bool(got_f) and "is_disable" not in got_f
+             and "trap_in_the_way" not in got_f,
+             "and a disable's own feature dict names **neither** term --"
+             " the direct evidence the predicate is gone rather than merely"
+             " unweighted. Asserted on the dict rather than on two totals,"
+             " because the totals legitimately differ by board and a"
+             " leftover predicate could hide inside that difference",
+             f"{len(got_f)} feature(s), is_disable="
+             f"{'is_disable' in got_f},"
+             f" trap_in_the_way={'trap_in_the_way' in got_f}")
+    out.that("is_disable" not in WEIGHTS and "trap_in_the_way" not in WEIGHTS,
+             "neither invented weight is in the table -- REMOVED, not set"
+             " to zero. A declared 0.0 claims a decision has been made"
+             " where the owed list records that one has not, and `#1098`"
+             " named that difference as the whole reason C beats B",
+             f"is_disable in WEIGHTS: {'is_disable' in WEIGHTS};"
+             f" trap_in_the_way: {'trap_in_the_way' in WEIGHTS}")
+    out.that("disable" in UNNAMED_KINDS_OWED,
+             "and the kind is on the OWED list, so `kinds_named` stays"
+             " green because the debt is recorded rather than because a"
+             " number was guessed. Without the entry that gate reds, which"
+             " is what stops this reverting quietly into an unnamed kind"
+             " nobody meant to leave unnamed",
+             f"{sorted(UNNAMED_KINDS_OWED)[:6]}...")
 
 
 def a_policy_memo_dies_with_its_board(out: Result) -> None:
@@ -61141,6 +61181,18 @@ UNNAMED_KINDS_OWED = frozenset(
         "aid_attack",
         "aid_defence",
         "bull_rush",
+        # **Here by Camille's call on `#1098`, not by never having been
+        # priced.** It *was* priced -- `is_disable` at -0.5 with a
+        # `trap_in_the_way` predicate paying +2.0 -- and both numbers were
+        # Claude's, taken against the standing `#1065` deferral. Asked, and
+        # given option C: *"Revert them and add `disable` to the owed list,
+        # to be priced with the other seven once `#314` lands."*
+        #
+        # So this entry is a **debt that was once paid in invented coin and
+        # has been handed back**, which is worth distinguishing from the
+        # rest of this set: a reader finding `disable` offered and never
+        # chosen should know it is owed rather than overlooked.
+        "disable",
         "dismount",
         "feint",
         "grab",
