@@ -234,6 +234,35 @@ SECONDARY_NEEDS_TARGET = ("open", "raise_cap")
 #: out deliberately. #984.
 GROUP_THRESHOLDS = ("half", "one")
 
+#: The action a skill check costs **inside a fight**, from DMG2 chapter 3:
+#: *"In an in-combat skill challenge, each skill check needs an associated
+#: action type -- standard, move, or minor. Using move or minor actions for
+#: skill checks can make it easier for the characters to fight and pursue
+#: the challenge at the same time."*
+#:
+#: So the cost is **per check, not per scene** -- which is the field
+#: `Scene.primary` was short by, and the reason an in-combat challenge could
+#: not be declared. DMG1's own worked sample prints four skills at three
+#: different costs, so one cost for the whole scene was never going to
+#: express it.
+#:
+#: Spelled as the engine spells them, because `run` hands each straight to
+#: `Encounter.spend` through `ActionType` -- a fourth word here would be a
+#: word with no action behind it.
+IN_COMBAT_ACTIONS = ("standard", "move", "minor")
+
+#: The hardest an in-combat challenge may be. DMG2, stating it as a rule
+#: rather than as advice: *"Don't create challenges of complexity 3 or
+#: higher that you intend to take place in the midst of combat -- there
+#: won't be enough monsters to keep the characters busy, or the challenge
+#: will take up too much of the party's attention."*
+#:
+#: DMG1 agrees from the other direction -- *"for challenges that work as
+#: part of a combat encounter, set the complexity lower"* -- and its worked
+#: sample is complexity 2. So this is a bound both books state and it makes
+#: the feature smaller than it looks: 4 or 6 successes, never 12.
+IN_COMBAT_MAX = 2
+
 
 class ModuleError(Exception):
     """A module file that cannot be played, with every reason at once."""
@@ -735,6 +764,17 @@ class Try:
     #: rises. Empty for the three that do not. Refused at parse if the
     #: effect needs one and it is missing, or carries one it cannot use.
     grants_to: str = ""
+    #: **What this check costs on a turn**, from `IN_COMBAT_ACTIONS`. Only
+    #: on a `combat` scene's challenge, where it is **required** on every
+    #: skill -- the printed rule says each check needs one, and a check with
+    #: no cost would be a free roll in the middle of a fight, which is the
+    #: one thing that makes an in-combat challenge strictly better than a
+    #: standalone one.
+    #:
+    #: Refused on a standalone challenge rather than ignored: outside a
+    #: fight nothing spends an action, so a module writing one has written a
+    #: field that is never read. #922.
+    action: str = ""
 
 
 @dataclass(frozen=True)
@@ -1209,6 +1249,37 @@ class Scene:
         for said in self.tries:
             if said.skill == skill.lower():
                 return said.win if won else said.lose
+        return ""
+
+    @property
+    def in_combat_challenge(self) -> bool:
+        """Does this scene run a challenge **inside** its fight? `#922`.
+
+        A `combat` scene that states a complexity, which is DMG2's named
+        category: *"When a skill challenge occurs in a combat setting, it
+        effectively replaces one or more monsters in the encounter."*
+
+        Derived rather than a field, so there is no way to write a scene
+        that claims to be one and carries no challenge, or carries one and
+        does not claim it. The three categories DMG2 names map onto this
+        tree as: in-combat is here, an *encounter* challenge is a
+        `skill_challenge` scene, and a *structure* challenge is `#937`'s
+        journey.
+        """
+        return self.kind == "combat" and bool(self.complexity)
+
+    def action_for(self, skill: str) -> str:
+        """What a check with this skill costs on a turn, or `""`.
+
+        One of `IN_COMBAT_ACTIONS`. Only an in-combat challenge has these
+        and `parse` requires one on every skill there, so an empty answer
+        from a scene that *is* one means the skill is not in the challenge
+        at all -- which is what `run` reads it as, refusing rather than
+        rolling free.
+        """
+        for said in self.tries:
+            if said.skill == skill.lower():
+                return said.action
         return ""
 
     def grants_of(self, skill: str) -> tuple[str, str]:
@@ -1979,6 +2050,12 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                         f"check -- a group check scores the challenge, so it "
                         f"belongs on a primary")
                     group = ""
+                costs = str(item.get("action", "")).strip().lower()
+                if costs and costs not in IN_COMBAT_ACTIONS:
+                    problems.append(
+                        f"{where}: {key} '{skill}' costs {costs!r}, which is "
+                        f"not one of {', '.join(IN_COMBAT_ACTIONS)}")
+                    costs = ""
                 said.append(Try(
                     skill=skill,
                     win=str(item.get("win", "")).strip(),
@@ -1986,7 +2063,8 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                     what=str(item.get("what", "")).strip(),
                     grants=grants,
                     grants_to=aimed,
-                    group=group))
+                    group=group,
+                    action=costs))
                 continue
             if str(item).strip():
                 names.append(str(item).strip().lower())
@@ -2075,12 +2153,69 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
             f"{min(complexity_table())}-{max(complexity_table())},"
             f" got {complexity}"
         )
+    # **Two kinds of scene roll a challenge now, and that is the whole of
+    # `#922`.** A `combat` scene carrying a complexity is DMG2's *in-combat
+    # challenge*, which shares the fight's board -- so every test below that
+    # used to read `kind == "skill_challenge"` is really asking *"does this
+    # scene roll a challenge"*, and asking the narrower question would have
+    # left an in-combat challenge with none of the checks the standalone one
+    # gets.
+    #
+    # A `combat` scene with **no** complexity is an ordinary fight and is
+    # untouched, which is what keeps every converted module playing exactly
+    # as it did.
+    in_combat = kind == "combat" and bool(complexity)
+    rolls = kind == "skill_challenge" or in_combat
     if kind == "skill_challenge" and not primary:
         problems.append(f"{where}: a skill challenge needs at least one primary skill")
-    if tries and kind != "skill_challenge":
+    if in_combat and not primary:
+        problems.append(
+            f"{where}: states a complexity, so it runs an in-combat "
+            "challenge, and needs at least one primary skill to roll")
+    if tries and not rolls:
         problems.append(
             f"{where}: a {kind} scene states what a skill check means, but "
-            "only a skill_challenge rolls them")
+            "only a scene that rolls a challenge uses them")
+
+    # **Complexity 1 or 2, because both books say so.** See `IN_COMBAT_MAX`.
+    # Refused rather than clamped: a module that wrote 4 meant a challenge
+    # this shape cannot carry, and silently halving it would field a
+    # different scene than the one the author described.
+    if in_combat and complexity > IN_COMBAT_MAX:
+        problems.append(
+            f"{where}: an in-combat challenge is complexity 1-"
+            f"{IN_COMBAT_MAX} and this states {complexity}. The printed "
+            "reason is that a harder one leaves too few monsters to keep "
+            "the rest of the party busy -- a standalone skill_challenge "
+            "scene is where a bigger one belongs")
+
+    # **Every check in a fight costs a named action.** The printed rule is
+    # per check, so a partly-costed challenge would hand some skills a free
+    # roll mid-fight. Named rather than defaulted to `standard`: the sample
+    # that motivated this has an Endurance check every character makes as a
+    # free action and a Perception check that buys somebody else a bonus, so
+    # a default would quietly make three of its four skills wrong.
+    if in_combat:
+        costed = {t.skill for t in tries if t.action}
+        want = set(primary) | set(secondary)
+        if costed != want:
+            missing = sorted(want - costed)
+            problems.append(
+                f"{where}: {', '.join(missing)} name no 'action'. An "
+                "in-combat check costs a standard, move or minor action on "
+                "the turn it is made, and the printed rule states one per "
+                "check -- an uncosted check is a free roll in the middle of "
+                "a fight")
+    # And the mirror: outside a fight nothing spends an action, so a cost
+    # written there is read by nothing.
+    if not in_combat:
+        costed = sorted({t.skill for t in tries if t.action})
+        if costed:
+            problems.append(
+                f"{where}: {', '.join(costed)} state an 'action', but a "
+                f"{kind} scene spends no actions -- an action cost is only "
+                "read by an in-combat challenge, which is a combat scene "
+                "that states a complexity")
 
     # **A phrasing that is just the skill name is refused**, because it is
     # the exact thing measured at 3 of 12 -- and the three failures include
@@ -2126,16 +2261,16 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
                 f"got {most!r}")
             continue
         caps.append((name, most))
-    if caps and kind != "skill_challenge":
+    if caps and not rolls:
         problems.append(
-            f"{where}: a {kind} scene caps a skill, but only a "
-            "skill_challenge rolls them")
+            f"{where}: a {kind} scene caps a skill, but only a scene "
+            "that rolls a challenge rolls them")
     # **A stated cap may not make the challenge unwinnable.** The default
     # withholds itself when it would (`Scene.capped`); a module's own
     # figure is trusted over the default, so it needs the same check or
     # the trust is a hole. Only when *every* primary is capped -- one
     # uncapped skill can carry the rest.
-    if caps and kind == "skill_challenge" and primary:
+    if caps and rolls and primary:
         stated = dict(caps)
         if all(s in stated for s in primary):
             most = sum(stated[s] for s in primary)
@@ -2367,8 +2502,17 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         # comment said while a rest scene had no beats to run.
         "skill_challenge": ("foes", "terrain", "affordances", "objective",
                             "readiness", "details"),
-        "combat": ("complexity", "primary", "secondary", "affordances",
-                   "details"),
+        # **`complexity`, `primary` and `secondary` are no longer refused
+        # here, and that is `#922`.** A combat scene carrying them is
+        # DMG2's in-combat challenge: *"When a skill challenge occurs in a
+        # combat setting, it effectively replaces one or more monsters in
+        # the encounter."* The bounds that make it a different thing from a
+        # standalone challenge -- complexity 1-2, an action cost per check
+        # -- are checked above rather than by refusing the fields outright.
+        #
+        # `affordances` and `details` stay refused: a fight runs no beat
+        # loop, so both would be written and never read.
+        "combat": ("affordances", "details"),
         # **A rest scene may carry a conversation.** `npcs`, `affordances`,
         # `lore` and `details` were refused here because nothing ran the
         # beat loop on a rest scene, which is the half of #937 that kept it

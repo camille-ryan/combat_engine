@@ -494,6 +494,33 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
             taken[made.slot] += 1
     slot = min(order, key=lambda i: (taken[i], i))
 
+    options = _options(run, table, slot)
+    if options is None:
+        # Every primary has given all it can. Nothing left to roll, so say
+        # so rather than spinning: `play`'s loop ends on a refusal it
+        # cannot act on.
+        return slot, next(iter(run.scene.primary), "")
+    if not options:
+        return -1, ""
+    return slot, _best(run, table, slot, options)
+
+
+def _options(
+    run: Running, table: Table, slot: int,
+) -> list[tuple[str, str]] | None:
+    """What this character could roll, as `(skill, band)` pairs.
+
+    `None` -- distinct from empty -- means **every primary has given all it
+    can**, which `taking_turns` answers differently from "nothing to roll":
+    one is a challenge that has run out of scoring moves and the other is a
+    character with nothing to offer.
+
+    Extracted from `taking_turns` for `in_combat_pick`, and extraction
+    rather than a second copy is the point: the cap rule and the
+    assist-gate below are each one printed rule with one measurement
+    behind them, and two readers of one rule is what lets them drift
+    (`#1014` is this tree's worked case). #922.
+    """
     # **A capped skill is not an option.** The chooser would otherwise
     # keep naming one that can no longer count, burning `play`'s attempt
     # limit without progressing -- measured at 33 refusals in one
@@ -505,10 +532,7 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
         or run.won_with.get(s, 0) < cap
     ]
     if not options:
-        # Every primary has given all it can. Nothing left to roll, so say
-        # so rather than spinning: `play`'s loop ends on a refusal it
-        # cannot act on.
-        return slot, next(iter(run.scene.primary), "")
+        return None
     # **No second secondary while a +2 is already banked.** The bonus is spent
     # by the next primary check and does not stack, so a chooser that takes the
     # easy roll whenever it has the best margin opens by burning every
@@ -528,8 +552,13 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
     may_assist = not run.pending_bonus or hopeless
     if may_assist:
         options += [(s, "easy") for s in run.scene.secondary if s not in run.spent]
-    if not options:
-        return -1, ""
+    return options
+
+
+def _best(
+    run: Running, table: Table, slot: int, options: list[tuple[str, str]],
+) -> str:
+    """The option this character should take, by margin over the DC."""
 
     def margin(pair: tuple[str, str]) -> tuple[int, int, int]:
         skill, band = pair
@@ -539,7 +568,40 @@ def taking_turns(run: Running, table: Table) -> tuple[int, str]:
         # secondaries early for a +2 it may never get to use.
         return (edge, 1 if skill in run.scene.primary else 0, -options.index(pair))
 
-    return slot, max(options, key=margin)[0]
+    return max(options, key=margin)[0]
+
+
+def in_combat_pick(
+    run: Running, table: Table, slot: int, affordable: frozenset[str],
+) -> str:
+    """Which skill this character tries **on its own turn**, or `""`. `#922`.
+
+    The difference from `taking_turns` is the whole of why it is a separate
+    function: in a fight the character is **not chosen**, the initiative
+    order chose them, so this takes a slot rather than returning one. What
+    it does choose is the skill, by the same ranking, over the options this
+    character can actually pay for.
+
+    `affordable` is the set of `module.IN_COMBAT_ACTIONS` words this
+    creature's budget can still cover this turn -- asked of the encounter by
+    the caller, because this module knows nothing about a board.
+
+    Returns `""` for every ordinary reason: the slot is not a character in
+    the challenge, the challenge has no scoring moves left, this character
+    has nothing to offer, or nothing it could roll is affordable.
+    """
+    if slot < 0 or slot >= len(table.eids) or table.party.sheets[slot].down:
+        return ""
+    options = _options(run, table, slot)
+    if not options:
+        return ""
+    payable = [
+        pair for pair in options
+        if run.scene.action_for(pair[0]) in affordable
+    ]
+    if not payable:
+        return ""
+    return _best(run, table, slot, payable)
 
 
 def play(

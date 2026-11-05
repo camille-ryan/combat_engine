@@ -470,6 +470,14 @@ class Dressed:
     #: dresser keeps its own draw -- which is arcade mode, where there is
     #: no encounter budget to overspend. #958.
     traps: int | None = None
+    #: What an **in-combat challenge** took out of the opposition's budget,
+    #: in XP. DMG2: *"it effectively replaces one or more monsters in the
+    #: encounter. (In terms of XP, it's worth a number of monsters of its
+    #: level equal to its complexity.)"* -- so this is a subtraction, and
+    #: naming the figure is what lets a reader see the fight got smaller on
+    #: purpose rather than by a draw going short. 0 for every other scene,
+    #: which is every scene in every converted module. #922.
+    challenge: float = 0.0
 
     def __len__(self) -> int:
         return len(self.refs)

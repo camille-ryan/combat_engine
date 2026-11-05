@@ -51,11 +51,23 @@ import argparse
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
+
+# **Types only, and under `TYPE_CHECKING` for a reason this file depends
+# on**: every other import here is function-local, because a module-level
+# one would run `src/` at import time and `sys.path` is not set up until
+# the two lines above. A `TYPE_CHECKING` block is never executed, so the
+# two module-level helpers at the bottom of this file can carry real
+# annotations instead of `-> tuple`, which `types.py` reds and `ruff` does
+# not.
+if TYPE_CHECKING:
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.story import module as story_module
 
 
 def must[T](value: T | None, what: str) -> T:
@@ -17061,7 +17073,6 @@ def a_terrain_power_is_offered_to_whoever_stands_by_it(out: Result) -> None:
     how the bug above was found in the first place.
     """
     import audit as _audit
-    from combat_engine.engine import World
     from combat_engine.engine import actions as A
     from combat_engine.engine import dsl as _DSL
     from combat_engine.engine import movement as M
@@ -20944,7 +20955,6 @@ def once_spent(out: Result) -> None:
     the original fault the enumeration was introduced to cure.
     """
 
-    from combat_engine.engine import World
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.durations import When
     from combat_engine.engine.events import DamageRolled, Window
@@ -21347,7 +21357,6 @@ def once_spend_moments(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Mods
     from combat_engine.engine.durations import When
-    from combat_engine.engine.ecs import World
     from combat_engine.engine.events import AttackRolled
     from combat_engine.engine.types import Defense
 
@@ -37891,6 +37900,655 @@ def a_module_gets_the_party_size_it_asked_for(out: Result) -> None:
     )
 
 
+def a_party_can_buy_and_sell_against_the_printed_price(out: Result) -> None:
+    """The market: a price, a purchase, a sale at one-fifth. `#1081`.
+
+    `Sheet.coins` accumulated from `#969` and **nothing in the tree could
+    spend one** -- `treasure.market_price` knew what an item cost and no
+    caller could pay it.
+
+    **The issue asked for a stock list and the page does not have one.**
+    `#1081`: *"a stock list, because everything at my level is not a shop.
+    The printed guidance for what a town stocks is worth reading before
+    inventing a rule."* It was read: *"in general you can buy any item you
+    can afford"*, with the shop rarity hedged as *"your DM might say"*.
+    So the only constraint on a purchase is money, and this rule asserts
+    the **absence** of a stock refusal as deliberately as it asserts the
+    two refusals that are there -- otherwise a later reader adds one.
+
+    The sale is printed and so is a check on it: *"only one-fifth the
+    normal price [...] enough money to buy an item that is five levels
+    lower"*. Those are two statements of one curve, and the second is
+    assertable against the first, which is what the last assertion here
+    does.
+    """
+    from combat_engine import db
+    from combat_engine.story import Sheet, market
+
+    out.that(market.SALE == 5,
+             "a sale returns one-FIFTH, which the page states in words --"
+             " pinned to a literal here because every assertion below that"
+             " reads `market.SALE` instead would shrink with a plant on it,"
+             " which is how the first version of this rule stayed green"
+             " when the divisor was changed to 1",
+             f"SALE={market.SALE}")
+
+    con = db.game()
+    rungs = list(con.execute(
+        "SELECT ref, level, cost FROM item_step WHERE cost > 0"))
+    refs = {r["ref"] for r in rungs}
+    out.that(len(rungs) == 7533 and len(refs) == 1853,
+             "1,853 item refs are priced across 7,533 rungs -- an item is"
+             " not one price, so a purchase has to name which rung it"
+             " means",
+             f"{len(rungs)} rungs over {len(refs)} refs")
+
+    odd = [r["ref"] for r in rungs if int(r["cost"]) % 5]
+    out.that(not odd,
+             "and a fifth of every printed price is exact -- 0 of 7,533"
+             " rungs leave a remainder, which is what makes the floor in"
+             " `sale_price` a guard rather than a rounding policy",
+             f"{len(odd)} rungs with a remainder")
+
+    #: Six rungs, levels 3 to 28, so both the cheapest-rung default and
+    #: the five-level gloss can be asked of one ref.
+    REF = "i1001"
+    steps = market.rungs(REF)
+    out.that(len(steps) == 6 and steps[0][0] == 3,
+             "the sample ref has six priced rungs, the first at level 3",
+             f"{steps}")
+    out.that(market.price(REF) == steps[0][1],
+             "`price` with no level gives the CHEAPEST rung -- the one a"
+             " party affords soonest",
+             f"{market.price(REF)} against {steps[0][1]}")
+    out.that(market.price(REF, steps[2][0]) == steps[2][1],
+             "and naming a level gives that rung exactly",
+             f"level {steps[2][0]} costs {market.price(REF, steps[2][0])}")
+    absent = next(n for n in range(1, 40)
+                  if n not in {lvl for lvl, _c in steps})
+    out.that(market.price(REF, absent) == 0,
+             "a level the item has no rung at is 0, not the nearest rung --"
+             " a +2 sword is not a +3 sword at a discount",
+             f"level {absent} prices at {market.price(REF, absent)}")
+
+    cost = market.price(REF)
+
+    #: Exactly affordable, which is the boundary the printed sentence is
+    #: about rather than a comfortable number.
+    rich = Sheet(cls="fighter", coins=cost)
+    out.that(market.buy(rich, REF) is True,
+             "a party holding EXACTLY the price can buy -- *\"any item you"
+             " can afford\"*, and the boundary is the interesting case",
+             f"{cost} coins, cost {cost}")
+    out.that(rich.coins == 0 and rich.carried.get(REF) == 1,
+             "the coin is gone and the item is CARRIED, not worn -- the"
+             " same noun a found parcel uses, which is what keeps the"
+             " `winrate` question out of this change",
+             f"coins={rich.coins} carried={dict(rich.carried)}")
+
+    #: One gold short. The negative control that pins the boundary, rather
+    #: than a party with no money at all, which any broken guard refuses.
+    poor = Sheet(cls="fighter", coins=cost - 1)
+    out.that(market.buy(poor, REF) is False,
+             "one gold short is refused -- and this is the control that"
+             " matters, because a penniless party is refused by any guard"
+             " at all",
+             f"{cost - 1} coins, cost {cost}")
+    out.that(poor.coins == cost - 1 and not poor.carried,
+             "and a refused purchase spends nothing and carries nothing",
+             f"coins={poor.coins} carried={dict(poor.carried)}")
+
+    #: An unpriced ref. `item_step` prices 1,853 of the items, so this is
+    #: the ordinary case rather than an exotic one.
+    unpriced = next(
+        (r["ref"] for r in con.execute("SELECT ref FROM item")
+         if r["ref"] not in refs), None)
+    out.that(unpriced is not None,
+             "there is an item with no priced rung to ask about",
+             f"{unpriced}")
+    flush = Sheet(cls="fighter", coins=10_000_000)
+    out.that(market.buy(flush, unpriced or "nope") is False,
+             "an unpriced ref cannot be bought at any price -- NOT for"
+             " sale is not the same as free, and a party with ten million"
+             " gold is the control that separates them",
+             f"{unpriced} refused with {flush.coins} coins")
+    out.that(flush.coins == 10_000_000,
+             "and that refusal spends nothing either",
+             f"coins={flush.coins}")
+
+    #: The stock question, asserted as an absence. Every priced rung the
+    #: database holds, including the 28th-level ones, is buyable by a
+    #: party that can afford it -- because the page states no stock rule.
+    dear = max(r["cost"] for r in rungs)
+    top = next(r["ref"] for r in rungs if r["cost"] == dear)
+    rung_of = {lvl: c for lvl, c in market.rungs(top)}
+    deep = max(rung_of)
+    flush2 = Sheet(cls="fighter", coins=rung_of[deep])
+    out.that(market.buy(flush2, top, deep) is True
+             and flush2.carried.get(top) == 1,
+             "the DEAREST rung in the database is buyable at its highest"
+             " printed level -- no stock rule and no level cap anywhere in"
+             " the path. Asserted because the issue asked for a stock list"
+             " and the page has none, so the absence is a decision",
+             f"{top} level {deep} at {rung_of[deep]}, the dearest of"
+             f" {len(rungs)} rungs")
+
+    #: Selling.
+    out.that(market.sell(rich, REF) is True,
+             "a carried item can be sold",
+             f"carried {dict(rich.carried)}")
+    out.that(rich.coins == cost // 5,
+             "for one-fifth of its price, which is printed and is NOT a"
+             " favourable transaction",
+             f"{rich.coins} against a price of {cost}")
+    out.that(REF not in rich.carried,
+             "and the key is DROPPED at zero rather than left at 0 --"
+             " `carried` is what is held, not a history of what was",
+             f"carried {dict(rich.carried)}")
+    out.that(market.sell(rich, REF) is False and rich.coins == cost // 5,
+             "selling what the party does not hold is refused and MINTS"
+             " NOTHING -- without that check a party could sell anything"
+             " the database prices",
+             f"coins={rich.coins}")
+
+    #: Two held, one sold: the count decrements rather than the key going.
+    pair = Sheet(cls="fighter", coins=0, carried={REF: 2})
+    market.sell(pair, REF)
+    out.that(pair.carried.get(REF) == 1,
+             "with two held, selling one decrements the count",
+             f"carried {dict(pair.carried)}")
+
+    #: The printed gloss, as a check on the printed curve.
+    out.that(market.sale_price(REF, steps[1][0]) == steps[0][1]
+             and steps[1][0] - steps[0][0] == 5,
+             "a fifth of a rung is EXACTLY the rung five levels below it --"
+             " which is the page's own gloss on the sale price, and the two"
+             " printed sentences agreeing is the strongest check available"
+             " on either",
+             f"a fifth of level {steps[1][0]} ({steps[1][1]}) is"
+             f" {market.sale_price(REF, steps[1][0])};"
+             f" level {steps[0][0]} costs {steps[0][1]}")
+
+
+def a_challenge_can_run_inside_a_fight(out: Result) -> None:
+    """DMG2's in-combat challenge: a combat scene that also rolls. `#922`.
+
+    `story/table.py`'s `borrow` -- a challenge and a fight sharing one
+    world and one bus -- was built by `#911` and had **no production
+    caller** for its whole life. `module.py` refused `complexity`,
+    `primary` and `secondary` on a combat scene, so nothing could declare
+    the scene that would use it.
+
+    > **In-Combat Challenges.** *When a skill challenge occurs in a combat
+    > setting, it **effectively replaces one or more monsters in the
+    > encounter.** (In terms of XP, it's worth a number of monsters of its
+    > level equal to its complexity.) **Don't create challenges of
+    > complexity 3 or higher** that you intend to take place in the midst
+    > of combat [...] In an in-combat skill challenge, **each skill check
+    > needs an associated action type -- standard, move, or minor.***
+
+    Three printed rules, each asserted here: the price comes **out** of the
+    budget, the complexity is capped at 2, and every check costs a named
+    action on the turn it is made.
+
+    **The one design question `#922` parked on is answered by reading the
+    code rather than by deciding anything.** Its last comment asked whether
+    `table.lay`'s geometry-free board could carry the adjacency two of the
+    sample's skills print. It does not have to: a combined scene borrows
+    the **fight's** board, which has a real `Grid`, so `lay` is not
+    involved at all.
+    """
+    from pathlib import Path
+    from random import Random
+
+    from combat_engine.story import Party
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story.cast_list import _slot_cost, resolve
+    from combat_engine.story.save import Campaign
+
+    LEVEL = 3
+    COSTS = (("arcana", "standard"), ("thievery", "move"),
+             ("perception", "minor"))
+    SIGIL = "The warding sigil dims."
+
+    def skills(costed: bool = True) -> list[dict]:
+        return [
+            {"skill": name, "win": SIGIL if name == "arcana" else "A seam.",
+             "lose": "It flares.", **({"action": act} if costed else {})}
+            for name, act in COSTS
+        ]
+
+    def raw(**over: Any) -> dict[str, Any]:
+        scene = {
+            "id": "f", "kind": "combat", "name": "the warded hall",
+            "sets": "Something is humming in the floor.",
+            "complexity": 2, "primary": skills(),
+            "foes": [{"count": 3, "role": "skirmisher", "rank": "standard"}],
+            "exits": [],
+        }
+        scene.update(over)
+        for key in [k for k, v in scene.items() if v is None]:
+            scene.pop(key)
+        return {"id": "p922", "party_level": LEVEL, "party_size": 4,
+                "start": "f", "scenes": [scene]}
+
+    def refused(**over: Any) -> str:
+        try:
+            mod.parse(raw(**over), Path("<driver>"))
+        except mod.ModuleError as exc:
+            return str(exc)
+        return ""
+
+    def scene_of(**over: Any) -> mod.Scene:
+        return mod.parse(raw(**over), Path("<driver>")).scene("f")
+
+    # -- the schema --------------------------------------------------------
+    good = scene_of()
+    out.that(
+        good.kind == "combat" and good.in_combat_challenge
+        and good.complexity == 2,
+        "a COMBAT scene may carry a challenge, which `module.py` refused "
+        "outright until now -- `complexity`, `primary` and `secondary` were "
+        "in the kind's `unused` list, so the scene `borrow` exists for "
+        "could not be written at all",
+        f"kind={good.kind} complexity={good.complexity} "
+        f"in_combat={good.in_combat_challenge}",
+    )
+    out.that(
+        all(good.action_for(name) == act for name, act in COSTS),
+        "and every check carries its own action type, which is the field "
+        "`Scene.primary` was short by -- the printed rule is per CHECK, and "
+        "DMG1's worked sample prints four skills at three different costs, "
+        "so one cost for the scene was never going to express it",
+        ", ".join(f"{n}={good.action_for(n)}" for n, _a in COSTS),
+    )
+
+    #: **The control for the whole feature.** A combat scene that states no
+    #: complexity is an ordinary fight, must still parse, and must not run
+    #: a challenge -- that is what keeps every converted module playing
+    #: exactly as it did.
+    plain = scene_of(complexity=None, primary=None)
+    out.that(
+        plain.kind == "combat" and not plain.in_combat_challenge
+        and not plain.action_for("arcana"),
+        "while a combat scene stating NO complexity is an ordinary fight "
+        "and runs no challenge -- the control, and the compatibility story "
+        "for every module already written",
+        f"in_combat={plain.in_combat_challenge}",
+    )
+
+    # -- the refusals ------------------------------------------------------
+    out.that(
+        "complexity 1-2" in refused(complexity=3),
+        "complexity 3 is REFUSED on a combat scene, which both books state: "
+        "*\"don\'t create challenges of complexity 3 or higher that you "
+        "intend to take place in the midst of combat\"*. Refused rather "
+        "than clamped -- an author who wrote 4 meant a challenge this shape "
+        "cannot carry",
+        refused(complexity=3)[:90] or "accepted",
+    )
+    out.that(
+        refused(complexity=2) == "" and refused(complexity=1) == "",
+        "and 1 and 2 are both fine, so the bound is asserted on both sides "
+        "of the boundary rather than only above it",
+        "accepted both",
+    )
+    uncosted = refused(primary=skills(costed=False))
+    out.that(
+        "name no 'action'" in uncosted,
+        "a check with no action type is refused -- an uncosted check is a "
+        "free roll in the middle of a fight, which is the one thing that "
+        "would make an in-combat challenge strictly better than a "
+        "standalone one",
+        uncosted[:90] or "accepted",
+    )
+    half = refused(primary=[skills()[0], *skills(costed=False)[1:]])
+    out.that(
+        "name no 'action'" in half and "thievery" in half,
+        "and a PARTLY costed challenge is refused too, naming the skills "
+        "that are free -- the printed rule is one per check, so some skills "
+        "costing nothing is the same fault in the place it is hardest to "
+        "see",
+        half[:90] or "accepted",
+    )
+    nonsense = refused(primary=[{"skill": "arcana", "action": "immediate"}])
+    out.that(
+        "not one of standard, move, minor" in nonsense,
+        "an action word the engine has no action for is refused -- the "
+        "words are spelled as `ActionType` spells them because `run` hands "
+        "each straight to `Encounter.spend`, so a fourth word here would be "
+        "a word with no action behind it",
+        nonsense[:90] or "accepted",
+    )
+    no_skills = refused(primary=None)
+    out.that(
+        "at least one primary skill" in no_skills,
+        "a combat scene stating a complexity and no skills is refused -- it "
+        "claims a challenge nothing can roll",
+        no_skills[:80] or "accepted",
+    )
+
+    #: The mirror, and it is the half that keeps the field honest: outside a
+    #: fight nothing spends an action, so a cost written on a standalone
+    #: challenge is read by nothing.
+    standalone = {
+        "id": "p922", "party_level": LEVEL, "party_size": 4, "start": "c",
+        "scenes": [{"id": "c", "kind": "skill_challenge", "complexity": 1,
+                    "primary": skills(), "exits": []}],
+    }
+    try:
+        mod.parse(standalone, Path("<driver>"))
+        said = ""
+    except mod.ModuleError as exc:
+        said = str(exc)
+    out.that(
+        "spends no actions" in said,
+        "and a STANDALONE challenge stating an action cost is refused -- "
+        "nothing spends an action outside a fight, so the field would be "
+        "written and never read, which is the `unused` fault this schema "
+        "already refuses everywhere else",
+        said[:90] or "accepted",
+    )
+
+    # -- the budget --------------------------------------------------------
+    #
+    # *"It effectively replaces one or more monsters in the encounter."*
+    one_standard = _slot_cost(LEVEL, "standard")
+    fielded = {}
+    for cx in (0, 1, 2):
+        sc = (scene_of(complexity=None, primary=None) if not cx
+              else scene_of(complexity=cx))
+        got = resolve(sc, party_level=LEVEL, draw=Random(7), party_size=4,
+                      stated_size=4)
+        fielded[cx] = got
+    out.that(
+        fielded[0].challenge == 0.0
+        and fielded[1].challenge == one_standard
+        and fielded[2].challenge == 2 * one_standard,
+        "the challenge is priced at `complexity` standard monsters of the "
+        "party's level, which is the printed parenthesis -- *\"worth a "
+        "number of monsters of its level equal to its complexity\"* -- and "
+        "off `_slot_cost`, the same function a creature is priced with "
+        "rather than a second copy of the arithmetic",
+        f"0 -> {fielded[0].challenge:.0f}, 1 -> {fielded[1].challenge:.0f}, "
+        f"2 -> {fielded[2].challenge:.0f}, one standard = {one_standard:.0f}",
+    )
+    out.that(
+        len(fielded[2].refs) < len(fielded[0].refs),
+        "and it comes OUT of the budget rather than on top of it, so the "
+        "same foe line fields fewer creatures -- which is the rule's whole "
+        "point and the thing an ally top-up (#961) does in the opposite "
+        "direction",
+        f"{len(fielded[0].refs)} creature(s) with no challenge, "
+        f"{len(fielded[2].refs)} with a complexity-2 one",
+    )
+    priced = [n for n in fielded[2].notes if "replaces" in n]
+    out.that(
+        bool(priced) and f"{2 * one_standard:.0f}" in priced[0],
+        "and the subtraction is SAID, with its figure -- a budget that "
+        "moved in silence is the fault this component is told not to "
+        "commit, and a reader would otherwise see a short draw",
+        (priced[0][:100] if priced else "said nothing"),
+    )
+
+    # -- the fight ---------------------------------------------------------
+    def play(**over: Any) -> run_mod.Step:
+        module = mod.parse(raw(**over), Path("<driver>"))
+        camp = Campaign(
+            module=module.id, seed=7,
+            party=Party.of(None, module.party_level, seed=7), scene="f")
+        return run_mod.step(camp, module)
+
+    made = play()
+    out.that(
+        made.challenge is not None and sum(made.challenge[:2]) > 0,
+        "the challenge actually ROLLS during the fight -- on the fight's "
+        "own board, through `table.borrow`, which is the facility that had "
+        "no production caller from #911 until this",
+        f"successes/failures/won = {made.challenge}",
+    )
+    rolled = [ln for ln in made.lines if ln.kind == "roll"]
+    out.that(
+        len(rolled) == sum(made.challenge_spent.values()),
+        "and EVERY roll was paid for: the action counts sum to exactly the "
+        "number of checks made. This is the assertion the feature rests on "
+        "-- a check that costs nothing is the whole difference between an "
+        "in-combat challenge and a standalone one running beside a fight, "
+        "and a fight the party wins anyway looks identical either way",
+        f"{len(rolled)} roll(s), spent {made.challenge_spent}",
+    )
+    rounds_used = made.challenge_standards
+    out.that(
+        set(made.challenge_spent) <= set(mod.IN_COMBAT_ACTIONS)
+        and len(rounds_used) == len(set(rounds_used)),
+        "at most one STANDARD-action check per round, because a standard "
+        "action is the character's whole turn: *\"while some of the PCs "
+        "deal with the attacking monsters, others work to disable the "
+        "trap\"*. Unbounded, every character spends every turn on the "
+        "challenge and nobody fights, which is not *some of the PCs*. "
+        "Asserted as NO ROUND APPEARING TWICE rather than as a count under "
+        "the round total -- removing the bound makes nobody attack, so the "
+        "fight runs to the cap and a count stays under it",
+        f"standards in rounds {rounds_used} over {made.rounds} round(s); "
+        f"spent {made.challenge_spent}",
+    )
+    out.that(
+        bool(rounds_used),
+        "and the setup landed: a standard-action check really was made, so "
+        "the assertion above is not passing on an empty list",
+        f"{len(rounds_used)} standard(s)",
+    )
+    out.that(
+        made.challenge_spent.get("move", 0) > 0
+        or made.challenge_spent.get("minor", 0) > 0,
+        "while the cheap checks are unbounded, which is printed as the "
+        "reason they exist: *\"using move or minor actions for skill "
+        "checks can make it easier for the characters to fight and pursue "
+        "the challenge at the same time\"*",
+        f"spent {made.challenge_spent}",
+    )
+
+    #: **Each sentence once**, which is `#932`'s rule and needs state that
+    #: outlives a turn here -- the standalone challenge builds its set in
+    #: one pass over `run.attempts` and these arrive one per turn.
+    out.that(
+        sum(1 for ln in made.lines if SIGIL in ln) <= 1,
+        "and what a roll MEANT is said once however often the skill "
+        "succeeds -- a fact does not become true again, and these arrive "
+        "one per turn rather than in one pass, so the dedupe the standalone "
+        "challenge does locally needs state carried across the fight",
+        f"{sum(1 for ln in made.lines if SIGIL in ln)} time(s)",
+    )
+
+    #: **Both halves, which is the printed setup**: *"the party must both
+    #: defeat the monsters and overcome the challenge."* At this seed the
+    #: party wins the fight and loses the challenge, so the scene is lost
+    #: -- and that pair is exactly what no other scene kind can produce.
+    out.that(
+        made.challenge is not None and not made.challenge[2]
+        and made.outcome == "lost",
+        "a fight WON with the challenge LOST is a lost scene, which is the "
+        "printed setup -- *\"the party must both defeat the monsters and "
+        "overcome the challenge\"* -- and an unfinished challenge counts "
+        "as lost, because the sample's failure case is the trap completing "
+        "its cycle",
+        f"challenge={made.challenge} outcome={made.outcome}",
+    )
+    both = [ln for ln in made.lines if "wanted both" in ln]
+    out.that(
+        bool(both),
+        "and it says so rather than reporting a loss a reader cannot "
+        "account for -- the monsters are down and the scene is lost, which "
+        "reads as a bug without the line",
+        (both[0][:90] if both else "said nothing"),
+    )
+
+    #: The control, through `run.step` rather than through a helper: a
+    #: combat scene with no challenge records none and spends nothing.
+    ordinary = play(complexity=None, primary=None)
+    out.that(
+        ordinary.challenge is None and not ordinary.challenge_spent
+        and ordinary.outcome in ("won", "lost"),
+        "while an ordinary fight records NO challenge and spends no actions "
+        "on one -- the control for the run half, and it goes through "
+        "`run.step` so a plant inside `_fight` cannot hide from it",
+        f"challenge={ordinary.challenge} spent={ordinary.challenge_spent} "
+        f"outcome={ordinary.outcome}",
+    )
+
+    # -- a character who cannot pay does not roll --------------------------
+    #
+    # **The refusal, posed directly**, because a full fight cannot reliably
+    # produce a character with an empty budget on the turn the challenge
+    # wants one -- and this is the branch that stops a check being free.
+    from combat_engine.engine.types import ActionType
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import table as tbl
+
+    module = mod.parse(raw(), Path("<driver>"))
+    camp = Campaign(module=module.id, seed=7,
+                    party=Party.of(None, module.party_level, seed=7),
+                    scene="f")
+    poor = run_mod.step(camp, module)
+    out.that(
+        poor.challenge is not None,
+        "the setup landed: the probe fight really did run a challenge",
+        f"{poor.challenge}",
+    )
+
+    world, encounter = _in_combat_board(module.scene("f"), module)
+    run = ch.open_challenge(module.scene("f"),
+                            party_level=module.party_level)
+    floor = tbl.borrow(world, encounter, camp.party)
+    actor = floor.eids[0]
+    world.turn = actor
+    step_a = run_mod.Step(scene=module.scene('f'))
+    from combat_engine.engine.components import Budget
+
+    budget = world.need(actor, Budget)
+    had = (budget.standard, budget.move, budget.minor)
+    before = len(run.attempts)
+    run_mod._in_combat_try(encounter, run, floor, actor, step_a, {}, set())
+    now = (budget.standard, budget.move, budget.minor)
+    out.that(
+        len(run.attempts) > before and step_a.challenge_spent,
+        "a character on its own turn with a full budget DOES roll, and the "
+        "action is recorded -- the positive half, so the refusal below is "
+        "not passing by never running",
+        f"{len(run.attempts) - before} attempt(s), "
+        f"spent {step_a.challenge_spent}",
+    )
+    out.that(
+        sum(now) < sum(had),
+        "and the action is really GONE from the creature's budget, not "
+        "merely counted. This is the assertion the whole feature rests on: "
+        "`Encounter.spend` is the same call a power pays with, and a plant "
+        "swapping it for `can_spend` leaves every other assertion here "
+        "green -- the roll still happens, the count still tallies, and the "
+        "check is free",
+        f"standard/move/minor {had} -> {now}",
+    )
+
+    #: Now empty the budget the way a creature that has acted does, and ask
+    #: again on the same board and the same turn.
+    for what in (ActionType.STANDARD, ActionType.MOVE, ActionType.MINOR):
+        while encounter.can_spend(actor, what):
+            encounter.spend(actor, what)
+    step_b = run_mod.Step(scene=module.scene('f'))
+    held = len(run.attempts)
+    run_mod._in_combat_try(encounter, run, floor, actor, step_b, {}, set())
+    out.that(
+        len(run.attempts) == held and not step_b.challenge_spent,
+        "and a character with NOTHING LEFT TO SPEND does not roll at all -- "
+        "refused rather than rolled free, which is the branch the printed "
+        "per-check action rule exists to produce. Posed on the same board, "
+        "the same creature and the same turn as the positive case above, so "
+        "the only thing that differs is the budget",
+        f"{len(run.attempts) - held} further attempt(s), "
+        f"spent {step_b.challenge_spent}",
+    )
+
+    #: And a creature that is not one of the party's characters is not
+    #: offered a check at all, however full its budget. `floor.eids` is
+    #: `table.characters()`, which carries the same `c:` ident filter
+    #: `harvest` does -- so a monster's turn, an ally's and a familiar's all
+    #: fall out of one rule rather than three.
+    outsider = next((e for e in _all_combatants(world)
+                     if e not in floor.eids), None)
+    out.that(
+        outsider is not None,
+        "the setup landed: there is a creature on the board that is not one "
+        "of the party's characters",
+        f"{outsider}",
+    )
+    if outsider is not None:
+        world.turn = outsider
+        step_c = run_mod.Step(scene=module.scene('f'))
+        kept = len(run.attempts)
+        # **Caught, so the plant reports a verdict rather than a crash.**
+        # Removing the guard under test makes `eids.index(actor)` raise,
+        # which is red either way -- but a traceback does not say which
+        # rule broke, and this component has eleven worked cases of
+        # exactly that costing time (#962).
+        raised = ""
+        try:
+            run_mod._in_combat_try(encounter, run, floor, outsider, step_c,
+                                   {}, set())
+        except Exception as exc:
+            raised = f"{type(exc).__name__}: {exc}"
+        out.that(
+            not raised
+            and len(run.attempts) == kept and not step_c.challenge_spent,
+            "and a creature that is not one of the party's characters is "
+            "offered no check -- a monster does not help disable the trap, "
+            "and the filter is `table.characters()` rather than a third "
+            "copy of the `c:` ident rule",
+            raised or f"{len(run.attempts) - kept} attempt(s) on its turn",
+        )
+
+
+def _all_combatants(world: World) -> list[int]:
+    """Every entity in the initiative order, for the outsider control."""
+    from combat_engine.engine.query import combatants
+
+    return list(combatants(world))
+
+
+def _in_combat_board(
+    scene: story_module.Scene, module: story_module.Module,
+) -> tuple[World, Encounter]:
+    """A fielded board for `scene`, for the assertions that need one directly.
+
+    Through `story.field_encounter` rather than hand-built, so the board the
+    refusal is posed on is the board `_fight` would have made.
+    """
+    from random import Random
+
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.policy import install
+    from combat_engine.policy.doctrine import DoctrinePolicy
+    from combat_engine.story import Party, field_encounter
+    from combat_engine.story.cast_list import resolve
+
+    got = resolve(scene, party_level=module.party_level, draw=Random(7),
+                  party_size=4, stated_size=4)
+    party = Party.of(None, module.party_level, seed=7)
+    fielded = field_encounter(
+        seed=7, level=module.party_level, party=party,
+        enemies=list(got.refs),
+    )
+    world = fielded.world
+    # `Encounter` plus `install` plus `start`, in `_fight`'s own order --
+    # `can_spend` answers False for anybody whose turn it is not and for a
+    # creature with no `Budget`, so a board that was never started would
+    # refuse every check and the positive case would pass by never running.
+    encounter = Encounter(world)
+    install(world, encounter, {}, default=DoctrinePolicy())
+    encounter.start()
+    return world, encounter
+
+
 def a_ritual_carries_its_level_cost_and_key_skills(out: Result) -> None:
     """The ritual table, and the plural skill column the issue did not expect.
 
@@ -47769,7 +48427,7 @@ def a_thing_on_the_floor_can_be_an_objective(out: Result) -> None:
     nothing, because `field_thing` runs on every combat scene now.
     """
     import audit as _audit
-    from combat_engine.engine import World, movement
+    from combat_engine.engine import movement
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health, Position, Scenery
     from combat_engine.engine.query import combatants, scenery
@@ -48683,11 +49341,21 @@ def one_skill_cannot_carry_a_whole_challenge(out: Result) -> None:
         "rest",
         "accepted both",
     )
+    #: **This assertion was INVERTED by `#922` and the inversion is the
+    #: honest version.** It read *"only a skill_challenge"* against a
+    #: `combat` scene, and a combat scene carrying a complexity is now
+    #: DMG2's in-combat challenge -- so the old claim is false and
+    #: loosening the rule to keep the driver green would have been the
+    #: thing `scripts/CLAUDE.md` forbids outright. What is still true, and
+    #: is what the rule was ever about, is that a scene rolling **no**
+    #: skills may not cap one. A roleplay scene is that.
+    no_skills = refused(caps={"arcana": 1}, kind="roleplay")
     out.that(
-        "only a skill_challenge" in refused(caps={"arcana": 1},
-                                            kind="combat"),
-        "and a scene that rolls no skills may not cap one",
-        refused(caps={"arcana": 1}, kind="combat")[:80] or "accepted",
+        "rolls a challenge" in no_skills,
+        "and a scene that rolls no skills may not cap one -- posed on a "
+        "roleplay scene, because #922 made a `combat` scene with a "
+        "complexity a challenge that DOES roll them",
+        no_skills[:80] or "accepted",
     )
 
     # -- the retired reading, and the bug that hid it ----------------------
@@ -50728,9 +51396,12 @@ def a_challenge_says_what_each_check_meant(out: Result) -> None:
     wrong_kind = refused(scene_of(
         [{"skill": "athletics", "win": WIN}], kind="roleplay"))
     out.that(
-        "only a skill_challenge rolls them" in wrong_kind,
+        "only a scene that rolls a challenge" in wrong_kind,
         "and a scene that is not a challenge stating what a check means is "
-        "refused, rather than carrying text nothing will ever print",
+        "refused, rather than carrying text nothing will ever print. The "
+        "wording moved with #922 -- TWO kinds roll a challenge now, so the "
+        "refusal can no longer name `skill_challenge` -- and the rule for a "
+        "roleplay scene is unchanged",
         wrong_kind[:90] or "accepted",
     )
     out.that(
@@ -54557,7 +55228,6 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
     from combat_engine.engine import Ident
     from combat_engine.engine.components import Condition as C
     from combat_engine.engine.components import Health as Hp
-    from combat_engine.engine.ecs import World
     from combat_engine.engine.query import is_ as has_
     from combat_engine.engine.turns import Encounter
     from combat_engine.story import Fielded, Party, field_encounter, harvest
@@ -54848,7 +55518,6 @@ def a_dying_ally_can_be_stabilised_with_a_heal_check(out: Result) -> None:
     from combat_engine.engine.components import Position as Pos
     from combat_engine.engine.conditions import RULES
     from combat_engine.engine.durations import When as W
-    from combat_engine.engine.ecs import World
     from combat_engine.engine.movement import place
     from combat_engine.engine.query import is_ as has_
     from combat_engine.engine.resolve import deal_damage
@@ -61731,7 +62400,7 @@ def the_search_action_is_named(out: Result) -> None:
     of fighting, which is the failure the six earlier kinds caused.
     """
     from combat_engine import story
-    from combat_engine.engine import Encounter, World
+    from combat_engine.engine import Encounter
     from combat_engine.engine.actions import Action, legal
     from combat_engine.engine.components import Side
     from combat_engine.engine.query import alive, creatures
@@ -61992,6 +62661,18 @@ DRIVERS = {
     "campaign_replays": (
         a_campaign_replays_in_a_fresh_process,
         "the same seed plays the same campaign, across processes (#789)",
+    ),
+    "in_combat_challenge": (
+        a_challenge_can_run_inside_a_fight,
+        "DMG2's in-combat challenge: a combat scene that also rolls, on the"
+        " fight's own board -- priced OUT of the budget, capped at"
+        " complexity 2, and every check paying a named action (#922)",
+    ),
+    "market": (
+        a_party_can_buy_and_sell_against_the_printed_price,
+        "a party's coin buys and sells against the printed price -- the"
+        " one-fifth sale, the exact-price boundary, and NO stock rule,"
+        " because the page states none (#1081)",
     ),
     "ritual_table": (
         a_ritual_carries_its_level_cost_and_key_skills,

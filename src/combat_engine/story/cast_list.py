@@ -588,6 +588,50 @@ def resolve(
             f"{helped:.0f} XP for them, so the fight is built to challenge "
             "the party that includes them"
         )
+    # **An in-combat challenge REPLACES monsters rather than adding to
+    # them**, which is DMG2 stating both the rule and the price: *"When a
+    # skill challenge occurs in a combat setting, it effectively replaces
+    # one or more monsters in the encounter. (In terms of XP, it's worth a
+    # number of monsters of its level equal to its complexity.)"*
+    #
+    # So the figure is `complexity` standard monsters of the party's level,
+    # off `_slot_cost` -- the same function `_rank` prices a creature with,
+    # rather than a second copy of the arithmetic. A complexity-2 challenge
+    # at level 5 costs two standards.
+    #
+    # **Subtracted after the allies are added**, deliberately: the allies
+    # make the fight bigger because the party is stronger, and the
+    # challenge makes it smaller because the party is busier. Both are
+    # adjustments to the same ceiling and the order between them does not
+    # matter, but the note has to come second or it reports a figure the
+    # allies then move.
+    #
+    # **Floored at one standard monster's worth**, so a complexity-2
+    # challenge cannot leave a fight with nobody in it: the printed reason
+    # for capping complexity at 2 is that a harder challenge means *"there
+    # won't be enough monsters to keep the characters busy"*, and a budget
+    # of nothing is that failure taken all the way. The clamp is said out
+    # loud when it bites, because a silent one is this component's own
+    # warned-against fault.
+    if scene.in_combat_challenge and want != float("inf"):
+        costs = scene.complexity * _slot_cost(party_level, "standard")
+        floor = _slot_cost(party_level, "standard")
+        if want - costs < floor:
+            out.notes.append(
+                f"{scene.id}: the in-combat challenge is worth "
+                f"{costs:.0f} XP and the budget is {want:.0f}, so taking it "
+                f"out would leave too few monsters to keep the rest of the "
+                f"party busy -- {floor:.0f} XP of opposition is kept"
+            )
+            costs = max(want - floor, 0.0)
+        out.challenge = costs
+        want -= costs
+        out.notes.append(
+            f"{scene.id}: a complexity-{scene.complexity} challenge runs "
+            f"during this fight and replaces {costs:.0f} XP of monsters "
+            f"rather than adding to them, so the opposition is built to "
+            f"{want:.0f}"
+        )
     spent = 0.0
 
     for spec in scene.foes:

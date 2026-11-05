@@ -537,12 +537,11 @@ each filed rather than fixed:
   character" -- and nothing models one. The converted chapter prints two
   with XP and awards neither, so its stated total is unreachable by
   construction. #940.
-* **a challenge inside a fight is a printed shape**, not an oddity of the
-  one adventure: *"for challenges that work as part of a combat
-  encounter, set the complexity lower."* On #922, with the action
-  economy answered too -- the adventure's three skills are each a
-  standard action and two require being adjacent to a specific object,
-  neither of which a scratch board can express.
+* ~~**a challenge inside a fight is a printed shape**~~ -- **done**,
+  `#922`. *"For challenges that work as part of a combat encounter, set
+  the complexity lower."* And the adjacency worry in the original note
+  was misplaced: a combined scene borrows the **fight's** board, which
+  has a real `Grid`, so a scratch board never had to express it.
 
 One thing the DMG **confirms rather than contradicts**: Camille's #830
 ruling that the DM may invent and the invention becomes canon is the
@@ -914,8 +913,11 @@ the two rules are separate copies and only one had been broken. **Assert
 the pairing** -- sheet *i* must describe the entity `characters` puts at
 *i* -- and the same break turns it red.
 
-Nothing uses the shared board yet; no scene kind can say "this fight also
-runs a challenge". #922.
+**Something uses the shared board now, and this paragraph said nothing did
+for as long as it was true.** `#922` built the scene kind: a `combat` scene
+that states a `complexity` is DMG2's **in-combat challenge**, and `borrow`
+is how its checks reach the real party on the real floor. See the section
+below.
 
 ### And something now publishes on it: a challenge announces its own end
 
@@ -976,6 +978,183 @@ cleanly. The filenames differ in an apostrophe — `Dungeon Master's
 Guide.pdf` for DMG1 and `Dungeon Masters Guide 2.pdf` for DMG2 — so a
 search for the apostrophe form finds nothing, which is probably why a note
 on master says DMG2 cannot be checked. It can.
+
+## A challenge can run inside a fight (#922)
+
+`table.borrow` -- a challenge and a fight sharing one world and one bus --
+was built by `#911` and had **no production caller for its whole life**,
+because `module.py` refused `complexity`, `primary` and `secondary` on a
+`combat` scene. The scene it exists for could not be declared.
+
+DMG2 chapter 3 names the category and prices it:
+
+> **In-Combat Challenges.** *When a skill challenge occurs in a combat
+> setting, it **effectively replaces one or more monsters in the
+> encounter.** (In terms of XP, it's worth a number of monsters of its
+> level equal to its complexity.) **Don't create challenges of complexity
+> 3 or higher** that you intend to take place in the midst of combat [...]
+> In an in-combat skill challenge, **each skill check needs an associated
+> action type -- standard, move, or minor.***
+
+So a `combat` scene stating a `complexity` is one, `Scene.in_combat_
+challenge` is that test, and the three printed rules are the three things
+that make it different from a standalone challenge:
+
+* **it comes out of the budget**, `complexity x _slot_cost(level,
+  "standard")`, with the figure said out loud. A complexity-2 challenge at
+  level 3 fields two creatures where the same foe line fielded three;
+* **complexity 1 or 2 only**, refused rather than clamped;
+* **every check costs a named action** (`Try.action`), paid with
+  `Encounter.spend` on the turn it is made, and **refused rather than
+  rolled free** when the character cannot afford it.
+
+### Three of DMG2's categories, and which is which
+
+| category | complexity | here |
+|---|---|---|
+| **in-combat** | 1-2 | a `combat` scene with a complexity |
+| **encounter** | 4-5 | a `skill_challenge` scene -- what existed already |
+| **structure** | any | between encounters, `#937`'s journey |
+
+### The one open design question answered itself in the code
+
+`#922`'s last comment left one thing: whether `table.lay`'s geometry-free
+board could carry the adjacency two of DMG1's sample skills print. **It
+does not have to.** A combined scene borrows the **fight's** board, which
+has a real `Grid`, so `lay` is not involved and adjacency is an ordinary
+question there. Three comments of design discussion and the answer was a
+`grep` away.
+
+### One standard-action check per round, and it is this engine's reading
+
+The books give the action costs and the warning; they do not give a number.
+A standard action **is** the character's turn, so with no bound every
+character spends every turn on the challenge and nobody fights:
+
+> *"While some of the PCs deal with the attacking monsters, others work to
+> disable or destroy the trap"* -- DMG1's worked sample
+>
+> *"The danger of using a skill challenge is that it can tie up a single
+> character for multiple rounds while everyone else is 'having fun' in
+> combat."* -- DMG2's ground rule
+
+So one standard per round, and move/minor unbounded because the printed
+sentence says those are the ones meant to be made alongside fighting.
+Named as policy in `_in_combat_try`'s docstring rather than dressed up as
+printed, and `#984`'s per-skill cap is what rotates *which* character --
+DMG2's own example of what not to do is the rogue spending the whole fight
+on Thievery.
+
+### Both halves, which is what no other scene kind can produce
+
+DMG1's sample states the setup: *"the party must both defeat the monsters
+and overcome the challenge."* So a won fight with a lost challenge is a
+**lost scene**, and it says so -- the monsters being down while the scene
+reads lost is a bug without the line. An unfinished challenge counts as
+lost, which is the printed reading rather than a convenience: the sample's
+failure case is the trap *completing its cycle*.
+
+The narrowing sits **after** the objective branch rather than inside
+either, which is what lets a scene state an objective *and* run a
+challenge: it narrows whichever verdict that produced.
+
+### `_options` was extracted rather than copied
+
+`taking_turns` picks a character and then a skill; in a fight the
+initiative order picks the character, so `in_combat_pick` takes a slot and
+chooses only among what that creature can pay for. The cap rule and the
+assist gate are each one printed rule with one measurement behind them, so
+they are **one function** -- `#1014` is this tree's worked case of two
+readers of one rule drifting.
+
+### What nine plants settled
+
+**Every other assertion is blind to whether the action was really paid.**
+The plant that matters swapped `Encounter.spend` for `can_spend`: the roll
+still happens, the count still tallies, the refusal for an empty budget
+still fires, and **27 of 28 assertions stayed green**. What catches it is
+reading the creature's `Budget` before and after. A check that costs
+nothing is the entire difference between this and a standalone challenge
+running beside a fight.
+
+**A count under the round total cannot see the per-round bound break.**
+Removing it makes nobody attack, so the fight runs to `MAX_ROUNDS` and the
+standard count stays under it. `Step.challenge_standards` records *which*
+rounds, and a round appearing twice is the claim itself.
+
+**And removing the not-a-character guard crashes the fight rather than
+failing a rule** -- monsters hit it every turn -- so the control was
+planted with the realistic mistake instead: defaulting an outsider's slot
+to 0 rather than refusing. That one the control sees.
+
+Two assertions in the existing suite had to be **inverted**, not loosened,
+because the rule genuinely changed: `skill_cap`'s *"only a
+skill_challenge"* was false once a combat scene could roll, and
+`challenge_says` matched a refusal message that can no longer name one
+kind. `scripts/CLAUDE.md` forbids the alternative outright.
+
+### Still not done, and each is its own thing
+
+* **failure escalating the fight.** DMG1's sample ends with the trap
+  reaching *"its fully functional state"* -- a higher attack bonus for the
+  remaining rounds. That is a mid-fight mutation of a board entity, and
+  `Scene.cost` is the nearest existing shape.
+* **a failed check spawning a fight**, which is DMG2's *Sneak In*
+  objective: *"combat encounters resulting from the characters' failed
+  checks."*
+* **the sample itself** still needs a trap that takes a turn (`#956`) and
+  can be disabled (`#955`).
+
+## A party's coin can be spent (#1081)
+
+`Sheet.coins` accumulated from `#969` -- six monetary parcels a level,
+1,996 of 2,000 gp over nine fights at level 5 -- and **nothing in the tree
+could spend one**. `story/market.py` is the other half: a price off
+`item_step`, a purchase, and a sale at one-fifth.
+
+**The issue asked for a stock list and the page does not have one.** It
+said *"a stock list, because everything at my level is not a shop. The
+printed guidance for what a town stocks is worth reading before inventing
+a rule."* It was read, and the rule is money and nothing else:
+
+> *"It's rare to find a shop or a bazaar that routinely sells magic items,
+> except perhaps the lowest-level items. [...] Your DM might say that you
+> can track down a seller for the item you want to buy or that you might
+> have to do some searching, but **in general you can buy any item you can
+> afford.**"*
+
+*"Might say"*, *"might have to"*, *"perhaps"* -- the shop rarity is the
+DM's colour, not a rule with a table behind it. So there is no stock
+refusal, and `drivers.market` asserts that **absence** as deliberately as
+it asserts the two refusals that exist, because otherwise a later reader
+adds one.
+
+Three things worth not re-deriving:
+
+* **the sale is one-fifth and it is exact**: 0 of the 7,533 priced rungs
+  leave a remainder, so the floor in `sale_price` is a guard rather than a
+  rounding policy. The printed gloss -- *"enough money to buy an item
+  that's five levels lower"* -- is a **check** on it: the curve multiplies
+  by five every five levels, so a fifth of a rung *is* the rung five levels
+  below. Two printed sentences agreeing is the strongest evidence available
+  on either.
+* **an item is not one price.** 1,853 refs across 7,533 rungs, so a
+  purchase names a rung; a level the item has no rung at is 0 rather than
+  the nearest one, because a +2 sword is not a +3 sword at a discount.
+* **a purchase lands in `carried`, not worn.** Exactly as a found parcel
+  does, and for `#969`'s reason: equipping anything moves what monster
+  defences are set against and owes a two-way `winrate` run. That is
+  `#1081`'s third part and it is **not** here.
+
+Also not here: *"a reason not to hoard"*, which is a design question rather
+than a printed one, and the `setup` scene kind -- `#942` called it *"nearly
+free"* on the assumption shopping existed, and with this it is thin, but it
+is still that issue's work.
+
+**One assertion of mine read the constant under test** and so could not see
+a plant on it: `cost // market.SALE` shrinks with `SALE`. The divisor is
+pinned to a literal `5` now, with `market.SALE == 5` asserted once -- the
+plant went from reddening 2 assertions to 4.
 
 ## A recurring character is the same person each time
 
@@ -2094,11 +2273,11 @@ uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     dead_and_dying challenge_ends \
     graph_edges challenge_says fight_aftermath reinforcements \
     scene_allies trap_budget room_shape templates skill_cap \
-    treasure camp_talk puzzle vignette
+    treasure camp_talk puzzle vignette market in_combat_challenge
 uv run scripts/check.py --only play,drivers
 ```
 
-**The command above is 55 drivers and prints 726 assertions**, and **each was
+**The command above is 57 drivers and prints 775 assertions**, and **each was
 proven by breaking what it watches** — the retype, the word grant, the
 three-failure cap, the refusal of an unlisted skill, the read of
 `Skills.trained`, the arming-is-not-spending rule, the `once` rule, the

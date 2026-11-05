@@ -46,6 +46,7 @@ from combat_engine.engine.components import Condition, Conditions, Position, Tra
 from combat_engine.engine.ecs import World
 from combat_engine.engine.query import alive
 from combat_engine.engine.turns import Encounter
+from combat_engine.engine.types import ActionType
 from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
 
@@ -66,16 +67,19 @@ from . import (
     treasure,
 )
 from . import beat as beat_mod
+from . import challenge as challenge_mod
 from . import formation as formation_mod
 from . import table as table_mod
 from . import xp as xp_mod
 from .cast_list import resolve
-from .challenge import Chooser
+from .challenge import Chooser, in_combat_pick, open_challenge
+from .challenge import attempt as challenge_attempt
 from .challenge import play as play_challenge
 from .module import (
     CAUGHT,
     DANGERS,
     EXPOSURE_HOURS,
+    IN_COMBAT_ACTIONS,
     SHELTERED,
     Module,
     Scene,
@@ -256,6 +260,29 @@ class Step:
     arrived: list[str] = field(default_factory=list)
     #: The subset of `arrived` that earns XP, by the module's own rule.
     arrived_worth: list[str] = field(default_factory=list)
+    #: **The in-combat challenge that ran during this fight**, if any, as
+    #: `(successes, failures, won)` -- or `None` for every fight that is
+    #: not one, which is every fight in every converted module. #922.
+    #:
+    #: Recorded for the reason `stood`, `surprised`, `traps` and `room`
+    #: are: the board does not outlive the fight, so a driver can only see
+    #: the outcome, and this component has four worked cases of a plant
+    #: staying green against an assertion that could only read that.
+    challenge: tuple[int, int, bool] | None = None
+    #: Which actions the challenge's checks actually cost, `word -> how
+    #: many`. The printed rule is that each check costs a named action on
+    #: the turn it is made, and **this is the only evidence it did** --
+    #: spending a standard is invisible in the outcome of a fight the
+    #: party wins anyway. #922.
+    challenge_spent: dict[str, int] = field(default_factory=dict)
+    #: The rounds a **standard**-action check was made in, in order. The
+    #: printed bound is one per round -- *"while some of the PCs deal with
+    #: the attacking monsters, others work to disable the trap"* -- and a
+    #: count against the round total cannot see it break: removing the
+    #: bound makes nobody attack, so the fight runs to the cap and the
+    #: count stays under it. A round appearing twice here is the claim
+    #: itself. #922.
+    challenge_standards: list[int] = field(default_factory=list)
     #: How the fight went, one phrase from `beat.FIGHTS`. Empty for any
     #: scene that is not a fight. #943.
     aftermath: str = ""
@@ -700,6 +727,43 @@ def _fight(
     # *before* the first turn and there is no round boundary before it.
     walked_on = 0
     arrived_in: int | None = None
+    # **The in-combat challenge, on the fight's own board.** DMG2:
+    # *"When a skill challenge occurs in a combat setting, it effectively
+    # replaces one or more monsters in the encounter."* -- so it is not a
+    # second scene run before or after, it is checks made on turns during
+    # this one. `table.borrow` is what makes that possible and it is the
+    # facility that had no production caller until now (#911): it wraps a
+    # world and an encounter somebody else built, so the challenge rolls
+    # against the real party on the real floor.
+    #
+    # **Which answers the one design question `#922` had left.** Its
+    # comment asked whether `table.lay`'s geometry-free board could carry
+    # the adjacency two of the sample's skills print. It does not have to:
+    # a combined scene borrows the *fight's* board, which has a real
+    # `Grid`, so adjacency is an ordinary question there and `lay` is not
+    # involved at all.
+    fighting = None
+    floor = None
+    #: round -> how many standard-action checks have been made in it, and
+    #: the sentences already said. Both live here rather than on `Running`
+    #: because they are facts about *this fight*, and a `Running` is the
+    #: challenge's own state in either category of challenge.
+    standards: dict[int, int] = {}
+    challenge_said: set[str] = set()
+    if scene.in_combat_challenge:
+        fighting = open_challenge(scene, party_level=module.party_level)
+        floor = table_mod.borrow(world, encounter, campaign.party)
+        # **Said before the first turn**, because DMG2 is explicit that a
+        # challenge the players do not know about cannot shape how they
+        # fight: the whole point of the category is choosing between
+        # swinging and working the problem.
+        step.say(
+            f"Also here: a complexity-{scene.complexity} skill challenge, "
+            f"{fighting.needs} success(es) before "
+            f"{challenge_mod.FAILURES} failures. Primary: "
+            f"{', '.join(scene.primary)}.",
+            "note",
+        )
     while not encounter.finished and world.round <= MAX_ROUNDS:
         if dressed.waves and arrived_in != world.round:
             arrived_in = world.round
@@ -722,6 +786,9 @@ def _fight(
         actor = world.turn
         if actor is None:
             break
+        if fighting is not None and floor is not None and not fighting.over:
+            _in_combat_try(encounter, fighting, floor, actor, step,
+                           standards, challenge_said)
         take_turn(world, encounter, actor, policy)
         encounter.advance()
 
@@ -818,6 +885,47 @@ def _fight(
         # result. Said here it came out above "Against:" -- the verdict on a
         # fight before the fight, which reads backwards.
         objective_line = f"Objective -- {asked}: {verdict.why}."
+
+    # **A combined scene is won only if BOTH halves are.** DMG1's worked
+    # sample of this exact encounter states it as the setup: *"the party
+    # must both defeat the monsters and overcome the challenge."*
+    #
+    # **After the objective branch and not inside either**, which is what
+    # lets the two compose: a scene may state an objective *and* run a
+    # challenge, and this narrows whichever verdict that produced rather
+    # than replacing it. The other order -- deciding the challenge first --
+    # would have needed the test written twice.
+    #
+    # An unfinished challenge counts as lost, which is the printed reading
+    # rather than a convenience: the sample's failure case is the trap
+    # *completing its cycle*, so a fight that ends with the party still
+    # working the problem is one where the problem won.
+    if fighting is not None:
+        step.challenge = (fighting.successes, fighting.failures,
+                          fighting.won)
+        if step.outcome == "won" and not fighting.won:
+            step.outcome = "lost"
+            step.say(
+                "The monsters are down and the challenge is not: "
+                f"{fighting.tally}. The scene wanted both.",
+                "note",
+            )
+        elif fighting.won and step.outcome != "won":
+            step.say(
+                f"The challenge was overcome -- {fighting.tally} -- but the "
+                "fight was not.",
+                "note",
+            )
+        else:
+            step.say(fighting.tally, "note")
+        if step.challenge_spent:
+            step.say(
+                "The challenge cost "
+                + ", ".join(f"{n} {word}"
+                            for word, n in sorted(step.challenge_spent.items()))
+                + " action(s) the party did not spend fighting.",
+                "note",
+            )
 
     shown = []
     for eid, flavour in zip(_enemy_eids(world), dressed.flavours, strict=False):
@@ -1568,6 +1676,119 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
                 step.say(f"    {meant}", "scene")
     step.say(run.tally, "note")
     step.outcome = "won" if run.won else "lost"
+
+
+def _in_combat_try(
+    encounter: Encounter,
+    run: challenge_mod.Running,
+    floor: table_mod.Table,
+    actor: int,
+    step: Step,
+    standards: dict[int, int],
+    said: set[str],
+) -> None:
+    """One character's challenge check on its own turn, paid in actions. `#922`.
+
+    The printed rule this exists for, DMG2 chapter 3:
+
+    > *"In an in-combat skill challenge, each skill check needs an
+    > associated action type -- standard, move, or minor. Using move or
+    > minor actions for skill checks can make it easier for the characters
+    > to fight and pursue the challenge at the same time."*
+
+    So the cost is real: `Encounter.spend` takes it out of this creature's
+    budget, which is the same call a power pays with, and a check it cannot
+    afford is **refused rather than rolled free**. That is the whole
+    difference between an in-combat challenge and a standalone one running
+    beside a fight -- without it the party gets the challenge for nothing
+    and the category is just a fight with extra text.
+
+    **At most one standard-action check per round, and the reason is
+    printed.** DMG1's worked sample of this exact scene:
+
+    > *"While some of the PCs deal with the attacking monsters, others work
+    > to disable or destroy the trap before it can overcome the
+    > adventurers."*
+
+    and DMG2's ground rule from the other side:
+
+    > *"The danger of using a skill challenge is that it can tie up a
+    > single character for multiple rounds while everyone else is 'having
+    > fun' in combat."*
+
+    A standard action **is** the character's turn, so without a bound every
+    character spends every turn on the challenge and nobody fights -- which
+    is not *"some of the PCs"*, it is all of them. Move and minor checks are
+    unbounded because the printed sentence above says they are the ones
+    meant to be made alongside fighting.
+
+    **This is the one piece of policy here and it is named as such.** The
+    books give the action costs and the warning; they do not give a number,
+    so "one standard per round" is this engine's reading of *"some ... and
+    others"* and the per-skill cap (`#984`) is what rotates *which*
+    character, since DMG2's own example of what not to do is the rogue
+    spending the whole fight on Thievery.
+
+    Does nothing at all for a creature that is not one of the party's
+    characters -- a monster's turn, an ally's turn, a familiar's -- because
+    `floor.eids` is `table.characters()`, which carries the same `c:` ident
+    filter `harvest` does.
+    """
+    eids = list(floor.eids)
+    if actor not in eids:
+        return
+    slot = eids.index(actor)
+    # What this creature's budget can still cover. Asked of the encounter
+    # rather than worked out here, so a dazed character -- one action of any
+    # kind -- and a creature that has already acted are both handled by the
+    # rule that already knows about them. `DOWNGRADES` means a standard can
+    # pay for a move, which is printed and is why this is three questions
+    # rather than a look at one counter.
+    affordable = frozenset(
+        word for word in IN_COMBAT_ACTIONS
+        if encounter.can_spend(actor, ActionType(word))
+    )
+    if not affordable:
+        return
+    # **The standard-action bound, before the pick rather than after.**
+    # Narrowing what is affordable makes the chooser take the best *move or
+    # minor* check it has instead of returning nothing, which is the
+    # difference between a character helping cheaply and a character
+    # standing idle because somebody else took the standard this round.
+    if standards.get(encounter.world.round, 0) >= 1:
+        affordable = affordable - {"standard"}
+        if not affordable:
+            return
+    skill = in_combat_pick(run, floor, slot, affordable)
+    if not skill:
+        return
+    cost = run.scene.action_for(skill)
+    if cost not in IN_COMBAT_ACTIONS:
+        # `parse` requires an action on every skill of an in-combat
+        # challenge, so this is unreachable through a validated module --
+        # and it is a refusal rather than a default, because defaulting to
+        # `standard` here is exactly the silent wrong answer the printed
+        # per-check rule exists to prevent.
+        return
+    if not encounter.spend(actor, ActionType(cost)):
+        return
+    if cost == "standard":
+        standards[encounter.world.round] = standards.get(
+            encounter.world.round, 0) + 1
+        step.challenge_standards.append(encounter.world.round)
+    step.challenge_spent[cost] = step.challenge_spent.get(cost, 0) + 1
+    made = challenge_attempt(run, floor, slot, skill)
+    step.say(f"  {made}", "roll")
+    # **What the roll meant, each sentence once**, which is `#932`'s rule
+    # and needs state that outlives a turn here -- the standalone challenge
+    # builds its `meant_already` set in one pass over `run.attempts`, and
+    # these arrive one per turn across the whole fight. A refused roll says
+    # nothing, because a refused attempt did not happen.
+    if made.rolled:
+        meant = run.scene.means(made.skill, won=made.success)
+        if meant and meant not in said:
+            said.add(meant)
+            step.say(f"    {meant}", "scene")
 
 
 def field_allies(world: World, dressed: Dressed) -> list[str]:

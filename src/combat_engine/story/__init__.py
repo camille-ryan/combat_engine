@@ -247,11 +247,16 @@ class Sheet:
     #: Cleared by a rest, which brings a dying character to 1 anyway
     #: (`stabilise`), and by damage on the board (`resolve._drop`).
     stable: bool = False
-    #: Coins, in gold pieces. **Nothing spends them**, deliberately: an
-    #: economy with nothing to buy is a separate piece of work, and the
-    #: printed buying rules want rituals (#453) and a market. A visible
-    #: number that cannot be spent is honest; awarding nothing was not.
-    #: #969.
+    #: Coins, in gold pieces. Awarded by `treasure` (#969) and spent by
+    #: `market.buy` (#1081), which is the half that used not to exist: for
+    #: a while this was a visible number nothing could spend, which #969
+    #: called honest rather than finished.
+    #:
+    #: **A purchase lands in `carried`, not worn**, exactly as a found item
+    #: does. Equipping anything -- bought or found -- moves what monster
+    #: defences are set against and so owes a two-way `winrate` run; see
+    #: `market`'s docstring. So this number buys things and the things sit
+    #: in a bag.
     coins: int = 0
     #: The magic items this character owns, as plain dicts. **The kit is
     #: part of who the character is, not part of the wear**, which is why it
