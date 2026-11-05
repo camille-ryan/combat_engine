@@ -17157,6 +17157,39 @@ def a_terrain_power_is_offered_to_whoever_stands_by_it(out: Result) -> None:
              "a creature standing in the region is offered its power -- the"
              " printed `you must be in a square of the dune` (#980)",
              f"offers={len(inside)}")
+
+    #: **The kind is OWED, not priced**, which is Camille's `#1098` ruling
+    #: applied to `#1108`. It carried `is_terrain` at a declared 0.0, and a
+    #: zero reads as *"worth nothing"* where the truth was *"the payoff is
+    #: not priced at all"*.
+    #:
+    #: Here because a plant putting the 0.0 weight back **stayed green**
+    #: against every other assertion in the suite: `kinds_named` is
+    #: satisfied by the owed entry either way, and `weights_named` only
+    #: reads prose. So nothing said the term was gone, and the revert could
+    #: have come back unnoticed -- which is the same hole `#1098`'s own
+    #: assertion closed for `is_disable`.
+    from combat_engine.policy import WEIGHTS as _W
+    from combat_engine.policy import features as _features
+
+    out.that("is_terrain" not in _W,
+             "the terrain kind has **no weight in the table** -- removed,"
+             " not set to 0.0. A declared zero claims the kind was priced"
+             " at nothing where the owed list records that it has not been"
+             " priced at all (#1098, #1108)",
+             f"is_terrain in WEIGHTS: {'is_terrain' in _W}")
+    got_t = _features(world, world.encounter, me, inside[0]) if inside else {}
+    out.that(bool(got_t) and "is_terrain" not in got_t,
+             "and a terrain offer's own feature dict does not name it"
+             " either, so the term is gone rather than computed and"
+             " unweighted",
+             f"{len(got_t)} feature(s),"
+             f" is_terrain={'is_terrain' in got_t}")
+    out.that("terrain" in UNNAMED_KINDS_OWED,
+             "while the kind IS on the owed list, so `kinds_named` stays"
+             " green because the pricing debt is recorded rather than"
+             " because a number was guessed",
+             f"terrain owed: {'terrain' in UNNAMED_KINDS_OWED}")
     out.that(inside and inside[0].ref == REF,
              "the offer names the region's row, so `perform` knows what to"
              " run without a second lookup",
@@ -61193,6 +61226,16 @@ UNNAMED_KINDS_OWED = frozenset(
         # rest of this set: a reader finding `disable` offered and never
         # chosen should know it is owed rather than overlooked.
         "disable",
+        # **Here for the same reason as `disable` directly above**, and by
+        # the same ruling applied to its sibling. `#980`'s terrain kind
+        # carried `is_terrain` at a declared **0.0**, which is `#1098`'s
+        # option B -- and this set's own note, written before either
+        # issue, already said a declared zero is worse than owing one.
+        # `#1108` holds the measurement: 0.0 and absent both lose to
+        # ending the turn by the 0.001 `is_end` floor, so the behaviour is
+        # unchanged and what moves is whether the table claims to have
+        # priced it.
+        "terrain",
         "dismount",
         "feint",
         "grab",
