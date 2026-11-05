@@ -39316,8 +39316,17 @@ def a_companion_character_is_built_from_its_role(out: Result) -> None:
                  " is not what it looks like",
                  f"{len(got)}: {got}")
         seen |= set(got)
-    out.that(len(seen) == 25,
-             "and the four roles between them cover all 25 classes, so the"
+    # **Counted off the `class` table, not written down.** This read `== 25`
+    # and went stale the day `#599` put a 26th class in scope.
+    # `classes_for` reads `class.role`, so the table is the denominator the
+    # claim is about -- and a derived count cannot go stale the next time a
+    # class lands.
+    from combat_engine.db import game as _game
+
+    total = _game().execute("SELECT count(*) FROM class").fetchone()[0]
+    out.that(len(seen) == total,
+             f"and the four roles between them cover all {total} classes,"
+             " so the"
              " power selection has somewhere to look for every role",
              f"{len(seen)} classes")
 
@@ -43518,9 +43527,33 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
     # declared, which handed a fighter an undeclared chassis and left it
     # with no class features at all -- eight classes like it. A wizard-only
     # assertion could not see that; this is the control that does.
-    empty = [cls for cls in sorted(chargen.CLASSES) if not features(cls)]
+    # **Only classes that HAVE a declared feature are asked**, and that is
+    # the question rather than a narrowing. A class with none declared has
+    # zero because nobody has written them, which is content owed and not
+    # the chassis filter stripping anything -- the fault this control is
+    # about.
+    #
+    # `#599` is what made the distinction necessary: the 26th class is in
+    # scope on Camille's ruling and `class_feature` carries **26**
+    # `cf:vampire-*` rows, **0 of them declared**. Asked flatly, it reads
+    # as the filter having emptied a class it never touched.
+    from combat_engine.engine.dsl import REGISTRY as _REG
+
+    def has_any_written(cls: str) -> bool:
+        return any(r.startswith(f"cf:{cls}") for r in _REG)
+
+    askable = [c for c in sorted(chargen.CLASSES) if has_any_written(c)]
+    unwritten = [c for c in sorted(chargen.CLASSES) if not has_any_written(c)]
+    out.that(len(askable) >= 25,
+             "the setup landed: at least 25 classes have a declared class"
+             " feature to lose, so the control below is asked of a"
+             " populated set rather than passing on an empty one",
+             f"{len(askable)} askable, {len(unwritten)} with none written"
+             + (f" ({', '.join(unwritten)})" if unwritten else ""))
+    empty = [cls for cls in askable if not features(cls)]
     out.that(not empty,
-             "no class is left with zero class features by the chassis filter",
+             "no class that HAS declared features is left with zero by the"
+             " chassis filter",
              f"classes with none: {empty or 'none'}")
 
     # And the familiar, which is what a sha'ir chassis is for.
