@@ -38741,6 +38741,314 @@ def _in_combat_board(
     return world, encounter
 
 
+def a_printed_check_gates_a_power_and_an_attack_rides_the_level(
+    out: Result,
+) -> None:
+    """`Attack: Level + 3` and a `Check:` that gates the body. `#1105`, `#1106`.
+
+    Both were named by `#980` as the two gaps holding back 23 of the 24
+    terrain powers, and they are header fields rather than body code for
+    one reason each.
+
+    **`Attack(level_plus=N)`** -- the printed line is *"the level of
+    whoever uses it, plus three"*, which `printed=` cannot hold (its level
+    is already inside the number and `scaling.trim` takes it back out) and
+    `ability=` would corrupt (it adds proficiency and an ability modifier a
+    patch of ground has not got).
+
+    **`Check(skill, band)`** -- `dsl.use` runs a body **once per target**,
+    so a check rolled there is rolled once per creature caught and a
+    failure on the first cannot stop the second.
+
+    The census, measured on the corpus rather than taken from either
+    issue, and it corrects both:
+
+        terrain  12 rows print `Attack: Level + N`
+        trap      2 rows print it too      <- #1105 had not checked
+        terrain  14 print a `Check:`        <- terrain_powers.py said 21
+        terrain  11 print BOTH              <- the rows this unblocks
+    """
+    import combat_engine.content  # noqa: F401 -- declares the row
+    from combat_engine.dc import dc as dc_for
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Stats
+    from combat_engine.engine.dsl import REGISTRY, Attack, Check, power, use
+    from combat_engine.engine.events import PowerResolved
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.types import Condition
+    from combat_engine.engine.zones import Zone
+
+    REF = "x2_125"
+
+    # -- the census, so the claims above are checkable ---------------------
+    import re as _re
+
+    from combat_engine.db import game as _game
+
+    rows = list(_game().execute(
+        "SELECT ref, spec FROM terrain WHERE kind='terrain power'"))
+    chk = _re.compile(r"Check\s*:\s*(\w+)\s+check\s*\(([a-z]+)\s*DC\)", _re.I)
+    lvl = _re.compile(r"Attack\s*:?\s*Level\s*\+\s*(\d+)", _re.I)
+    has_check = [r for r in rows if chk.search(r["spec"] or "")]
+    has_lvl = [r for r in rows if lvl.search(r["spec"] or "")]
+    both = [r for r in rows
+            if chk.search(r["spec"] or "")
+            and _re.search(r"Attack\s*:", r["spec"] or "", _re.I)]
+    traps = [r for r in _game().execute("SELECT ref, spec FROM trap")
+             if lvl.search(r["spec"] or "")]
+    out.that(len(rows) == 24 and len(has_lvl) == 12 and len(traps) == 2,
+             "12 terrain powers print `Attack: Level + N` and so do **2"
+             " traps** -- which `#1105` flagged as its own unchecked"
+             " question. So this is not a terrain-only field, and a header"
+             " form was the right shape rather than a terrain one",
+             f"{len(rows)} terrain powers, {len(has_lvl)} level-relative,"
+             f" {len(traps)} trap(s) likewise")
+    out.that(len(has_check) == 14 and len(both) == 11,
+             "and 14 print a `Check:`, 11 of them beside an `Attack:` --"
+             " **not the 21 `content/terrain_powers.py` claimed**. That"
+             " note counted line-anchored where a spec is one run of text;"
+             " corrected there and asserted here so it cannot drift back",
+             f"{len(has_check)} with a check, {len(both)} with both")
+
+    # -- the header holds it, and renders it ------------------------------
+    p = REGISTRY[REF]
+    # Bound and then guarded, so the reads below are narrowed: `Power.attack`
+    # and `Power.check` are both `| None`, and an `out.that` does not tell a
+    # type checker anything. The guard is a `skip` rather than a crash
+    # because the two assertions above are what should speak if the row
+    # stops declaring them.
+    atk, chk = p.attack, p.check
+    out.that(atk is not None and atk.level_plus == 3
+             and atk.printed is None and atk.ability is None,
+             "the live row declares `level_plus` and NEITHER of the other"
+             " two forms -- which is the point: a row stating this states"
+             " no ability and no finished total",
+             f"level_plus={atk.level_plus if atk else '-'}"
+             f" printed={atk.printed if atk else '-'}"
+             f" ability={atk.ability if atk else '-'}")
+    if atk is None or chk is None:
+        out.skip(f"{REF} no longer declares both an attack and a check,"
+                 " so nothing below can be posed")
+        return
+    out.that(str(atk) == "Level +3 vs. REF",
+             "and it renders as the card prints it. Without a branch for"
+             " it the fall-through reads the ability, finds none and shows"
+             " `? vs. REF` -- and this string is what the page and the"
+             " audit display",
+             f"{str(p.attack)!r}")
+    out.that(chk.skill == "nature" and chk.band == "hard",
+             "and the printed `Check: Nature check (hard DC)` is a HEADER"
+             " field, so the UI and the AI policy can read it without"
+             " running anything",
+             f"{chk}")
+
+    # -- the bonus is the roller's level plus N, untrimmed -----------------
+    world, me, _ = _board(REF, 1)
+    stats = world.get(me, Stats)
+    lvl_now = stats.level if stats else 1
+    got = atk.bonus_for(world, me, REF)
+    out.that(got == lvl_now + 3,
+             "`bonus_for` is the roller's level plus N and is NOT trimmed"
+             " by `world.scaling` -- `trim` exists to take a level back"
+             " out of a finished total, and this number never had one"
+             " added",
+             f"{got} against level {lvl_now} + 3")
+    # **The bonus has to TRACK the level, which one reading cannot show.**
+    # The board's caster is level 1, so `level + 3` is 4 and a constant 3
+    # is 3 -- different, but only by the constant. Moving the level is what
+    # tells "the user's level plus three" from "any fixed number": a
+    # `printed=4` row would answer 4 at every level.
+    if stats is not None:
+        stats.level = 5
+        moved = atk.bonus_for(world, me, REF)
+        stats.level = lvl_now
+    else:
+        moved = -1
+    out.that(moved == 8,
+             "and it MOVES with the level: the same row answers 8 for a"
+             " level-5 roller where it answered 4 for a level-1 one. A"
+             " fixed number could pass the assertion above and not this"
+             " one",
+             f"level 1 -> {got}, level 5 -> {moved}")
+    # **Measured under BOUNDED, because FULL.trim is the identity.** The
+    # first draft asserted `printed != level_plus` with an `or` fallback
+    # for "unless the preset does not trim" -- which is an escape hatch,
+    # and a plant that trimmed the level-relative bonus stayed **green**
+    # through it. On a bounded world `trim(8, 5)` is 4, so the two forms
+    # have to disagree and there is nothing for an `or` to excuse.
+    from combat_engine.engine.scaling import BOUNDED
+
+    was_scaling = world.scaling
+    if stats is not None:
+        stats.level = 5
+    world.scaling = BOUNDED
+    try:
+        bounded_lvl = atk.bonus_for(world, me, REF)
+        bounded_printed = Attack(printed=8).bonus_for(world, me, REF)
+    finally:
+        world.scaling = was_scaling
+        if stats is not None:
+            stats.level = lvl_now
+    out.that(bounded_lvl == 8 and bounded_printed == 4,
+             "and on a BOUNDED world `level_plus` still answers 8 where"
+             " `printed=8` answers 4 -- which is the whole reason this is a"
+             " third field rather than a spelling of the first: `trim`"
+             " takes a level back out, and this number never had one put"
+             " in",
+             f"level_plus {bounded_lvl}, printed=8 -> {bounded_printed}")
+
+    # -- the check is rolled ONCE, before any target ----------------------
+    #
+    # **The claim `#1106` is about**, and the one a body line cannot make.
+    rolled: list[str] = []
+    real = Cast.check
+
+    def counting(self, skill: str, dc: int = 0, **kw: Any):  # noqa: ANN001, ANN202
+        rolled.append(skill)
+        return real(self, skill, dc, **kw)
+
+    # **The region has to be LAID, or the body returns at its first line
+    # and every assertion below is vacuous.** `_board` spawns no terrain,
+    # so the first draft of this rule tested nothing past the header: a
+    # plant removing the whole gate stayed **green**, because nobody was
+    # ever restrained either way.
+    from combat_engine.engine.components import Position as _Pos
+    from combat_engine.engine.durations import When as _When
+
+    def laid(seed: int = 1):  # noqa: ANN202
+        world_, me_, _ = _board(REF, seed)
+        foes_ = sorted(enemies(world_, me_))
+        here = world_.need(me_, _Pos).square
+        spots = {here}
+        for n, f_ in enumerate(foes_[:2]):
+            spot = (here[0] + 1 + n, here[1])
+            world_.need(f_, _Pos).square = spot
+            world_.grid.occupants[spot] = f_
+            spots.add(spot)
+        world_.zones.create(0, REF, frozenset(spots), _When.ENCOUNTER,
+                            power=REF, power_uses=0, power_reach=1)
+        return world_, me_, foes_
+
+    world2, me2, foes = laid()
+    out.that(len(foes) >= 2,
+             "the setup landed: two or more creatures to aim at, without"
+             " which once-per-use and once-per-target are the same number",
+             f"{len(foes)} foe(s)")
+    pool2 = next((e for e, z in world2.each(Zone) if z.power == REF), None)
+    out.that(pool2 is not None
+             and all(f in world2.zones.occupants(pool2) for f in foes[:2]),
+             "and the region is laid with both of them standing in it, so"
+             " the body's own membership gate cannot return before the"
+             " claim below is reached -- without this the whole rule"
+             " passes on a body that never ran",
+             f"zone={pool2}, inside="
+             f"{sorted(world2.zones.occupants(pool2)) if pool2 is not None else '-'}")
+    try:
+        Cast.check = counting
+        use(world2, me2, REF, targets=foes[:2], spend=False)
+    finally:
+        Cast.check = real
+    out.that(len(rolled) == 1,
+             "the gating check is rolled EXACTLY ONCE for a use aimed at"
+             " two creatures -- the claim no body line can make, because a"
+             " body runs once per target and would roll it twice. `== 1`"
+             " and not `<= 1`, because a gate that never rolls at all"
+             " passes the looser test",
+             f"{len(rolled)} roll(s): {rolled}")
+
+    # -- a failed check runs no body, and still counts as a use -----------
+    world3, me3, foes3 = laid()
+    stats3 = world3.get(me3, Stats)
+    hard = dc_for(stats3.level if stats3 else 1, "hard")
+    out.that(hard > 0,
+             "the setup landed: the hard band resolves to a real DC, so"
+             " forcing a failure below is forcing something",
+             f"hard DC {hard}")
+
+    def never(self, skill: str, dc: int = 0, **kw: Any) -> bool:  # noqa: ANN001
+        return False
+
+    mark = len(world3.bus.log)
+    try:
+        Cast.check = never
+        ran = use(world3, me3, REF, targets=foes3[:1], spend=False)
+    finally:
+        Cast.check = real
+    after = world3.bus.log[mark:]
+    resolved = [e for e in after if isinstance(e, PowerResolved)]
+    out.that(ran is True,
+             "a failed check still reports the power as USED -- the card"
+             " spends the action either way (*\"Check: ... Success:\"*),"
+             " so a failure is an attempt that came to nothing rather than"
+             " a refusal. A refusal belongs in `usable`",
+             f"use() returned {ran}")
+    out.that(bool(resolved) and not resolved[0].rolls,
+             "and `PowerResolved` still fires, with no rolls -- a watcher"
+             " waiting on the use completing has to see it",
+             f"{len(resolved)} PowerResolved, rolls={resolved[0].rolls if resolved else '-'}")
+    out.that(not is_(world3, foes3[0], Condition.RESTRAINED),
+             "while the body did NOT run: nobody is restrained, which is"
+             " the printed nothing-happens and the thing a per-target"
+             " check could not deliver",
+             f"restrained={is_(world3, foes3[0], Condition.RESTRAINED)}")
+
+    # **The positive half, and without it the assertion above is vacuous.**
+    # A body that never runs satisfies "nobody is restrained" whatever the
+    # gate does -- which is exactly how the first draft of this rule passed
+    # a plant that removed the gate entirely. So the same board, the same
+    # creature, and a check forced to SUCCEED.
+    def always(self, skill: str, dc: int = 0, **kw: Any) -> bool:  # noqa: ANN001
+        return True
+
+    world4, me4, foes4 = laid()
+    # 19 hits and does not crit, which is what the other rules here load
+    # for exactly this reason: the attack must land for the rider to be
+    # readable, and a crit would change what the rider is.
+    world4.rng.loaded = 19
+    try:
+        Cast.check = always
+        use(world4, me4, REF, targets=foes4[:1], spend=False)
+    finally:
+        Cast.check = real
+    out.that(is_(world4, foes4[0], Condition.RESTRAINED),
+             "and with the check PASSING the body runs and the target is"
+             " restrained -- the positive control, so the failure above is"
+             " the gate working rather than a body that does nothing on"
+             " this board",
+             f"restrained={is_(world4, foes4[0], Condition.RESTRAINED)}")
+
+    # -- and the declaration refuses a skill or band that does not exist --
+    def declared(**kw: Any) -> str:
+        from combat_engine.engine.dsl import PERSONAL, SELF
+        from combat_engine.engine.types import ActionType, Usage
+        try:
+            @power("zzz_check_probe", level=1, usage=Usage.AT_WILL,
+                   action=ActionType.STANDARD, reach=PERSONAL, target=SELF,
+                   **kw)
+            def _probe(c: Cast) -> None: ...
+        except ValueError as exc:
+            return str(exc)
+        return ""
+
+    bad_skill = declared(check=Check("haggling", "hard"))
+    bad_band = declared(check=Check("athletics", "brutal"))
+    out.that("not one of the" in bad_skill and "skills" in bad_skill,
+             "a check naming a skill that does not exist is refused AT"
+             " DECLARATION -- `skills.check` of an unknown skill is a"
+             " modifier of nothing, which beats a low DC and so reads as a"
+             " PASS. Silently inert in the generous direction",
+             bad_skill[:80] or "accepted")
+    out.that("not one of easy, moderate, hard" in bad_band,
+             "and so is a band that does not exist, rather than falling"
+             " through to a DC of 0 -- which every roll beats",
+             bad_band[:80] or "accepted")
+    out.that(not declared(check=Check("athletics", "hard")),
+             "while a real skill and a real band are accepted -- the"
+             " control, without which the two refusals could be a gate"
+             " that refuses everything",
+             "accepted")
+
+
 def a_ritual_carries_its_level_cost_and_key_skills(out: Result) -> None:
     """The ritual table, and the plural skill column the issue did not expect.
 
@@ -62923,6 +63231,12 @@ DRIVERS = {
         "DMG2's in-combat challenge: a combat scene that also rolls, on the"
         " fight's own board -- priced OUT of the budget, capped at"
         " complexity 2, and every check paying a named action (#922)",
+    ),
+    "terrain_check": (
+        a_printed_check_gates_a_power_and_an_attack_rides_the_level,
+        "a printed `Check:` gates the whole power and is rolled ONCE, and"
+        " `Attack: Level + 3` is the roller's level plus three rather than"
+        " a finished total (#1105, #1106)",
     ),
     "market": (
         a_party_can_buy_and_sell_against_the_printed_price,

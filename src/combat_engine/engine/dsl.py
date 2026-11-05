@@ -909,6 +909,49 @@ class Pick(Enum):
 
 
 @dataclass(frozen=True)
+class Check:
+    """A printed `Check:` line that **gates the rest of the power**. `#1106`.
+
+    The shape, from the 24 `kind = 'terrain power'` rows:
+
+        Check: Athletics check (hard DC) to shove the rock.
+        Success: <it happens, and usually makes an attack>
+
+    **Why this cannot be a body line, which is the whole of `#1106`.**
+    `dsl.use` runs a body **once per target**, so a check rolled there is
+    rolled once per creature caught -- and a failure on the first target
+    cannot stop the second. `c.first` guards a once-per-use line but gives
+    no way to abandon the rest of the power. Measured on the corpus:
+
+        24 terrain powers
+        14 print a `Check:`
+        20 print an `Attack:`
+        11 print BOTH            <- the rows this unblocks
+
+    **11, and `content/terrain_powers.py` said 21.** That note read "21 of
+    24 print one", which is wrong: the specs are a single run of text
+    rather than lines, and a line-anchored count gets a different answer
+    from a run-anchored one. Corrected there too.
+
+    A `band` rather than a DC, because the cards print bands -- `hard` 5,
+    `moderate` 6, `easy` 3 of the 14 -- and `combat_engine/dc.py` is the
+    90-number table they index. `dc` overrides it for a page that states a
+    number outright, which is the same precedence `story.Lore` and
+    `story.Affordance` already use and for the same reason: a band is
+    lossy.
+
+    The skills are `athletics` 12, `nature` 1, `thievery` 1.
+    """
+
+    #: Which skill. One of `engine.skills.SKILLS`, checked at declaration.
+    skill: str
+    #: Which DC band, indexed into `dc.py` against the roller's level.
+    band: str = "moderate"
+    #: A stated DC, which wins over the band. 0 means "use the band".
+    dc: int = 0
+
+
+@dataclass(frozen=True)
 class Attack:
     """A printed `Attack:` line.
 
@@ -943,6 +986,35 @@ class Attack:
     plus: int = 0
     #: A monster's finished attack bonus, level included, as printed.
     printed: int | None = None
+    #: **The level of whoever uses it, plus this.** `#1105`. The printed
+    #: line is `Attack: Level + 3 vs. Reflex`, which is neither of the two
+    #: above:
+    #:
+    #: * `printed=` is a finished total with a level already inside it, so
+    #:   `world.scaling.trim` takes that level back out. Here the level is
+    #:   **unknown at declaration** -- it is the user's, not the feature's
+    #:   -- so there is nothing to trim and trimming would be wrong twice.
+    #: * `ability=` rolls a character's line, which adds proficiency and an
+    #:   ability modifier the card does not mention. A patch of ground has
+    #:   no Strength score.
+    #:
+    #: **Measured at 14 rows, which is more than the issue that asked for
+    #: it knew.** `#1105` says 12 terrain powers and flags its own
+    #: unchecked question -- whether anything else prints a level-relative
+    #: attack. Two **traps** do, so this is not a terrain-only field:
+    #:
+    #:     terrain  12 rows   Attack: Level + 3
+    #:     trap      2 rows   Attack: Level + 3
+    #:
+    #: All 14 print `+ 3`. `terrain.attack_level` holds the N; `trap` has
+    #: no such column, so the ETL captures it for one of the two tables --
+    #: a smaller gap, filed rather than fixed here.
+    #:
+    #: A header field and not a body computation, because `Attack` is read
+    #: by the UI and the AI policy **without running anything**. That is
+    #: the header-is-data rule, and it is why `c.strike(bonus=...)` is the
+    #: wrong shape however convenient.
+    level_plus: int | None = None
     #: Who rolls it, when it is not the creature using the row. `"companion"`
     #: is a ranger's beast: the printed line is "Beast's attack bonus vs.
     #: AC", which is the beast's numbers and not its owner's. `from_=` on
@@ -964,8 +1036,17 @@ class Attack:
         if self.printed is not None:
             stats = world.get(actor, Stats)
             return world.scaling.trim(self.printed, stats.level if stats else 1)
+        # **The user's level plus N, and deliberately NOT trimmed.** #1105.
+        # `trim` exists to take a level back out of a finished total; this
+        # number is already level-relative, so trimming it would remove a
+        # level that was never added. Checked before `ability`, because a
+        # row stating this states no ability.
+        if self.level_plus is not None:
+            stats = world.get(actor, Stats)
+            return (stats.level if stats else 1) + self.level_plus
         if self.ability is None:
-            raise ValueError("an Attack needs either an ability or a printed bonus")
+            raise ValueError(
+                "an Attack needs an ability, a printed bonus or level_plus")
         # `ref` matters: proficiency applies to a weapon power and not to an
         # implement one, and `_attack_bonus` reads the keywords off it.
         probe = Cast(world=world, me=actor, ref=ref, branch=branch)
@@ -1028,6 +1109,13 @@ class Attack:
     def __str__(self) -> str:
         if self.printed is not None:
             return f"{self.printed:+d} vs. {self.vs.value.upper()}"
+        # **As the card prints it: `Level + 3 vs. REF`.** `#1105`. Without
+        # this the fall-through reads the ability, finds none and renders
+        # `? vs. REF` -- and this string is what the page and the audit
+        # show, so a reader would see a question mark where the card has a
+        # rule. Same argument as the `Pick` branch below.
+        if self.level_plus is not None:
+            return f"Level {self.level_plus:+d} vs. {self.vs.value.upper()}"
         tail = f" {self.plus:+d}" if self.plus else ""
         if isinstance(self.ability, Pick):
             # As the card prints it, so the page and the audit both read the
@@ -1167,6 +1255,10 @@ class Power:
     keywords: tuple[Keyword, ...] = ()
     #: The printed Attack line, when there is one. Read by policies.
     attack: Attack | None = None
+    #: **A printed `Check:` that gates the whole power.** `#1106`. Rolled
+    #: once, before any target is walked, and a failure abandons the body
+    #: -- see `Check` and the roll site in `use`.
+    check: Check | None = None
     #: The printed damage, when the row is simple enough to declare it.
     damage: Damage | None = None
     #: The other branch's attack and damage, for a `MeleeOrRanged` row whose
@@ -1861,6 +1953,7 @@ def power(
     target: Target = ONE_CREATURE,
     keywords: Iterable[Keyword] = (),
     attack: Attack | None = None,
+    check: Check | None = None,
     damage: Damage | None = None,
     attack_alt: Attack | None = None,
     damage_alt: Damage | None = None,
@@ -2001,6 +2094,28 @@ def power(
                     f"there."
                 )
 
+    # **A gated `Check:` is validated at declaration, not at use.** `#1106`.
+    # A misspelled skill would otherwise make the check unrollable and the
+    # power silently inert -- `skills.check` of an unknown skill is a
+    # modifier of nothing, which beats a low DC and so reads as a *pass*.
+    # Refused here for the reason the marker gate refuses prose: so the
+    # tools can tell.
+    if check is not None:
+        from combat_engine.dc import BANDS as _BANDS
+
+        if check.skill not in SKILLS:
+            raise ValueError(
+                f"{ref}: check names {check.skill!r}, which is not one of "
+                f"the {len(SKILLS)} skills. The printed line is "
+                f"`Check: <skill> check (<band> DC)`."
+            )
+        if not check.dc and check.band not in _BANDS:
+            raise ValueError(
+                f"{ref}: check names band {check.band!r}, which is not one "
+                f"of {', '.join(_BANDS)}. State a `dc=` instead when the "
+                f"page prints a number rather than a band."
+            )
+
     narrative = tuple(narrative)
     skills = []
     for clause in narrative:
@@ -2051,6 +2166,7 @@ def power(
             target=target,
             keywords=tuple(keywords),
             attack=attack,
+            check=check,
             damage=damage,
             attack_alt=attack_alt,
             damage_alt=damage_alt,
@@ -4057,6 +4173,54 @@ def use(
 
     # A reentrant run finds its own row already marked; leaving the mark
     # standing on the way out is what keeps the guard true for the outer one.
+    # **The printed `Check:`, rolled ONCE and before any target.** `#1106`.
+    #
+    # Here rather than in the body because the body runs once per target:
+    # a check rolled there is rolled per creature caught, and a failure on
+    # the first cannot stop the second. 11 of the 24 terrain powers print
+    # a `Check:` *and* an `Attack:`, so for those the per-target reading
+    # is not merely untidy -- it rolls the shove once per victim.
+    #
+    # **After `cast.used()` deliberately.** The card spends the action and
+    # the use whether the check lands or not -- *"Check: Athletics check
+    # (hard DC) to shove the rock. Success: ..."* -- so a failure is an
+    # attempt that came to nothing, not a refusal. `usable` is where a
+    # refusal belongs and this is not one.
+    #
+    # Returns True on a failure for the same reason: the power was used.
+    # The body simply does not run, which is the printed "nothing
+    # happens", and `audit.py` sees a row that fired and did nothing on
+    # that seed -- which is why its 8 seeds matter for a gated row.
+    if p.check is not None:
+        from combat_engine.dc import dc as _dc
+
+        from .components import Stats as _Stats
+
+        # Function-local, the way the twin emit at the bottom of this
+        # function imports it, and for the file's standing reason: a
+        # module-level `events` import here reopens the cycle.
+        from .events import PowerResolved
+
+        want = p.check.dc
+        if not want:
+            stats = world.get(actor, _Stats)
+            want = _dc(stats.level if stats else 1, p.check.band)
+        if not cast.check(p.check.skill, want):
+            # **`PowerResolved` still fires**, with no rolls and the
+            # targets that were aimed at. The power *was* used and came to
+            # nothing, so a watcher waiting on the use completing must see
+            # it -- and the emit is the same shape as the one at the
+            # bottom of this function, deliberately, so a reader diffing
+            # the two finds only `rolls`.
+            world.bus.emit(
+                PowerResolved(
+                    actor=actor, power=ref, targets=list(chosen), rolls=[],
+                    trigger=trigger,
+                    granted_by=granted_by, granted_via=granted_via,
+                )
+            )
+            return True
+
     fresh = (actor, ref) not in _IN_FLIGHT
     _IN_FLIGHT.add((actor, ref))
     _RUNNING.append(cast)

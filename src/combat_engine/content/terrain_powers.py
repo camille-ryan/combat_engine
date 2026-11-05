@@ -21,28 +21,38 @@ carries a ref (`Zone.power`), the action menu offers it to whoever is
 standing near enough (`actions._terrain`), and `perform` runs it through
 `dsl.use(board=True)`. `content/terrain.py`'s `lay` is the writer.
 
-**This module holds one row, deliberately, and the other 23 are a content
-wave with two gaps in front of them.** Writing a facility with no caller is
+**This module holds two rows, and the gaps that held the other 22 are
+closed.** Writing a facility with no caller is
 how `c.zone(hindering=)` sat unused from `#952` until `#1039` -- the field
 was recorded and burned nobody -- so the mechanism gets a live caller in
 the same commit that builds it. What the remaining 23 want is measured on
 `#980`:
 
-* **`Attack(level + N)` has no header form.** 12 of the 24 print
-  *"Attack: Level + 3 vs. Reflex"*. `Attack(printed=)` is a finished total
-  with the creature's level already inside it and `Attack(ability=)` rolls
-  a character's line; neither says "the user's level, plus three". Filed as
-  `#1105`.
-* **A `Check:` that gates the attack cannot be rolled in the body.** 21 of
-  24 print one, and the body runs **once per target** -- so a check rolled
-  there is rolled once per creature in the blast, and a failure on the
-  first target cannot stop the second. `c.first` guards a once-per-use line
-  but gives no way to abandon the rest. That wants a header field; filed as
-  `#1106`.
+* ~~**`Attack(level + N)` has no header form**~~ -- **built**, `#1105`.
+  `Attack(level_plus=3)` is the user's level plus three, resolved in
+  `bonus_for` with no `scaling.trim`: `printed=` is a finished total whose
+  level gets taken back out, and `ability=` would add a proficiency and an
+  ability modifier a patch of ground has not got. 12 terrain powers print
+  it **and so do 2 traps**, which `#1105` had flagged as its own unchecked
+  question.
+* ~~**A `Check:` that gates the attack cannot be rolled in the body**~~ --
+  **built**, `#1106`. `Check(skill, band)` is a header field rolled once in
+  `dsl.use` before any target is walked; a failure runs no body, still
+  reports the power used, and still emits `PowerResolved`. The body runs
+  **once per target**, so a check rolled there is rolled once per creature
+  caught and a failure on the first cannot stop the second.
 
-`x2_124` needs neither, which is why it is the one here: `target=SELF`, so
-the body runs exactly once and the check is correct in it, and it has no
-attack line at all.
+**The `Check:` census here was wrong and is worth the correction.** This
+said *"21 of 24 print one"*. It is **14**, and 11 of those print an
+`Attack:` beside it -- the specs are a single run of text rather than
+lines, so a line-anchored count and a run-anchored one give different
+answers. `drivers.terrain_check` asserts both figures so they cannot drift
+back.
+
+`x2_124` needed neither field, which is why it was the first row here:
+`target=SELF`, so the body runs exactly once and the check is correct in
+it, and it has no attack line at all. `x2_125` is the live caller for both
+-- the shortest of the 11, with one target and one effect.
 """
 
 from __future__ import annotations
@@ -51,10 +61,19 @@ from typing import Any
 
 from combat_engine.dc import dc
 from combat_engine.engine.cast import Cast
-from combat_engine.engine.dsl import PERSONAL, SELF, power
+from combat_engine.engine.dsl import (
+    ONE_CREATURE,
+    PERSONAL,
+    SELF,
+    Attack,
+    Check,
+    Ranged,
+    power,
+)
 from combat_engine.engine.durations import When
 from combat_engine.engine.events import Hit, Miss, Moved
-from combat_engine.engine.types import ActionType, Usage
+from combat_engine.engine.types import ActionType, Condition, Defense, Usage
+from combat_engine.engine.zones import Zone
 
 
 @power("x2_124", level=1, usage=Usage.AT_WILL, action=ActionType.STANDARD,
@@ -138,3 +157,53 @@ def x2_124(c: Cast) -> None:
     for event in (Hit, Miss, Moved):
         c.watch(event, stirs, until=When.ENCOUNTER, on=me, once=True,
                 label=f"{c.ref} buried")
+
+
+@power("x2_125", level=1, usage=Usage.AT_WILL, action=ActionType.STANDARD,
+       reach=Ranged(10), target=ONE_CREATURE,
+       check=Check("nature", "hard"),
+       attack=Attack(level_plus=3, vs=Defense.REF))
+def x2_125(c: Cast) -> None:
+    """Spot a deeper patch in the silt and put somebody in it.
+
+    **The live caller for both header fields `#980` was waiting on**, and
+    the reason it is this row of the eleven: it is the shortest -- 331
+    characters of spec -- with one target, one effect and no Requirement
+    line, so the two new fields are the only interesting thing in it.
+
+    `check=Check("nature", "hard")` is the printed `Check: Nature check
+    (hard DC)`, and it is a **header** field because `dsl.use` runs a body
+    once per target: rolled in the body it would be rolled once per
+    creature caught, and a failure on the first could not stop the second.
+    This row has one target so the difference is invisible here -- which is
+    exactly why the eleven that have several needed it. `#1106`.
+
+    `attack=Attack(level_plus=3, ...)` is the printed `Attack: Level + 3`,
+    which is the **user's** level plus three. Not `printed=`, whose level
+    is already inside the number and gets trimmed back out, and not
+    `ability=`, which would add a proficiency and an ability modifier a
+    patch of silt does not have. `#1105`.
+
+    **The region is the range, and that is why the body gates on it.** The
+    printed Target is *"one creature you choose within a silt pool"* --
+    which names no distance, so `Ranged(10)` is the aiming envelope and
+    the pool is the real bound. `world.zones.occupants` answers it, and the
+    gate is per target, which is correct: membership is a property of each
+    creature where the check was a property of the use.
+
+    A `save ends` restraint rather than `until=When.EONT`: the card prints
+    "(save ends)" and `c.condition` takes the window, so there is no
+    shorthand to reach for -- `Cast` has `slowed`, `immobilized` and
+    `weakened` and no `restrained`, which is left alone rather than added,
+    because a new `Cast` member owes a `symbols` regeneration for one use.
+    """
+    pool = next(
+        (eid for eid, zone in c.world.each(Zone) if zone.power == c.ref),
+        None,
+    )
+    if pool is None:
+        return
+    if c.target not in c.world.zones.occupants(pool):
+        return
+    if c.strike():
+        c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
