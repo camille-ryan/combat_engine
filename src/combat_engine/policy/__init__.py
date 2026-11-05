@@ -214,11 +214,21 @@ def features(
     f["is_search"] = float(action.kind == "search")
     # **Disarming one is NOT scored, and that is Camille's call on `#1098`.**
     #
-    # It was: `is_disable` at -0.5 with a `trap_in_the_way` predicate paying
-    # +2.0, so the AI disarmed a found trap when a foe was within 3 squares.
-    # Both numbers were mine and I took that decision without authority --
-    # `#1065`, about 14 hours earlier, had already said *"Defer until these
-    # can be scored dynamically."*
+    # It was scored: a flat negative term with a larger situational one
+    # paying for it when a foe stood near enough to be made to cross the
+    # trap. Both figures were mine and I took that decision without
+    # authority -- `#1065`, about 14 hours earlier, had already said
+    # *"Defer until these can be scored dynamically."*
+    #
+    # **The numbers are deliberately not repeated here**, and
+    # `drivers.weights_named` is why: it reds on any sentence under
+    # `policy/` that puts a number beside a weight the tables do not hold,
+    # because a sentence like that is what the next term gets sized
+    # against. The first draft of this very comment quoted both and the
+    # rule caught it on the wide sweep -- which is the rule working on the
+    # commit that removed the weights it was written to protect. `#1098`
+    # and `691201e5` hold the figures, where they cannot be mistaken for
+    # live ones.
     #
     # Asked, and given option C of three:
     #
