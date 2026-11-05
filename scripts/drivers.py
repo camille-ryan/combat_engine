@@ -37891,6 +37891,114 @@ def a_module_gets_the_party_size_it_asked_for(out: Result) -> None:
     )
 
 
+def a_bonus_can_be_gated_on_what_a_check_is_for(out: Result) -> None:
+    """A standing skill bonus narrowed to the purpose of the check. `#1111`.
+
+    `i2746x1` prints *"+2 to Athletics checks made to swim"*. Laying that
+    flat would be a row stronger than its card -- every Athletics check
+    rather than the swimming ones -- so the clause needs the *purpose* of
+    the check, and the row carried a marker for three different reasons
+    over its life. Each of the first two premises was refuted; **the third
+    was mine and was also wrong.**
+
+    `SkillCheck.purpose` landed with `#735`'s narrow half, so I filed
+    `#1111` saying the clause was writable. It was not. The attribute is
+    *announced on the event*, so a row **watching a resolved check** can
+    gate on it -- `f946` does, on a Bluff made to feint -- and
+    `skills.modifier`'s context did **not** carry it, so a **standing
+    bonus** could not see it at all. The gap was one layer below the
+    marker, which is this tree's commonest shape of wrong marker.
+
+    So `purpose` is in the context now, and this rule asserts the thing
+    that matters: **the bonus fires through the real caller**. Asking
+    `skills.modifier` directly would prove the context key exists and not
+    that anything reaches it -- `movement.swims` is the only caller in the
+    tree that says what its check is for, and it is what a swimming
+    character actually goes through.
+
+    **The control is a different board, not an unarmed row**, and the first
+    version got that wrong. `Encounter.start()` arms every `action=NONE`
+    trait, so a board built for `i2746x1` has already laid the bonus before
+    any explicit `use` -- the "not armed" arm read +2 as well and the
+    control was void. A board built for another ref does not hold the belt,
+    which is the real negative.
+    """
+    import audit as _audit
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.movement import swims
+    from combat_engine.engine.skills import modifier
+
+    Rolls = list[tuple[str, str, int, int]]
+
+    def dive(ref: str) -> tuple[bool, Rolls, int | None]:
+        world, me, _ = _audit.board(ref, 5, terrain="aquatic")
+        holds = world.get(me, Powers)
+        seen: Rolls = []
+        world.bus.on(SkillCheck, lambda ev: seen.append(
+            (ev.skill, getattr(ev, "purpose", ""), ev.natural, ev.bonus)))
+        budget = swims(world, me)
+        return "i2746x1" in (holds.known if holds else []), seen, budget
+
+    held, rolls, budget = dive("i2746x1")
+    bare_held, bare_rolls, bare_budget = dive("i593p1")
+
+    out.that(held and not bare_held,
+             "the setup landed: one board's caster holds the belt and the"
+             " other's does not -- the control is a DIFFERENT board, because"
+             " `Encounter.start()` arms every `action=NONE` trait and an"
+             " `unarmed` arm on the same board reads the bonus too",
+             f"holds={held} control_holds={bare_held}")
+
+    out.that(rolls and bare_rolls,
+             "the setup landed: swimming really rolled a check on both"
+             " boards -- `movement.swims` is the one caller in the tree that"
+             " says what its check is for, and the aquatic floor is what"
+             " makes it fire (#1087)",
+             f"{len(rolls)} / {len(bare_rolls)} check(s)")
+    if not (rolls and bare_rolls):
+        return
+
+    skill, purpose, natural, bonus = rolls[0]
+    _bs, _bp, bare_natural, bare_bonus = bare_rolls[0]
+
+    out.that(skill == "athletics" and purpose == "swim",
+             "and it is an Athletics check announced with"
+             " `purpose='swim'` -- the word the printed narrowing turns on",
+             f"skill={skill} purpose={purpose!r}")
+    out.that(natural == bare_natural,
+             "both boards rolled the same natural, so the difference below"
+             " is the bonus and not the die",
+             f"{natural} vs {bare_natural}")
+    out.that(bonus - bare_bonus == 2,
+             "the holder's swimming check carries +2 and the control does"
+             " not -- measured through the caller, so the context key is"
+             " reached rather than merely present",
+             f"{bonus} vs {bare_bonus}")
+
+    # And the narrowing itself: the same bonus must not reach other checks.
+    world, me, _ = _audit.board("i2746x1", 5, terrain="aquatic")
+    plain = modifier(world, me, "athletics")
+    swimming = modifier(world, me, "athletics", purpose="swim")
+    other = modifier(world, me, "stealth", purpose="swim")
+    other_plain = modifier(world, me, "stealth")
+    out.that(swimming - plain == 2,
+             "an Athletics check with no stated purpose gets nothing, so the"
+             " +2 is not a flat bonus wearing a predicate",
+             f"plain={plain} swimming={swimming}")
+    out.that(other == other_plain,
+             "and a STEALTH check made while swimming gets nothing -- the"
+             " gate is the purpose AND the skill, and a row stronger than"
+             " its card is what this narrowing exists to prevent",
+             f"stealth {other_plain} -> {other}")
+
+    out.that(budget == bare_budget,
+             "the swim budget itself is unchanged, which is the point: the"
+             " belt helps the check and the printed half-speed is the"
+             " speed's business",
+             f"{budget} vs {bare_budget}")
+
+
 def a_companion_character_is_built_from_its_role(out: Result) -> None:
     """DMG2's companion-character formulas, against the printed page. `#1015`.
 
@@ -61561,6 +61669,12 @@ DRIVERS = {
     "campaign_replays": (
         a_campaign_replays_in_a_fresh_process,
         "the same seed plays the same campaign, across processes (#789)",
+    ),
+    "check_purpose": (
+        a_bonus_can_be_gated_on_what_a_check_is_for,
+        "a standing skill bonus narrowed to what the check was FOR -- the"
+        " purpose was announced on the event and absent from the modifier"
+        " context, so only a watcher could read it (#1111)",
     ),
     "follower": (
         a_companion_character_is_built_from_its_role,

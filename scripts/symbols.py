@@ -555,6 +555,24 @@ CTX_KEYS: dict[str, str] = {
     "actor": "whoever is acting, on a ctx built from a non-attack event.",
     "advantage": "did the attack have combat advantage.",
     "ammo": "the ammunition used.",
+    "purpose": (
+        "what the skill check was FOR -- `movement.swims` passes "
+        '"swim" and nothing else says anything today. Written by '
+        "`skills.modifier`, off `SkillCheck.purpose`, which "
+        "`skills.check` sets from its own argument. #1111.\n\n"
+        "It is the ONE narrowing two printed rows need and could not "
+        "have: a +2 to Athletics *made to swim* (`i2746x1`) and a +5 "
+        "to Perception *made to find hidden creatures* "
+        "(`p13783:augment1`). Laying either flat is a row stronger "
+        "than its card. The attribute was announced on the event "
+        "before this, so a row WATCHING a resolved check could read "
+        "it (`f946`, on a Bluff made to feint) while a STANDING "
+        "bonus could not -- the context is what `Mods.total` is "
+        "handed and the key was not in it.\n\n"
+        'Empty for every caller that does not say, so a gate asking '
+        "for a purpose is False on an ordinary check rather than "
+        "absent from the context."
+    ),
     "among": "the set a choice was made from.",
     "as_": "the action it is being taken as.",
     "attacker": "who is swinging. `target` is who it lands on.",

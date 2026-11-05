@@ -832,34 +832,66 @@ def i2689p1(c: Cast) -> None:
     c.immovable(on=c.me, until=When.EONT)
 
 
+def _swimming(ctx: dict[str, Any]) -> bool:
+    """An Athletics check made **to swim**, and not any other.
+
+    `movement.walk` is the one caller that says what its check is for --
+    `check(world, eid, "athletics", dc, purpose="swim")` -- and the word is
+    now in the modifier context, so the printed narrowing is sayable.
+    """
+    return ctx.get("purpose") == "swim"
+
+
 @power("i2746x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("story.skill_use()",))
+       reach=PERSONAL, target=SELF, dropped=("engine.suffocation()",))
 def i2746x1(c: Cast) -> None:
     """+2 to Athletics made to swim, and to Endurance made to hold your
     breath, swim or tread water.
 
-    **Re-pointed twice, and the second premise was wrong too.** "Skill
-    checks with no combat consequence" was the first reason and is false --
-    an Athletics check is rolled in fights. "A check context cannot be
-    asked what the check was for" was the second, and the printed rules
-    answer it: these checks are **per hour**, DC by water conditions and +2
-    for each additional hour, and holding your breath is five rounds free
-    then DC 10 + 1 per round. That is a span of time, not a missing context
-    key.
+    **The Athletics half is written and the premise that blocked it was
+    wrong twice over.** This note used to say so about its own two earlier
+    re-pointings; here is the third and it was mine.
 
-    **Deferred to the story engine** on Camille's call: an hour of swimming
-    is a circumstance the fight's clock cannot reach, and
-    `docs/STORY_ENGINE.md` is the component that fields one. #787.
+    *"A check context cannot be asked what the check was for"* was the
+    second premise and was answered by `SkillCheck.purpose`, which landed
+    with `#735`'s narrow half. I then filed `#1111` saying the clause was
+    therefore writable. **It was not** -- `purpose` was *announced* on the
+    event, so a row **watching** a resolved check could gate on it (`f946`
+    does), and `skills.modifier`'s context did not carry it, so a
+    **standing bonus** could not. The gap was one layer below the marker,
+    which is this tree's commonest shape of wrong marker.
 
-    Laying the +2 flat would be a row **stronger than its card** -- every
-    Athletics check rather than the swimming ones -- which is the direction
-    `m5808a0`'s rule says never to guess in. So nothing is laid.
+    So the engine change came with the row: `purpose` is in the context
+    now, and `p13783`'s augment 1 is the second caller waiting on the same
+    key -- its own note says *"a skill check carries no such purpose to
+    gate on -- the bonus would apply to every Perception check"*.
 
-    `todo=` and not `dropped=`, which `lint.py` insisted on and is right:
-    the +2 is the whole row, so with nothing laid the row cannot play.
-    `dropped=` means "plays with one clause missing".
+    Laying the +2 flat would still be a row **stronger than its card** --
+    every Athletics check rather than the swimming ones -- which is the
+    direction `m5808a0`'s rule says never to guess in. `_swimming` is that
+    narrowing, and `movement.walk` is the only caller that says `"swim"`,
+    so an ordinary Athletics check reads `purpose == ""` and the bonus
+    stands down.
+
+    **`dropped=` now rather than `todo=`, and the marker names a different
+    thing.** The row plays: a swimming character gets its +2. What is
+    missing is the Endurance half, and that is **not** the story engine's
+    hour-long swim -- it is the printed in-fight rule, DMG p159: *"a
+    character holding his breath during underwater combat must make a DC 20
+    Endurance check at the end of his turn in a round where he takes
+    damage"*, which nothing rolls. `#971`'s own comment calls that the
+    engine half and says it deserves its own issue.
+
+    The old marker said `story.skill_use()`, which `#787`'s second comment
+    had already proved is the wrong facility.
+
+    `kind="item"`, because the card says *"item bonus"* -- and that matters
+    beyond bookkeeping: two item bonuses do not stack, so the kind is what
+    stops a second swimming item doubling it.
 
     The Level 18 and 28 steps are out of scope."""
+    c.bonus("skill:athletics", 2, kind="item", on=c.me,
+            until=When.ENCOUNTER, when=_swimming)
 
 
 @power("i593p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,

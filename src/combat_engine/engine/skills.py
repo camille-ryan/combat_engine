@@ -98,6 +98,7 @@ def modifier(
     skill: str,
     target: int | None = None,
     natural: int | None = None,
+    purpose: str = "",
 ) -> int:
     """The fixed part of a creature's check: ability, half level, modifiers.
 
@@ -147,6 +148,26 @@ def modifier(
     if mods is not None:
         ctx: dict[str, object] = {
             "actor": eid, "skill": skill.lower(), "target": target,
+            # **What the check is FOR, which `SkillCheck.purpose` carried and
+            # no modifier could read.** The attribute was set and announced,
+            # so a row *watching* a resolved check could gate on it --
+            # `f946` does -- and a **standing bonus** could not, because this
+            # context is what `Mods.total` is handed and `purpose` was not in
+            # it.
+            #
+            # That is the gap one layer below two markers. `i2746x1`'s is
+            # *"+2 to Athletics made to swim"* and `p13783`'s augment 1 is
+            # *"+5 to Perception checks made to find hidden creatures"*, and
+            # the second's note says it outright: *"a skill check carries no
+            # such purpose to gate on -- the bonus would apply to every
+            # Perception check"*. Both are the printed narrowing, and laying
+            # the bonus unconditionally is a row stronger than its card.
+            #
+            # `""` for every caller that does not say, which is all but one
+            # (`movement.walk` passes `"swim"`), so a predicate asking for a
+            # purpose is False on an ordinary check rather than absent from
+            # the context. #1111.
+            "purpose": purpose,
         }
         if natural is not None:
             ctx["natural"] = natural
@@ -316,7 +337,8 @@ def check(
     announced.purpose = purpose  # ty: ignore[unresolved-attribute]
 
     def finish(ev: SkillCheck) -> None:
-        ev.bonus += modifier(world, eid, ev.skill, ev.target, ev.natural)
+        ev.bonus += modifier(world, eid, ev.skill, ev.target, ev.natural,
+                             getattr(ev, "purpose", ""))
         ev.total = ev.natural + ev.bonus
         ev.success = ev.dc <= 0 or ev.total >= ev.dc
 
