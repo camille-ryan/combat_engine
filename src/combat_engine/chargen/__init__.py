@@ -2874,6 +2874,202 @@ def power_swap(powers: list[str], feats: list[str]) -> list[str]:
     return out
 
 
+def retrain(who: Character, drop: str, take: str) -> Character:
+    """Change one feat, power or skill the character already chose. #991.
+
+    > *"Every time you gain a level, you can retrain your character: change
+    > one feat, power, or skill selection you made previously. You can make
+    > only one change at each level. When your class table tells you to
+    > replace a power you know with a different power of a higher level,
+    > that doesn't count as retraining."*
+
+    Returns a **new** `Character`; the one handed in is untouched, so a
+    caller can offer the swap, show it, and keep the old sheet if the player
+    declines.
+
+    **The allowance is not spent here**, deliberately. *"Only one change at
+    each level"* is a fact about levelling, and nothing applies a level yet
+    -- `#1013`, where `xp.ready()` says a character has earned one and
+    `story/run.py:1893` only narrates it. So the caller that grants the
+    level is the thing that may call this once, and putting a counter here
+    would be a second place recording what a level is.
+
+    **Which of the three it is, is read off `drop` rather than passed in.**
+    A ref is a feat, a power or a skill word and cannot be two of them, so
+    an argument saying which could only ever disagree with the ref -- and
+    `power_swap`'s neighbours in this file take the same view.
+
+    ## Every refusal below is printed, and raises rather than returning
+
+    A silent no-op would hand back a character that looks retrained and is
+    not, which is the failure this component's notes keep naming. The
+    message quotes the reason.
+
+    **A feat** may be swapped for one whose prerequisites are met, and not
+    if it is itself a prerequisite for something the character has.
+    `choices.legal_feats` is the pool -- written, not marked, gate met,
+    not a second card -- asked with the dropped feat **already removed**, so
+    a feat that only qualified because of the one being dropped is refused
+    by construction rather than by a second rule.
+
+    *"A feature of the class rather than a choice"* needs no check: a class
+    feature is a `cf:` ref and lands in `Powers.known` through the chassis,
+    never in `Character.feats`, so it cannot be named here. Said rather than
+    coded, because a check that can never fire reads as a guarantee.
+
+    **A power** may be swapped for one of the **same usage**, the **same
+    level or lower**, and the **same class**. Three columns -- `power.usage`,
+    `power.level`, `power.class` -- and a fourth refusal that is not a
+    column: a `cf:` ref is a class feature and not a known power.
+
+    **Lower is allowed and higher is not**, which is the asymmetry worth
+    stating: the printed words are *"of the same level or lower"*, and the
+    higher-level case is the class table's own replacement, which the rule
+    says explicitly *"doesn't count as retraining"*. Two mechanisms that
+    look like one.
+
+    **A skill** may be swapped for another on the class list, and not if the
+    one dropped is *granted*. `class_skill.granted` is that distinction --
+    the first printed sentence against the second -- and a granted skill is
+    *"predetermined by the class"* in the rule's words.
+
+    A skill required by a held feat is also refused, read off `feat.prereq`
+    directly rather than through `meets`: that function answers every
+    `skill` atom False today (`#1113`), so asking it would refuse nothing.
+    """
+    import json
+
+    from combat_engine.db import game
+
+    from .choices import legal_feats
+
+    db = game()
+
+    if drop in who.feats:
+        if take in who.feats:
+            raise ValueError(f"{take} is already taken")
+        # **What depends on it**, read straight off the prerequisite trees of
+        # everything else held. `meets` evaluates a tree against a
+        # character; this is the reverse question and the same data.
+        for other in who.feats:
+            if other == drop:
+                continue
+            row = db.execute(
+                "SELECT prereq FROM feat WHERE ref = ?", (other,)).fetchone()
+            if row is None or not row["prereq"]:
+                continue
+            try:
+                node = json.loads(row["prereq"])
+            except (TypeError, ValueError):
+                continue
+            if drop in _refs_named(node):
+                raise ValueError(
+                    f"{drop} cannot be retrained: {other} requires it")
+        kept = [f for f in who.feats if f != drop]
+        if take not in legal_feats(
+                who.cls, who.level, build_of(who.cls, who.build),
+                who.race, taken=[*who.powers, *kept]):
+            raise ValueError(
+                f"{take} is not a feat this character may take")
+        return replace(who, feats=[*kept, take])
+
+    if drop in who.powers:
+        if take in who.powers:
+            raise ValueError(f"{take} is already known")
+        if drop.startswith("cf:") or take.startswith("cf:"):
+            raise ValueError(
+                "a class feature is not a power selection and cannot be "
+                "retrained")
+        was = db.execute(
+            "SELECT class, level, usage FROM power WHERE ref = ?",
+            (drop,)).fetchone()
+        now = db.execute(
+            "SELECT class, level, usage FROM power WHERE ref = ?",
+            (take,)).fetchone()
+        if was is None or now is None:
+            raise ValueError(
+                f"{drop if was is None else take} is not a printed power")
+        if (now["usage"] or "").lower() != (was["usage"] or "").lower():
+            raise ValueError(
+                f"{take} is {now['usage']} and {drop} is {was['usage']}: a "
+                "power is replaced by one of the same type")
+        if (now["class"] or "").lower() != (was["class"] or "").lower():
+            raise ValueError(
+                f"{take} is a {now['class']} power and {drop} is a "
+                f"{was['class']} one: a power is replaced from the same class")
+        if int(now["level"] or 0) > int(was["level"] or 0):
+            raise ValueError(
+                f"{take} is level {now['level']} and {drop} is level "
+                f"{was['level']}: a power is replaced by one of the same "
+                "level or lower")
+        return replace(who, powers=[p for p in who.powers if p != drop]
+                       + [take])
+
+    if drop in who.skills:
+        if take in who.skills:
+            raise ValueError(f"{take} is already trained")
+        rows = db.execute(
+            "SELECT skill, granted FROM class_skill WHERE lower(class) = ?",
+            (who.cls.lower(),)).fetchall()
+        if not rows:
+            raise ValueError(f"{who.cls} prints no skill list to retrain in")
+        if any(r["skill"] == drop and r["granted"] for r in rows):
+            raise ValueError(
+                f"{drop} is trained by the class itself and is not a "
+                "selection")
+        if take not in {r["skill"] for r in rows if not r["granted"]}:
+            raise ValueError(
+                f"{take} is not on the {who.cls} skill list")
+        for ref in who.feats:
+            row = db.execute(
+                "SELECT prereq FROM feat WHERE ref = ?", (ref,)).fetchone()
+            if row is None or not row["prereq"]:
+                continue
+            try:
+                node = json.loads(row["prereq"])
+            except (TypeError, ValueError):
+                continue
+            if drop.lower() in _skills_named(node):
+                raise ValueError(
+                    f"{drop} cannot be retrained: {ref} requires it")
+        return replace(
+            who,
+            skills=(*(s for s in who.skills if s != drop), take))
+
+    raise ValueError(
+        f"{drop} is not a feat, power or skill this character chose")
+
+
+def _refs_named(node: object) -> set[str]:
+    """Every `ref` a prerequisite tree names, at any depth."""
+    out: set[str] = set()
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in ("all", "any"):
+                for child in value or ():
+                    out |= _refs_named(child)
+            elif key == "ref" and isinstance(value, str):
+                out.add(value)
+    return out
+
+
+def _skills_named(node: object) -> set[str]:
+    """Every `skill` a prerequisite tree names, case-folded, at any depth.
+
+    Read here rather than through `meets` because that function answers
+    every `skill` atom False (`#1113`), so it would refuse nothing.
+    """
+    out: set[str] = set()
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in ("all", "any"):
+                for child in value or ():
+                    out |= _skills_named(child)
+            elif key == "skill" and isinstance(value, str):
+                out.add(value.strip().lower())
+    return out
+
+
 #: What the printed maths assumes you are holding. Enhancement runs in
 #: five-level bands, and 4e's own advice is blunt about the floor: by the
 #: end of level 5 everyone needs a +1 weapon, +1 armour and a +1 neck

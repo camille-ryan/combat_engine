@@ -37891,6 +37891,211 @@ def a_module_gets_the_party_size_it_asked_for(out: Result) -> None:
     )
 
 
+def one_choice_can_be_retrained_and_the_rest_refused(out: Result) -> None:
+    """A feat, power or skill may be changed, with the printed refusals.
+
+    `#991`. The printed rule:
+
+    > *"Every time you gain a level, you can retrain your character: change
+    > one feat, power, or skill selection you made previously."*
+
+    **Its stated blocker is gone.** That issue called skills *"the honest
+    blocker"* -- `Character` had no `skills` field, so the skill third had
+    nothing to retrain -- and `#793`'s pin added one. All three thirds are
+    live now.
+
+    **Every candidate here is chosen by query and checked not to be held**,
+    because two of the first controls were void for exactly that: a
+    different-usage power that happened to be known already was refused as
+    *"already known"*, which is a refusal the rule would make anyway, so the
+    assertion proved nothing about usage. And the allowed case had no
+    candidate at all -- `level < 1 and > 0` is empty -- so it passed by not
+    running. Both read green.
+
+    The allowance is **not** asserted here because it is not implemented:
+    *"only one change at each level"* belongs to whatever applies a level,
+    which is `#1013` and unbuilt. `retrain` does the swap and the refusals.
+    """
+    from combat_engine import db
+    from combat_engine.chargen import build_of, retrain
+    from combat_engine.chargen.choices import legal_feats
+    from combat_engine.story import Party
+
+    con = db.game()
+    party = Party.of(["rogue", "wizard"], level=3, seed=7)
+    who = party.sheets[0].character
+    holds = set(who.powers)
+
+    def shape(ref: str) -> tuple[str, int, str] | None:
+        got = con.execute(
+            "SELECT class, level, usage FROM power WHERE ref = ?",
+            (ref,)).fetchone()
+        return ((got["class"] or ""), int(got["level"] or 0),
+                (got["usage"] or "")) if got else None
+
+    def unheld(sql: str, *args: object) -> str:
+        for row in con.execute(sql, args).fetchall():
+            if row["ref"] not in holds:
+                return str(row["ref"])
+        return ""
+
+    out.that(who.feats and who.skills and len(who.powers) > 5,
+             "the setup landed: a dealt rogue has feats, a pinned training"
+             " set and a hand -- all three things this rule retrains",
+             f"feats={len(who.feats)} skills={len(who.skills)}"
+             f" powers={len(who.powers)}")
+
+    # ---- the power third -------------------------------------------------
+    drop = ""
+    was: tuple[str, int, str] | None = None
+    for ref in who.powers:
+        got = shape(ref)
+        if got and got[0].lower() == "rogue" and got[1] > 0:
+            drop, was = ref, got
+            break
+    out.that(bool(drop) and was is not None,
+             "the setup landed: a held rogue power above level 0, so"
+             " `same level or lower` has somewhere to go -- the first"
+             " version of this picked a level-0 power and the allowed case"
+             " had no candidate, passing by not running",
+             f"drop={drop} shape={was}")
+    assert was is not None
+
+    take = unheld(
+        "SELECT ref FROM power WHERE lower(class) = 'rogue' AND usage = ?"
+        " AND level <= ?", was[2], was[1])
+    swapped = retrain(who, drop, take) if take else None
+    out.that(swapped is not None and drop not in swapped.powers
+             and take in swapped.powers
+             and len(swapped.powers) == len(who.powers),
+             "a power is replaced by one of the same class, the same usage"
+             " and the same level or lower -- and the hand is the same size"
+             " afterwards, so a retrain is a swap and not a gain",
+             f"{drop} -> {take}")
+    out.that(drop in who.powers,
+             "and the character handed in is untouched, so a caller may"
+             " offer the swap and keep the old sheet if it is declined",
+             f"{drop} still held by the original")
+
+    for sql, args, why in (
+        ("SELECT ref FROM power WHERE lower(class) = 'rogue' AND usage != ?"
+         " AND level <= ?", (was[2], was[1]), "same type"),
+        ("SELECT ref FROM power WHERE lower(class) = 'rogue' AND usage = ?"
+         " AND level > ?", (was[2], was[1]), "same level or lower"),
+        ("SELECT ref FROM power WHERE lower(class) = 'wizard' AND usage = ?"
+         " AND level <= ?", (was[2], was[1]), "same class"),
+    ):
+        other = unheld(sql, *args)
+        refused, said = False, ""
+        if other:
+            try:
+                retrain(who, drop, other)
+            except ValueError as err:
+                refused, said = True, str(err)
+        # **`already known` is the wrong refusal** and is the reason every
+        # candidate is filtered against `holds` above: it is a refusal the
+        # rule makes anyway, so an assertion satisfied by it says nothing
+        # about the clause under test.
+        out.that(bool(other) and refused and "already known" not in said,
+                 f"a power breaking `{why}` is refused, and refused FOR that"
+                 " -- not for being one the character already knows, which"
+                 " would be a refusal that proves nothing",
+                 f"candidate={other or 'NONE FOUND'} said={said!r}")
+
+    # ---- the feat third --------------------------------------------------
+    gone = who.feats[0]
+    kept = [f for f in who.feats if f != gone]
+    pool = [f for f in legal_feats(
+        who.cls, who.level, build_of(who.cls, who.build), who.race,
+        taken=[*who.powers, *kept]) if f not in who.feats]
+    out.that(pool,
+             "the setup landed: there are legal replacements for a held"
+             " feat, asked with the dropped one already removed",
+             f"{len(pool)} legal")
+    if pool:
+        after = retrain(who, gone, pool[0])
+        out.that(gone not in after.feats and pool[0] in after.feats
+                 and len(after.feats) == len(who.feats),
+                 "a feat is replaced by one whose prerequisites are met,"
+                 " and the count is unchanged",
+                 f"{gone} -> {pool[0]}")
+
+    refused, said = False, ""
+    try:
+        retrain(who, gone, "f99998")
+    except ValueError as err:
+        refused, said = True, str(err)
+    out.that(refused and "may take" in said,
+             "and a feat outside the legal pool is refused -- `legal_feats`"
+             " is asked with the dropped feat removed, so one that only"
+             " qualified because of it is refused by construction",
+             said)
+
+    # ---- the skill third -------------------------------------------------
+    rows = con.execute(
+        "SELECT skill, granted FROM class_skill WHERE lower(class) = 'rogue'"
+    ).fetchall()
+    granted = {r["skill"] for r in rows if r["granted"]}
+    chose = [s for s in who.skills if s not in granted]
+    out.that(chose and granted,
+             "the setup landed: the rogue has both granted skills and chosen"
+             " ones, which is what the next two assertions tell apart",
+             f"granted={sorted(granted)} chosen={sorted(chose)}")
+
+    free = next((r["skill"] for r in rows
+                 if not r["granted"] and r["skill"] not in who.skills), "")
+    if chose and free:
+        moved = retrain(who, chose[0], free)
+        out.that(chose[0] not in moved.skills and free in moved.skills,
+                 "a chosen skill is replaced by another on the class list",
+                 f"{chose[0]} -> {free}")
+
+    held_granted = next((g for g in granted if g in who.skills), "")
+    refused, said = False, ""
+    if held_granted and free:
+        try:
+            retrain(who, held_granted, free)
+        except ValueError as err:
+            refused, said = True, str(err)
+    out.that(refused and "not a selection" in said,
+             "a GRANTED skill is refused -- the printed words are"
+             " `predetermined by the class`, and `class_skill.granted` is"
+             " that distinction: the first printed sentence against the"
+             " second",
+             f"{held_granted}: {said!r}")
+
+    refused, said = False, ""
+    if chose:
+        try:
+            retrain(who, chose[0], "arcana")
+        except ValueError as err:
+            refused, said = True, str(err)
+    out.that(refused and "not on the" in said,
+             "and a skill off the class list is refused, however freely the"
+             " character might want it",
+             said)
+
+    # ---- nothing the character chose -------------------------------------
+    refused, said = False, ""
+    try:
+        retrain(who, "f99999", "f1")
+    except ValueError as err:
+        refused, said = True, str(err)
+    out.that(refused and "did not" not in said and "chose" in said,
+             "and a ref the character never chose is refused rather than"
+             " silently doing nothing -- a no-op would hand back a sheet"
+             " that looks retrained and is not",
+             said)
+
+    # A class feature is not a selection, and cannot be named.
+    out.that(not any(f.startswith("cf:") for f in who.feats),
+             "a class feature never appears in `Character.feats`, so"
+             " `a feature of the class rather than a choice` needs no check"
+             " -- asserted rather than coded, because a check that cannot"
+             " fire reads as a guarantee",
+             f"{[f for f in who.feats if f.startswith('cf:')]}")
+
+
 def a_party_keeps_its_training_between_fights(out: Result) -> None:
     """A campaign character's trained skills do not change per encounter.
 
@@ -61143,6 +61348,12 @@ DRIVERS = {
     "campaign_replays": (
         a_campaign_replays_in_a_fresh_process,
         "the same seed plays the same campaign, across processes (#789)",
+    ),
+    "retrain": (
+        one_choice_can_be_retrained_and_the_rest_refused,
+        "a feat, power or skill may be retrained, with the printed refusals"
+        " -- same type, same level or lower, same class, and not one the"
+        " class predetermined (#991)",
     ),
     "party_training": (
         a_party_keeps_its_training_between_fights,
