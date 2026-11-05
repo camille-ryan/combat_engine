@@ -405,22 +405,30 @@ def i654x1(c: Cast) -> None:
 
 @power("i3523x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.CLASSES.vampire",))
+       todo=("c.regeneration(adds_to=)",))
 def i3523x1(c: Cast) -> None:
-    """The regeneration this raises belongs to a feature of a class this
-    project does not build.
+    """The regeneration this raises belongs to a class feature, and raising
+    an existing one is not sayable.
 
-    **Re-pointed off `c.class_feature()`.** This row's own docstring already
-    said "a class the importer never brought in", which is right and is not
-    a `Cast` gap: `chargen.CLASSES` holds 25 classes where the compendium
-    holds 77, and `build._class_features` skips any class outside that set.
-    The parser handles the page fine -- it finds the sections and the
-    headings -- so nothing is broken; the class is simply out of scope, and
-    whether it should be is a decision rather than a verb.
+    **Re-pointed twice, and the second obstacle is now the only one.** This
+    waited on `c.class_feature()`, then on `chargen.CLASSES.vampire`
+    because the class was out of scope. `#599` put the class in scope on
+    Camille's ruling -- `chargen.CLASSES` holds 26 and `class_feature`
+    carries 26 `cf:vampire-*` rows -- so that premise is gone.
 
-    The second obstacle stands either way and is worth keeping written
-    down: even given the ref, `c.regeneration` lays a second, separate heal
-    rather than adding to an existing feature's number."""
+    What is left is the obstacle this docstring already named and kept
+    written down, which is why the re-point is one line rather than a
+    re-reading: **`c.regeneration` lays a second, separate heal rather than
+    adding to an existing feature's number.** Measured against the verb --
+    `amount`, `until`, `on`, `while_bloodied`, `unless`,
+    `unless_struck_by`, `unless_damaged_by` -- and none of them raises a
+    regeneration that is already standing. Two heals of 2 and 3 are not a
+    regeneration of 5: they tick separately and each reads its own
+    `unless`.
+    
+    No other row waits on this today (`blocked.py --group` lists none), so
+    the symbol is minted rather than reused -- which is the exception the
+    content file allows when there is nothing to join."""
 
 
 @power("i640x1", level=3, cls=ITEM, action=ActionType.NONE,

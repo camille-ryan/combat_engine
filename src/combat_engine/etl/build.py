@@ -54,6 +54,24 @@ CLASSES = (
     "Ardent", "Artificer", "Assassin", "Avenger", "Barbarian", "Bard",
     "Battlemind", "Druid", "Invoker", "Monk", "Psion", "Runepriest",
     "Seeker", "Shaman", "Sorcerer", "Swordmage", "Warden",
+    # **The 26th, and it is one word rather than a chassis.** `#599`, in
+    # scope on Camille's ruling: *"in scope, add it."*
+    #
+    # That issue's own correction says it *"wants a hand-transcribed
+    # `ClassLine`"*, because `chargen._from_the_book` derives one from the
+    # already-gated `class` table and so cannot bootstrap a class the
+    # table does not carry. True -- and the gate is **this list**, not
+    # `chargen.CLASSES`. The two were conflated: this one is the printed
+    # names the import filters on, `chargen.CLASSES` is a dict of
+    # `ClassLine`s, and `chargen` ends with `CLASSES.update(
+    # _from_the_book())`. So a name here makes the table carry the row and
+    # the derived route fills the chassis.
+    #
+    # Checked through the parse-level harness before the rebuild rather
+    # than after it: hp 12 + 5 a level, 2 surges, cloth, +1 Fortitude and
+    # +1 Will, simple melee and simple ranged, 4 skill picks from 11.
+    # Shadow power source, striker.
+    "Vampire",
 )  # fmt: skip
 
 SCHEMA = """
@@ -5000,7 +5018,26 @@ def _other_names(
             if len(name) < 3:
                 continue
             ref = f"x{n}_{row['ID']}"
-            names.setdefault(ref, {"name": name})
+            # **`setdefault` on the NAME, not on the entry**, and that one
+            # word is `#1116`. An importer that has already written
+            # `names.setdefault(ref, {})["rules_text"] = prose` created the
+            # key, so `setdefault(ref, {...})` saw it present and the name
+            # was **never recorded** -- silently, for every row that
+            # importer touched.
+            #
+            # Measured when `#454`'s deity import did exactly that: all
+            # 134 `x1_` entries came out with prose and no name, the scrub
+            # had nothing to substitute, and printed names went into
+            # `game.db` -- `x2_151.spec` and `rt:r26-t2.spec` both carried
+            # a name in full where they had carried `x1_10`. Ten tables
+            # moved with identical row counts.
+            #
+            # `_poisons` already knew and wrote the two lines by hand. The
+            # trap is **removed** here rather than documented, because the
+            # call site looks complete either way and three of the eleven
+            # alias tables now have importers with more queued. A row that
+            # already has a name keeps it.
+            names.setdefault(ref, {}).setdefault("name", name)
             seen += 1
     return seen
 

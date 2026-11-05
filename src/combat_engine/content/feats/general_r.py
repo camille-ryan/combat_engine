@@ -139,7 +139,28 @@ R44 = ("p7441", "p7442", "p7443")
 #:   *is* in scope and whose feature row simply is not declared yet. Naming
 #:   the ref is the tree's own convention for that -- `items/waist.i640x1`
 #:   does it one line from a row that had this same wrong symbol.
-UNBUILT_CLASS = ("chargen.CLASSES.vampire",)
+#: **Re-pointed: the class is built now, and the gap moved rather than
+#: closed.** `#599`, on Camille's ruling *"in scope, add it"*. One word in
+#: `etl.build.CLASSES` and a rebuild: `chargen.CLASSES` holds 26,
+#: `_from_the_book` derives the chassis (hp 12 + 5, 2 surges, cloth,
+#: striker, `c817`), and `class_feature` carries **26** `cf:vampire-*`
+#: rows.
+#:
+#: **None of the 26 is declared**, which is what these rows actually wait
+#: on: each names a class feature in prose and wants a *declared* row to
+#: read or unwind. So the symbol names the undeclared features rather
+#: than the class.
+#:
+#: The old symbol could never have fired. `blocked._surface` resolves
+#: module attributes, and `chargen.CLASSES.vampire` is a **key inside a
+#: dict** -- measured, `_one("chargen.CLASSES.vampire", _surface())` is
+#: False with the class present -- so `todo.py` would have gone on
+#: reporting these as waiting for ever. Filed.
+#: Named by its first member, the way `BERSERKER_FORM` directly below
+#: names a class feature by ref: all **26** are undeclared, so the family
+#: is one gap and `cf:vampire-f0` is what resolves when somebody starts
+#: writing it.
+UNDECLARED_CLASS_FEATURE = ("cf:vampire-f0",)
 BERSERKER_FORM = ("cf:barbarian-berserker-f0",)
 #: **Retired: `etl.build_sub_option()`. The taxonomy landed, and the seven
 #: rows that shared the symbol stopped sharing a gap.**
@@ -1740,7 +1761,7 @@ def f3620(c: Cast) -> None:
 
 @power("f3621", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=UNBUILT_CLASS)
+       dropped=UNDECLARED_CLASS_FEATURE)
 def f3621(c: Cast) -> None:
     """Both surge halves play. What is left is the third clause, which
     unwinds a class feature named in prose -- there is nothing to unwind.
@@ -1888,7 +1909,7 @@ def f3625(c: Cast) -> None:
 
 
 @power("f3626", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=UNBUILT_CLASS,
+       reach=PERSONAL, target=SELF, todo=UNDECLARED_CLASS_FEATURE,
        proficiency=("w:holy-symbol", "w:ki-focus"))
 def f3626(c: Cast) -> None:
     """Three class features named in prose, with the surge pool they cost

@@ -1104,6 +1104,37 @@ def _build_spec_tables() -> tuple[frozenset[str], list[str]]:
     return listed, reading
 
 
+#: An alias-table ref -- `x0_412`, `x10_7`. `etl.build._ALIAS_TABLES` mints
+#: these and `_other_names` is what gives them their names, so this is the
+#: family `#1116`'s ordering trap can empty.
+_ALIAS_REF = re.compile(r"x\d+_\d+$")
+
+
+def _same_card(found: str, ref: str) -> bool:
+    """Is `found` the same printed card as `ref`, or a card printed inside it?
+
+    The waiver this serves is real: `p289b` is the card `p289` hands over
+    and may print its own name, so a spec citing both is not leaking.
+
+    **But a bare prefix waives a leak**, which is `#1116`'s sibling finding.
+    `f1397` starts with `f139` and is a **different feat**, so `f139`'s spec
+    printing `f1397`'s name was silently waived as "its own name".
+
+    The two are told apart by what follows: a second card is a **letter**
+    suffix (`p289b`, `f960b`, `cf:ardent-f0s3`) and a different ref differs
+    in its **digits** (`f139` -> `f1397`). So a digit immediately after the
+    shorter ref means two refs, not one card.
+
+    Same bug, same reasoning and same sweep as `audit.py`'s `_labelled`.
+    """
+    short, long = sorted((found, ref), key=len)
+    if short == long:
+        return True
+    if not long.startswith(short):
+        return False
+    return not long[len(short)].isdigit()
+
+
 def tables() -> int:
     """Do the lists that decide what gets scrubbed and checked agree?
 
@@ -1222,6 +1253,46 @@ def specs() -> int:
     # reconciliation has to be able to fail *first* -- otherwise the clean
     # line is printed and the registration fault reads as a pass. #492.
     registered = tables()
+    # **And the index has to hold a name for the refs about to be searched
+    # for**, which is `#1116` and is the precondition this pass never had.
+    #
+    # A name absent from the index is a name the detector **cannot look
+    # for**, so losing one blinds the scrub and this gate in the same
+    # instant -- and the headline then says "no printed names in any spec"
+    # over names it no longer has. That is not hypothetical: `#454`'s deity
+    # import created its index entries prose-first, `_other_names`'
+    # `setdefault` saw the key present and never added the name, all 134
+    # `x1_` entries came out nameless, and printed names went into
+    # `game.db` while this pass reported clean.
+    #
+    # The only signal was two *baseline* entries reporting themselves
+    # retired -- which reads like good news and is the shape
+    # `scripts/CLAUDE.md` warns about: a waiver reported "no longer needed"
+    # may be a check that stopped firing.
+    #
+    # Checked per alias prefix rather than against a row count, because a
+    # nameless `x<n>_` entry is **always** the bug: `_other_names` indexes
+    # every alias row by its name, so an entry with prose and no name is an
+    # importer that got there first. No external source needed, which is
+    # what makes this cheap enough to run before every walk.
+    nameless = sorted(
+        ref for ref, got in names.items()
+        if _ALIAS_REF.match(ref) and not (got or {}).get("name")
+    )
+    if nameless:
+        by_prefix: dict[str, int] = {}
+        for ref in nameless:
+            by_prefix[ref.split("_", 1)[0]] = by_prefix.get(
+                ref.split("_", 1)[0], 0) + 1
+        print(f"{len(nameless)} alias entry/entries carry no name, so this"
+              f" pass cannot look for them:", file=sys.stderr)
+        for prefix, n in sorted(by_prefix.items()):
+            held = sum(1 for r in names if r.startswith(f"{prefix}_"))
+            print(f"  {prefix}_  {n} of {held} nameless"
+                  f"  -- e.g. {nameless[0]}", file=sys.stderr)
+        print("  an importer wrote `names.setdefault(ref, {})[...]` before"
+              " `_other_names` ran; see #1116", file=sys.stderr)
+        return 1
 
     db = game()
     found: list[tuple[str, str, str, list[str]]] = []
@@ -1257,7 +1328,17 @@ def specs() -> int:
                 for name, refs in _hits(line, index):
                     # Its own name, or a card printed inside it -- `p289b`
                     # belongs to `p289` and may say so.
-                    if any(r.startswith(ref) or ref.startswith(r) for r in refs):
+                    #
+                    # **With a boundary, because a bare prefix waives a
+                    # real leak.** `f1397` starts with `f139` and is a
+                    # different feat, so `f139`'s spec printing `f1397`'s
+                    # name was waived as "its own name". The second card
+                    # convention is a **letter** suffix (`p289b`, `f960b`)
+                    # and a different ref differs in its **digits**, so
+                    # refusing a digit boundary keeps the waiver and closes
+                    # the hole. Same bug and same fix as `audit.py`'s
+                    # `_labelled`, found in the same sweep.
+                    if any(_same_card(r, ref) for r in refs):
                         continue
                     if _identifies(name, refs, rules, line):
                         found.append((table, ref, name, refs))
