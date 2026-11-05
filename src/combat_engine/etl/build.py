@@ -122,6 +122,17 @@ CREATE INDEX power_class ON power(class, level);
 -- moves no call site. #339.
 CREATE TABLE class (
   name TEXT PRIMARY KEY, role TEXT, source TEXT,
+  -- **The POWER source -- arcane, martial, divine, primal, psionic,
+  -- shadow -- and not the book.** `source` directly above is the book
+  -- citation, which is the collision that made `#1094` report this data
+  -- as existing nowhere: a reader checking `class.source` finds a
+  -- populated column of the wrong thing.
+  --
+  -- 300 feat prerequisites ask about this and `chargen.meets` answered
+  -- False to every one of them before the column existed. Six values on
+  -- 46 classes; the feats name five of them (martial 107, divine 93,
+  -- arcane 43, primal 31, psionic 26), and no feat gates on `shadow`.
+  power TEXT,
   hp_first INTEGER, hp_per_level INTEGER, surges INTEGER,
   defences TEXT, armour TEXT, weapons TEXT, implements TEXT,
   abilities TEXT, ref TEXT, id INTEGER,
@@ -2091,7 +2102,19 @@ def _classes(
     rows = [
         r
         for r in source.execute(
-            "SELECT ID, Name, Role, Source, Abilities, PlainTxt, Txt FROM Class"
+            # **`Power` as well as `Source`, and they are different
+            # things.** `Source` is the book citation and is what the
+            # `class.source` column has always held; `Power` is the power
+            # source -- arcane, martial, divine, primal, psionic, shadow --
+            # which is what 300 feat prerequisites ask about and what
+            # `chargen.meets` answered False to for every one of them.
+            #
+            # The column collision is why `#1094`'s body said this data
+            # *"exists nowhere"*: a reader checking `class.source` finds a
+            # populated column of the wrong thing. It is `class.power` here
+            # rather than a second `source`.
+            "SELECT ID, Name, Role, Source, Power, Abilities, PlainTxt, Txt"
+            " FROM Class"
         )
         if not r["Name"].lower().startswith("hybrid")
         and r["Name"].split("(")[0].strip().lower() in wanted
@@ -2112,9 +2135,11 @@ def _classes(
                 found[field_] = m.group(1).strip()
         picks, skills = _skills_of(plain)
         out.execute(
-            "INSERT OR REPLACE INTO class VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO class VALUES"
+            " (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 bare, row["Role"] or "", row["Source"] or "",
+                (row["Power"] or "").strip().lower(),
                 int(found.get("hp_first", 0) or 0),
                 int(found.get("hp_per_level", 0) or 0),
                 int(found.get("surges", 0) or 0),

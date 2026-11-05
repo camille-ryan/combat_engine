@@ -2531,23 +2531,111 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
             wanted in (w.group, w.category, w.slug.replace("-", " "))
             for w in who.line.weapons
         )
-    # **`skill` is answerable now and is deliberately still False**, which
-    # is worth a note because the field it would read exists as of `#793`.
+    # **The power source**, which 300 feat prerequisites ask about.
+    # Camille's call on `#1094`, option C.
     #
-    # `Character.skills` names the pool picks, and the granted ones are
-    # derivable from `cls` with no rng at all -- so this atom could be
-    # answered today. It is not, because **87 feats carry a `skill`
-    # prerequisite** and answering it would make some of them legal:
-    # `choices.legal_feats` would return a different pool, every chargen
-    # draw would move, and all seven `replay` fixtures would diverge. That
-    # is a baseline re-record plus a two-way `winrate` -- a deliberate
-    # change with a measurement, not a side effect of adding a field.
+    # `class.power` since the same issue -- *arcane*, *martial*, *divine*,
+    # *primal*, *psionic*, *shadow*. `#1094`'s body said this data
+    # *"exists nowhere"* and the reason it looked that way is a column
+    # collision: `class.source` has always been populated and holds the
+    # **book**. One column in one SELECT, not a hand-written table.
     #
-    # Filed as #1113 with the count. Until then the honest direction is the
-    # one this function already takes for every atom it cannot read.
+    # Derivable from `cls` alone, which is what makes it safe to answer
+    # here: `choices._legal_feats` is memoised on a key that already holds
+    # `cls`, so this cannot give two answers for one key.
+    if "source" in node:
+        return str(node["source"]).strip().lower() == power_source(who.cls)
+    # **A trained skill, on the set that is DERIVABLE and not on the pool
+    # picks.** `#1113`, and the narrowing is deliberate and measured.
     #
-    # term, skill, source: still answered False.
+    # The set is class-granted (`class_skill.granted = 1`) plus the one
+    # racial trait that trains a skill **outright** -- measured, and not
+    # the three `_trained_skills` names: `r3` and `r7` both *choose* one,
+    # which needs a stream. That is the **non-circular** reading
+    # `#1113` argued for, minus the explicit request, and the minus is
+    # forced by where this function is called from:
+    #
+    # * `choices._legal_feats` builds its own
+    #   `Character(cls=, level=, build=, race=)` with **no `skills=`**, so
+    #   `who.skills` is empty on that path whatever the caller pinned;
+    # * and it is memoised on `(cls, level, leg_name, race, taken)`. A
+    #   reader that consulted `who.skills` would make the pool depend on
+    #   something absent from the key, which is the order-dependent cache
+    #   bug where the first caller's answer freezes for the process.
+    #
+    # Granted-plus-race depends only on `cls` and `race`, both in that
+    # key, so it is answerable without touching the cache.
+    #
+    # **What that reaches, measured: 39 of the 87 feats**, on six skills
+    # -- arcana, dungeoneering, nature, religion, stealth, thievery. The
+    # other 48 ask for skills no class is *given* (intimidate alone is 18)
+    # and so need the pool picks, which needs them computed before the
+    # feats are dealt and threaded into `legal_feats`. That is the book's
+    # own step order and it is `#1113`'s remaining half.
+    #
+    # A feat-trained skill deliberately does **not** count toward another
+    # feat's prerequisite: `meets` is asked *while* feats are being chosen,
+    # so reading them would be circular, and the book puts skills at step
+    # 4, before feats, for that reason.
+    if "skill" in node:
+        return str(node["skill"]).strip().lower() in given_skills(
+            who.cls, who.race)
+    # term: still answered False. 586 feats, 14 classified kinds, and
+    # `#1094`/`#1044` carry what each kind would need -- an ETL import, a
+    # matching pass, and a residue nobody has read.
     return False
+
+
+@cache
+def power_source(cls: str) -> str:
+    """Which power source a class draws on, or `""`. `#1094`.
+
+    Off `class.power`, which is the compendium's `Class.Power` -- **not**
+    `class.source`, which is the book citation and is the collision that
+    made this data look absent.
+
+    Matched case-insensitively for the same `#339` reason `_trained_skills`
+    gives: `Character.cls` is a slug and the table's key is the printed
+    word. An unknown class answers `""`, which matches no prerequisite
+    rather than raising -- a monster has no entry here and is not meant to.
+    """
+    from combat_engine.db import game
+
+    want = (cls or "").strip().lower()
+    if not want:
+        return ""
+    for row in game().execute("SELECT name, power FROM class"):
+        if (row["name"] or "").strip().lower() == want:
+            return (row["power"] or "").strip().lower()
+    return ""
+
+
+@cache
+def given_skills(cls: str, race: str = "") -> frozenset[str]:
+    """The skills this class and race are **given**, never the pool picks.
+
+    The derivable half of `_trained_skills`, split out because `meets`
+    needs exactly this half and cannot have the other -- see the `skill`
+    branch of `meets` for why the pool picks are out of reach there.
+
+    Lower-cased on both sides, like every other class lookup here.
+
+    **Not a second copy of `_trained_skills`' granted branch**: that
+    function calls this one, so the two cannot drift. Measured over the 25
+    dealt classes: 17 of them are given at least one skill, and six
+    distinct skills are given by some class.
+    """
+    from combat_engine.db import game
+
+    want = (cls or "").strip().lower()
+    out: set[str] = set()
+    if want:
+        for row in game().execute(
+                "SELECT class, skill FROM class_skill WHERE granted = 1"):
+            if (row["class"] or "").strip().lower() == want:
+                out.add((row["skill"] or "").strip().lower())
+    out |= {s.lower() for s in _race_skills(race)}
+    return frozenset(out)
 
 
 #: Sub-choices a row's card asks the player to make **when it is taken**,
@@ -3745,6 +3833,36 @@ def _trained_skills(cls: str, feats: list[str], rng: Random,
     )
 
 
+@cache
+def _race_skills(race: str) -> frozenset[str]:
+    """The skills a race is **given** outright. No choice, so no rng.
+
+    `race.trains` only, and **measured: one race, not the three that train
+    anything.** `_trained_skills`' docstring names three racial traits and
+    all three are real, but only `rt:r52-t3` is a *grant* -- `r52.trains`
+    is `stealth`. The other two are picks: `r3` chooses one of seventeen
+    skills and `r7` chooses from the character's own class list. A pick
+    needs a stream, which is exactly the half `meets` cannot have, so a
+    character of either answers on its class alone.
+
+    Said at this length because "three racial traits train a skill" is
+    true, and reading it as "three races contribute here" is wrong -- the
+    first draft of this function did exactly that.
+
+    **One reader, called by both `given_skills` and `_plus_race`'s granted
+    branch**, so the two cannot answer differently about the same column.
+    """
+    from combat_engine.db import game
+
+    if not race:
+        return frozenset()
+    got = game().execute(
+        "SELECT trains FROM race WHERE ref = ?", (race,)).fetchone()
+    if got is None or not got["trains"]:
+        return frozenset()
+    return frozenset(s for s in got["trains"].split(",") if s)
+
+
 def _plus_race(db: sqlite3.Connection, cls: str, race: str,
                already: set[str], rng: Random) -> set[str]:
     """Add the race's printed training to a set already holding the rest.
@@ -3785,8 +3903,11 @@ def _plus_race(db: sqlite3.Connection, cls: str, race: str,
     out = set(already)
     # Granted outright: no choice to make, so a collision is just one
     # training rather than a wasted pick.
-    if got["trains"]:
-        out |= {s for s in got["trains"].split(",") if s}
+    #
+    # Through `_race_skills` rather than re-splitting the column, so this
+    # and `given_skills` -- which `chargen.meets` reads for the `skill`
+    # prerequisite -- cannot disagree about what a race is *given*. #1113.
+    out |= set(_race_skills(race))
     offered = [s for s in (got["trains_choice"] or "").split(",") if s]
     if got["trains_from"]:
         # `"class"` is the one value of that column which is not a printed
