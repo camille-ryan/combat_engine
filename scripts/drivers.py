@@ -8088,11 +8088,54 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
     from combat_engine.engine.query import allies, enemies, is_
     from combat_engine.engine.types import Condition, Defense, Keyword
 
+    #: Every ref the `feat` table carries, so the pose can hold exactly
+    #: the feat under test and no other. A feat is an ordinary row in
+    #: `Powers.known` with nothing in its header to mark it one, which is
+    #: what `Cast.feats` says, so the table is the only way to ask.
+    def _every_feat_ref() -> frozenset[str]:
+        from combat_engine.db import game
+
+        return frozenset(
+            str(r["ref"]) for r in game().execute("SELECT ref FROM feat"))
+
+    ALL_FEATS = _every_feat_ref()
+
     def pose(power: str, feat: str, seed: int = 1):  # noqa: ANN202
         world, me, _ = _board(power, seed)
         known = world.need(me, Powers)
+        # **Every OTHER feat comes off, and that is what makes the negative
+        # arms controls.** `_board` deals a real character, so it arrives
+        # holding its own feats -- and `pose(power, "")` only declined to
+        # *add* one. Four assertions here read *"without the feat nobody
+        # does it"* against a creature that held a dealt feat doing exactly
+        # it, and they went red the moment `#1094` widened the feat pool
+        # and a different one landed.
+        #
+        # They were not newly wrong; they were newly *visible*. A control
+        # that depends on which feats the dealer happened to pick is a
+        # control that one draw change can void, which is the same lesson
+        # `race_training` learned in the same sweep.
+        known.known = [r for r in known.known if r not in ALL_FEATS]
         if feat:
             known.known.append(feat)
+        # **The victim has to SURVIVE the attack**, and this is what six of
+        # these assertions actually rest on. Every clause here is a rider on
+        # a hit -- the target is knocked prone, the bystanders flinch, the
+        # target swings at somebody -- so a target the caster *kills* takes
+        # the clause with it: death clears its conditions and relations, and
+        # a corpse makes no basic attack.
+        #
+        # That is exactly how `#1094` reddened four of them. Widening the
+        # feat pool gave this warlock a different hand and a sling as well
+        # as its rod, so the same body now kills the target outright --
+        # `Died` where the other arm logged the granted `Hit`. The clauses
+        # were never wrong and the assertions were never about lethality.
+        #
+        # So the two creatures the poses read are given a pool nothing here
+        # can empty, and `survived` below is asserted rather than assumed --
+        # a dead victim would otherwise make every rider read as inert while
+        # being correct.
+
         # `arm_traits` may already have spent the boon before round 1, and
         # this rule is about the augment rather than about that clock.
         known.charges.clear()
@@ -8103,6 +8146,10 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
         world.get(neighbour, Position).square = (here.square[0] + 4, here.square[1])
         for spare in (foes[1], *foes[3:]):
             world.get(spare, Position).square = (here.square[0] + 15, here.square[1])
+        for who in (victim, neighbour):
+            hp = world.need(who, Health)
+            hp.max_hp = max(hp.max_hp, 999)
+            hp.hp = hp.max_hp
         use = Cast(world=world, me=me, ref=power, targets=[victim])
         use.target = victim
         return world, me, use, victim, neighbour
@@ -8110,6 +8157,20 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
     def attack_total(world, who: int) -> int:  # noqa: ANN001
         mods = world.get(who, Mods)
         return mods.total("attack", {}) if mods is not None else 0
+
+    # **The setup assertion for every pose below**, and it exists because
+    # its absence is what let `#1094` void four of these silently: a target
+    # the caster kills takes the rider with it, and every one of them then
+    # reads as inert while being correct.
+    _w0, _me0, _use0, _v0, _n0 = pose("p1341", "f3427")
+    REGISTRY["p1341"].body(_use0)
+    out.that(_w0.get(_v0, Health).hp > 0 and _w0.get(_n0, Health).hp > 0,
+             "the poses survive the attack: `pose` gives the victim and the"
+             " bystander a pool the caster cannot empty, so the riders"
+             " below are asserted on a living target. Without this a"
+             " stronger caster makes every clause here read as inert",
+             f"victim {_w0.get(_v0, Health).hp}, "
+             f"bystander {_w0.get(_n0, Health).hp}")
 
     # -- f3427: "you also knock the target prone" ------------------------
     for power in ("p1341", "p5919"):
@@ -8219,21 +8280,44 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
     # and `shared.augmenting` is the same gate for all six, already planted.
 
     # f3421: "the target makes a basic attack against a creature you choose"
+    #
+    # **Asserted on the swing being MADE, not on it landing**, and that is
+    # a correction. It read `neighbour.hp < hurt` -- the bystander loses
+    # hit points -- which requires the granted basic attack to *hit*. A
+    # miss is a legal outcome of the clause working, so the assertion was
+    # really about a die roll, and it went red the moment `#1094` changed
+    # the dealt character enough to move that roll: `33 -> 33`, a clean
+    # miss.
+    #
+    # The claim is that the target swings at the creature the caster picks.
+    # `Hit`/`Miss` carry `attacker` and the victim, so the bus answers it
+    # exactly, for either outcome, on any board.
+    def swings_at(world, use, swinger: int, at: int) -> list[str]:  # noqa: ANN001
+        return [
+            type(ev).__name__ for ev in world.bus.log
+            if type(ev).__name__ in ("Hit", "Miss")
+            and getattr(ev, "attacker", None) == swinger
+            and at in (getattr(ev, "target", None),
+                       *(getattr(ev, "targets", ()) or ()))
+        ]
+
     world, me, use, victim, neighbour = pose("p1400", "f3421")
-    hurt = world.get(neighbour, Health).hp
     REGISTRY["p1400"].body(use)
-    out.that(world.get(neighbour, Health).hp < hurt,
+    swung = swings_at(world, use, victim, neighbour)
+    out.that(bool(swung),
              "f3421 makes p1400's target swing at the creature the caster"
              " picks -- `c.grant_attack`'s first argument is who swings and"
-             " its `on=` is who is swung at",
-             f"{hurt} -> {world.get(neighbour, Health).hp}")
+             " its `on=` is who is swung at. Read off the bus rather than"
+             " off the bystander's hit points, because a MISS is the clause"
+             " working and a hit is a die roll",
+             f"{swung or 'no Hit/Miss from the target at the bystander'}")
 
-    world, me, use, _, neighbour = pose("p1400", "")
-    hurt = world.get(neighbour, Health).hp
+    world, me, use, victim2, neighbour = pose("p1400", "")
     REGISTRY["p1400"].body(use)
-    out.that(world.get(neighbour, Health).hp == hurt,
-             "and without the feat the bystander is not struck",
-             f"{hurt} -> {world.get(neighbour, Health).hp}")
+    out.that(not swings_at(world, use, victim2, neighbour),
+             "and without the feat the target swings at nobody -- the"
+             " control, and it is the same question asked of the same log",
+             f"{swings_at(world, use, victim2, neighbour) or 'no swing'}")
 
     # f3417: "each ally adjacent to the target can shift 1 or take +2 to all
     # defences". The ally decides, so the headless default -- `c.may`'s first
@@ -30386,14 +30470,49 @@ def a_race_that_trains_a_skill(out: Result) -> None:
     # -- the two that print a choice ---------------------------------------
     # Counted rather than named: both pick one skill from a pool, so which
     # one is a property of the seed and the *number* is the claim.
+    # **Measured with the FEATS HELD FIXED**, which is a correction rather
+    # than a convenience. This compared two *dealt* characters and counted
+    # the difference -- and the race is part of the draw, so the two arms
+    # get different feats. `_trained_skills` adds skills a **feat** trains,
+    # so once `#1094` widened the feat pool a cleric of `r7` drew a
+    # skill-training feat and the count read **+2** against an expected
+    # +1. Both numbers were right; the comparison was not isolating the
+    # race.
+    #
+    # Same shape as the `r52` assertion above, whose comment already makes
+    # this argument for Dexterity, size and armour: *"clearing the set and
+    # re-asking cancels every one of those terms"*. Here the term to cancel
+    # is the hand, so the race is varied with the feats and the stream held
+    # identical -- which is the claim, and which no draw change can move.
+    from random import Random
+
+    from combat_engine.chargen import _trained_skills
+
     for race, what in (("r3", "a skill of your choice"),
                        ("r7", "one more from your own class list")):
-        _w, _e, got = dealt("cleric", race)
-        out.that(len(got) == len(plain) + 1,
+        FEATS: list[str] = []
+        bare = _trained_skills("cleric", FEATS, Random(11), "")
+        with_race = _trained_skills("cleric", FEATS, Random(11), race)
+        out.that(len(with_race) == len(bare) + 1,
                  f"{race} prints training in {what}, and its character ends"
-                 " up with one more trained skill than the same class of a"
-                 " race that trains nothing",
-                 f"{len(plain)} -> {len(got)}: {sorted(got)}")
+                 " up with exactly one more trained skill than the same"
+                 " class and the same hand with no race -- the race varied"
+                 " and the feats and the stream held identical, so a feat"
+                 " that trains a skill cannot be counted as the race's"
+                 " doing",
+                 f"{len(bare)} -> {len(with_race)}: "
+                 f"{sorted(set(with_race) - set(bare))}")
+    # And the dealt path still reaches it, which is what the count above no
+    # longer proves: a race's training has to survive `chargen.spawn`, not
+    # merely `_trained_skills`.
+    _w7, _e7, got7 = dealt("cleric", "r7")
+    out.that(len(got7) > len(plain),
+             "and a dealt `r7` cleric really does come off `chargen.spawn`"
+             " with more training than a race that trains nothing -- an"
+             " inequality rather than a count, because the hand is not"
+             " pinned on this path and a skill-training feat legitimately"
+             " adds to it",
+             f"{len(plain)} -> {len(got7)}: {sorted(got7)}")
 
     # -- the control: the baseline really is the class's own training -----
     # Against `class_skill` rather than against another race, so "no race
