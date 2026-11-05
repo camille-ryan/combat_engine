@@ -960,6 +960,41 @@ CREATE TABLE background (
 );
 CREATE INDEX background_kind ON background(kind);
 
+-- Every deity, which had no table at all and is the **largest blocked
+-- slice of the feat-prerequisite problem**: 196 feats carry a `must
+-- worship` prerequisite and `chargen.meets` answers every one False.
+-- #454.
+--
+-- Two columns and no more, because two are all a rule can act on.
+--
+-- `alignment` is an allow-listed word from a closed set of **five** --
+-- unaligned, good, evil, chaotic evil, lawful good -- measured across all
+-- 134 rows. Those are rules vocabulary rather than names, so they are
+-- safe in the open, and the allow-list is what keeps a product name from
+-- ever reaching this column if a later printing widens it.
+--
+-- `domains` is a JSON list of the domain words a deity's page prints, and
+-- it exists because **half the prerequisites ask about a domain rather
+-- than a deity**: of the 90 `must worship` terms, 47 name a deity and 43
+-- read "must worship a deity of the <X> domain", one skeleton, 34 distinct
+-- domains.
+--
+-- **Empty for 56 of the 134, and that is the page and not a parse
+-- failure.** Those rows do not contain the word "domain" anywhere in their
+-- text -- checked, 0 of 56 -- so they are deities from printings that do
+-- not use the domain system. An empty list is the honest answer where
+-- guessing a domain would be the invention this component forbids. The
+-- other 78 print two or three each.
+--
+-- The prose goes to `names[ref]["rules_text"]` and nowhere else, for
+-- `background`'s reason one table up: a deity's text is flavour, so the
+-- table holds only what a rule can read. `deity` is therefore **not** in
+-- `SPEC_TABLES`.
+CREATE TABLE deity (
+  ref TEXT PRIMARY KEY, id INTEGER, alignment TEXT, domains TEXT
+);
+CREATE INDEX deity_alignment ON deity(alignment);
+
 -- What each of the seventeen skills can be **used to do**, with the printed
 -- sample DC and the printed task beside it.
 --
@@ -1084,6 +1119,8 @@ class Report:
     disable_many: int = 0
     disable_none: int = 0
     poisons: int = 0
+    deities: int = 0
+    deity_domains: int = 0
     backgrounds: int = 0
     background_skills: int = 0
     skill_uses: int = 0
@@ -1173,6 +1210,13 @@ class Report:
             f"(30 and 5 when whole; 0 means the printing moved -- see "
             f"`_rules_tables`)",
             f"poisons       {self.poisons:6d}",
+            # **Both numbers, because one of them is the interesting one.**
+            # 56 of the 134 print no domain line at all, so a bare count of
+            # deities would hide that the domain half of the prerequisites
+            # can only ever be answered for 78 of them.
+            f"deities       {self.deities:6d}  "
+            f"({self.deity_domains} print a domain line; the rest print "
+            f"none, which is the page and not a parse failure)",
             f"backgrounds   {self.backgrounds:6d}  "
             f"({self.background_skills} name at least one of the "
             f"engine's seventeen skills)",
@@ -1294,6 +1338,7 @@ def build() -> Report:
     report.disable_none, report.disable_many = _disable_split(out)
     report.trap_hp, report.trap_hp_level = _object_stat_lines(out)
     report.poisons = _poisons(source, out, names)
+    report.deities, report.deity_domains = _deities(source, out, names)
     report.backgrounds = _backgrounds(source, out, names)
     # The cross-check beside the count, the same shape `trap_hp` uses:
     # a shrinking total could be the corpus or the skill filter, and
@@ -3586,6 +3631,101 @@ _BACKGROUND_KINDS = frozenset({
     "Divine", "Adventurers", "Origin", "Adulthood", "Regional",
     "Psychology",
 })
+
+
+#: The five printed alignments, which is a closed set and measured as one:
+#: 37 unaligned, 31 good, 31 evil, 21 chaotic evil, 14 lawful good across
+#: all 134 deity rows. Allow-listed rather than passed through, so a later
+#: printing that puts something else in the column stores NULL instead of
+#: whatever it says. #454.
+_ALIGNMENTS = frozenset({
+    "unaligned", "good", "evil", "chaotic evil", "lawful good",
+})
+
+#: The printed `Domain: X, Y` line. Capitalised words only, because the
+#: sentence after it is prose and an unanchored comma list would swallow
+#: it.
+_DOMAIN_LINE = re.compile(
+    r"\bDomains?\s*:?\s*([A-Z][A-Za-z]*(?:\s*,\s*[A-Z][A-Za-z]*)*)"
+)
+
+
+def _deities(source: sqlite3.Connection, out: sqlite3.Connection,
+             names: dict[str, dict[str, str]]) -> tuple[int, int]:
+    """Every deity, which had no table at all. #454.
+
+    **`x1_`, not a new prefix.** `_ALIAS_TABLES` holds "Deity" at index 1,
+    so all 134 are already in the name index as `x1_<id>` -- minting a new
+    prefix would give one page two refs, which is the duplicate-namespace
+    fault `_poisons` records paying for.
+
+    **Why this is worth a table rather than staying an alias.** 196 feats
+    carry a `must worship` prerequisite and `chargen.meets` answers every
+    `term` atom False, so all 196 are unreachable. That is the single
+    largest kind of prerequisite term in the corpus -- more than the next
+    three kinds together -- and it was filed as a flavour import that
+    "18 spec rows" wanted.
+
+    **The domains are parsed and the alignment is read.** Half the
+    prerequisites ask about a domain rather than a deity: 47 of the 90
+    terms name a deity, 43 read *"must worship a deity of the X domain"*.
+    So a deity ref alone cannot answer them and the domain list has to come
+    with it.
+
+    Nothing is derived and nothing is guessed. A deity whose page prints no
+    domain line gets `[]` -- 56 of the 134, none of which contain the word
+    "domain" at all -- rather than a domain inferred from its alignment or
+    its text.
+    """
+    import json as _json
+
+    written = carried = 0
+    for did, name, alignment, plain in source.execute(
+        "SELECT ID, Name, Alignment, PlainTxt FROM Deity ORDER BY ID"
+    ):
+        ref = f"x1_{did}"
+        prose = " ".join((plain or "").split())
+        # The page opens by repeating its own name, as a background's does.
+        for _ in range(3):
+            if name and prose.startswith(name):
+                prose = prose[len(name):].lstrip()
+        prose = re.split(r"\s*Published in\b", prose)[0].strip()
+        found = _DOMAIN_LINE.search(plain or "")
+        domains = sorted({
+            part.strip().lower()
+            for part in (found.group(1).split(",") if found else [])
+            if part.strip()
+        })
+        word = (alignment or "").strip().lower()
+        out.execute(
+            "INSERT OR REPLACE INTO deity VALUES (?,?,?,?)",
+            (ref, did, word if word in _ALIGNMENTS else None,
+             _json.dumps(domains)),
+        )
+        # **Both lines, and the second is the one I left out.** `_poisons`
+        # does the same two and its comment says why: `_other_names` is the
+        # fallback for a table with no importer and it runs **after** this,
+        # with `names.setdefault(ref, {"name": name})` -- so a key this
+        # function creates first is seen as present and never gets a name.
+        #
+        # Without a name the scrub has nothing to substitute, so every spec
+        # that mentions a deity keeps the **printed name**. Measured on the
+        # first rebuild: `x2_151` and `rt:r26-t2` both went from carrying
+        # `x1_10` to carrying the name in full, and 10 tables moved.
+        #
+        # Worse, `leaks.py --specs` went **blind at the same time** -- a
+        # name absent from the index is a name it cannot look for -- so its
+        # headline read *"no printed names in any spec"* while two were
+        # there. The only signal was two baseline entries reporting
+        # themselves no longer hit, which is the
+        # waiver-stopped-firing shape this repo already has a rule about.
+        names.setdefault(ref, {})["name"] = name
+        if prose:
+            names[ref]["rules_text"] = prose
+        written += 1
+        if domains:
+            carried += 1
+    return written, carried
 
 
 def _backgrounds(source: sqlite3.Connection, out: sqlite3.Connection,

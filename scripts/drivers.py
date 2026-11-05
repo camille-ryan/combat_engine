@@ -37891,6 +37891,125 @@ def a_module_gets_the_party_size_it_asked_for(out: Result) -> None:
     )
 
 
+def a_deity_carries_its_alignment_and_its_domains(out: Result) -> None:
+    """The deity table, and the domain vocabulary the prerequisites use.
+
+    `#454`. Deities had no table: `_ALIAS_TABLES` took `ID, Name` and
+    nothing else, so a deity was a name in the index and a rule could not
+    read anything about it. Meanwhile **196 feats** carry a `must worship`
+    prerequisite -- the largest single kind of prerequisite term in the
+    corpus, more than the next three kinds together -- and
+    `chargen.meets` answers every one False.
+
+    **The load-bearing assertion is the domain set**, not the row count.
+    Half the prerequisites ask about a domain rather than a deity: of the
+    90 `must worship` terms, 47 name a deity and 43 read *"must worship a
+    deity of the X domain"* -- one skeleton, 34 distinct domains. So the
+    import only answers them if the domains parsed off the pages are
+    **exactly** the vocabulary the prerequisites use. They are: 34 parsed,
+    34 asked, nothing unmatched in either direction.
+
+    That identity is what makes the parse trustworthy. A regex that caught
+    most of them would still read 34-ish and leave a prerequisite nobody
+    can ever satisfy.
+
+    **56 of the 134 carry no domain, and that is the page.** None of those
+    rows contains the word "domain" anywhere in its text -- checked, 0 of
+    56 -- so they are deities from printings that do not use the domain
+    system. An empty list is the honest answer where inferring a domain
+    from the alignment would be the invention `etl/CLAUDE.md` forbids.
+    """
+    import json as _json
+
+    from combat_engine import db
+
+    con = db.game()
+    rows = list(con.execute("SELECT ref, id, alignment, domains FROM deity"))
+    out.that(len(rows) == 134,
+             "all 134 compendium deity pages are imported -- the count the"
+             " issue states and the count the source holds",
+             f"{len(rows)} rows")
+    out.that(all(r["ref"] == f"x1_{r['id']}" for r in rows),
+             "and each keeps the `x1_` ref it already had in the name"
+             " index, rather than being given a second one -- a page with"
+             " two refs is the duplicate-namespace fault `_poisons`"
+             " records paying for",
+             "every ref is x1_<id>")
+
+    ALIGNMENTS = {"unaligned", "good", "evil", "chaotic evil", "lawful good"}
+    stored = {r["alignment"] for r in rows}
+    out.that(stored == ALIGNMENTS,
+             "every row carries one of the five printed alignments and no"
+             " row carries NULL -- so the allow-list covers the whole"
+             " printed vocabulary rather than silently dropping a sixth"
+             " value",
+             f"{sorted(x for x in stored if x)}")
+
+    carried = [r for r in rows if _json.loads(r["domains"])]
+    out.that(len(carried) == 78,
+             "78 of the 134 print a domain line",
+             f"{len(carried)}")
+    out.that(len(rows) - len(carried) == 56,
+             "and 56 print none, which is the page rather than a parse"
+             " failure -- those rows do not contain the word `domain` at"
+             " all, so an empty list is the honest answer",
+             f"{len(rows) - len(carried)}")
+    sizes = {len(_json.loads(r["domains"])) for r in rows}
+    out.that(sizes == {0, 2, 3},
+             "a deity prints two or three domains or none -- no row prints"
+             " exactly one, which is the shape that would suggest the"
+             " regex had clipped a list",
+             f"{sorted(sizes)}")
+
+    # --- the identity that makes the parse trustworthy -------------------
+    parsed = {d for r in rows for d in _json.loads(r["domains"])}
+    asked = {
+        r["ref"] for r in con.execute(
+            "SELECT ref FROM prereq_term WHERE kind = 'deity'")
+    }
+    out.that(len(asked) == 90,
+             "the setup landed: 90 prerequisite terms are classified"
+             " `deity`, which is the population the import is for",
+             f"{len(asked)} terms")
+    out.that(len(parsed) == 34,
+             "34 distinct domains are parsed off the pages",
+             f"{len(parsed)}: {sorted(parsed)[:6]}...")
+
+    # The prerequisites name their domain in prose, which lives in the
+    # git-ignored localisation -- so this half is skipped where that file
+    # is absent rather than failing, the way `drivers` treats the
+    # compendium.
+    from pathlib import Path as _Path
+    loc = _Path("localization/names.json")
+    if not loc.exists():
+        out.skip("localization/names.json is not on this machine, so the"
+                 " domain-set identity cannot be checked here -- the"
+                 " prerequisites name their domain in prose")
+        return
+    import re as _re
+
+    names = _json.loads(loc.read_text())
+    wanted = set()
+    for ref in asked:
+        said = (names.get(ref) or {}).get("description") or ""
+        found = _re.match(
+            r"must worship a deity of the (.+) domain", said, _re.I)
+        if found:
+            wanted.add(found.group(1).strip().lower())
+    out.that(len(wanted) == 34,
+             "and 34 domains are asked for by the prerequisites -- one"
+             " skeleton, `must worship a deity of the X domain`",
+             f"{len(wanted)}")
+    out.that(wanted == parsed,
+             "**the two sets are identical** -- every domain a prerequisite"
+             " asks about is one the pages print, and every domain the"
+             " pages print is asked about. A parse that caught most of them"
+             " would still read 34-ish and leave a prerequisite nobody can"
+             " ever satisfy",
+             f"asked-not-parsed={sorted(wanted - parsed)}"
+             f" parsed-not-asked={sorted(parsed - wanted)}")
+
+
 def prose_does_not_quote_a_weight_the_tables_lack(out: Result) -> None:
     """No comment under `policy/` puts a number beside a dead weight. `#1110`.
 
@@ -61798,6 +61917,12 @@ DRIVERS = {
     "campaign_replays": (
         a_campaign_replays_in_a_fresh_process,
         "the same seed plays the same campaign, across processes (#789)",
+    ),
+    "deity_domains": (
+        a_deity_carries_its_alignment_and_its_domains,
+        "a deity carries its alignment and the domains its page prints, and"
+        " the parsed domain set is EXACTLY the one 196 feats' prerequisites"
+        " ask about (#454)",
     ),
     "weights_named": (
         prose_does_not_quote_a_weight_the_tables_lack,
