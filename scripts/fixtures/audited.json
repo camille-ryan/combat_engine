@@ -1,7 +1,7 @@
 {
-  "sha": "f9836c10c53eae91a86c2212e9ece33aec7c5df0",
-  "refs": 21515,
-  "fired": 19959,
+  "sha": "7935a7d0d4345eaccb26e98435647d5bad092f5b",
+  "refs": 21516,
+  "fired": 19960,
   "silent": 542,
   "never": 844,
   "never_refs": [
@@ -1575,7 +1575,6 @@
     "cf:rogue-scoundrel-f1s2",
     "cf:swordmage-f0",
     "cf:warlord-marshal-f0",
-    "cf:wizard-mage-f6s5",
     "f1021",
     "f1027",
     "f1113",
