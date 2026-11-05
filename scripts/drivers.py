@@ -60025,6 +60025,21 @@ def the_importer_brief_and_the_parser_agree(out: Result) -> None:
 #: getting off.
 UNNAMED_KINDS_OWED = frozenset(
     {
+        # **The two the gate could not see until #1109.** They were in
+        # neither this set nor the derived vocabulary: `_manoeuvres` builds
+        # `Action(kind=what, ...)` off a granted word, and the walk read
+        # only constant kinds -- so a rule written to report unnamed kinds
+        # was structurally unable to report these.
+        #
+        # Owed rather than priced, because the value is Camille's and is
+        # deferred: *"It should choose them when they are the better play...
+        # Defer until we have that capability."* (#890, routed to #293.)
+        # Naming them with a guessed number would pre-empt that, and a
+        # declared 0.0 is worse than owing it -- `is_end` is 0.001, so a
+        # zero loses to ending the turn and the AI would still never choose
+        # either, while the table would claim a decision had been made.
+        "aid_attack",
+        "aid_defence",
         "bull_rush",
         "dismount",
         "feint",
@@ -61094,7 +61109,7 @@ def every_action_kind_is_named(out: Result) -> None:
 
     from combat_engine import story
     from combat_engine.engine import Encounter
-    from combat_engine.engine.actions import Action
+    from combat_engine.engine.actions import GRANTABLE, Action
     from combat_engine.engine.types import ActionType
     from combat_engine.policy import features
 
@@ -61108,15 +61123,46 @@ def every_action_kind_is_named(out: Result) -> None:
         return
 
     kinds: set[str] = set()
+    expressions = 0
     for node in ast.walk(ast.parse(src.read_text())):
         if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Action":
             for kw in node.keywords:
-                if kw.arg == "kind" and isinstance(kw.value, ast.Constant):
+                if kw.arg != "kind":
+                    continue
+                if isinstance(kw.value, ast.Constant):
                     kinds.add(str(kw.value.value))
+                else:
+                    expressions += 1
+    # **The constructions whose `kind` is not a constant, which this rule was
+    # blind to for its whole life.** `_manoeuvres` builds
+    # `Action(kind=what, ...)` off a granted word, so every kind that reaches
+    # the menu through a *grant* was absent from the vocabulary above -- and
+    # therefore could not be reported missing by the gate built to report
+    # exactly that. `aid_attack` and `aid_defence` were in neither `kinds`
+    # nor `UNNAMED_KINDS_OWED`: not named, not owed, and unreachable by the
+    # check. #1109.
+    #
+    # **`actions.GRANTABLE` is read, not a list written here.** The
+    # docstring's objection is to a vocabulary living in the *rule*, where it
+    # goes stale; this one is a frozenset in the module under test, so a
+    # thirteenth granted word enters the vocabulary without anybody editing
+    # `drivers.py`. Same derivation, one more source.
+    out.that(expressions == 1,
+             "exactly one `Action(kind=...)` construction takes an"
+             " expression rather than a constant -- `_manoeuvres`, off a"
+             " granted word. A second one would be a second blind spot and"
+             " the union below would not cover it",
+             f"{expressions} non-constant kind(s)")
+    kinds |= set(GRANTABLE)
     out.that(len(kinds) >= 30,
              "and a real vocabulary came out of it -- a parse that silently"
              " found nothing would make every assertion below vacuous",
-             f"{len(kinds)} kinds constructed")
+             f"{len(kinds)} kinds constructed or grantable")
+    out.that({"aid_attack", "aid_defence"} <= kinds,
+             "and the two aid actions are IN it -- they are real menu"
+             " entries, built in `_manoeuvres` and executed into"
+             " `Cast.aid_attack`, and the gate could not see either",
+             f"{sorted({'aid_attack', 'aid_defence'} & kinds)}")
 
     fielded = story.field_encounter(
         3, 5, party=story.Party.of(story.PARTY, 5, seed=3))
