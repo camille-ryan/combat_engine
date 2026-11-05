@@ -91,6 +91,28 @@ class Event:
         if not self.cancelled:
             out.pop("cancelled", None)
             out.pop("reason", None)
+        # **A field marked `repr=False` is not wire data either**, and the
+        # alternative is a broken page rather than a verbose one. `#1103`
+        # added `PowerUsed.area` as a frozenset for rows to read; `asdict`
+        # put it straight into this payload, and `json.dumps` raises
+        # `Object of type frozenset is not JSON serializable` -- which
+        # killed the SSE stream mid-fight. The symptom was an **empty log
+        # panel**: 9 events arrived and then nothing, with `api` reporting
+        # *"raw events came but no narration frames"* and `browser` three
+        # failures about the log, while `audit` and `replay` were green.
+        #
+        # So the same flag governs both exits. It is the right one for the
+        # same reason in each: `repr` is the transcript's business, `wire`
+        # is the page's and the save format's, and a derived field for rows
+        # is neither. 49 squares an event would also be real bloat in a
+        # save.
+        #
+        # **This is not a general guard against an unserialisable field** --
+        # a future `set`, `Path` or `datetime` would do it again, and
+        # nothing here would say so until a page went blank. Filed.
+        for f in fields(self):
+            if not f.repr:
+                out.pop(f.name, None)
         return out
 
     def __str__(self) -> str:
