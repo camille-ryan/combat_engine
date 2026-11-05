@@ -38741,6 +38741,203 @@ def _in_combat_board(
     return world, encounter
 
 
+def holding_your_breath_costs_a_surge_in_a_round_you_are_hurt(
+    out: Result,
+) -> None:
+    """DMG p159's in-fight suffocation check. `#1115`.
+
+    > *"In strenuous situations, such as combat, going without air is much
+    > harder. A character holding his breath during underwater combat, for
+    > example, must make a DC 20 Endurance check at the end of his turn **in
+    > a round where he takes damage**."*
+
+    The emphasis is the point. Dropping *"in a round where he takes
+    damage"* makes the rule fire every turn, which is strictly harsher than
+    print -- so that is the first thing asserted here, before anything about
+    surges or damage.
+
+    `#971` keeps the deprivation half: three weeks without food, three days
+    without water, an escalating DC and a check per day. Three minutes of
+    air is rounds rather than days.
+    """
+    from combat_engine.engine import suffocation as suf
+    from combat_engine.engine.components import Health, Movement, Stats
+    from combat_engine.engine.events import DamageApplied, RoundStart
+    from combat_engine.engine.resolve import deal_damage
+
+    def wet(dry: bool = False):  # noqa: ANN202
+        """A board, aquatic unless asked otherwise, and a creature on it."""
+        from combat_engine import chargen
+
+        was = chargen.SCORED_CHOICES
+        from audit import board
+
+        chargen.SCORED_CHOICES = False
+        try:
+            world, me, _ = board("mba", 1, terrain="" if dry else "aquatic")
+        finally:
+            chargen.SCORED_CHOICES = was
+        return world, me
+
+    # -- the printed DC, which is flat ------------------------------------
+    out.that(suf.DC == 20 and suf.SKILL == "endurance",
+             "the printed check is a flat DC 20 Endurance -- **not** off"
+             " `dc.py`, whose bands scale with level because a challenge is"
+             " pitched at the party. Reading it off a band would make"
+             " drowning easier for a stronger character",
+             f"DC {suf.DC}, {suf.SKILL}")
+
+    # -- the terrain gate --------------------------------------------------
+    dry_world, dry_me = wet(dry=True)
+    deal_damage(dry_world, 0, dry_me, 3, detail="probe", from_attack=False)
+    out.that(not suf.holding_breath(dry_world, dry_me),
+             "nobody holds their breath on a dry board -- the gate is"
+             " `world.terrain`, which only a module sets (#1083), so every"
+             " arcade board and every `replay` fixture is untouched by"
+             " construction rather than by a flag to remember",
+             f"terrain={sorted(getattr(dry_world, 'terrain', ()))}")
+    out.that(not suf.owed(dry_world, dry_me),
+             "and nothing is owed there even after taking damage -- the"
+             " control that keeps this rule out of 23,000 audited rows",
+             "not owed")
+
+    # -- **the clause most likely to be dropped** --------------------------
+    world, me = wet()
+    out.that(suf.holding_breath(world, me),
+             "the setup landed: on an aquatic board this creature IS"
+             " holding its breath, so the two assertions below differ by"
+             " the damage and nothing else",
+             f"terrain={sorted(getattr(world, 'terrain', ()))}")
+    world.bus.emit(RoundStart(round=world.round))
+    out.that(not suf.hurt_this_round(world, me),
+             "a creature that has taken no damage this round owes NOTHING"
+             " -- *in a round where he takes damage*. Without this clause"
+             " the rule fires every turn, which is harsher than print, and"
+             " it is the half a reader drops",
+             "no damage, nothing owed")
+    out.that(not suf.owed(world, me),
+             "and `owed` agrees, so the two halves are read together"
+             " rather than one standing in for the other",
+             "not owed")
+
+    deal_damage(world, 0, me, 3, detail="probe", from_attack=False)
+    out.that(suf.hurt_this_round(world, me) and suf.owed(world, me),
+             "take damage in the same round and the check IS owed -- which"
+             " is the positive half, without which the assertion above"
+             " passes on a reader that always says no",
+             "hurt, owed")
+
+    #: The scan has to stop at the round boundary, or last round's damage
+    #: keeps the check owed for ever.
+    world.bus.emit(RoundStart(round=world.round + 1))
+    out.that(not suf.hurt_this_round(world, me),
+             "and a new round forgets it: the scan stops at `RoundStart`,"
+             " so damage taken last round does not keep the check owed."
+             " Read off the bus rather than stored, so there is no mark to"
+             " go stale",
+             "new round, nothing owed")
+
+    # -- a swim speed exempts, even wet and hurt ---------------------------
+    swim_world, swim_me = wet()
+    move = swim_world.need(swim_me, Movement)
+    move.modes["swim"] = 6
+    deal_damage(swim_world, 0, swim_me, 3, detail="probe", from_attack=False)
+    out.that(not suf.holding_breath(swim_world, swim_me)
+             and not suf.owed(swim_world, swim_me),
+             "a creature with a swim speed is exempt even in the water and"
+             " even hurt -- the same exemption `movement.swims` makes for"
+             " the Athletics check, read through the same door so the two"
+             " cannot disagree",
+             "swim speed, nothing owed")
+
+    # -- a failure costs a surge -------------------------------------------
+    s_world, s_me = wet()
+    health = s_world.need(s_me, Health)
+    health.surges = 3
+    deal_damage(s_world, 0, s_me, 3, detail="probe", from_attack=False)
+    had = health.surges
+    s_world.rng.loaded = 1          # a 1 cannot beat 20
+    passed = suf.check(s_world, s_me)
+    out.that(passed is False and health.surges == had - 1,
+             "a failed check costs a healing surge -- the same consequence"
+             " the environmental rule has, which is the page's own *as"
+             " described above*",
+             f"{had} -> {health.surges} surge(s)")
+
+    # -- with none left, damage equal to level -----------------------------
+    d_world, d_me = wet()
+    d_health = d_world.need(d_me, Health)
+    d_health.surges = 0
+    stats = d_world.get(d_me, Stats)
+    level = stats.level if stats else 1
+    deal_damage(d_world, 0, d_me, 3, detail="probe", from_attack=False)
+    before = d_health.hp
+    mark = len(d_world.bus.log)
+    d_world.rng.loaded = 1
+    suf.check(d_world, d_me)
+    hits = [e for e in d_world.bus.log[mark:]
+            if isinstance(e, DamageApplied)
+            and getattr(e, "target", None) == d_me]
+    out.that(bool(hits) and d_health.hp < before,
+             "and with no surges left it costs hit points instead, which"
+             " is the printed fallback",
+             f"{before} -> {d_health.hp}")
+    out.that(any(getattr(e, "amount", 0) == max(1, level) for e in hits),
+             "equal to the creature's LEVEL -- not a flat number and not"
+             " the damage that provoked the check",
+             f"level {level}, dealt"
+             f" {[getattr(e, 'amount', '?') for e in hits]}")
+
+    # -- passing costs nothing ---------------------------------------------
+    p_world, p_me = wet()
+    p_health = p_world.need(p_me, Health)
+    p_health.surges = 3
+    deal_damage(p_world, 0, p_me, 3, detail="probe", from_attack=False)
+    kept = p_health.surges
+    p_world.rng.loaded = 20         # a 20 plus any modifier beats 20
+    ok_ = suf.check(p_world, p_me)
+    out.that(ok_ is True and p_health.surges == kept,
+             "a passed check costs nothing -- the control, without which"
+             " every assertion above could be a rule that always fires",
+             f"{kept} surge(s) kept")
+
+    # -- the row that waited on it, which can now gate on the purpose ------
+    import audit as _audit
+    from combat_engine.engine.skills import modifier
+
+    belt_world, belt_me, _ = _audit.board("i2746x1", 5, terrain="aquatic")
+    plain = modifier(belt_world, belt_me, "endurance")
+    held = modifier(belt_world, belt_me, "endurance", purpose="suffocation")
+    other = modifier(belt_world, belt_me, "athletics", purpose="suffocation")
+    other_plain = modifier(belt_world, belt_me, "athletics")
+    out.that(held - plain == 2,
+             "`i2746x1`'s Endurance half lands: +2 to an Endurance check"
+             " made to hold your breath. That clause had been inert for the"
+             " row's whole life -- a bonus to a check nothing rolled -- and"
+             " `purpose=\"suffocation\"` is what gave it something to"
+             " narrow against",
+             f"plain={plain} holding={held}")
+    out.that(other == other_plain,
+             "and an ATHLETICS check made while suffocating gets nothing"
+             " from that half -- the gate is the purpose AND the skill, so"
+             " the row is not stronger than its card. Its swimming half is"
+             " the mirror of this and `drivers.swim_check` holds it",
+             f"athletics {other_plain} -> {other}")
+
+    # -- and no row still waits on the facility ----------------------------
+    from combat_engine.engine.dsl import REGISTRY
+
+    waiting = [r for r, q in REGISTRY.items()
+               if "engine.suffocation()" in (q.todo or ()) + (q.dropped or ())]
+    out.that(not waiting,
+             "no row still names `engine.suffocation()` -- `i2746x1` is the"
+             " one that did, and #1115's census correction is why that is"
+             " one row and not the six #971's title claimed: two of those"
+             " are finished, two are complete-and-inert, and one waits on"
+             " something else",
+             f"{waiting or 'none'}")
+
+
 def an_area_attack_announces_the_squares_it_covered(out: Result) -> None:
     """`PowerUsed.area`, and the chain it unblocked. `#1103`.
 
@@ -63661,6 +63858,11 @@ DRIVERS = {
         "DMG2's in-combat challenge: a combat scene that also rolls, on the"
         " fight's own board -- priced OUT of the budget, capped at"
         " complexity 2, and every check paying a named action (#922)",
+    ),
+    "suffocation": (
+        holding_your_breath_costs_a_surge_in_a_round_you_are_hurt,
+        "DMG p159's in-fight suffocation check: DC 20 Endurance at the end"
+        " of a turn, and ONLY in a round the creature took damage (#1115)",
     ),
     "power_area": (
         an_area_attack_announces_the_squares_it_covered,

@@ -850,8 +850,24 @@ def _swimming(ctx: dict[str, Any]) -> bool:
     return ctx.get("purpose") == "swim"
 
 
+def _holding_breath(ctx: dict[str, Any]) -> bool:
+    """An Endurance check made **to hold your breath**, and not any other.
+
+    One purpose and not three. The card names *"hold your breath, swim or
+    tread water"*, and of those the engine rolls exactly one Endurance
+    check: `engine.suffocation`'s, which is the printed in-fight rule. The
+    other two are hour-long travel, which is `#971` and has no roll here --
+    and swimming's own check is **Athletics**, so it is `_swimming` above
+    rather than a second purpose for this one.
+
+    So the narrowing is complete against what the engine asks, not against
+    what the card lists, and a new purpose is what widens it later.
+    """
+    return ctx.get("purpose") == "suffocation"
+
+
 @power("i2746x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("engine.suffocation()",))
+       reach=PERSONAL, target=SELF)
 def i2746x1(c: Cast) -> None:
     """+2 to Athletics made to swim, and to Endurance made to hold your
     breath, swim or tread water.
@@ -881,25 +897,27 @@ def i2746x1(c: Cast) -> None:
     so an ordinary Athletics check reads `purpose == ""` and the bonus
     stands down.
 
-    **`dropped=` now rather than `todo=`, and the marker names a different
-    thing.** The row plays: a swimming character gets its +2. What is
-    missing is the Endurance half, and that is **not** the story engine's
-    hour-long swim -- it is the printed in-fight rule, DMG p159: *"a
-    character holding his breath during underwater combat must make a DC 20
-    Endurance check at the end of his turn in a round where he takes
-    damage"*, which nothing rolls. `#971`'s own comment calls that the
-    engine half and says it deserves its own issue.
+    **And the Endurance half is written now, which retires the marker the
+    row carried for its whole life.** It said `engine.suffocation()` and it
+    was right: nothing rolled an Endurance check to hold your breath, so a
+    bonus to one was a bonus to nothing. `engine/suffocation.py` is the
+    printed DMG p159 rule -- DC 20 at the end of a turn in a round the
+    creature took damage -- and it rolls with `purpose="suffocation"`, so
+    `_holding_breath` has a check to narrow against. `#1115`.
 
-    The old marker said `story.skill_use()`, which `#787`'s second comment
-    had already proved is the wrong facility.
+    Three re-pointings and a fourth premise, all wrong in the same
+    direction: each named a facility one layer away from the real gap.
 
     `kind="item"`, because the card says *"item bonus"* -- and that matters
     beyond bookkeeping: two item bonuses do not stack, so the kind is what
-    stops a second swimming item doubling it.
+    stops a second swimming item doubling it. Both halves carry it, so a
+    second water item cannot double either one.
 
     The Level 18 and 28 steps are out of scope."""
     c.bonus("skill:athletics", 2, kind="item", on=c.me,
             until=When.ENCOUNTER, when=_swimming)
+    c.bonus("skill:endurance", 2, kind="item", on=c.me,
+            until=When.ENCOUNTER, when=_holding_breath)
 
 
 @power("i593p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,

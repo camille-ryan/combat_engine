@@ -129,6 +129,13 @@ class Encounter:
         #: Whether round 1 is a surprise round. See `start`.
         self._surprise = False
         world.bus.on(TurnEnd, self._death_saves)
+        # **The printed in-fight suffocation check**, a sibling of the death
+        # saves above and subscribed the same way. `#1115`. It owes nothing
+        # on a dry board -- `suffocation.owed` reads `world.terrain`, which
+        # only a module sets (`#1083`) -- so every arcade board and every
+        # `replay` fixture is untouched by construction rather than by a
+        # flag somebody has to remember.
+        world.bus.on(TurnEnd, self._suffocation)
         world.bus.on(Died, self._on_death)
         from .triggers import Triggers
 
@@ -633,6 +640,19 @@ class Encounter:
         return self.world.round * 1000 + self.index
 
     # -- dying ---------------------------------------------------------------
+
+    def _suffocation(self, ev: TurnEnd) -> None:
+        """DMG p159's end-of-turn check for a creature holding its breath.
+
+        Delegated whole to `suffocation.check`, which carries the rule and
+        the reasoning. Here only so it hangs off the same `TurnEnd` the
+        death saves do -- and after them in subscription order, which is
+        the printed order: a creature that stabilises this turn is still
+        underwater.
+        """
+        from . import suffocation
+
+        suffocation.check(self.world, ev.actor)
 
     def _death_saves(self, ev: TurnEnd) -> None:
         from .query import is_
