@@ -4052,9 +4052,22 @@ def _restores_the_resolved(ref: str) -> bool:
 _SPEND_FOR_REAL = False
 
 
-def _use(world, who: int, ref: str, **kw: object) -> object:  # noqa: ANN001
+def _use(world: World, who: int, ref: str, **kw: Any) -> bool:
     """`dsl.use`, with the board's `spend=False` lifted for the rows that need
     a real spend to have happened.
+
+    **`**kw: Any` and not `**kw: object`, which is a correction rather than a
+    loosening.** `dsl.use`'s keywords are typed -- `bool`, `list[int] | None`,
+    `Square | None` -- and `object` is assignable to none of them, so the
+    splat below reported one `invalid-argument-type` **per keyword parameter**
+    of `use`. The count was therefore a function of `use`'s signature rather
+    than of anything here: adding `board=` for `#980` took it from 13 to 14,
+    and `types.py` refused to bless the growth -- correctly, since a baseline
+    that only ever grows is not a baseline.
+
+    `Any` is the accurate type for a pass-through splat. The return is `bool`
+    because `use` returns one; `-> object` erased it, which is the same
+    annotation fault this repo already has a note about.
 
     The board provokes with `spend=False` everywhere on purpose -- it is what
     lets a power be put through repeatedly without exhausting it. For
