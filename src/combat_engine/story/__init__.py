@@ -118,6 +118,20 @@ class Sheet:
     #: worth and whether this character is past saving. Not a request: it is
     #: read off the board, because the number is the chassis's to decide.
     max_hp: int = 0
+    #: What this character is trained in, pinned so it does not change
+    #: between fights.
+    #:
+    #: **`#1101`'s bug one field over.** `chargen._trained_skills` is
+    #: called from `spawn`, keyed on `world.rng.seed` -- the **fight's**
+    #: seed -- so a campaign character re-rolled its training every
+    #: encounter. Measured on four fully-pinned characters across four
+    #: fight seeds: **4 of 4 differed**, with only the class's *granted*
+    #: skills stable. A rogue was trained in Perception for one fight and
+    #: Insight for the next, which every skill check in the campaign reads.
+    #:
+    #: Dealt once in `Party.of` off its own stream, exactly as `kit` is, and
+    #: read back by `Sheet.character`. #793.
+    skills: list[str] = field(default_factory=list)
     #: Healing surges left. `None` is the full pool.
     surges: int | None = None
     #: What a fresh pool holds, read off the board the way `max_hp` is and
@@ -333,6 +347,7 @@ class Sheet:
         return chargen.Character(
             self.cls, self.level, build=self.build, race=self.race,
             powers=list(self.powers), feats=list(self.feats),
+            skills=tuple(self.skills),
             # **Rebuilt from the stored dicts, not re-dealt.** `Magic` takes
             # tuples where JSON gives lists, so `base` and `powers` are
             # coerced back -- without that an item compares unequal to the
@@ -381,6 +396,7 @@ class Party:
         from combat_engine.chargen import (
             DEAL_RACES,
             Character,
+            _trained_skills,
             build_of,
             deal_race,
             dealt_hand,
@@ -425,9 +441,16 @@ class Party:
                     Random(f"{seed}:{key}:gear"),
                 )
             ]
+            # **And the skills, for the reason the kit is dealt here.**
+            # `_trained_skills` runs inside `spawn` off the *fight's* seed,
+            # so a party's training was re-rolled per encounter -- measured,
+            # 4 of 4 pinned characters differed across four fight seeds.
+            # Its own stream, keyed the way the others are.
+            trained = sorted(_trained_skills(
+                key, list(taken), Random(f"{seed}:{key}:skills"), race))
             sheets.append(Sheet(
                 cls=key, level=level, build=build.name, race=race,
-                powers=kept, feats=taken, kit=kit,
+                powers=kept, feats=taken, kit=kit, skills=trained,
             ))
         return cls(sheets=sheets)
 

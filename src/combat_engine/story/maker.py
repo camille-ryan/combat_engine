@@ -232,9 +232,16 @@ def interview(
             Random(f"{seed}:{cls}:gear"),
         )
     ]
+    # **The skills too, and this is the third thing this function has had
+    # to be taught rather than inherit.** `drivers.chargen_defaults`
+    # asserts that `dealt()` and `Party.of` produce the identical `Sheet`,
+    # and the kit comment above records it catching exactly this shape when
+    # `#1101` pinned one dealer and not the other. Same key, same stream.
+    trained = sorted(chargen._trained_skills(
+        cls, list(taken), Random(f"{seed}:{cls}:skills"), race))
     return Sheet(
         cls=cls, level=level, build=build.name, race=race,
-        powers=kept, feats=taken, kit=kit,
+        powers=kept, feats=taken, kit=kit, skills=trained,
     )
 
 

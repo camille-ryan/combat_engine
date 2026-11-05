@@ -2165,6 +2165,30 @@ class Character:
     #: power. That is the version of this fix that looks right and removes
     #: the thing it was built for. #1101.
     gear: tuple[Magic, ...] = ()
+    #: What this character is trained in. Empty deals it, which is what
+    #: every character got before this and still gets. #793.
+    #:
+    #: **The whole trained set, not the pool picks**, which is the same
+    #: shape `gear` above takes and for the same reason: a pin has to
+    #: reproduce what the deal produced, and a class's granted skills, a
+    #: feat's training and a racial trait's all arrive through the same
+    #: `_trained_skills` call. Pinning only the choices would need the
+    #: stream re-walked to recover the rest, and recovering it means
+    #: re-dealing it.
+    #:
+    #: The *question* layer composes this -- ask for `skill_choices` picks,
+    #: add what the class and race grant, pin the union. That is the step-4
+    #: order the book prints and the reason `#793` calls skills the piece
+    #: that unblocks the others.
+    #:
+    #: **And it is a bug fix, not only a field.** `_trained_skills` is
+    #: called from `spawn`, keyed on `world.rng.seed` -- the **fight's**
+    #: seed -- so a campaign character re-rolled its training every
+    #: encounter. Measured on four fully-pinned characters across four
+    #: fight seeds: **4 of 4 differed**, with only the granted skills
+    #: stable. Exactly `#1101`'s kit bug one field over, and `Party.of`
+    #: now pins this the way it pins the kit.
+    skills: tuple[str, ...] = ()
     #: Which **feature chassis** this character has, as the ref spells it --
     #: `arcanist`, `templar`, `warpriest`. Empty takes the class's first,
     #: which is `chassis_of`'s business and is the only chassis for 23 of
@@ -2487,7 +2511,22 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
             wanted in (w.group, w.category, w.slug.replace("-", " "))
             for w in who.line.weapons
         )
-    # term, skill, source: nothing on a character answers them yet.
+    # **`skill` is answerable now and is deliberately still False**, which
+    # is worth a note because the field it would read exists as of `#793`.
+    #
+    # `Character.skills` names the pool picks, and the granted ones are
+    # derivable from `cls` with no rng at all -- so this atom could be
+    # answered today. It is not, because **87 feats carry a `skill`
+    # prerequisite** and answering it would make some of them legal:
+    # `choices.legal_feats` would return a different pool, every chargen
+    # draw would move, and all seven `replay` fixtures would diverge. That
+    # is a baseline re-record plus a two-way `winrate` -- a deliberate
+    # change with a measurement, not a side effect of adding a field.
+    #
+    # Filed as #1113 with the count. Until then the honest direction is the
+    # one this function already takes for every atom it cannot read.
+    #
+    # term, skill, source: still answered False.
     return False
 
 
@@ -3387,7 +3426,8 @@ def _class_skill_pool(db: sqlite3.Connection, printed: str) -> set[str]:
 
 
 def _trained_skills(cls: str, feats: list[str], rng: Random,
-                    race: str = "") -> frozenset[str]:
+                    race: str = "",
+                    wanted: Sequence[str] = ()) -> frozenset[str]:
     """Which skills this character is trained in: the given, plus the chosen.
 
     Off `class_skill`, which `etl/build.py` fills from the two sentences
@@ -3416,6 +3456,17 @@ def _trained_skills(cls: str, feats: list[str], rng: Random,
     the fight has rolled. An unknown class trains in nothing rather than
     raising -- a monster has no entry here and is not meant to.
     """
+    # **A pinned set is returned whole and the stream is not touched.**
+    # `Character.skills` records what a previous deal produced, so there is
+    # nothing left to draw -- and drawing anyway would be worse than
+    # pointless here, because this function is the *last* reader of its own
+    # `Random`: it is constructed per character in `spawn`
+    # (`"{seed}:{ref}:{level}:skills"`) and nothing else reads it after.
+    # So short-circuiting moves no other decision, which is the opposite of
+    # the pool sample below -- see the note there.
+    if wanted:
+        return frozenset(wanted)
+
     from combat_engine.db import game
 
     db = game()
@@ -3464,6 +3515,14 @@ def _trained_skills(cls: str, feats: list[str], rng: Random,
     # the set does that for free -- but it does **not** buy a free pick in
     # exchange, which is the printed rule and the reason the sample is
     # taken before the union rather than from `pool - from_feats`.
+    # **Drawn even when the answer is thrown away**, which is the trap this
+    # kind of override sets. `rng` is the character's own stream and
+    # everything after this reads from it, so skipping the sample for a
+    # pinned character would shift every later draw -- its race's pick, and
+    # whatever the caller takes next. Pinning the *skills* must not change
+    # the rest of the character. `content.terrain.dress` records the same
+    # hazard about a trap it has already decided not to lay: drawn, then
+    # cut.
     chosen = set(rng.sample(pool, min(picks, len(pool))))
     return frozenset(
         _plus_race(db, cls, race, given | chosen | from_feats, rng)
@@ -3702,6 +3761,15 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 feats,
                 Random(f"{world.rng.seed}:{who.ref}:{who.level}:skills"),
                 who.race,
+                # **The pin, and it is why this seed no longer decides a
+                # campaign character's training.** The stream above is keyed
+                # on `world.rng.seed` -- the *fight's* seed -- so without a
+                # pinned set a party re-rolled its skills every encounter.
+                # Measured: 4 of 4 fully-pinned characters differed across
+                # four fight seeds. `Party.of` deals this once and
+                # `Sheet.character` hands it back, exactly as `#1101` did
+                # for the kit.
+                who.skills,
             )
         ),
         Gear(

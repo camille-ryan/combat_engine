@@ -37891,6 +37891,100 @@ def a_module_gets_the_party_size_it_asked_for(out: Result) -> None:
     )
 
 
+def a_party_keeps_its_training_between_fights(out: Result) -> None:
+    """A campaign character's trained skills do not change per encounter.
+
+    `#793`. `chargen._trained_skills` was called only from `spawn`, keyed on
+    `world.rng.seed` -- **the fight's seed** -- so a party re-rolled its
+    training every time it walked onto a board. Measured on four
+    fully-pinned characters across four fight seeds before the fix: **4 of 4
+    differed**, with only the class's *granted* skills stable. A rogue was
+    trained in Perception for one fight and Insight for the next, and every
+    skill check in the campaign reads that.
+
+    **`#1101`'s bug one field over**, and that issue's note says so about
+    the kit in almost the same words -- *"dealt inside `spawn` off
+    `world.rng.seed` -- the fight's seed -- so a party walked into every
+    encounter wearing different things"*. Same cause, same fix: deal once in
+    `Party.of` off its own stream, pin it on the `Sheet`, hand it back
+    through `Sheet.character`.
+
+    **The confound this rule has to avoid, because my first probe fell into
+    it.** Spawning `Character(cls, level)` directly re-deals *powers and
+    feats* as well, and feat-granted training moves with them -- so the
+    skills look unstable for a reason that has nothing to do with skills.
+    The party here comes from `Party.of`, which pins powers, feats, race,
+    build and kit, so the only thing left free is the one under test.
+
+    And the pin is asserted to **match** the sheet, not merely to be
+    stable: a pin that was stably wrong -- say an empty set, or the granted
+    skills alone -- would pass a stability check and lose every chosen
+    skill.
+    """
+    from combat_engine.chargen import spawn
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.components import Skills
+    from combat_engine.story import Party
+    from combat_engine.story import Sheet as _Sheet
+    from combat_engine.story import maker as _maker
+
+    SEEDS = (1, 2, 3, 4)
+
+    # **`sheet: object` erases the type** and `sheet.character` then reads
+    # as an attribute on `object`. Third time in this session; `ruff` passes
+    # either way, which is why it keeps happening.
+    def trained(seed: int, sheet: _Sheet) -> list[str]:
+        world = World(Grid(20, 12), Rng(seed), Bus())
+        eid = spawn(world, sheet.character, (2, 2))
+        got = world.get(eid, Skills)
+        return sorted(got.trained) if got is not None else []
+
+    # A list, because `Party.of` declares `list[str] | None` -- a tuple is
+    # accepted at runtime and is a `types` error, which is the same
+    # annotate-it-properly lesson one line up.
+    party = Party.of(["rogue", "fighter", "cleric", "wizard"],
+                     level=3, seed=7)
+    out.that(all(len(s.powers) > 1 and s.feats for s in party.sheets),
+             "the setup landed: `Party.of` pinned powers and feats, so the"
+             " only thing free on these boards is the training -- a probe"
+             " that spawns a bare `Character` re-deals feats too and the"
+             " skills look unstable for the wrong reason",
+             f"{[(s.cls, len(s.powers), len(s.feats)) for s in party.sheets]}")
+
+    out.that(all(s.skills for s in party.sheets),
+             "and every sheet carries a pinned training set -- `Party.of`"
+             " deals it once off its own stream, the way it deals the kit",
+             f"{[len(s.skills) for s in party.sheets]}")
+
+    for sheet in party.sheets:
+        seen = [trained(seed, sheet) for seed in SEEDS]
+        steady = all(got == seen[0] for got in seen)
+        out.that(steady,
+                 f"a {sheet.cls} spawns with the same training on four"
+                 " different fight seeds -- before the pin, 4 of 4 classes"
+                 " differed, because the stream is keyed on the fight's"
+                 " seed",
+                 f"{len(set(map(tuple, seen)))} distinct set(s) over"
+                 f" {len(SEEDS)} seeds")
+        out.that(steady and seen[0] == sorted(sheet.skills),
+                 f"and it is the set the sheet pinned, not merely a steady"
+                 f" one -- an empty pin or the granted skills alone would"
+                 f" pass a stability check and silently drop every chosen"
+                 f" skill ({sheet.cls})",
+                 f"board={seen[0]} sheet={sorted(sheet.skills)}")
+
+    # The second dealer, which this repo has already had fork once.
+    for cls in ("rogue", "wizard"):
+        made = _maker.dealt(cls, level=3, seed=7)
+        pinned = next(s for s in party.sheets if s.cls == cls)
+        out.that(sorted(made.skills) == sorted(pinned.skills),
+                 f"and `maker.dealt` pins the same training as `Party.of`"
+                 f" for a {cls} -- the two dealers must not fork, which is"
+                 " what `chargen_defaults` is for and what it caught when"
+                 " `#1101` pinned the kit in one of them only",
+                 f"made={sorted(made.skills)} dealt={sorted(pinned.skills)}")
+
+
 def every_default_makes_the_character_the_dealer_would_have(out: Result) -> None:
     """A hand-made character taking every default *is* the dealt one.
 
@@ -61049,6 +61143,12 @@ DRIVERS = {
     "campaign_replays": (
         a_campaign_replays_in_a_fresh_process,
         "the same seed plays the same campaign, across processes (#789)",
+    ),
+    "party_training": (
+        a_party_keeps_its_training_between_fights,
+        "a campaign character's trained skills do not change per encounter"
+        " -- they were re-rolled off the fight's seed, 4 of 4 classes"
+        " (#793)",
     ),
     "chargen_defaults": (
         every_default_makes_the_character_the_dealer_would_have,
