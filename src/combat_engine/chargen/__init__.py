@@ -1841,7 +1841,27 @@ def _fork_members(spec: str, powers: tuple[str, ...]) -> tuple[str, ...]:
             continue
         ref, text = found.group(1), found.group(2).lower()
         if seen_heading:
-            after.append(ref)
+            # **An entry that names its own ref is scaffolding, not an
+            # option.** `rt:r6-t4`'s whole text is *"You have the rt:r6-t4
+            # power"* -- it restates its sibling power rather than offering
+            # anything, and the self-reference is an artefact of the name
+            # scrub: the trait and the power share a printed name, so the
+            # substitution matched the trait's own ref for both.
+            #
+            # Dropped here rather than filtered later, because `one_of` is
+            # what a reader of the fork sees. `chargen.granted` already
+            # discards it -- silently, on `m in REGISTRY` -- so a printed
+            # three-way choice was *dealt* two-way while `one_of` reported
+            # three. `lint._narrowed_forks` existed to report exactly that
+            # gap and this closes it at the source.
+            #
+            # **Derived, not listed.** Exactly one row in the whole
+            # `racial_trait` table has this shape today, and a hard-coded
+            # ref would not catch the next one. Measured: of all 29 fork
+            # options across 7 races, `rt:r6-t4` is the only entry whose
+            # text mentions its own ref. #1084.
+            if ref.lower() not in text:
+                after.append(ref)
         elif any(word in text for word in _ONE_OF):
             # The heading itself is not one of its own options.
             seen_heading = True

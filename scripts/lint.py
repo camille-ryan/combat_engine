@@ -1973,31 +1973,28 @@ PREDICATE_FIELDS = {
 
 #: Fork options left out of `_narrowed_forks` with a reason, not a pass.
 #:
-#: **`rt:r6-t4` may not be a missing row at all**, and the question needs a
-#: page this repo does not hold. Its extracted spec is self-referential --
-#: *"You have the rt:r6-t4 power"* -- because the scrub replaced a power's
-#: printed name with the trait's own ref, which happens when the trait and
-#: the power share a name (#528's family). Measured:
+#: **Empty, and the one entry it held is settled rather than waived.**
+#: `rt:r6-t4` was waived because deciding it *"needs a page this repo does
+#: not hold"* -- `Heroes of the Forgotten Kingdoms` is not in `resources/`,
+#: which is true and was the wrong place to look.
 #:
-#:     r6.one_of        ('rt:r6-t3', 'rt:r6-t4', 'p13689')
-#:     r6.traits        ['rt:r6-t0', 'rt:r6-t1', 'rt:r6-t3']
-#:     rt:r6-t2's spec  "Select an option for your r6 character"
-#:                      -- the fork's HEADER, not an option
-#:     every r6 power   p13689 lvl 0, p14387 lvl 2, p14388 lvl 6,
-#:                      p14389 lvl 10 -- the standard racial ladder
-#:     refs sharing rt:r6-t4's printed name   none
+#: The note listed *"refs sharing `rt:r6-t4`'s printed name: none"* and
+#: stopped there. That search was for an exact match. Folding case and
+#: punctuation, `rt:r6-t4` and `p13689` have the **same printed name** --
+#: three words, 17 characters, identical hash -- while the one other race
+#: with this fork shape, `r7`, has two genuinely different names. So
+#: `rt:r6-t4` is the scaffolding entry *"you have the <X> power"* and
+#: `p13689` **is** X: one printed option emitted twice.
 #:
-#: So the likely reading is that `rt:r6-t4` is the **trait** and `p13689`
-#: the **power it grants**, listed as two options by the extraction -- which
-#: would make the printed fork genuinely two-way and `granted`'s filter
-#: accidentally right. The other reading is a real third option whose power
-#: was never extracted.
+#: The same shape as `#1021`: a failed search is not an absent fact.
 #:
-#: `Heroes of the Forgotten Kingdoms` is `p13689`'s book and is **not** in
-#: `resources/` (six PDFs, checked), so the page cannot settle it here.
-#: Waived rather than reported, so the check stays live for the next hole
-#: instead of being red on an undecided one. #1084.
-FORK_UNDECIDED = frozenset({"rt:r6-t4"})
+#: Fixed at the source instead. `chargen._fork_members` now drops an entry
+#: whose own text names its own ref, which is **derived** rather than
+#: listed -- exactly one row in `racial_trait` has that shape today, and a
+#: hard-coded ref would not catch the next. `r6.one_of` is a two-way fork
+#: and `granted` is byte-identical over 60 seeds, because the filter
+#: already discarded the ref before choosing. #1084.
+FORK_UNDECIDED: frozenset[str] = frozenset()
 
 
 def _narrowed_forks() -> list[tuple[str, str, str]]:
