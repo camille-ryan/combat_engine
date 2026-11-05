@@ -2589,18 +2589,24 @@ def f3674(c: Cast) -> None:
 @power("f3675", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,        proficiency=("w:orb", "w:staff", "w:wand"))
 def f3675(c: Cast) -> None:
-    """Hands over the card printed beside it, which is `p15850` reprinted
-    on the feat's page."""
-    c.grant_row("f3675b", on=c.me, until=When.ENCOUNTER)
+    """Hands over `p15850` itself, which is the card printed beside it.
 
+    **`f3675b` used to exist and be handed over instead**, and deleting it
+    is Camille's call on `#1045`: *"The class feature should grant the
+    power and point at it."* One implementation per printed card.
 
-@power("f3675b", level=1, cls="", usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-       out_of_combat=True)
-def f3675b(c: Cast) -> None:
-    """A Requirement of "you must use this power during an extended rest"
-    and an Effect that is a hint about the future. Narrative from end to
-    end, so it is declared inert rather than left unwritten."""
+    This pair is the one of the four where folding is **free**, measured
+    rather than assumed: both declarations were `DAILY`/`STANDARD`,
+    `out_of_combat=True` and narrative, and the only difference between
+    the bodies was that `p15850` emits a `c.note` and `f3675b` emitted
+    nothing at all. So pointing at the class power loses no clause and
+    gains the note -- the granted card now says what it did.
+
+    The other three pairs are **not** free and `#1045` carries the
+    measurement: their bodies have already drifted, in both directions,
+    and each needs reading against its printed card rather than deleting.
+    """
+    c.grant_row("p15850", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3679", level=1, cls="", usage=AT_WILL, action=ActionType.FREE,
