@@ -995,6 +995,43 @@ CREATE TABLE deity (
 );
 CREATE INDEX deity_alignment ON deity(alignment);
 
+-- Every ritual, which had no table either. 360 pages, and **20 spec rows
+-- cite one in a position the scrubber cannot reach** -- every one a feat
+-- or an item saying "you may perform <ritual>" -- so those citations
+-- resolved to a ref that fetched nothing. #453.
+--
+-- Four columns, and the issue's own analysis picked them: `level`,
+-- `component`, `price`, `key_skills`. The page also prints Category, Time
+-- and Duration; none is a number a rule can act on and none is stored.
+--
+-- **`key_skills` is plural for `disease.check_skills`' reason, and the
+-- issue assumed otherwise.** It records *"`KeySkill` is the engine's own
+-- skill vocabulary"*, which is true of 256 of the 360 and not of the rest:
+-- 89 pages print two skills and 10 print three -- "Arcana or Nature or
+-- Religion" -- and 5 print none. Split on `or`, **every** part lands in
+-- `engine.skills.SKILLS`: 0 of 360 rows carry a word the engine does not
+-- know. Comma-joined with no spaces, which is the format `disease`
+-- already uses.
+--
+-- **`component` is text and `price` is an integer, and the issue had them
+-- the same way round.** Its comment reasons about a column *"holding 'See
+-- below' beside one holding '1 healing surge'"* and concludes both are
+-- prose. Measured over all 360: `Component` is a string every time and
+-- `Price` is an **int** every time -- so the prose cost is `component`
+-- and the market price is a plain number. Typed accordingly rather than
+-- stored as text for a reason that applies to the other column.
+--
+-- 262 of the 360 are at levels 1-10, which is the band this project
+-- plays; 84 are paragon and 14 epic.
+--
+-- The prose goes to `names[ref]["rules_text"]` and nowhere else, for
+-- `background`'s reason. `ritual` is therefore **not** in `SPEC_TABLES`.
+CREATE TABLE ritual (
+  ref TEXT PRIMARY KEY, id INTEGER, level INTEGER,
+  component TEXT, price INTEGER, key_skills TEXT
+);
+CREATE INDEX ritual_level ON ritual(level);
+
 -- What each of the seventeen skills can be **used to do**, with the printed
 -- sample DC and the printed task beside it.
 --
@@ -1119,6 +1156,8 @@ class Report:
     disable_many: int = 0
     disable_none: int = 0
     poisons: int = 0
+    rituals: int = 0
+    ritual_choices: int = 0
     deities: int = 0
     deity_domains: int = 0
     backgrounds: int = 0
@@ -1214,6 +1253,9 @@ class Report:
             # 56 of the 134 print no domain line at all, so a bare count of
             # deities would hide that the domain half of the prerequisites
             # can only ever be answered for 78 of them.
+            f"rituals       {self.rituals:6d}  "
+            f"({self.ritual_choices} print more than one key skill as "
+            f"alternatives, which is why the column is plural)",
             f"deities       {self.deities:6d}  "
             f"({self.deity_domains} print a domain line; the rest print "
             f"none, which is the page and not a parse failure)",
@@ -1338,6 +1380,7 @@ def build() -> Report:
     report.disable_none, report.disable_many = _disable_split(out)
     report.trap_hp, report.trap_hp_level = _object_stat_lines(out)
     report.poisons = _poisons(source, out, names)
+    report.rituals, report.ritual_choices = _rituals(source, out, names)
     report.deities, report.deity_domains = _deities(source, out, names)
     report.backgrounds = _backgrounds(source, out, names)
     # The cross-check beside the count, the same shape `trap_hp` uses:
@@ -3648,6 +3691,71 @@ _ALIGNMENTS = frozenset({
 _DOMAIN_LINE = re.compile(
     r"\bDomains?\s*:?\s*([A-Z][A-Za-z]*(?:\s*,\s*[A-Z][A-Za-z]*)*)"
 )
+
+
+def _rituals(source: sqlite3.Connection, out: sqlite3.Connection,
+             names: dict[str, dict[str, str]]) -> tuple[int, int]:
+    """Every ritual, which had no table at all. #453.
+
+    **`x0_`, not a new prefix.** `_ALIAS_TABLES` holds "Ritual" at index 0,
+    so all 360 are already in the name index as `x0_<id>`.
+
+    **The skills are plural and the issue assumed they were not.** Its
+    analysis says `KeySkill` *"is the engine's own skill vocabulary"* --
+    true for 256 of 360. 89 pages print two and 10 print three, as
+    alternatives ("Arcana **or** Nature **or** Religion"), and 5 print
+    none. Measured after splitting on `or`: **0 of 360** carry a word
+    outside `engine.skills.SKILLS`, so the filter below drops nothing it
+    should keep. Same shape and same reason as `disease.check_skills`.
+
+    Nothing is derived. `component` keeps the printed string, because one
+    page says "See below" where another gives a cost in words; `price` is
+    the market price and is an integer in all 360 rows, which is the one
+    place the issue's own analysis had the two columns the wrong way round.
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    written = plural = 0
+    for rid, name, level, component, price, skill, plain in source.execute(
+        "SELECT ID, Name, Level, Component, Price, KeySkill, PlainTxt "
+        "FROM Ritual ORDER BY ID"
+    ):
+        ref = f"x0_{rid}"
+        prose = " ".join((plain or "").split())
+        for _ in range(3):
+            if name and prose.startswith(name):
+                prose = prose[len(name):].lstrip()
+        prose = re.split(r"\s*Published in\b", prose)[0].strip()
+        wanted = [
+            part for part in (
+                piece.strip().lower()
+                for piece in re.split(r"\bor\b|,", (skill or "").lower())
+            )
+            if part in SKILLS
+        ]
+        try:
+            band = int(str(level).strip())
+        except (TypeError, ValueError):
+            band = None
+        out.execute(
+            "INSERT OR REPLACE INTO ritual VALUES (?,?,?,?,?,?)",
+            (
+                ref, rid, band,
+                str(component or "").strip() or None,
+                price if isinstance(price, int) else None,
+                ",".join(dict.fromkeys(wanted)) or None,
+            ),
+        )
+        # **Both lines.** See `_deities` for what omitting the second one
+        # cost: `_other_names` runs after this and will not fill a name
+        # onto a key that already exists.
+        names.setdefault(ref, {})["name"] = name
+        if prose:
+            names[ref]["rules_text"] = prose
+        written += 1
+        if len(wanted) > 1:
+            plural += 1
+    return written, plural
 
 
 def _deities(source: sqlite3.Connection, out: sqlite3.Connection,

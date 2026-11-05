@@ -37891,6 +37891,81 @@ def a_module_gets_the_party_size_it_asked_for(out: Result) -> None:
     )
 
 
+def a_ritual_carries_its_level_cost_and_key_skills(out: Result) -> None:
+    """The ritual table, and the plural skill column the issue did not expect.
+
+    `#453`. 360 pages, no table, and **20 spec rows cite a ritual** -- every
+    one a feat or an item saying *"you may perform <ritual>"* -- so those
+    citations resolved to a ref that fetched nothing.
+
+    **Two things the issue's own analysis had wrong, and both are
+    asserted.**
+
+    It records that `KeySkill` *"is the engine's own skill vocabulary"*,
+    singular. True of 256 of the 360: **89** pages print two skills as
+    alternatives and **10** print three, so the column is plural for
+    `disease.check_skills`' reason. Split on `or`, **0 of 360** rows carry a
+    word outside `engine.skills.SKILLS` -- which is what makes the filter
+    safe rather than lossy.
+
+    And it reasons about `Component`/`Price` as though both were prose,
+    from a page *"holding 'See below' beside one holding '1 healing
+    surge'"*. Measured: `Component` is a string in all 360 and `Price` is
+    an **int** in all 360. So the prose cost is `component` and the market
+    price is a number, and the table types them apart.
+    """
+    from combat_engine import db
+    from combat_engine.engine.skills import SKILLS
+
+    con = db.game()
+    rows = list(con.execute(
+        "SELECT ref, id, level, component, price, key_skills FROM ritual"))
+    out.that(len(rows) == 360,
+             "all 360 compendium ritual pages are imported",
+             f"{len(rows)} rows")
+    out.that(all(r["ref"] == f"x0_{r['id']}" for r in rows),
+             "and each keeps the `x0_` ref it already had in the name"
+             " index rather than being given a second one",
+             "every ref is x0_<id>")
+
+    heroic = [r for r in rows if (r["level"] or 0) <= 10]
+    out.that(len(heroic) == 262,
+             "262 are at levels 1-10, which is the band this project plays"
+             " -- the figure worth having before anybody prices the content"
+             " side",
+             f"{len(heroic)} heroic of {len(rows)}")
+
+    many = [r for r in rows if r["key_skills"] and "," in r["key_skills"]]
+    out.that(len(many) == 99,
+             "99 pages print more than one key skill as alternatives, which"
+             " is why the column is plural -- the issue recorded this as a"
+             " single skill and it is a single skill on only 256 of 360",
+             f"{len(many)} with a comma")
+
+    words = {
+        part for r in rows
+        for part in (r["key_skills"] or "").split(",") if part
+    }
+    out.that(words <= set(SKILLS),
+             "and every skill stored is one of the engine's seventeen --"
+             " measured at 0 of 360 rows carrying a word outside them, so"
+             " splitting on `or` is exact rather than lossy",
+             f"{len(words)} distinct, outside={sorted(words - set(SKILLS))}")
+
+    odd = [r["ref"] for r in rows
+           if r["price"] is not None and not isinstance(r["price"], int)]
+    out.that(not odd,
+             "`price` is an integer, not prose -- the printed market price."
+             " The issue's analysis put this column and `component` the"
+             " same way round",
+             f"non-int prices: {odd[:3]}")
+    out.that(any(r["component"] and not str(r["component"]).isdigit()
+                 for r in rows),
+             "and `component` really does carry prose, which is the column"
+             " the `See below` reasoning applies to",
+             "at least one non-numeric component")
+
+
 def a_deity_carries_its_alignment_and_its_domains(out: Result) -> None:
     """The deity table, and the domain vocabulary the prerequisites use.
 
@@ -61917,6 +61992,11 @@ DRIVERS = {
     "campaign_replays": (
         a_campaign_replays_in_a_fresh_process,
         "the same seed plays the same campaign, across processes (#789)",
+    ),
+    "ritual_table": (
+        a_ritual_carries_its_level_cost_and_key_skills,
+        "a ritual carries its level, its printed cost and its key skills --"
+        " plural, because 99 of 360 print alternatives (#453)",
     ),
     "deity_domains": (
         a_deity_carries_its_alignment_and_its_domains,
