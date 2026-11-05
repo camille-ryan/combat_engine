@@ -92,7 +92,7 @@ from .module import (
     # needs both.
     Side as VignetteSide,
 )
-from .objective import field_thing, watcher
+from .objective import area, field_thing, watcher
 from .reflavour import Dressed
 from .reflavour import apply as apply_flavour
 from .save import Campaign
@@ -283,6 +283,14 @@ class Step:
     #: count stays under it. A round appearing twice here is the claim
     #: itself. #922.
     challenge_standards: list[int] = field(default_factory=list)
+    #: Terrain powers actually laid on this board, by ref. `#1107`.
+    #:
+    #: Recorded for the reason `stood`, `surprised`, `traps`, `room` and
+    #: `challenge` are: the board does not outlive the fight, so a driver
+    #: that can only read the outcome cannot tell a placer that ran from
+    #: one that did not. Four green plants in this component have been
+    #: exactly that.
+    features: list[str] = field(default_factory=list)
     #: How the fight went, one phrase from `beat.FIGHTS`. Empty for any
     #: scene that is not a fight. #943.
     aftermath: str = ""
@@ -596,6 +604,16 @@ def _fight(
     # The parked half is `content.terrain.dress`, which arranges blocking
     # squares and rough going and is a separate, balance-affecting call.
     # These are just the words.
+    # **Before `encounter.start()`**, like the allies and the watcher: a
+    # trait arming at the top of round one may read the floor, and a
+    # region laid afterwards is one it never saw. #1107.
+    step.features = place_features(world, scene)
+    if step.features:
+        step.say(
+            f"The room holds {len(step.features)} usable feature(s): "
+            + ", ".join(step.features) + ".",
+            "note",
+        )
     said = ground(world, scene)
     if said:
         step.notes.append(
@@ -1789,6 +1807,52 @@ def _in_combat_try(
         if meant and meant not in said:
             said.add(meant)
             step.say(f"    {meant}", "scene")
+
+
+def place_features(world: World, scene: Scene) -> list[str]:
+    """Put the scene's terrain powers on the floor. Returns what was laid.
+
+    `#1107`. `#980` built the mechanism and nothing placed one, so a
+    terrain power could be used and could not be reached:
+    `Zones.create(power=...)` is the writer and its only caller was a
+    driver rule.
+
+    **A named function rather than four lines inside `_fight`**, for the
+    reason `field_allies` and `survivors` both record: the board does not
+    outlive the fight, so a driver asserting on the outcome cannot tell a
+    placer that ran from one that did not. Through this, "the region is
+    there", "it carries the ref" and "it is where the author said" are all
+    assertable against the code that runs.
+
+    **A scene's dressing and never the board dresser.** `#1083`'s ruling
+    is that terrain lives in modules and only in modules;
+    `content.terrain.dress` runs on every audit board and every `replay`
+    fixture, so a terrain power placed there would be a free attack on
+    every recorded fight -- a balance change wearing a wiring fix.
+
+    `objective.area` resolves the position word, reused rather than
+    re-derived: an author knows "the west end" and does not know the board
+    is 16x12.
+
+    Returns the refs actually laid, which may be fewer than asked for: a
+    position that resolves to no squares on this board lays nothing, and
+    that is said rather than silently skipped.
+    """
+    from combat_engine.engine.durations import When
+
+    laid: list[str] = []
+    for feature in scene.features:
+        squares = area(world, feature.position)
+        if not squares:
+            continue
+        world.zones.create(
+            0, feature.ref, squares, When.ENCOUNTER,
+            power=feature.ref,
+            power_uses=feature.uses,
+            power_reach=feature.reach,
+        )
+        laid.append(feature.ref)
+    return laid
 
 
 def field_allies(world: World, dressed: Dressed) -> list[str]:

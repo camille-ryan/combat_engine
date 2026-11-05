@@ -38741,6 +38741,194 @@ def _in_combat_board(
     return world, encounter
 
 
+def a_scene_places_a_terrain_power_on_its_floor(out: Result) -> None:
+    """An author puts a usable feature in a room. `#1107`.
+
+    `#980` built the mechanism -- `Zone.power` carries a ref,
+    `actions._terrain` offers it to whoever stands within
+    `Zone.power_reach`, `perform` runs it through `dsl.use(board=True)` --
+    and **nothing placed one**. `Zones.create(power=...)` is the writer and
+    its only caller was a driver rule, so a terrain power could be used and
+    could not be reached.
+
+    **A scene's own dressing, and `#1083` is what chose that.**
+    `content.terrain.dress` runs on every audit board, every `replay`
+    fixture and every scorecard fight, so a terrain power placed there
+    would be a free attack on every recorded fight -- a balance change
+    wearing a wiring fix. `#1083`'s ruling is that terrain lives in modules
+    and only in modules, and this is the power half of it.
+
+    The position is a **word**, resolved by `objective.area` against the
+    real grid: an author knows "the west end of the room" and does not know
+    the board is 16x12. Reused rather than re-derived, which is also what
+    keeps a feature and an objective talking about the same geometry.
+    """
+    from pathlib import Path
+
+    import combat_engine.content  # noqa: F401 -- declares x2_125
+    from combat_engine.engine.zones import Zone
+    from combat_engine.story import Party
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+    from combat_engine.story.objective import POSITIONS, area
+    from combat_engine.story.save import Campaign
+
+    REF = "x2_125"
+
+    def raw(**over: Any) -> dict:
+        scene: dict[str, Any] = {
+            "id": "f", "kind": "combat", "sets": "A silt pool.",
+            "foes": [{"count": 2, "role": "skirmisher", "rank": "standard"}],
+            "features": [{"ref": REF, "position": "centre"}],
+            "exits": [],
+        }
+        scene.update(over)
+        for key in [k for k, v in scene.items() if v is None]:
+            scene.pop(key)
+        return {"id": "pf", "party_level": 3, "party_size": 4,
+                "start": "f", "scenes": [scene]}
+
+    def played(**over: Any) -> run_mod.Step:
+        module = mod.parse(raw(**over), Path("<driver>"))
+        camp = Campaign(module=module.id, seed=7,
+                        party=Party.of(None, module.party_level, seed=7),
+                        scene="f")
+        return run_mod.step(camp, module)
+
+    def refused(**over: Any) -> str:
+        try:
+            mod.parse(raw(**over), Path("<driver>"))
+        except mod.ModuleError as exc:
+            return str(exc)
+        return ""
+
+    # -- it reaches the board ----------------------------------------------
+    made = played()
+    out.that(made.features == [REF],
+             "a scene's `features` reach the floor through `run._fight` --"
+             " recorded on the `Step` because the board does not outlive"
+             " the fight, which is the same reason `stood`, `surprised`,"
+             " `traps` and `room` are recorded",
+             f"{made.features}")
+    said = [ln for ln in made.lines if "usable feature" in ln]
+    out.that(bool(said),
+             "and it is SAID, so a reader knows the room holds one -- a"
+             " board feature nobody is told about is one no human will"
+             " press",
+             (said[0][:80] if said else "said nothing"))
+
+    # -- the region really carries the row, in the right place -------------
+    world = _board(REF, 1)[0]
+    scene = mod.parse(raw(), Path("<driver>")).scene("f")
+    laid = run_mod.place_features(world, scene)
+    out.that(laid == [REF],
+             "`place_features` reports what it laid, which is what lets a"
+             " position resolving to nowhere be visible rather than"
+             " silently skipped",
+             f"{laid}")
+    zones = [(e, z) for e, z in world.each(Zone) if z.power == REF]
+    out.that(len(zones) == 1,
+             "exactly one region carries the ref -- `Zone.power` is what"
+             " `actions._terrain` matches on, so two would offer the"
+             " action twice",
+             f"{len(zones)} region(s)")
+    want = area(world, "centre")
+    out.that(bool(want) and zones and set(zones[0][1].squares) == set(want),
+             "and it covers the squares the position word names, off"
+             " `objective.area` rather than a second reading of the grid"
+             " -- so a feature and an objective cannot disagree about"
+             " where `centre` is",
+             f"{len(zones[0][1].squares) if zones else 0} squares against"
+             f" {len(want)} for `centre`")
+    out.that(zones and zones[0][1].power_uses == 0
+             and zones[0][1].power_reach == 1,
+             "carrying the scene's own `uses` and `reach` -- 0 is the"
+             " printed `At-Will Terrain` and 1 covers both *adjacent to*"
+             " and *in a square of*, since a creature in the region is"
+             " within 1 of its own square",
+             f"uses={zones[0][1].power_uses if zones else '-'}"
+             f" reach={zones[0][1].power_reach if zones else '-'}")
+
+    # -- and a creature standing in it is offered the action ---------------
+    #
+    # **The claim the whole issue is about**: placed and *reachable*. The
+    # mechanism was proven by `terrain_power`; what was missing was a route
+    # into a fight, so this asks the menu rather than the zone.
+    from combat_engine.engine import actions as acts_mod
+    from combat_engine.engine.components import Position as _Pos
+
+    world2, me2, _ = _board(REF, 1)
+    scene2 = mod.parse(raw(), Path("<driver>")).scene("f")
+    run_mod.place_features(world2, scene2)
+    spot = sorted(area(world2, "centre"))[0]
+    world2.need(me2, _Pos).square = spot
+    world2.grid.occupants[spot] = me2
+    offers = [a for a in acts_mod.legal(world2, world2.encounter, me2)
+              if a.kind == "terrain"]
+    out.that(len(offers) == 1 and offers[0].ref == REF,
+             "a creature standing in the placed region is offered the"
+             " feature -- placed AND reachable, which is the whole of"
+             " `#1107`: the mechanism worked and had no route into a"
+             " fight",
+             f"{len(offers)} offer(s): {[a.ref for a in offers]}")
+
+    # -- the control: no `features`, no region, nothing said ---------------
+    bare = played(features=None)
+    out.that(not bare.features,
+             "while a scene naming no feature lays none -- the control,"
+             " and the compatibility story for every module already"
+             " written",
+             f"{bare.features}")
+    out.that(not [ln for ln in bare.lines if "usable feature" in ln],
+             "and says nothing about one, so the line is evidence rather"
+             " than decoration",
+             "no line")
+
+    # -- the refusals ------------------------------------------------------
+    out.that("names no 'ref'" in refused(features=[{"position": "west"}]),
+             "a feature with no ref is refused at LOAD -- `--validate` is"
+             " the one command a converter runs before anything is built",
+             refused(features=[{"position": "west"}])[-70:] or "accepted")
+    bad_spot = refused(features=[{"ref": REF, "position": "nowhere"}])
+    out.that("is not one of" in bad_spot and "west" in bad_spot,
+             "and so is a position that is not one of the five, naming"
+             " them -- an author cannot guess a vocabulary",
+             bad_spot[-70:] or "accepted")
+    out.that("uses is -1" in refused(features=[{"ref": REF, "uses": -1}]),
+             "and a negative `uses`, where 0 already means no limit",
+             refused(features=[{"ref": REF, "uses": -1}])[-70:] or "accepted")
+    #: **And the reason here is not the one I first wrote.** This said a
+    #: reach of 0 *"would offer the feature to nobody"*. It would not:
+    #: `actions._terrain` does `reach = max(1, zone.power_reach)`, so 0 is
+    #: **clamped to 1** and behaves identically -- measured, a creature
+    #: adjacent to the region is offered it at either value.
+    #:
+    #: So the refusal is about the author rather than the board: 0 reads
+    #: as unset and silently means 1, and a module that wanted adjacency
+    #: should say 1. Worth refusing for the reason `formation`'s spread
+    #: refuses it -- *"zero is an unset value; a player wanting shoulder
+    #: to shoulder writes 1"* -- and worth not claiming more than that.
+    out.that("reach is 0" in refused(features=[{"ref": REF, "reach": 0}]),
+             "and a reach of 0 -- which the engine clamps to 1 rather than"
+             " offering to nobody, so this refusal is about an unset-"
+             "looking value silently meaning 1, not about an inert region",
+             refused(features=[{"ref": REF, "reach": 0}])[-70:] or "accepted")
+
+    # -- only a scene that fields a board may carry one --------------------
+    for kind in ("roleplay", "rest", "skill_challenge", "puzzle", "vignette"):
+        said_no = refused(kind=kind, foes=None, complexity=None,
+                          primary=None)
+        out.that("must not carry 'features'" in said_no,
+                 f"a {kind} scene may not carry one -- it fields no board,"
+                 " so the feature would be written and never read, which"
+                 " is what the `unused` table is for",
+                 said_no[-62:] or "accepted")
+    out.that(len(POSITIONS) == 5,
+             "and the position vocabulary is the five `objective` already"
+             " names, not a second list -- so an author learns one",
+             f"{POSITIONS}")
+
+
 def a_printed_check_gates_a_power_and_an_attack_rides_the_level(
     out: Result,
 ) -> None:
@@ -63231,6 +63419,12 @@ DRIVERS = {
         "DMG2's in-combat challenge: a combat scene that also rolls, on the"
         " fight's own board -- priced OUT of the budget, capped at"
         " complexity 2, and every check paying a named action (#922)",
+    ),
+    "scene_feature": (
+        a_scene_places_a_terrain_power_on_its_floor,
+        "a scene places a terrain power on its floor, and a creature"
+        " standing in the region is offered it -- the route into a fight"
+        " #980's mechanism had not got (#1107)",
     ),
     "terrain_check": (
         a_printed_check_gates_a_power_and_an_attack_rides_the_level,

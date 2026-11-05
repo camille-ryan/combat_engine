@@ -703,6 +703,46 @@ class Vignette:
 
 
 @dataclass(frozen=True)
+class Feature:
+    """A terrain power an author places in a room. `#1107`.
+
+    `#980` built the mechanism -- a region carries a ref (`Zone.power`),
+    `actions._terrain` offers it to whoever stands within
+    `Zone.power_reach`, and `perform` runs it through
+    `dsl.use(board=True)`. `Zones.create(power=...)` is the writer and its
+    only caller was a driver rule, so nothing put one on a floor.
+
+    **A position word, never coordinates**, which is the same reasoning
+    `objective.POSITIONS` and `formation.BANDS` are built on: an author
+    knows "the west end of the room" and does not know the board is 16x12.
+    `objective.area` is the resolver, reused rather than re-derived.
+    """
+
+    #: The terrain power's ref -- an `x2_` row. Checked against the
+    #: `terrain` table at load, so a typo is refused rather than placed as
+    #: a region nobody can use.
+    ref: str
+    #: Where it sits, one of `objective.POSITIONS`.
+    position: str = "centre"
+    #: How many times it may be used. **0 means no limit**, which is the
+    #: printed `At-Will Terrain`; a `Single-Use Terrain` row writes 1. The
+    #: same convention `Zone.power_uses` already uses, so this is carried
+    #: rather than translated.
+    uses: int = 0
+    #: How near a creature has to stand. 1 is adjacent, which covers both
+    #: the printed *"adjacent to"* and *"in a square of"* -- a creature in
+    #: the region is within 1 of its own square. One printed row wants 5.
+    #:
+    #: **0 is refused, and not because it would offer the feature to
+    #: nobody.** `actions._terrain` does `reach = max(1, zone.power_reach)`,
+    #: so 0 is clamped to 1 and behaves identically -- measured. It is
+    #: refused because it *reads* as unset while silently meaning 1, which
+    #: is the same call `formation`'s spread makes: *"zero is an unset
+    #: value; a player wanting shoulder to shoulder writes 1."*
+    reach: int = 1
+
+
+@dataclass(frozen=True)
 class Try:
     """One of a challenge's skills, and what either result means.
 
@@ -1147,6 +1187,19 @@ class Scene:
     #: fielded, played and judged exactly as it was before objectives existed
     #: -- see `story/objective.py` and `run._fight`.
     objective: Objective | None = None
+    #: **Terrain powers an author puts in this room.** `#1107`. Each is a
+    #: region carrying a usable row -- `#980`'s mechanism -- and nothing
+    #: placed one until now, so the row could be used and could not be
+    #: reached.
+    #:
+    #: **A scene's own dressing, not the board dresser**, and `#1083`
+    #: settled which. `content.terrain.dress` runs on *every* board, so
+    #: putting a terrain power there would make it weather: a free attack
+    #: on every audit board, every `replay` fixture and every scorecard
+    #: fight, which is a balance change rather than a wiring one. `#1083`'s
+    #: ruling is that terrain lives in modules and only in modules, and
+    #: this is that ruling applied to the power half.
+    features: tuple[Feature, ...] = ()
 
     #: How big the room is, and what shape: `(width, height, kind)`, with
     #: `kind` one of `ROOM_KINDS`. Empty leaves the board the floor every
@@ -2473,6 +2526,42 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
             for i, r in enumerate(raw.get("cost", ()) or ())
         ) if c is not None
     )
+    # **Terrain powers this room holds.** `#1107`. Validated here rather
+    # than at fielding time for the reason every other scene list is: a
+    # module that names a row nobody can use should hear about it from
+    # `--validate`, which is the one command a converter runs before
+    # anything is built.
+    features: list[Feature] = []
+    for i, item in enumerate(raw.get("features", ()) or ()):
+        at = f"{where} feature {i + 1}"
+        if not isinstance(item, dict):
+            problems.append(f"{at}: a feature is an object with a 'ref'")
+            continue
+        ref = str(item.get("ref", "")).strip()
+        if not ref:
+            problems.append(f"{at}: names no 'ref'")
+            continue
+        spot = str(item.get("position", "centre")).strip().lower() or "centre"
+        if spot not in POSITIONS:
+            problems.append(
+                f"{at}: position {spot!r} is not one of"
+                f" {', '.join(POSITIONS)}")
+            continue
+        uses = item.get("uses", 0)
+        if not isinstance(uses, int) or isinstance(uses, bool) or uses < 0:
+            problems.append(
+                f"{at}: uses is {uses!r}; it is how many times the feature"
+                " may be used and 0 means no limit, as the printed"
+                " `At-Will Terrain` has it")
+            continue
+        reach = item.get("reach", 1)
+        if not isinstance(reach, int) or isinstance(reach, bool) or reach < 1:
+            problems.append(
+                f"{at}: reach is {reach!r}; it is how near a creature has"
+                " to stand and 1 is adjacent")
+            continue
+        features.append(Feature(ref=ref, position=spot, uses=uses,
+                                reach=reach))
     readiness = str(raw.get("readiness", "ready")).strip().lower() or "ready"
     if readiness not in READINESS:
         problems.append(
@@ -2496,12 +2585,12 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     # Both read exactly like a scene that works, which is why they are refused.
     unused = {
         "roleplay": ("foes", "terrain", "complexity", "primary", "secondary",
-                     "objective", "readiness"),
+                     "objective", "readiness", "features"),
         # `details` belongs to the kinds that run beats to spend them, which
         # is roleplay **and rest** since #937 -- not roleplay alone, as this
         # comment said while a rest scene had no beats to run.
         "skill_challenge": ("foes", "terrain", "affordances", "objective",
-                            "readiness", "details"),
+                            "readiness", "details", "features"),
         # **`complexity`, `primary` and `secondary` are no longer refused
         # here, and that is `#922`.** A combat scene carrying them is
         # DMG2's in-combat challenge: *"When a skill challenge occurs in a
@@ -2521,7 +2610,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         # with a foe list still plays as a rest and silently drops the
         # fight, which is what this whole check is about.
         "rest": ("foes", "terrain", "complexity", "primary", "secondary",
-                 "objective", "readiness"),
+                 "objective", "readiness", "features"),
         # **A puzzle tests the player, not the character**, which is the
         # printed design constraint and decides this list: no foes, no
         # objective, no complexity, and none of the beat-loop fields. The
@@ -2530,7 +2619,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         # are a skill challenge's tally and a puzzle has no tally. #960.
         "puzzle": ("foes", "terrain", "complexity", "primary", "secondary",
                    "objective", "readiness", "affordances", "npcs", "lore",
-                   "details"),
+                   "details", "features"),
         # **A vignette keeps every beat-loop field and loses every fight
         # field.** It is a conversation with stakes, so `affordances`,
         # `npcs`, `lore` and `details` all do their usual work -- an
@@ -2541,7 +2630,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         # challenge's success count would be a second mechanism deciding
         # the same scene.
         "vignette": ("foes", "terrain", "complexity", "primary", "secondary",
-                     "objective", "readiness"),
+                     "objective", "readiness", "features"),
     }[kind]
     # **And `puzzle` belongs to the one kind that runs one.** A block on any
     # other scene is written and never read, which is the fault the whole
@@ -2571,6 +2660,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         hours=hours,
         pressed=bool(raw.get("pressed", False)),
         cost=cost,
+        features=tuple(features),
         npcs=npcs,
         affordances=affordances,
         details=details,
