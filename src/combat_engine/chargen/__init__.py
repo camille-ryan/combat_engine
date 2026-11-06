@@ -2616,8 +2616,23 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     # so reading them would be circular, and the book puts skills at step
     # 4, before feats, for that reason.
     if "skill" in node:
-        return str(node["skill"]).strip().lower() in given_skills(
-            who.cls, who.race)
+        # **A pinned character answers off its own training.** `#1113`.
+        #
+        # `who.skills` is the union a previous deal produced -- granted,
+        # pool picks, race and feat-granted -- so for a campaign party or
+        # the advisor this is the real answer and reaches the 67 feats the
+        # granted set cannot. `choices.legal_feats` carries it into the
+        # cache key, which is what makes reading it here safe.
+        #
+        # Empty is the **dealer's** path and keeps the old answer exactly: a
+        # character mid-build does not know its pool picks yet, so the
+        # derivable half is all there is. The remaining half of `#1113` is
+        # the draw-order change that would give the dealer them too, and it
+        # is not free -- see the issue.
+        wanted = str(node["skill"]).strip().lower()
+        if who.skills:
+            return wanted in {s.strip().lower() for s in who.skills}
+        return wanted in given_skills(who.cls, who.race)
     # term: still answered False. 586 feats, 14 classified kinds, and
     # `#1094`/`#1044` carry what each kind would need -- an ETL import, a
     # matching pass, and a residue nobody has read.
@@ -2716,7 +2731,7 @@ def _build_options(feats: list[str]) -> set[str]:
 def feats_for(
     cls: str, level: int = 1, build: Build | None = None,
     rng: Random | None = None, powers: list[str] | None = None,
-    race: str = "",
+    race: str = "", skills: Sequence[str] = (),
 ) -> list[str]:
     """The feats this character has taken, drawn like its powers are.
 
@@ -2741,7 +2756,8 @@ def feats_for(
 
     taken: list[str] = []
     for _ in range(feat_slots(level, race_ref)):
-        legal = legal_feats(cls, level, build, race_ref, taken=held + taken)
+        legal = legal_feats(cls, level, build, race_ref, taken=held + taken,
+                            skills=skills)
         if not legal:
             break
         taken.append(_one_feat(legal, cls, build, pick))
@@ -4030,6 +4046,12 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         who.cls, who.level, build,
         Random(f"{world.rng.seed}:{who.cls}:{build.name}:feats"),
         list(powers), who.race,
+        # **The pin, when there is one.** `#1113`: a character whose
+        # training is already decided -- a campaign party, which `Party.of`
+        # pins -- has its skill-gated feats answered off the real set. A
+        # character being dealt fresh passes nothing and the pool is
+        # unchanged, so this moves no existing draw.
+        skills=who.skills,
     )
     # A feat that hands over a card takes one back, and both halves happen
     # here: a `Cast` opens on a board with the hand already dealt.

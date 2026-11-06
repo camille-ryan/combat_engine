@@ -560,6 +560,7 @@ def legal_feats(
     build: Build | None = None,
     race: str = "",
     taken: Sequence[str] = (),
+    skills: Sequence[str] = (),
 ) -> list[str]:
     """The feats this character could actually take.
 
@@ -610,8 +611,23 @@ def legal_feats(
     mutable list behind a cache is the kind of aliasing that would show up as
     an unreproducible draw rather than as an error.
     """
+    #: **`skills` is in the key, which is the whole reason it is a
+    #: parameter and not a read.** `#1113`. 87 feats are gated on being
+    #: trained in something and `meets` could only answer off the
+    #: class-granted set, because this is memoised and a reader consulting
+    #: something absent from the key freezes the first caller's answer for
+    #: the process -- the order-dependent cache bug.
+    #:
+    #: Empty is the dealer's path and keeps the old answer exactly: a
+    #: character being built does not know its pool picks yet, so
+    #: `meets` falls back to what the class and race *grant*. A **pinned**
+    #: character -- a campaign party, or the advisor -- does know, and gets
+    #: its 67 remaining feats gated correctly.
+    #:
+    #: Sorted, so two callers naming the same skills in different orders
+    #: share a key rather than splitting it.
     return list(_legal_feats(cls, level, (build or _build_of(cls)).name,
-                             race, tuple(taken)))
+                             race, tuple(taken), tuple(sorted(skills))))
 
 
 def _build_of(cls: str):  # noqa: ANN202
@@ -622,7 +638,8 @@ def _build_of(cls: str):  # noqa: ANN202
 
 @lru_cache(maxsize=8192)
 def _legal_feats(
-    cls: str, level: int, leg_name: str, race: str, taken: tuple[str, ...]
+    cls: str, level: int, leg_name: str, race: str, taken: tuple[str, ...],
+    skills: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """The cached body of `legal_feats`. See its docstring for the key.
 
@@ -646,7 +663,8 @@ def _legal_feats(
 
     second_block = re.compile(r"f\d+[a-z]+").fullmatch
     gates = feat_gates()
-    who = Character(cls=cls, level=level, build=leg_name, race=race)
+    who = Character(cls=cls, level=level, build=leg_name, race=race,
+                    skills=skills)
     held = list(taken)
     return tuple(
         ref

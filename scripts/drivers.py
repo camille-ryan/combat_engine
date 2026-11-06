@@ -9593,6 +9593,116 @@ def vulnerability_held_by_a_zone(out: Result) -> None:
                  f"mine={gate({'source': me})} theirs={gate({'source': foe})}")
 
 
+def a_skill_gated_feat_reads_a_pinned_characters_training(out: Result) -> None:
+    """87 feats are gated on being trained in something. `#1113`.
+
+    `chargen.meets` could only answer off the class-**granted** set, which
+    reaches 20 of the 87 -- the rest are gated on a skill no class is
+    *given*, and those are the pool picks a character chooses.
+
+    **A pinned character knows them, and a character being dealt does
+    not.** So this is a parameter threaded into `legal_feats` rather than a
+    read inside `meets`, and it is **in the memoisation key**: that cache
+    is keyed `(cls, level, leg_name, race, taken)`, and a reader consulting
+    something absent from the key freezes the first caller's answer for the
+    whole process. That is the order-dependent cache bug
+    `scripts/CLAUDE.md` records, and the third assertion below is the one
+    that would catch it.
+
+    The dealer's path is unchanged **by construction**, not by luck:
+    `skills=()` falls through to the same `given_skills` call it always
+    made. The remaining half of `#1113` -- giving the *dealer* its pool
+    picks too -- means moving the skill draw ahead of the feat draw, and
+    the stream order is `feats -> pool -> race`, so it would move every
+    character's training rather than only the gating. That cost is on the
+    issue rather than paid here.
+    """
+    #: **The content import is load-bearing**, not hygiene: `legal_feats`
+    #: filters on `dsl.REGISTRY`, so without it the pool is empty and every
+    #: assertion below passes or fails on nothing. The first run of this
+    #: rule reported "0 more feats" for exactly that reason, which is the
+    #: shape of a control that cannot tell two implementations apart.
+    import combat_engine.content  # noqa: F401
+    from combat_engine.chargen import Character as _Chr
+    from combat_engine.chargen import given_skills, meets
+    from combat_engine.chargen.choices import feat_gates, legal_feats
+
+    gates = feat_gates()
+    gated = [r for r, node in gates.items() if "skill" in str(node)]
+    out.that(len(gated) == 87,
+             "87 feats carry a skill in their prerequisite -- the census this"
+             " is written against, counted off the gates rather than grepped",
+             f"{len(gated)}")
+
+    # -- a pinned character is answered off its own training -------------
+    trained = ("intimidate", "nature", "arcana", "stealth", "thievery",
+               "religion", "dungeoneering", "athletics")
+    bare = set(legal_feats("rogue", 1, race="r1"))
+    pinned = set(legal_feats("rogue", 1, race="r1", skills=trained))
+    gained = pinned - bare
+    out.that(len(gained) >= 10,
+             "a character whose training is pinned is offered feats the"
+             " granted set alone cannot reach -- the 67 this issue is about",
+             f"{len(gained)} more feats, e.g. {sorted(gained)[:4]}")
+    out.that(gained <= set(gated),
+             "and every one of them is skill-gated, so nothing else moved"
+             " with it",
+             f"{sorted(gained - set(gated))[:4] or 'all skill-gated'}")
+
+    # -- the dealer's path is unchanged ----------------------------------
+    #: Asserted against `given_skills` directly rather than against a
+    #: recorded number: the claim is "unpinned answers off the granted
+    #: set", and comparing to the function that *is* the granted set
+    #: cannot drift with the corpus.
+    #: **A literal, and unconditional.** The first version hunted a skill
+    #: out of `gates` with `"skill" in gates[r]` -- but a gate node is
+    #: nested (`{"all": [...]}`) for most feats, so it found nothing and
+    #: the two assertions below were **skipped silently**. That is the
+    #: failure `scripts/CLAUDE.md` names first: a check that runs on half
+    #: its runs is not a check.
+    #:
+    #: `nature` is the literal, and it is checked against `given_skills`
+    #: rather than assumed: a rogue is granted stealth and thievery, so
+    #: nature is exactly the "chosen, not granted" case this is about.
+    want = "nature"
+    out.that(want not in given_skills("rogue", "r1"),
+             f"the control landed: {want!r} is NOT granted to a rogue, so it"
+             " is the chosen-skill case and not a trivially-true one",
+             f"granted={sorted(given_skills('rogue', 'r1'))}")
+    node = {"skill": want}
+    out.that(not meets(node, _Chr(cls="rogue", level=1, race="r1"), []),
+             "an unpinned character is NOT credited with it -- the dealer"
+             " does not know its pool picks yet, which is the old answer"
+             " and must stay the old answer",
+             f"meets={meets(node, _Chr(cls='rogue', level=1, race='r1'), [])}")
+    out.that(meets(node, _Chr(cls="rogue", level=1, race="r1",
+                              skills=(want,)), []),
+             "while the same character with that training pinned IS"
+             " credited -- which is the whole change",
+             "pinned meets=True")
+
+    # -- the cache key holds the skills -----------------------------------
+    #: **The arm that catches the cache bug.** Two different pinned sets
+    #: must give two different pools; if `skills` were read inside `meets`
+    #: without being in the key, the second call would return the first
+    #: call's answer and this would be equal.
+    one = tuple(legal_feats("rogue", 1, race="r1", skills=("nature",)))
+    two = tuple(legal_feats("rogue", 1, race="r1", skills=("intimidate",)))
+    out.that(one != two,
+             "two different pinned skill sets give two different pools -- so"
+             " `skills` is really in the memoisation key and not read behind"
+             " it, which would freeze the first caller's answer",
+             f"{len(one)} vs {len(two)} feats")
+    #: And the order of the names must not split the key.
+    out.that(tuple(legal_feats("rogue", 1, race="r1",
+                               skills=("nature", "arcana")))
+             == tuple(legal_feats("rogue", 1, race="r1",
+                                  skills=("arcana", "nature"))),
+             "and naming the same skills in a different order is the same"
+             " key, because the parameter is sorted on the way in",
+             "same pool either order")
+
+
 def a_remnant_history_outlives_the_fight_and_dies_at_a_rest(out: Result) -> None:
     """What a warlock has bargained with since its last rest. `#1046`.
 
@@ -66675,6 +66785,10 @@ DRIVERS = {
                    "adding to a roll already made, without rolling again"),
     "recharge_while": (recharge_while,
                        "a recharge condition that is a state, not a moment"),
+    "skill_gated_feat": (a_skill_gated_feat_reads_a_pinned_characters_training,
+                         "a feat gated on training is answered off a pinned"
+                         " character's own skills, and the key holds them"
+                         " (#1113)"),
     "remnant_history": (a_remnant_history_outlives_the_fight_and_dies_at_a_rest,
                         "what a warlock has bargained with since its last"
                         " rest, and both rests ending that window (#1046)"),
