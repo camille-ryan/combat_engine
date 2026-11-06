@@ -38741,6 +38741,154 @@ def _in_combat_board(
     return world, encounter
 
 
+def a_terrain_power_comes_out_of_the_feature_not_its_user(out: Result) -> None:
+    """A printed terrain area is centred on the thing on the floor. `#1127`.
+
+    **Nine of the 24 printed terrain powers resolved with no targets and
+    reported a successful use.** Every one a `close blast 3`. The cause was
+    one level below the symptom and explains three behaviours at once.
+
+    `area_of`'s close-blast branch is `blast(mine, size, aim)` where `mine`
+    is **always the actor's squares** and `origin` is the **aim point**. So
+    a terrain blast was built *from the caster, aimed at the feature* --
+    the opposite of the printed line -- and `candidates` then rejected it,
+    because a feature's own square is never a legal placement: those are
+    the ring two squares out.
+
+    | printed shape | what it did |
+    |---|---|
+    | `area_burst` | correct -- `area_burst(origin, size)` centres on the origin |
+    | `close_blast` | **0 candidates**, 9 rows |
+    | `close_burst` | played, but centred on the **user** |
+
+    So the missing concept was a **source distinct from the aimer**, not a
+    gate to relax. `source` threads from the offer to the geometry and
+    `_terrain` now gives a blast no `origin` at all, letting
+    `_auto_targets` pick the placement that catches most -- which is what
+    it already does for every other area power.
+
+    Measured from a feature two squares away: **16** legal placements from
+    the feature, the best giving 5 targets, against **0** for the feature's
+    own square.
+
+    **Why this is safe around the `aim_points` cache**, which was the one
+    risk worth naming: the `close_blast` branch is not cached at all, and
+    the cached `area_burst`/`wall` branch keys on `mine` -- so a different
+    source is a different key by construction. Nothing to invalidate, and
+    no aim-through-walls exposure.
+    """
+    import audit as _audit
+    from combat_engine.engine import actions as A
+    from combat_engine.engine import dsl as D
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.grid import distance
+
+    BLAST3 = ("x2_117", "x2_118", "x2_119", "x2_122", "x2_131",
+              "x2_134", "x2_135", "x2_145", "x2_156")
+
+    def posed(
+        ref: str, gap: int = 2,
+    ) -> tuple[World, int, tuple[int, int], tuple[int, int], list[A.Action]]:
+        """A board where only the terrain door can offer `ref`.
+
+        **Annotated with the real types rather than `-> tuple`.** A bare
+        `tuple` passes `ruff` and erases every element, which this repo has
+        a standing note about: `types.py` goes red on the caller instead of
+        here, one step away from the cause.
+
+        **The granted copy is stripped first, and that is load-bearing.**
+        `audit.board` grants the row under test to its caster, so a probe
+        that does not remove it sees `kind="power"` actions with perfectly
+        good origins and reports no problem at all -- which is how this bug
+        survived every instrument.
+        """
+        world, me, _foe = _audit.board(ref, 3)
+        known = world.get(me, Powers)
+        if known is not None and ref in known.known:
+            known.known.remove(ref)
+        here = world.need(me, Position).square
+        feature = (here[0] + gap, here[1])
+        world.zones.create(me, "probe region", frozenset({feature}),
+                           When.ENCOUNTER, power=ref, power_uses=1,
+                           power_reach=gap)
+        acts = [a for a in A.legal(world, world.encounter, me)
+                if a.kind == "terrain" and getattr(a, "ref", "") == ref]
+        return world, me, here, feature, acts
+
+    _world, _me, _here, feature, acts = posed(BLAST3[0])
+    out.that(len(acts) == 1,
+             "the setup landed: the terrain door offers the row exactly"
+             " once, with the granted copy stripped. Without that strip the"
+             " board's own grant answers instead and the probe passes on"
+             " the wrong action entirely",
+             f"{len(acts)} terrain action(s)")
+    out.that(acts and acts[0].source and feature in acts[0].source,
+             "and the offered action carries the feature's squares as its"
+             " `source` -- the field that says where the power comes OUT"
+             " of, which `origin` cannot say because `origin` is the aim",
+             f"source={sorted(acts[0].source) if acts else '-'}")
+    out.that(acts and acts[0].origin is None,
+             "and a close blast is offered with NO origin, so the aim is"
+             " chosen from the feature's own placements. Passing the"
+             " feature's square as the origin is the bug: it is a source,"
+             " never a legal blast placement",
+             f"origin={acts[0].origin if acts else '-'}")
+
+    # -- every blast-3 row now hits somebody ------------------------------
+    empty: list[str] = []
+    counts: dict[str, int] = {}
+    for ref in BLAST3:
+        w, who, _h, feat, got = posed(ref)
+        if not got:
+            empty.append(f"{ref}: not offered")
+            continue
+        p = D.REGISTRY[ref]
+        chosen, _aim = D._auto_targets(w, who, p, got[0].origin, 0, 0,
+                                       got[0].source)
+        counts[ref] = len(chosen)
+        if not chosen:
+            empty.append(ref)
+    out.that(len(counts) == len(BLAST3),
+             "all nine close-blast-3 rows were really posed, so the"
+             " assertion below is over the whole family rather than one"
+             " lucky row",
+             f"{len(counts)} of {len(BLAST3)}")
+    out.that(not empty,
+             "and every one of them now reaches somebody. Each resolved"
+             " with NO targets before, while reporting a successful use --"
+             " this component's own named failure mode, silently false"
+             " rather than a crash",
+             f"{empty or sorted(counts.items())[:3]}")
+
+    # -- and the geometry is the feature's, not the user's ----------------
+    w, who, _h, feat, got = posed("x2_134", gap=3)
+    p = D.REGISTRY["x2_134"]
+    chosen, aim = D._auto_targets(w, who, p, got[0].origin, 0, 0, got[0].source)
+    area = D.area_of(w, who, p, aim, 0, 0, got[0].source)
+    near_feature = min((distance(sq, feat) for sq in area), default=99)
+    # **Compared against the same aim built from the USER, which is the
+    # only test that isolates `source`.** My first assertion here was
+    # "nearer the feature than the user" and it went red on working code: a
+    # blast emanating from the feature and aimed back at the crowd
+    # legitimately catches the user, so `distance 0` from the user is not
+    # evidence of anything. The claim worth making is that the shape
+    # *differs*, and sits against the feature.
+    from_user = D.area_of(w, who, p, aim, 0, 0, None)
+    out.that(area and area != from_user,
+             "the blast's squares differ from the same aim built out of the"
+             " USER -- which is the whole of `source`. Before this, the two"
+             " were identical by construction, because `area_of` took the"
+             " actor's squares whatever origin it was handed",
+             f"{len(area)} squares from the feature, {len(from_user)} from"
+             f" the user, overlap {len(area & from_user)}")
+    out.that(area and near_feature <= 1,
+             "and it sits against the feature -- the feature is three"
+             " squares from the caster here, so a shape this close to it"
+             " cannot have been built from the caster",
+             f"nearest square to the feature: {near_feature}")
+
+
 def the_printed_sheet_agrees_with_the_creature_it_describes(out: Result) -> None:
     """`chargen.sheet` against a really-spawned creature. `#793` item 6.
 
@@ -64272,6 +64420,12 @@ DRIVERS = {
         "DMG2's in-combat challenge: a combat scene that also rolls, on the"
         " fight's own board -- priced OUT of the budget, capped at"
         " complexity 2, and every check paying a named action (#922)",
+    ),
+    "terrain_origin": (
+        a_terrain_power_comes_out_of_the_feature_not_its_user,
+        "a printed terrain area is centred on the feature rather than on"
+        " whoever reached for it, and a close blast 3 can be aimed at all"
+        " (#1127)",
     ),
     "chargen_sheet": (
         the_printed_sheet_agrees_with_the_creature_it_describes,

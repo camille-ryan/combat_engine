@@ -54,6 +54,13 @@ class Action:
     targets: tuple[int, ...] = ()
     dest: Square | None = None
     origin: Square | None = None
+    #: **The squares the power comes out of, when that is not the actor.**
+    #: `#1127`. A terrain feature's printed area is centred on the feature,
+    #: and `origin` cannot say that -- it is the *aim point*, and
+    #: `area_of` builds a close blast from the actor's squares whatever it
+    #: holds. Empty means the actor, which is every action but a terrain
+    #: one.
+    source: frozenset[Square] = frozenset()
     #: Which half of a two-branch range line this option uses. 0 for
     #: everything that prints one range, which is almost everything.
     branch: int = 0
@@ -1586,7 +1593,7 @@ def _terrain(world: World, encounter: Encounter, actor: int) -> list[Action]:
     ref, for the reason the `move_zone` note gives: a field on `Action`
     widens a structure two readers consume without running anything.
     """
-    from .dsl import get, usable
+    from .dsl import get, reach_of, usable
     from .zones import Zone
 
     out: list[Action] = []
@@ -1622,9 +1629,28 @@ def _terrain(world: World, encounter: Encounter, actor: int) -> list[Action]:
         # Nearest square of the region, because a feature a creature is
         # standing beside is the one it is reaching for, and the printed
         # requirement is about that adjacency.
-        origin = min(zone.squares, key=lambda sq: distance(here.square, sq))
+        # **`source` says where it comes out of; `origin` says where it is
+        # aimed. They are different squares and this used to pass one for
+        # both.** `#1127`.
+        #
+        # `area_of` reads `origin` as the **aim point** and builds the
+        # shape from `source` -- so for a close blast the feature's own
+        # square is never a legal aim (the placements are the ring two out
+        # from it), `candidates` returned `[]`, and nine rows resolved with
+        # no targets while reporting a successful use. Measured from a
+        # feature two squares away: 16 legal placements, the best giving 5
+        # targets, against 0 for the feature's own square.
+        #
+        # So a blast is offered with **no** origin and `_auto_targets`
+        # picks the placement that catches most, which is what it does for
+        # every other area power. An `area_burst` keeps the feature square,
+        # because there `origin` really is the centre; a `close_burst`
+        # ignores it and is centred by `source` alone.
+        nearest = min(zone.squares, key=lambda sq: distance(here.square, sq))
+        aimed_from_feature = reach_of(world, actor, p, 0, 0).kind == "close_blast"
         out.append(Action(kind="terrain", cost=p.action, ref=zone.power,
-                          origin=origin))
+                          origin=None if aimed_from_feature else nearest,
+                          source=frozenset(zone.squares)))
     return out
 
 
@@ -2619,7 +2645,8 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         if holder is None:
             return False
         ran = _use(world, actor, action.ref, spend=False, board=True,
-                   origin=action.origin)
+                   origin=action.origin,
+                   source=action.source or frozenset(holder.squares))
         # **Decremented after, and only on a use that happened.** A row that
         # refuses in its own body -- a failed requirement it checks itself --
         # must not consume a single-use feature, and this is the printed

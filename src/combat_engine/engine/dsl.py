@@ -2305,7 +2305,7 @@ def declared() -> list[str]:
 
 def area_of(
     world: World, actor: int, p: Power, origin: Square | None = None, branch: int = 0,
-    augment: int = 0,
+    augment: int = 0, source: frozenset[Square] | None = None,
 ) -> frozenset[Square]:
     """The squares a power covers, given where its origin was placed.
 
@@ -2327,9 +2327,17 @@ def area_of(
     # Every origin, unioned. One companion gives one origin and the same answer
     # as before; two give the area either of them could reach, which is what the
     # printed rule asks for on both of its sentences. See `origins`.
-    mine = set()
-    for eye in origins(world, actor, r):
-        mine |= squares(world, eye)
+    # **`source` replaces the eyes, which is `#1127`.** A power coming out
+    # of a terrain feature is centred on the feature, not on whoever
+    # reached for it -- so the squares the shape is built from are its,
+    # and `origins` (the actor plus any companion) is the default rather
+    # than the only answer.
+    if source is not None:
+        mine = set(source)
+    else:
+        mine = set()
+        for eye in origins(world, actor, r):
+            mine |= squares(world, eye)
     stretch = _stretched(world, actor, r.kind,
                          {"power": p.ref, "range_kind": r.kind})
     # **Not applied to a melee or ranged range here**, because those go
@@ -3015,15 +3023,26 @@ def roller(world: World, actor: int, by: str) -> int:
     return actor
 
 
-def aim_points(world: World, actor: int, p: Power, augment: int = 0) -> list[Square]:
+def aim_points(world: World, actor: int, p: Power, augment: int = 0,
+               source: frozenset[Square] | None = None) -> list[Square]:
     """Every square this power can be pointed at.
 
     For a close blast these are the placement centres -- a blast 3 from a
     Medium creature gives the ring two squares out. For an area burst it is
     every square in range. Everything else aims at a creature rather than a
     square and gets an empty list.
+
+    **`source` is where the power comes out of, which is not always its
+    user.** `#1127`: a terrain feature's printed line is "close blast 3"
+    emanating from the thing on the floor, and the placements belong to
+    *its* square rather than the caster's. Default `None` means the actor,
+    which is every other caller.
+
+    The cached branch below keys on `mine`, so a different source is a
+    different key by construction -- there is no staleness to invalidate,
+    which is the one risk worth naming around this cache.
     """
-    mine = squares(world, actor)
+    mine = source if source is not None else squares(world, actor)
     # The form being used, not the printed base: an augment that turns a
     # melee swing into an area burst has a `within` the base row has not
     # got, and asking the base here offered the burst nowhere to land.
@@ -3184,7 +3203,7 @@ def basic_options(world: World, actor: int, window: str, own: str = "") -> list[
 
 def candidates(
     world: World, actor: int, p: Power, origin: Square | None = None, branch: int = 0,
-    augment: int = 0,
+    augment: int = 0, source: frozenset[Square] | None = None,
 ) -> list[int]:
     """Everyone this power could legally be aimed at right now.
 
@@ -3293,10 +3312,10 @@ def candidates(
     # origin at all. #894.
     reach = reach_of(world, actor, p, branch, augment)
     aimed = origin is not None and reach.kind in ("area_burst", "close_blast")
-    if aimed and origin not in aim_points(world, actor, p, augment):
+    if aimed and origin not in aim_points(world, actor, p, augment, source):
         return []
 
-    area = area_of(world, actor, p, origin, branch, augment)
+    area = area_of(world, actor, p, origin, branch, augment, source)
     # **A row asking for a corpse must have the corpse in its pool.**
     # `targetable` is "alive, or scenery" -- it already carves out scenery so
     # that "one Medium or smaller object" can be aimed at, and a target line
@@ -4012,6 +4031,11 @@ def use(
     *,
     targets: list[int] | None = None,
     origin: Square | None = None,
+    #: **Where the power comes out of, when that is not its user.** `#1127`:
+    #: a terrain feature's "close blast 3" emanates from the thing on the
+    #: floor, so the shape is built from its squares. `None` is the actor,
+    #: which is every caller but the board.
+    source: frozenset[Square] | None = None,
     spend: bool = True,
     trigger: Any = None,
     opportunity: bool = False,
@@ -4114,7 +4138,8 @@ def use(
         if targets and not chosen:
             return False
     else:
-        chosen, origin = _auto_targets(world, actor, p, origin, branch, augment)
+        chosen, origin = _auto_targets(world, actor, p, origin, branch, augment,
+                                       source)
         chosen = list(chosen)
     cast = Cast(
         world=world,
@@ -4361,7 +4386,7 @@ def _survive_provoking(world: World, actor: int, ref: str) -> bool:
 
 def _auto_targets(
     world: World, actor: int, p: Power, origin: Square | None, branch: int = 0,
-    augment: int = 0,
+    augment: int = 0, source: frozenset[Square] | None = None,
 ) -> tuple[list[int], Square | None]:
     """Who this power lands on when the caller did not say, and where it aimed.
 
@@ -4383,13 +4408,13 @@ def _auto_targets(
             "area_burst", "close_blast"):
         best: list[int] = []
         chosen: Square | None = None
-        for aim in aim_points(world, actor, p, augment):
-            hit = candidates(world, actor, p, aim, branch, augment)
+        for aim in aim_points(world, actor, p, augment, source):
+            hit = candidates(world, actor, p, aim, branch, augment, source)
             if len(hit) > len(best):
                 best, chosen = hit, aim
         if best:
             return (best if want.everyone else best[: want.count]), chosen
-    pool = candidates(world, actor, p, origin, branch, augment)
+    pool = candidates(world, actor, p, origin, branch, augment, source)
     if want.everyone:
         return pool, origin
     return pool[: want.count], origin
