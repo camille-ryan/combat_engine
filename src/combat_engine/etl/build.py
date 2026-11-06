@@ -4806,8 +4806,19 @@ def _cross_reference(
 
 
 #: Compendium tables whose rows are never content but whose names are
-#: printed inside things that are. The prefix is what their ref is built
-#: from -- `x12` for a ritual, `x4` for a deity -- and it is deliberately
+#: printed inside things that are. The prefix is the **tuple index below**,
+#: so `x0_` is a ritual and `x1_` a deity -- which `_rituals` and `_deities`
+#: each say in their own docstrings, and `x1_1` is a real deity ref.
+#:
+#: **This said `x12` for a ritual and `x4` for a deity, and both were
+#: wrong**: `x4_` is Poison and `x12_` is not in this family at all.
+#: `x12_` is minted by `_opaque_shared_abilities` as
+#: `f"x12_{sha1(name)[:8]}"` -- a shared monster ability with no table
+#: behind it -- which is why the wrong example was plausible: there really
+#: is an `x12_`, 1,156 of them, and it is the one alias prefix this tuple
+#: does not produce. The index is positional and goes 0 to 10.
+#:
+#: It is deliberately
 #: one letter for all of them: an author is told only that a name was
 #: here, never what kind of thing it named.
 _ALIAS_TABLES = (

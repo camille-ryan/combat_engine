@@ -7,8 +7,17 @@ catch one and then carry it forever at whatever stage it arrived at,
 because no reader existed and no rest rolled anything.
 
 This is steps 1 and 2 of `#948`: the state on `story.Sheet` and the roll
-at an extended rest. Step 3 is 69 content rows and step 4 is the engine
-half; neither is here.
+at an extended rest.
+
+**Step 4 landed in `503512fb` and this said it had not.** `Cast.contract`
+and `Cast.expose` are live at **54 call sites across 33 files, 23 distinct
+refs** -- so something does inflict a disease, and has for a while.
+
+Step 3 -- the per-stage content rows -- is still absent, and `#948` records
+why it is not merely unwritten: nothing reads `Afflictions.contracted` to
+*apply* a stage's effect, so an `x5_` row would have no caller, and
+`spec.py` has no `disease` branch, so no author can be handed a brief for
+one. Writing them first is the drawable-and-inert shape.
 
 **The roll follows `run.weather`'s shape and not a new one.** That function
 already rolls a party-wide Endurance check between scenes -- lay a
@@ -148,10 +157,14 @@ def tick(party: object, seed: int) -> list[str]:
     """Roll each afflicted character's check at an extended rest. #948.
 
     One line per character who rolled, saying which way it went. `[]` when
-    nobody is afflicted, which is every party today -- **nothing inflicts a
-    disease yet**, so this is the reader arriving before its writer. Said
-    plainly because an empty list is otherwise indistinguishable from a
-    broken tick.
+    nobody is afflicted.
+
+    **This said "nothing inflicts a disease yet" and that is false since
+    `503512fb`** -- `c.contract` and `c.expose` have 54 call sites across 33
+    files, 22 of whose 23 refs are in the tickable 53. So an empty list is
+    now a party that has caught nothing rather than a writer that does not
+    exist. Still worth saying plainly, for the original reason: an empty
+    list is otherwise indistinguishable from a broken tick.
 
     Beat the improve DC and the stage falls by one; fail the worsen DC and
     it rises by one; between the two and it holds, which is the printed
