@@ -190,7 +190,13 @@ def catches_itself(
         SavingThrow(
             actor=eid, against="falling", natural=natural, bonus=plus,
             saved=natural + plus >= SAVE_BEATS, when_="edge",
-            granted_via=power, keywords=frozenset(),
+            # **`()` and not `frozenset()`, which is `#1120`.** A
+            # frozenset is not JSON-serialisable and `EventDTO.model_dump`
+            # keeps it, so `json.dumps` raises in the SSE generator and the
+            # log panel goes blank -- *even when it is empty*, which is
+            # what made this one invisible. A falling save is rare enough
+            # that no fixture and no pinned day rolls one.
+            granted_via=power, keywords=(),
         )
     ).saved
 

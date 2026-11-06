@@ -38762,6 +38762,31 @@ def every_event_field_can_reach_the_page(out: Result) -> None:
       catches what the walk cannot judge at all: a field annotated `Any`,
       whose value is only *sometimes* safe.
 
+    **Four halves, and one of them is not in this file.** The division is
+    worth stating because it was learnt by missing something:
+
+    | | catches |
+    |---|---|
+    | the **walk** | a declared annotation that is unsafe |
+    | the **defaults** arm | a declared default that is unsafe, empty or not |
+    | the **live pass** | a value the board produced, including the `Any` fields |
+    | **`types.py`** | a call site the board never reaches |
+
+    The last row is how `falling.py`'s `keywords=frozenset()` was found --
+    a third construction site, after the two the fix patched. The
+    annotation there was **correct** and the call site lied, so the walk
+    was blind to it; and the first draft of the live pass reached no
+    falling save, so that was blind too. A type checker found it.
+
+    The live pass now poses one, through `falling.catches_itself` rather
+    than by emitting a `SavingThrow` by hand -- emitting one would test
+    this file's own literal. So that site is covered here as well, and the
+    plant proves it: restoring the frozenset turns two assertions red.
+
+    **But the general case still belongs to `types.py`**, and the table
+    says so: a construction site on a path no board in this rule walks is
+    invisible to every arm of it. This rule is not the whole gate.
+
     `wire()` is the **save format**, so coercion was the wrong answer and
     `#1120` says why: sets to sorted lists and paths to strings would
     silently change what is written to disk, and a 49-square area in every
@@ -38822,9 +38847,9 @@ def every_event_field_can_reach_the_page(out: Result) -> None:
             return all(safe(a) for a in args)
         return False
 
-    subs: list[type] = []
+    subs: list[Any] = []
 
-    def walk(cls: type) -> None:
+    def walk(cls: Any) -> None:
         for sub in cls.__subclasses__():
             subs.append(sub)
             walk(sub)
@@ -38893,10 +38918,50 @@ def every_event_field_can_reach_the_page(out: Result) -> None:
                  " exists",
                  f"safe({t}) = {safe(t)}, wanted {want}")
 
+    # -- the declared DEFAULTS, which is the half that slipped ------------
+    #
+    # **This arm exists because the first version of this rule missed a real
+    # bug and `types.py` found it.** `falling.py` constructed a
+    # `SavingThrow` with `keywords=frozenset()` -- a THIRD site, after the
+    # two the fix patched. The walk above could not see it (the annotation
+    # is correct; the call site lied) and the live pass below could not see
+    # it (no board here rolls a falling save). An empty frozenset raises
+    # just as loudly as a full one, so it was a live blank log panel.
+    #
+    # A declared default is the half of that which IS checkable here, and
+    # it is the sharper case: before the fix, `keywords`' own default was
+    # `frozenset()`, so EVERY saving throw carried one.
+    bad_default: list[str] = []
+    checked = 0
+    for cls in subs:
+        for f in dataclasses.fields(cls):
+            if not f.repr:
+                continue
+            if f.default is not dataclasses.MISSING:
+                value = f.default
+            elif f.default_factory is not dataclasses.MISSING:
+                value = f.default_factory()
+            else:
+                continue
+            checked += 1
+            try:
+                json.dumps(value)
+            except (TypeError, ValueError):
+                bad_default.append(f"{cls.__name__}.{f.name} = {value!r}")
+    out.that(checked > 100,
+             "the defaults arm looked at a real population of declared"
+             " defaults, so the assertion below is not vacuous",
+             f"{checked} defaults checked")
+    out.that(not bad_default,
+             "and no field's DEFAULT is a value `json.dumps` refuses. This"
+             " is the arm the first draft of this rule lacked: a default of"
+             " `frozenset()` is unsafe even though it is empty, and it"
+             " applies to every event of that class that does not override"
+             " it",
+             f"{bad_default or 'all clean'}")
+
     # -- the live half: serialise what a real fight actually logged -------
-    world, me, foe = _board("mba", 3)
-    enc = world.encounter if hasattr(world, "encounter") else None
-    _ = enc
+    world, me, _foe = _board("mba", 3)
     from combat_engine.engine.types import Keyword
 
     # A save carrying keywords is the case that had no fixture, so it is
@@ -38905,6 +38970,32 @@ def every_event_field_can_reach_the_page(out: Result) -> None:
                                  saved=False,
                                  keywords=tuple(sorted({Keyword.POISON,
                                                         Keyword.FIRE}))))
+
+    # **And a FALLING save, through `falling.catches_itself` rather than by
+    # emitting one.** That is the site `types.py` caught and no arm here
+    # could -- so it is posed by calling the real code, which is the only
+    # version of this assertion that would have gone red before the fix.
+    # A hand-emitted `SavingThrow` would be testing this file's own
+    # literal.
+    from combat_engine.engine import falling
+    from combat_engine.engine.components import Position as _Position
+
+    # `catches_itself` returns early unless the destination's floor is
+    # LOWER than the creature's -- `Grid.floor` reads `elevation`, so a
+    # negative entry is the edge. The setup is asserted below rather than
+    # assumed: the first attempt dug no pit, emitted no save, and the
+    # setup assertion is what said so.
+    here = world.need(me, _Position).square
+    pit = (here[0] + 1, here[1])
+    world.grid.elevation[pit] = world.grid.floor(here) - 2
+    falling.catches_itself(world, me, pit, power="probe")
+    fell = [e for e in world.bus.log
+            if isinstance(e, E.SavingThrow) and e.against == "falling"]
+    out.that(fell,
+             "the setup landed: `falling.catches_itself` really emitted a"
+             " falling save. Without one this arm is vacuous, and a vacuous"
+             " arm here is exactly how the third site stayed hidden",
+             f"{len(fell)} falling save(s)")
     logged = list(world.bus.log)
     out.that(len(logged) > 20,
              "the board logged a real stream to serialise -- an empty log"
@@ -38918,10 +39009,14 @@ def every_event_field_can_reach_the_page(out: Result) -> None:
         except (TypeError, ValueError) as exc:
             raised.append(f"{type(ev).__name__}: {exc}")
     out.that(not raised,
-             "and every one of them survives `json.dumps(ev.wire())`, which"
-             " is the exact call the SSE stream makes. This is the half the"
-             " walk cannot do: a field annotated `Any` is judged by its"
-             " value or not at all",
+             "and every one of them survives `json.dumps(ev.wire())`."
+             " **One step before the call the SSE stream makes**, said"
+             " precisely: the stream dumps"
+             " `render.event_dto(...).model_dump()`, and `EventDTO.data` is"
+             " a `dict[str, Any]` so pydantic passes the value through"
+             " unchanged -- which is why `wire()` being safe is what"
+             " decides it. This is the half the walk cannot do: a field"
+             " annotated `Any` is judged by its value or not at all",
              f"{raised[:3] or 'all serialise'}")
 
     saves = [e for e in logged if isinstance(e, E.SavingThrow)]
