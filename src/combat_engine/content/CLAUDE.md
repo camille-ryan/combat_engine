@@ -294,14 +294,44 @@ no ref of its own.
 the tree still holds the old rider shape in places. `p704` is the worked
 example.
 
-**No `label=`, and this line used to say the opposite.** It said laying the
-effect with `label="<the feat>"` was not optional, for credit — and
-`c.bonus`, `c.penalty`, `c.flat` and `c.damage` take no `label=` at all, so
-the instruction raised a `TypeError`. Credit is not the question either: the
-feat row is not fired, because it carries `implemented_in=` and `audit.py`
-buckets that separately. A modifier is labelled with the laying row's ref
-for free. See `docs/AUTHORING.md` for the one case where a label does
-matter — two *penalties* in one body, which collapse without one.
+**Credit is `c.credit`, and this paragraph used to tell you to ignore it.**
+It said *"credit is not the question either"*, which was true before the
+mechanism existed and is now the most misleading sentence a migrator could
+read. The shape:
+
+```python
+if c.feat("f974"):
+    with c.credit("f974"):
+        c.penalty(AC, 2, on=victim, until=When.EONT)
+```
+
+Everything laid inside the block is that feat's doing rather than the
+power's. Without it the effect is the *power's*, so its label and its `by`
+both say the power and the feat reports SILENT while working perfectly.
+Camille's call on `#550`.
+
+**Two different things were wearing the word "credit"** and that is how the
+old sentence came to be wrong rather than merely stale. The true half: the
+feat *row* is not fired, because it carries `implemented_in=` and
+`audit.py` buckets that separately. The false half: that this means nothing
+has to say who a laid effect is for. It does, and `c.credit` is how.
+
+**And `label=` is still not it.** `c.bonus`, `c.penalty`, `c.flat` and
+`c.damage` take no `label=` at all, so the old instruction raised a
+`TypeError` — and of the verbs such a clause needs, the two that *do* take
+one put it on the `Mod`, for the non-stacking rule, not on the effect
+`audit._claimed` reads. So a label could not be made to mean credit without
+breaking what it already means. A block is one door all 148 effect verbs
+reach; a keyword would have needed adding to six. It is a **stack**, so an
+inner block gives the outer one back rather than clearing it.
+
+See `docs/AUTHORING.md` for the one case where a label does still matter —
+two *penalties* in one body, which collapse without one.
+
+Said at this length because the 2026-11-03 wave recorded that *"the recipe
+I handed out was wrong"* — it used `c.feat` where `c.declare` was required
+— and `c.credit` appeared in **neither** this file nor
+`docs/AUTHORING.md`, so the next wave would have inherited the same gap.
 
 Three reasons, and the second is a rule the engine could otherwise break:
 
