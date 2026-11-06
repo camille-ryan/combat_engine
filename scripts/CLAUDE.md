@@ -204,6 +204,20 @@ it improves, red when it regresses, never a bare allowance. #372.
   ETL change moves a value, so a gate on it would be red most of the time and
   get ignored."*
 
+  **`questions.py` is in `check.py` despite needing the network, and the
+  difference from the paragraph above is the one that matters.**
+  `leaks.py --history`'s issue half was kept out for **two** reasons --
+  it needs the network *and* it can never go green, because a pushed
+  message is append-only. Only the first applies to `questions.py`: an
+  issue's last comment is editable by adding another, so the check can
+  reach zero and does. It was green within a day of being written.
+
+  So the network is a cost rather than a disqualification, and it is
+  priced: ~1s per parked issue, usually a dozen, and an unreachable `gh`
+  exits `NOTHING_IN_SCOPE` so the run prints SKIP and is withheld from
+  "all instruments clean" instead of passing. A check that cannot pass is
+  forbidden here; a check that cannot run says so.
+
   **The gate that is worth having is at commit-msg time**, which is the one
   moment a message is still editable, and it is installed:
 
@@ -293,6 +307,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `lint.py` | ruff, plus two structural walks. Python only — never `web/` |
 | `leaks.py` | has a printed name got into the repo, a spec, a **quoted run in a comment**, a commit message or an issue, or has a tracked file **quoted an adventure the user owns**; `--specs`, `--cited`, `--modules`, `--history`, `--issues`, `--staged` |
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
+| `questions.py` | does every issue tagged `question` end with a plain-language ask. Three outcomes: parked on Camille, **ANSWERED** (her comment is last, so it is yours), **NO ELI5**. Camille's requirement, 2026-11-06 |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
 | `impact.py` | which rows actually execute a given engine function; `--record`, `--record --refs`, `--select`, `--why`, `--stats`. Not a gate — a selector, and it fails open to WIDE on any doubt. **`check.py` consults it automatically**, with no flag, **and tops it up with the rows each clean commit touched** (9s for two rows); `nightly.sh` re-records the whole corpus after a clean sweep. Proven by a plant: a comment inside one `cast.py` method selects 71 rows of 23,062 and **70 of 70 raise** when that method is broken, with two equal-size controls undisturbed |
 | `written.py` | written / not written / half-written on purpose. **Was `coverage.py`** and renamed in #853: `scripts/` is first on `sys.path`, so that name shadowed the real `coverage` library and stopped `impact.py` pooling its recording |

@@ -195,6 +195,17 @@ CHECKS = (
                "no spec holds a name-shaped phrase the baseline does not know"),
     Instrument("todo", ("uv", "run", "scripts/todo.py"),
                "no `todo=` waits on a symbol that now exists"),
+    # **The only instrument that reaches the network**, and it earns it:
+    # Camille asked that a `question` tag be *required* to come with a
+    # plain-language version, and prose in `CLAUDE.md` is not how this repo
+    # makes a thing required. Unpaused on purpose -- a backstop nobody runs
+    # is not a requirement.
+    #
+    # `gh` being unreachable exits `NOTHING_IN_SCOPE`, so an offline run
+    # prints SKIP and is kept out of "all instruments clean" rather than
+    # passing quietly. ~1s per parked issue; there are usually a dozen.
+    Instrument("questions", ("uv", "run", "scripts/questions.py"),
+               "every issue parked on Camille ends with a plain-language ask"),
     Instrument("bonuses", ("uv", "run", "scripts/bonuses.py", "--quiet"),
                "every bonus says the type its card prints"),
     # Beside `bonuses` because it is the same question about a different corpus:

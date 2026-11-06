@@ -29,6 +29,36 @@ The rest of the policy:
   two issues. The same rule applies to markers and for the same reason: one
   symbol serving three needs made twelve rows report ready when a third of
   it landed.
+* **A `question` tag carries a plain-language version, as the last
+  comment.** Camille, asked directly, 2026-11-06:
+
+  > *"can we make it required that when you add a question tag to an issue
+  > you give an ELI5?"*
+
+  Required, and `scripts/questions.py` is the gate -- unpaused in
+  `check.py`, because a backstop nobody runs is not a requirement. It
+  reports three states, which are three different jobs:
+
+  | | meaning |
+  |---|---|
+  | parked | your ask is the last comment, in plain words — waiting on Camille |
+  | **ANSWERED** | *Camille's* comment is last, so it is waiting on **you** — act on the ruling and drop the tag, or re-ask |
+  | **NO ELI5** | tagged with no plain-language version — the thing this rule forbids |
+
+  What the plain version holds: **what is broken**, **what is being
+  asked**, **what each option means**, and **your pick**. Short sentences,
+  no jargon, no line numbers. The technical comment stays above it; this
+  is not a replacement for it.
+
+  **Last comment, not any comment**, for this section's own first reason:
+  the bottom of the thread is where the current state lives, so an ELI5
+  buried under four later notes of yours is not the thing Camille reads.
+
+  And it is worth the effort rather than a formality: the first pass over
+  the parked list found **14 of 15** had none, one issue whose plain
+  version Camille still could not follow (*"I still don't understand the
+  question"*), and three stale blockers found only because writing the
+  simple version forced the thread to be read end to end.
 * **Put new state in a comment**, not by editing the body. That is what
   keeps the convention working — and it is why the bodies above went stale.
 * **Close with the measurement**: what landed, what moved, how it was
