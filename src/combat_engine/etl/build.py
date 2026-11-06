@@ -2104,14 +2104,32 @@ def _skills_of(plain: str) -> tuple[int, list[tuple[str, str, int]]]:
     return picks, out
 
 
+#: **`[^.\n]` and not `[^.]`, which is `#1119`.** `[^.]` matches a
+#: newline, so a line with no full stop of its own runs on into the next
+#: heading -- and the implement line is the one that never ends in a stop.
+#: Live before the fix: **16 of 16 populated `implements` values carried
+#: the following heading**, so none of the populated ones was clean, where
+#: the issue read as if 11 classes parsed correctly.
+#:
+#: All four list patterns are narrowed and not only the one that was
+#: swallowing, because it is one swallowing behaviour rather than four
+#: bugs. Measured first: the other three carry **zero** newline-bearing
+#: values today, so their captures come out byte-identical and the change
+#: is inert for them -- stated rather than assumed, since a legitimately
+#: wrapped list would have been truncated by this.
+#:
+#: Proven not to move the draw without a rebuild, which is the parse-level
+#: harness `CLAUDE.md` asks for: the sole reader is `chargen._arms`, which
+#: substring-tests for `staff` and `totem`, and cutting every live value
+#: at its newline moves **0 of 16** verdicts.
 _CHASSIS = {
     "hp_first": r"Hit Points at 1st Level\s*:?\s*(\d+)",
     "hp_per_level": r"Hit Points per Level Gained\s*:?\s*(\d+)",
     "surges": r"Healing Surges(?: per Day)?\s*:?\s*(\d+)",
-    "armour": r"Armor Proficiencies\s*:?\s*([^.]+)",
-    "weapons": r"Weapon Proficiencies\s*:?\s*([^.]+)",
-    "implements": r"Implements?\s*:?\s*([^.]+)",
-    "defences": r"Bonus to Defenses?\s*:?\s*([^.]+)",
+    "armour": r"Armor Proficiencies\s*:?\s*([^.\n]+)",
+    "weapons": r"Weapon Proficiencies\s*:?\s*([^.\n]+)",
+    "implements": r"Implements?\s*:?\s*([^.\n]+)",
+    "defences": r"Bonus to Defenses?\s*:?\s*([^.\n]+)",
 }
 
 
