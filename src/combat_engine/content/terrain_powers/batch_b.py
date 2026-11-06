@@ -329,7 +329,7 @@ def x2_119(c: Cast) -> None:
        reach=CloseBurst(5), target=Target("other", 1),
        check=Check("arcana", "hard"),
        attack=Attack(level_plus=3, vs=Defense.REF),
-       dropped=("dsl.Check(skill=tuple)",))
+       dropped=("dsl.Check(skills=)",))
 def x2_120(c: Cast) -> None:
     """Set it off at one creature in the burst.
 
@@ -348,6 +348,20 @@ def x2_120(c: Cast) -> None:
     `lint.py` catches it for the `everyone=True` constants only, so the
     single-target spelling has no gate and had to be read off the events.
     `powers/monk/second_card_1` and `races/powers_a` spell it this way too.
+
+    **The marker is `dsl.Check(skills=)` and NOT `(skill=tuple)`, which is
+    the shape it was first written as.** `blocked._one` resolves a marker by
+    *parameter name*: it parses `dsl.Check(skill=tuple)` as the parameter
+    `skill`, which already exists, so the type qualifier is invisible and
+    `todo.py` reported the symbol **ARRIVED on the day the row landed** --
+    red, on a gap that had not moved. The plural names a parameter that
+    does not exist, so it resolves False today and goes red the day it
+    lands, which is the one job that instrument has.
+
+    Measured: exactly **1 marker in 848** had the type-qualifier shape, and
+    it was this one, so this is a badly-named marker rather than a hole in
+    the convention. The mirror of `#1118`, where a marker naming a dict key
+    could *never* resolve: this one could never fail to.
 
     A close burst with a single target is the printed shape and
     `candidates` serves it; `powers/battlemind/level_0` has it twice.
