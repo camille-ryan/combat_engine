@@ -1,9 +1,9 @@
 {
-  "sha": "7935a7d0d4345eaccb26e98435647d5bad092f5b",
-  "refs": 21516,
-  "fired": 19960,
+  "sha": "ea76d3ae6babbfd394a65338df2533ed49b42455",
+  "refs": 21538,
+  "fired": 19981,
   "silent": 542,
-  "never": 844,
+  "never": 845,
   "never_refs": [
     "cf:barbarian-f2c0",
     "cf:wizard-mage-f0s3",
@@ -848,7 +848,8 @@
     "p9758",
     "p9870",
     "p9969",
-    "p9994"
+    "p9994",
+    "x2_127"
   ],
   "known_quiet": 170,
   "known_quiet_refs": [
