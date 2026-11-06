@@ -86,15 +86,34 @@ def parked() -> list[dict]:
     return json.loads(out.stdout)
 
 
-def last_comment(number: int) -> str:
+def last_word(number: int) -> tuple[str, bool]:
+    """The last thing Camille reads on this issue, and whether it is a comment.
+
+    **The body counts when there are no comments**, which this got wrong on
+    its first day. A freshly filed question carries its plain-language
+    version in the body -- there is nowhere else to put it -- and reading
+    only comments reported it as missing. `#1134` was the case: filed with
+    a plain version, flagged for not having one.
+
+    The rule is "the plain version is the last thing she reads", and for an
+    issue nobody has commented on that is the body. Once a comment exists
+    the body is the stale part (this repo's first rule), so the comment
+    wins from then on.
+
+    The flag is returned rather than discarded so the caller can tell
+    Camille's reply from mine -- a body is always mine.
+    """
     out = subprocess.run(
-        ["gh", "issue", "view", str(number), "--json", "comments"],
+        ["gh", "issue", "view", str(number), "--json", "comments,body"],
         capture_output=True, text=True, timeout=120,
     )
     if out.returncode != 0:
         raise RuntimeError(out.stderr.strip() or f"gh issue view {number} failed")
-    comments = json.loads(out.stdout).get("comments") or []
-    return comments[-1]["body"] if comments else ""
+    got = json.loads(out.stdout)
+    comments = got.get("comments") or []
+    if comments:
+        return comments[-1]["body"], True
+    return got.get("body") or "", False
 
 
 def main() -> int:
@@ -120,15 +139,17 @@ def main() -> int:
     for issue in issues:
         number, title = issue["number"], issue["title"]
         try:
-            body = last_comment(number)
+            body, from_comment = last_word(number)
         except Exception as why:
             print(f"  SKIPPED -- #{number}: {why}")
             return NOTHING_IN_SCOPE
-        opener = " ".join(body.split())[:70] or "(no comments at all)"
-        if body and not SIGNED.search(body):
+        where = "last comment" if from_comment else "the body"
+        opener = " ".join(body.split())[:70] or "(nothing written at all)"
+        # A body is always mine, so only a *comment* can be Camille's.
+        if from_comment and body and not SIGNED.search(body):
             answered.append((number, title, opener))
         elif not MARKERS.search(body):
-            bad.append((number, title, opener))
+            bad.append((number, title, f"{where} opens: {opener}"))
 
     ok = len(issues) - len(bad) - len(answered)
     print(f"  {len(issues)} tagged `question`: {ok} parked on Camille with a"
@@ -144,7 +165,7 @@ def main() -> int:
         print(f"           Camille said: {opener}")
     for number, title, opener in bad:
         print(f"  NO ELI5  #{number}  {title[:62]}")
-        print(f"           last comment opens: {opener}")
+        print(f"           {opener}")
     print()
     if bad:
         print("  A `question` tag is a request for Camille's time, so it carries")
