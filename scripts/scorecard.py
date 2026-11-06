@@ -396,6 +396,57 @@ class Counted(D.DoctrinePolicy):
 
 
 
+def _could_be_saved(world, who: int) -> bool:  # noqa: ANN001
+    """Does a living ally hold an unspent row that could heal this creature?
+
+    The third counter `#324` asks for, and that issue parks it saying the
+    predicate *"nothing carries"*. Nothing carries it as one thing; both
+    halves are live and compose:
+
+    * `doctrine.heals(ref)` -- does this row put hit points back. It reads
+      the body for `c.heal`, `c.surge` and `c.temp_hp`, cached per ref.
+    * the row's own target **side** -- does it reach anybody but its
+      caster. A `target=SELF` heal cannot answer a dying ally.
+
+    Plus `Powers.times(ref) == 0` for *unspent*, which is the same question
+    `_held_a_second_wind` asks one row narrower.
+
+    **This under-reports, deliberately, and `_heal_reach_unreadable` says
+    by how much.** Of the 586 character-holdable healing rows, 333 are
+    self-only, 114 reach somebody else and **139 have no readable side** --
+    so a third of the family cannot be classified from the header. Counting
+    only the 114 is the safe direction for a counter whose job is to find a
+    **refusal**: it can say "the AI declined a save it had" and be right,
+    where guessing the 139 either way could invent one. A number that
+    silently omitted a third of its population would be the shape this
+    repo's notes warn about, so the omission is reported beside it.
+
+    Asked of **living** allies only. A heal held by somebody who is also
+    down is not an answer anybody declined.
+    """
+    from combat_engine.policy.doctrine import heals
+
+    me = world.get(who, Side)
+    if me is None:
+        return False
+    for other, side in world.each(Side):
+        if other == who or side.team != me.team or not alive(world, other):
+            continue
+        known = world.get(other, Powers)
+        if known is None:
+            continue
+        for ref in known.known:
+            if not heals(ref):
+                continue
+            row = get(ref)
+            target = getattr(row, "target", None) if row is not None else None
+            if getattr(target, "side", None) in ("self", None):
+                continue
+            if known.times(ref) == 0:
+                return True
+    return False
+
+
 def _held_a_second_wind(world, who: int) -> bool:  # noqa: ANN001
     """Could this creature still have taken a second wind as it dropped?
 
@@ -537,6 +588,14 @@ def play(
         pol.n[f"{side}/downed"] += 1
         if _held_a_second_wind(world, ev.actor):
             pol.n[f"{side}/downed_holding_wind"] += 1
+        # **The half that measures the REFUSAL**, which `#324` calls the
+        # worse fault: not a heal wasted but a heal the party held and did
+        # not spend on somebody dying. Counted at the drop, which is the
+        # moment the question is about -- the same reason
+        # `_held_a_second_wind` reads the state then rather than tallying
+        # events afterwards.
+        if _could_be_saved(world, ev.actor):
+            pol.n[f"{side}/downed_with_a_heal_in_the_party"] += 1
 
     world.bus.on(Dropped, went_down)
     encounter.start()
@@ -855,6 +914,12 @@ def measure(levels: tuple[int, ...], fights: int = 1,
                 "dailies": pol.n[f"{side}/dailies"],
                 "downed": pol.n[f"{side}/downed"],
                 "downed_holding_wind": pol.n[f"{side}/downed_holding_wind"],
+                # **An under-count by construction**, and `#324`'s comment
+                # says why: 139 of 586 healing rows have no readable target
+                # side, so they are not counted either way. See
+                # `_could_be_saved`.
+                "downed_with_a_heal_in_the_party":
+                    pol.n[f"{side}/downed_with_a_heal_in_the_party"],
                 "ap_standard": pol.n[f"{side}/ap_standard"],
                 "melee_turns": pol.n[f"{side}/melee_turns"],
             }
@@ -949,6 +1014,19 @@ ROWS = [
     # which is fixable. Dropping after spending it says the fight was hard, which
     # is not a fault. One number cannot say which.
     ("downed_holding_wind", "...with their second wind still unspent", "lower"),
+    # **The refusal, which `#324` calls the worse of its two faults.** The
+    # wasted-heal counters above measure a heal spent badly; this measures
+    # one the party held and did not spend on somebody dying. Printed
+    # beside the second-wind line because they are the same shape one
+    # scope wider -- that one asks whether the creature could have saved
+    # itself, this whether anybody else could have saved it.
+    #
+    # **Under-counts by construction**: 139 of 586 healing rows have no
+    # readable target side, so they are counted neither way. See
+    # `_could_be_saved` for why that is the safe direction for a counter
+    # whose job is to find a refusal.
+    ("downed_with_a_heal_in_the_party",
+     "...with a heal unspent in the party", "lower"),
     ("ap_standard", "...of them buying a standard action", "higher"),
     ("decisions", "decisions", "-"),
 ]

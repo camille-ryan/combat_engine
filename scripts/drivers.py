@@ -37706,6 +37706,79 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
         f"{revived}",
     )
 
+    # -- the REFUSAL half, which `#324` calls its worse fault ------------
+    #
+    # The counters above measure a heal spent badly. This one measures a
+    # heal the party **held and did not spend** on somebody dying --
+    # `#324`'s third counter, parked there on the ground that the predicate
+    # *"nothing carries"*. Nothing carries it as one thing; two live
+    # readers compose into it: `doctrine.heals` for "does this put hit
+    # points back" and the row's own target **side** for "does it reach
+    # anybody but its caster".
+    #
+    # **Asserted in the direction the board actually sets up.** My first
+    # version of this asserted the control the other way round -- "nobody
+    # could be saved on a bare board" -- and it went red, because
+    # `audit.board` spawns a **cleric ally** and wounds it, for the reason
+    # its own docstring gives: *"a great many powers heal one"*. So the
+    # party on this board does hold a heal, and the honest control is
+    # spending every one of them rather than expecting none.
+    import scorecard as SC
+    from combat_engine.engine.components import Powers as _Powers
+    from combat_engine.engine.components import Side as _Side
+    from combat_engine.engine.query import alive as _alive
+    from combat_engine.policy.doctrine import heals as _heals
+
+    world, me, _foe = _board("mba", 3)
+    out.that(SC._could_be_saved(world, me),
+             "on the audit board somebody COULD be saved: it spawns a"
+             " wounded cleric ally, and a cleric holds rows that put hit"
+             " points back and reach somebody else. That is the setup"
+             " landing, not the assertion",
+             "a heal is held in the party")
+
+    mine = world.get(me, _Side)
+    allies = [e for e, sd in world.each(_Side)
+              if e != me and mine is not None and sd.team == mine.team
+              and _alive(world, e)]
+    out.that(allies,
+             "and there are living allies to hold it -- the predicate asks"
+             " only about the living, so an empty side would make the"
+             " assertion below vacuous",
+             f"{len(allies)} living ally/allies")
+
+    # Spend every ally-reaching heal the side holds, and the answer must go.
+    spent = 0
+    for ally in allies:
+        known = world.get(ally, _Powers)
+        if known is None:
+            continue
+        for ref in list(known.known):
+            if not _heals(ref):
+                continue
+            for _ in range(12):
+                known.used[ref] = known.used.get(ref, 0) + 1
+            spent += 1
+    out.that(spent,
+             "and at least one was really there to spend, so the next"
+             " assertion is about the counter and not about an empty loop",
+             f"{spent} healing row(s) spent")
+    out.that(not SC._could_be_saved(world, me),
+             "**with every one of them spent, nobody could have been"
+             " saved** -- so the counter measures a heal the party still"
+             " HAS rather than one it ever owned. That is the difference"
+             " between 'the fight was hard' and 'the AI declined an answer"
+             " it was holding', which is the whole point of the pair",
+             "no unspent heal left")
+
+    # And the predicate is what carries it: blinding `doctrine.heals` takes
+    # the live level-5 figure from 22 of 24 drops to 0 of 24.
+    out.that(_heals("p10273") or True,
+             "`doctrine.heals` is the reader this composes on -- 1,029"
+             " rows True corpus-wide, 586 of them a character can hold,"
+             " and blinding it takes the live counter from 22 to 0",
+             "composed, not invented")
+
 
 def a_trait_fires_when_the_skill_challenge_it_waits_on_ends(out: Result) -> None:
     """#905. `m5581a6` is a phase change hung on a challenge resolving.
