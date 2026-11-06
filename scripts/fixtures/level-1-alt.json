@@ -974,7 +974,7 @@
   "Bloodied(actor=8, source=4, power='p13975')",
   "PowerResolved(actor=4, power='p13975', targets=[8], rolls=[AttackResult(hit=True, critical=False, natural=17, total=22, target_defence=12, advantage=False, cancelled=False, forced=False, turned=False, weapon='', target=8, treated='', rolls=[17], rerolled_by=[])])",
   "TurnEnd(actor=4, round=2)",
-  "SavingThrow(actor=4, against='e82[ongoing 5, save ends, ongoing 5 fire]', natural=1, bonus=0, saved=False, keywords=frozenset({<Keyword.FIRE: 'fire'>}))",
+  "SavingThrow(actor=4, against='e82[ongoing 5, save ends, ongoing 5 fire]', natural=1, bonus=0, saved=False, keywords=(<Keyword.FIRE: 'fire'>,))",
   "TurnStart(actor=8, round=2)",
   "ActionSpent(actor=8, cost=<ActionType.STANDARD: 'standard'>)",
   "PowerUsed(actor=8, power='m4865a2', targets=[4])",
