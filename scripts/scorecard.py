@@ -396,6 +396,62 @@ class Counted(D.DoctrinePolicy):
 
 
 
+#: The `Target.side` values from which a row can reach a dying **ally**.
+#:
+#: An allow-list on purpose. `_could_be_saved` used the complement --
+#: `side in ("self", None)` -- and a complement admits every value nobody
+#: thought of, which is how a filter meant for 114 rows came to pass 253.
+#: `"other"` is deliberately absent: `Target.side`'s own comment lists it,
+#: no healing row declares it, and a row that means "not me" is not a row
+#: that means "a friend", so it would have to be read before being counted.
+REACHES_AN_ALLY = ("ally", "team", "any")
+
+
+def _heal_reach() -> dict[str, int]:
+    """How the character-holdable healing rows split by target side.
+
+    **Measured, because this was a census quoted in three comments and it
+    had drifted.** `#324` recorded *"333 self-only, 114 reach somebody
+    else, 139 with no readable side"* out of 586, and `scorecard.py` and
+    `drivers.py` each repeated it in prose. Live it is 331 / 114 / 139 out
+    of 584 -- the shape held, the numbers moved, and nothing would have
+    said so. This repo's own rule: a census is a floor, so build the gate
+    and let it count.
+
+    `undeclared` is the half worth separating and it is not readable from
+    `side` alone. `Power.target` defaults to the **module-level singleton**
+    `dsl.ONE_CREATURE`, so a row that never wrote a target line is
+    `target is ONE_CREATURE` -- identity, not a value comparison. 122 of
+    the 139 `enemy` rows are that, and the other 17 print an enemy target
+    for real. Both are correctly uncounted here; the split matters because
+    122 of them are a *missing header* rather than a design, which is a
+    content finding and not this counter's business.
+    """
+    from combat_engine.engine import dsl
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.policy.doctrine import heals
+
+    got = Counter()
+    for ref in REGISTRY:
+        # `pfi` is the character-holdable third of the corpus -- powers,
+        # feats and items. A monster row is in no party member's hands.
+        if ref[0] not in "pfi" or not heals(ref):
+            continue
+        got["holdable"] += 1
+        row = get(ref)
+        target = getattr(row, "target", None) if row is not None else None
+        side = getattr(target, "side", None)
+        if side in REACHES_AN_ALLY:
+            got["reaches_an_ally"] += 1
+        elif side == "self":
+            got["self_only"] += 1
+        else:
+            got["cannot_reach_an_ally"] += 1
+            if target is dsl.ONE_CREATURE:
+                got["undeclared"] += 1
+    return dict(got)
+
+
 def _could_be_saved(world, who: int) -> bool:  # noqa: ANN001
     """Does a living ally hold an unspent row that could heal this creature?
 
@@ -411,15 +467,39 @@ def _could_be_saved(world, who: int) -> bool:  # noqa: ANN001
     Plus `Powers.times(ref) == 0` for *unspent*, which is the same question
     `_held_a_second_wind` asks one row narrower.
 
-    **This under-reports, deliberately, and `_heal_reach_unreadable` says
-    by how much.** Of the 586 character-holdable healing rows, 333 are
-    self-only, 114 reach somebody else and **139 have no readable side** --
-    so a third of the family cannot be classified from the header. Counting
-    only the 114 is the safe direction for a counter whose job is to find a
-    **refusal**: it can say "the AI declined a save it had" and be right,
-    where guessing the 139 either way could invent one. A number that
-    silently omitted a third of its population would be the shape this
-    repo's notes warn about, so the omission is reported beside it.
+    **An allow-list, and it was a deny-list that over-counted by 2.2x.**
+    This read `if side in ("self", None): continue` -- so every side the
+    list did not name was taken as reaching an ally. Measured over the 584
+    character-holdable healing rows:
+
+        self                     331     skipped, correctly
+        ally / team / any        114     the population this counter wants
+        enemy                    139     passed the deny-list
+
+    So the filter admitted **253** rows where 114 reach an ally, and the
+    139 are ones that cannot save anybody: 122 declare no target line at
+    all and inherit `dsl.ONE_CREATURE`, and 17 genuinely print an enemy
+    target, which is a drain -- it heals its *caster*, never the creature
+    it is aimed at.
+
+    **And the docstring claimed the opposite of what the code did.** It
+    said this *"under-reports, deliberately"* and that counting only the
+    114 was *"the safe direction for a counter whose job is to find a
+    refusal"*. The reasoning was right and the code did not implement it:
+    `downed_with_a_heal_in_the_party` has been reading high, which for a
+    counter measuring the AI **declining** an answer is the direction that
+    invents refusals.
+
+    The old note also said those 139 *"have no readable side"*, and they
+    are readable -- `Target.side` is a plain `str` field with no `None` in
+    it. That census was taken over the printed **header** in `game.db`,
+    which is a different population from the declared row this function
+    asks, and the two were conflated. `_heal_reach()` measures the
+    declared one, which is the one that governs here.
+
+    An allow-list rather than the deny-list mended, because a side value
+    added to `Target` later defaults to *counted* under a deny-list -- the
+    unsafe direction, and exactly how this got to 253.
 
     Asked of **living** allies only. A heal held by somebody who is also
     down is not an answer anybody declined.
@@ -440,7 +520,7 @@ def _could_be_saved(world, who: int) -> bool:  # noqa: ANN001
                 continue
             row = get(ref)
             target = getattr(row, "target", None) if row is not None else None
-            if getattr(target, "side", None) in ("self", None):
+            if getattr(target, "side", None) not in REACHES_AN_ALLY:
                 continue
             if known.times(ref) == 0:
                 return True
@@ -914,10 +994,13 @@ def measure(levels: tuple[int, ...], fights: int = 1,
                 "dailies": pol.n[f"{side}/dailies"],
                 "downed": pol.n[f"{side}/downed"],
                 "downed_holding_wind": pol.n[f"{side}/downed_holding_wind"],
-                # **An under-count by construction**, and `#324`'s comment
-                # says why: 139 of 586 healing rows have no readable target
-                # side, so they are not counted either way. See
-                # `_could_be_saved`.
+                # **Counted over the 114 rows that can reach an ally**,
+                # of 584 a character can hold -- `_heal_reach()` measures
+                # the split rather than quoting it. This comment used to
+                # say "an under-count by construction, 139 have no
+                # readable target side"; the code was admitting those 139
+                # and so over-counted by 2.2x, and the 139 are readable.
+                # See `_could_be_saved`.
                 "downed_with_a_heal_in_the_party":
                     pol.n[f"{side}/downed_with_a_heal_in_the_party"],
                 "ap_standard": pol.n[f"{side}/ap_standard"],
@@ -1021,10 +1104,16 @@ ROWS = [
     # scope wider -- that one asks whether the creature could have saved
     # itself, this whether anybody else could have saved it.
     #
-    # **Under-counts by construction**: 139 of 586 healing rows have no
-    # readable target side, so they are counted neither way. See
-    # `_could_be_saved` for why that is the safe direction for a counter
-    # whose job is to find a refusal.
+    # **Counted over rows that can reach an ally** -- 114 of the 584 a
+    # character can hold, measured by `_heal_reach()`. The 470 others are
+    # 331 self-only and 139 that cannot reach a friend at all, of which
+    # 122 declare no target line and inherit `dsl.ONE_CREATURE`.
+    #
+    # This said "under-counts by construction" and the code did the
+    # opposite: its filter was the complement of the list above, so it
+    # admitted all 139 and read 2.2x high. For a counter whose subject is
+    # the AI **declining** an answer, high is the direction that invents
+    # refusals.
     ("downed_with_a_heal_in_the_party",
      "...with a heal unspent in the party", "lower"),
     ("ap_standard", "...of them buying a standard action", "higher"),

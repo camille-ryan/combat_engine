@@ -38567,13 +38567,119 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
              " it was holding', which is the whole point of the pair",
              "no unspent heal left")
 
-    # And the predicate is what carries it: blinding `doctrine.heals` takes
-    # the live level-5 figure from 22 of 24 drops to 0 of 24.
-    out.that(_heals("p10273") or True,
-             "`doctrine.heals` is the reader this composes on -- 1,029"
-             " rows True corpus-wide, 586 of them a character can hold,"
-             " and blinding it takes the live counter from 22 to 0",
-             "composed, not invented")
+    # And the predicate is what carries it: `doctrine.heals` is the reader
+    # this composes on.
+    #
+    # **This assertion used to be `_heals("p10273") or True`**, which no
+    # value of anything can fail. It was prose wearing a check's clothes,
+    # and it sat beside the bug below for as long as both existed.
+    out.that(_heals("p10273"),
+             "`doctrine.heals` answers True for a row that puts hit points"
+             " back -- the reader this predicate composes on, asserted"
+             " rather than asserted-or-True",
+             "the reader answers")
+
+    # -- the side filter, which is what the four assertions above cannot
+    # -- see, and which was wrong by 2.2x -------------------------------
+    #
+    # Every assertion above holds under **either** filter: the board's
+    # cleric holds rows that reach an ally, so "somebody could be saved"
+    # and "spend them all and nobody can" are both true whether or not the
+    # filter also admits 139 rows that cannot reach a friend. The census is
+    # the only thing that separates them.
+    reach = SC._heal_reach()
+    out.that(reach["reaches_an_ally"] == 114
+             and reach["holdable"] == 584,
+             "114 of the 584 character-holdable healing rows can reach an"
+             " ally -- `ally`, `team` or `any`. This is the population the"
+             " refusal counter is about",
+             f"{reach['reaches_an_ally']} of {reach['holdable']}")
+    out.that(reach["self_only"] == 331
+             and reach["cannot_reach_an_ally"] == 139
+             and reach["reaches_an_ally"] + reach["self_only"]
+             + reach["cannot_reach_an_ally"] == reach["holdable"],
+             "and the three buckets partition it -- 331 self-only, 139"
+             " that reach no friend, 114 that do. They have to add up or"
+             " the census is reading something twice",
+             f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
+             f" + {reach['reaches_an_ally']}")
+    out.that(reach["undeclared"] == 122,
+             "**122 of those 139 declare no target line at all** and"
+             " inherit `dsl.ONE_CREATURE`, so they read `enemy` by"
+             " default rather than by design. Told apart by identity"
+             " against the singleton, which is the only way to see it --"
+             " the other 17 print an enemy target for real, and a heal"
+             " aimed at an enemy is a drain that heals its caster",
+             f"{reach['undeclared']} undeclared")
+    # -- and the filter exercised, which is the load-bearing pair -------
+    #
+    # The census above asserts the **constant**; this asserts the
+    # **function reading it**, and only this one can see the deny-list come
+    # back. `_heal_reach` consults `REACHES_AN_ALLY` directly, so a plant
+    # inside `_could_be_saved`'s body moves no census number -- the trap
+    # where a rule and the thing it tests share a reader and the expected
+    # set shrinks with the plant.
+    #
+    # So: strip the side down to one ally holding exactly one healing row,
+    # and ask the predicate with each kind of row in its hands.
+    only = allies[0]
+    held = world.get(only, _Powers)
+    for other in allies[1:]:
+        gone = world.get(other, _Powers)
+        if gone is not None:
+            for ref in list(gone.known):
+                for _ in range(12):
+                    gone.used[ref] = gone.used.get(ref, 0) + 1
+    out.that(held is not None and not SC._could_be_saved(world, me),
+             "with every other ally's rows spent and this one's too,"
+             " nobody can be saved -- the floor the next two measure from",
+             "floor is False")
+
+    #: `p4935` prints an **enemy** target and heals: a drain, which puts
+    #: hit points into its *caster*. It cannot answer a dying ally, and the
+    #: deny-list counted it as if it could.
+    held.known = ("p4935",)
+    held.used = {}
+    out.that(not SC._could_be_saved(world, me),
+             "an ally holding ONLY a heal that targets an **enemy** cannot"
+             " save anybody -- `p4935` is a drain, it heals whoever casts"
+             " it. **This is the assertion the deny-list failed**: it"
+             " skipped only `self` and `None`, so a drain read as a heal"
+             " the party was declining to spend",
+             "a drain is not a save")
+
+    #: And the same shape for the 122 that never declared a target line at
+    #: all: `p10274` inherits `dsl.ONE_CREATURE`, so it reads `enemy` by
+    #: default. Uncounted for the same reason, by the same code path, and
+    #: worth its own assertion because it is 122 rows against 17.
+    held.known = ("p10274",)
+    held.used = {}
+    out.that(not SC._could_be_saved(world, me),
+             "nor one holding only `p10274`, which declares no target line"
+             " and so inherits `ONE_CREATURE` -- `enemy` by default rather"
+             " than by design. 122 rows are in that state and the"
+             " deny-list admitted every one",
+             "an undeclared target is not a save")
+
+    #: The positive control, same board, same ally, one row changed. A pair
+    #: whose negative half can be satisfied by a broken board proves
+    #: nothing -- this is what says the board can still answer True.
+    held.known = ("p10273",)
+    held.used = {}
+    out.that(SC._could_be_saved(world, me),
+             "and the SAME ally holding `p10273` instead -- a heal that"
+             " reaches an ally -- can. One row changed on one board, so"
+             " the three answers are about the filter and not about the"
+             " board having gone empty underneath them",
+             "an ally-reaching heal is a save")
+
+    out.that(set(SC.REACHES_AN_ALLY) == {"ally", "team", "any"},
+             "and the filter is an **allow-list**: a side value added to"
+             " `Target` later is uncounted until somebody reads it. The"
+             " complement -- `not in (\"self\", None)` -- is what admitted"
+             " all 139, because a complement passes every value nobody"
+             " thought of",
+             f"{SC.REACHES_AN_ALLY}")
 
 
 def a_trait_fires_when_the_skill_challenge_it_waits_on_ends(out: Result) -> None:
