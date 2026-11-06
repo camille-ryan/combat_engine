@@ -2176,10 +2176,20 @@ def f3778(c: Cast) -> None:
 
 
 @power("f3779", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("chargen.armor_proficiency()",))
+       reach=PERSONAL, target=SELF, proficiency=("a7", "a8"))
 def f3779(c: Cast) -> None:
-    """The check penalty is waived; the proficiency half is not.
+    """Both halves play now. `#568`.
+
+    **"Proficiency with all shields" is `proficiency=("a7", "a8")`** --
+    both printed shields, light and heavy, because *all* is what the card
+    says and `a8` alone would be the heavy one only.
+    `chargen.armour_opened` turns them into a weight and `spawn` takes the
+    better of the chassis's and the feats'. It goes through `_shield_for`
+    on a widened line rather than past it, so this cannot hand a shield to
+    a character whose hands are full -- that rule stays in one place.
+
+    A build-time sentence, so header data: the shield is strapped on
+    before initiative.
 
     **Half of this was marked unwritable and is not.** The old note said
     the penalty "is settled when the character is built", and it is not:

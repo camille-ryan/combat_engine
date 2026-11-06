@@ -32,6 +32,8 @@ decides anything, which is the test for whether something belongs this low.
 
 from __future__ import annotations
 
+from functools import cache
+
 
 #: Armour, by the bonus it gives. Light armour also takes a modifier.
 #: The basic armours, **read off the `armour` table** rather than remembered.
@@ -117,3 +119,47 @@ def _words() -> tuple[dict[str, str], dict[int, str]]:
 
 
 ARMOUR_WORD, SHIELD_WORD = _words()
+
+#: Every base armour row by **ref**, as its printed category word and -- for
+#: a shield -- its weight. `#568`.
+#:
+#: **Keyed by ref and not by type, which is why this is separate from
+#: `_basics`.** That one keys by `type` and takes one row per category
+#: behind an `id BETWEEN 1 AND 8` filter, because `a93`-`a99` are variant
+#: items *within* the same categories: three plates differing only in check
+#: penalty, weight and cost. Keyed by type they collide and the last write
+#: wins. A feat naming `a5` wants the category word `scale`, and that is
+#: what this answers; it needs no filter because a ref cannot collide.
+@cache
+def _by_ref() -> tuple[dict[str, str], dict[str, int]]:
+    from combat_engine.db import game
+
+    words: dict[str, str] = {}
+    weights: dict[str, int] = {}
+    for row in game().execute(
+        "SELECT ref, type FROM armour WHERE kind = 'base'"
+    ):
+        printed = str(row["type"])
+        words[str(row["ref"])] = printed
+        if printed.endswith("shields"):
+            weights[str(row["ref"])] = 2 if printed.split()[0] == "heavy" else 1
+    return words, weights
+
+
+def category_of(ref: str) -> str:
+    """The printed category a base armour ref names, or `""`.
+
+    `""` rather than a raise: a `proficiency=` ref that names no armour row
+    is a row keeping its marker, which is the honest direction `chargen`'s
+    weapon half already takes.
+    """
+    return _by_ref()[0].get(ref, "")
+
+
+def shield_weight(ref: str) -> int:
+    """1 for a light shield, 2 for a heavy one, 0 for anything else.
+
+    The same 0/1/2 `Gear.shield` already indexes by, so a feat's shield and
+    a chassis's are the same number and `max` is a meaningful comparison.
+    """
+    return _by_ref()[1].get(ref, 0)

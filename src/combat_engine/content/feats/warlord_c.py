@@ -599,10 +599,9 @@ def f2466(c: Cast) -> None:
 
 
 @power("f2396", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("chargen.armor_proficiency()",))
+       reach=PERSONAL, target=SELF, proficiency=("a5",))
 def f2396(c: Cast) -> None:
-    """The surge half plays; the armour half is dropped.
+    """Both halves play now. `#568`.
 
     Re-read: no verb moves the maximum, but the field is not the gap.
     `Health.max_surges` is the pool `turns` refills to, and a content
@@ -613,8 +612,26 @@ def f2396(c: Cast) -> None:
     is the surge itself, and is also what keeps the row from auditing
     silent.
 
-    Dropped: armour proficiency is a chargen column and nothing writes
-    to one from a row."""
+    **And the armour half is `proficiency=("a5",)`, which was the whole
+    marker.** It said *"armour proficiency is a chargen column and nothing
+    writes to one from a row"* -- the first clause is right and the second
+    was the gap rather than a reason. `proficiency=` is header data the
+    draw already reads for weapons; `chargen.armour_opened` reads the
+    armour refs off it and `spawn` takes the heaviest of the chassis's
+    word and the feats', so `a5` makes scale available to a character
+    whose class trains lighter.
+
+    **A build-time sentence, so it is header data and not a body line.**
+    "You gain proficiency with scale armor" has no moment in a fight to
+    happen in: the gear is on before initiative is rolled. That is the
+    same argument `chargen.proficiency`'s docstring makes for the weapon
+    half.
+
+    This row was **dealt** the whole time -- `choices._legal_feats` filters
+    `todo` and `obsolete` and not `dropped` -- so the clause was inert on
+    live boards rather than merely unwritten. Camille's call on `#568`:
+    *"All feats that are selected should have their actual effect happen
+    on the board."*"""
     # Raised once per character, not once per fight: a trait is armed at the
     # start of every encounter, so a bare `+= 1` would climb all day.
     health = c.world.get(c.me, Health)

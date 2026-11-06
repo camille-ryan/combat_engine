@@ -595,6 +595,44 @@ def _defences(printed: str) -> dict[str, int]:
     return out
 
 
+def armour_opened(feats: list[str]) -> tuple[frozenset[str], int]:
+    """The armour categories and best shield this character's feats open up.
+
+    **A build-time sentence, like the weapon half one function down.** "You
+    gain proficiency with scale armor" has no moment in a fight to happen
+    in -- the gear is already on when the first initiative is rolled -- so
+    it is read off the feat's own `proficiency=` header here rather than
+    being a verb nothing could call. `#568`.
+
+    Split from `proficiency` rather than folded into it because that one
+    returns `Weapon`s and an armour ref is not one: `PRINTED.get(want) or
+    IMPLEMENTS.get(want)` are both weapon tables, so an `a...` ref yielded
+    **nothing, silently**, which is the fault `#568` is filed on.
+
+    A ref naming no armour row contributes nothing rather than raising --
+    the same honest direction `proficiency` takes, where the row keeps its
+    marker and `blocked.py` keeps saying so.
+    """
+    from combat_engine.armour import category_of, shield_weight
+    from combat_engine.engine.dsl import REGISTRY
+
+    words: set[str] = set()
+    shield = 0
+    for ref in feats:
+        declared = REGISTRY.get(ref)
+        for want in getattr(declared, "proficiency", ()) or ():
+            if not want.startswith("a"):
+                continue
+            printed = category_of(want)
+            if not printed:
+                continue
+            if printed.endswith("shields"):
+                shield = max(shield, shield_weight(want))
+            else:
+                words.add(printed)
+    return frozenset(words), shield
+
+
 def _heaviest(printed: str) -> str:
     """The best armour the class is trained in, which is what it wears."""
     for kind in ("plate", "scale", "chain", "hide", "leather", "cloth"):
@@ -4010,7 +4048,15 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         powers,
         spent={w.ref for w in from_feats},
     )
-    carried_shield = _shield_for(line, carried)
+    # **A feat's armour proficiency widens the chassis's, and this is where
+    # it lands.** `#568`: two rows are dealt with the clause inert because
+    # nothing read it. The shield goes through `_shield_for` on a widened
+    # line rather than past it, so a feat cannot hand a shield to a
+    # character whose hands are full -- that rule stays in one place.
+    opened_armour, opened_shield = armour_opened(list(feats))
+    carried_shield = _shield_for(
+        replace(line, shield=max(line.shield, opened_shield)), carried
+    )
 
     # First level takes the whole Constitution *score*; every level after
     # takes the class's flat step. Surges take the modifier, not the score.
@@ -4115,7 +4161,10 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
             # returns 0, 1 or 2 and this used to `bool()` it, which is where
             # nine rows' "your shield bonus" went missing. See `Gear.shield`.
             shield=carried_shield,
-            armour=line.armour,
+            # The heaviest of what the chassis trains in and what the
+            # feats opened up. `_heaviest` picks by printed word, so
+            # joining them is the whole of the comparison. `#568`.
+            armour=_heaviest(" ".join([line.armour, *sorted(opened_armour)])),
             # **What this character is trained with**, which nothing recorded
             # before: the chassis's printed lines, plus what its feats and its
             # race opened up. `_attack_bonus` was awarding a weapon's

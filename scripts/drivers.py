@@ -38741,6 +38741,125 @@ def _in_combat_board(
     return world, encounter
 
 
+def a_feats_armour_proficiency_reaches_the_board(out: Result) -> None:
+    """"You gain proficiency with scale armor." `#568`.
+
+    **Two rows were dealt with this clause inert**, because
+    `choices._legal_feats` filters `todo` and `obsolete` and **not**
+    `dropped` -- so the marker read as "not yet written" while the feats
+    were going out to live characters. Camille's call:
+
+    > *"All feats that are selected should have their actual effect happen
+    > on the board."*
+
+    A build-time sentence, so header data rather than a body line: the gear
+    is on before initiative is rolled, which is the same argument
+    `chargen.proficiency` makes for the weapon half. `proficiency=` already
+    took refs; what was missing was a reader, because
+    `PRINTED.get(want) or IMPLEMENTS.get(want)` are both **weapon** tables
+    and an `a...` ref fell through them **silently**.
+
+    **`armour._basics` is deliberately untouched, and the last assertion
+    pins that.** `#568`'s own plan called for lifting its
+    `id BETWEEN 1 AND 8` filter so `a93`-`a99` become reachable. Those are
+    variant items *inside* the same categories -- three plates differing
+    only in check penalty, weight and cost -- and `_basics` keys by
+    **type**, so lifting it hands three rows keyed `plate` to one slot and
+    the last write wins. A feat granting scale grants the **category**,
+    which `a5` already is, so the new map is keyed by **ref**, where
+    collision is impossible.
+    """
+    from combat_engine import armour as AR
+    from combat_engine import chargen
+    from combat_engine.engine.components import Gear
+
+    was = chargen.SCORED_CHOICES
+    chargen.SCORED_CHOICES = False
+    try:
+        # -- the ref reader, before anything is built on it --------------
+        out.that(AR.category_of("a5") == "scale"
+                 and AR.category_of("a6") == "plate",
+                 "a base armour ref answers its printed category, which is"
+                 " what a feat's clause names -- *scale armor*, not a"
+                 " particular masterwork row",
+                 f"a5={AR.category_of('a5')!r} a6={AR.category_of('a6')!r}")
+        out.that(AR.shield_weight("a7") == 1 and AR.shield_weight("a8") == 2,
+                 "and a shield ref answers the same 0/1/2 `Gear.shield`"
+                 " indexes by, so a feat's shield and a chassis's are"
+                 " comparable with `max` rather than by hand",
+                 f"a7={AR.shield_weight('a7')} a8={AR.shield_weight('a8')}")
+        out.that(AR.category_of("w3612") == ""
+                 and AR.shield_weight("w3612") == 0,
+                 "a WEAPON ref answers nothing from either -- the reader is"
+                 " keyed on the armour table, so a `proficiency=` tuple"
+                 " holding both kinds is split rather than confused",
+                 "weapon ref -> empty")
+
+        world, _me, _foe = _board("mba", 3)
+
+        def worn(cls: str, feats: list[str]) -> tuple[str, int]:
+            who = chargen.Character(cls=cls, level=3, race="r1", feats=feats)
+            gear = world.get(chargen.spawn(world, who, (14, 14)), Gear)
+            return (gear.armour if gear else ""), (gear.shield if gear else -1)
+
+        bare_armour, _ = worn("wizard", [])
+        with_feat, _ = worn("wizard", ["f2396"])
+        out.that(bare_armour == "cloth",
+                 "the control: a wizard with no feats wears what its"
+                 " chassis trains in. Without this the assertion below"
+                 " could pass on a class that already wore scale",
+                 f"{bare_armour!r}")
+        out.that(with_feat == "scale",
+                 "and the same wizard holding `f2396` wears **scale** --"
+                 " the printed clause, landing on the board. Removing the"
+                 " reader in `spawn` puts it back to cloth, which is the"
+                 " plant",
+                 f"{bare_armour!r} -> {with_feat!r}")
+
+        rogue_bare, _ = worn("rogue", [])
+        rogue_feat, _ = worn("rogue", ["f2396"])
+        out.that(rogue_bare == "leather" and rogue_feat == "scale",
+                 "and it is the HEAVIEST of the two rather than the feat's"
+                 " outright: a rogue trains in leather and ends in scale,"
+                 " so the chassis is widened and not replaced",
+                 f"{rogue_bare!r} -> {rogue_feat!r}")
+
+        _, bare_shield = worn("wizard", [])
+        _, feat_shield = worn("wizard", ["f3779"])
+        out.that(bare_shield == 0 and feat_shield == 2,
+                 "`f3779`'s *proficiency with all shields* lands too, as a"
+                 " heavy shield -- declared `('a7', 'a8')` because **all**"
+                 " is what the card says and `a8` alone is the heavy one"
+                 " only",
+                 f"shield {bare_shield} -> {feat_shield}")
+
+        # -- and it cannot hand a shield to full hands -------------------
+        _, fighter_shield = worn("fighter", ["f3779"])
+        out.that(fighter_shield == 0,
+                 "but a fighter on a two-handed leg still carries NO"
+                 " shield, because the feat goes **through** `_shield_for`"
+                 " on a widened line rather than past it. A feat that could"
+                 " arm a full pair of hands would also make"
+                 " `Gear.two_weapon` false and break every *wielding two"
+                 " melee weapons* requirement",
+                 f"shield {fighter_shield}")
+
+        # -- the change I did NOT make --------------------------------
+        words, _weights = AR._by_ref()
+        plates = [r for r, w in words.items() if w == "plate"]
+        ac, _check, _speed, _shield = AR._basics()
+        out.that(len(plates) >= 3 and len(ac) < len(words),
+                 "and `_basics` still keys by TYPE behind its id filter --"
+                 " three refs print `plate`, so lifting that filter (which"
+                 " `#568`'s own plan asked for) would hand one slot three"
+                 " rows and let the last write win. The ref map is what"
+                 " made the filter unnecessary rather than wrong",
+                 f"{len(plates)} plate refs, {len(ac)} type keys,"
+                 f" {len(words)} ref keys")
+    finally:
+        chargen.SCORED_CHOICES = was
+
+
 def a_terrain_power_comes_out_of_the_feature_not_its_user(out: Result) -> None:
     """A printed terrain area is centred on the thing on the floor. `#1127`.
 
@@ -64420,6 +64539,11 @@ DRIVERS = {
         "DMG2's in-combat challenge: a combat scene that also rolls, on the"
         " fight's own board -- priced OUT of the budget, capped at"
         " complexity 2, and every check paying a named action (#922)",
+    ),
+    "armour_proficiency": (
+        a_feats_armour_proficiency_reaches_the_board,
+        "a feat's printed armour or shield proficiency reaches `Gear`, and"
+        " cannot arm a pair of hands that are full (#568)",
     ),
     "terrain_origin": (
         a_terrain_power_comes_out_of_the_feature_not_its_user,
