@@ -827,6 +827,17 @@ def _elements_of(declared) -> frozenset[str]:  # noqa: ANN001
     )
 
 
+#: The verbs that make a body a *plain hit* rather than a rider.
+#:
+#: Lifted out of the function so the AST walk below and anybody reading the
+#: classification see the same list.
+_PLAIN_HIT = frozenset({
+    "strike", "damage", "w", "target", "first", "ref", "me",
+    "level", "str_mod", "dex_mod", "con_mod", "int_mod",
+    "wis_mod", "cha_mod", "attack_mod", "dice_for",
+})
+
+
 def _does_more_than_damage(declared) -> bool:  # noqa: ANN001
     """Does the body do anything besides roll damage?
 
@@ -834,18 +845,58 @@ def _does_more_than_damage(declared) -> bool:  # noqa: ANN001
     there is no header field for "and the target is slowed". A body whose only
     verbs are the attack and the damage is a plain hit; anything else -- a
     condition, a push, a shift granted, a zone -- is a rider.
+
+    **Parsed, not split on a substring, and that fixed three bugs at once.**
+    `#1093`. This read:
+
+        verbs = {line.split("c.", 1)[1].split("(", 1)[0]
+                 for line in src.splitlines() if "c." in line}
+
+    * `inspect.getsource` includes the **docstring**, and the word *"etc."*
+      contains `"c."` -- so **prose decided the draw.** Two bodies whose code
+      is identical classified differently if one of them said "etc.", and
+      editing a comment could redden `replay` for no visible reason.
+    * `split("c.", 1)` took the **first** `c.x` on a line and dropped the
+      rest, so `c.strike() and c.slide(1)` read as `strike` alone -- a rider
+      missed, in the quiet direction.
+    * a call split across lines put its verb on a continuation line that
+      `if "c." in line` never matched.
+
+    An `ast` walk has none of the three: a docstring is a `Constant` and not
+    an `Attribute`, every `c.<name>` is found wherever it sits, and line
+    breaks do not survive a parse.
+
+    `textwrap.dedent` because a body is indented by its decorator, and
+    `ast.parse` refuses a leading indent.
+
+    Still a source read rather than a header field, which is the honest
+    limit: a rider a row lays by calling a *helper* is invisible here, the
+    same as it was before. What changed is that the reader no longer answers
+    on anything but code.
     """
+    import ast
     import inspect
+    import textwrap
 
     try:
-        src = inspect.getsource(declared.body)
+        src = textwrap.dedent(inspect.getsource(declared.body))
     except (OSError, TypeError):
         return False
-    verbs = {line.split("c.", 1)[1].split("(", 1)[0]
-             for line in src.splitlines() if "c." in line}
-    return bool(verbs - {"strike", "damage", "w", "target", "first", "ref", "me",
-                         "level", "str_mod", "dex_mod", "con_mod", "int_mod",
-                         "wis_mod", "cha_mod", "attack_mod", "dice_for"})
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        # A body this cannot parse is not evidence of a rider. Same
+        # direction as the read failing above: say "plain" rather than
+        # guess, so a parse problem cannot quietly reprice the corpus.
+        return False
+    verbs = {
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "c"
+    }
+    return bool(verbs - _PLAIN_HIT)
 
 
 def wield_options(
