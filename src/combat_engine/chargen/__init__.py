@@ -3991,10 +3991,29 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
             scores[ability] = scores.get(ability, 10) + 2
     # Level 4, 8 and so on raise two scores by one. Applied here rather than
     # recorded, so a level 8 character is derivable from its class and level.
+    #
+    # **Primary and secondary, which is Camille's ruling on `#1013`:**
+    #
+    #   > *"Almost always, the character should be improving their primary
+    #   > and secondary abilities. The primary would be what their attack
+    #   > rolls key off and the secondary is what their riders key off.
+    #   > Adjust that for autogen."*
+    #
+    # This was `primary` and **CON**, which is a defensible house pick -- it
+    # buys hit points and surges -- and not what the autogen should want: a
+    # character's riders key off the secondary, so raising CON instead left
+    # every rider a point behind for the whole paragon tier.
+    #
+    # No fallback needed and that was checked rather than assumed:
+    # `Build.secondary` is not optional, and across all **99** declared
+    # builds it is never unset and never equal to the primary.
+    #
+    # The printed rule lets a *player* pick any two; that half is the level-up
+    # screen Camille also asked for, and it is `#1013`'s own remaining body.
     for step in (4, 8):
         if who.level >= step:
             scores[build.primary] += 1
-            scores[CON] += 1
+            scores[build.secondary] += 1
 
     # An empty power list means "deal me a hand", which is what both callers
     # want and what neither of them used to do: each kept its own list of
@@ -4296,10 +4315,13 @@ def sheet(who: Character) -> str:
     if race is not None:
         for ability in race.taken(build):
             scores[ability] = scores.get(ability, 10) + 2
+    # Primary and secondary, the same as `spawn` -- Camille's `#1013` ruling,
+    # quoted in full there. The two have to agree or the sheet a human reads
+    # describes a different character from the one on the board.
     for step in (4, 8):
         if who.level >= step:
             scores[build.primary] += 1
-            scores[CON] += 1
+            scores[build.secondary] += 1
     con = modifier(scores[CON])
     d = defences(line, scores, who.level)
     step = who.level // 2  # what scaling adds at full strength
