@@ -9749,11 +9749,41 @@ def a_skill_gated_feat_reads_a_pinned_characters_training(out: Result) -> None:
     from combat_engine.chargen import given_skills, meets
     from combat_engine.chargen.choices import feat_gates, legal_feats
 
+    #: **Walked, not substring-matched, and the loose version broke within
+    #: hours of being written.** It was
+    #: `"skill" in str(node)`, which went red the moment `#454` resolved the
+    #: worship clauses: **`"skill"` is one of the 34 printed deity
+    #: domains**, so `{"deity_domain": "skill"}` matched and the count read
+    #: 89 against the real 87.
+    #:
+    #: Which is `#1093`'s own lesson arriving in the rule that was written
+    #: to cover `#1093`'s fix -- a substring test over a serialised
+    #: structure matches the wrong thing, and this one did it two commits
+    #: later. Walking for a real atom key cannot.
+    def _atom_keys(node) -> set:  # noqa: ANN001
+        if isinstance(node, dict):
+            out_: set = set()
+            for k, v in node.items():
+                if k in ("all", "any"):
+                    for child in v:
+                        out_ |= _atom_keys(child)
+                else:
+                    out_.add(k)
+            return out_
+        if isinstance(node, list):
+            got: set = set()
+            for child in node:
+                got |= _atom_keys(child)
+            return got
+        return set()
+
     gates = feat_gates()
-    gated = [r for r, node in gates.items() if "skill" in str(node)]
+    gated = [r for r, node in gates.items() if "skill" in _atom_keys(node)]
     out.that(len(gated) == 87,
-             "87 feats carry a skill in their prerequisite -- the census this"
-             " is written against, counted off the gates rather than grepped",
+             "87 feats carry a real `skill` atom in their prerequisite --"
+             " walked rather than grepped, because `skill` is also a printed"
+             " deity domain and a substring test counts two feats gated on"
+             " *that* instead (#1093's lesson, in this rule)",
              f"{len(gated)}")
 
     # -- a pinned character is answered off its own training -------------
@@ -41410,43 +41440,49 @@ def a_deity_carries_its_alignment_and_its_domains(out: Result) -> None:
 
     # --- the identity that makes the parse trustworthy -------------------
     parsed = {d for r in rows for d in _json.loads(r["domains"])}
-    asked = {
-        r["ref"] for r in con.execute(
-            "SELECT ref FROM prereq_term WHERE kind = 'deity'")
-    }
-    out.that(len(asked) == 90,
-             "the setup landed: 90 prerequisite terms are classified"
-             " `deity`, which is the population the import is for",
-             f"{len(asked)} terms")
     out.that(len(parsed) == 34,
              "34 distinct domains are parsed off the pages",
              f"{len(parsed)}: {sorted(parsed)[:6]}...")
 
-    # The prerequisites name their domain in prose, which lives in the
-    # git-ignored localisation -- so this half is skipped where that file
-    # is absent rather than failing, the way `drivers` treats the
-    # compendium.
-    from pathlib import Path as _Path
-    loc = _Path("localization/names.json")
-    if not loc.exists():
-        out.skip("localization/names.json is not on this machine, so the"
-                 " domain-set identity cannot be checked here -- the"
-                 " prerequisites name their domain in prose")
-        return
+    #: **Read off the resolved atoms, not off the opaque term list**, and
+    #: this rule was pinning the unfixed state until `#454` landed.
+    #:
+    #: It asserted `len(asked) == 90` against
+    #: `prereq_term WHERE kind='deity'` -- the population of worship
+    #: clauses the importer could **not** resolve. `#454` resolves 88 of
+    #: them into `{"deity": ref}` and `{"deity_domain": word}` atoms, so
+    #: that count is now **2** and the assertion went red on the commit
+    #: that fixed what it was documenting.
+    #:
+    #: Which is `content/CLAUDE.md`'s "a drivers assertion can pin a bug in
+    #: place", arriving here: the number was a measure of the gap, so
+    #: closing the gap broke it. The *claim* is still worth making and is
+    #: unchanged -- every domain a prerequisite asks about is one the pages
+    #: print -- only the place to read the question from has moved.
+    #:
+    #: And it needs no localisation now, so the skip this used to take when
+    #: `names.json` was absent is gone: the domain word is in `feat.prereq`
+    #: as data rather than in prose.
     import re as _re
 
-    names = _json.loads(loc.read_text())
     wanted = set()
-    for ref in asked:
-        said = (names.get(ref) or {}).get("description") or ""
-        found = _re.match(
-            r"must worship a deity of the (.+) domain", said, _re.I)
-        if found:
-            wanted.add(found.group(1).strip().lower())
+    for row in con.execute(
+            "SELECT prereq FROM feat WHERE prereq LIKE '%deity_domain%'"):
+        wanted |= set(_re.findall(
+            r'"deity_domain":\s*"([a-z]+)"', row["prereq"] or ""))
     out.that(len(wanted) == 34,
-             "and 34 domains are asked for by the prerequisites -- one"
-             " skeleton, `must worship a deity of the X domain`",
+             "and 34 domains are asked for by the prerequisites -- read off"
+             " the resolved `deity_domain` atoms, which is where the"
+             " question lives since `#454`",
              f"{len(wanted)}")
+    opaque = con.execute(
+        "SELECT COUNT(*) AS n FROM prereq_term WHERE kind = 'deity'"
+    ).fetchone()["n"]
+    out.that(opaque <= 5,
+             "and almost no worship clause is still opaque -- 90 before"
+             " `#454`, a handful after, the residue being printed spellings"
+             " the deity table does not carry",
+             f"{opaque} still opaque")
     out.that(wanted == parsed,
              "**the two sets are identical** -- every domain a prerequisite"
              " asks about is one the pages print, and every domain the"
