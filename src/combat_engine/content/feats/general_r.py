@@ -47,6 +47,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.powers.bard.level_0 import aura_of_healing
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -97,7 +98,6 @@ from combat_engine.engine import (
     Usage,
     When,
     Window,
-    ZoneEntered,
     about_me,
     get,
     power,
@@ -108,7 +108,6 @@ from combat_engine.engine.events import RowStored
 from combat_engine.engine.query import (
     creatures,
     defence,
-    distance_between,
     team,
     unseen_by,
 )
@@ -510,8 +509,23 @@ def _surge_when_it_lands(c: Cast, ok: Any) -> None:
     c.watch(Hit, landed, until=When.ENCOUNTER)
 
 
-def _skald_aura(ref: str, *, per_day: int = 0):  # noqa: ANN202
-    """The two printings of the skald's aura are the same card twice.
+def _aura_printing(ref: str, *, per_day: int = 0):  # noqa: ANN202
+    """The two feat printings of `p15849`'s aura are the same card twice.
+
+    **Named by ref, because the word this was named after is half of a
+    printed name.** It was named for `p15849`'s build -- one of the two
+    words that card prints -- so the helper's own name, and its docstring,
+    were a **tier 2** leak: a name in the code.
+
+    The tree-wide `leaks.py` walk passed it on every run, which is the
+    two-ordinary-words blind spot `#494` records. What found it was
+    `leaks.py --cited`, the moment this file began citing `p15849` --
+    because that pass asks the narrow question (does a file print the name
+    of a ref it also cites) and needs no waiver to answer it.
+
+    So the citation did not create the leak; it revealed one that had been
+    sitting here. Recorded because the fix looks like "remove the
+    citation" and that would have hidden it again.
 
     `per_day` is the day's allowance one of the two printings carries and
     the other does not, so it is a parameter rather than a line in the
@@ -522,37 +536,17 @@ def _skald_aura(ref: str, *, per_day: int = 0):  # noqa: ANN202
            reach=PERSONAL, target=SELF,
            keywords=[Keyword.MARTIAL, Keyword.HEALING])
     def card(c: Cast) -> None:
-        me = c.me
-        aura = c.aura(5, label=ref, until=When.ENCOUNTER, on=me)
-        left = [2]
-        handed: set[int] = set()
-
-        def spend(who: int) -> None:
-            if not left[0] or not c.in_my_aura(who, label=ref):
-                return
-            # The day's allowance, where one printing has one: charged to
-            # the skald rather than to whoever is being healed.
-            if per_day and not c.spend_per_day(ref, per_day):
-                return
-            left[0] -= 1
-            c.surge(on=who, bonus=c.roll("1d6"))
-
-        def offer(who: int) -> None:
-            if who in handed:
-                return
-            handed.add(who)
-            c.give(ref, spend, on=who, uses=2, cost=MINOR)
-
-        offer(me)
-        for ally in c.allies():
-            if distance_between(c.world, me, ally) <= 5:
-                offer(ally)
-
-        def walked_in(ev: Any) -> None:
-            if ev.zone == aura and team(c.world, ev.actor) == team(c.world, me):
-                offer(ev.actor)
-
-        c.watch(ZoneEntered, walked_in, until=When.ENCOUNTER)
+        # **The body lives with the class power now, which is Camille's
+        # ruling A on `#1045`**: *"The class feature should grant the power
+        # and point at it."* `p15849` is that power -- the bard's own
+        # printing of this aura -- and it had the card's two other thirds
+        # missing while its docstring argued they were unwritable, which
+        # this helper had been disproving all along.
+        #
+        # What stays here is the only thing that differs between the three
+        # printings: the allowance. This one's `per_day` is the clause
+        # `f3664b` prints and `f3668b` does not.
+        aura_of_healing(c, label=ref, uses=2, per_day=per_day)
 
     card.__name__ = ref
     card.__doc__ = (
@@ -2429,7 +2423,7 @@ def f3664(c: Cast) -> None:
     c.grant_row("f3664b", on=c.me, until=When.ENCOUNTER)
 
 
-f3664b = _skald_aura("f3664b", per_day=1)
+f3664b = _aura_printing("f3664b", per_day=1)
 
 
 @power("f3668", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -2444,7 +2438,7 @@ def f3668(c: Cast) -> None:
     c.grant_row("f3668b", on=me, until=When.ENCOUNTER)
 
 
-f3668b = _skald_aura("f3668b")
+f3668b = _aura_printing("f3668b")
 
 
 # -- the r44 and r61 runs ---------------------------------------------------
