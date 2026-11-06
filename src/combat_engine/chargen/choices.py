@@ -192,10 +192,29 @@ WEIGHTS: dict[str, float] = {
     # deep and never runs out.
     "refused_in_play": -8.0,
     # -- which weapon is actually held ------------------------------------
-    # **Camille's rule**: "If the character has taken the feat, it should
-    # almost certainly be taking that weapon as well." Heavy enough to beat
-    # the chassis weapon's die and light enough that `keeps_class_rows` can
-    # still stop it, which is the one case where taking it is wrong.
+    # **This weight has no ruling behind it, and the attribution that used
+    # to be here was withdrawn on `#727`.** It read `**Camille's rule**:
+    # "If the character has taken the feat, it should almost certainly be
+    # taking that weapon as well."` -- and `#727`'s own comment says of it
+    # *"I cannot show that it was ever said"*. It is Claude's paraphrase
+    # and it was justifying the heaviest term in this table.
+    #
+    # What Camille *has* said about this file, verbatim and on the record:
+    # *"I don't think `spent_a_feat` is a good score except if we're trying
+    # to force the testing of that equipment, but I am waiting for all of
+    # the ETL and engine work before returning to the AI portion."* So the
+    # number is deferred rather than endorsed, and `#558` and `#1093` defer
+    # the same table twice more.
+    #
+    # The measured fault it causes, on `#727`: a fighter dealt `b:c3-3`
+    # benches the heavy weapon its own leg names in favour of a feat-bought
+    # 1d6 one-hander, 22.5% of draws over 80 leg/seed pairs. **10 of 99
+    # legs name a weapon in their `Build`**, across 5 classes, so the
+    # exposed surface is five times the two legs that issue measured.
+    #
+    # `keeps_class_rows` is 3.0 *per row* and unbounded, so "light enough
+    # that it can still stop it" holds only at one class row -- a weapon
+    # serving four of the character's own rows already scores 12.0.
     "spent_a_feat": 10.0,
     # `outfit`'s docstring names the trap this answers: swing whichever hits
     # hardest and a rogue puts its dagger away, taking every light-blade
@@ -847,8 +866,12 @@ def wield_options(
     **`spent` is the refs a *feat* opened up, and nothing else.** A race trains
     a character in weapons through the same header field, so the list `outfit`
     used to build held both -- and priced a racial longsword as though a feat
-    slot had been spent on it. That is not Camille's rule and it beat a
-    ranger's own short swords with a weapon nobody chose.
+    slot had been spent on it. It beat a ranger's own short swords with a
+    weapon nobody chose.
+
+    (This said *"That is not Camille's rule"*, leaning on the paraphrase
+    `WEIGHTS` used to carry and `#727` withdrew. The fault is real on its
+    own evidence and needs no ruling to name it.)
 
     **This score answers "which weapon" and cannot answer "how many".** A
     requirement is sometimes about the count rather than the kind -- a
