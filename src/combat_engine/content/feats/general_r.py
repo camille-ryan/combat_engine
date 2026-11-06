@@ -48,6 +48,7 @@ from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.powers.bard.level_0 import aura_of_healing
+from combat_engine.content.powers.druid.forms import ends_with
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -2187,20 +2188,29 @@ def f3646b(c: Cast) -> None:
     set to test against." **The keyword arrived and the set is testable
     now** -- `Keyword.BEAST_FORM` is declared on 67 rows.
 
-    What is left is the *refusal*, which is a different thing from the set:
-    nothing can bar a character from using powers that lack a keyword.
-    `c.forbid(keyword=)` is the symbol, and `p16525` and `p16535` carry it
-    for the identical sentence on two themes, so this is one gap across
-    three rows rather than three.
+    **The refusal is written and this note said it could not be.** It read
+    *"nothing can bar a character from using powers that lack a keyword.
+    `c.forbid(keyword=)` is the symbol"* -- while the body two lines below
+    was already calling `c.forbid(lacking=)`, which does exactly that and
+    is read by `dsl.usable` through `Powers.required_keywords`. Stale by
+    its own code, which is the shape `content/CLAUDE.md` names.
+
+    **And the restriction is tied to the form now.** It was laid
+    `until=When.ENCOUNTER` and nothing bound it to the shape, so a
+    character changing back early stayed barred from its own weapons **in
+    humanoid form** -- the printed clause is *"while you are in beast
+    form"*. `forms.ends_with` is the helper for exactly this and its
+    docstring describes the mirror-image bug. `#1130`.
 
     `name=` as well as the label, so the form answers `c.in_form("beast")`
-    and not only `c.suffering`. Only the second knows the word, and the
-    restriction will need the state as well as the keyword.
+    and not only `c.suffering`.
 
     The equipment clauses are bookkeeping with no combat consequence."""
     shape = c.form(label="beast form", revert=MINOR, until=When.ENCOUNTER,
                    name="beast")
-    c.forbid(lacking=Keyword.BEAST_FORM, on=c.me, until=When.ENCOUNTER)
+    ends_with(c, shape,
+              c.forbid(lacking=Keyword.BEAST_FORM, on=c.me,
+                       until=When.ENCOUNTER))
     c.endable(shape, MINOR, then=lambda: c.shift(1))
 
 

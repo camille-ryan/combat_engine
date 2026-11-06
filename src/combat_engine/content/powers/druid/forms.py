@@ -160,7 +160,36 @@ def take_beast_form(
         revert=ActionType.MINOR,
         label=BEAST,
     )
-    ends_with(c, shape, c.effect(c.ref, on=c.me, until=When.ENCOUNTER))
+    # **The printed restriction, which the class power did not carry.**
+    # `#1130`. The card says *"while you are in beast form, you can't use
+    # weapon or implement attack powers that lack the beast form keyword,
+    # although you can sustain such powers"* -- and this helper, which is
+    # how all 13 of its callers get a druid into the shape, imposed
+    # nothing. A feat's duplicate of the same card (`f3646b`) had the
+    # `c.forbid` call; the power every dealt druid holds did not, so a
+    # druid in beast form could swing anything.
+    #
+    # **Through `ends_with`, which is the whole reason that helper is
+    # here.** `c.forbid` takes `until=When.ENCOUNTER` -- the longer of the
+    # two printed clocks -- and the shorter one is the form itself. Laid
+    # bare it would survive changing back, leaving a druid in humanoid
+    # form barred from its own weapons. That is the bug `ends_with`'s
+    # docstring already describes in the other direction: *"without it a
+    # druid stepping out of the shape kept what the shape gave it."*
+    #
+    # `Keyword.BEAST_FORM` and not the wider *"keyword or the
+    # `in_beast_form` gate"* test, and that is measured rather than
+    # assumed: every row carrying the gate also declares the keyword (this
+    # module's own note, #744), and **0 declared rows have lost it** -- 65
+    # in the database against 68 declared, with `keywords.py` reporting no
+    # omissions. So the bare keyword bars exactly the rows print bars.
+    #
+    # The *"although you can sustain such powers"* exception is already
+    # honoured one layer down: `dsl.usable` exempts `powers.sustainable`.
+    ends_with(c, shape,
+              c.effect(c.ref, on=c.me, until=When.ENCOUNTER),
+              c.forbid(lacking=Keyword.BEAST_FORM, on=c.me,
+                       until=When.ENCOUNTER))
     return shape
 
 
