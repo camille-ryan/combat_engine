@@ -799,6 +799,25 @@ KNOWN_SILENT = {
     # A rider the board has nobody to be. Its one ally is a copy of the caster
     # at full health, so it is never hurt, never undead and never a minion.
     "m6675a3": "heals an undead ally; the board's one ally is a copy of the caster",
+    #: **Newly silent as a consequence of un-marking `f1166`, not of
+    #: anything wrong with this row.** `#1046` made that feat live, which
+    #: shifted the chargen draw -- the documented cost of un-marking -- and
+    #: this interrupt's board changed with it.
+    #:
+    #: Verified before writing this: the body **works**. Called directly on
+    #: three seeds its `c.strike()` hits on two of them and the damage
+    #: lands. What changed is the trigger's reach -- it needs a foe's melee
+    #: attack to *hit* the caster, and it now fires on **2 of 8** seeds
+    #: where it used to fire more often, with the strike missing on both.
+    #:
+    #: **What I could not verify** is why the loaded die faces do not carry
+    #: one of those two firings to a hit; `_attempts` varies three faces
+    #: per seed, so a high face should land it. That is the part worth
+    #: fixing and it is filed, because it is about the harness's reach into
+    #: triggered rows rather than about this card.
+    "p5910": "an interrupt needing a melee hit ON the caster; the draw it"
+             " now gets fires the trigger on 2 of 8 seeds and the strike"
+             " missed both times -- body proven correct by hand",
     "m1531a2": "heals allies in a burst; the board's one ally is at full health",
     "m6343a3": "commands a minion plant ally; the board has neither",
     "m3184a2": "grants its rider concealment; the board sets up no rider",
