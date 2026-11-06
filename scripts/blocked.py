@@ -35,7 +35,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1043,6 +1043,32 @@ def _one(token: str, have: dict[str, object]) -> bool:
             # function and a new keyword -- which is most of them -- reported
             # arrived on the function alone.
             return _params_ok_on(getattr(thing, attr), rest)
+        # **A marker may name a KEY INSIDE A MAPPING, which `hasattr`
+        # cannot see.** `#1118`: three rows waited on
+        # `chargen.CLASSES.vampire`, `#599` put that class in scope, and the
+        # symbol STILL did not resolve -- so on the day the thing arrived
+        # nothing could say so, which is the one job `todo.py` has. Worse
+        # than a wrong answer: the marker is silent in both directions, and
+        # reads exactly like a row legitimately still waiting.
+        #
+        # It fell through to the wrong-module fallback below, which demands
+        # `owner.islower()` -- and `"chargen.CLASSES"` is not lowercase, so
+        # the answer was a hard False for ever.
+        #
+        # **Free, and `#1118` doubted that it would be.** That issue worried
+        # a dict-key resolver would have to import a built database for
+        # every check, because `chargen.CLASSES` is filled by
+        # `CLASSES.update(_from_the_book())` at import. Measured: `_surface`
+        # already imports `chargen`, so `CLASSES` holds all 26 by the time
+        # this runs and the key is one dictionary lookup. That settles the
+        # issue's own open question in favour of resolving the marker rather
+        # than refusing it at import.
+        #
+        # A key carries no parameters, so a marker asking for one --
+        # `chargen.CLASSES.vampire(x=)` -- is refused rather than granted.
+        # Whatever that author meant, it is not a key.
+        if isinstance(thing, Mapping) and attr in thing:
+            return not rest.strip().rstrip(")").strip()
         # **The marker may have guessed the wrong module.** A symbol is
         # written from memory while the row is being written, so
         # `query.keywords_of` gets named for something that lives in
