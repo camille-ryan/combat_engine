@@ -758,7 +758,6 @@ KNOWN_SILENT = {
     # being tested against. Each card's target line was read to confirm the
     # dependency rather than inferred from the verdict.
     "m5602a4": "commands a conjuration; m5602a3 is what conjures one",
-    "m3219a5": "reanimates a dead ally; the board's one ally is at full health",
     # **The corpse-raisers, and the board has no corpse.** Four rows read
     # `c.fallen` -- the verb added because `c.within` and every other finder
     # ends in `alive` and so can never hand one over -- and the harness fields
@@ -893,8 +892,6 @@ KNOWN_SILENT = {
     # nothing for it. Checked by reading the body rather than trusting the
     # note, after the health half of this board limit was closed and this row
     # stayed silent.
-    "m822a4": ("heals undead allies in a burst; its only ally is a copy of "
-               "itself and reads as humanoid, so the kind gate returns"),
     # Terrain a bare grid has not got.
     # Round 11: the board carries `fire` and `object` scenery and nothing else, so
     # a row wanting a tree has none to find. `m115702a2` is the same cause.
@@ -913,10 +910,6 @@ KNOWN_SILENT = {
     # An ally of a kind the board's one ally cannot be. It is a copy of the caster,
     # so a row wanting an ally of a *different* kind finds none -- checked rather
     # than assumed: both casters below read as `humanoid`, never undead or animate.
-    "m3983a2": "grants an undead or beast ally an attack; its only ally is a "
-               "humanoid copy of itself",
-    "m5655a2": "grants an allied animate an attack; its only ally is a humanoid "
-               "copy of itself",
     "m5625a2": "slides an allied minion of one kind; the board spawns none",
     # A target state `_provoke` does not produce.
     # **Round 13's ten, over 507 rows at level 11.** Nine of the ten are the
@@ -1074,8 +1067,6 @@ KNOWN_SILENT = {
     "m6284a2": "its Requirement is flanking; the board does not set one up",
     # An ally of a kind the board's one ally cannot be -- it is a copy of the
     # caster, so a row wanting an ally of a *different* kind finds none.
-    "m6180a0": "wants an ally of a kind its own copy is not",
-    "m6180a2": "wants an ally of a kind its own copy is not",
     "m5787a8": "wants an ally of a kind its own copy is not",
     # Gated on a form change having happened first, which needs the sibling row
     # that performs it.
@@ -2240,6 +2231,24 @@ def board(ref: str, seed: int, pose: bool = False,
 
             mate_health = world.need(mate, _Health)
             mate_health.hp = max(1, mate_health.max_hp // 2)
+        # **And a creature type, for the rows that ask about their friend's.**
+        # `#1124`. The ally is a copy of the caster, so a row helping an
+        # undead ally is posed against a humanoid twin -- five excuses say
+        # exactly that, one of them *"wants an ally of a kind its own copy is
+        # not"*.
+        #
+        # Laid as an effect, which is what `query.kinds_of` reads: the same
+        # mechanism `c.set_origin` and `dummy.spawn(types=)` use, so it needs
+        # no second creature and no fake row in the monster table.
+        #
+        # The label leads with `audit:setup` deliberately -- `_claimed`
+        # credits a label's first token, and the board laid this rather than
+        # the row, so the row must not be credited for its own pose.
+        if mate is not None and (wants := _asks_an_allys_kind(ref)):
+            kinder = Cast(world=world, me=caster, ref="audit:setup")
+            for word in wants:
+                kinder.effect(f"audit:setup origin:{word}",
+                              until=When.ENCOUNTER, on=mate)
         foe_team = Team.PC
     else:
         # A classless row -- the engine's own basic attacks -- is fielded on
@@ -5691,6 +5700,79 @@ def _wanted_by_word(ref: str) -> tuple[str, ...]:
 
 
 @cache
+@cache
+def _type_words() -> frozenset[str]:
+    """Every creature type word the compendium prints, parens stripped.
+
+    `monster.origin` and `monster.kind` store them bracketed -- `(aquatic)`,
+    `(undead)` -- so a naive read matches nothing and the gate below would
+    silently pose no row at all. Measured while writing it: of 15 words a
+    first draft reported as "not a type word", **14 were type words** and
+    the parentheses were the whole difference.
+
+    The vocabulary is the gate's safety rail: a row may pass `c.is_kind` any
+    string, and laying `origin:<anything>` on the board's ally would make
+    the harness assert a kind the game does not have.
+    """
+    from combat_engine.db import game
+
+    out: set[str] = set()
+    for col in ("origin", "kind"):
+        for row in game().execute(
+            f"SELECT DISTINCT {col} AS w FROM monster WHERE {col} IS NOT NULL"
+        ):
+            for word in str(row["w"]).lower().replace(",", " ").split():
+                out.add(word.strip("()"))
+    out.discard("")
+    return frozenset(out)
+
+
+#: Only the **first positional** argument of `c.is_kind` is a type word.
+#:
+#: A first draft read every quoted string in the call and reported `target`
+#: as a creature type 9 times -- it was coming out of
+#: `c.is_kind("aquatic", on=ctx.get("target"))`, where the quoted word is
+#: the name of a context key. So the pattern anchors the word to the first
+#: argument and keeps the rest only to test it for `c.me`.
+_KIND_CALL = re.compile(r'c\.is_kind\(\s*"([a-z ]+)"([^)]*)\)')
+
+
+def _asks_an_allys_kind(ref: str) -> tuple[str, ...]:
+    """The type words this row asks about somebody **other than itself**.
+
+    The gate on giving the monster board's one ally a creature type. `#1124`:
+    that ally is `loader.spawn` of the caster's own ref -- a copy -- so a row
+    helping an *undead* ally is posed against a humanoid twin and reaches
+    nobody it was written for. Five `KNOWN_SILENT` excuses say so in those
+    words, including *"wants an ally of a kind its own copy is not"*.
+
+    **A type word is an effect, not a stat block.** `query.kinds_of` reads
+    `origin:<word>` off any effect label as well as off the type line, which
+    is the mechanism `c.set_origin` and `dummy.spawn(types=)` already use --
+    so posing this needs no second creature and no fake monster row.
+
+    Read off the body rather than the card, like `_asks_a_bloodied_ally`,
+    and **opt-in per row** for that function's stated reason: the board
+    poses the caster 48 ways and nobody else, so a state laid for all
+    ~13,400 monster rows to serve a handful is a corpus-wide baseline move.
+    Measured: **133** rows ask, and they name 87-word-vocabulary words only.
+
+    Excluded, same as the sibling: a row asking only about `c.me`. The
+    board already poses the caster's own kind.
+    """
+    row = REGISTRY.get(ref)
+    src = _source_of(getattr(row, "body", None), ref)
+    if not src:
+        return ()
+    vocab = _type_words()
+    found = {
+        word
+        for word, rest in _KIND_CALL.findall(src)
+        if "c.me" not in rest and word in vocab
+    }
+    return tuple(sorted(found))
+
+
 def _asks_a_bloodied_ally(ref: str) -> bool:
     """Does this row's body ask whether somebody other than itself is hurt?
 
