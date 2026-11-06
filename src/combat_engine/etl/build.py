@@ -3297,11 +3297,35 @@ _TR_ATK_FLAT = re.compile(r"\bAttack\s*:\s*\+?(\d+)\s+vs\.?\s+(\w+)", re.I)
 #:
 #: `extra` and `ongoing` are allowed between the amount and the type
 #: because the page writes both and neither changes what the number is.
+#: **The amount may carry a `+ N`, which is `#1128`.** This was
+#: `(\d+d\d+|\d+)`, which cannot span the `+ 3` in `1d10 + 3 damage` -- so
+#: the match at `1d10` failed, `search` found the later `3 damage`, and the
+#: column stored the **flat bonus with the dice dropped**. Five rows:
+#: `1d10 + 3` read as `3`, `2d8 + 4` as `4`, `1d6 + 4` as `4`.
+#:
+#: `+ one-half level` is deliberately NOT matched. Five more rows print it,
+#: and it is a *derived* number -- half the user's level -- which this
+#: column has no shape for. Storing `2d10` alone would be a quieter version
+#: of the same bug, so they keep storing nothing and `#1128` carries the
+#: question of what the column should hold for them.
 _TR_DAMAGE = re.compile(
-    r"\b(\d+d\d+|\d+)\s+(?:extra\s+|ongoing\s+)*"
+    r"\b(\d+d\d+(?:\s*\+\s*\d+)?|\d+)\s+(?:extra\s+|ongoing\s+)*"
     r"((?:\w+(?:\s+and\s+\w+)?)\s+)?damage"
     r"(?P<tier>\s+per\s+tier)?",
     re.I)
+
+#: The `Hit:` clause of a printed card, up to the next labelled clause.
+#:
+#: **Searched before the rest of the spec, which is the other half of
+#: `#1128`.** A card whose *second* route to setting the feature off prints
+#: "deal 10 damage to a square of it to breach it (all defenses 10)" has
+#: that sentence **before** its `Hit:` line -- so a plain search over the
+#: whole spec stored a **breach threshold** as the power's damage. One row
+#: did exactly that, with `10` where the card deals `1d8 + 4 poison`, and
+#: its `damage_type` was empty because the breach phrase names no type.
+_TR_HIT_CLAUSE = re.compile(
+    r"Hit:\s*(.*?)(?=\b(?:Miss|Effect|Target|Attack|Special)\b:|$)",
+    re.I | re.S)
 
 #: Words that look like a damage type and are not one. Anything else before
 #: `damage` is taken as the printed type, so this list is what keeps
@@ -3354,7 +3378,15 @@ def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
         # on six rows. Falling back to `spec` keeps the rows whose damage is
         # stated outside an `Effect:` line.
         effect_txt = eff.group(1).strip() if eff else ""
-        dmg = _TR_DAMAGE.search(effect_txt) or _TR_DAMAGE.search(spec)
+        # **The `Hit:` clause first.** See `_TR_HIT_CLAUSE`: a breach
+        # threshold printed earlier in the spec was being stored as the
+        # power's damage. `#1128`.
+        hit = _TR_HIT_CLAUSE.search(spec)
+        dmg = (
+            (_TR_DAMAGE.search(hit.group(1)) if hit else None)
+            or _TR_DAMAGE.search(effect_txt)
+            or _TR_DAMAGE.search(spec)
+        )
         dmg_type = ""
         if dmg and dmg.group(2):
             words = [w for w in dmg.group(2).lower().split()
@@ -3384,7 +3416,9 @@ def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
                 int(flat_atk.group(1)) if flat_atk and not lvl else None,
                 ((lvl or flat_atk).group(2).strip().lower()
                  if (lvl or flat_atk) else ""),
-                (dmg.group(1) if dmg else ""),
+                # `1d10+3`, not `1d10 + 3`: a reader splitting on
+                # whitespace must not be handed three tokens. `#1128`.
+                (dmg.group(1).replace(" ", "") if dmg else ""),
                 sanitise.scrub(spec, {name: ref}),
                 int(bool(dmg and dmg.group("tier"))),
                 dmg_type,
