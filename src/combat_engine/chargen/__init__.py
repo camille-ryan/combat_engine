@@ -4208,11 +4208,49 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
 
 
 def sheet(who: Character) -> str:
-    """Every number a player would have written down. For reading, not play."""
+    """Every number a player would have written down. For reading, not play.
+
+    **The scores are built the way `spawn` builds them, and this used to
+    read `dict(line.scores)` raw.** That is the class page's own
+    recommendation, which is three transformations short of what a dealt
+    character actually has: `scores_for` re-ranks it onto the build's leg
+    and swaps in `STANDARD_ARRAY`'s values, the race adds its +2, and
+    levels 4 and 8 each raise two scores. So the sheet a human reads
+    disagreed with the character the engine fields -- every ability, its
+    modifier, the hit points off CON, the surges off CON and all four
+    defences.
+
+    `#793`'s item 6, and the only plain bug in that issue. The three steps
+    are copied from `spawn` rather than factored out of it deliberately:
+    extracting them would put a second caller on a path the fixtures pin,
+    and this function fields nothing. If they drift, `drivers.chargen_sheet`
+    is what says so -- it asserts this against a really-spawned creature
+    rather than against a second copy of the arithmetic, because a
+    comparison against a re-derivation would pass while both halves were
+    wrong together.
+
+    **The skills line prints `-` for a character whose skills are not
+    pinned, and that is correct rather than missing.** `Character.skills` is
+    an input: `spawn` writes the dealt set into the creature's `Skills`
+    component and never writes back to the `Character`. Deriving them here
+    is not available either -- `_trained_skills` takes the fight's `Random`,
+    so the *chosen* half of a character's training is only decided at spawn.
+    So a pinned character -- the `maker.interview` path, which is what this
+    function is for -- names its skills, and a dealt one says `-`.
+    """
     from combat_engine.engine.types import modifier
 
     line = who.line
-    scores = dict(line.scores)
+    build = build_of(who.cls, who.build)
+    race = RACES.get(who.race) if who.race else None
+    scores = scores_for(line, build)
+    if race is not None:
+        for ability in race.taken(build):
+            scores[ability] = scores.get(ability, 10) + 2
+    for step in (4, 8):
+        if who.level >= step:
+            scores[build.primary] += 1
+            scores[CON] += 1
     con = modifier(scores[CON])
     d = defences(line, scores, who.level)
     step = who.level // 2  # what scaling adds at full strength
@@ -4231,5 +4269,10 @@ def sheet(who: Character) -> str:
             + (f"  {line.weapon.damage} weapon (+{line.weapon.proficiency} prof)"
                if line.weapon else "  implement"),
             f"  powers: {', '.join(who.powers) or '-'}",
+            # **Both of these were missing, and both are things a player
+            # writes down.** `#793` item 2 is about choosing skills and
+            # this is the half that only had to be printed.
+            f"  feats: {', '.join(who.feats) or '-'}",
+            f"  skills: {', '.join(sorted(who.skills)) or '-'}",
         ]
     )

@@ -38741,6 +38741,124 @@ def _in_combat_board(
     return world, encounter
 
 
+def the_printed_sheet_agrees_with_the_creature_it_describes(out: Result) -> None:
+    """`chargen.sheet` against a really-spawned creature. `#793` item 6.
+
+    **It read `dict(line.scores)` -- the class page's own recommendation,
+    three transformations short of what a dealt character has.** `scores_for`
+    re-ranks onto the build's leg and swaps in `STANDARD_ARRAY`'s values,
+    the race adds its +2, and levels 4 and 8 each raise two scores. So the
+    sheet a human reads disagreed with the character the engine fields, on
+    every ability and on everything derived from one: the modifiers, the hit
+    points off CON, the surges off CON and all four defences.
+
+    Measured before the fix: **12 of 12** class/level pairs disagreed. After:
+    0 of 12. Not a near-miss on one class.
+
+    **Asserted against a spawned creature, never against a second copy of
+    the arithmetic.** `sheet` copies `spawn`'s three steps rather than
+    sharing them -- extracting them would put a second caller on a path the
+    replay fixtures pin, and `sheet` fields nothing -- so the risk this rule
+    exists for is the two drifting apart. Comparing the sheet against a
+    re-derivation would be blind to exactly that: it would pass while both
+    were wrong together, which is this repo's own note about a rule that
+    reads the constant under test.
+    """
+    import re
+
+    from combat_engine import chargen
+    from combat_engine.engine.components import Health, Stats
+    from combat_engine.engine.types import Ability
+
+    abbr: dict[str, Ability] = {a.value.upper(): a for a in Ability}
+    was = chargen.SCORED_CHOICES
+    chargen.SCORED_CHOICES = False
+    try:
+        checked = 0
+        bad: list[str] = []
+        for cls in ("fighter", "cleric", "rogue", "wizard"):
+            for level in (1, 5, 8):
+                world, _me, _foe = _board("mba", 3)
+                who = chargen.Character(cls=cls, level=level, race="r1")
+                eid = chargen.spawn(world, who, (12, 12))
+                stats = world.get(eid, Stats)
+                health = world.get(eid, Health)
+                if stats is None or health is None:
+                    bad.append(f"{cls} L{level}: no creature")
+                    continue
+                text = chargen.sheet(who)
+                printed = {
+                    abbr[str(m.group(1))]: int(m.group(2))
+                    for m in re.finditer(r"\b([A-Z]{3}) (\d+) \(", text)
+                    if str(m.group(1)) in abbr
+                }
+                checked += 1
+                for a in Ability:
+                    if printed.get(a) != stats.score(a):
+                        bad.append(
+                            f"{cls} L{level} {a.value}: sheet"
+                            f" {printed.get(a)} vs board {stats.score(a)}")
+                hp = re.search(r"HP (\d+)", text)
+                if not hp or int(hp.group(1)) != health.max_hp:
+                    bad.append(f"{cls} L{level} hp: sheet"
+                               f" {hp and hp.group(1)} vs board {health.max_hp}")
+        out.that(checked == 12,
+                 "the setup landed: twelve class/level pairs were really"
+                 " spawned and read. A pair that failed to build would make"
+                 " the comparison below vacuous, which is how a sheet"
+                 " assertion passes while describing nobody",
+                 f"{checked} of 12 pairs built")
+        out.that(not bad,
+                 "every ability on the printed sheet, and the hit points"
+                 " derived from CON, match the creature the engine actually"
+                 " fields. Reverting `sheet` to the raw class line makes"
+                 " **12 of 12** pairs disagree, so this is not a near-miss"
+                 " on one class",
+                 f"{bad[:4] or 'all twelve agree'}")
+
+        # -- the two things that were simply absent from the sheet --------
+        who = chargen.Character(cls="fighter", level=5, race="r1")
+        world, _me, _foe = _board("mba", 3)
+        chargen.spawn(world, who, (12, 12))
+        text = chargen.sheet(who)
+        out.that("feats:" in text and "skills:" in text,
+                 "and the sheet prints the feats and the trained skills --"
+                 " both are things a player writes down and neither was"
+                 " there, so a reader could not tell a dealt character's"
+                 " skills from an undealt one's",
+                 f"feats={'feats:' in text} skills={'skills:' in text}")
+        # **The skills line is tested on a PINNED character, and the first
+        # version of this assertion was wrong to demand otherwise.** It
+        # asserted a *dealt* character's skills appear, and they cannot:
+        # `Character.skills` is an input pin, not an output, and `spawn`
+        # writes the dealt set into the creature's `Skills` component
+        # without writing back to the `Character`. Deriving them in `sheet`
+        # is not available either -- `_trained_skills` takes the fight's
+        # `Random`, so the *chosen* half is only decided at spawn.
+        #
+        # So `-` on an unpinned character is the honest output, and the
+        # case this line exists for is the human-made one, where
+        # `maker.interview` pins them.
+        pinned = chargen.Character(cls="fighter", level=1, race="r1",
+                                   skills=("athletics", "intimidate"))
+        pinned_text = chargen.sheet(pinned)
+        out.that("athletics" in pinned_text and "intimidate" in pinned_text,
+                 "and a character whose skills are PINNED -- the human-made"
+                 " path -- has them named on its sheet. An unpinned one"
+                 " prints `-`, which is correct rather than missing: the"
+                 " chosen half is decided at spawn off the fight's seed and"
+                 " is not on the `Character` at all",
+                 f"{sorted(pinned.skills)}")
+        out.that("skills: -" in chargen.sheet(
+            chargen.Character(cls="fighter", level=1, race="r1")),
+                 "and the unpinned case says `-` rather than printing a"
+                 " plausible-looking empty list, so a reader can tell"
+                 " 'not chosen yet' from 'trained in nothing'",
+                 "skills: -")
+    finally:
+        chargen.SCORED_CHOICES = was
+
+
 def every_event_field_can_reach_the_page(out: Result) -> None:
     """`Event.wire()` is `asdict`, so an unserialisable field blanks the log
     panel and nothing else sees it. `#1120`.
@@ -64154,6 +64272,11 @@ DRIVERS = {
         "DMG2's in-combat challenge: a combat scene that also rolls, on the"
         " fight's own board -- priced OUT of the budget, capped at"
         " complexity 2, and every check paying a named action (#922)",
+    ),
+    "chargen_sheet": (
+        the_printed_sheet_agrees_with_the_creature_it_describes,
+        "`chargen.sheet`'s numbers match a really-spawned creature, not the"
+        " raw class page it used to print (#793)",
     ),
     "event_wire": (
         every_event_field_can_reach_the_page,
