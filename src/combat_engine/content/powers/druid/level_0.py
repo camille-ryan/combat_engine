@@ -316,17 +316,53 @@ def p15857(c: Cast) -> None:
     summon=Summon(),
 )
 def p15858(c: Cast) -> None:
-    """The printed block is "a creature of your Primal Aspect of your level
-    or lower" and prints no numbers at all, so the summon takes `Summon`'s
+    """The class printing. `summon_of_your_aspect` holds the body.
+
+    **It used to drop the dismissal and carry no marker for it.** The
+    docstring said *"dismissing it as a minor action is dropped with the
+    other dismissals; see the report"* while the header declared no
+    `dropped=` -- so the row reported finished, `blocked.py` could not see
+    it, and the one instrument that would have is the marker census. The
+    clause is printed plainly: *"Otherwise, it lasts until you dismiss it
+    as a minor action or until the end of the encounter."*
+
+    Nothing had to be built to pay it. `f3648b` -- the feat printing of
+    **this same card**, specs byte-identical -- had the dismissal written
+    all along, so the fix was to read the sibling rather than to write a
+    verb. `#1045` ruling A.
+    """
+    summon_of_your_aspect(c)
+
+
+def summon_of_your_aspect(c: Cast) -> None:
+    """The summon two refs print identically: `p15858` and `f3648b`.
+
+    Their specs are the same **byte for byte**, which is why this is one
+    body with no parameters -- unlike `aura_of_healing`, where three
+    printings differed in the allowance. `#1045` ruling A: *"the class
+    feature should grant the power and point at it"*.
+
+    The block prints no numbers at all, so the summon takes `Summon`'s
     defaults -- the summoner's defences, a surge's worth of hit points, no
     attack of its own. The actions it can be commanded to take are the ones
     its own entry lists, and there is no entry.
 
-    The surge it costs when it falls is the half that is printed in
-    mechanics, and that is watched for. Dismissing it as a minor action is
-    dropped with the other dismissals; see the report.
+    Two clocks, and the card gives them in one sentence. Dropping below 1
+    hit point costs the summoner a surge; otherwise it lasts *"until you
+    dismiss it as a minor action or until the end of the encounter"*. So
+    the hold is `When.ENCOUNTER` and `c.endable` prices the early exit,
+    which is how every other deliberate ending in the tree is written.
+    `c.summon_inline` spawns a `Companion`, and `c.dismiss_companion` is
+    the verb that takes one away.
+
+    `get(c.ref).summon` and not a captured spec: `c.ref` is the **caller's**
+    ref, so each printing reads its own declared `Summon`.
     """
     beast = c.summon_inline(get(c.ref).summon, at=c.origin)
+    c.endable(
+        c.effect(f"{c.ref} summoned", until=When.ENCOUNTER, on=c.me),
+        MINOR, then=c.dismiss_companion,
+    )
 
     def fell(ev: Dropped) -> None:
         if ev.actor == beast:

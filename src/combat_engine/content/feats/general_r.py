@@ -49,6 +49,7 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.powers.bard.level_0 import aura_of_healing
 from combat_engine.content.powers.druid.forms import take_beast_form
+from combat_engine.content.powers.druid.level_0 import summon_of_your_aspect
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -2241,27 +2242,19 @@ def f3648(c: Cast) -> None:
        reach=Ranged(5), target=NO_TARGET,
        keywords=[Keyword.PRIMAL, Keyword.SUMMONING], summon=Summon())
 def f3648b(c: Cast) -> None:
-    """The block prints no numbers at all, so the summon takes `Summon`'s
-    defaults -- the summoner's defences, a surge's worth of hit points, no
-    attack of its own. The surge it costs when it falls is the printed
-    mechanic and is watched for.
+    """The feat printing of `p15858`, and the two specs are identical byte
+    for byte -- so `summon_of_your_aspect` is the whole body and there is
+    nothing to parameterise. `#1045` ruling A.
 
-    "Until you dismiss it as a minor action" is written the way every
-    other deliberate ending is: a bare hold on the summoner, `c.endable`
-    to price dropping it, and `c.dismiss_companion` as what dropping it
-    buys. `c.summon_inline` spawns a `Companion`, which is what that verb
-    takes away."""
-    beast = c.summon_inline(get(c.ref).summon, at=c.origin)
-    c.endable(
-        c.effect(f"{c.ref} summoned", until=When.ENCOUNTER, on=c.me),
-        MINOR, then=c.dismiss_companion,
-    )
+    **This was the complete one of the pair.** The dismissal the class
+    printing dropped was written here all along, so folding them moved the
+    clause the other way from the other two pairs: `p15858` gained a
+    printed effect rather than this row losing anything. Worth saying
+    because *"delete the duplicate"* would have deleted the better body.
 
-    def fell(ev: Any) -> None:
-        if ev.actor == beast:
-            c.spend_surge(on=c.me)
-
-    c.watch(Dropped, fell, until=When.ENCOUNTER)
+    The `Dropped` watch also gains `on=`, `once=` and a `label=` from the
+    class printing's version, which this one had without them."""
+    summon_of_your_aspect(c)
 
 
 # -- the racial powers a gate pins by ref -----------------------------------
