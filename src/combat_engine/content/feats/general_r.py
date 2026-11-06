@@ -48,7 +48,7 @@ from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.powers.bard.level_0 import aura_of_healing
-from combat_engine.content.powers.druid.forms import ends_with
+from combat_engine.content.powers.druid.forms import take_beast_form
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -2195,22 +2195,30 @@ def f3646b(c: Cast) -> None:
     is read by `dsl.usable` through `Powers.required_keywords`. Stale by
     its own code, which is the shape `content/CLAUDE.md` names.
 
-    **And the restriction is tied to the form now.** It was laid
-    `until=When.ENCOUNTER` and nothing bound it to the shape, so a
-    character changing back early stayed barred from its own weapons **in
-    humanoid form** -- the printed clause is *"while you are in beast
-    form"*. `forms.ends_with` is the helper for exactly this and its
-    docstring describes the mirror-image bug. `#1130`.
+    **It calls `forms.take_beast_form` now, which is Camille's ruling A on
+    `#1045`** -- *"the class feature should grant the power and point at
+    it"* -- and it fixes a bug the duplication caused.
 
-    `name=` as well as the label, so the form answers `c.in_form("beast")`
-    and not only `c.suffering`.
+    This body laid its own form with `label="beast form"`. `forms.BEAST` is
+    **`"druid beast form"`**, and `forms.in_beast_form` compares labels --
+    so a character who gained the shape through this feat was **not in
+    beast form** as far as every gated row was concerned. Measured: after
+    `p5032`, `in_beast_form` is True; after this row it was **False**. The
+    feat granted the shape and none of the powers requiring it worked.
+
+    That is what two hand-written bodies for one printed card cost, and it
+    is the second live fault the pair held -- the first being the
+    restriction itself, `#1130`.
+
+    Sharing the helper also brings the `c.forbid` tied to the shape through
+    `ends_with`, so the *"while you are in beast form"* clause ends when
+    the form does rather than running to the encounter.
+
+    What stays here is the printed *"or vice versa"*: a minor action back
+    out, and the shift on the way.
 
     The equipment clauses are bookkeeping with no combat consequence."""
-    shape = c.form(label="beast form", revert=MINOR, until=When.ENCOUNTER,
-                   name="beast")
-    ends_with(c, shape,
-              c.forbid(lacking=Keyword.BEAST_FORM, on=c.me,
-                       until=When.ENCOUNTER))
+    shape = take_beast_form(c)
     c.endable(shape, MINOR, then=lambda: c.shift(1))
 
 
