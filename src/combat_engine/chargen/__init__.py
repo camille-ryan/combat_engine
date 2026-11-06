@@ -2084,6 +2084,25 @@ RACES: dict[str, RaceLine] = _races_from_the_book()
 #: and re-recording under it in a mixed commit would hide one.
 DEAL_RACES = True
 
+#: Deal every character a deity. `#454`, on Camille's option B.
+#:
+#: **A flag for the same reason `DEAL_RACES` is one**, and a much smaller
+#: one: a deity is not a number on the sheet, so it changes no score and no
+#: roll. What it changes is which **feats** a character may take -- 194 of
+#: them carry a worship prerequisite -- so the feat pool moves and with it
+#: the draw.
+#:
+#: The eight `replay` fixtures pin `feats` and `powers`, so a pool change
+#: cannot reach them; that is checked rather than assumed in the commit
+#: that turns this on.
+#:
+#: **Every class, not only the divine ones.** The book lets anyone worship,
+#: and the feats that care already carry `{"source": "divine"}` beside the
+#: worship clause -- so gating the deal on the class as well would be the
+#: same test twice and would wrongly refuse a non-divine character the few
+#: feats that ask for worship alone.
+DEAL_DEITY = True
+
 #: Score the build choices instead of drawing them uniformly. `choices.py`
 #: holds the terms and the weights.
 #:
@@ -2247,6 +2266,25 @@ class Character:
     #: stable. Exactly `#1101`'s kit bug one field over, and `Party.of`
     #: now pins this the way it pins the kit.
     skills: tuple[str, ...] = ()
+    #: Which deity this character worships, as the deity's **ref**. `#454`.
+    #:
+    #: Camille's ruling was option B -- the mechanical half lands and the
+    #: flavour stays for campaign data:
+    #:
+    #:   > *"B is fine. I looked at the deities though and I think the most
+    #:   > mechanical portion is their domains."*
+    #:
+    #: A **ref and not a name**, which is what makes her next sentence
+    #: cheap: *"eventually [I] want some kind of mapping from domain to
+    #: [feat] prereq instead of them having deity specific."* A ref reaches
+    #: `deity.domains`, so the domain test is a lookup -- and it is needed
+    #: **now**, because 34 of the 90 printed prerequisites already name a
+    #: domain instead of a god.
+    #:
+    #: Empty means "worships nobody", which is the honest default: 54 of
+    #: the clauses name a specific god and a character with none meets none
+    #: of them.
+    worships: str = ''
     #: Which **feature chassis** this character has, as the ref spells it --
     #: `arcanist`, `templar`, `warpriest`. Empty takes the class's first,
     #: which is `chassis_of`'s business and is the only chassis for 23 of
@@ -2633,10 +2671,88 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
         if who.skills:
             return wanted in {s.strip().lower() for s in who.skills}
         return wanted in given_skills(who.cls, who.race)
+    # **Worship, as a ref and as a domain.** `#454`, and both read through
+    # `domains_of` so Camille's eventual *"mapping from domain to prereq"*
+    # is a change of atom rather than of reader.
+    #
+    # 54 clauses name a god and 34 name a domain, measured -- so the second
+    # is not a refinement of the first, it is a third of the family.
+    if "deity" in node:
+        return bool(who.worships) and who.worships == node["deity"]
+    if "deity_domain" in node:
+        return str(node["deity_domain"]).strip().lower() in domains_of(
+            who.worships)
     # term: still answered False. 586 feats, 14 classified kinds, and
     # `#1094`/`#1044` carry what each kind would need -- an ETL import, a
     # matching pass, and a residue nobody has read.
     return False
+
+
+@cache
+def _all_deities() -> tuple[str, ...]:
+    """Every deity ref, sorted. `#454`.
+
+    Sorted so a seed picks the same one every time -- the ordering a
+    database returns is not a promise, and `_trained_skills` records the
+    same reasoning about its own pool.
+    """
+    from combat_engine.db import game
+
+    try:
+        return tuple(sorted(
+            r["ref"] for r in game().execute("SELECT ref FROM deity")))
+    except Exception:
+        return ()
+
+
+def deal_deity(rng: Random, cls: str = "") -> str:
+    """Pick a deity for a character that names none. `#454`.
+
+    Uniform over the 134, which is the honest default: **which** god a
+    character follows is campaign flavour, and Camille's ruling put that
+    half in campaign data -- *"Deities are campaign specific and should go
+    in the graphrag for a campaign."* What the mechanics need is only that
+    a character **has** one, so 194 worship prerequisites become answerable
+    either way.
+
+    `cls` is taken and deliberately unused: a class's own page restricts
+    which gods suit it, and that restriction is campaign-and-flavour rather
+    than mechanical. Named in the signature so the one place to add it
+    later is obvious, and said here so the next reader does not take its
+    absence for an oversight.
+    """
+    pool = _all_deities()
+    return rng.choice(list(pool)) if pool else ""
+
+
+@cache
+def domains_of(deity: str) -> frozenset[str]:
+    """The domains this deity carries, lower-cased. `#454`.
+
+    Off `deity.domains`, which the importer already fills as a JSON list on
+    every one of the 134 rows -- so the domain half of the worship
+    prerequisites needs no new import at all. That is the measurement
+    behind Camille's *"the most mechanical portion is their domains"*.
+
+    Empty for a character who worships nobody, and for a ref the table does
+    not carry: a prerequisite then matches nothing rather than raising,
+    which is the direction every other atom in `meets` takes.
+    """
+    if not deity:
+        return frozenset()
+    import json
+
+    from combat_engine.db import game
+
+    try:
+        row = game().execute(
+            "SELECT domains FROM deity WHERE ref = ?", (deity,)).fetchone()
+    except Exception:
+        return frozenset()
+    if row is None:
+        return frozenset()
+    return frozenset(str(w).strip().lower()
+                     for w in json.loads(row["domains"] or "[]"))
 
 
 @cache
@@ -2731,7 +2847,7 @@ def _build_options(feats: list[str]) -> set[str]:
 def feats_for(
     cls: str, level: int = 1, build: Build | None = None,
     rng: Random | None = None, powers: list[str] | None = None,
-    race: str = "", skills: Sequence[str] = (),
+    race: str = "", skills: Sequence[str] = (), worships: str = "",
 ) -> list[str]:
     """The feats this character has taken, drawn like its powers are.
 
@@ -2757,7 +2873,7 @@ def feats_for(
     taken: list[str] = []
     for _ in range(feat_slots(level, race_ref)):
         legal = legal_feats(cls, level, build, race_ref, taken=held + taken,
-                            skills=skills)
+                            skills=skills, worships=worships)
         if not legal:
             break
         taken.append(_one_feat(legal, cls, build, pick))
@@ -3993,6 +4109,16 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 build,
             ),
         )
+    # Its own stream, like the race's above and for the same reason: adding
+    # this draw must not move the dice every other decision reads. `#454`.
+    if DEAL_DEITY and not who.worships:
+        who = replace(
+            who,
+            worships=deal_deity(
+                Random(f"{world.rng.seed}:{who.cls}:{build.name}:deity"),
+                who.cls,
+            ),
+        )
     race = RACES.get(who.race)
     # **A copy each, always.** `LONGSWORD` and its siblings are module-level
     # singletons, so every fighter ever built shared one object -- and
@@ -4052,6 +4178,10 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         # character being dealt fresh passes nothing and the pool is
         # unchanged, so this moves no existing draw.
         skills=who.skills,
+        # **Unlike skills, this one is always known by now**: the deal four
+        # lines up settles it before the feats are drawn, which is the
+        # step order `#1135` is about having for skills too. `#454`.
+        worships=who.worships,
     )
     # A feat that hands over a card takes one back, and both halves happen
     # here: a `Cast` opens on a board with the hand already dealt.

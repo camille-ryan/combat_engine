@@ -9593,6 +9593,128 @@ def vulnerability_held_by_a_zone(out: Result) -> None:
                  f"mine={gate({'source': me})} theirs={gate({'source': foe})}")
 
 
+def a_worship_prerequisite_is_answered_by_ref_and_by_domain(out: Result) -> None:
+    """194 feats are gated on worship, and a third name a domain. `#454`.
+
+    Camille's ruling was option B -- the mechanical half lands, the flavour
+    stays for campaign data -- with a forward constraint:
+
+    > *"I looked at the deities though and I think the most mechanical
+    > portion is their domains. Eventually [I] want some kind of mapping
+    > from domain to [feat] prereq instead of them having deity specific.
+    > Don't build that now, just make sure it would be easy to add."*
+
+    Reading the 90 clauses turned that from a future refinement into a
+    requirement: **34 of them already name a domain** rather than a god. A
+    design comparing deity refs alone would have left a third of the family
+    opaque and then needed the domain test bolted on -- the outcome the
+    instruction was guarding against, reached from the other side.
+
+    So there are two atoms, and `deity.domains` -- already a JSON list on
+    all 134 rows -- answers the second with no new import.
+    """
+    import combat_engine.content  # noqa: F401 -- legal_feats filters on REGISTRY
+    from combat_engine.chargen import Character as _C
+    from combat_engine.chargen import domains_of, meets
+    from combat_engine.chargen.choices import legal_feats
+    from combat_engine.db import game
+
+    con = game()
+    gated = {r["ref"] for r in con.execute(
+        "SELECT ref FROM feat WHERE prereq LIKE '%\"deity\"%'"
+        " OR prereq LIKE '%deity_domain%'")}
+    out.that(len(gated) >= 150,
+             "the importer resolves the worship clauses into real atoms --"
+             " 194 feats carry one, where they were opaque `term` nodes that"
+             " `meets` answered False for every character",
+             f"{len(gated)} feats")
+    left = con.execute(
+        "SELECT COUNT(*) AS n FROM prereq_term WHERE kind='deity'").fetchone()["n"]
+    out.that(left <= 5,
+             "and almost none stay opaque: 90 deity terms before, a handful"
+             " after, the residue being printed spellings the deity table"
+             " does not carry -- which stay opaque ON PURPOSE rather than"
+             " resolving to a wrong ref",
+             f"{left} still opaque")
+
+    # -- the domain half, which is a third of the family ------------------
+    with_dom = [r["ref"] for r in con.execute(
+        "SELECT ref FROM deity WHERE domains IS NOT NULL AND domains != '[]'")]
+    #: **78, not "most", and the number is asserted rather than rounded.**
+    #: My first draft guessed `>= 100` and this went red at 78 -- which is
+    #: a fact about the data and not a threshold to lower.
+    #:
+    #: 56 of the 134 print no domains at all, spread across every
+    #: alignment, so they are not one source or one kind of god. What makes
+    #: that harmless rather than a gap: **all 34 domain words a
+    #: prerequisite names are carried by the 78**, with nothing missing. So
+    #: no printed prerequisite is unanswerable.
+    #:
+    #: The consequence, recorded because it is real: a character dealt one
+    #: of the 56 meets **no** domain prerequisite. `deal_deity` is uniform
+    #: over all 134 on purpose -- which god you follow is flavour, and
+    #: biasing the deal toward the domained ones would quietly make the
+    #: feats commoner than the books do.
+    out.that(len(with_dom) == 78,
+             "78 of the 134 deities carry domains, and every one of the 34"
+             " domain words a prerequisite names is among them -- which is"
+             " what made Camille's 'easy to add' free: no new import",
+             f"{len(with_dom)} of 134")
+    all_words = {w for d in with_dom for w in domains_of(d)}
+    wanted = set()
+    import re as _re_dom
+    for row in con.execute("SELECT prereq FROM feat WHERE prereq LIKE '%deity_domain%'"):
+        wanted |= set(_re_dom.findall(r'"deity_domain":\s*"([a-z]+)"', row["prereq"] or ""))
+    out.that(bool(wanted) and wanted <= all_words,
+             "no printed domain prerequisite names a word the deities do not"
+             " carry -- so the 56 without domains cost no feat its"
+             " answerability, they only narrow who can take it",
+             f"{len(wanted)} wanted, missing {sorted(wanted - all_words) or 'none'}")
+    probe = with_dom[0]
+    doms = domains_of(probe)
+    out.that(bool(doms),
+             "the control landed: the deity used below really does carry"
+             " domains, so the two assertions after it are not vacuous",
+             f"{len(doms)} domain(s)")
+    word = sorted(doms)[0]
+    out.that(meets({"deity_domain": word}, _C(cls="cleric", worships=probe), []),
+             "a character worshipping it meets a prerequisite naming one of"
+             " its domains",
+             f"domain={word!r}")
+    out.that(not meets({"deity_domain": word}, _C(cls="cleric"), []),
+             "and a character worshipping nobody meets none -- `domains_of`"
+             " answers empty rather than raising, which is the direction"
+             " every other atom in `meets` takes",
+             "no deity -> False")
+
+    # -- the deity half ---------------------------------------------------
+    out.that(meets({"deity": probe}, _C(cls="cleric", worships=probe), []),
+             "a prerequisite naming a specific god is met by worshipping"
+             " that god",
+             "ref match -> True")
+    other = next(d for d in with_dom if d != probe)
+    out.that(not meets({"deity": other}, _C(cls="cleric", worships=probe), []),
+             "and not by worshipping a different one, which is the whole"
+             " point of holding the ref rather than a flag",
+             "different ref -> False")
+
+    # -- and it reaches the feat pool, through the cache key --------------
+    #: The arm that catches the cache bug: `worships` is read by `meets`, so
+    #: it has to be in `_legal_feats`' key or the first caller's answer
+    #: freezes for the process.
+    bare = set(legal_feats("cleric", 11, race="r1"))
+    one = set(legal_feats("cleric", 11, race="r1", worships=probe))
+    two = set(legal_feats("cleric", 11, race="r1", worships=other))
+    out.that(one != bare,
+             "a character with a deity is offered feats one without cannot"
+             " take",
+             f"{len(one - bare)} more")
+    out.that(one != two,
+             "and two different deities give two different pools -- so"
+             " `worships` is really in the memoisation key",
+             f"{len(one)} vs {len(two)}")
+
+
 def a_skill_gated_feat_reads_a_pinned_characters_training(out: Result) -> None:
     """87 feats are gated on being trained in something. `#1113`.
 
@@ -66785,6 +66907,9 @@ DRIVERS = {
                    "adding to a roll already made, without rolling again"),
     "recharge_while": (recharge_while,
                        "a recharge condition that is a state, not a moment"),
+    "worship_gate": (a_worship_prerequisite_is_answered_by_ref_and_by_domain,
+                     "a worship prerequisite answered by deity ref and by"
+                     " domain, 34 of the 90 naming a domain (#454)"),
     "skill_gated_feat": (a_skill_gated_feat_reads_a_pinned_characters_training,
                          "a feat gated on training is answered off a pinned"
                          " character's own skills, and the key holds them"

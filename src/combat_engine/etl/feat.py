@@ -672,6 +672,27 @@ class _Index:
         # `r<ID>` convention: without the fallback all ~690 race
         # prerequisites file as opaque terms, and a missing dependency looks
         # exactly like a broken parser.
+        #: Printed deity name to its ref. `#454`.
+        #:
+        #: One ref rather than a list, unlike `features`: a deity's printed
+        #: name is unique across the 134 and a prerequisite naming one means
+        #: that one. Measured: 134 of 134 carry a localised name.
+        self.deities = {
+            name: refs[0]
+            for name, refs in _by_name(out, names, "SELECT ref FROM deity").items()
+        }
+        #: Every domain word printed on a deity, for the clauses that name a
+        #: domain instead of a god. **34 of the 90 do** -- Camille's
+        #: instinct on `#454` that *"the most mechanical portion is their
+        #: domains"*, and it is a third of the family today rather than a
+        #: later refinement. Measured: 34 distinct words on the deities, 34
+        #: named by a prerequisite, 34 of 34 matching.
+        self.domains = {
+            word
+            for (blob,) in out.execute(
+                "SELECT domains FROM deity WHERE domains IS NOT NULL")
+            for word in json.loads(blob or "[]")
+        }
         self.races = {
             name: refs[0]
             for name, refs in _by_name(out, names, "SELECT ref FROM race").items()
@@ -875,6 +896,35 @@ def _atom(clause: str, index: _Index) -> dict:
         # a two-word one -- there is no running prose here.
         if low in index.features:
             return _ref(index.features[low])
+
+    # **Worship, which is `#454` and is two atoms rather than one.**
+    #
+    # 34 of the 90 clauses name a *domain* -- "must worship a deity of the
+    # arcana domain" -- and 54 name a god. A design that only compared
+    # deity refs would leave a third of the family opaque and then need the
+    # domain test bolted on, which is what Camille's *"make sure it would
+    # be easy to add"* was guarding against.
+    #
+    # The domain is answerable off `deity.domains`, already a JSON list on
+    # every one of the 134 rows, so neither atom needs a new import.
+    #
+    # Tested near the bottom because "must worship X" cannot be mistaken
+    # for a class, a race or a level, and the god's name is matched against
+    # a printed table the same way `races` and `features` are above.
+    worship = re.fullmatch(r"(?:you\s+)?must\s+worship\s+(.+)", low)
+    if worship:
+        want = _flat(worship.group(1))
+        domain = re.fullmatch(r"a\s+deity\s+of\s+the\s+(\w+)\s+domain", want)
+        if domain and domain.group(1) in index.domains:
+            return {"deity_domain": domain.group(1)}
+        found = index.deities.get(want)
+        if found:
+            return {"deity": found}
+        # A name the deity table does not carry stays opaque rather than
+        # becoming a `deity` atom pointing at nothing. Two clauses are in
+        # this position -- `q192` and `q202` -- whose printed spelling
+        # differs from the row's, and a wrong ref would read as a met
+        # prerequisite rather than an unknown one.
 
     return {"term": low}
 

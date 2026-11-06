@@ -561,6 +561,7 @@ def legal_feats(
     race: str = "",
     taken: Sequence[str] = (),
     skills: Sequence[str] = (),
+    worships: str = "",
 ) -> list[str]:
     """The feats this character could actually take.
 
@@ -626,8 +627,13 @@ def legal_feats(
     #:
     #: Sorted, so two callers naming the same skills in different orders
     #: share a key rather than splitting it.
+    #: `worships` is in the key for the same reason `skills` is: `meets`
+    #: reads it, and a reader consulting something absent from the key
+    #: freezes the first caller's answer for the process. 194 feats carry a
+    #: worship prerequisite. `#454`.
     return list(_legal_feats(cls, level, (build or _build_of(cls)).name,
-                             race, tuple(taken), tuple(sorted(skills))))
+                             race, tuple(taken), tuple(sorted(skills)),
+                             worships))
 
 
 def _build_of(cls: str):  # noqa: ANN202
@@ -639,7 +645,7 @@ def _build_of(cls: str):  # noqa: ANN202
 @lru_cache(maxsize=8192)
 def _legal_feats(
     cls: str, level: int, leg_name: str, race: str, taken: tuple[str, ...],
-    skills: tuple[str, ...] = (),
+    skills: tuple[str, ...] = (), worships: str = "",
 ) -> tuple[str, ...]:
     """The cached body of `legal_feats`. See its docstring for the key.
 
@@ -664,7 +670,7 @@ def _legal_feats(
     second_block = re.compile(r"f\d+[a-z]+").fullmatch
     gates = feat_gates()
     who = Character(cls=cls, level=level, build=leg_name, race=race,
-                    skills=skills)
+                    skills=skills, worships=worships)
     held = list(taken)
     return tuple(
         ref
