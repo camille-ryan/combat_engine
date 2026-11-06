@@ -884,7 +884,6 @@ def f2600(c: Cast) -> None:
 
 @power("f2617", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=("chargen.race_choice()",),
        trigger="you drop to 0 hit points or fewer",
        on=Trigger(Dropped, _i_dropped, "you drop"))
 def f2617(c: Cast) -> None:
@@ -894,8 +893,24 @@ def f2617(c: Cast) -> None:
 
     "Once per day" is this row's own `ENCOUNTER` budget -- see #72 --
     and a card that prints a limit is what lets a triggered row carry
-    one. The aspect of nature is still a race choice nothing records,
-    and it is dropped rather than marked because the other half plays.
+    one.
+
+    **The marker is gone and its premise was false.** It said *"the aspect
+    of nature is still a race choice nothing records"*. The choice **is**
+    recorded: `RACES["r44"].one_of` holds all three powers and
+    `RaceLine.granted(pick)` deals exactly **one** of them into the
+    character's rows, so which aspect was chosen is readable as the row
+    the character holds -- which is how `f602` reads its own
+    manifestation, unmarked.
+
+    And this body never needed to know. It restores any **spent** row in
+    the family; the two the character does not hold can never be spent, so
+    the loop is correct whichever aspect was dealt. The marker was pure
+    residue: `dropped=` on a row with nothing dropped.
+
+    Found by its premise rather than its name -- name-matching the six
+    rows carrying this symbol returns six, and asking which commit
+    falsified each note returns four. #1112.
     """
     spent = set(c.expended())
     for ref in R44:
