@@ -788,7 +788,7 @@ def f1947(c: Cast) -> None:
 
 
 @power("f1945", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
+       reach=PERSONAL, target=SELF, todo=("chargen.RaceLine.powers(borrowed=)",))
 def f1945(c: Cast) -> None:
     """Marks whatever a racial trait's chosen power hits.
 

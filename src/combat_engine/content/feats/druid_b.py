@@ -466,9 +466,22 @@ def f2033(c: Cast) -> None:
 
 
 @power("f2880", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
+       reach=PERSONAL, target=SELF, todo=("chargen.RaceLine.granted(second=)",))
 def f2880(c: Cast) -> None:
     """Gives a racial trait's chosen power the printed keyword this
     package gates on. `forms.beast_row` reads that keyword off the row's
     `requires=`, so it could be granted -- but nothing records which
-    power the trait was pointed at, the same gap f604 named."""
+    power the trait was pointed at, the same gap f604 named.
+
+    **The premise in the sentence above is doubtful and wants a card read
+    before this is written.** `general_f.f602` -- written, unmarked -- reads
+    exactly which manifestation a character holds, off its own rows via
+    `_holds`, and `RaceLine.granted(pick)` deals exactly one. So *which
+    power the trait was pointed at* is already recorded. If that is all this
+    row needed, it is writable today and the marker is residue.
+
+    Kept marked rather than un-marked because the clause has not been read
+    against its printed card, and this row's own note says its gap is *"the
+    same gap f604 named"* -- and f604's real gap is a **second**
+    manifestation, which is what the marker now points at. Those two
+    readings cannot both be right. #1029, #1112."""

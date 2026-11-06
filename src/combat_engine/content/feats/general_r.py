@@ -732,7 +732,7 @@ def f3567(c: Cast) -> None:
 
 
 @power("f3568", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
+       reach=PERSONAL, target=SELF, todo=("chargen.Character.race2",))
 def f3568(c: Cast) -> None:
     """A second race's power, chosen at build time, and then a shared
     once-an-encounter budget with `p8278`.

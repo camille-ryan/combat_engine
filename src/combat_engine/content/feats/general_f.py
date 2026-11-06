@@ -505,7 +505,7 @@ def f602(c: Cast) -> None:
 
 
 @power("f604", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
+       reach=PERSONAL, target=SELF, todo=("chargen.RaceLine.granted(second=)",))
 def f604(c: Cast) -> None:
     """Learns a second elemental manifestation and lets a rest switch
     between them. The manifestation is a racial choice, and there is no

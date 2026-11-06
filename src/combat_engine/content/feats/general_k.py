@@ -686,7 +686,7 @@ def f1836(c: Cast) -> None:
 
 @power("f1848", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=("chargen.race_choice()",),
+       dropped=("chargen.RaceLine.granted(second=)",),
        trigger="you use a r33 racial power",
        on=Trigger(PowerUsed, _used_any(*R33), "you use a r33 racial power"))
 def f1848(c: Cast) -> None:
