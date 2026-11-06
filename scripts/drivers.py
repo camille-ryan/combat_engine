@@ -38741,6 +38741,202 @@ def _in_combat_board(
     return world, encounter
 
 
+def every_event_field_can_reach_the_page(out: Result) -> None:
+    """`Event.wire()` is `asdict`, so an unserialisable field blanks the log
+    panel and nothing else sees it. `#1120`.
+
+    **The symptom is an empty page, not an error anybody reads.** `#1103`
+    added `PowerUsed.area` as a `frozenset`; `json.dumps` raised inside an
+    SSE generator in `api/app.py`, the stream died after nine events, and
+    `audit`, `verdicts`, `drivers` and `replay` were all **green** -- none
+    of them serialises an event. Only the two instruments that start a
+    server caught it, and the failure was far from the cause.
+
+    So this is a gate at the declaration, which is where a reader can act,
+    and it is in two halves because neither alone is enough:
+
+    * the **walk** judges every field's resolved annotation. It catches the
+      latent case -- a `set`, a `Path`, a `datetime`, a dataclass that is
+      not an `Event` -- before any fight runs it.
+    * the **live pass** serialises every event a real fight logged. It
+      catches what the walk cannot judge at all: a field annotated `Any`,
+      whose value is only *sometimes* safe.
+
+    `wire()` is the **save format**, so coercion was the wrong answer and
+    `#1120` says why: sets to sorted lists and paths to strings would
+    silently change what is written to disk, and a 49-square area in every
+    area event is real bloat. Dropping the field (`repr=False`) was right
+    for `area`; a serialisable type is right for a field worth keeping.
+
+    **The walk found a live second instance on its first run.**
+    `SavingThrow.keywords` was a `frozenset[Keyword]` with `repr=True`, and
+    two sites populate it -- so any save carrying keywords blanked the
+    panel, and no fixture happened to roll one. It is
+    `tuple[Keyword, ...]` now, **sorted**, which is the shape
+    `DamageRolled.dtypes` already uses. Sorted because `Keyword` is a
+    `StrEnum` and a set of them iterates in per-process hash order:
+    `replay.py`'s `_FROZEN` normaliser exists precisely because that made
+    the regression net flaky, and building a tuple from an unsorted set
+    would have moved the flake rather than removed it.
+    """
+    import dataclasses
+    import json
+    import types as _types
+    import typing
+
+    from combat_engine.engine import events as E
+
+    #: Fields whose annotation cannot be judged, each one a real `Any`.
+    #: **A named list that may shrink and never grow**, which is this
+    #: repo's shape for `keywords.json` and `leaks.DEFERRED` -- an
+    #: unjudgeable annotation is not a waiver from the question, it is a
+    #: field the LIVE half below has to answer instead.
+    UNJUDGEABLE = {
+        ("PowerUsed", "trigger"),
+        ("PowerResolved", "trigger"),
+        ("PowerResolved", "rolls"),
+        ("WeaponLoaded", "cost"),
+    }
+
+    def safe(t: object) -> bool:
+        """Would `json.dumps` accept every value of this resolved type?
+
+        Atoms are the four JSON scalars and `None`; a `str` or `int`
+        subclass is in because every enum in `types.py` is a `StrEnum`, so
+        its members ARE strings. A `list`, `tuple` or `str`-keyed `dict` of
+        safe things is safe. **A `set` or `frozenset` is not**, which is
+        the whole of both bugs, and anything else is refused rather than
+        assumed.
+        """
+        if t in (int, float, str, bool, type(None)):
+            return True
+        origin = typing.get_origin(t)
+        if origin is None:
+            return isinstance(t, type) and issubclass(t, (str, int))
+        args = [a for a in typing.get_args(t) if a is not Ellipsis]
+        if origin in (list, tuple):
+            return all(safe(a) for a in args)
+        if origin is dict:
+            return bool(args) and safe(args[0]) and all(safe(a) for a in args[1:])
+        if origin is typing.Union or origin is _types.UnionType:
+            return all(safe(a) for a in args)
+        return False
+
+    subs: list[type] = []
+
+    def walk(cls: type) -> None:
+        for sub in cls.__subclasses__():
+            subs.append(sub)
+            walk(sub)
+
+    walk(E.Event)
+    out.that(len(subs) >= 70,
+             "the setup landed: every `Event` subclass is reachable through"
+             " `__subclasses__`, so the walk below is over the whole"
+             " hierarchy rather than a handful",
+             f"{len(subs)} subclasses")
+
+    bad: list[str] = []
+    judged = unjudged = 0
+    for cls in subs:
+        hints = typing.get_type_hints(cls)
+        for f in dataclasses.fields(cls):
+            if not f.repr:
+                continue          # dropped by `wire()`, so it cannot reach
+            key = (cls.__name__, f.name)
+            if key in UNJUDGEABLE:
+                unjudged += 1
+                continue
+            judged += 1
+            if not safe(hints.get(f.name)):
+                bad.append(f"{cls.__name__}.{f.name}: {hints.get(f.name)}")
+    out.that(judged > 400,
+             "and it judged the whole field surface, not a sample -- a walk"
+             " that judged six fields would pass for the wrong reason",
+             f"{judged} judged, {unjudged} unjudgeable")
+    out.that(not bad,
+             "every `repr=True` field on every event is a type `json.dumps`"
+             " accepts. A `set`, a `frozenset`, a `Path` or a `datetime`"
+             " here blanks the log panel, and only the two instruments that"
+             " start a server would say so",
+             f"{bad or 'all clean'}")
+
+    # **The detector is tested on known inputs before it is trusted.** A
+    # `safe` that answered True for everything would make the assertion
+    # above vacuous, and that is the failure mode a plant on the subject
+    # cannot see.
+    SAMPLES = (
+        (int, True), (str, True), (bool, True), (type(None), True),
+        (E.Event.__subclasses__()[0] if E.Event.__subclasses__() else int, False),
+        (tuple[int, int], True),
+        (list[int], True),
+        (frozenset[int], False),
+        (set[str], False),
+        (frozenset[tuple[int, int]], False),
+        (typing.Any, False),
+        # **These two are here because their absence hid a bug in `safe`
+        # itself.** The first draft compared `get_origin`'s answer against
+        # the STRING "types.UnionType", which never matches, so every
+        # `int | None` field read as unsafe -- five of them -- and the
+        # self-test above passed because it held no union at all. A judge's
+        # samples have to cover the shapes the tree actually uses.
+        (int | None, True),
+        (str | None, True),
+        (list[int] | None, True),
+        (frozenset[int] | None, False),
+    )
+    for t, want in SAMPLES:
+        out.that(safe(t) is want,
+                 "the judge answers a known type correctly before being"
+                 " trusted on the tree -- the frozenset cases are the two"
+                 " real bugs and the `Any` case is why the live pass below"
+                 " exists",
+                 f"safe({t}) = {safe(t)}, wanted {want}")
+
+    # -- the live half: serialise what a real fight actually logged -------
+    world, me, foe = _board("mba", 3)
+    enc = world.encounter if hasattr(world, "encounter") else None
+    _ = enc
+    from combat_engine.engine.types import Keyword
+
+    # A save carrying keywords is the case that had no fixture, so it is
+    # posed by hand rather than hoped for.
+    world.bus.emit(E.SavingThrow(actor=me, against="e1", natural=7, bonus=2,
+                                 saved=False,
+                                 keywords=tuple(sorted({Keyword.POISON,
+                                                        Keyword.FIRE}))))
+    logged = list(world.bus.log)
+    out.that(len(logged) > 20,
+             "the board logged a real stream to serialise -- an empty log"
+             " would make the pass below vacuous",
+             f"{len(logged)} events, {len({type(e).__name__ for e in logged})} kinds")
+
+    raised: list[str] = []
+    for ev in logged:
+        try:
+            json.dumps(ev.wire())
+        except (TypeError, ValueError) as exc:
+            raised.append(f"{type(ev).__name__}: {exc}")
+    out.that(not raised,
+             "and every one of them survives `json.dumps(ev.wire())`, which"
+             " is the exact call the SSE stream makes. This is the half the"
+             " walk cannot do: a field annotated `Any` is judged by its"
+             " value or not at all",
+             f"{raised[:3] or 'all serialise'}")
+
+    saves = [e for e in logged if isinstance(e, E.SavingThrow)]
+    out.that(saves and all(isinstance(e.keywords, tuple) for e in saves),
+             "including a saving throw CARRYING keywords, which is the"
+             " second live instance and the one no fixture rolled -- posed"
+             " by hand for exactly that reason",
+             f"{[e.keywords for e in saves][:2]}")
+    out.that(saves and list(saves[-1].keywords) == sorted(saves[-1].keywords),
+             "and its keywords are SORTED, not in set order: a `StrEnum`"
+             " set iterates by salted hash, so an unsorted tuple would have"
+             " moved `replay`'s flake rather than removed it",
+             f"{saves[-1].keywords if saves else '-'}")
+
+
 def holding_your_breath_costs_a_surge_in_a_round_you_are_hurt(
     out: Result,
 ) -> None:
@@ -58237,7 +58433,12 @@ def a_burst_is_never_aimed_where_a_downed_ally_stands(out: Result) -> None:
     out.that(
         not _hits_a_downed_ally(world, enc, me, burst(ATTACK)),
         "a burst catching a **standing** ally is still offered -- that is a "
-        "trade a controller may take and `allies_caught` prices it at -7.0. "
+        "trade a controller may take, and `hp_swing` is what prices it: the "
+        "ally's lost hit points net against the enemies' in ONE currency. "
+        "(This message used to say `allies_caught` prices it at -7.0, which "
+        "`81e89b30` retired into `hp_swing` -- dead prose naming a term "
+        "that cannot fire, and `drivers.weights_named` scans only "
+        "`policy/` so it structurally could not see this file. #1110.) "
         "Refusing it would be a different and much larger change",
         "offered",
     )
@@ -63858,6 +64059,11 @@ DRIVERS = {
         "DMG2's in-combat challenge: a combat scene that also rolls, on the"
         " fight's own board -- priced OUT of the budget, capped at"
         " complexity 2, and every check paying a named action (#922)",
+    ),
+    "event_wire": (
+        every_event_field_can_reach_the_page,
+        "every event field `wire()` keeps is a type `json.dumps` accepts,"
+        " checked at the declaration AND over a real fight's log (#1120)",
     ),
     "suffocation": (
         holding_your_breath_costs_a_surge_in_a_round_you_are_hurt,

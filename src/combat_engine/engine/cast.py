@@ -1671,7 +1671,7 @@ class Cast:
                     actor=who, against=against or self.ref, natural=natural,
                     bonus=plus, saved=natural + plus >= 10,
                     when_=when_, granted_via=self.ref,
-                    keywords=frozenset(words),
+                    keywords=tuple(sorted(set(words))),
                 )
             )
             return ev.saved

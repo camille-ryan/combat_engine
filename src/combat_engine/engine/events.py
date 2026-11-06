@@ -1670,7 +1670,23 @@ class SavingThrow(Decision):
     #: `f1941` *triggers* on the throw rather than modifying it -- "when you
     #: save against a poison effect" -- and `against=str(eff)` is a display
     #: string with nothing to match on.
-    keywords: frozenset[Keyword] = frozenset()
+    #: **A sorted tuple and not a `frozenset`, which is `#1120`.** A
+    #: `frozenset` is not JSON-serialisable, `wire()` is `asdict`, and the
+    #: symptom is an empty log panel rather than an error anybody reads --
+    #: the whole of `#1103`'s failure, arriving a second time on a field
+    #: nobody had looked at. Two sites populate this one.
+    #:
+    #: **Sorted, because the order is otherwise salted.** `Keyword` is a
+    #: `StrEnum`, so a set of them iterates in per-process hash order --
+    #: `replay.py` carries a `_FROZEN` normaliser built precisely because
+    #: that made the regression net flaky. Building the tuple from an
+    #: unsorted set would move the flake rather than remove it.
+    #:
+    #: `tuple[Keyword, ...]` is the shape `DamageRolled.dtypes` already
+    #: uses for the same reason, so this is the house pattern rather than a
+    #: new one. Every reader tests membership (`Keyword.POISON in
+    #: ev.keywords`), which a tuple answers.
+    keywords: tuple[Keyword, ...] = ()
 
 
 @dataclass

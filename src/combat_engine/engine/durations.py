@@ -1225,7 +1225,7 @@ class Effects:
                 # it, and a `when=` gate is no use to a watcher.
                 when_=when_,
                 granted_via=granted_via,
-                keywords=frozenset(ctx["keywords"]),
+                keywords=tuple(sorted(set(ctx["keywords"]))),
             )
         )
         # Refusing it is not the same as failing it. A cancelled save never
