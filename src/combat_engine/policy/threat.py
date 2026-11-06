@@ -442,9 +442,24 @@ def row_damage(world: Any, eid: int, ref: str) -> float:
 #: **The number collapses six meanings into one float and no caller can tell
 #: them apart.** `unarmed` already draws exactly this distinction one level
 #: up -- its own note says *"both come back as 0.0 and only one of them is a
-#: bug"* -- and `#326` measured the cost of not drawing it for a row: over
-#: the 72 corpus rows with no `attack=` header that roll one in the body, 49
-#: probe 0.0, of which **7 are correctly zero and 42 are unknown**.
+#: bug"* -- and `#326` measured the cost of not drawing it for a row.
+#:
+#: **Re-measured 2026-11-05, because the numbers that were here came from
+#: the pass this file replaced.** They said *"72 corpus rows ... 49 probe
+#: 0.0, of which 7 are correctly zero and 42 are unknown"*, which was the
+#: state before these six words existed. Counting the family by **AST**
+#: rather than by substring -- the fault `#1093` records, worth 17 rows
+#: here -- and asking `row_verdict` for each:
+#:
+#:     85  in the family: no `attack=` header, the body rolls one
+#:     55  probe 0.0
+#:          30 scored      24 deals no damage
+#:          19 armed later 12 needs a trigger
+#:
+#: So **24 is the figure `#314` wants** -- the rows that really deal
+#: nothing and that `is_power` overpays -- not 55, and not the 42
+#: "unknown" this comment used to report. The three other groups want
+#: different treatment rather than one constant.
 #:
 #: Six words rather than a bool, because the six want different work:
 #:
@@ -454,8 +469,13 @@ def row_damage(world: Any, eid: int, ref: str) -> float:
 #: * `NEEDS_TRIGGER` -- the row declares `on=`, so it only runs when its
 #:   printed trigger fires. Standing still is the wrong question to ask it;
 #: * `ARMED_LATER` -- the body subscribed a closure and the event never
-#:   arrived. `#326` measured this as the **majority** cause, 26 of 49, and
-#:   it is documented nowhere else. `p916`'s own docstring names the
+#:   arrived. This said `#326` measured it as the **majority** cause, 26 of
+#:   49. It is **19 of 55, 35%**, and `NO_DAMAGE` is larger at 24 -- which
+#:   agrees with `#326`'s own later comment (*"the body RAN and acted, but
+#:   emitted no damage event ... the dominant cause is not that the body
+#:   fails to run"*) and disagrees with its earlier one. Two comments there
+#:   contradict each other and the later is right. Documented nowhere
+#:   else, which is still true. `p916`'s own docstring names the
 #:   mechanism: *"the attack is rolled by hand rather than with
 #:   `c.strike()` because it happens outside the cast"*;
 #: * `UNEVALUABLE` -- the probe raised. `#326` first reported this firing
