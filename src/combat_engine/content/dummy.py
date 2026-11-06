@@ -149,10 +149,13 @@ def spawn(
     ## The three knobs, and why these three
 
     A dummy with no state answers "does this row work against a plain
-    creature". Most of what `audit.py` cannot ask is not that. `KNOWN_SILENT`
-    is **231** hand-written excuses, and a read of a random 20 found **19
-    blaming the harness** rather than the row. Classified by the state the
-    harness would have to produce:
+    creature". Most of what `audit.py` cannot ask is not that.
+
+    **The census below is the measurement that chose these three knobs, and
+    it is historical rather than live.** `KNOWN_SILENT` held **231**
+    excuses when it was taken, and a read of a random 20 found 19 blaming
+    the harness rather than the row. Classified by the state the harness
+    would have to produce:
 
         63  grabbed                 <- `grabbed_by=`
         37  a condition applied     <- `conditions=`
@@ -161,9 +164,23 @@ def spawn(
          7  a sibling's effect   7  prone   5  dying or dead
          3  a form        2  bloodied      73  unclassified
 
-    So these are the top three by a wide margin and `grabbed_by` alone is
-    27% of the file. **Creature type was the knob asked for first and is a
-    tenth of the problem** -- worth having, and not where to start. #437, #286.
+    So these were the top three by a wide margin and `grabbed_by` alone was
+    27% of the file. **Creature type was the knob asked for first and was a
+    tenth of the problem** -- worth having, and not where to start. #437,
+    #286.
+
+    **Live is 190, and the 41 that went are these knobs working** -- an
+    excuse covered by a knob is deleted rather than kept, which is the only
+    direction that list is allowed to move. `#1124`'s thread twice asked
+    that the 231 stop being quoted as current; it is dated here instead of
+    deleted, because the *reason* these three exist is not reconstructible
+    from the list that remains.
+
+    Do **not** re-derive the breakdown by keyword. Tried, 2026-11-06: it
+    answers 13 grabbed against the 63 above and leaves 136 of 190
+    unclassified, because an excuse describing a grab rarely contains the
+    word and the ones that did are gone. The original was read by hand and
+    a weaker method must not overwrite it with numbers that look live.
 
     `types=` needs no schema change, which is the pleasant surprise:
     `query.kinds_of` reads a creature's type words off its stat block *and*
