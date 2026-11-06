@@ -213,6 +213,24 @@ class Zone:
     #: after the row runs, not before: a row refused mid-body must not
     #: consume the feature.
     power_uses: int = 0
+    #: Whether the last use of a limited feature has been spent. `#1126`.
+    #:
+    #: **A flag and not a sentinel in `power_uses`, which is the whole
+    #: point.** That field means two things already -- a count, and 0 for
+    #: *no limit* -- so a single-use feature decremented to 0 and read as
+    #: unlimited: the spend turned a once-only feature into an at-will one.
+    #: Encoding "spent" as a negative `power_uses` would fix the symptom
+    #: and leave one int carrying three meanings, which is the failure
+    #: `CLAUDE.md` records as having made twelve rows report ready when a
+    #: third of the work had landed.
+    #:
+    #: So `power_uses` keeps counting, this says whether the count ran out,
+    #: and the ETL column, `story.module.Feature.uses` and every content
+    #: docstring citing the 0-is-no-limit convention stay true unchanged.
+    #:
+    #: Set by `perform`, like the decrement, and for the same reason: a row
+    #: that refuses inside its own body must not spend the feature.
+    power_spent: bool = False
     #: How far from these squares a creature may stand and still use
     #: `power`. 1 is adjacent, which is what 20 of the 24 printed rows say.
     #:

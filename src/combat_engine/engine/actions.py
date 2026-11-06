@@ -1584,8 +1584,14 @@ def _terrain(world: World, encounter: Encounter, actor: int) -> list[Action]:
     row out of the menu, and it applies every prohibition about the *user*
     -- a creature barred from fire powers may not tip a brazier over. What
     it does not check is the feature's own limit, which is
-    `Zone.power_uses` and is checked here: a spent single-use feature is
-    not offered, and `perform` is what decrements it.
+    `Zone.power_spent` and is checked here: a spent single-use feature is
+    not offered, and `perform` is what spends it.
+
+    **This read `power_uses < 0` and so checked nothing.** `#1126`: a
+    single-use feature decrements to 0, 0 is the value that means *no
+    limit*, and nothing writes a negative -- so the gate passed a spent
+    feature for ever and the sentence above was false for as long as it
+    had been written down.
 
     No `targets`: the row's own header carries its range and target line,
     so the attack is aimed by `dsl.use` the way every other row's is. The
@@ -1604,7 +1610,7 @@ def _terrain(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # around it. Compared against the zone's squares rather than walked per
     # square of the region, because a region is much the larger of the two.
     for _eid, zone in world.each(Zone):
-        if not zone.power or not zone.squares or zone.power_uses < 0:
+        if not zone.power or not zone.squares or zone.power_spent:
             continue
         reach = max(1, zone.power_reach)
         near = {here.square} | set(spread({here.square}, reach))
@@ -2639,7 +2645,7 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # refuses here rather than being trusted.
         holder = next(
             (z for _e, z in world.each(_TZone)
-             if z.power == action.ref and z.power_uses >= 0),
+             if z.power == action.ref and not z.power_spent),
             None,
         )
         if holder is None:
@@ -2652,8 +2658,15 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # must not consume a single-use feature, and this is the printed
         # reading: the card spends the terrain on the attack, not on the
         # attempt. `power_uses` of 0 is no limit and stays 0.
+        #
+        # **And the flag is what records the limit running out.** `#1126`:
+        # decrementing 1 to 0 wrote the value that means *unlimited*, so one
+        # use of a `Single-Use Terrain` feature made it at-will. The count
+        # still counts; `power_spent` is what the gate reads.
         if ran and holder.power_uses > 0:
             holder.power_uses -= 1
+            if holder.power_uses == 0:
+                holder.power_spent = True
         return ran
 
     if action.kind == "sustain":

@@ -433,7 +433,22 @@ def option_dto(session: Session, index: int, action: Action) -> dto.OptionDTO:
 
     affected: list = []
     if p is not None and p.reach.kind in ("close_burst", "close_blast", "area_burst"):
-        affected = sorted(area_of(world, actor, p, action.origin))
+        # **`source` as well as `origin`, or the page draws the wrong
+        # squares.** `#1129`. `origin` is where a power is *aimed* and
+        # `source` is where it comes *out of*; for a terrain power those
+        # differ, and `area_of` builds the shape from `source`. Without it
+        # the page fanned a blast out of the character while the engine
+        # resolved it out of the feature on the floor -- the player saw the
+        # attack in one place and the damage land in another.
+        #
+        # `action.source` is empty for every ordinary power, and empty
+        # means the actor, so this is a no-op on all of them. `#1127`
+        # threaded the field; this is the one render site that has an
+        # `Action` in scope to read it from.
+        affected = sorted(
+            area_of(world, actor, p, action.origin,
+                    source=action.source or None)
+        )
 
     return dto.OptionDTO(
         index=index,

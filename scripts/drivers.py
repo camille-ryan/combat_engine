@@ -17202,6 +17202,7 @@ def a_terrain_power_is_offered_to_whoever_stands_by_it(out: Result) -> None:
     from combat_engine.engine import movement as M
     from combat_engine.engine.actions import Action
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget as _BUDGET
     from combat_engine.engine.components import Position
     from combat_engine.engine.components import Powers as _POWERS
     from combat_engine.engine.durations import When
@@ -17385,9 +17386,57 @@ def a_terrain_power_is_offered_to_whoever_stands_by_it(out: Result) -> None:
              " the FEATURE's, so `Powers.used` is the wrong grain: it would"
              " let a second character shove the same boulder",
              f"ran={ran} uses_left={left}")
-    out.that(len(offered(world, me)) == 0,
-             "and a spent feature is no longer offered at all",
-             f"offers={len(offered(world, me))}")
+
+    #: **The budget has to be put back before the question is asked, and
+    #: this assertion was green without doing it.** `#1126`.
+    #:
+    #: `_terrain` checks `encounter.can_spend` (`actions.py:1616`), and
+    #: `perform` has just spent the standard action -- so NOTHING is offered
+    #: on the turn a feature is used, whatever its limit says. The old form
+    #: of this assertion read `offers == 0` straight after `perform` and
+    #: passed on the **action budget**, while the use limit it names was
+    #: broken underneath it: `power_uses` decremented 1 to 0, and 0 is the
+    #: value meaning *no limit*.
+    #:
+    #: So this rule was pinning the bug green -- the shape
+    #: `content/CLAUDE.md` records as a driver assertion asserting the
+    #: defect. A fresh `Budget` is the only control that isolates the limit,
+    #: because it is the one thing that differs from a new turn.
+    #:
+    #: Running turns forward does **not** work as the control and was tried:
+    #: the region is laid `until=When.ENCOUNTER` and the budget is restored
+    #: by the turn machinery, but so is everything else, so a failure could
+    #: not be attributed to the limit.
+    world.add(me, _BUDGET())
+    out.that(world.encounter.can_spend(me, ActionType.STANDARD),
+             "the control landed: with a fresh `Budget` the creature can"
+             " spend a standard action again, so what is offered next is"
+             " decided by the feature's own limit and nothing else",
+             f"can_spend={world.encounter.can_spend(me, ActionType.STANDARD)}")
+    spent_now = offered(world, me)
+    out.that(len(spent_now) == 0,
+             "and a spent `Single-Use` feature is no longer offered -- asked"
+             " with the budget restored, so this is the FEATURE's limit and"
+             " not the action economy answering for it (#1126)",
+             f"offers={len(spent_now)}"
+             f" power_spent={[z.power_spent for _e, z in world.each(Zone) if z.power]}")
+
+    #: And the other half of the convention: `At-Will Terrain` is 0 uses and
+    #: 0 means no limit, so a used at-will feature IS offered again. Here
+    #: because `#1126`'s fix turns "the count ran out" into a flag, and a
+    #: flag set too eagerly would silently cap the 9 at-will rows at one use
+    #: -- a regression in the opposite direction with no other assertion
+    #: looking for it.
+    atwill, who, _ = laid((0, 0), uses=0, run=False)
+    opening = offered(atwill, who)
+    A.perform(atwill, atwill.encounter, who, opening[0]) if opening else None
+    atwill.add(who, _BUDGET())
+    again = offered(atwill, who)
+    out.that(len(opening) == 1 and len(again) == 1,
+             "an `At-Will Terrain` feature -- 0 uses, meaning no limit -- is"
+             " still offered after being used, asked with the same fresh"
+             " budget. 9 of the 24 print that heading",
+             f"before={len(opening)} after={len(again)}")
 
     # 5. The row's own clauses, with a control that says the row ran.
     world, me, here = laid((0, 0))
@@ -39074,6 +39123,64 @@ def a_terrain_power_comes_out_of_the_feature_not_its_user(out: Result) -> None:
              " actor's squares whatever origin it was handed",
              f"{len(area)} squares from the feature, {len(from_user)} from"
              f" the user, overlap {len(area & from_user)}")
+
+    #: -- and the PAGE highlights the squares the engine resolves (#1129) --
+    #:
+    #: **A `wire` assertion inside an `engine` rule, deliberately.** The
+    #: pose above is the only place in the suite that stands a creature by a
+    #: feature with the granted copy stripped, and re-deriving it for one
+    #: assertion would duplicate the three controls that make it honest.
+    #: The issues stay separate; the board does not.
+    #:
+    #: `render.option_dto` highlights `area_of(..., action.origin)` and
+    #: passed no `source`, so the page fanned the blast out of the
+    #: character while the engine resolved it out of the thing on the
+    #: floor: the player saw the attack in one place and the damage land in
+    #: another. Nothing was wrong with the resolution, which is why no
+    #: engine assertion could see it.
+    #:
+    #: Asserted as "the page agrees with the engine" rather than against a
+    #: square count, because a count would pass the moment the two areas
+    #: were the same SIZE in different places -- which is exactly what the
+    #: bug produced: 25 squares either way for a close burst 2, centred two
+    #: squares apart, and 9 either way for a blast with 3 in common.
+    #: **Through `option_dto`, not through `area_of`.** The first draft of
+    #: these two assertions called `render.area_of(..., source=...)`
+    #: directly -- which is `dsl.area_of` under another name, so it tested
+    #: the engine helper that `#1127` already proved and would have stayed
+    #: **green with the render fix reverted**. `content/CLAUDE.md`'s rule:
+    #: assert through the caller, or the rule survives the fix coming out.
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from combat_engine.api import render as _render
+    from combat_engine.api.wire import Wire as _Wire
+    from combat_engine.policy.doctrine import DoctrinePolicy as _Doctrine
+
+    #: Only the three attributes `option_dto` reads. A real `Session` wants
+    #: a policy, a seed and a started encounter of its own, none of which
+    #: this question touches, and building one would re-field the board the
+    #: pose above just arranged.
+    sess = SimpleNamespace(world=w, wire=_Wire(show_names=False), current=who,
+                           encounter=w.encounter, policy=_Doctrine())
+    drawn = sorted(_render.option_dto(sess, 0, got[0]).affected)
+    engine_sees = sorted(D.area_of(w, who, p, got[0].origin, 0, 0,
+                                   got[0].source))
+    stripped = sorted(
+        _render.option_dto(sess, 0, replace(got[0], source=frozenset())).affected
+    )
+    out.that(bool(drawn) and drawn == engine_sees,
+             "the PAGE highlights exactly the squares the engine resolves"
+             " -- read off `render.option_dto(...).affected`, so reverting"
+             " the render fix reddens this (#1129)",
+             f"page={len(drawn)} engine={len(engine_sees)}"
+             f" identical={drawn == engine_sees}")
+    out.that(bool(stripped) and drawn != stripped,
+             "and the same offer with its `source` stripped draws a"
+             " DIFFERENT area, which is what the page did before: the"
+             " user's own square at the centre instead of the feature's",
+             f"sourced={len(drawn)} stripped={len(stripped)}"
+             f" overlap={len(set(drawn) & set(stripped))}")
     out.that(area and near_feature <= 1,
              "and it sits against the feature -- the feature is three"
              " squares from the caster here, so a shape this close to it"
