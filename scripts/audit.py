@@ -810,14 +810,27 @@ KNOWN_SILENT = {
     #: attack to *hit* the caster, and it now fires on **2 of 8** seeds
     #: where it used to fire more often, with the strike missing on both.
     #:
-    #: **What I could not verify** is why the loaded die faces do not carry
-    #: one of those two firings to a hit; `_attempts` varies three faces
-    #: per seed, so a high face should land it. That is the part worth
-    #: fixing and it is filed, because it is about the harness's reach into
-    #: triggered rows rather than about this card.
-    "p5910": "an interrupt needing a melee hit ON the caster; the draw it"
-             " now gets fires the trigger on 2 of 8 seeds and the strike"
-             " missed both times -- body proven correct by hand",
+    #: **And it is this row rather than its family**, which I filed as
+    #: `#1133` and then refuted. Measured over every row declared as an
+    #: immediate interrupt or reaction whose trigger names a melee attack:
+    #:
+    #:     327 such rows        272 of 315 fire and do something   (86%)
+    #:                           15 silent, 1 of them this one
+    #:
+    #: So the harness reaches that family perfectly well. `Rng.loaded` is
+    #: **sticky** rather than one-shot -- every d20 returns the forced face
+    #: while it is set -- so the row's own attack is loaded exactly as the
+    #: provoking one is, which was the mechanism I had suspected and it
+    #: does not hold.
+    #:
+    #: What remains unexplained is narrow and specific to this board: why
+    #: the trigger fires on only 2 of 48 attempts here when 272 sibling
+    #: rows manage it. Not a family gap, and not worth an issue -- the row
+    #: is proven correct by hand and the draw that reaches it changed.
+    "p5910": "an interrupt needing a melee hit ON the caster; this draw"
+             " fires the trigger on 2 of 48 attempts and the strike missed"
+             " both times. Body proven correct by hand; its family is 86%"
+             " firing, so this is the row's board and not the harness",
     "m1531a2": "heals allies in a burst; the board's one ally is at full health",
     "m6343a3": "commands a minion plant ally; the board has neither",
     "m3184a2": "grants its rider concealment; the board sets up no rider",
