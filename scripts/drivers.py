@@ -9663,6 +9663,70 @@ def class_form(out: Result) -> None:
         " -- which is why one marker could not serve both",
     )
 
+    #: -- and what the printed restriction bars, which is the third member of
+    #: this family and had no assertion at all (#1130, #1132) ---------------
+    #:
+    #: `#1130` gave the form a `c.forbid(lacking=BEAST_FORM)` and shipped
+    #: **no driver rule**, which is why the over-reach below survived until a
+    #: wide sweep reported two rows newly silent.
+    #:
+    #: The printed sentence, PHB2 p84, read off the page:
+    #:
+    #:   > "While you are in beast form, you can't use **attack, utility, or
+    #:   > feat powers** that lack the beast form keyword, although you can
+    #:   > sustain such powers."
+    #:
+    #: Three kinds of power one *uses*. A **trait** is none of them: `action
+    #: is NONE` means armed when the fight starts and never chosen, which
+    #: `actions._powers` already skips for the same reason. Barring those
+    #: refused rows in the only circumstance they were printed for --
+    #: `f2284`'s whole card is a *Benefit* reading "while you are in beast
+    #: form", and it could never pay out.
+    #:
+    #: Both arms asserted, because either alone passes the wrong fix: drop
+    #: the exemption and the second reddens; drop the restriction and the
+    #: first does.
+    import audit as _audit_cf
+    from combat_engine.content.powers.druid.forms import in_beast_form as _ibf
+    from combat_engine.engine.components import Powers as _PowersCF
+    from combat_engine.engine.dsl import REGISTRY as _REG
+    from combat_engine.engine.dsl import usable as _usable_cf
+    from combat_engine.engine.dsl import use as _use_cf
+    from combat_engine.engine.types import ActionType as _AT
+
+    w3, who3, _ = _audit_cf.board("f2284", 3)
+    known3 = w3.get(who3, _PowersCF)
+    if known3 is not None and "p5032" not in known3.known:
+        known3.known.append("p5032")
+    _use_cf(w3, who3, "p5032", spend=False)
+    out.that(_ibf(w3, who3),
+             "the control landed: the caster really is in beast form, so the"
+             " two refusals below are the restriction answering and not an"
+             " empty board",
+             f"in_beast_form={_ibf(w3, who3)}")
+
+    barred = [
+        r for r in (known3.all if known3 else [])
+        if (d := _REG.get(r)) is not None
+        and "beast form keyword" in _usable_cf(w3, who3, d)[1]
+    ]
+    out.that(len(barred) >= 5,
+             "a power lacking the printed keyword is still refused while in"
+             " beast form -- #1130's restriction, which this must not undo",
+             f"{len(barred)} refused for the keyword")
+    out.that(all(_REG[r].action is not _AT.NONE for r in barred),
+             "and every one of them is a power the creature would USE --"
+             " none is a trait, which is the line the printed sentence draws",
+             f"{sorted(r for r in barred if _REG[r].action is _AT.NONE)}")
+
+    feat_ok, feat_why = _usable_cf(w3, who3, _REG["f2284"])
+    out.that(feat_ok,
+             "while a static feat Benefit gated on being in beast form is"
+             " NOT refused -- `f2284` prints no power block, no keyword line"
+             " and no action, and barring it made the card unpayable in the"
+             " only circumstance it names (#1132)",
+             f"usable={feat_ok} why={feat_why!r}")
+
 
 def leash(out: Result) -> None:
     """A tether: cannot get further than N squares from something.
@@ -39151,18 +39215,32 @@ def a_terrain_power_comes_out_of_the_feature_not_its_user(out: Result) -> None:
     #: **green with the render fix reverted**. `content/CLAUDE.md`'s rule:
     #: assert through the caller, or the rule survives the fix coming out.
     from dataclasses import replace
-    from types import SimpleNamespace
 
     from combat_engine.api import render as _render
+    from combat_engine.api.session import Session as _Session
     from combat_engine.api.wire import Wire as _Wire
     from combat_engine.policy.doctrine import DoctrinePolicy as _Doctrine
 
-    #: Only the three attributes `option_dto` reads. A real `Session` wants
-    #: a policy, a seed and a started encounter of its own, none of which
-    #: this question touches, and building one would re-field the board the
-    #: pose above just arranged.
-    sess = SimpleNamespace(world=w, wire=_Wire(show_names=False), current=who,
-                           encounter=w.encounter, policy=_Doctrine())
+    #: **A real `Session`, built over the posed world rather than a
+    #: stand-in.** The first version passed a `SimpleNamespace` with the
+    #: attributes `option_dto` reads, and `types` caught it: two
+    #: `invalid-argument-type` diagnostics above the baseline, invisible to
+    #: `ruff` and to every narrow run, because the narrow `types` only looks
+    #: at changed files and the tree was clean by then.
+    #:
+    #: `Session` is a dataclass, so it can be constructed directly — which
+    #: matters, since `Session.create` would field a *new* encounter and
+    #: throw away the pose above. `current` is a property reading
+    #: `world.turn`, so it is asserted rather than set.
+    assert w.encounter is not None, "the posed board has no encounter"
+    sess = _Session(id="drivers:1129", world=w, encounter=w.encounter,
+                    wire=_Wire(show_names=False), policy=_Doctrine(),
+                    seed=3, level=3, scaling="full")
+    out.that(sess.current == who,
+             "the control landed: the posed caster is the session's current"
+             " actor, so `option_dto` renders ITS offer and not somebody"
+             " else's",
+             f"current={sess.current} posed={who}")
     drawn = sorted(_render.option_dto(sess, 0, got[0]).affected)
     engine_sees = sorted(D.area_of(w, who, p, got[0].origin, 0, 0,
                                    got[0].source))

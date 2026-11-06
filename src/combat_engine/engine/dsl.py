@@ -3532,12 +3532,42 @@ def usable(
             barred = mine & powers.forbidden_keywords
             if barred:
                 return False, f"cannot use {sorted(barred)[0].value} powers"
-            # "You can't use weapon or implement attack powers that lack the
-            # beast form keyword, **although you can sustain such powers.**"
-            # The exception is the half most easily dropped, and dropping it
-            # cancels every zone and stance the character had running when it
-            # changed shape -- so a row already standing is exempt.
-            if powers.required_keywords and p.ref not in powers.sustainable:
+            # The printed rule, read off the page rather than quoted from
+            # memory -- this comment used to say "weapon or implement attack
+            # powers", which is a different and narrower sentence than the
+            # one that governs:
+            #
+            #   > "While you are in beast form, you can't use **attack,
+            #   > utility, or feat powers** that lack the beast form
+            #   > keyword, **although you can sustain such powers.**"
+            #
+            # The sustain exception is the half most easily dropped, and
+            # dropping it cancels every zone and stance the character had
+            # running when it changed shape -- so a row already standing is
+            # exempt.
+            #
+            # **And a trait is not a power you "use".** `action is NONE`
+            # means a row armed when the fight starts and never chosen --
+            # `_powers` skips exactly these, with the same reading in its
+            # own comment ("a trait; armed at the start of the fight, never
+            # chosen"). The printed sentence bars three kinds of power one
+            # *uses*; a static benefit is none of them.
+            #
+            # Found by a wide sweep, which is what the wide sweep is for:
+            # two rows went **newly silent** and both are gated on being in
+            # beast form, so the restriction was refusing rows in the only
+            # circumstance they were printed to work in. `f2284`'s whole
+            # card is *"Benefit: While you are in beast form, any time you
+            # take the total defense action or use your second wind, you
+            # gain resist 5"* -- no power block, no keyword line, no action
+            # -- and `cf:druid-f1` is a class feature. Bisected to one
+            # line, the `c.forbid` added by `#1130`.
+            #
+            # A triggered row is NOT exempt: an immediate reaction carries
+            # its own `ActionType`, so it stays barred, which is right --
+            # that one really is a power being used.
+            if (powers.required_keywords and p.ref not in powers.sustainable
+                    and p.action is not ActionType.NONE):
                 missing = powers.required_keywords - mine
                 if missing:
                     return False, (
