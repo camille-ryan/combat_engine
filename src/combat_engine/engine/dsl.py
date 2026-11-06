@@ -2840,6 +2840,24 @@ def _reshaped(
     return None
 
 
+def _wants_the_dead(p: Power, augment: int = 0) -> bool:
+    """Does this row's printed target line name a dead creature?
+
+    `Condition.DEAD` among the target's conditions, which is how `#399`
+    made the dead targetable at all and what `candidates` already filters
+    the pool by. Read through `target_of` so an augment that rewrites the
+    target line is honoured, as every other read of it here is.
+
+    Narrow on purpose: not "may a row touch a corpse" but "did this row
+    ask for one", so a target that dies mid-resolution is still dropped
+    for every row that did not.
+    """
+    from .types import Condition
+
+    want = p.target_of(augment)
+    return Condition.DEAD in (want.conditions or frozenset())
+
+
 def target_of(
     world: World, actor: int, p: Power, augment: int = 0
 ) -> Target:
@@ -4291,7 +4309,29 @@ def use(
             t = chosen[i]
             cast.index = i
             i += 1
-            if not targetable(world, t):
+            # **A row whose target line names the dead is not asking about
+            # a creature that *became* invalid.** `#1124`.
+            #
+            # `targetable` is `alive or Scenery`, and it is a re-check: the
+            # pool was chosen by `candidates`, which honours the printed
+            # target line, so this exists to drop a target that stopped
+            # being one between being chosen and being run -- killed by the
+            # first square of a burst, most often.
+            #
+            # For a card printing "one dead ally" that re-check is wrong in
+            # the one case the card is about. The body was skipped for
+            # every target and the row **still returned True and emitted
+            # `PowerResolved`** -- a successful use that did nothing, with
+            # no raise and nothing in the log to read.
+            #
+            # Exactly the fault `targetable`'s own docstring records
+            # happening once before: *"a row aimed at a crate was dropped
+            # between being chosen and being run without a word."* Scenery
+            # was added to `targetable` then; the dead cannot join it the
+            # same way, because a target killed mid-resolution must still
+            # be dropped -- so the question is about this row's target line
+            # rather than about the creature.
+            if not targetable(world, t) and not _wants_the_dead(p, augment):
                 continue
             cast.target = t
             cast.result = None

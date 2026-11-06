@@ -450,7 +450,6 @@ KNOWN_SILENT = {
     # same fix -- a board that can pose the companion block (#437). #512.
     "m5481a0": "tethers to the block it is fielded beside; the board fields it alone",
     "m5482a0": "tethers to the block it is fielded beside; the board fields it alone",
-    "m135a3": "targets a destroyed undead ally; the board has none",
     # Its printed benefit holds only "while you're not wearing heavy armor",
     # and the board deals this character heavy armour -- so the row correctly
     # lays nothing. `f3722` is silent for the same sentence and the same
@@ -768,8 +767,6 @@ KNOWN_SILENT = {
     # creature-counting row is tested against. The evidence is
     # `drivers.raises_the_fallen`, which kills the ally first and then watches
     # all four. `m135a3` carries the same reason further up this table.
-    "m1042a2": "raises destroyed undead as new creatures; the board has no corpse",
-    "m3499a3": "heals a destroyed undead ally; the board has no corpse",
     # The two that are not a sibling dependency, and each is a different gap.
     # `m3291a4` rerolls an attack roll, so fired alone there is no roll behind
     # it to reroll -- the row is correct and the harness offers it nothing.
@@ -1025,7 +1022,6 @@ KNOWN_SILENT = {
                "board has one of its kind and nothing suppressed. Proved by "
                "`drivers.regeneration_resumed`, with both controls",
     # The remaining four, each its own shape.
-    "m5948a6": "raises a dead ally; nobody here is dead",
     "m3288a6": "rerolls an attack roll; fired alone there is none behind it",
     "m5468a3": "cures an ally's condition at the start of its turn; the board's "
                "one ally carries none",
@@ -2244,11 +2240,44 @@ def board(ref: str, seed: int, pose: bool = False,
         # The label leads with `audit:setup` deliberately -- `_claimed`
         # credits a label's first token, and the board laid this rather than
         # the row, so the row must not be credited for its own pose.
-        if mate is not None and (wants := _asks_an_allys_kind(ref)):
+        wants = _asks_an_allys_kind(ref)
+        if mate is not None and wants:
             kinder = Cast(world=world, me=caster, ref="audit:setup")
             for word in wants:
                 kinder.effect(f"audit:setup origin:{word}",
                               until=When.ENCOUNTER, on=mate)
+        # **And a body, for the rows that reach for one.** `#1124`, on
+        # Camille's ruling that a corpse is a creature at or below
+        # `dying_at` -- which is what `resolve._die` already produces, so
+        # this poses the engine's own death rather than a new concept.
+        #
+        # A **third** creature, not the ally above: killing that one would
+        # take away the live ally the kind pose exists to provide, and five
+        # of these rows want a dead ally *of a kind*, so they need both at
+        # once.
+        #
+        # Both halves set, or the board holds a half-corpse. `query.alive`
+        # reads `hp > dying_at` and `_die` does the rest -- the DEAD
+        # condition, the bereavement, and lifting the body off the grid so
+        # a row may walk into its square. Setting hit points alone leaves a
+        # corpse that is still an occupant.
+        if _asks_for_a_corpse(ref):
+            from combat_engine.engine import Health as _CorpseHealth
+            from combat_engine.engine.resolve import _die
+
+            body = loader.spawn(world, ref.split("a")[0], (8, 9),
+                                team=Team.ENEMY)
+            if body:
+                corpse_health = world.need(body, _CorpseHealth)
+                corpse_health.hp = corpse_health.dying_at
+                _die(world, body)
+                # The same kind words as the live ally: "raises a destroyed
+                # **undead** ally" asks both questions of one creature.
+                if wants:
+                    kinder = Cast(world=world, me=caster, ref="audit:setup")
+                    for word in wants:
+                        kinder.effect(f"audit:setup origin:{word}",
+                                      until=When.ENCOUNTER, on=body)
         foe_team = Team.PC
     else:
         # A classless row -- the engine's own basic attacks -- is fielded on
@@ -5735,6 +5764,47 @@ def _type_words() -> frozenset[str]:
 #: the name of a context key. So the pattern anchors the word to the first
 #: argument and keeps the rest only to test it for `c.me`.
 _KIND_CALL = re.compile(r'c\.is_kind\(\s*"([a-z ]+)"([^)]*)\)')
+
+
+#: `c.fallen` and `c.reanimate` are the two verbs that reach for a body.
+#:
+#: Named rather than inferred from the prose, because the prose was wrong
+#: for years: three rows were marked *"the board has no way to name a
+#: corpse"* and dropped while a fourth hand-rolled the same comprehension
+#: and worked. `c.fallen`'s own docstring records that -- *"the gap was
+#: never in the board; `_die` keeps the body an entity and its `Position`.
+#: It was in the vocabulary."*
+_CORPSE_CALL = re.compile(r"c\.(?:fallen|reanimate)\(")
+
+
+def _asks_for_a_corpse(ref: str) -> bool:
+    """Does this row reach for a dead creature?
+
+    The gate on laying a body on the monster board. `#1124`, and Camille's
+    ruling on what a corpse *is*:
+
+      > *"I think A is the right choice, but most powers shouldn't interact
+      > with it. Other use cases might be something like looting the body
+      > during combat."*
+
+    **A -- a creature at or below `dying_at`** -- which is what the engine
+    already produces, so the pose needs no new concept. `resolve._die`
+    keeps the entity and its `Position` and lifts it off the grid, and
+    `query.alive` is `hp > dying_at`, so both halves have to be set or the
+    board holds a half-corpse: dead to `alive()` and still an occupant.
+
+    **"Most powers shouldn't interact with it" needs nothing here**, and
+    that is worth recording rather than building. Every creature-finder in
+    `Cast` ends in `alive(...)` and `query.enemies` filters the dead, so a
+    corpse is already invisible to ordinary targeting -- `c.fallen` is the
+    opt-in read, which is the shape the ruling asks for.
+
+    Opt-in per row, as the two poses above are: **31** monster rows name
+    one of the verbs, 5 of them carrying an excuse that says in words that
+    the board has no corpse.
+    """
+    src = _source_of(getattr(REGISTRY.get(ref), "body", None), ref)
+    return bool(src) and bool(_CORPSE_CALL.search(src))
 
 
 def _asks_an_allys_kind(ref: str) -> tuple[str, ...]:

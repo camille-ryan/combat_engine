@@ -9593,6 +9593,111 @@ def vulnerability_held_by_a_zone(out: Result) -> None:
                  f"mine={gate({'source': me})} theirs={gate({'source': foe})}")
 
 
+def a_row_that_targets_the_dead_reaches_its_body(out: Result) -> None:
+    """"One dead ally" is a printed target line, and the body was skipped.
+
+    `#1124`, on Camille's ruling about what a corpse is:
+
+    > *"I think A is the right choice, but most powers shouldn't interact
+    > with it. Other use cases might be something like looting the body
+    > during combat."*
+
+    **A -- a creature at or below `dying_at`** -- which the engine already
+    produced. What it did not do was let such a row run. `dsl.use` re-checks
+    every chosen target with `query.targetable` (`alive or Scenery`) and
+    `continue`s past the ones that fail, so for a card printing "one dead
+    ally" the body was skipped for **every** target -- and the row still
+    returned True and emitted `PowerResolved`. A successful use that did
+    nothing, with no raise and nothing in the log.
+
+    Exactly the fault `targetable`'s own docstring records happening once
+    before -- *"a row aimed at a crate was dropped between being chosen and
+    being run without a word"* -- which is why `Scenery` is in it. The dead
+    could not join it the same way: a target **killed mid-resolution** must
+    still be dropped, so the question has to be about the row's target line
+    rather than about the creature. Hence `_wants_the_dead`.
+
+    Both arms matter and the second is the one that keeps the fix honest:
+    a row that did *not* ask for the dead must still lose a target that
+    died, or this has quietly made every burst hit corpses.
+    """
+    import audit as _audit_dead
+    from combat_engine.engine import resolve as _resolve
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health as _DeadHealth
+    from combat_engine.engine.dsl import REGISTRY as _REG_DEAD
+    from combat_engine.engine.dsl import use as _use_dead
+    from combat_engine.engine.query import alive as _alive_dead
+    from combat_engine.engine.query import enemies as _foes_dead
+    from combat_engine.engine.types import Condition as _Cond
+
+    # -- the row's target line really does name the dead ------------------
+    asked = _REG_DEAD["m4502a5"]
+    out.that(_Cond.DEAD in (asked.target.conditions or frozenset()),
+             "the row under test declares `Condition.DEAD` in its printed"
+             " target line -- which is what `candidates` filters the pool by"
+             " and what `_wants_the_dead` reads",
+             f"conditions={sorted(str(c) for c in (asked.target.conditions or ()))}")
+
+    # -- it reaches its body and raises the corpse ------------------------
+    world, me, _ = _audit_dead.board("m4502a5", 3)
+    corpses = [a for a in Cast(world=world, me=me, ref="drivers").fallen()]
+    out.that(bool(corpses),
+             "the board poses a body for it -- `audit._asks_for_a_corpse`,"
+             " a third creature dropped through `resolve._die` so it is both"
+             " below `dying_at` and off the grid",
+             f"corpses within reach: {corpses}")
+    if corpses:
+        body = corpses[0]
+        out.that(not _alive_dead(world, body),
+                 "the control landed: that creature really is dead, so the"
+                 " raise below is the row working and not a live target",
+                 f"alive={_alive_dead(world, body)}")
+        _use_dead(world, me, "m4502a5", spend=False)
+        out.that(_alive_dead(world, body),
+                 "and using the row puts it back on its feet -- the body ran."
+                 " Before this, `use` returned True, emitted `PowerResolved`"
+                 " and skipped the body for every target (#1124)",
+                 f"alive after={_alive_dead(world, body)}")
+
+    # -- and a row that did NOT ask still drops a dead target -------------
+    #: **The arm that stops this being a loosening.** `targetable` is a
+    #: re-check for a target that stopped being one between being chosen and
+    #: being run; the commonest case is a creature killed by the first
+    #: square of a burst. If the fix had gone into `targetable` itself, that
+    #: creature would keep taking hits.
+    plain, who, _ = _audit_dead.board("m189a2", 3)
+    victim = sorted(_foes_dead(plain, who))[0]
+    hurt = plain.need(victim, _DeadHealth)
+    hurt.hp = hurt.dying_at
+    _resolve._die(plain, victim)
+    out.that(not _alive_dead(plain, victim),
+             "the control landed: a foe is dead on this board too",
+             f"alive={_alive_dead(plain, victim)}")
+    ordinary = _REG_DEAD["m189a2"]
+    out.that(_Cond.DEAD not in (ordinary.target.conditions or frozenset()),
+             "and the row used here does NOT name the dead in its target"
+             " line, which is what makes it the control",
+             f"conditions={sorted(str(c) for c in (ordinary.target.conditions or ()))}")
+    out.that(not _wants_the_dead_via_dsl(ordinary),
+             "so `_wants_the_dead` answers False for it -- a corpse is still"
+             " dropped between being chosen and being run for every row that"
+             " did not ask, which is the behaviour `targetable` exists for",
+             f"_wants_the_dead={_wants_the_dead_via_dsl(ordinary)}")
+
+
+def _wants_the_dead_via_dsl(p) -> bool:  # noqa: ANN001
+    """Reach the private predicate by its real name, not a copy of it.
+
+    A re-implementation here would pass whatever the rule asserted and say
+    nothing about the engine -- `content/CLAUDE.md`'s "assert through the
+    caller" applied to a predicate.
+    """
+    from combat_engine.engine.dsl import _wants_the_dead
+
+    return _wants_the_dead(p)
+
+
 def a_minor_action_finds_a_hidden_creature(out: Result) -> None:
     """Spotting a hidden creature: a minor action, opposed, once per quarry.
 
@@ -66483,6 +66588,10 @@ DRIVERS = {
                    "adding to a roll already made, without rolling again"),
     "recharge_while": (recharge_while,
                        "a recharge condition that is a state, not a moment"),
+    "targets_the_dead": (a_row_that_targets_the_dead_reaches_its_body,
+                         "a row printing \"one dead ally\" reaches its body,"
+                         " and one that did not ask still drops a corpse"
+                         " (#1124)"),
     "spot": (a_minor_action_finds_a_hidden_creature,
              "a minor action to find a hidden creature, opposed by what the"
              " hider actually rolled, and once per quarry (#1088)"),
