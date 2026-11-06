@@ -63,15 +63,15 @@ _load("items")
 _load("feats")
 _load("races")
 
-# **A top-level module is not walked and so registers nothing.** `_load`
-# takes a *package* and walks it; `terrain_powers.py` sits beside this file
-# rather than under one of the six, so without this line its rows are
-# absent from `REGISTRY` and every instrument reports a tree that does not
-# hold them -- `audit.board` raises `NoneType has no attribute 'cls'`,
-# which is how this was found rather than by reading.
+# **`terrain_powers` is a package now and so is walked like the rest.**
+# This used to be `from combat_engine.content import terrain_powers`, with
+# a note explaining that a top-level module registers nothing because
+# `_load` walks *packages* -- true, and the symptom was `audit.board`
+# raising `NoneType has no attribute 'cls'` when the line was missing.
 #
-# Imported by name instead of adding a seventh `_load`: there is no
-# `terrain_powers/` package and inventing one for a module would be the
-# wrong shape. `terrain.py` and `dummy.py` beside it declare no rows at
-# all, which is why nothing had needed this before. #980.
-from combat_engine.content import terrain_powers  # noqa: E402
+# That note also said inventing a package for one module would be the
+# wrong shape. It was right for two rows and wrong for twenty-four: the 24
+# printed terrain powers cannot be authored in parallel out of a single
+# file, so they partition by file and the package is what the seventh
+# `_load` walks. A new batch module now needs no line here. #980, #1123.
+_load("terrain_powers")

@@ -1260,9 +1260,30 @@ def _strike_without_line() -> list[tuple[str, str, str, str]]:
 
 #: Rows whose card really does catch the creature using it, so `EACH_CREATURE`
 #: on a close area is right there. Ten cards in the compendium print "include
-#: you"; this is the only one of them written that way, and the check would
-#: otherwise report it forever.
-CATCHES_ITSELF = {"p9652"}
+#: you"; the check would otherwise report each of them forever.
+#:
+#: **The two terrain rows are here for a reason the other entry is not**, and
+#: it is worth stating because it is the general case for this whole family:
+#: their areas are *"centered on"* the terrain feature rather than on the
+#: creature using it, so the user stands inside its own burst. Each card then
+#: prints a clause that only parses if the user can be hit:
+#:
+#: * `x2_133` -- *"You can drop prone as part of the standard action to avoid
+#:   the attack."*
+#: * `x2_142` -- *"if the attacking creature is also a target of the attack,
+#:   it gains a +5 bonus to Reflex against the attack."*
+#:
+#: Read off the printed text before waiving, not from the row's author: an
+#: entry here is the check's definition being corrected, and the rule against
+#: loosening an instrument to make a number look better applies to this list
+#: more than to anything else in the file.
+#:
+#: `x2_156` was offered for this list and is **deliberately absent.** Its area
+#: is a plain `close blast 3` from the user, and a close blast never covers the
+#: user's own square -- so `EACH_OTHER` and `EACH_CREATURE` pick out the same
+#: creatures there and it needs no waiver. The distinction is *centred on the
+#: feature* against *cast from the user*, not "is it a terrain row". #1123.
+CATCHES_ITSELF = {"p9652", "x2_133", "x2_142"}
 
 
 #: Every Python file the project owns. **Uses are counted across all of them**
