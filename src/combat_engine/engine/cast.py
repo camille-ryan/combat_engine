@@ -15967,6 +15967,21 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             label=f"{self.ref} {_VESTIGE}{chosen}",
             by=self.ref,
         )
+        # **And remembered until the next rest.** `#1046`, Camille's design:
+        # *"save a set of used vestiges and wipe it on every rest"*. The
+        # effect above is the *active* bargain and dies with the encounter;
+        # this is the history the printed clause offers from, and it is the
+        # one thing the swap could not be written without.
+        #
+        # Recorded here rather than by the rows that swap, because every
+        # swap goes through this verb -- a row recording its own would be
+        # one more thing each of the eight has to remember.
+        from .components import Powers as _VestigePowers
+
+        held = (self.world.get(who, _VestigePowers)
+                or self.world.add(who, _VestigePowers()))
+        if chosen not in held.vestiges_used:
+            held.vestiges_used.append(chosen)
         return chosen
 
     def active_vestige(self, *, of: int | None = None) -> str:
@@ -16042,7 +16057,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         return tuple(fresh)
 
     def vestiges(
-        self, *, of: int | None = None, primary: bool = False
+        self, *, of: int | None = None, primary: bool = False,
+        since_rest: bool = False,
     ) -> tuple[str, ...]:
         """The remnants this warlock can bargain with. `c.vestiges()`
 
@@ -16055,8 +16071,30 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         Empty before any offer, which is the honest answer for a warlock on
         another pact and is what a clause keyed to a remnant needs in order
         not to fire.
+
+        **`since_rest=True` answers a different question at a longer
+        lifetime**, and that is `#1046`. The default reads the offers
+        standing *now*, which live at `When.ENCOUNTER`; one card asks for
+        *"any other vestige you have been bargaining with since your last
+        short or extended rest"* -- a record over a window several fights
+        wide, which no effect can hold.
+
+        Camille's design, and the reason this is a parameter rather than a
+        second verb: *"save a set of used vestiges and wipe it on every
+        rest"*. The two readings differ only in the window, which is
+        exactly what a parameter is for -- `Powers.vestiges_used` is the
+        record and both rests clear it.
+
+        A warlock who has swapped twice may offer a remnant whose access a
+        daily power granted and then lost, which the standing offers no
+        longer hold. That is the case the card is about.
         """
         who = of if of is not None else self.me
+        if since_rest:
+            from .components import Powers as _UsedPowers
+
+            held = self.world.get(who, _UsedPowers)
+            return tuple(sorted(held.vestiges_used)) if held is not None else ()
         tag = _PRIMARY if primary else _OFFERED
         found = set()
         for eff in self.world.effects.of(who):

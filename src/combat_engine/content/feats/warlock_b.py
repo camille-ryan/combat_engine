@@ -92,19 +92,6 @@ SHADOW = "cf:warlock-f3"
 #: question from which can be bargained with.** `#1046`.
 #:
 #: This used to read `c.active_vestige()`, and that symbol **arrived** --
-#: `#1034` landed the offered set, the active one and the swap, and the
-#: rows that wanted them were finished. `todo.py` went red on exactly
-#: that: a symbol that exists with a row still waiting on it.
-#:
-#: The row behind it is not finished, though, so this is a re-point rather
-#: than an un-marking. `c.vestiges()` reads `When.ENCOUNTER` effects --
-#: the right lifetime for "what can you bargain with" and the wrong one
-#: for a window that spans rests, so the existing state is the wrong
-#: shape rather than a near miss.
-#:
-#: Named as a parameter on the verb that already exists, because the two
-#: readings differ only in the window they ask about.
-VESTIGE = ("c.vestiges(since_rest=True)",)
 #: "Instead of": a printed swap for half of what a class feature does
 #: inside its own body. Declining that half is the operation nothing has.
 INSTEAD = ("c.pre_empt(ref, clause)",)
@@ -661,8 +648,11 @@ def f2291(c: Cast) -> None:
 # -- the pact boon: four rows and one hole ----------------------------------
 
 
-@power("f1166", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=VESTIGE)
+@power("f1166", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="your pact boon is triggered",
+       on=Trigger(Dropped, cursed_by_me,
+                  "an enemy you have cursed drops to 0 hit points"))
 def f1166(c: Cast) -> None:
     """Swaps the active remnant when the pact boon fires.
 
@@ -686,11 +676,50 @@ def f1166(c: Cast) -> None:
     swapped twice may offer a remnant a daily power granted and then lost
     access to, which the offered set no longer holds.
 
-    So the marker stays and now names that gap. `#1046` carries it, and
-    also the thing worth settling first: `c.bargain` holds the bargain per
-    *encounter* while the pact leg's own spec says per *rest*, so the
-    window this row needs is the one already approximated next door.
+    **Written now, on Camille's design.** `#1046`:
+
+      > *"I still don't understand the question. Yes, keep rules parity.
+      > If i were writing this myself, I'd just save a set of used vestiges
+      > and wipe it on every rest."*
+
+    So `Powers.vestiges_used` is that set, `c.bargain` appends to it, both
+    rests clear it and `c.vestiges(since_rest=True)` reads it. It lives on
+    `story.Sheet` as well as the component, because the printed window
+    spans several fights and `story/` rebuilds each character per
+    encounter -- a component alone would be wiped by the next fight rather
+    than by a rest.
+
+    "Keep rules parity" also settles the thing this note said to settle
+    first: the window is the printed one, so the per-encounter
+    approximation next door is not what this row reads.
+
+    **The trigger is the boon's own moment**, which was never the hard
+    part: every boon fires off `Dropped` under `cursed_by_me`, and `f2191`
+    three hundred lines down is the same declaration.
+
+    **"You can choose to change" is a decline, so the pick includes one.**
+    `c.bargain` takes its single option silently, which is right for a
+    card that must swap and wrong for one that may -- so the options are
+    offered through `c.choose` with an empty string beside them, the same
+    sentinel shape `powers.augment` uses for "spend nothing".
+
+    **"Any *other* vestige"**: the standing bargain is excluded, or the
+    row would offer a swap to what is already active and report having
+    done something.
+
+    `AT_WILL` rather than `ENCOUNTER`, which the marker's header had: the
+    card is a *Benefit* with no usage line and fires whenever the boon
+    does, which is how its three siblings are declared.
     """
+    if c.trigger is None or c.trigger.source != c.me:
+        return
+    standing = c.active_vestige()
+    others = [v for v in c.vestiges(since_rest=True) if v and v != standing]
+    if not others:
+        return
+    picked = c.choose([*others, ""], "change your active vestige to")
+    if picked:
+        c.bargain(picked)
 
 
 @power("f2035", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -162,6 +162,18 @@ class Sheet:
     #: Keyed by the danger or the deprivation, so the words are the same
     #: ones `module.DANGERS` holds and a reader can see what is owed.
     withheld: dict[str, int] = field(default_factory=dict)
+    #: Every remnant this character has bargained with since its last rest.
+    #:
+    #: `#1046`. On the sheet rather than only on the component because the
+    #: printed window is *"since your last short or extended rest"* and
+    #: spans several fights -- and `story/` rebuilds each character from
+    #: its sheet per encounter, so a component alone would be wiped by the
+    #: next fight rather than by a rest.
+    #:
+    #: Same shape and the same reason as `withheld` two fields up: state
+    #: that outlives an encounter and is relieved by a specific event. A
+    #: list because a sheet is written as JSON.
+    vestiges_used: list[str] = field(default_factory=list)
     #: Unspent action points. One at the start of a day; a milestone grants
     #: more, and `extended_rest` does not carry them over.
     action_points: int = 1
@@ -552,6 +564,11 @@ class Party:
         from combat_engine.engine.types import Usage
 
         for sheet in self.sheets:
+            # **Both rests, which is what the card names.** `#1046`, and
+            # it sits above the `extended` fork deliberately: a short rest
+            # ends this window exactly as an extended one does, so putting
+            # it inside either branch would have been half the rule.
+            sheet.vestiges_used.clear()
             if extended:
                 sheet.spent.clear()
                 sheet.per_day.clear()
@@ -716,6 +733,11 @@ def _wear(world: World, eid: int, sheet: Sheet) -> str:
         for ref, round_ in sheet.spent.items():
             if ref in powers.known:
                 powers.used[ref] = round_
+        # The remnant history, unfiltered. `#1046`: unlike `spent` above it
+        # is **not** keyed on a row the character holds -- a remnant is a
+        # thing bargained with, not a power in the hand -- so filtering it
+        # through `powers.known` would empty it every fight.
+        powers.vestiges_used[:] = list(sheet.vestiges_used)
         # The day's allowances, unfiltered: a `per_day` count is keyed on the
         # row that *grants* the allowance, which for a class feature is not in
         # `powers.known` at all. Filtering it the way `spent` is filtered
@@ -796,6 +818,7 @@ def harvest(world: World, party: Party) -> None:
         if powers is not None:
             sheet.spent = dict(powers.used)
             sheet.per_day = dict(powers.per_day)
+            sheet.vestiges_used = list(powers.vestiges_used)   # `#1046`
         # **What the fight left in them.** `Afflictions` lives on a creature
         # in a `World` that does not outlive the encounter, and
         # `affliction.tick()` reads `Sheet.afflictions` at the extended

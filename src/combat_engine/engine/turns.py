@@ -818,6 +818,11 @@ def short_rest(world: World) -> None:
         # to ask: a charge is per-encounter by definition -- that is what
         # distinguishes it from `Powers.per_day`. #529.
         powers.charges.clear()
+        # **And the remnant history, which the card names a rest for.**
+        # `#1046`: *"any other vestige you have been bargaining with since
+        # your last short or extended rest"*, so a short rest ends the
+        # window exactly as an extended one does.
+        powers.vestiges_used.clear()
         rested.append(eid)
     # **After the restore, and in a second pass.** A row answering the rest
     # asks what it has available -- an artificer's banked charge, a
@@ -846,6 +851,7 @@ def extended_rest(world: World) -> None:
         powers.recharging.clear()
         powers.forbidden.clear()
         powers.charges.clear()
+        powers.vestiges_used.clear()      # `#1046`, as the short rest does
     for _, health in world.each(Health):
         health.hp = health.max_hp
         health.temp = 0

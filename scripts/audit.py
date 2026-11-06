@@ -2508,6 +2508,34 @@ def board(ref: str, seed: int, pose: bool = False,
     # the draw exactly as they were -- nothing but `c.element()` reads this
     # key -- so the arming cannot cost another row anything. That is the
     # property the two previous attempts did not have. #885.
+    # **And a remnant history, for the row that reads one.** `#1046`.
+    # Written straight onto `Powers.vestiges_used` rather than by
+    # calling `c.bargain` twice: a second bargain *ends the first*, by
+    # the printed one-at-a-time rule, so bargaining twice leaves one
+    # standing remnant and a history of two -- which is the state, but
+    # reached by a route that depends on `bargain`'s internals holding
+    # still. The record is the thing the row reads, so the record is
+    # what this poses.
+    #
+    # Two, because the card says "any **other**" and excludes the
+    # standing one. With a single entry the row correctly offers
+    # nothing and reports silent.
+    if _asks_a_rest_long_history(ref):
+        from combat_engine.engine.components import Powers as _VPowers
+
+        offered = Cast(world=world, me=caster, ref="audit:setup")
+        held = (world.get(caster, _VPowers)
+                or world.add(caster, _VPowers()))
+        standing = offered.active_vestige() or ""
+        # The leg's own remnants are the honest contents -- whatever
+        # this warlock could really have bargained with. Falling back
+        # to the board's two placeholders only when the leg offers
+        # none, so the pose is never empty for a row that asked.
+        pool = [v for v in offered.vestiges() if v and v != standing]
+        for ref_ in (pool or ["audit:vestige-a", "audit:vestige-b"])[:2]:
+            if ref_ not in held.vestiges_used:
+                held.vestiges_used.append(ref_)
+
     if element:
         from combat_engine.engine.components import Build as _Build
 
@@ -5775,6 +5803,28 @@ _KIND_CALL = re.compile(r'c\.is_kind\(\s*"([a-z ]+)"([^)]*)\)')
 #: never in the board; `_die` keeps the body an entity and its `Position`.
 #: It was in the vocabulary."*
 _CORPSE_CALL = re.compile(r"c\.(?:fallen|reanimate)\(")
+
+
+#: Does this row read the remnant history rather than the standing offers?
+_SINCE_REST = re.compile(r"c\.vestiges\([^)]*since_rest")
+
+
+def _asks_a_rest_long_history(ref: str) -> bool:
+    """Does this row read what the caster has bargained with since a rest?
+
+    The gate on giving the board's warlock one. `#1046`: the printed clause
+    offers *"any other vestige that has been an active vestige for you
+    since your last short rest or extended rest"*, and **"other"** is what
+    makes this unposeable by accident -- the standing bargain is excluded,
+    so the row needs **two** bargains to have happened and the board makes
+    at most one.
+
+    Opt-in per row, as the kind and corpse poses are. One row reads it
+    today; the parameter is new, so the gate is written for the family
+    rather than for the row.
+    """
+    src = _source_of(getattr(REGISTRY.get(ref), "body", None), ref)
+    return bool(src) and bool(_SINCE_REST.search(src))
 
 
 def _asks_for_a_corpse(ref: str) -> bool:

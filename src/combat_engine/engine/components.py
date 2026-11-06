@@ -1099,6 +1099,28 @@ class Powers:
     #: write and `c.charge_left` the read; `c.restore_charge` hands one
     #: back, which is what a boon that regains on a kill needs.
     charges: dict[str, int] = field(default_factory=dict)
+    #: Every remnant this warlock has bargained with **since its last rest**.
+    #:
+    #: `#1046`, and it is Camille's design rather than mine:
+    #:
+    #:   > *"I still don't understand the question. Yes, keep rules parity.
+    #:   > If i were writing this myself, I'd just save a set of used
+    #:   > vestiges and wipe it on every rest."*
+    #:
+    #: The printed clause offers *"any other vestige you have been
+    #: bargaining with since your last short or extended rest"*, so the
+    #: options are a record over a rest-length window. `Cast.vestiges`
+    #: reads `When.ENCOUNTER` effects, which is the right lifetime for
+    #: "what may you bargain with" and the wrong one for this.
+    #:
+    #: **A list, not a set**, because `story.Sheet` carries it between
+    #: encounters and a sheet is written as JSON. Order is insertion order
+    #: and readers sort, the same arrangement `Cast.vestiges` already uses
+    #: so a menu cannot depend on it.
+    #:
+    #: Wiped by **both** rests -- `turns.short_rest` and
+    #: `turns.extended_rest` -- because the card names both.
+    vestiges_used: list[str] = field(default_factory=list)
     #: Augment clauses a **feat** lent to a named row, as `(cost, clause)`.
     #:
     #: Four feats print "your <power> gains the augmentable keyword. When you

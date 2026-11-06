@@ -9593,6 +9593,93 @@ def vulnerability_held_by_a_zone(out: Result) -> None:
                  f"mine={gate({'source': me})} theirs={gate({'source': foe})}")
 
 
+def a_remnant_history_outlives_the_fight_and_dies_at_a_rest(out: Result) -> None:
+    """What a warlock has bargained with since its last rest. `#1046`.
+
+    Camille's design, and the row had been blocked on the window rather
+    than on the swap:
+
+    > *"I still don't understand the question. Yes, keep rules parity. If i
+    > were writing this myself, I'd just save a set of used vestiges and
+    > wipe it on every rest."*
+
+    `c.vestiges()` reads the offers standing **now**, which live at
+    `When.ENCOUNTER` -- the right lifetime for "what may you bargain with"
+    and the wrong one for a clause naming a rest. So
+    `Powers.vestiges_used` is the record, `c.bargain` appends to it, both
+    rests clear it, and `story.Sheet` carries it between encounters because
+    the printed window spans several.
+
+    **This rule exists because the audit cannot test the recorder.**
+    `audit.board` poses the history by writing `vestiges_used` directly --
+    it has to, since the card says "any *other*" and so needs two bargains
+    the board cannot make -- which means `f1166` stays green with
+    `c.bargain`'s append removed. Planted and confirmed: pose off reddens
+    the row, recorder off does **not**. The same shape as the board
+    granting the row under test, and the reason that half is asserted here.
+    """
+    import audit as _audit_v
+    from combat_engine.engine import turns as _turns
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers as _VPowers
+
+    world, me, _ = _audit_v.board("f1166", 3)
+    held = world.get(me, _VPowers)
+    assert held is not None, "the caster has no Powers to record on"
+    #: Cleared first: the board poses a history on purpose for this very
+    #: row, and asserting on a recorder while its answer is pre-filled is
+    #: the fault `audit-board-pre-sets-the-numbers` names.
+    held.vestiges_used.clear()
+    out.that(held.vestiges_used == [],
+             "the control landed: the posed history is cleared, so what is"
+             " below is `c.bargain` recording and not the board's pose",
+             f"{held.vestiges_used}")
+
+    c = Cast(world=world, me=me, ref="drivers:vestige")
+    first = c.bargain("v:one")
+    out.that(first == "v:one" and held.vestiges_used == ["v:one"],
+             "`c.bargain` records what it picked -- the standing bargain is"
+             " an encounter effect and dies with the fight, so the history"
+             " is the only thing that can answer a clause naming a rest",
+             f"picked={first!r} history={held.vestiges_used}")
+
+    second = c.bargain("v:two")
+    out.that(second == "v:two" and held.vestiges_used == ["v:one", "v:two"],
+             "and a second bargain ADDS rather than replacing -- which is"
+             " the whole point: the active remnant is one at a time, the"
+             " history is not",
+             f"history={held.vestiges_used}")
+    out.that(c.active_vestige() == "v:two",
+             "while only the second is active, by the printed one-at-a-time"
+             " rule `c.bargain` already enforced",
+             f"active={c.active_vestige()!r}")
+    out.that(c.vestiges(since_rest=True) == ("v:one", "v:two"),
+             "`c.vestiges(since_rest=True)` reads the history, sorted -- a"
+             " different question at a longer lifetime than the bare call",
+             f"{c.vestiges(since_rest=True)}")
+    out.that("v:one" not in c.vestiges(),
+             "and the bare call does NOT answer it: the offers standing now"
+             " are not the history, which is why this is a parameter rather"
+             " than a widening of the default",
+             f"offers now={c.vestiges()}")
+
+    # -- and a rest ends the window, both kinds ---------------------------
+    _turns.short_rest(world)
+    out.that(held.vestiges_used == [],
+             "a SHORT rest wipes it -- the card names both rests, so putting"
+             " the clear only in the extended one would be half the rule",
+             f"history={held.vestiges_used}")
+
+    world2, me2, _ = _audit_v.board("f1166", 3)
+    held2 = world2.get(me2, _VPowers)
+    assert held2 is not None, "the caster has no Powers to record on"
+    held2.vestiges_used[:] = ["v:three"]
+    _turns.extended_rest(world2)
+    out.that(held2.vestiges_used == [],
+             "and an EXTENDED rest wipes it too",
+             f"history={held2.vestiges_used}")
+
+
 def a_row_that_targets_the_dead_reaches_its_body(out: Result) -> None:
     """"One dead ally" is a printed target line, and the body was skipped.
 
@@ -66588,6 +66675,9 @@ DRIVERS = {
                    "adding to a roll already made, without rolling again"),
     "recharge_while": (recharge_while,
                        "a recharge condition that is a state, not a moment"),
+    "remnant_history": (a_remnant_history_outlives_the_fight_and_dies_at_a_rest,
+                        "what a warlock has bargained with since its last"
+                        " rest, and both rests ending that window (#1046)"),
     "targets_the_dead": (a_row_that_targets_the_dead_reaches_its_body,
                          "a row printing \"one dead ally\" reaches its body,"
                          " and one that did not ask still drops a corpse"
