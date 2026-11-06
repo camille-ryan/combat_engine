@@ -86,6 +86,13 @@ from combat_engine.db import game, localisation
 #: about, and the reason `comp:` is listed before `c`-anything.
 REF = re.compile(
     r"\b(?:cf|rt|comp|b|t|q):[A-Za-z0-9][A-Za-z0-9:_.-]*"
+    # **`x\d+_\d+` first, and it is not a longest-match courtesy.** A
+    # terrain ref is `x2_116` and a disease ref is `x5_12`; the alternative
+    # below ends in `\b`, and `_` is a word character, so `x2_116` matched
+    # **nothing at all** -- not even `x2`. A terrain row's glossary came
+    # out empty, which reads as "this row mentions nobody" and is the one
+    # misreading `_glossary` exists to prevent.
+    r"|\bx\d+_\d+\b"
     r"|\b[pmifrax]\d+(?:[apx]\d+)?(?::augment\d+)?\b"
 )
 
@@ -477,6 +484,8 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
     # read as a power that does not exist.
     if ref.startswith("q"):
         return _term(db, ref)
+    if re.fullmatch(r"x\d+_\d+", ref):
+        return _terrain(db, ref)
     if ref.startswith("b:"):
         row = db.execute(
             "SELECT * FROM build_option WHERE ref = ?", (ref,)
@@ -591,6 +600,67 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
         return "\n\n".join(out)
 
     return None
+
+
+def _terrain(db, ref: str) -> str | None:  # noqa: ANN001
+    """A printed terrain feature or terrain power. `#1123`.
+
+    **There was no door to these at all**, which is why 22 of the 24
+    printed terrain powers are unwritten: an authoring agent could not get
+    a brief, so `spec.py` answered "no such row" for a ref that is sitting
+    in `game.db`. Same shape as `_features`' own note about class features
+    being readable only as numbers.
+
+    The header carries what the body must not recompute -- the skill and
+    band of the gate, the attack line, the action and the number of uses --
+    because a row's decorator is read by the UI and the AI policy without
+    running anything, which is the engine component's *"header is data,
+    body is code"*.
+
+    `check_dc` is shown only when the page prints a flat number. A band
+    without one means the DC comes off the level table, and printing a
+    `None` there invites an author to write a literal where the table
+    should decide. Same for `attack_flat` against `attack_level`.
+    """
+    row = db.execute("SELECT * FROM terrain WHERE ref = ?", (ref,)).fetchone()
+    if row is None:
+        return None
+    bits = [f"### {row['ref']}   {row['kind']}"]
+    if row["action"]:
+        bits.append(row["action"])
+    if row["uses"]:
+        bits.append(f"{row['uses']} use(s)")
+    if row["usage"]:
+        bits.append(row["usage"])
+    head = "   ".join(bits)
+    lines = [head]
+    if row["check_skill"]:
+        gate = f"check: {row['check_skill']}"
+        if row["check_band"]:
+            gate += f" ({row['check_band']})"
+        if row["check_dc"] not in (None, "", "None"):
+            gate += f" DC {row['check_dc']}"
+        lines.append(gate)
+    if row["attack_level"] not in (None, "", "None") or row["defence"]:
+        atk = "attack:"
+        if row["attack_flat"] not in (None, "", "None"):
+            atk += f" +{row['attack_flat']}"
+        elif row["attack_level"] not in (None, "", "None"):
+            atk += f" level {row['attack_level']}"
+        if row["defence"]:
+            atk += f" vs. {row['defence']}"
+        lines.append(atk)
+    if row["damage"] or row["damage_tier"] not in (None, "", "None", "0", 0):
+        dmg = f"damage: {row['damage']}" if row["damage"] else (
+            f"damage: tier {row['damage_tier']}")
+        if row["damage_type"]:
+            dmg += f" {row['damage_type']}"
+        lines.append(dmg)
+    if row["requirement"]:
+        lines.append(f"requirement: {row['requirement']}")
+    if row["effect"]:
+        lines.append(f"effect: {row['effect']}")
+    return "\n".join([*lines, row["spec"] or ""])
 
 
 def _term(db, ref: str) -> str | None:  # noqa: ANN001
