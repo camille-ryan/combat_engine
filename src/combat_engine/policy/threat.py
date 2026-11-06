@@ -48,6 +48,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import cache
 from typing import Any
 from weakref import WeakKeyDictionary
 
@@ -402,6 +403,65 @@ def _runnable(ref: str) -> bool:
     return p is not None and getattr(p, "body", None) is not None
 
 
+@cache
+def _is_terrain_power(ref: str) -> bool:
+    """Does this ref name one of the 24 printed terrain powers? `#1108`.
+
+    Asked of the `terrain` table rather than of the ref's shape: `x2_` also
+    prefixes the 121 fantastic-terrain regions, which are not powers and
+    have no feature to stand next to.
+    """
+    from combat_engine.db import game
+
+    try:
+        got = game().execute(
+            "SELECT 1 FROM terrain WHERE ref = ? AND kind = 'terrain power'",
+            (ref,),
+        ).fetchone()
+    except Exception:
+        return False
+    return got is not None
+
+
+def _pose_the_feature(w: Any, me: int, ref: str) -> None:
+    """Put the thing a terrain power comes out of on the measuring board.
+
+    `#1108`. These rows print *"Requirement: you must be adjacent to a
+    <feature>"*, and `board` lays a caster and a dummy on bare ground --
+    so the body returned at its first line and **`row_damage` answered
+    0.0 for a row printing 10 fire damage.** The AI then priced the whole
+    payoff at nothing and a terrain power lost to ending the turn by
+    0.001.
+
+    The same pose `audit.board` and `story.run.place_features` make, for
+    the same reason: the feature is the row's context, not its target.
+
+    Idempotent, because `row_damage` reuses one board per creature and
+    `scrub` does not sweep zones -- laying a second copy each call would
+    let the probe's answer drift with how many rows had been priced
+    before it.
+
+    Adjacent, and `power_reach` generous: the requirement is about
+    standing next to the thing, and a probe that fails it is measuring the
+    board rather than the row.
+    """
+    if not _is_terrain_power(ref):
+        return
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.zones import Zone
+
+    for _eid, zone in w.each(Zone):
+        if zone.power == ref:
+            return
+    stood = w.get(me, Position)
+    if stood is None:
+        return
+    beside = (stood.square[0] + 1, stood.square[1])
+    w.zones.create(0, ref, frozenset({beside}), When.ENCOUNTER,
+                   power=ref, power_uses=0, power_reach=2)
+
+
 def row_damage(world: Any, eid: int, ref: str) -> float:
     """What one row of `eid`'s would deal to the baseline opponent, in hp.
 
@@ -429,6 +489,8 @@ def row_damage(world: Any, eid: int, ref: str) -> float:
         boards[eid] = made
     w, me, foe = made
     scrub(w, me, foe)
+    # After `scrub`, which puts the board back and does not sweep zones.
+    _pose_the_feature(w, me, ref)
     try:
         out = float(expected(w, me, ref, foe))
     except Exception:

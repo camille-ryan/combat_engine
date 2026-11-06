@@ -1683,13 +1683,33 @@ def _terrain(world: World, encounter: Encounter, actor: int) -> list[Action]:
     feature for ever and the sentence above was false for as long as it
     had been written down.
 
-    No `targets`: the row's own header carries its range and target line,
-    so the attack is aimed by `dsl.use` the way every other row's is. The
-    zone is not carried on the `Action` either -- `perform` finds it back by
-    ref, for the reason the `move_zone` note gives: a field on `Action`
-    widens a structure two readers consume without running anything.
+    **`targets` are enumerated now, which is `#1108`.** They used to be
+    left empty on the reasoning that *"the row's own header carries its
+    range and target line, so the attack is aimed by `dsl.use` the way
+    every other row's is"*. True about the aiming, and it cost the AI the
+    whole payoff: `doctrine`'s hit-point-swing loop walks
+    `action.targets`, so an offer with none reads as worth nothing and a
+    terrain power lost to **ending the turn by 0.001**.
+
+    What is enumerated is **the decision the engine is going to make**, not
+    an estimate of it: `perform` calls `dsl.use` with this same `origin`
+    and `source`, and `_auto_targets` is deterministic, so the priced
+    targets are the resolved ones. That is the whole argument for doing it
+    here rather than offering one entry per placement -- which would also
+    have re-opened `#1127`'s decision that a close blast is offered with no
+    aim at all.
+
+    They can go stale between the menu being drawn and the action being
+    taken -- another creature's reaction, a slide -- which is already true
+    of every `_aimings` offer and is why `perform` re-resolves rather than
+    trusting them.
+
+    The zone is still not carried on the `Action` -- `perform` finds it
+    back by ref, for the reason the `move_zone` note gives: a field on
+    `Action` widens a structure two readers consume without running
+    anything.
     """
-    from .dsl import get, reach_of, usable
+    from .dsl import _auto_targets, get, reach_of, usable
     from .zones import Zone
 
     out: list[Action] = []
@@ -1744,9 +1764,19 @@ def _terrain(world: World, encounter: Encounter, actor: int) -> list[Action]:
         # ignores it and is centred by `source` alone.
         nearest = min(zone.squares, key=lambda sq: distance(here.square, sq))
         aimed_from_feature = reach_of(world, actor, p, 0, 0).kind == "close_blast"
+        aim = None if aimed_from_feature else nearest
+        here_from = frozenset(zone.squares)
+        # **What `dsl.use` will pick, asked the same way it will ask.**
+        # `#1108`. Wrapped because a geometry read on a half-built board can
+        # raise and an offer must not: a menu that throws is worse than one
+        # priced at nothing, which is what this is fixing.
+        try:
+            caught, _aimed = _auto_targets(world, actor, p, aim, 0, 0, here_from)
+        except Exception:
+            caught = []
         out.append(Action(kind="terrain", cost=p.action, ref=zone.power,
-                          origin=None if aimed_from_feature else nearest,
-                          source=frozenset(zone.squares)))
+                          origin=aim, source=here_from,
+                          targets=tuple(caught)))
     return out
 
 
