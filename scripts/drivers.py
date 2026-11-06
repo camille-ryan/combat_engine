@@ -9593,6 +9593,195 @@ def vulnerability_held_by_a_zone(out: Result) -> None:
                  f"mine={gate({'source': me})} theirs={gate({'source': foe})}")
 
 
+def a_minor_action_finds_a_hidden_creature(out: Result) -> None:
+    """Spotting a hidden creature: a minor action, opposed, once per quarry.
+
+    `#1088`, on Camille's correction -- *"the minor action is to try and
+    spot a creature. The minute long thing is to search an area for hidden
+    traps, items, etc."* My recommendation had been not to build it at all,
+    on a misread of the *"Searching"* note; the page says otherwise and
+    every clause below is printed:
+
+    > *"If you want to use the skill actively, you need to take a minor
+    > action or spend 1 minute listening or searching, depending on the
+    > task."* -- Perception, PHB p186
+    >
+    > *"Opposed Check: Perception vs. Stealth when trying to spot or hear a
+    > creature using Stealth."*
+    >
+    > *"Failure: You can't try again unless circumstances change."*
+    >
+    > *"An enemy can try to find you on its turn. If an enemy makes an
+    > active Perception check and beats your Stealth check result (**don't
+    > make a new check**), you don't remain hidden from that enemy."*
+    > -- Stealth, PHB p188
+
+    The last clause is why `components.STEALTH_RESULT` exists: the number a
+    spot is opposed by is the one the hider **already rolled**, and nothing
+    else in the engine kept it.
+
+    The row it was built for is `p13783`'s Augment 1, whose own docstring
+    argued the clause could not be written -- *"a skill check carries no
+    such purpose to gate on"* -- which `#1111` had already made false.
+    """
+    import audit as _audit_spot
+    from combat_engine.engine import actions as _A
+    from combat_engine.engine import skills as _skills
+    from combat_engine.engine.actions import SPOT_PURPOSE, spot_failed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import STEALTH_RESULT, Budget, Powers
+    from combat_engine.engine.dsl import use as _use_spot
+    from combat_engine.engine.query import allies, enemies, hidden_from
+    from combat_engine.engine.types import ActionType, Relation
+
+    def offers(world, who):  # noqa: ANN001, ANN202
+        return [a for a in _A.legal(world, world.encounter, who)
+                if a.kind == "spot"]
+
+    # 1. Nothing to spot, nothing offered.
+    world, me, _ = _audit_spot.board("p377", 3)
+    out.that(not offers(world, me),
+             "no spot is offered while nobody is hidden -- the action exists"
+             " for a creature you cannot see, not as a free minor every turn",
+             f"{len(offers(world, me))} offer(s)")
+
+    # 2. A real hide records what it rolled, and the spot is offered.
+    foe = sorted(enemies(world, me))[0]
+    Cast(world=world, me=foe, ref="drivers:hide").hide(from_=me, check=True)
+    out.that(me in hidden_from(world, foe),
+             "the setup landed: the foe is hidden from the caster, so the"
+             " offer below is the action answering and not an empty board",
+             f"hidden_from={sorted(hidden_from(world, foe))}")
+    theirs = world.get(foe, Powers)
+    rolled = theirs.charges.get(STEALTH_RESULT) if theirs is not None else None
+    out.that(rolled is not None,
+             "and the hider's Stealth TOTAL is remembered -- the printed"
+             " clause is 'beats your Stealth check result (don't make a new"
+             " check)', and `Cast.check` answers whether a DC was beaten"
+             " rather than by how much, so nothing else kept this number",
+             f"recorded={rolled}")
+    got = offers(world, me)
+    out.that(len(got) == 1 and got[0].cost is ActionType.MINOR,
+             "a creature hidden from you is offered a spot, as a MINOR"
+             " action -- the cost the Perception entry prints",
+             f"{len(got)} offer(s), cost={got[0].cost if got else None}")
+
+    # 3. Success reveals THIS PAIR only, with both watchers really set.
+    pair, who, _ = _audit_spot.board("p377", 3)
+    quarry = sorted(enemies(pair, who))[0]
+    mate = next(a for a in allies(pair, who) if a != who)
+    Cast(world=pair, me=quarry, ref="drivers:hide").hide(from_=who, check=True)
+    #: Laid directly for the second watcher rather than with a second
+    #: `hide(check=True)`: that one rolls against the ally's passive
+    #: Perception and **failed** on the first attempt here, leaving the
+    #: control empty and the pair-only assertion vacuous. Asserted below
+    #: rather than assumed.
+    pair.relations.set(Relation.HIDDEN_FROM, quarry, mate, via="drivers")
+    out.that(who in hidden_from(pair, quarry)
+             and mate in hidden_from(pair, quarry),
+             "the setup landed: the quarry is hidden from BOTH watchers, so"
+             " 'only this pair' below is a real claim",
+             f"from_caster={who in hidden_from(pair, quarry)}"
+             f" from_ally={mate in hidden_from(pair, quarry)}")
+    quarry_powers = pair.get(quarry, Powers)
+    assert quarry_powers is not None, "the quarry has no Powers to record on"
+    quarry_powers.charges[STEALTH_RESULT] = 0  # nothing to beat
+    #: Guarded, because unwiring the offer must make this rule report FAIL
+    #: on each assertion rather than raise on the first index -- a raising
+    #: rule names the file and not the claim.
+    pair_offer = offers(pair, who)
+    out.that(bool(pair_offer),
+             "the spot is reachable through `legal` for the pair board too,"
+             " which is what the next two assertions act on",
+             f"{len(pair_offer)} offer(s)")
+    if pair_offer:
+        _A.perform(pair, pair.encounter, who, pair_offer[0])
+    out.that(who not in hidden_from(pair, quarry),
+             "a spot that beats the recorded result reveals the quarry to"
+             " the spotter",
+             f"still hidden from the spotter:"
+             f" {who in hidden_from(pair, quarry)}")
+    out.that(mate in hidden_from(pair, quarry),
+             "and to the spotter ALONE -- being hidden is held per watcher,"
+             " so `clear_source` would have revealed it to the whole board,"
+             " which is a stronger outcome than the card gives",
+             f"still hidden from the ally:"
+             f" {mate in hidden_from(pair, quarry)}")
+
+    # 4. Failure stands against that creature, budget or no budget.
+    miss, who2, _ = _audit_spot.board("p377", 3)
+    quarry2 = sorted(enemies(miss, who2))[0]
+    Cast(world=miss, me=quarry2, ref="drivers:hide").hide(from_=who2, check=True)
+    quarry2_powers = miss.get(quarry2, Powers)
+    assert quarry2_powers is not None, "the quarry has no Powers to record on"
+    quarry2_powers.charges[STEALTH_RESULT] = 999  # unbeatable
+    miss_offer = offers(miss, who2)
+    out.that(bool(miss_offer),
+             "and for the miss board, so the failure assertions below are"
+             " about a spot that happened",
+             f"{len(miss_offer)} offer(s)")
+    if miss_offer:
+        _A.perform(miss, miss.encounter, who2, miss_offer[0])
+    mine = miss.get(who2, Powers)
+    out.that(who2 in hidden_from(miss, quarry2),
+             "a spot that misses leaves the quarry hidden",
+             f"hidden={who2 in hidden_from(miss, quarry2)}")
+    out.that(spot_failed(quarry2) in (mine.charges if mine else {}),
+             "and the failure is remembered against THAT creature -- the"
+             " printed clause is 'you can't try again unless circumstances"
+             " change', which is not a per-turn cost",
+             f"charges={sorted(mine.charges) if mine else []}")
+    #: **A fresh `Budget`, for the reason `#1126` paid for.** Straight after
+    #: `perform` the minor is spent, so nothing would be offered whatever
+    #: the retry rule said -- the assertion would pass on the action economy.
+    miss.add(who2, Budget())
+    out.that(miss.encounter.can_spend(who2, ActionType.MINOR),
+             "the control landed: with a fresh `Budget` a minor is available"
+             " again, so the refusal below is the retry rule and not the"
+             " action economy answering for it",
+             f"can_spend={miss.encounter.can_spend(who2, ActionType.MINOR)}")
+    out.that(not offers(miss, who2),
+             "and no second spot is offered at that creature",
+             f"{len(offers(miss, who2))} offer(s)")
+
+    # 5. The row this was built for, and the narrowing it prints.
+    ard, caster, _ = _audit_spot.board("p13783", 9)
+
+    def one_point(actor, kind, options, prompt):  # noqa: ANN001, ANN202
+        return options.index(1) if kind == "choose" and 1 in options else 0
+
+    ard.decider = one_point
+    _use_spot(ard, caster, "p13783", spend=False)
+    hidden_mod = _skills.modifier(ard, caster, "perception",
+                                  purpose=SPOT_PURPOSE)
+    plain_mod = _skills.modifier(ard, caster, "perception", purpose="")
+    trap_mod = _skills.modifier(ard, caster, "perception", purpose="trap")
+    out.that(hidden_mod == plain_mod + 5,
+             "`p13783`'s Augment 1 pays its printed +5 to a Perception check"
+             " made to find a hidden creature",
+             f"find-hidden={hidden_mod} ordinary={plain_mod}")
+    out.that(trap_mod == plain_mod,
+             "and NOT to a Perception check made to find a trap -- same"
+             " skill, different purpose, and the card names only the"
+             " creature. Without this the bonus would be a standing +5 to"
+             " every Perception check the ardent makes",
+             f"trap={trap_mod} ordinary={plain_mod}")
+
+    # 6. The kind is OWED, not priced -- Camille's #1098/#1065 ruling.
+    from combat_engine.policy import WEIGHTS as _W_spot
+
+    out.that("is_spot" not in _W_spot,
+             "the spot kind has no weight in the table -- owed, not priced."
+             " Camille's standing deferral is 'defer until these can be"
+             " scored dynamically' (#1065), and a guessed number would"
+             " pre-empt it exactly as `is_disable` and `is_terrain` did",
+             f"is_spot in WEIGHTS: {'is_spot' in _W_spot}")
+    out.that("spot" in UNNAMED_KINDS_OWED,
+             "and it is on the owed list, so `kinds_named` stays green"
+             " honestly rather than by the kind being invisible to it",
+             f"owed={'spot' in UNNAMED_KINDS_OWED}")
+
+
 def class_form(out: Result) -> None:
     """A class form is a state *and* a keyword, and they are not the same test.
 
@@ -63313,6 +63502,18 @@ UNNAMED_KINDS_OWED = frozenset(
         "terrain",
         "dismount",
         "feint",
+        # **Owed, not priced, and by the same ruling as `disable` and
+        # `terrain` above.** `#1088` adds the printed minor action for
+        # spotting a hidden creature; what it is worth against ending a
+        # turn is a balance decision and Camille's standing deferral on
+        # `#1065` covers it: *"Defer until these can be scored
+        # dynamically."*
+        #
+        # So the action is offered and the AI will not choose it until
+        # `#314` lands. Said plainly rather than implied: a player can take
+        # it today, a monster will not, and inventing a weight here would
+        # pre-empt the ruling exactly as `is_disable` and `is_terrain` did.
+        "spot",
         "grab",
         "mount",
         "pull_grabbed",
@@ -66282,6 +66483,9 @@ DRIVERS = {
                    "adding to a roll already made, without rolling again"),
     "recharge_while": (recharge_while,
                        "a recharge condition that is a state, not a moment"),
+    "spot": (a_minor_action_finds_a_hidden_creature,
+             "a minor action to find a hidden creature, opposed by what the"
+             " hider actually rolled, and once per quarry (#1088)"),
     "class_form": (class_form,
                    "a class form is a state and a keyword, and those differ"),
     "substitution": (substitution,

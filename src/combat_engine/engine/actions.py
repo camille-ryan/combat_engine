@@ -151,6 +151,7 @@ def legal(
     out.extend(_stabilising(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
     out.extend(_searching(world, encounter, actor))
+    out.extend(_spotting(world, encounter, actor))
     out.extend(_disabling(world, encounter, actor))
     out.extend(_readying(world, encounter, actor))
     out.extend(_feinting(world, encounter, actor))
@@ -365,6 +366,32 @@ def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
 #: right clock for "only once per encounter".
 FEINT_USE = "feint:used"
 
+#: What a spot's Perception check is **for**, carried on `SkillCheck.purpose`.
+#:
+#: `#1088`. One card gates on it -- *"+5 to Perception checks made to find
+#: hidden creatures"* -- and without it that bonus would apply to every
+#: Perception check the character makes, which is wider than the printed
+#: line. `#1111` put `purpose` into the modifier context for exactly this
+#: pair of markers; this is the half that makes the druid's one reachable.
+SPOT_PURPOSE = "find-hidden"
+
+#: A spot that failed against one creature, held on `Powers.charges`.
+#:
+#: The printed failure clause is *"You can't try again unless circumstances
+#: change"* -- so a failed spot is not a once-per-turn cost but a standing
+#: refusal against **that creature**, which is why the key carries the
+#: target's id. Without it a minor action could be spent every round for a
+#: fresh roll, which the page denies.
+#:
+#: "Circumstances change" is not modelled further than this: the key clears
+#: with the rest of `charges` at a rest, and `Cast.unhide` wipes the hider's
+#: recorded result, so a creature that hides *again* is a new question. That
+#: is the honest reading of a clause whose trigger the book leaves to the
+#: DM, and it is said here rather than implied.
+def spot_failed(victim: int) -> str:
+    return f"spot:failed:{victim}"
+
+
 #: What the feint's Bluff check is **for**, carried on `SkillCheck.purpose`.
 #:
 #: One card keys off it -- "a successful Bluff check in combat to gain combat
@@ -445,6 +472,69 @@ def _searching(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # is to look around, not to look at a particular trap you cannot see.
     return [Action(kind="search", cost=ActionType.MINOR,
                    targets=tuple(sorted(hidden)))]
+
+
+def _spotting(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Finding a creature that is hidden from you. A **minor** action.
+
+    `#1088`, on Camille's correction -- *"the minor action is to try and
+    spot a creature; the minute long thing is to search an area for hidden
+    traps, items, etc."* Read off the page afterwards, and every clause is
+    printed:
+
+    > *"If you want to use the skill actively, you need to take a minor
+    > action or spend 1 minute listening or searching, depending on the
+    > task."* (Perception, PHB p186)
+    >
+    > *"Opposed Check: Perception vs. Stealth when trying to spot or hear a
+    > creature using Stealth."*
+    >
+    > *"An enemy can try to find you on its turn. If an enemy makes an
+    > active Perception check and beats your Stealth check result (**don't
+    > make a new check**), you don't remain hidden from that enemy."*
+    > (Stealth, PHB p188)
+    >
+    > *"Failure: You can't try again unless circumstances change."*
+
+    So: minor, opposed against the number the hider **already rolled**, and
+    a failure stands against that creature.
+
+    **Offered to both sides**, which is the difference from `_searching`.
+    That one is PC-only by Camille's `#1064` ruling about traps, and the
+    reasoning does not carry: the printed clause is about an *enemy* trying
+    to find you, and a monster hunting a hidden rogue is the case this
+    exists for.
+
+    Offered only where it could do something -- a creature actually hidden
+    from this one, not already failed against, with a recorded result to
+    beat.
+    """
+    from .components import Powers
+    from .query import enemies, hidden_from
+
+    if not encounter.can_spend(actor, ActionType.MINOR):
+        return []
+    known = world.get(actor, Powers)
+    tried = known.charges if known is not None else {}
+    lurking = [
+        e
+        for e in sorted(enemies(world, actor))
+        if alive(world, e)
+        # `hidden_from(world, e)` is who **e** is hidden from, which is the
+        # direction `_hiding` reads it in too.
+        and actor in hidden_from(world, e)
+        and spot_failed(e) not in tried
+    ]
+    if not lurking:
+        return []
+    # One action per creature, unlike the trap search's one-over-all. A trap
+    # is something you cannot see and so cannot name; a hidden creature you
+    # are trying to locate is a specific enemy, and the printed failure
+    # clause is **per creature** -- so they cannot share an action.
+    return [
+        Action(kind="spot", cost=ActionType.MINOR, targets=(who,))
+        for who in lurking
+    ]
 
 
 def _disabling(world: World, encounter: Encounter, actor: int) -> list[Action]:
@@ -2436,6 +2526,42 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
                     targets=list(action.targets),
                     target=action.targets[0] if action.targets else None)
         return cast.coup_de_grace()
+
+    if action.kind == "spot":
+        from .cast import Cast as _SpotCast
+        from .components import STEALTH_RESULT
+        from .components import Powers as _SpotPowers
+        from .skills import check as _spot_check
+
+        if not action.targets:
+            return False
+        quarry = action.targets[0]
+        # The number to beat is the one the hider ROLLED, not a fresh check
+        # and not its passive -- "don't make a new check". A creature hidden
+        # by a row rather than by the hide action has no recorded roll, so
+        # its passive Stealth stands in: that is the only number available,
+        # and refusing to offer the spot at all would make such a creature
+        # permanently unfindable.
+        theirs = world.get(quarry, _SpotPowers)
+        cast = _SpotCast(world=world, me=actor, ref="spot",
+                         targets=[quarry], target=quarry)
+        recorded = (theirs.charges.get(STEALTH_RESULT)
+                    if theirs is not None else None)
+        dc = recorded if recorded is not None else cast.passive(
+            "stealth", of=quarry)
+        found = _spot_check(world, actor, "perception", dc=dc,
+                            target=quarry, purpose=SPOT_PURPOSE)
+        mine = world.get(actor, _SpotPowers) or world.add(actor, _SpotPowers())
+        if not found:
+            # "You can't try again unless circumstances change."
+            mine.charges[spot_failed(quarry)] = 1
+            return True
+        # **This pair only.** Being hidden is held per watcher, so a
+        # successful spot reveals the quarry to the spotter and to nobody
+        # else -- `clear_source` would reveal it to the whole board, which
+        # is a different and much stronger outcome than the card gives.
+        world.relations.clear(Relation.HIDDEN_FROM, quarry, actor, "spotted")
+        return True
 
     if action.kind == "feint":
         # `_Powers` is aliased: a later branch of this same function imports

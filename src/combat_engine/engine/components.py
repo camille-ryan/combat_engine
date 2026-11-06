@@ -2161,3 +2161,29 @@ class Weapon:
                     break
         elif self.hands.lower() not in self.properties:
             self.properties = self.properties | {self.hands.lower()}
+
+
+
+#: The total a hidden creature rolled on the Stealth check that hid it, kept
+#: on `Powers.charges`. `#1088`.
+#:
+#: **Remembered rather than re-rolled, because the page says so**:
+#:
+#:   > "If an enemy makes an active Perception check and beats your Stealth
+#:   > check result (**don't make a new check**), you don't remain hidden
+#:   > from that enemy."
+#:
+#: So a spot is opposed by the number the hider actually rolled, and there
+#: is nowhere else that number survives -- `Cast.check` answers whether a DC
+#: was beaten, not by how much.
+#:
+#: On `charges` for the reason `actions.FEINT_USE` gives: per-encounter
+#: bookkeeping that belongs to a printed action rather than to a row. It is
+#: cleared by both rests with the rest of `charges`, and by `Cast.unhide`,
+#: so a stale number cannot oppose a later hide.
+#:
+#: **Here and not in `actions.py`.** `FEINT_USE` is written and read in
+#: `actions`; this is written in `cast` and read in `actions`, and `actions`
+#: already imports `cast` function-locally to dodge a cycle. `components` is
+#: below both.
+STEALTH_RESULT = "stealth:result"

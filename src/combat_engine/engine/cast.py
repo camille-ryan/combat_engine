@@ -2099,7 +2099,8 @@ class Cast:
         creature stays visible: a failed Stealth check is a spent action and
         no hiding, which is the whole of what this changes about play.
         """
-        from .events import Note
+        from .components import STEALTH_RESULT, Powers
+        from .events import Note, SkillCheck
         from .query import moved_this_action, ran_this_action
         from .resolve import _mods
 
@@ -2132,11 +2133,41 @@ class Cast:
                 Note(text=f"{self.me} failed to go unseen")
             )
             return None
+        # **Remember what was rolled**, because a spotter is told explicitly
+        # not to make this creature roll again -- `components.STEALTH_RESULT`
+        # carries the printed clause and the reasoning. `#1088`.
+        #
+        # Read back off the bus rather than from `check`'s return, which
+        # answers whether the DC was beaten and not by how much. `SkillCheck`
+        # is a `Decision` whose `total` is finished inside the resolve
+        # callback, so the logged event holds the outcome where a listener's
+        # copy held the proposal.
+        last = next(
+            (e for e in reversed(self.world.bus.log)
+             if isinstance(e, SkillCheck) and e.actor == self.me
+             and e.skill == "stealth"),
+            None,
+        )
+        if last is not None:
+            known = self.world.get(self.me, Powers) or self.world.add(
+                self.me, Powers())
+            known.charges[STEALTH_RESULT] = int(last.total)
         return self.invisible(to=from_, until=until)
 
     def unhide(self) -> None:
-        """Give yourself away deliberately."""
+        """Give yourself away deliberately.
+
+        The remembered Stealth result goes with it (`#1088`): a creature
+        that is not hidden has no check for a spotter to beat, and a stale
+        number left behind would oppose the *next* hide with an older and
+        possibly better roll.
+        """
+        from .components import STEALTH_RESULT, Powers
+
         self.world.relations.clear_source(Relation.HIDDEN_FROM, self.me, "revealed")
+        known = self.world.get(self.me, Powers)
+        if known is not None:
+            known.charges.pop(STEALTH_RESULT, None)
 
     def is_hidden(self, *, from_: int | None = None) -> bool:
         from .query import hidden_from
