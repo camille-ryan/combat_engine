@@ -9719,6 +9719,46 @@ def class_form(out: Result) -> None:
              " none is a trait, which is the line the printed sentence draws",
              f"{sorted(r for r in barred if _REG[r].action is _AT.NONE)}")
 
+    #: -- and the AUDIT BOARD must not pose a row into its own refusal ----
+    #:
+    #: `#1131`. `audit._use_rows` fires the caster's other rows to arm
+    #: things, a dealt druid holds the row that reshapes it, and the
+    #: restriction above then refuses the row the board exists to exercise.
+    #: Measured over all 180 declared druid power rows: **80** reported
+    #: `UNUSED` against **5** once the pose is unwound, and the 5 are
+    #: genuine `Requirement`s that must keep reporting it.
+    #:
+    #: Asserted here rather than left to the sweep, because the sweep is
+    #: 35 minutes and reports it as 75 rows' own fault.
+    bare, who4, _ = _audit_cf.board("p15858", 3)
+    ok4, why4 = _usable_cf(bare, who4, _REG["p15858"])
+    out.that(ok4,
+             "a druid row is usable on its own audit board -- the setup fires"
+             " the row that takes beast form, and `_unforbid` unwinds that"
+             " when it refuses the row under test (#1131)",
+             f"usable={ok4} why={why4!r}")
+    #: **The control that says it unwinds only when it has to**, and the
+    #: first draft of this assertion was tautological -- it read
+    #: `in_beast_form is False or ok4`, which any true `ok4` satisfies, so it
+    #: restated the line above instead of testing anything.
+    #:
+    #: `p5036` **carries** the beast form keyword, so the restriction never
+    #: refuses it and `_unforbid` has no reason to fire. The shape must
+    #: therefore still be on that board. A blanket strip would pass the
+    #: assertion above and fail this one.
+    kept, who5, _ = _audit_cf.board("p5036", 3)
+    keyworded = get("p5036")
+    assert keyworded is not None, "p5036 is not declared"
+    out.that(Keyword.BEAST_FORM in (keyworded.keywords or ()),
+             "the control is built on a row that really does carry the"
+             " keyword, so the restriction has nothing to say about it",
+             f"keywords={sorted(str(k) for k in (keyworded.keywords or ()))}")
+    out.that(_ibf(kept, who5),
+             "and on ITS board the druid is still in beast form -- so"
+             " `_unforbid` unwinds the pose only where the row under test is"
+             " refused, rather than stripping every form it finds",
+             f"in_beast_form={_ibf(kept, who5)}")
+
     feat_ok, feat_why = _usable_cf(w3, who3, _REG["f2284"])
     out.that(feat_ok,
              "while a static feat Benefit gated on being in beast form is"

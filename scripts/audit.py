@@ -5913,6 +5913,62 @@ def _use_rows(world, caster: int, refs: list[str], foe: int | None, skip: str = 
     for e, was in stood.items():
         if world.get(e, Position) is not None:
             place(world, e, was)
+    # **And unwind a setup row that REFUSES the row under test.** #1131, and
+    # the third instance of the bug class the two notes above are about: a
+    # setup row leaves a lasting effect that makes other rows unauditable,
+    # and the fault reads as theirs.
+    #
+    # The case: a dealt druid holds the power that takes a beast form, #1130
+    # correctly bars a power lacking that keyword while the shape is held,
+    # and `usable` therefore refuses the row the board was built for.
+    # Measured over all 180 declared druid power rows -- 90 of 174 firing
+    # against 164 with the restriction made inert, so **75 rows** were
+    # reporting UNUSED for a reason that is not theirs.
+    #
+    # `skip` is the ref under test at every call site, which is what makes
+    # this answerable here rather than in the caller.
+    #
+    # **One effect at a time, stopping as soon as the row is usable.** Ending
+    # the whole candidate set at once would tear down more of the pose than
+    # the refusal called for, and would not say which row caused it. This
+    # attributes it.
+    #
+    # **And only effects a setup row laid**, by the same label convention the
+    # `p10046` guard above uses -- an effect's label begins with the ref of
+    # the row that laid it -- so the holds the board places on purpose, and
+    # anything a `Requirement` genuinely cannot meet, are untouched. A row
+    # that is still refused afterwards reports UNUSED, which is the honest
+    # answer and the one this must not start papering over.
+    _unforbid(world, caster, skip, set(refs) - {skip})
+
+
+def _unforbid(world, caster: int, under_test: str, fired: set[str]) -> None:  # noqa: ANN001
+    """End setup-laid effects that refuse `under_test`, one at a time.
+
+    Returns nothing and does nothing at all unless the row under test is
+    refused, so the board every other row sees is unchanged. #1131.
+
+    Separate from `_use_rows` because `_attempts` poses the same caster
+    several ways and this is the question *"is the pose hiding the row"*,
+    which is worth being able to read on its own.
+    """
+    from combat_engine.engine.dsl import get, usable
+
+    if not under_test:
+        return
+    declared = get(under_test)
+    if declared is None:
+        return
+    if usable(world, caster, declared, board=True)[0]:
+        return
+    for eff in list(world.effects.live.values()):
+        if eff.owner != caster:
+            continue
+        if eff.label.split(" ")[0] not in fired:
+            continue
+        world.effects.end(eff, "audit:setup forbade the row under test")
+        if usable(world, caster, declared, board=True)[0]:
+            return
 
 
 def _allies_of(world, caster: int) -> list[int]:  # noqa: ANN001
