@@ -728,18 +728,44 @@ def f3567(c: Cast) -> None:
 
 
 @power("f3568", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.Character.race2",))
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.Character.race2_power",))
 def f3568(c: Cast) -> None:
     """A second race's power, chosen at build time, and then a shared
     once-an-encounter budget with `p8278`.
 
-    The old reason was false: `c.race_of` reads the `race:<ref>` that
-    `Build.choices` carries, so a character does have a race. What is
-    missing is the *second* one -- the race another racial feature chose,
-    and which of its powers was taken -- and nothing in `Build.choices`
-    records either, so there is no ref for `c.grant_row` to hand over.
-    The shared budget is sayable once that ref exists: `c.expend_row`
-    spends the other end."""
+    **Half of what this waited on is built, so the marker moved rather
+    than the row landing.** #1029. The note said *"nothing in
+    `Build.choices` records either"* of two things, and one of them now
+    is: `Character.race2` holds the race `rt:r47-t1` picked, `spawn`
+    draws one for a revenant and only a revenant, and `Build.choices`
+    carries it as `race2:<ref>`.
+
+    What is left is the card's parenthetical:
+
+        "(if that race has more than one racial power, choose one of the
+         powers, and you gain only that one)"
+
+    Nothing records **which** power was taken. Measured over the 46
+    dealable races:
+
+        exactly one racial power   39      the choice is forced
+        more than one              6       r1 r14 r16 r33 r44 r61
+        none at all                1       r41
+
+    So the pick is only a question for 6 of 46, and `RaceLine.one_of`
+    already names the options for some of them -- but a row cannot be
+    written for 39 races and left guessing for 6, which is why this keeps
+    a marker rather than landing with a note.
+
+    **A symbol of its own and deliberately not `chargen.power_choice()`**
+    (`#1112`'s, 9 rows): that one records a sub-choice a *feat* offers,
+    this one a sub-choice a *race* offers, and one symbol serving two
+    needs is the mistake `CLAUDE.md` opens on -- twelve rows reported
+    ready when a third of it landed.
+
+    The shared budget is unchanged and still sayable the moment the ref
+    exists: `c.expend_row` spends the other end."""
 
 
 # -- the dim light family ---------------------------------------------------

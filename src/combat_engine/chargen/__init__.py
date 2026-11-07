@@ -2146,6 +2146,14 @@ RACES: dict[str, RaceLine] = _races_from_the_book()
 #: and re-recording under it in a mixed commit would hide one.
 DEAL_RACES = True
 
+#: The one race whose printed trait grants a second race. #1029.
+#:
+#: Held as a ref rather than a name, like `HUMAN` above it and for the
+#: same reason. `rt:r47-t1` is the trait and its text is quoted on
+#: `Character.race2`; no other race in the 46 prints anything of the
+#: shape, which is why this is a constant and not a column.
+SECOND_RACE_FROM = "r47"
+
 #: Deal every character a deity. `#454`, on Camille's option B.
 #:
 #: **A flag for the same reason `DEAL_RACES` is one**, and a much smaller
@@ -2223,7 +2231,8 @@ USE_RATINGS = True
 BLACK = 3.0
 
 
-def deal_race(rng: Random, cls: str = "", build: Build | None = None) -> str:
+def deal_race(rng: Random, cls: str = "", build: Build | None = None,
+              *, other_than: str = "") -> str:
     """A race, drawn like a hand of powers is.
 
     **Weighted towards the ones whose scores suit the class, and not decided
@@ -2235,6 +2244,10 @@ def deal_race(rng: Random, cls: str = "", build: Build | None = None) -> str:
 
     `cls` is optional so the old one-argument call still answers; without it
     there is no build to score against and the draw stays uniform.
+
+    `other_than` drops one ref from the pool **before** the draw, for
+    `rt:r47-t1`'s printed *"Select a race other than r47"*. See the note
+    at the sample below for why it is not a filter applied afterwards.
     """
     # **Variants are selectable and not dealt**, which is what keeps this
     # change from moving every sheet in the game. A variant's own 21 traits
@@ -2249,14 +2262,24 @@ def deal_race(rng: Random, cls: str = "", build: Build | None = None) -> str:
     # filter is a one-line change -- and it belongs in a commit with
     # nothing else in it, for the reason `DEAL_RACES` records below: it
     # moves every number on every sheet and all seven fixtures with them.
-    pool = sorted(r for r, line in RACES.items() if not line.parent)
+    pool = sorted(r for r, line in RACES.items()
+                  if not line.parent and r != other_than)
     if not pool:
         return ""
     if not SCORED_CHOICES or not cls:
         return rng.choice(pool)
     from .choices import race_options, sample
 
-    drawn = sample(race_options(cls, build=build), rng)
+    # **`other_than` is excluded before the draw, never after it.** #1029.
+    # `rt:r47-t1` prints *"Select a race other than r47"*, and a result
+    # discarded afterwards would spend a different number of values from
+    # the stream depending on what came out -- so the same seed would
+    # deal a different character depending on a race it did not take.
+    # The same hazard `_trained_skills` records about drawing for a pinned
+    # set and throwing the answer away.
+    offered = [o for o in race_options(cls, build=build)
+               if getattr(o, "ref", "") != other_than]
+    drawn = sample(offered, rng)
     return drawn.ref if drawn is not None else rng.choice(pool)
 
 
@@ -2290,6 +2313,32 @@ class Character:
     #: used `race=""` as its raceless control and the control had a race.
     #: #688.
     race: str = ""
+    #: **A second race, counted for prerequisites only.** #1029.
+    #:
+    #: One printed trait asks for this and no other does. `rt:r47-t1`:
+    #:
+    #:     "Select a race other than r47. You are also considered a member
+    #:      of that race for the purpose of meeting prerequisites, such as
+    #:      feat or paragon path prerequisites."
+    #:
+    #: Camille, asked directly: *"This is a special case for revenants.
+    #: Read the revenant race. I think it should make sense then."* It
+    #: does -- the printed clause is **scoped to prerequisites** and to
+    #: nothing else, so this is one scalar read by `meets` and not a
+    #: second `RaceLine`.
+    #:
+    #: **Deliberately NOT read by `spawn`.** A second race does not bring
+    #: its size, its speed, its scores, its skill bonuses, its surges, its
+    #: trait rows or its racial power -- the trait grants none of those,
+    #: and `f3568` exists precisely because the **power** needs a separate
+    #: feat to come across. Widening this to the rest of `RaceLine` would
+    #: hand every revenant a second race's whole chassis, which is the
+    #: drawable-and-inert fault pointed the other way: a field doing more
+    #: than its card says.
+    #:
+    #: Empty for every character but a revenant, and empty is what every
+    #: reader already answers for.
+    race2: str = ""
     #: The magic items this character arrives wearing, as `Magic` records.
     #: Empty means "deal me a kit", the same as `powers` and `feats` above
     #: and read at the same place in `spawn`.
@@ -2404,6 +2453,21 @@ class Character:
             out.add(f"beast:{leg.companion}")
         if self.race:
             out.add(f"race:{self.race}")
+        # **The second race, under its own key.** #1029. `race2:<ref>`
+        # rather than a second `race:<ref>`, because a reader asking "is
+        # this character an r3" and a reader asking "which race did the
+        # revenant trait pick" are different questions -- and folding them
+        # would make `Cast.chosen_option`-style reads answer the first
+        # with the second. `chargen.meets` is what unites them, and only
+        # for a prerequisite.
+        #
+        # Carried at all because `f3568` has to read it from the board:
+        # *"You gain the racial power of the race you chose with your
+        # rt:r47-t1 racial feature"*. Written here rather than left on
+        # `Character` alone, since a `Character` does not outlive the
+        # deal and a `Build` does.
+        if self.race2:
+            out.add(f"race2:{self.race2}")
         return out
 
     @property
@@ -2683,7 +2747,23 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
         scores = scores_for(who.line, who.chosen)
         return scores.get(Ability(node["ability"]), 10) >= node["min"]
     if "race" in node:
-        return node["race"] == who.race
+        # **Either race answers, and only here.** #1029. `rt:r47-t1` is
+        # the one printed trait that grants a second race, and its clause
+        # is scoped to exactly this question:
+        #
+        #     "You are also considered a member of that race for the
+        #      purpose of meeting prerequisites, such as feat or paragon
+        #      path prerequisites."
+        #
+        # So the widening belongs in `meets` and nowhere else -- `spawn`
+        # must keep reading `race` alone, or a revenant would arrive
+        # wearing a second race's size, speed, scores and traits, none of
+        # which the trait grants.
+        #
+        # `race2` is `""` for every character but a revenant, and `""`
+        # never equals a prerequisite's named ref, so this costs nothing
+        # for the other 45 races.
+        return node["race"] in (who.race, who.race2)
     if "ref" in node:
         return node["ref"] in powers
     # **Armour and shields, which used to arrive as `weapon_prof` and be
@@ -4472,6 +4552,32 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 Random(f"{world.rng.seed}:{who.cls}:{build.name}:race"),
                 who.cls,
                 build,
+            ),
+        )
+    # **A revenant picks its second race, and only a revenant.** #1029.
+    # `rt:r47-t1` prints *"Select a race other than r47"*, so the choice
+    # is the trait's and has to be made for it: a field nothing fills is
+    # the drawable-and-inert fault, and the trait would stay as dead as
+    # the `_inert` marker it carries today.
+    #
+    # **Its own stream**, like the race's above and the deity's below, so
+    # adding this draw moves no other decision's dice -- and keyed on the
+    # race rather than on the class, because it exists only for one race
+    # and a key naming the class would shift if the class list moved.
+    #
+    # `other_than=` rather than filtering afterwards: `deal_race`'s own
+    # sample is weighted, and dropping a result after the draw would spend
+    # a different number of values from the stream depending on what came
+    # out, which is the hazard `_trained_skills` records about a pinned
+    # set.
+    if DEAL_RACES and who.race == SECOND_RACE_FROM and not who.race2:
+        who = replace(
+            who,
+            race2=deal_race(
+                Random(f"{world.rng.seed}:{who.race}:second-race"),
+                who.cls,
+                build,
+                other_than=who.race,
             ),
         )
     # Its own stream, like the race's above and for the same reason: adding

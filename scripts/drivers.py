@@ -31216,8 +31216,11 @@ def a_race_that_trains_a_skill(out: Result) -> None:
     the same code.
     """
     import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
     from combat_engine.chargen import Character, spawn
+    from combat_engine.engine import Bus, Rng, World
     from combat_engine.engine.components import Skills
+    from combat_engine.engine.grid import Grid
     from combat_engine.engine.skills import TRAINING, modifier
 
     def dealt(cls: str, race: str):  # noqa: ANN202
@@ -31337,6 +31340,87 @@ def a_race_that_trains_a_skill(out: Result) -> None:
              "measured against a class list that is actually populated, so"
              " the arithmetic above is not two zeroes agreeing",
              f"{len(_class_skill_pool(db, 'cleric'))} skills on the list")
+
+    # -- #1029: one race counts as two, for prerequisites only ------------
+    # `rt:r47-t1` prints *"Select a race other than r47. You are also
+    # considered a member of that race for the purpose of meeting
+    # prerequisites"* -- and nothing recorded the second race, so the
+    # trait's whole clause was inert.
+    #
+    # **Scoped to prerequisites and asserted as scoped**, which is the half
+    # a reader would get wrong: a second race brings no size, no speed, no
+    # scores, no traits and no racial power. `f3568` exists precisely
+    # because the power needs its own feat.
+    from combat_engine.engine.components import Build as _BuildComp
+
+    out.that(chargen.SECOND_RACE_FROM == "r47",
+             "the setup: one race is named as the one whose trait grants a"
+             " second, held as a ref rather than a name",
+             f"SECOND_RACE_FROM={chargen.SECOND_RACE_FROM!r}")
+    seen_second: set[str] = set()
+    for seed in (3, 5, 11, 17):
+        w2 = World(Grid(16, 12), Rng(seed), Bus())
+        eid2 = chargen.spawn(
+            w2, chargen.Character(cls="fighter", level=5,
+                                  race=chargen.SECOND_RACE_FROM), (2, 3))
+        got = w2.get(eid2, _BuildComp)
+        picks = sorted(c for c in (got.choices if got else ()) 
+                       if c.startswith("race2:"))
+        out.that(len(picks) == 1,
+                 f"seed {seed}: a revenant is dealt exactly one second race,"
+                 " carried on `Build.choices` as `race2:<ref>` so a row can"
+                 " read it (#1029)",
+                 f"carried {picks}")
+        seen_second |= {p.split(":", 1)[1] for p in picks}
+    out.that(chargen.SECOND_RACE_FROM not in seen_second,
+             "and never its own race, which the card requires -- `Select a"
+             " race other than r47`",
+             f"second races drawn: {sorted(seen_second)}")
+    # **Not asserted, and said so rather than implied:** this cannot tell
+    # an exclusion made *before* the draw from a result discarded after
+    # it. Both answer "never r47". The ordering matters for a different
+    # reason -- a discarded result spends a different number of values
+    # from the stream, so the same seed would deal a different character
+    # depending on a race it did not take -- and the only way to see that
+    # is to diff a whole corpus against a second implementation.
+    # `deal_race`'s own note carries the reasoning.
+    out.that(len(seen_second) > 1,
+             "and it varies by seed, so it is a draw rather than a constant"
+             " wearing one",
+             f"{len(seen_second)} distinct across four seeds")
+    # A character of any other race gets none, which is the control: a
+    # field filled for everybody would pass every assertion above.
+    w3 = World(Grid(16, 12), Rng(5), Bus())
+    eid3 = chargen.spawn(
+        w3, chargen.Character(cls="fighter", level=5, race="r3"), (2, 3))
+    other = w3.get(eid3, _BuildComp)
+    out.that(not any(c.startswith("race2:")
+                     for c in (other.choices if other else ())),
+             "and a character of any other race is dealt none -- the"
+             " control, since a second race for everybody would satisfy"
+             " every assertion above",
+             f"choices: {sorted(c for c in (other.choices if other else ()) if 'race' in c)}")
+    # **The reader, and it is the printed clause itself.**
+    node_r3 = {"race": "r3"}
+    out.that(chargen.meets(node_r3,
+                           chargen.Character(cls="fighter", level=5,
+                                             race="r47", race2="r3"), []),
+             "a prerequisite naming the SECOND race is met -- which is the"
+             " whole of what the trait prints (#1029)",
+             "meets said False")
+    out.that(not chargen.meets(node_r3,
+                               chargen.Character(cls="fighter", level=5,
+                                                 race="r47", race2="r7"), []),
+             "and a prerequisite naming neither race is still refused --"
+             " the control, because `in (race, race2)` written as a truthy"
+             " test would pass everything",
+             "meets said True")
+    out.that(chargen.meets(node_r3,
+                           chargen.Character(cls="fighter", level=5,
+                                             race="r3"), []),
+             "and the ordinary one-race case is untouched, which is 690 of"
+             " the heroic feats",
+             "meets said False")
 
 
 def a_racial_skill_pool_and_the_one_race_that_has_none(out: Result) -> None:
@@ -38650,29 +38734,44 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # and "spend them all and nobody can" are both true whether or not the
     # filter also admits 139 rows that cannot reach a friend. The census is
     # the only thing that separates them.
+    # **The three figures moved by one row and the direction is the
+    # point.** `#1139` read the 122 against their printed cards and found
+    # `i545p2` -- *"One ally within 5 squares of you regains hit points"*,
+    # no enemy anywhere in it -- declared `ONE_CREATURE` by default. It is
+    # `ONE_ALLY` now, measured from `candidates` returning `[]` with the
+    # foes down to `[7, 8]`.
+    #
+    # So 114 -> 115 reach an ally, 139 -> 138 reach no friend, and 122 ->
+    # 121 declare nothing. **A row got better**, which is the one reason
+    # to move a pinned census: this is the same tightening-not-loosening
+    # rule `audited.json` is built on, and the sum still has to partition
+    # the 584.
     reach = SC._heal_reach()
-    out.that(reach["reaches_an_ally"] == 114
+    out.that(reach["reaches_an_ally"] == 115
              and reach["holdable"] == 584,
-             "114 of the 584 character-holdable healing rows can reach an"
+             "115 of the 584 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
-             " refusal counter is about",
+             " refusal counter is about, and it went up by one when"
+             " `i545p2`'s printed target line was honoured (#1139)",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
     out.that(reach["self_only"] == 331
-             and reach["cannot_reach_an_ally"] == 139
+             and reach["cannot_reach_an_ally"] == 138
              and reach["reaches_an_ally"] + reach["self_only"]
              + reach["cannot_reach_an_ally"] == reach["holdable"],
-             "and the three buckets partition it -- 331 self-only, 139"
-             " that reach no friend, 114 that do. They have to add up or"
+             "and the three buckets partition it -- 331 self-only, 138"
+             " that reach no friend, 115 that do. They have to add up or"
              " the census is reading something twice",
              f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
              f" + {reach['reaches_an_ally']}")
-    out.that(reach["undeclared"] == 122,
-             "**122 of those 139 declare no target line at all** and"
+    out.that(reach["undeclared"] == 121,
+             "**121 of those 138 declare no target line at all** and"
              " inherit `dsl.ONE_CREATURE`, so they read `enemy` by"
              " default rather than by design. Told apart by identity"
              " against the singleton, which is the only way to see it --"
              " the other 17 print an enemy target for real, and a heal"
-             " aimed at an enemy is a drain that heals its caster",
+             " aimed at an enemy is a drain that heals its caster."
+             " 12 of the 121 attack nobody at all, which is `#1139`'s"
+             " live population",
              f"{reach['undeclared']} undeclared")
     # -- and the filter exercised, which is the load-bearing pair -------
     #

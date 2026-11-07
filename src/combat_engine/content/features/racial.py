@@ -1237,8 +1237,21 @@ def rt_r46_t1(c: Cast) -> None:
 # -- r47 ---------------------------------------------------------------
 
 _inert("rt:r47-t1",
-       "Counting as a second race for prerequisites. `Character.race` "
-       "holds one ref and `chargen.meets` reads that one.")
+       "Counting as a second race for prerequisites, which now happens. "
+       "#1029. The printed clause is `Select a race other than r47. You "
+       "are also considered a member of that race for the purpose of "
+       "meeting prerequisites` -- and it is scoped to prerequisites and "
+       "to nothing else, so the whole of it is a build-time fact. "
+       "`Character.race2` records the pick, `spawn` draws one for a "
+       "revenant and only a revenant, `Build.choices` carries it as "
+       "`race2:<ref>`, and `chargen.meets`' race atom answers off either "
+       "race. "
+       "Still `_inert` and correctly so: this helper's own docstring "
+       "names `a prerequisite it may claim` as one of the things it is "
+       "for, and where a prerequisite is granted is chargen rather than "
+       "a body -- the same reason the three skill-training traits stay "
+       "inert. The row has nothing to do on a board; what changed is "
+       "that the clause is now true off one.")
 _origin("r47", "undead", "living", why=_BOTH)
 
 
