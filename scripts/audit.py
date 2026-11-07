@@ -140,6 +140,45 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **The board provokes its all-missed `PowerResolved` with a BASIC
+    # ATTACK, and a basic attack has no use to hand back.** `#1143`.
+    #
+    # The row is *"you miss every target with an attack using this
+    # crossbow -> you do not expend the use"*, and its body is one line:
+    # `c.restore_use(c.trigger.power)`. Traced on the board the audit
+    # builds, the ref it is handed is **`rba`**:
+    #
+    #     restore_use calls (ref, times before, result)
+    #       ('rba', 0, False)
+    #       ('rba', 0, False)
+    #
+    # `rba` is the ranged basic attack -- a pseudo-ref, not a row in
+    # `Powers`, so `powers.times('rba')` is 0 by construction and
+    # `restore_use` returns False on exactly the branch that is the
+    # printed Requirement. A correct row reports silent.
+    #
+    # **`#901`'s pose exists, matches, and does not reach this.**
+    # `_restores_the_resolved("i1676p1")` is True and `_SPEND_FOR_REAL` is
+    # set around `_provoke_passes` -- but the provoking calls traced through
+    # `_use` are real powers with `spend=False`, and the one that actually
+    # fires this trigger is the basic attack, which never goes through
+    # `_use` at all. So lifting the spend cannot help: there is no use to
+    # lift. The other row that pose was built for, `i3271p1`, fires **0**
+    # times and is in `never_refs`.
+    #
+    # **Pre-existing, and newly visible rather than newly broken.** It sat
+    # in `never_refs` -- never fired, so never asked -- until `#1114` made
+    # four feats drawable and the changed draw gave it a board that fires
+    # it. `never_refs` to `silent_refs` is never-fired to fired-and-silent,
+    # which is strictly toward observability; the newly-silent check reads
+    # membership of one list and so reports it as a regression. Nothing
+    # about the row changed.
+    "i1676p1": ("fires on the board's all-missed `PowerResolved`, which is "
+                "provoked by a BASIC ATTACK -- so `c.trigger.power` is "
+                "`rba`, a pseudo-ref with no use to restore, and "
+                "`restore_use` returns False on the printed Requirement's "
+                "own branch. Posing it needs an all-missed resolution from "
+                "a real power the caster has spent: #1143"),
     # **This row's premise is two things at once and the board poses one.**
     # It triggers on the caster becoming bloodied, and pays only if an enemy
     # is carrying a shroud *at that instant*. A shroud exists only after
@@ -2445,12 +2484,18 @@ def board(ref: str, seed: int, pose: bool = False,
         # on its neighbour's work. Traits are never UNUSED anyway, which
         # is what siblings are here to fix.
         named = [] if _is_trait(declared) else _siblings(ref)
+        # **Bound once, and the narrowing is why.** `declared` is
+        # `Power | None`, so every `declared.level` is a `types`
+        # diagnostic; this file carries one for the `Character(...)` call
+        # below already and a second read added another. One local serves
+        # both and nets the file back to its baseline.
+        at_level = max(1, declared.level if declared is not None else 1)
         # **And a power to trade, for a `Swap.pool` row.** `#1114`. The
         # hand below is composed rather than dealt, so it holds no daily
         # or encounter attack -- and a row whose whole effect is trading
         # one away then has nothing to do and reports silent. See
         # `_pooled_trade_for`; a row that does not ask this gets `""`.
-        trade_bait = _pooled_trade_for(ref, cls, max(1, declared.level))
+        trade_bait = _pooled_trade_for(ref, cls, at_level)
         # Siblings first, so a second card's parent is armed before it.
         hand = [*named, *features] if a_feat else [ref, *named, *features]
         if trade_bait and trade_bait not in hand:
@@ -2458,7 +2503,7 @@ def board(ref: str, seed: int, pose: bool = False,
         caster = chargen.spawn(
             world,
             chargen.Character(
-                cls, max(1, declared.level), hand,
+                cls, at_level, hand,
                 build=chargen.build_for(cls, leg_ref),
                 feats=[ref] if a_feat else [],
                 race=race,
@@ -5910,7 +5955,15 @@ def _pooled_trade_for(ref: str, cls: str, level: int) -> str:
         and (trade.usage is None or other.usage is trade.usage)
         and (other.attack is None) is trade.utility
     ]
-    return min(offer, key=lambda p: (REGISTRY[p].level, p)) if offer else ""
+    # **A local, not `REGISTRY[p].level` inside the key.** `Power | None`
+    # is what the checker sees through a subscript, so the attribute read
+    # was one `types` diagnostic above the baseline -- invisible to `ruff`,
+    # and the third time this exact shortcut has cost a red run today.
+    def _rank(ref_: str) -> tuple[int, str]:
+        got_ = REGISTRY.get(ref_)
+        return (got_.level if got_ is not None else 0, ref_)
+
+    return min(offer, key=_rank) if offer else ""
 
 
 def _asks_for_a_corpse(ref: str) -> bool:
