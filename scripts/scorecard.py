@@ -685,17 +685,43 @@ def play(
             break
         before = world.get(actor, Position)
         was = before.square if before else None
-        gap = min((distance(was, q.square) for e in enemies(world, actor)
-                   if alive(world, e) and (q := world.get(e, Position)) is not None),
-                  default=99) if was else 99
+        # **Per enemy, not the minimum.** Camille's call on `#271`, asked
+        # directly: *"I think just if it moved closer to any enemy."*
+        #
+        # This was `min(...)` both sides -- the distance to the **nearest**
+        # enemy -- so a creature that walked away from the closest one while
+        # closing on a different one counted as idle. Her answer is neither
+        # of the two options the issue offered (the chosen enemy, or the
+        # nearest): it is *any*, which needs the distances kept apart.
+        #
+        # Keyed by entity id, and compared below only for enemies present
+        # in **both** readings: one that died or was removed during the
+        # turn cannot say whether anybody closed on it, and counting a
+        # vanished enemy as "not closed" would make a killing turn read as
+        # idle.
+        reach_was = {
+            e: distance(was, q.square) for e in enemies(world, actor)
+            if alive(world, e) and (q := world.get(e, Position)) is not None
+        } if was else {}
+        gap = min(reach_was.values(), default=99)
         hits = pol.n[f"{side_of(world, actor)}/attacks"]
         began = world.round
         take_turn(world, encounter, actor, pol)
         turn_watch(world, pol, actor)
         after = world.get(actor, Position)
-        now = min((distance(after.square, q.square) for e in enemies(world, actor)
-                   if alive(world, e) and (q := world.get(e, Position)) is not None),
-                  default=99) if after else 99
+        reach_now = {
+            e: distance(after.square, q.square) for e in enemies(world, actor)
+            if alive(world, e) and (q := world.get(e, Position)) is not None
+        } if after else {}
+        #: Did this turn close with **anybody**? `#271`. True when any
+        #: enemy present both before and after is nearer than it was.
+        #:
+        #: There is no `now` any more: its only reader was the
+        #: `now >= gap` test this replaces. `gap` stays, because the two
+        #: `adjacent_*` counters below ask whether the creature is
+        #: standing next to somebody, which is still a question about the
+        #: **closest** enemy and not about any.
+        closed_on_any = _closed_on_any(reach_was, reach_now)
         # **Two different failures, and one counter could not tell them apart.**
         # "Neither attacked nor closed" lumped a creature that stalled out of reach
         # together with one standing next to an enemy and not swinging -- and a
@@ -729,11 +755,38 @@ def play(
                 pol.n[f"{side_of(world, actor)}/adjacent_helped"] += 1
             elif gap <= 1:
                 pol.n[f"{side_of(world, actor)}/adjacent_idle"] += 1
-            elif now >= gap:
+            elif not closed_on_any:
+                # Was `now >= gap`, the nearest-enemy comparison. See
+                # `reach_was`: Camille's `#271` ruling is *any* enemy.
                 pol.n[f"{side_of(world, actor)}/idle_melee"] += 1
         encounter.advance()
     _count_healing(world, pol)
     return world.round, encounter.finished
+
+
+def _closed_on_any(was: dict[int, int], now: dict[int, int]) -> bool:
+    """Did this turn end nearer to **any** enemy than it began? `#271`.
+
+    Camille's ruling, asked directly:
+
+    > *"I think just if it moved closer to any enemy."*
+
+    Neither of the two readings the issue offered -- the enemy the AI
+    picked, or the nearest one. The counter compared
+    `min(now) >= min(was)`, so a creature that walked away from the closest
+    enemy while closing on a different one read as idle.
+
+    **Only enemies in both readings.** One that died or was removed during
+    the turn cannot say whether anybody closed on it, and treating a
+    vanished enemy as "not closed" would make a killing turn read as idle.
+
+    Extracted rather than left inline so it can be asserted on dictionaries
+    -- `drivers.closed_on_any` does -- instead of only through a whole
+    scorecard run. Measured over 27 melee turns at level 5, the old and new
+    readings **never disagreed**, so this is a correctness fix with no
+    observed effect at that sample size rather than a number that moves.
+    """
+    return any(now[e] < was[e] for e in now.keys() & was.keys())
 
 
 def _count_healing(world: World, pol: Counted) -> None:

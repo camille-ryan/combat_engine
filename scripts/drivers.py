@@ -57079,6 +57079,62 @@ def a_surge_lost_to_the_cold_is_not_given_back_by_a_rest(out: Result) -> None:
              f"{[s.withheld for s in warm.party.sheets]}")
 
 
+def closed_on_any(out: Result) -> None:
+    """"Idle" asks about any enemy, not the nearest one. `#271`.
+
+    Camille's ruling, asked directly:
+
+    > *"I think just if it moved closer to any enemy."*
+
+    Which is **neither** of the two readings that issue offered -- the
+    enemy the AI picked, or the closest one. `scorecard`'s `idle_melee`
+    compared `min(now) >= min(was)`, the distance to the *nearest* enemy,
+    so a creature that walked away from the closest one while closing on a
+    different one counted as having stalled.
+
+    That matters because `idle_melee` is the **approach guard**: it is what
+    catches a change to what rewards closing going wrong. A guard that
+    calls a real approach idle is a guard that cries wolf.
+    """
+    from scorecard import _closed_on_any as _closed
+
+    out.that(_closed({7: 5}, {7: 3}),
+             "closing on the only enemy is closing",
+             "True")
+    out.that(not _closed({7: 3}, {7: 5}),
+             "and walking away from it is not -- the floor, without which"
+             " every turn would read as an approach",
+             "False")
+    out.that(_closed({7: 2, 8: 9}, {7: 4, 8: 6}),
+             "**away from the nearest and closer on another counts as"
+             " closing** -- 2 becomes 4 while 9 becomes 6. This is the"
+             " whole of the ruling, and the old `min` comparison called it"
+             " idle: `min(4, 6) >= min(2, 9)`",
+             "True where the nearest-enemy test said idle")
+    out.that(not _closed({7: 2}, {}),
+             "an enemy that died or left during the turn cannot say"
+             " whether anybody closed on it, so it is dropped rather than"
+             " counted as `not closed` -- otherwise a killing turn would"
+             " read as idle, which is the inverse of what the counter is"
+             " for",
+             "False, and for the right reason")
+    out.that(not _closed({}, {}),
+             "and a creature with no enemies at all has not closed --"
+             " vacuously, which is what `any` over an empty set gives and"
+             " is the honest answer",
+             "False")
+
+    # -- the contrast, so the ruling is visible as a change ---------------
+    was, now = {7: 2, 8: 9}, {7: 4, 8: 6}
+    nearest_says_idle = min(now.values()) >= min(was.values())
+    out.that(nearest_says_idle and _closed(was, now),
+             "and the two readings are asserted side by side on that case:"
+             " the nearest-enemy test says IDLE and the ruling says CLOSED."
+             " A rule that only checked the new reading could not show that"
+             " anything changed",
+             f"nearest={nearest_says_idle}, any={_closed(was, now)}")
+
+
 def a_scene_may_name_printed_terrain(out: Result) -> None:
     """A scene's ground may be a real imported terrain ref. `#458`.
 
@@ -66922,6 +66978,12 @@ DRIVERS = {
     # duplicate dict key silently drops one of the two -- ruff's `F601`
     # caught it, and nothing else would have: the suite would have run 1
     # of the 2 rules and reported a clean count.
+    "closed_on_any": (
+        closed_on_any,
+        "`idle_melee` asks whether a turn closed on ANY enemy, not the"
+        " nearest -- so moving away from the closest while closing on"
+        " another is no longer counted as stalling (#271)",
+    ),
     "printed_terrain": (
         a_scene_may_name_printed_terrain,
         "a scene's ground may be a real imported terrain ref, where the"
