@@ -34057,8 +34057,7 @@ def a_weapon_the_build_chose(out: Result) -> None:
               ("ranger", "companion"), ("fighter", "tempest"))
     for cls, leg_name in PAIRED:
         legs = chargen.BUILDS[cls]
-        leg = next(b for b in legs
-                   if b.name == leg_name)  # type: ignore[union-attr]
+        leg = next(b for b in legs if b.name == leg_name)
         declared = [w.ref for w in leg.weapons]
         out.that(len(declared) == 2 and declared[0] == declared[1],
                  f"the setup: {cls}/{leg_name} declares the same weapon"
@@ -34078,10 +34077,15 @@ def a_weapon_the_build_chose(out: Result) -> None:
                      f"holds {melee}, declared {declared}")
     # **The control, and it is what stops this becoming "the pair always
     # wins".** A leg that declares no pair keeps the ranking it always
-    # had: a great-weapon fighter holds the one two-hander its leg names,
-    # and nothing about this change may hand it a second weapon.
+    # had -- it holds the one two-hander its leg names -- and nothing
+    # about this change may hand it a second weapon.
+    #
+    # The leg is named by its slug below and deliberately not described in
+    # words here: `leaks.py` caught the obvious phrasing of this sentence
+    # as the printed name of `b:c3-3`, which is the rule about prose
+    # explaining a rule being where the rule gets broken.
     solo = next(b for b in chargen.BUILDS["fighter"]
-                if b.name == "great-weapon")  # type: ignore[union-attr]
+                if b.name == "great-weapon")
     world = World(Grid(16, 12), Rng(5), Bus())
     eid = chargen.spawn(
         world, chargen.Character(cls="fighter", level=10,
