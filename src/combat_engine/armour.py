@@ -32,6 +32,7 @@ decides anything, which is the test for whether something belongs this low.
 
 from __future__ import annotations
 
+import re
 from functools import cache
 
 
@@ -144,6 +145,68 @@ def _by_ref() -> tuple[dict[str, str], dict[str, int]]:
         if printed.endswith("shields"):
             weights[str(row["ref"])] = 2 if printed.split()[0] == "heavy" else 1
     return words, weights
+
+
+#: The printed armour ladder, lightest first. `#568`.
+#:
+#: **A printed fact rather than a reconstruction**, which matters because
+#: `ClassLine.armour` holds **one** word where the page prints a list. Every
+#: class's Armor Proficiencies line in the PHB is cumulative and starts at
+#: cloth:
+#:
+#:     Cloth, leather, hide, chainmail
+#:     Cloth, leather, hide
+#:     Cloth, leather
+#:     Cloth
+#:
+#: So "is this character trained in leather" is answerable from the single
+#: word the ETL kept: a class whose best is `chain` is trained in everything
+#: at or below it. Without the ladder the collapse would have to be undone
+#: in the importer, and the answer is the same either way.
+#:
+#: `plate` and `scale` sit above chainmail and are reached by the two long
+#: lines and by the Armor Proficiency feats.
+LADDER = ("cloth", "leather", "hide", "chain", "scale", "plate")
+
+#: What a printed prerequisite calls each rung, normalised. The pages write
+#: *"training with plate armor"* and *"proficiency with chainmail"*, so the
+#: suffix is optional and `chainmail` is one word where the rest are two.
+_SPELT = {
+    "chainmail": "chain", "chain mail": "chain",
+    "cloth": "cloth", "leather": "leather", "hide": "hide",
+    "scale": "scale", "plate": "plate",
+}
+
+
+def rung(printed: str) -> str:
+    """Which rung of `LADDER` a printed armour word names, or `""`.
+
+    Takes the phrase as the page writes it -- *"plate armor"*, *"hide
+    armour"*, *"chainmail"* -- and strips the optional noun. `""` for
+    anything that is not a worn armour category, which is how a caller
+    tells an armour prerequisite from a weapon one.
+    """
+    low = " ".join(str(printed).lower().split())
+    low = re.sub(r"\s+armou?r$", "", low)
+    return _SPELT.get(low, "")
+
+
+def trains_in(best: str, want: str) -> bool:
+    """Is a character whose heaviest armour is `best` trained in `want`?
+
+    Both are rungs of `LADDER`. True when `want` is at or below `best`,
+    which is what a cumulative printed line means. False if either word is
+    not a rung, so an unknown category refuses rather than passing.
+    """
+    if best not in LADDER or want not in LADDER:
+        return False
+    return LADDER.index(want) <= LADDER.index(best)
+
+
+#: The shield weights a printed prerequisite names. `ClassLine.shield` is
+#: already 0, 1 or 2 -- see `Gear.shield` -- so this is the word half.
+SHIELD_RUNG = {"light shields": 1, "light shield": 1,
+               "heavy shields": 2, "heavy shield": 2}
 
 
 def category_of(ref: str) -> str:

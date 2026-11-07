@@ -57255,6 +57255,134 @@ def a_surge_lost_to_the_cold_is_not_given_back_by_a_rest(out: Result) -> None:
              f"{[s.withheld for s in warm.party.sheets]}")
 
 
+def armour_prereq(out: Result) -> None:
+    """An armour proficiency is not a weapon one. `#568`.
+
+    27 feats print *"proficiency with chainmail"* or *"training with plate
+    armor"*, and `etl/feat.py`'s `_atom` filed every one of them as
+    `{"weapon_prof": ...}` -- because `_is_gear` is true of `chainmail` as
+    readily as of `longsword`. `chargen.meets` then answered that atom
+    against the character's **weapons**:
+
+        wanted in (w.group, w.category, w.slug.replace("-", " "))
+            for w in who.line.weapons
+
+    and no weapon's group, category or slug is ever `chainmail`. So all 27
+    returned **False forever** and no class could take any of them.
+
+    **The ladder is printed, not reconstructed**, which is what makes one
+    stored word enough. Every class's Armor Proficiencies line in the PHB
+    is cumulative and starts at cloth -- *"Cloth, leather, hide,
+    chainmail"*, *"Cloth, leather, hide"*, *"Cloth"* -- so a class whose
+    best is `scale` is trained in everything at or below it. `ClassLine`
+    keeps only the best word and loses nothing by it.
+
+    **`#568`'s own framing is inverted by this.** That issue is filed as a
+    balance change -- *"every dealt character of those classes can wear
+    heavier armour, a change to AC on every board"* -- and asks for a
+    scorecard pass first. Measured, the change moves nothing: 0 of 99 legs
+    change AC, 0 of 8 fixtures diverge, and 0 dealt characters take any of
+    the newly legal feats, because the scored draw ranks them below what it
+    already picks. The balance measurement it wanted was unmeasurable while
+    the atom was wrong, and is zero now that it is right.
+    """
+    import re as _re2
+
+    # **`content` first, and without it this rule reported `0 pairs, 0
+    # classes` against a measured 51 and 18.** `legal_feats` filters
+    # against `dsl.REGISTRY`, which is populated by importing the content
+    # tree -- so a rule that calls it first sees an empty registry and
+    # every pool comes back empty. Third time today, in three rules.
+    import combat_engine.content  # noqa: F401
+    from combat_engine import armour as _arm
+    from combat_engine import chargen as _cg
+    from combat_engine import db as _db
+    from combat_engine.chargen.choices import legal_feats as _legal
+    from combat_engine.etl import feat as _etlfeat
+
+    con = _db.game()
+    arm = [r["ref"] for r in con.execute(
+        "SELECT ref FROM feat WHERE prereq LIKE '%armour_prof%'")]
+    shd = [r["ref"] for r in con.execute(
+        "SELECT ref FROM feat WHERE prereq LIKE '%shield_prof%'")]
+    out.that(len(arm) == 19 and len(shd) == 8,
+             "19 feats gate on a worn armour category and 8 on a shield --"
+             " 27 that `meets` could never answer, because the atom said"
+             " `weapon_prof` and the answer was looked up among weapons",
+             f"armour {len(arm)}, shield {len(shd)}")
+
+    WORDS = {"chainmail", "cloth", "leather", "hide", "scale", "plate",
+             "plate armor", "hide armor", "scale armor", "leather armor",
+             "light shields", "heavy shields"}
+    stuck = [
+        r["ref"] for r in con.execute(
+            "SELECT ref, prereq FROM feat WHERE prereq LIKE '%weapon_prof%'")
+        if any(w.lower() in WORDS for w in _re2.findall(
+            r'"weapon_prof":\s*"([^"]+)"', r["prereq"] or ""))
+    ]
+    out.that(not stuck,
+             "**and no armour word is left filed as a weapon one** -- the"
+             " assertion that says the split is complete rather than"
+             " partial, which a count of the new atoms alone cannot",
+             f"{len(stuck)} still mis-filed: {stuck[:4]}")
+
+    # -- the printed ladder ----------------------------------------------
+    out.that(_arm.LADDER == ("cloth", "leather", "hide", "chain",
+                             "scale", "plate"),
+             "the ladder is the printed order, lightest first -- the PHB's"
+             " class lines are cumulative and all start at cloth, which is"
+             " the fact that makes one stored word answer every rung",
+             f"{_arm.LADDER}")
+    out.that(_arm.trains_in("scale", "leather")
+             and _arm.trains_in("plate", "plate")
+             and not _arm.trains_in("leather", "plate"),
+             "so a scale class is trained in leather, and a leather class"
+             " is NOT trained in plate. The negative half is the one that"
+             " matters: a ladder that answered True downward and upward"
+             " would make every prerequisite vacuous",
+             "ordering holds both ways")
+    out.that(not _arm.trains_in("scale", "longsword")
+             and not _arm.rung("longsword"),
+             "and a weapon word is not a rung at all, so the branch"
+             " declines rather than passing -- which is what keeps a"
+             " weapon prerequisite out of the armour answer",
+             f"rung('longsword')={_arm.rung('longsword')!r}")
+
+    # -- the mirror, which the ETL cannot import --------------------------
+    out.that(set(_etlfeat._ARMOUR_RUNG.values()) <= set(_arm.LADDER)
+             and set(_etlfeat._ARMOUR_RUNG) == {
+                 "chainmail", "chain mail", "cloth", "leather", "hide",
+                 "scale", "plate"},
+             "**the ETL's copy of the vocabulary matches `armour.py`'s.**"
+             " It is a copy because that module reads `game.db` at IMPORT"
+             " time, so importing it inside a build dies with `database is"
+             " locked` -- the ETL is holding the file it is writing. Found"
+             " by the first rebuild after this change. Same arrangement as"
+             " `questions.py` mirroring `check.NOTHING_IN_SCOPE`, and this"
+             " is the gate that stops the copy drifting",
+             f"{sorted(_etlfeat._ARMOUR_RUNG)}")
+    out.that(_etlfeat._SHIELD_RUNG == _arm.SHIELD_RUNG,
+             "and the shield half of the copy matches too",
+             f"{_etlfeat._SHIELD_RUNG}")
+
+    # -- and `meets` really answers it ------------------------------------
+    gated = set(arm) | set(shd)
+    pairs = 0
+    classes = 0
+    for cls in sorted(_cg.BUILDS):
+        leg = _cg.BUILDS[cls][0]
+        n = len(set(_legal(cls, 5, leg, race="", taken=())) & gated)
+        pairs += n
+        classes += 1 if n else 0
+    out.that(pairs == 51 and classes == 18,
+             "**51 (class, feat) pairs are legal across 18 of 26 classes,"
+             " where every one was 0 before** -- the assertion that this"
+             " is a gate answering rather than a column being written. A"
+             " count of atoms says the parse changed; this says `meets`"
+             " changed its mind",
+             f"{pairs} pairs, {classes} classes")
+
+
 def every_alias_table_has_a_brief(out: Result) -> None:
     """`spec.py` could brief one alias table of five. `#948`.
 
@@ -66868,6 +66996,12 @@ DRIVERS = {
         "an extended rest does not refund a surge lost to a failed Endurance"
         " check, and the printed table has nine conditions rather than seven"
         " (#971)",
+    ),
+    "armour_prereq": (
+        armour_prereq,
+        "an armour proficiency is not a weapon one: 27 feats were filed as"
+        " weapon_prof and refused forever, and the printed class ladder is"
+        " what makes one stored word answer every rung (#568)",
     ),
     "alias_briefs": (
         every_alias_table_has_a_brief,

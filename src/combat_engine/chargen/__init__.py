@@ -2609,6 +2609,26 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
         return node["race"] == who.race
     if "ref" in node:
         return node["ref"] in powers
+    # **Armour and shields, which used to arrive as `weapon_prof` and be
+    # answered against weapons.** `#568`. A class's printed Armor
+    # Proficiencies line is cumulative -- *"Cloth, leather, hide,
+    # chainmail"* -- so one word is enough to answer any rung at or below
+    # it, which is what `armour.trains_in` does and why the ETL's collapse
+    # to a single word costs nothing here.
+    if "armour_prof" in node:
+        from combat_engine.armour import trains_in
+
+        return trains_in(_heaviest(who.line.armour or ""),
+                         str(node["armour_prof"]).lower())
+    # `ClassLine.shield` is already 0, 1 or 2 -- see `Gear.shield`, which
+    # records the kind and not merely whether -- so a printed *"heavy
+    # shields"* is a comparison and not a lookup.
+    if "shield_prof" in node:
+        try:
+            want = int(node["shield_prof"])
+        except (TypeError, ValueError):
+            return False
+        return int(getattr(who.line, "shield", 0) or 0) >= want
     if "weapon_prof" in node:
         wanted = node["weapon_prof"].lower()
         return any(

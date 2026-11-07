@@ -973,6 +973,34 @@ def _atom(clause: str, index: _Index) -> dict:
 
     gear = re.fullmatch(r"(?:proficien(?:cy|t)|train(?:ing|ed))\s+(?:with|in)\s+(.+)", low)
     kit = re.sub(r"^(?:any|a|an|the)\s+", "", gear.group(1) if gear else low)
+    # **Armour is not a weapon, and one atom was answering for both.**
+    # `#568`. `_is_gear` is true of `chainmail` as readily as of
+    # `longsword`, so *"proficiency with chainmail"* became
+    # `{"weapon_prof": "chainmail"}` -- and `chargen.meets` answers that
+    # atom against the character's **weapons**, where no weapon's group,
+    # category or slug is ever `chainmail`. So it returned False forever
+    # and **30 feats could never be legal**, 7 of them the whole of
+    # `#568`'s own census.
+    #
+    # Asked before the weapon branch rather than after, because the two
+    # vocabularies overlap in exactly one direction: every armour word is
+    # gear, and no weapon word is a rung of the armour ladder.
+    #
+    # **Mirrored from `combat_engine.armour` rather than imported, and the
+    # reason is a deadlock.** That module reads `game.db` at *import* time
+    # -- `ARMOUR, ARMOUR_CHECK, ARMOUR_SPEED, SHIELD_CHECK = _basics()` at
+    # module level -- so importing it from inside a build fails with
+    # `database is locked`: the ETL is holding the file it is writing.
+    # Found by the first rebuild after this change, which died there.
+    #
+    # Same arrangement and the same reason as `questions.py` mirroring
+    # `check.NOTHING_IN_SCOPE`, and `drivers.armour_prereq` asserts the two
+    # vocabularies are identical so the copy cannot drift.
+    worn = _ARMOUR_RUNG.get(re.sub(r"\s+armou?r$", "", kit))
+    if worn:
+        return {"armour_prof": worn}
+    if kit in _SHIELD_RUNG:
+        return {"shield_prof": _SHIELD_RUNG[kit]}
     if _is_gear(kit):
         return {"weapon_prof": kit}
 
@@ -1027,6 +1055,21 @@ def _atom(clause: str, index: _Index) -> dict:
         # prerequisite rather than an unknown one.
 
     return {"term": low}
+
+
+#: The printed armour ladder's rungs, by how a prerequisite spells them.
+#: Mirrored from `combat_engine.armour`; see `_atom` for why it is a copy
+#: and `drivers.armour_prereq` for the gate that keeps the two identical.
+_ARMOUR_RUNG = {
+    "chainmail": "chain", "chain mail": "chain", "cloth": "cloth",
+    "leather": "leather", "hide": "hide", "scale": "scale",
+    "plate": "plate",
+}
+
+#: And the shield weights, which `ClassLine.shield` already holds as 0, 1
+#: or 2 rather than as a word.
+_SHIELD_RUNG = {"light shields": 1, "light shield": 1,
+                "heavy shields": 2, "heavy shield": 2}
 
 
 def _bare_power(low: str) -> str:
