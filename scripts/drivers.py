@@ -57255,6 +57255,100 @@ def a_surge_lost_to_the_cold_is_not_given_back_by_a_rest(out: Result) -> None:
              f"{[s.withheld for s in warm.party.sheets]}")
 
 
+def every_alias_table_has_a_brief(out: Result) -> None:
+    """`spec.py` could brief one alias table of five. `#948`.
+
+    `_render`'s branch was a bare `re.fullmatch(r"x\\d+_\\d+", ref)` sending
+    **every** alias-table ref to `_terrain`. The number in the ref is the
+    table -- `etl/build.py`'s `_ALIAS_TABLES` mints `x{index}_{id}` -- so a
+    disease, a poison, a background and an associate were each looked up in
+    `terrain`, missed, and came back as *"no such row"* for a ref sitting in
+    `game.db`.
+
+    **What that cost, and it is the thing `#948` names as its step 2:** an
+    authoring agent cannot be handed a brief it cannot get, which is
+    exactly why 22 of the 24 printed terrain powers sat unwritten until
+    `_terrain` existed and then landed in a day (`#1123`). The disease rows
+    are in that position now, and so are four other tables nobody had
+    counted.
+
+    A `spec` is not a brief and `_alias_spec` does not pretend to be one --
+    a table whose header carries numbers worth stating gets its own
+    renderer, and `terrain` and `disease` have them. The rest get the
+    printed card rather than nothing, which is strictly more than they had.
+    """
+    import sys as _sys
+
+    if "scripts" not in _sys.path:
+        _sys.path.insert(0, "scripts")
+    import spec as _spec
+    from combat_engine import db as _db
+
+    con = _db.game()
+    counts = {}
+    for table in ("terrain", "disease", "poison", "background", "associate"):
+        refs = [r["ref"] for r in con.execute(
+            f"SELECT ref FROM {table}")]
+        ok = sum(1 for r in refs if _spec._render(con, r, set(), False))
+        counts[table] = (len(refs), ok)
+
+    out.that(all(n == ok for n, ok in counts.values()),
+             "**every row of all five alias tables renders a brief** --"
+             " 1,138 of 1,138, where 993 of them answered `no such row`"
+             " before. A ref that is in `game.db` and cannot be briefed is"
+             " a row nobody can be handed",
+             f"{ {t: f'{ok}/{n}' for t, (n, ok) in counts.items()} }")
+    out.that(counts["disease"][0] == 69 and counts["background"][0] == 817,
+             "and the populations are the measured ones: 69 diseases --"
+             " `#948`'s step 3 partitions by that count -- and 817"
+             " backgrounds, which is the table `#1078` reads",
+             f"disease {counts['disease'][0]},"
+             f" background {counts['background'][0]}")
+
+    out.that(_spec._ALIAS_TABLE[2] == "terrain"
+             and _spec._ALIAS_TABLE[5] == "disease"
+             and _spec._ALIAS_TABLE[6] == "background",
+             "the index in the ref is what names the table, mirroring"
+             " `etl/build.py`'s `_ALIAS_TABLES` -- 2 terrain, 5 disease,"
+             " 6 background. Mirrored rather than imported, because"
+             " `scripts/` reaches the built database and never the ETL",
+             f"{ {k: _spec._ALIAS_TABLE[k] for k in (2, 5, 6)} }")
+
+    # -- the disease brief carries what a stage body must not recompute ---
+    brief = _spec._render(con, "x5_11", set(), False) or ""
+    out.that("disease" in brief and "level 3" in brief
+             and "4 stage(s)" in brief,
+             "a disease brief states its level and how many stages the"
+             " track wants -- the count `#948`'s step 3 is partitioned by,"
+             " and not derivable from the prose",
+             brief.splitlines()[0] if brief else "(nothing)")
+    out.that("improve DC 13" in brief and "worsen DC 8" in brief
+             and "endurance" in brief,
+             "**and both DCs and the skill, because a stage body must not"
+             " recompute them** -- the engine component's `header is data,"
+             " body is code`. An author given only the prose would write"
+             " the numbers out by hand",
+             # **Joined, not a list.** `Result.that`'s detail is a `str`,
+             # and handing it a list is a `types` diagnostic ruff cannot
+             # see -- the fifth time this session the same shortcut cost a
+             # red run, in five different shapes.
+             next((ln for ln in brief.splitlines() if "DC" in ln), "no DC line"))
+    out.that("(fixed)" in brief,
+             "and `dc_shape`, because the printed tracks are not all the"
+             " same: a fixed pair of DCs and a pair that moves with the"
+             " stage are different rules, and the numbers alone cannot say"
+             " which this is",
+             "dc_shape stated")
+
+    # -- the negative control: an index naming no table --------------------
+    out.that(_spec._render(con, "x99_1", set(), False) is None,
+             "and an index naming no table answers `None` rather than"
+             " guessing a table -- the dispatch is a lookup, so an alias"
+             " family added to the ETL later is unbriefable until somebody"
+             " says which table it is, which is the honest direction",
+             "unknown index declines")
+
+
 def a_background_grants_a_skill_bonus(out: Result) -> None:
     """A dealt character has a background, and its +2 reaches a check. `#1078`.
 
@@ -66774,6 +66868,12 @@ DRIVERS = {
         "an extended rest does not refund a surge lost to a failed Endurance"
         " check, and the printed table has nine conditions rather than seven"
         " (#971)",
+    ),
+    "alias_briefs": (
+        every_alias_table_has_a_brief,
+        "spec.py briefs every alias table and not only terrain -- 1,138"
+        " rows where 993 answered `no such row`, which is what kept the"
+        " disease rows unwritable (#948)",
     ),
     "background": (
         a_background_grants_a_skill_bonus,

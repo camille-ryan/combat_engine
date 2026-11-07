@@ -484,8 +484,18 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
     # read as a power that does not exist.
     if ref.startswith("q"):
         return _term(db, ref)
-    if re.fullmatch(r"x\d+_\d+", ref):
-        return _terrain(db, ref)
+    alias = re.fullmatch(r"x(\d+)_\d+", ref)
+    if alias:
+        # **Keyed on the index, where this was a bare `x\d+_\d+` -> terrain.**
+        # See `_ALIAS_TABLE`: the number IS the table, so every non-terrain
+        # alias ref was being looked up in `terrain`, missing, and answered
+        # as "no such row" -- 858 rows of them.
+        table = _ALIAS_TABLE.get(int(alias.group(1)), "")
+        if table == "terrain":
+            return _terrain(db, ref)
+        if table == "disease":
+            return _disease(db, ref)
+        return _alias_spec(db, ref, table) if table else None
     if ref.startswith("b:"):
         row = db.execute(
             "SELECT * FROM build_option WHERE ref = ?", (ref,)
@@ -600,6 +610,112 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
         return "\n\n".join(out)
 
     return None
+
+
+#: Which table an `x<N>_<id>` ref belongs to, by the index in the ref.
+#:
+#: `etl/build.py`'s `_ALIAS_TABLES` mints these -- `x{index}_{id}` -- so the
+#: number is the table and nothing else can tell them apart. Mirrored here
+#: rather than imported because `scripts/` reaches the built database and
+#: never the ETL, which is the seam `db.py` exists to keep.
+#:
+#: **Everything except `2` used to be read as terrain.** `_render`'s branch
+#: was `re.fullmatch(r"x\d+_\d+", ref) -> _terrain(...)`, so a disease, a
+#: poison, a background and an associate all went to a table that does not
+#: hold them, `_terrain` returned `None`, and `spec.py` answered *"no such
+#: row"* for a ref sitting in `game.db`. Measured, that was briefs for
+#: **1,003 rows** nobody could be handed:
+#:
+#:     terrain      145   rendered
+#:     background   817   "no such row"
+#:     disease       69   "no such row"
+#:     associate     88   "no such row"
+#:     poison        19   "no such row"
+#:
+#: `#948` names the disease fifth of this as its step 2, and `#1123` is the
+#: precedent for what a missing brief costs: 22 of 24 terrain powers sat
+#: unwritten until `_terrain` existed, then landed in a day.
+_ALIAS_TABLE = {
+    0: "ritual", 1: "deity", 2: "terrain", 3: "trap", 4: "poison",
+    5: "disease", 6: "background", 7: "theme", 8: "paragon_path",
+    9: "epic_destiny", 10: "associate",
+}
+
+
+def _disease(db, ref: str) -> str | None:  # noqa: ANN001
+    """A printed disease, stage by stage. `#948`.
+
+    The header carries the numbers a stage body must not recompute -- the
+    two DCs and which skill is rolled -- for the engine component's reason
+    that a header is data and a body is code. `dc_shape` is shown because
+    the printed tracks are not all the same: a fixed pair of DCs and a
+    pair that moves with the stage are different rules, and an author
+    reading only the numbers cannot tell which it is looking at.
+
+    `stages` is stated so the brief says how many rows the track wants,
+    which is the count `#948`'s step 3 partitions by.
+    """
+    row = db.execute("SELECT * FROM disease WHERE ref = ?", (ref,)).fetchone()
+    if row is None:
+        return None
+    bits = [f"### {row['ref']}   disease"]
+    if row["level"] not in (None, "", "None"):
+        bits.append(f"level {row['level']}")
+    if row["stages"] not in (None, "", "None"):
+        bits.append(f"{row['stages']} stage(s)")
+    lines = ["   ".join(bits)]
+    gate = []
+    if row["check_skills"]:
+        gate.append(f"check: {row['check_skills']}")
+    if row["improve_dc"] not in (None, "", "None"):
+        gate.append(f"improve DC {row['improve_dc']}")
+    if row["worsen_dc"] not in (None, "", "None"):
+        gate.append(f"worsen DC {row['worsen_dc']}")
+    if row["dc_shape"]:
+        gate.append(f"({row['dc_shape']})")
+    if gate:
+        lines.append("   ".join(gate))
+    if row["spec"]:
+        lines.append("")
+        lines.append(row["spec"])
+    return "\n".join(lines)
+
+
+def _alias_spec(db, ref: str, table: str) -> str | None:  # noqa: ANN001
+    """The printed text of an alias-table row, for the tables with no brief.
+
+    **A spec is not a brief and this does not pretend to be one.** It is the
+    flavour-stripped printed card, which is what an author needs most and
+    what `spec.py` was already answering `None` for. A table whose header
+    carries numbers worth stating gets its own renderer -- `_terrain` and
+    `_disease` do -- and the rest get this rather than *"no such row"*.
+
+    Named per table in the heading so a reader knows which kind of thing it
+    is holding, because the ref alone does not say.
+    """
+    try:
+        row = db.execute(
+            f"SELECT * FROM {table} WHERE ref = ?", (ref,)
+        ).fetchone()
+    except Exception:
+        return None
+    if row is None:
+        return None
+    keys = set(row.keys())
+    lines = [f"### {ref}   {table}"]
+    head = [f"{k} {row[k]}" for k in ("level", "kind", "cost", "size")
+            if k in keys and row[k] not in (None, "", "None")]
+    if head:
+        lines[0] += "   " + "   ".join(head)
+    if "spec" in keys and row["spec"]:
+        lines.append("")
+        lines.append(row["spec"])
+    elif "skills" in keys and row["skills"]:
+        # `background` carries no spec column -- its mechanical half IS the
+        # associated skills, which is what `#1078` reads.
+        lines.append("")
+        lines.append(f"associated skills: {row['skills']}")
+    return "\n".join(lines)
 
 
 def _terrain(db, ref: str) -> str | None:  # noqa: ANN001
