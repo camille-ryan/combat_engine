@@ -140,34 +140,6 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
-    # **The harness has no pass where an ALLY makes the kill.** `#1149`.
-    #
-    # The printed trigger is "an ally you can see reduces a creature to 0
-    # hit points", and `_provoke_passes`' own docstring names the three
-    # situations it stages -- somebody swings at the owner, the owner swings
-    # at somebody, somebody walks past. An ally's killing blow is none of
-    # them, so this row fires only when an ally happens to land one during
-    # another pass.
-    #
-    # **It did, until an unrelated commit moved the dice.** `#1135`
-    # reordered the chargen draw, which changed the party's feats and so
-    # their gear and damage, and this row went from firing to silent with
-    # its body untouched. That is the evidence it was luck rather than
-    # coverage: 20 of the 26 rows with this trigger shape still pass the
-    # same way and are deliberately **not** listed here.
-    #
-    # **And the row is right.** Posed by hand -- an ally struck the killing
-    # blow and `Dropped(source=ally)` was announced:
-    #
-    #     Dropped actor=2                   the enemy down, by the ally
-    #     PowerUsed i2838p1 actor=1         the item answers
-    #     MoveStart/Moved/MoveEnd actor=7   the ALLY shifts, as printed
-    #     PowerResolved i2838p1
-    #
-    # So this is a board limit and not a half-written row. The fix is a
-    # fourth provocation pass, which moves every verdict and wants its own
-    # sweep -- hence the issue rather than the change.
-    "i2838p1": "the harness never stages an ally's killing blow (#1149)",
     # **The die contest ties on this board, every time, and a tie is
     # printed to do nothing.** `#1144`.
     #
@@ -2628,15 +2600,55 @@ def board(ref: str, seed: int, pose: bool = False,
             # row, and the weapon it belongs to is the one that should carry
             # it. Chargen's own magic is what gives way, because it is
             # incidental here and the row under test is not. #699.
+            # **Exactly one weapon, and a real one.** #1147. The loop here
+            # stamped the first weapon whose item differed and stopped --
+            # which is one stamp, but `equipment.equip` has already made
+            # one of its own on a weapon that had no magic. With a single
+            # weapon in hand those are the same weapon and nothing shows;
+            # once the character carries two, the item under test ends up
+            # on **both**:
+            #
+            #     i1150x1   w3612 item='i1150'   w:holy-symbol item='i1150'
+            #
+            # So a magic weapon's clause was laid on an implement as well,
+            # and `c.gains_property(mine=True)` -- which matches on
+            # `Weapon.item`, correctly -- paid twice. Measured on a random
+            # sample of 120 of the 1,020 item rows: **7** boards in that
+            # state, so on the order of 60 rows.
+            #
+            # `#1135` is what surfaced it, by reordering the chargen draw
+            # so some characters take a feat granting an implement. The
+            # board had been single-weapon for every one of these rows
+            # until then, which is why `#699`'s note says "the one weapon
+            # it deals" and was true when written.
+            #
+            # **A real weapon over an implement**, because a weapon-slot
+            # item's clause is about something you hit with -- and because
+            # which one gets it was previously decided by list order,
+            # which is not a decision.
             if magic.slot == "weapon":
                 from combat_engine.engine import Gear as _Gear
 
                 gear = world.get(caster, _Gear)
-                for held in (gear.weapons if gear is not None else []):
-                    if held.item != magic.ref:
-                        held.item = magic.ref
-                        held.enhancement = max(held.enhancement, magic.plus)
-                        break
+                weapons = list(gear.weapons if gear is not None else [])
+                takes_it = next(
+                    (w for w in weapons if w.group != "implement"),
+                    next(iter(weapons), None),
+                )
+                # **No clearing branch, and it was measured out rather
+                # than argued out.** I wrote one -- "if another weapon
+                # already carries the item under test, take it off" -- and
+                # a plant disabling it left all 121 sampled boards
+                # **byte-identical**. Naming the carrier is sufficient:
+                # `equipment.equip` puts a weapon-slot item on a weapon
+                # with no magic of its own, which is the same weapon this
+                # picks, so a second carrier cannot arise once the choice
+                # stops depending on list order. Dead bookkeeping no plant
+                # can redden is dead bookkeeping.
+                if takes_it is not None:
+                    takes_it.item = magic.ref
+                    takes_it.enhancement = max(
+                        takes_it.enhancement, magic.plus)
         _hand_it_the_weapon(world, caster, declared)
         foe_team = Team.ENEMY
 
@@ -4157,6 +4169,35 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     # triggers on its own downfall, and a harness that only ever kills
     # other people can never reach one. Three such rows were written and
     # none had ever been exercised.
+    # **And an ALLY swings one**, which the pass above structurally cannot
+    # produce: `killer` there is the caster, or `foes[0]` when the caster
+    # is itself the victim, so `Dropped.source` is never somebody on the
+    # caster's own side. #1149.
+    #
+    # 26 rows print *"an ally you can see reduces a creature to 0 hit
+    # points"* and every one of them fired only when an ally happened to
+    # land a killing blow during one of the other passes -- **20 of the 26
+    # passed that way**, which is board luck rather than coverage. `#1135`
+    # reordered the chargen draw, which changed the party's feats and so
+    # their damage, and **four** rows changed bucket with their bodies
+    # untouched: `i2838p1` went silent, and `p5002`, `p5910` and `i1104p1`
+    # went from quiet-for-a-recorded-reason to never-offered.
+    #
+    # Everybody is revived first, for the same reason the caster's own
+    # death throe needs it: by this point the loop above has killed the
+    # whole board, so there is nobody left for an ally to be and nobody
+    # left to kill.
+    mates = [a for a in _allies_of(world, caster) if a != caster]
+    if mates:
+        _revive_everyone(world, caster)
+        for victim in foes:
+            health = world.get(victim, Health)
+            if health is None or health.hp <= 0:
+                continue
+            world.damage(mates[0], victim, health.hp + health.max_hp)
+            if probe():
+                return True
+
     for victim in (*foes, *_allies_of(world, caster), caster):
         if victim == caster:
             # Put everybody else back on their feet first. A death throe is
@@ -4177,6 +4218,7 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         world.damage(killer, victim, health.hp + health.max_hp)
         if probe():
             return True
+
     return _fired(world, ref, cursor)
 
 
