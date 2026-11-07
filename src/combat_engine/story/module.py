@@ -426,6 +426,45 @@ DANGERS = {
     "pervasive necromantic energy": 31,
 }
 
+#: How long the rule of three gives a character before the checks start,
+#: **in days**, by what they are going without. DMG p159, read off the page:
+#:
+#: > *"When deprived of food, water, or air, the rule of three applies. An
+#: > adventurer can handle three weeks without food, three days without
+#: > water, and three minutes without air outside of strenuous
+#: > situations."*
+#:
+#: **Air is deliberately absent.** Three minutes is rounds, not days, and
+#: it is the in-fight rule -- `engine/suffocation.py`, `#1115`. A scene
+#: clock cannot express it and a module stating `without: [air]` would be
+#: asking this component for the wrong rule, so the validator refuses the
+#: word rather than quietly charging a day for it.
+#:
+#: Three weeks is 21 days, stated as the arithmetic rather than as 21 so
+#: the page's own words are checkable against it. #971.
+DEPRIVATIONS = {
+    "food": 3 * 7,
+    "water": 3,
+}
+
+#: What the first check after the grace period has to beat, and what each
+#: one after it adds.
+#:
+#: > *"At the end of the time period (three weeks, three days, or three
+#: > minutes), the character must succeed on a DC 20 Endurance check.
+#: > Success buys the character another day (if hungry or thirsty), or
+#: > round (if unable to breathe). Then the check is repeated at DC 25,
+#: > then at DC 30, **and so on**."*
+#:
+#: **"And so on" is why there is no ceiling here.** The obvious reading of
+#: "20, then 25, then 30" is a three-step ladder that stops, and `#971`'s
+#: own comment quoted it as *"the escalating DC 20/25/30"* -- which would
+#: cap a two-month starvation at a DC a level-30 character passes on a 1.
+#: The page does not stop, so neither does this.
+DEPRIVATION_DC = 20
+DEPRIVATION_STEP = 5
+
+
 #: *"Every eight hours within an area of environmental danger, the character
 #: must succeed on an Endurance check."*
 EXPOSURE_HOURS = 8
@@ -1119,8 +1158,20 @@ class Scene:
     #: happens, from `DANGERS`. Any kind may carry them: a conversation on
     #: a mountainside is as cold as a fight on one.
     exposure: tuple[str, ...] = ()
-    #: How long the scene takes, in hours. Only read when `exposure` is
-    #: stated -- an Endurance check falls due every `EXPOSURE_HOURS`.
+    #: What the party goes **without** while this scene happens, from
+    #: `DEPRIVATIONS`. Food and water; air is the in-fight rule and the
+    #: validator refuses the word.
+    #:
+    #: Separate from `exposure` and not a tenth danger in it, because the
+    #: two are relieved by different things and charged on different
+    #: clocks: a danger is a check every eight hours and ends when the
+    #: party walks out of it, a deprivation is a grace period of days then
+    #: a check a day, and ends when they eat. #971.
+    without: tuple[str, ...] = ()
+    #: How long the scene takes, in hours. Only read when `exposure` or
+    #: `without` is stated -- an Endurance check falls due every
+    #: `EXPOSURE_HOURS` for a danger, and once a day for a deprivation
+    #: after its grace period.
     hours: int = 0
     #: Is the party under a time constraint here. #942.
     #:
@@ -2515,10 +2566,37 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
             "and must be a non-negative integer"
         )
         hours = 0
+    without = tuple(
+        str(w).strip().lower() for w in raw.get("without", ()) or ()
+        if str(w).strip()
+    )
+    for word in without:
+        if word in ("air", "breath", "oxygen"):
+            # **Named rather than lumped in with the typo case**, because a
+            # module asking for air is asking a sound question of the wrong
+            # component: three minutes is rounds, and the in-fight rule is
+            # `engine.suffocation` (`#1115`). A bare "not one of food,
+            # water" would read as a spelling mistake.
+            problems.append(
+                f"{where}: without {word!r} -- going without air is three "
+                "MINUTES and is the in-fight rule (engine.suffocation), "
+                "not a scene clock. A scene cannot charge it."
+            )
+        elif word not in DEPRIVATIONS:
+            problems.append(
+                f"{where}: without {word!r} is not one of "
+                f"{', '.join(sorted(DEPRIVATIONS))}"
+            )
     if exposure and not hours:
         problems.append(
             f"{where}: states exposure {list(exposure)} and no hours, so no "
             "Endurance check would ever fall due -- say how long it takes"
+        )
+    if without and not hours:
+        problems.append(
+            f"{where}: states without {list(without)} and no hours, so the "
+            "rule of three's clock would never advance -- say how long it "
+            "takes"
         )
     cost = tuple(
         c for c in (
@@ -2657,6 +2735,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         exits=tuple(str(e).strip() for e in raw.get("exits", ()) if str(e).strip()),
         grants=grants,
         exposure=exposure,
+        without=without,
         hours=hours,
         pressed=bool(raw.get("pressed", False)),
         cost=cost,

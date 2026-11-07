@@ -154,9 +154,23 @@ class Table:
             return -1
         return max(pool, key=lambda i: (self.modifier(i, skill), -i))
 
-    def check(self, index: int, skill: str, dc: int) -> CheckResult:
-        """Roll one check, through the engine, with everything standing."""
-        return roll_check(self.world, self.eids[index], skill.lower(), dc)
+    def check(self, index: int, skill: str, dc: int, *,
+              purpose: str = "") -> CheckResult:
+        """Roll one check, through the engine, with everything standing.
+
+        `purpose` is **what the check is for**, forwarded to
+        `skills.check` so a conditional bonus can gate on it. Without it a
+        row printing *"a bonus to Endurance checks to resist the effects
+        of starvation, thirst, or suffocation"* has nothing to read and
+        either applies to every Endurance check in the game or to none --
+        and `skills.py`'s own note says the second is what happens, since
+        `Mods.total` sees `purpose` as False rather than absent.
+
+        The words are the page's: `starvation`, `thirst`, `suffocation`,
+        and a danger's own name for the environmental half. #971.
+        """
+        return roll_check(self.world, self.eids[index], skill.lower(), dc,
+                          purpose=purpose)
 
     def strike(self) -> None:
         """Read the wear back onto the sheets and let the board go.

@@ -57206,6 +57206,374 @@ def a_surge_lost_to_the_cold_is_not_given_back_by_a_rest(out: Result) -> None:
              f"{[s.withheld for s in warm.party.sheets]}")
 
 
+def the_rule_of_three_charges_a_surge_a_day(out: Result) -> None:
+    """Going without food or water costs surges, on an escalating DC. `#971`.
+
+    The second half of `#971`. `run.weather` shipped the environmental
+    danger paragraph; this is the one under it, DMG p159, extracted from
+    `resources/` rather than read off the issue:
+
+    > *"When deprived of food, water, or air, the rule of three applies.
+    > An adventurer can handle three weeks without food, three days
+    > without water, and three minutes without air outside of strenuous
+    > situations. [...] At the end of the time period, the character must
+    > succeed on a DC 20 Endurance check. Success buys the character
+    > another day (if hungry or thirsty) [...] Then the check is repeated
+    > at DC 25, then at DC 30, **and so on**. When a character fails the
+    > check, he loses one healing surge and must continue to make checks.
+    > A character without healing surges who fails a check takes damage
+    > equal to his level."*
+
+    **`weather`'s docstring deferred this on a premise that had already
+    been answered.** It said deprivation *"needs a surge pool that
+    remembers why a surge went"* because *"`Sheet.surges` is a single
+    integer that cannot say that"* -- and `Sheet.withheld`, a dict keyed by
+    cause, was built for the cold half and answers it exactly. So the
+    blocker was gone and the docstring still argued for it.
+
+    **And `#971`'s own comment quoted the ladder as "DC 20/25/30"**, which
+    reads as a three-step ladder that stops. The page says *"and so on"*.
+    A cap at 30 is a number a paragon character fails on a 1, so a month
+    of starvation would cost nothing -- which is why the unbounded
+    assertion below is the one worth having.
+
+    The assertions each pin a thing that could plausibly have gone the
+    other way, and three of them pin a bug this had on the way:
+
+    * the first check falls **at** the end of the grace period, not a day
+      after it -- a `>` for a `>=` loses it silently;
+    * the ladder is per **deprivation**, not per scene, so splitting a
+      journey into legs must not make it easier;
+    * a failure does **not** stop the checks;
+    * a scene naming two causes rolls **two** ladders, and the first
+      version of the note printed one cause's DCs against both.
+    """
+    from pathlib import Path as _Path2
+
+    from combat_engine.story import module as _m
+    from combat_engine.story import run as _r
+    from combat_engine.story.run import Step as _Step2
+
+    def journey(legs: list[dict], *, seed: int = 5) -> tuple:
+        """Play a module of consecutive scenes. Returns (campaign, lines)."""
+        scenes = []
+        for i, leg in enumerate(legs):
+            scene = {"id": f"s{i}", "kind": leg.get("kind", "roleplay"),
+                     "name": f"Leg {i}",
+                     "exits": [f"s{i + 1}"] if i + 1 < len(legs) else [],
+                     "hours": leg.get("hours", 0),
+                     "without": list(leg.get("without", ())),
+                     "exposure": list(leg.get("exposure", ()))}
+            if scene["kind"] == "rest":
+                scene["extended"] = True
+            scenes.append(scene)
+        built = _m.parse({"id": "probe", "party_level": 2, "party_size": 4,
+                          "start": "s0", "scenes": scenes},
+                         _Path2("<driver>"))
+        camp = _r.begin(built, seed=seed)
+        said: list[str] = []
+        for _ in legs:
+            if not camp.scene:
+                break
+            said.extend(_r.step(camp, built, record=False).lines)
+        return camp, said
+
+    def dcs(lines: list[str]) -> list[str]:
+        """Every DC rolled against a deprivation, in order."""
+        got = []
+        for line in lines:
+            if "check(s) against going without" in line:
+                for part in line.split("at DC ")[1:]:
+                    got.extend(d.strip(" .;")
+                               for d in part.split(";")[0].split(","))
+        return [d for d in got if d]
+
+    # -- the printed numbers --------------------------------------------
+    out.that(_m.DEPRIVATIONS == {"food": 21, "water": 3},
+             "the rule of three is three WEEKS without food and three DAYS"
+             " without water -- 21 and 3, and the two are not the same"
+             " number of the same unit, which is the whole reason the"
+             " table is keyed by cause",
+             f"{_m.DEPRIVATIONS}")
+    out.that(_m.DEPRIVATION_DC == 20 and _m.DEPRIVATION_STEP == 5,
+             "the first check is DC 20 and each one after adds 5",
+             f"DC {_m.DEPRIVATION_DC} step {_m.DEPRIVATION_STEP}")
+    out.that("air" not in _m.DEPRIVATIONS,
+             "and **air is not here**: three minutes is rounds, and going"
+             " without it in a fight is `engine.suffocation` (#1115). A"
+             " scene clock cannot charge it",
+             "air is the in-fight rule")
+
+    # -- the off-by-one, which is silent in both directions --------------
+    out.that(_r._checks_due(71, 3) == 0 and _r._checks_due(72, 3) == 1,
+             "the first check falls **at** the end of the grace period --"
+             " 71h of thirst is nothing and 72h is one check. A `>` for a"
+             " `>=` here loses the first check and nothing else moves",
+             f"71h={_r._checks_due(71, 3)} 72h={_r._checks_due(72, 3)}")
+    out.that(_r._checks_due(96, 3) == 2 and _r._checks_due(120, 3) == 3,
+             "and each later check buys exactly a day -- `success buys the"
+             " character another day`",
+             f"96h={_r._checks_due(96, 3)} 120h={_r._checks_due(120, 3)}")
+    out.that(_r._checks_due(24 * 20, 21) == 0
+             and _r._checks_due(24 * 21, 21) == 1,
+             "the same shape against food's three weeks, so the grace"
+             " period is read from the table rather than hard-coded at 3",
+             f"20d={_r._checks_due(24 * 20, 21)}"
+             f" 21d={_r._checks_due(24 * 21, 21)}")
+
+    # -- played: inside the grace period, nothing happens ---------------
+    inside, said_in = journey([{"hours": 48, "without": ["water"]}])
+    out.that(inside.without == {"water": 48},
+             "two days without water advances the clock",
+             f"{inside.without}")
+    out.that(all(not sh.withheld for sh in inside.party.sheets)
+             and not dcs(said_in),
+             "and costs nothing -- inside the three days the page allows."
+             " The negative control, and it is the half a grace period"
+             " implemented as `always roll` would fail",
+             f"{[sh.withheld for sh in inside.party.sheets]}")
+    out.that(any("grace" in line for line in said_in),
+             "and it SAYS so rather than printing nothing -- `the party"
+             " marched two days thirsty and nothing happened` and `the"
+             " clock is not running` read identically otherwise, and one"
+             " of them is a bug",
+             "the grace period is printed")
+
+    # -- played: past it, the ladder climbs -----------------------------
+    dry, said = journey([{"hours": 120, "without": ["water"]}])
+    out.that(dcs(said) == ["20", "25", "30"],
+             "five days without water rolls THREE checks, at DC 20 then 25"
+             " then 30 -- the printed ladder, played rather than computed",
+             f"{dcs(said)}")
+    owing = [sh for sh in dry.party.sheets if sh.withheld.get("water")]
+    out.that(owing,
+             "and somebody fails one, so everything below is about the"
+             " charge landing and not about an empty party",
+             f"{len(owing)} of {len(dry.party.sheets)} owe a surge")
+    out.that(any(sh.withheld.get("water", 0) > 1 for sh in dry.party.sheets),
+             "**and a failure does not end the checks** -- at least one"
+             " character owes more than one surge, which can only happen"
+             " if it kept rolling after failing. `must continue to make"
+             " checks`",
+             f"{[sh.withheld.get('water', 0) for sh in dry.party.sheets]}")
+
+    # -- the ladder is per deprivation, not per scene -------------------
+    split, said_split = journey([{"hours": 40, "without": ["water"]}] * 3)
+    out.that(dcs(said_split) == ["20", "25", "30"],
+             "**the same journey in three legs rolls the same ladder** --"
+             " 3x40h is 120h, so the clock is on the campaign and the DC"
+             " is read off it. Per-scene state would restart at 20 each"
+             " leg and make a long march cut into chapters strictly"
+             " easier than the same march in one scene",
+             f"{dcs(said_split)}")
+    out.that(split.without == dry.without == {"water": 120},
+             "and the two journeys leave the clock in the same place",
+             f"split={split.without} whole={dry.without}")
+
+    # -- unbounded, which is what `and so on` means ---------------------
+    _long, said_long = journey([{"hours": 24 * 13, "without": ["water"]}])
+    out.that("70" in dcs(said_long),
+             "**the ladder does not stop at 30.** Thirteen days without"
+             " water reaches DC 70, because the page says `then at DC 25,"
+             " then at DC 30, AND SO ON`. #971's own comment quoted it as"
+             " `20/25/30`; a cap there is a DC a paragon character cannot"
+             " fail, so a fortnight of thirst would cost nothing",
+             f"reached DC {dcs(said_long)[-1]}")
+
+    # -- two causes, two ladders ----------------------------------------
+    waste, said_waste = journey([{"hours": 24 * 22,
+                                  "without": ["food", "water"]}])
+    line = next((ln for ln in said_waste
+                 if "check(s) against going without" in ln), "")
+    out.that("food at DC 20, 25;" in line and "water at DC 20, 25, 30" in line,
+             "a scene naming BOTH rolls two ladders and names each -- 22"
+             " days is the second check against food and the twentieth"
+             " against water. The first version of this note re-derived"
+             " the ladder from `scene.without[0]` afterwards and printed"
+             " water's DCs against both",
+             line[:90])
+    out.that(waste.without == {"food": 528, "water": 528},
+             "and both clocks advance",
+             f"{waste.without}")
+
+    # -- relief: the pair that separates eating from sleeping -----------
+    still, _ = journey([{"hours": 120, "without": ["water"]},
+                        {"kind": "rest", "hours": 8, "without": ["water"]}])
+    out.that(any(sh.withheld.get("water") for sh in still.party.sheets),
+             "**an extended rest while STILL without water gives nothing"
+             " back** -- `cannot regain healing surges lost to starvation,"
+             " thirst, or suffocation until he eats a meal, drinks, or"
+             " gains access to air again`. The rest refilling the pool is"
+             " the bug this half exists to prevent",
+             f"{[sh.withheld for sh in still.party.sheets]}")
+    out.that(any((sh.surges or 0) < sh.max_surges
+                 for sh in still.party.sheets if sh.max_surges),
+             "and the pool is really short rather than merely marked",
+             f"{[(sh.surges, sh.max_surges) for sh in still.party.sheets]}")
+
+    fed, _ = journey([{"hours": 120, "without": ["water"]},
+                      {"kind": "rest", "hours": 8}])
+    out.that(all(not sh.withheld for sh in fed.party.sheets),
+             "a rest somewhere there IS water clears the debt -- the"
+             " positive half of the pair, and without it a first dry"
+             " march would cost surges for the rest of the campaign",
+             f"{[sh.withheld for sh in fed.party.sheets]}")
+    out.that(fed.without == {},
+             "**and the clock resets, which the debt clearing does not"
+             " say.** A fed interlude between two marches has to put the"
+             " ladder back to 20 -- otherwise the second march starts"
+             " mid-escalation and a party that ate last week rolls"
+             " against a DC nobody printed",
+             f"{fed.without}")
+
+    # -- the branch a probe would otherwise never reach ------------------
+    #
+    # **Read off the line, not off `sheet.hp`.** The first version set
+    # `hp = 30`, called `deprive`, and asserted the shortfall was a
+    # multiple of level. It failed with one character at 27 of 30, and the
+    # 3 was not damage: `deprive` lays a board and strikes it, and
+    # `Table.strike` **harvests** -- writing the board's own `Health.hp`
+    # back over whatever the probe had set. The same hazard the function's
+    # own comment records for surges, arriving in the assertion about it.
+    #
+    # So the printed consequence is what gets asserted, which is also the
+    # only place the number is stated rather than inferred.
+    broke, _ = journey([{"hours": 120, "without": ["water"]}], seed=5)
+    for sheet in broke.party.sheets:
+        sheet.surges = 0
+    empty = _m.parse({"id": "p", "party_level": 2, "party_size": 4,
+                      "start": "s0",
+                      "scenes": [{"id": "s0", "kind": "roleplay",
+                                  "name": "x", "exits": []}]},
+                     _Path2("<driver>"))
+    dying = _m.Scene(id="dry", kind="roleplay", name="Dry",
+                     without=("water",), hours=24)
+    told = _Step2(scene=dying)
+    _r.deprive(broke, empty, dying, told)
+    damaged = [ln for ln in told.lines if "takes" in ln and "damage" in ln]
+    out.that(damaged,
+             "with no surges left a failure costs hit points instead of a"
+             " surge -- the branch a party with a full pool never reaches,"
+             " and the one a probe has to arrange",
+             f"{len(damaged)} character(s) took damage")
+    levels = {sh.level for sh in broke.party.sheets}
+    out.that(damaged and all(
+        any(f"takes {lvl} damage" in ln for lvl in levels)
+        for ln in damaged),
+             "and the damage is **equal to level** rather than a roll --"
+             " `a character without healing surges who fails a check takes"
+             " damage equal to his level`. Asserted off the line, because"
+             " `deprive` strikes a board and the harvest writes the"
+             " board's own hit points back over anything a probe set",
+             f"{damaged[0][-40:] if damaged else '-'}")
+    out.that(all(not sh.withheld.get("water", 0) > 3
+                 for sh in broke.party.sheets),
+             "and a character paying in hit points records no new surge"
+             " debt, because it had none to give -- the two branches are"
+             " exclusive and a reader of `withheld` must not see a surge"
+             " that was never spent",
+             f"{[sh.withheld.get('water', 0) for sh in broke.party.sheets]}")
+
+    # -- the purpose, which is what makes a printed bonus reachable -----
+    #
+    # `rt:r60-t4` prints *"a +5 racial bonus to Endurance checks to resist
+    # the effects of starvation, thirst, or suffocation"*. Without a
+    # purpose on the roll that clause has nothing to gate on, and
+    # `skills.py`'s own note says what happens then: `Mods.total` sees
+    # `purpose` as **False rather than absent**, so a gated bonus applies
+    # to nothing at all. A silent nothing, on a row that looks written.
+    out.that(_r.PURPOSE_OF == {"food": "starvation", "water": "thirst"},
+             "a module declares what the party has none OF -- `food` --"
+             " and the printed rows name the condition: `starvation`,"
+             " `thirst`, `suffocation`. The roll carries the page's word,"
+             " because that is the one a bonus is written against",
+             f"{_r.PURPOSE_OF}")
+    out.that(set(_r.PURPOSE_OF) == set(_m.DEPRIVATIONS),
+             "and every deprivation a module may declare has one -- a"
+             " cause with no printed word would raise `KeyError` at the"
+             " roll, which is the right direction but only if the two"
+             " tables are checked against each other",
+             f"{sorted(_r.PURPOSE_OF)} vs {sorted(_m.DEPRIVATIONS)}")
+
+    seen: list[str] = []
+    probe = _m.parse({"id": "p", "party_level": 2, "party_size": 4,
+                      "start": "s0",
+                      "scenes": [{"id": "s0", "kind": "roleplay",
+                                  "name": "x", "exits": []}]},
+                     _Path2("<driver>"))
+    thirsty = _m.Scene(id="dry", kind="roleplay", name="Dry",
+                       without=("water",), hours=120)
+    fresh, _ = journey([{"hours": 1, "without": ["water"]}])
+    import combat_engine.story.table as _tbl
+    real_check = _tbl.Table.check
+
+    def spy(self, index, skill, dc, *, purpose=""):  # noqa: ANN001, ANN202
+        seen.append(purpose)
+        return real_check(self, index, skill, dc, purpose=purpose)
+
+    _tbl.Table.check = spy
+    try:
+        _r.deprive(fresh, probe, thirsty, _Step2(scene=thirsty))
+    finally:
+        _tbl.Table.check = real_check
+    out.that(seen,
+             "and the roll really goes through `Table.check` -- the spy saw"
+             " it, so the assertion below is about the purpose and not"
+             " about a call that never happened",
+             f"{len(seen)} check(s) observed")
+    out.that(seen and set(seen) == {"thirst"},
+             "**every check against going without water carries"
+             " `purpose=thirst`** -- not `water`, which is the field's"
+             " word and appears on no card. This is the assertion that"
+             " makes `rt:r60-t4`'s +5 reachable rather than inert",
+             f"{sorted(set(seen))}")
+
+    # -- the validator ---------------------------------------------------
+    #
+    # **`parse` RAISES on a bad module** rather than returning one with a
+    # `problems` list, so the first version of these two assertions never
+    # ran -- the rule died on the `ModuleError` three assertions early and
+    # everything after it was unreported. A raise is a louder red than a
+    # FAIL and prints no FAIL line, so a grep for one reads it as green.
+    def refused(scene: dict) -> str:
+        try:
+            _m.parse({"id": "p", "party_level": 2, "party_size": 4,
+                      "start": "s0", "scenes": [scene]}, _Path2("<driver>"))
+        except _m.ModuleError as why:
+            return str(why)
+        return ""
+
+    air = refused({"id": "s0", "kind": "roleplay", "name": "x", "exits": [],
+                   "hours": 8, "without": ["air"]})
+    out.that("suffocation" in air,
+             "a module asking for `without: [air]` is refused by NAME,"
+             " pointing at `engine.suffocation` -- it is a sound question"
+             " of the wrong component, and `not one of food, water` would"
+             " read as a spelling mistake",
+             air[-80:] or "not refused at all")
+    mute = refused({"id": "s0", "kind": "roleplay", "name": "x", "exits": [],
+                    "without": ["water"]})
+    out.that("clock would never advance" in mute,
+             "and stating a deprivation with no hours is refused too --"
+             " the clock would never advance and the scene would read as"
+             " charging something. Same shape as `exposure` with no hours",
+             mute[-70:] or "not refused at all")
+    typo = refused({"id": "s0", "kind": "roleplay", "name": "x", "exits": [],
+                    "hours": 8, "without": ["waterr"]})
+    out.that("not one of food, water" in typo,
+             "and an ordinary misspelling gets the ordinary message, so"
+             " the air case above is a distinct branch rather than the"
+             " only one firing",
+             typo[-60:] or "not refused at all")
+    fine = refused({"id": "s0", "kind": "roleplay", "name": "x", "exits": [],
+                    "hours": 8, "without": ["water"]})
+    out.that(not fine,
+             "and a well-formed one is accepted -- the control that says"
+             " the three refusals above are about their inputs and not"
+             " about the validator refusing everything",
+             fine[-60:] or "accepted")
+
+
 def hours_in_the_cold_cost_the_party_healing_surges(out: Result) -> None:
     """A healing surge could only ever be lost to a fight, and the printed
     rules have another way to spend one:
@@ -65838,6 +66206,13 @@ DRIVERS = {
         "an extended rest does not refund a surge lost to a failed Endurance"
         " check, and the printed table has nine conditions rather than seven"
         " (#971)",
+    ),
+    "rule_of_three": (
+        the_rule_of_three_charges_a_surge_a_day,
+        "three weeks without food and three days without water cost a surge"
+        " a day on a DC that climbs 20/25/30 and does not stop, the ladder"
+        " is per deprivation rather than per scene, and eating resets the"
+        " clock while a rest hands the surges back (#971)",
     ),
     "cold_hours": (
         hours_in_the_cold_cost_the_party_healing_surges,

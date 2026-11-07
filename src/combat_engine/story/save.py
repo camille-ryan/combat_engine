@@ -139,6 +139,24 @@ class Campaign:
     #: the day and not about any character, and because an extended rest
     #: has to reset it from `run.step`, which is where the rest happens.
     encounters: int = 0
+    #: How long the party has gone without each thing, **in hours**, by
+    #: what they are going without. `#971`.
+    #:
+    #: **Hours and not days**, because a scene is hours: three eight-hour
+    #: marches are a day of thirst and a field counting days would read 0
+    #: for all three. Days fall out of it with `// 24`.
+    #:
+    #: **On the campaign and not on a `Sheet`**, because it is a fact about
+    #: the journey rather than about any character -- the party goes
+    #: thirsty together, and the escalating DC is the same number for all
+    #: of them because they all started at the same moment. A per-sheet
+    #: counter would also have to be kept in step across a party that
+    #: splits and rejoins, which nothing else here does.
+    #:
+    #: The *debt* is per sheet (`Sheet.withheld`) because surges are; the
+    #: *clock* is shared. Reset to 0 by a scene that does not name the
+    #: cause, which is the party eating or drinking.
+    without: dict[str, int] = field(default_factory=dict)
     #: Extended rests taken. The second of the two units a timeline entry
     #: can be due in; scenes played is `len(visited)` and needs no field.
     rests: int = 0

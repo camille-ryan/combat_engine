@@ -78,6 +78,9 @@ from .challenge import play as play_challenge
 from .module import (
     CAUGHT,
     DANGERS,
+    DEPRIVATION_DC,
+    DEPRIVATION_STEP,
+    DEPRIVATIONS,
     EXPOSURE_HOURS,
     IN_COMBAT_ACTIONS,
     SHELTERED,
@@ -2600,7 +2603,16 @@ def _out_of_the_cold(campaign: Campaign, scene: Scene, made: Step) -> None:
     end of the scene, so a cold night's own failures are recorded after this
     has run and are correctly still owed in the morning.
     """
-    here = set(scene.exposure)
+    # **Both kinds of debt, and `without` is why this is a union.** A
+    # deprivation is relieved by eating rather than by walking out of
+    # somewhere, but the question this asks is the same one either way:
+    # does the scene still name the thing that took the surge? Leaving
+    # `without` out of the set would have refunded a starving party's
+    # surges at the first night it slept while still starving, which is
+    # the exact sentence the page refuses -- *"cannot regain healing
+    # surges lost to starvation, thirst, or suffocation until he eats a
+    # meal, drinks, or gains access to air again"*.
+    here = set(scene.exposure) | set(scene.without)
     for sheet in campaign.party.sheets:
         gone = [d for d in sheet.withheld if d not in here]
         for danger in gone:
@@ -2609,6 +2621,189 @@ def _out_of_the_cold(campaign: Campaign, scene: Scene, made: Step) -> None:
             made.say(
                 f"{sheet.cls} is out of {', '.join(sorted(gone))} and the "
                 "surges it cost come back with this rest.",
+                "note",
+            )
+
+
+#: What a deprivation is called on the page, by what a module declares.
+#:
+#: A module says `without: [food]` because that is the thing the party has
+#: none of; the printed rows say *"to resist the effects of starvation,
+#: thirst, or suffocation"*. A bonus has to gate on the page's word, so the
+#: two vocabularies are mapped here rather than conflated -- and
+#: `suffocation` is in the values without being in the keys, because the
+#: in-fight rule already uses that purpose (`#1115`) and this is the table
+#: that shows the three are one printed sentence. #971.
+PURPOSE_OF = {
+    "food": "starvation",
+    "water": "thirst",
+}
+
+
+def _checks_due(hours: int, grace_days: int) -> int:
+    """How many deprivation checks have fallen due after `hours` of it.
+
+    > *"At the end of the time period (three weeks, three days, or three
+    > minutes), the character must succeed on a DC 20 Endurance check.
+    > Success buys the character another day (if hungry or thirsty) [...]
+    > Then the check is repeated at DC 25, then at DC 30, and so on."*
+
+    So the first check is **at** the end of the grace period and each later
+    one buys exactly a day. Lifted out of `deprive` so it can be asserted
+    on its own, because every off-by-one available here is silent: a
+    `>` for a `>=` loses the first check entirely, and dropping the `+ 1`
+    charges a three-day thirst nothing at all.
+
+    Pure arithmetic on hours, so a party that marches eight hours at a time
+    crosses a day boundary the same way one that marches for a day does.
+    """
+    grace = grace_days * 24
+    if hours < grace:
+        return 0
+    return (hours - grace) // 24 + 1
+
+
+def deprive(campaign: Campaign, module: Module, scene: Scene,
+            made: Step) -> None:
+    """Charge the rule of three for food and water. #971.
+
+    The other half of `#971`, and `weather`'s docstring deferred it here
+    saying it needed *"a surge pool that remembers why a surge went"*
+    because *"`Sheet.surges` is a single integer that cannot say that"*.
+    That was true when written and `Sheet.withheld` -- a dict keyed by
+    cause -- has since answered it, so the stated blocker was already gone.
+
+    > *"When deprived of food, water, or air, the rule of three applies.
+    > An adventurer can handle three weeks without food, three days
+    > without water, and three minutes without air outside of strenuous
+    > situations. [...] At the end of the time period, the character must
+    > succeed on a DC 20 Endurance check. Success buys the character
+    > another day [...] Then the check is repeated at DC 25, then at DC
+    > 30, and so on. When a character fails the check, he loses one
+    > healing surge and must continue to make checks. A character without
+    > healing surges who fails a check takes damage equal to his level."*
+
+    Four things the page decides and this follows:
+
+    * **The DC does not stop at 30.** *"And so on"*, so it is
+      `DEPRIVATION_DC + DEPRIVATION_STEP * n` with no ceiling. `#971`'s
+      own comment quoted this as *"the escalating DC 20/25/30"*, which
+      would cap a month of starvation at a number a paragon character
+      cannot fail.
+    * **The ladder is per deprivation, not per scene.** The check after a
+      twenty-day march is the twentieth, so the clock lives on the
+      campaign and the DC is read off it. Resetting per scene would make
+      a long journey cut into chapters strictly easier than the same
+      journey in one scene.
+    * **A failure does not end it** -- *"loses one healing surge and must
+      continue to make checks"*. So every due check is rolled, not just
+      up to the first failure.
+    * **No surges left is damage equal to level**, which is the same
+      consequence `weather` already pays.
+
+    **Not air.** Three minutes is rounds and is the in-fight rule
+    (`engine.suffocation`, `#1115`); `module` refuses the word with that
+    reason rather than as a spelling mistake.
+
+    **The clock is reset by a scene that does not name the cause**, which
+    is the party eating or drinking. That is a reading and not a
+    quotation: the page says when a deprivation *starts* costing and when
+    the surges *may* return, and says nothing about a partial meal. The
+    debt itself is relieved separately by `_out_of_the_cold`, so eating
+    makes the surges eligible and the next extended rest hands them back
+    -- which is the order the two printed sentences are in.
+    """
+    # **Reset before charging, and for anything not named.** A scene that
+    # does not mention thirst is one where the party drank, so the clock
+    # goes back to nought -- otherwise a fed interlude between two marches
+    # leaves the second march starting mid-ladder, and a party that ate
+    # last week rolls against DC 45.
+    for cause in list(campaign.without):
+        if cause not in scene.without:
+            del campaign.without[cause]
+    if not scene.without or scene.hours <= 0:
+        return
+
+    # Collect, strike, then spend -- the same ordering `weather` records,
+    # and for the same reason: `Table.strike` harvests the board's
+    # `Health.surges` onto every sheet, so a surge subtracted while the
+    # board was live is overwritten by a board that never knew about it.
+    failures: list[tuple[int, str, int]] = []
+    #: cause -> every DC rolled against it this scene, in order.
+    ladder: dict[str, list[int]] = {}
+    rolled = 0
+    board = table_mod.lay(campaign.party,
+                          seed=seed_for(campaign, scene, "deprivation"))
+    try:
+        for cause in scene.without:
+            grace = DEPRIVATIONS[cause]
+            had = campaign.without.get(cause, 0)
+            now = had + scene.hours
+            campaign.without[cause] = now
+            before, after_ = _checks_due(had, grace), _checks_due(now, grace)
+            if after_ <= before:
+                continue
+            for nth in range(before, after_):
+                target = DEPRIVATION_DC + DEPRIVATION_STEP * nth
+                ladder.setdefault(cause, []).append(target)
+                for slot in range(len(campaign.party.sheets)):
+                    rolled += 1
+                    # **The purpose is the page's word, not the field's.**
+                    # A row prints *"to resist the effects of starvation,
+                    # thirst, or suffocation"*, so a bonus gates on
+                    # `starvation` -- `food` is what a module declares and
+                    # nothing printed says it.
+                    if not board.check(slot, "endurance", target,
+                                       purpose=PURPOSE_OF[cause]):
+                        failures.append((slot, cause, target))
+    finally:
+        board.strike()
+
+    # **Printed whether or not anything fell due**, because "the party
+    # marched three days thirsty and nothing happened" and "the clock is
+    # not running" read identically otherwise, and one of them is a bug.
+    for cause in scene.without:
+        total = campaign.without.get(cause, 0)
+        grace = DEPRIVATIONS[cause]
+        if _checks_due(total, grace) <= 0:
+            made.say(
+                f"{total}h without {cause}: inside the {grace}-day grace "
+                "the rule of three allows, so no Endurance check falls due.",
+                "note",
+            )
+    # **The DCs as rolled, collected in the loop rather than recomputed.**
+    # The first version of this note re-derived the ladder afterwards from
+    # `scene.without[0]`, so a scene naming both food and water printed
+    # water's DCs against both and a reader checking the escalation would
+    # have been checking the wrong cause. Recomputing what a loop already
+    # knew is how that happened.
+    if ladder:
+        made.say(
+            f"{rolled} Endurance check(s) against going without "
+            + "; ".join(
+                f"{cause} at DC {', '.join(str(d) for d in dcs)}"
+                for cause, dcs in ladder.items()
+            ) + ".",
+            "note",
+        )
+    for slot, cause, target in failures:
+        sheet = campaign.party.sheets[slot]
+        left = sheet.surges or 0
+        if left > 0:
+            sheet.surges = left - 1
+            sheet.withheld[cause] = sheet.withheld.get(cause, 0) + 1
+            made.say(
+                f"{sheet.cls} fails Endurance {target} against going "
+                f"without {cause} and spends a healing surge.",
+                "note",
+            )
+        else:
+            hurt = sheet.level
+            sheet.hp = (sheet.max_hp if sheet.hp is None else sheet.hp) - hurt
+            made.say(
+                f"{sheet.cls} fails Endurance {target} against going "
+                f"without {cause} with no surges left and takes {hurt} "
+                "damage.",
                 "note",
             )
 
@@ -2641,12 +2836,19 @@ def weather(campaign: Campaign, module: Module, scene: Scene,
       exerting himself"* -- which makes a cold night cheaper than a cold
       day's march, and is the only reason the rest kind is consulted here.
 
-    **Not deprivation.** The rule of three -- three weeks without food,
-    three days without water, three minutes without air -- is the other half
-    of #971 and is left there, because it needs a surge pool that remembers
-    *why* a surge went: one lost to deprivation does not come back until the
-    character eats, drinks or breathes, and `Sheet.surges` is a single
-    integer that cannot say that.
+    **Not deprivation** -- that is `deprive`, below, and this paragraph
+    used to say it was *"left there"* for a reason that had already been
+    answered. It read:
+
+        it needs a surge pool that remembers *why* a surge went [...] and
+        `Sheet.surges` is a single integer that cannot say that
+
+    True when written, and `Sheet.withheld` -- a dict keyed by cause, built
+    for *this* function's own debt -- answers it exactly. So the stated
+    blocker was removed by the change that wrote this docstring, and the
+    docstring went on naming it. The rule of three is charged by `deprive`
+    on a different clock: a grace period in days rather than a check every
+    eight hours, and relieved by eating rather than by walking out.
     """
     if not scene.exposure or scene.hours <= 0:
         return
@@ -2672,7 +2874,14 @@ def weather(campaign: Campaign, module: Module, scene: Scene,
             target = DANGERS[danger] - eased
             for _ in range(spells):
                 for slot in range(len(campaign.party.sheets)):
-                    if not board.check(slot, "endurance", target):
+                    # The danger's own name, so a row printing a bonus
+                    # against the cold has something to gate on. Safe to
+                    # add: nothing reads these words today -- the only
+                    # three purposes in the tree are `swim`,
+                    # `suffocation` and `trap` -- so no row's behaviour
+                    # moves, and the hook is there when one wants it.
+                    if not board.check(slot, "endurance", target,
+                                       purpose=danger):
                         failures.append((slot, danger, target))
     finally:
         board.strike()
@@ -3001,6 +3210,17 @@ def step(
     # of scene it is -- a conversation on a mountainside is as cold as a
     # fight on one -- so this sits outside the kind dispatch. #971.
     weather(campaign, module, scene, made)
+
+    # **After the weather, not before, and it matters on one board.** Both
+    # charge surges and both read `sheet.surges`, so whichever runs second
+    # sees the first one's spending -- and a party that has already paid
+    # for the cold is correctly nearer to the "no surges left, take damage
+    # equal to level" branch when the thirst is charged. Running
+    # deprivation first would let the same party pay both from a full pool.
+    #
+    # The order is the page's too: environmental danger is the paragraph
+    # above the rule of three, and a day is a day of both.
+    deprive(campaign, module, scene, made)
 
     # **Beside the weather and for the same reason.** A journey is
     # time passing, so it happens whatever kind of scene declared
