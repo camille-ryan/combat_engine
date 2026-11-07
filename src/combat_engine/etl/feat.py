@@ -402,6 +402,50 @@ def _trimmed(source: sqlite3.Connection, row: Any, spec: str) -> str:
     return _EXAMPLES.sub("", spec)
 
 
+#: The printed lead-in a power card puts on a prerequisite and a feat does
+#: not. `#1044`.
+#:
+#: The cards say *"You must have training in Acrobatics"* and *"You must be
+#: trained in Athletics"*, where a feat says *"training in the Nature
+#: skill"*. `_atom`'s skill branch is a **fullmatch**, so the lead-in makes
+#: an otherwise ordinary clause fall through every test and come out
+#: opaque:
+#:
+#:     "You must have training in Acrobatics"  ->  opaque
+#:     "training in Acrobatics"                ->  {"skill": "acrobatics"}
+#:
+#: **Stripped on the power side only, deliberately.** 2 of the 230 opaque
+#: feat terms begin *"you must"*, and resolving either would take a clause
+#: out of the dictionary and renumber every `qN` after it -- which rewrites
+#: every feat's tree, 308 entries of a tracked localisation fixture, and
+#: three content docstrings that name a term by ref. `feat.py:441` already
+#: refuses that trade for `#277`'s sake and it is refused here too.
+_LEAD_IN = re.compile(r"^you\s+must\s+(?:have|be)\s+", re.I)
+
+
+def _power_clauses(source: sqlite3.Connection) -> dict[int, str]:
+    """Every power id that prints a `Prerequisite:`, and its clause.
+
+    Read from the compendium's own `Power.Txt` rather than from the built
+    `power.spec`, which is the thing that looks like it should work and
+    does not: the clause **is** in the spec -- 137 rows contain
+    `Prerequisite:`, matching `#1044`'s census exactly -- but
+    `_prerequisite` matches raw HTML (`<b>Prerequisite</b>`) and a spec is
+    already flavour-stripped text, so it finds **0** of them.
+
+    Unfiltered by level or class on purpose. The caller updates by ref and
+    a ref that `_powers` did not insert simply matches no row, which is
+    cheaper and more honest than keeping this query's filters in step with
+    that one's.
+    """
+    got: dict[int, str] = {}
+    for row in source.execute("SELECT ID, Txt FROM Power ORDER BY ID"):
+        clause = _prerequisite(row["Txt"] or "")
+        if clause:
+            got[row["ID"]] = _LEAD_IN.sub("", clause).strip().rstrip(".")
+    return got
+
+
 def feats(
     source: sqlite3.Connection,
     out: sqlite3.Connection,
@@ -430,8 +474,41 @@ def feats(
         trees[row["ID"]] = tree if _count(tree) else None
         uses.update(_opaque(tree))
 
+    # **The power table's prerequisites, parsed here because the dictionary
+    # is global.** `#1044`. 137 heroic power rows print a `Prerequisite:`
+    # and all 137 are declared, so without this they are dealt to
+    # characters who do not meet them.
+    #
+    # Here rather than in `_powers` for the reason this function's own
+    # docstring gives about feats: a clause that both tables print must get
+    # **one** id, or `prereq_term` stops being the thing it exists to be.
+    # `_powers` runs first, so the column is an UPDATE from here.
+    power_clauses = _power_clauses(source)
+    power_trees: dict[int, dict | None] = {}
+    power_uses: Counter[str] = Counter()
+    for pid, clause in power_clauses.items():
+        tree = _tree(clause, index)
+        power_trees[pid] = tree if _count(tree) else None
+        power_uses.update(_opaque(tree))
+
     ordinary = mechanical() | {w for (w,) in out.execute("SELECT word FROM common_word")}
+    # **Numbered, then APPENDED -- never re-sorted.** A clause both tables
+    # print keeps the id the feat pass gave it, which is the whole point of
+    # a global dictionary; a clause only the powers print gets a new id
+    # after the maximum.
+    #
+    # Folding `power_uses` into `uses` before the sort would have been one
+    # line and is the thing to refuse. It changes the sorted order, so
+    # **every `qN` in the corpus moves**: 230 `prereq_term` rows, every
+    # feat tree holding a term, 308 entries of a tracked localisation
+    # fixture, and three content docstrings that name a term by ref and
+    # would silently come to mean another clause. The note below about
+    # `#277` refuses the same trade for the same reason.
     terms = {clause: f"q{n}" for n, clause in enumerate(sorted(uses))}
+    for n, clause in enumerate(sorted(set(power_uses) - set(terms)),
+                               start=len(terms)):
+        terms[clause] = f"q{n}"
+    uses.update(power_uses)
     # **A clause naming a race's "choose one" option resolves to that option**,
     # which is #277's title: it could not, so each such prerequisite minted an
     # opaque `qN` pointing at nothing -- 11 of them, every one used exactly once.
@@ -526,8 +603,31 @@ def feats(
         report.feats += 1
         report.unparsed += opaque
 
+    # **The power column, written after substitution so its tree holds the
+    # same `qN` a feat's does.** `#1044`.
+    #
+    # By ref, so a power the compendium prints and `_powers` filtered out
+    # (over level, or an unplayed class) matches no row and is silently
+    # skipped -- which is why `_power_clauses` does not try to reproduce
+    # that filter. `touched` is counted rather than assumed for the same
+    # reason: the gap between "clauses parsed" and "rows updated" is the
+    # filter, and a reader should be able to see it.
+    power_atoms = 0
+    touched = 0
+    for pid, tree in power_trees.items():
+        opaque = _substitute(tree, terms)
+        power_atoms += _count(tree)
+        done = out.execute(
+            "UPDATE power SET prereq = ?, unparsed = ? WHERE ref = ?",
+            (json.dumps(tree) if tree else None, opaque, f"p{pid}"),
+        )
+        touched += done.rowcount
+        report.power_prereqs += done.rowcount
+        report.power_unparsed += opaque if done.rowcount else 0
     report.terms = len(terms)
     report.scores["feat"] = 1 - report.unparsed / max(1, atoms)
+    report.scores["power_prereq"] = (
+        1 - report.power_unparsed / max(1, power_atoms))
 
 
 def _card(

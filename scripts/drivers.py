@@ -57206,6 +57206,169 @@ def a_surge_lost_to_the_cold_is_not_given_back_by_a_rest(out: Result) -> None:
              f"{[s.withheld for s in warm.party.sheets]}")
 
 
+def a_power_s_printed_prerequisite_is_a_tree(out: Result) -> None:
+    """137 power rows print a `Prerequisite:` and now carry it. `#1044`.
+
+    The `power` table had no prerequisite column, so every one of the 137
+    was dealt to characters who do not meet it -- there was nowhere for the
+    gate to live, which means nothing downstream could refuse it even in
+    principle. `feat` and `terrain` each carried theirs.
+
+    **The expensive part was the numbering, and this issue's own plan had
+    it backwards.** The opaque-clause dictionary is global --
+    `prereq_term`'s schema says *"keyed on a global dictionary of clause
+    texts rather than per feat, so that answering 'must worship <name>'
+    once answers all ten feats that ask it"* -- and it is built by a sort:
+
+        terms = {clause: f"q{n}" for n, clause in enumerate(sorted(uses))}
+
+    So folding the power clauses in *before* the sort moves **every `qN` in
+    the corpus**. Measured, what that rewrites: 230 `prereq_term` rows,
+    every feat tree holding a term, **308 entries of a tracked localisation
+    fixture**, and three content docstrings that name a term by ref and
+    would silently come to mean a different clause.
+
+    `feat.py` already refuses that trade for `#277`'s sake -- *"renumbering
+    would shift every opaque ref after the first match and rewrite the
+    prereq tree of every feat in the corpus"* -- so the power clauses are
+    **appended after the maximum** instead. A clause both tables print
+    keeps the id it has, which is the whole point of a global dictionary,
+    and nothing existing moves. That is what the stability assertions below
+    are for, and they are the ones carrying the plant.
+    """
+    import json as _json
+
+    from combat_engine import db as _db
+    from combat_engine.etl.feat import _LEAD_IN as _LEAD
+
+    con = _db.game()
+
+    def atoms(node) -> set:  # noqa: ANN001
+        if isinstance(node, dict):
+            got: set = set()
+            for k, v in node.items():
+                if k in ("all", "any"):
+                    for child in v:
+                        got |= atoms(child)
+                else:
+                    got.add(k)
+            return got
+        if isinstance(node, list):
+            found: set = set()
+            for child in node:
+                found |= atoms(child)
+            return found
+        return set()
+
+    rows = list(con.execute(
+        "SELECT ref, level, prereq, unparsed FROM power"
+        " WHERE prereq IS NOT NULL"))
+    out.that(len(rows) == 137,
+             "137 power rows carry a prerequisite tree -- the census this"
+             " issue was filed on, and it was exact",
+             f"{len(rows)}")
+    out.that(all((r["level"] or 0) <= 10 for r in rows),
+             "and every one is heroic, so none of them is held back by the"
+             " tier rule -- all 137 are dealt today",
+             f"max level {max((r['level'] or 0) for r in rows)}")
+
+    kinds: dict[str, int] = {}
+    for row in rows:
+        for kind in atoms(_json.loads(row["prereq"])):
+            kinds[kind] = kinds.get(kind, 0) + 1
+    out.that(kinds.get("skill") == 76,
+             "**76 of them gate on skill training**, which is the family"
+             " this issue's thread predicted and the one `chargen.meets`"
+             " can already answer -- `#1094` added the `skill` atom, so"
+             " these are gates that bite rather than data nobody reads",
+             f"skill={kinds.get('skill')}")
+    out.that(kinds.get("ref") == 38 and kinds.get("race") == 5,
+             "38 resolve to a power or feature ref and 5 to a race",
+             f"ref={kinds.get('ref')} race={kinds.get('race')}")
+    out.that(kinds.get("term") == 19,
+             "and 19 keep an opaque atom -- 86% fully resolved. Asserted"
+             " rather than left implicit, because a parser that quietly"
+             " resolved less would read exactly like one that resolved"
+             " more unless the opaque count is pinned too",
+             f"term={kinds.get('term')}")
+    out.that(sum(1 for r in rows if r["unparsed"]) == 19,
+             "and `unparsed` agrees with the trees -- the column and the"
+             " JSON are two records of one fact and must not drift",
+             f"{sum(1 for r in rows if r['unparsed'])} row(s)")
+
+    # -- the stability guarantee, which is the whole design --------------
+    terms = list(con.execute("SELECT ref, kind, uses FROM prereq_term"))
+    nums = sorted(int(t["ref"][1:]) for t in terms if t["ref"][1:].isdigit())
+    out.that(len(terms) == 247,
+             "247 terms in the global dictionary, 230 of them from the"
+             " feats as before and 17 new to the powers",
+             f"{len(terms)}")
+    # **This one cannot detect a renumber and the plant proved it.** A
+    # re-sort produces a contiguous `q0..qN` too, so it stayed green with
+    # the one-line version planted. It is kept because it catches a
+    # *vacated* id -- the failure mode where a clause resolves and leaves
+    # a hole -- and the two assertions after it are what actually pin the
+    # stability. Recorded so nobody reads this as the renumber gate.
+    out.that(nums and nums[0] == 0 and max(n for n in nums if n < 230) == 229,
+             "the feat range is **unbroken from q0 to q229**, so no id was"
+             " vacated. NOT a renumber detector -- a re-sort is contiguous"
+             " too and this stayed green under the plant; the two below"
+             " are the ones that caught it",
+             f"q{nums[0]}..q229 contiguous")
+    out.that(len([n for n in nums if n >= 230]) == 17,
+             "and the 17 power-only clauses are q230 and up, outside the"
+             " range anything existing points at",
+             f"{len([n for n in nums if n >= 230])} appended")
+    # **Named `busiest`, not after the clause it holds.** The clause's own
+    # text is a printed name, and using it as a variable put it in a
+    # tracked file -- which `leaks.py` caught on the first run after the
+    # rebuild that made it a known name. Tier 2, and it came from wanting
+    # the assertion to read concretely, which is exactly where this rule
+    # gets broken.
+    busiest = next((t for t in terms if t["ref"] == "q227"), None)
+    out.that(busiest is not None and busiest["uses"] == 25,
+             "**`q227` is still the 25-use term it was before this change**"
+             " -- a named, pinned id on the busiest clause in the table."
+             " If the sort had been re-run this would be some other"
+             " clause, and every one of the 308 tracked localisation"
+             " entries would be pointing at the wrong text",
+             f"q227 uses={busiest['uses'] if busiest else None}")
+
+    # -- the lead-in, and the reason it is power-side only ---------------
+    out.that(_LEAD.sub("", "You must have training in Acrobatics")
+             == "training in Acrobatics"
+             and _LEAD.sub("", "You must be trained in Athletics")
+             == "trained in Athletics",
+             "the printed lead-in is stripped -- `_atom`'s skill branch is"
+             " a fullmatch, so `You must have training in Acrobatics` falls"
+             " through every test and comes out opaque where"
+             " `training in Acrobatics` resolves",
+             "stripped")
+    out.that(_LEAD.sub("", "training in the Nature skill")
+             == "training in the Nature skill"
+             and _LEAD.sub("", "You must worship a deity of the storm domain")
+             == "You must worship a deity of the storm domain",
+             "and it strips **only** the lead-in: a feat's phrasing is"
+             " untouched, and so is `#454`'s worship clause, whose own"
+             " atom matches the `you must` itself. The negative control",
+             "untouched")
+
+    # -- the trap that cost the first attempt ----------------------------
+    from combat_engine.etl.feat import _prerequisite as _pre
+    found = sum(1 for r in con.execute("SELECT spec FROM power")
+                if _pre(r["spec"] or ""))
+    said = sum(1 for r in con.execute("SELECT spec FROM power")
+               if "Prerequisite:" in (r["spec"] or ""))
+    out.that(said == 137 and found == 0,
+             "**the clause is in the built spec and `_prerequisite` finds"
+             " none of it.** 137 specs print `Prerequisite:` and the"
+             " extractor matches raw HTML (`<b>Prerequisite</b>`), so"
+             " reading the built table returns 0 -- which looks exactly"
+             " like a corpus that prints no prerequisites. The import"
+             " reads the compendium's own text instead",
+             f"{said} specs say it, {found} match the HTML extractor")
+
+
 def the_rule_of_three_charges_a_surge_a_day(out: Result) -> None:
     """Going without food or water costs surges, on an escalating DC. `#971`.
 
@@ -66206,6 +66369,13 @@ DRIVERS = {
         "an extended rest does not refund a surge lost to a failed Endurance"
         " check, and the printed table has nine conditions rather than seven"
         " (#971)",
+    ),
+    "power_prereq": (
+        a_power_s_printed_prerequisite_is_a_tree,
+        "137 power rows print a Prerequisite and now carry it as a tree, 76"
+        " of them gating on skill training -- and the global term"
+        " dictionary is APPENDED to rather than re-sorted, so no existing"
+        " `qN` moves (#1044)",
     ),
     "rule_of_three": (
         the_rule_of_three_charges_a_surge_a_day,

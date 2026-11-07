@@ -124,7 +124,24 @@ CREATE TABLE power (
   -- Two axes because they are two relationships, and NULL for the great majority
   -- of rows that mention no weapon at all. `etl/wields.py` fills it; three
   -- consumers were asking this by substring match before it existed. #237.
-  wields TEXT
+  wields TEXT,
+  -- The printed `Prerequisite:` line as a tree, same shape and the same
+  -- parser as `feat.prereq`. 137 heroic rows print one and all 137 are
+  -- declared, so without this they are dealt to characters who do not meet
+  -- them and nothing downstream can refuse them even in principle. #1044.
+  --
+  -- Filled by a **late pass** rather than by `_powers`, the way `wields`
+  -- is, and for a sharper reason: the opaque-clause dictionary in
+  -- `prereq_term` is global across feats and powers, so a clause both
+  -- tables print must get one id. That numbering lives in `feat.feats`,
+  -- which runs after `_powers`, so the column is written by an UPDATE
+  -- from there.
+  prereq TEXT,
+  -- How many atoms of this row's prerequisite stayed opaque. `feat` carries
+  -- the same column for the same reason: a tree that parsed nothing and a
+  -- row with no prerequisite both hold NULL in `prereq`, and only this
+  -- tells them apart.
+  unparsed INTEGER
 );
 CREATE INDEX power_class ON power(class, level);
 
@@ -1253,6 +1270,13 @@ class Report:
     terms: int = 0
     aliases: int = 0
     unparsed: int = 0
+    #: Power rows whose printed `Prerequisite:` became a tree, and how many
+    #: of their atoms stayed opaque. Counted apart from `unparsed` because
+    #: the two tables' parse rates are separate measurements -- a power
+    #: prerequisite is nearly all skill training, a feat's is nearly all
+    #: printed names, so pooling them would hide whichever is worse. #1044.
+    power_prereqs: int = 0
+    power_unparsed: int = 0
     names: int = 0
     common: int = 0
     scores: dict[str, float] = field(default_factory=dict)
@@ -1341,6 +1365,10 @@ class Report:
             f"feats         {self.feats:6d}",
             f"  power cards {self.feat_cards:6d}  (a feat that prints a whole power)",
             f"  unparsed    {self.unparsed:6d}  (prerequisite clauses left opaque)",
+            f"  power gates {self.power_prereqs:6d}  "
+            f"(a power's printed Prerequisite, now a tree -- #1044)",
+            f"  ...opaque   {self.power_unparsed:6d}  "
+            f"(atoms of those left unresolved)",
             f"races         {self.races:6d}",
             f"  racial rows {self.racial:6d}  (a power a race grants, never imported)",
             f"  traits      {self.racial_traits:6d}  "
