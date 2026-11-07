@@ -49427,13 +49427,35 @@ def weapon_is_mine(out: Result) -> None:
     def two_in_hand() -> tuple[Any, int, Any]:
         """The audit board, plus a second weapon carrying another item.
 
-        `audit.board` lays the item under test on the one weapon it deals
+        `audit.board` lays the item under test on the weapons it deals
         (#699), and arms the trait during `Encounter.start` -- so the clause
         is already on by the time a rule looks. Both are stripped here, so
         what the body writes is observable rather than assumed.
+
+        **And the board's own implement is stripped too, which it did not
+        used to deal.** `#699`'s note says "the one weapon", and that was
+        true until `#1135` reordered the draw: this board's character now
+        takes a feat granting an implement, so the item under test is
+        stamped on a greataxe **and** a holy symbol, and `mine=` -- rightly
+        -- matched both. That doubled the writes and the rule went red on a
+        working selector. `#1147` is the board's half.
+
+        This rule is about a selector matching `Weapon.item`, so a second
+        weapon carrying the *same* item is noise rather than subject, and
+        the assertion below is what stops the narrowing being a quiet
+        widening: exactly one board weapon may carry the item, and the rule
+        says so out loud if that stops being true.
         """
         world, me, _start = A.board(REF, 1)
         gear = gear_of(world, me)
+        printed = [w for w in gear.weapons if w.slug == "greataxe"]
+        if len(printed) != 1:
+            raise AssertionError(
+                f"the board dealt {len(printed)} weapons slugged greataxe "
+                f"({[w.ref for w in gear.weapons]}) -- this rule needs the "
+                "one the item is printed on"
+            )
+        gear.weapons = printed
         mine = gear.weapons[0]
         other = dataclasses.replace(
             mine, ref="w9999", slug="other", item="i2882", group="hammer",

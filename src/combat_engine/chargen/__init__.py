@@ -4149,15 +4149,17 @@ def _trained_skills(cls: str, feats: list[str], rng: Random,
     from combat_engine.db import game
 
     db = game()
-    rows = db.execute(
-        "SELECT skill, granted FROM class_skill WHERE lower(class) = ?"
-        " ORDER BY skill",
-        (cls.lower(),),
-    ).fetchall()
-    # **The feats come first, and apply even to a class with no entry.** A
-    # multiclass feat's "you gain training in Nature" is training the
-    # character has however it was built, so it is not inside the `if not
-    # rows` guard below.
+    # **The class and the race are settled first, which is the printed step
+    # order and is what `#1135` moved.** Skills are step 4 of building a
+    # character and feats are step 5, in that order precisely so that a
+    # feat asking *"are you trained in Thievery"* has something to read.
+    # Drawn through the same helper `spawn` calls before it picks the
+    # feats, so the two cannot disagree about what the pool handed out:
+    # same key, same stream, same prefix of draws.
+    before = class_training(cls, race, rng, db=db)
+    # **And the feats apply even to a class with no entry.** A multiclass
+    # feat's "you gain training in Nature" is training the character has
+    # however it was built, so this is not inside any class guard.
     from_feats: set[str] = set()
     for ref in feats:
         got = db.execute(
@@ -4181,31 +4183,77 @@ def _trained_skills(cls: str, feats: list[str], rng: Random,
                 from_feats.add(rng.choice(sorted(offered)))
         if got["trains_from"]:
             from_feats |= _from_class_list(db, got["trains_from"], rng)
+    # A feat training a skill the class also offers is one training, not
+    # two -- the set does that for free -- and it does **not** buy a free
+    # pick in exchange, which is the printed rule and is why the union
+    # happens here rather than the pool being sampled from
+    # `pool - from_feats`.
+    return frozenset(before | from_feats)
+
+
+def class_training(cls: str, race: str, rng: Random,
+                   db: sqlite3.Connection | None = None) -> frozenset[str]:
+    """The skills a character has **before it picks a feat**. #1135.
+
+    Steps 2 and 4 of building a character: what the race trains it in, what
+    the class grants outright, and what it chooses from the class's own
+    list. Feats are step 5 and are added by `_trained_skills`.
+
+    **Split out so one draw can serve two readers.** `spawn` needs this set
+    *before* `feats_for`, because 67 of the 87 feats that say *"you must be
+    trained in X"* name a skill a character **chooses** rather than one it
+    is given -- so with the feats drawn first the question was unanswerable
+    and those rows could never be dealt. Camille's call on `#1135`:
+
+    > *"At first level, skills should be chosen before feats."*
+
+    It is the same function and the same stream key both times, so the
+    pre-feat answer and the final one cannot disagree about the pool: this
+    is the identical prefix of draws off `"{seed}:{ref}:{level}:skills"`,
+    and `_trained_skills` simply carries on from where this stopped.
+
+    **What moved, and it is the cost Camille accepted when she called it.**
+    The feat branch used to draw first, so putting the class sample ahead of
+    it changes what the stream hands out and **every dealt character's
+    skills change** -- not only the gated ones. A campaign party is
+    unaffected: `Party.of` pins its training and the pinned path returns
+    whole without touching the stream (`#1113`).
+
+    **And `_plus_race` can no longer see the feats**, which is correct
+    rather than a loss. Its *"one additional skill"* reading picks from what
+    is left, and at step 2 a character has no feats to collide with -- so a
+    feat that trains the same skill now wastes the feat's training rather
+    than the race's. That is the direction the two cards already disagree
+    in: the feat branch's own rule is that overlap buys no free pick, and
+    the race's is that it does.
+    """
+    if db is None:
+        from combat_engine.db import game
+
+        db = game()
+    rows = db.execute(
+        "SELECT skill, granted FROM class_skill WHERE lower(class) = ?"
+        " ORDER BY skill",
+        (cls.lower(),),
+    ).fetchall()
     if not rows:
-        return frozenset(from_feats)
+        # An unknown class trains in nothing and takes no race pick either
+        # -- which is what this did before the split, and is not a
+        # behaviour worth changing here: the only caller with no
+        # `class_skill` row is a monster, and a monster has no `race` ref,
+        # so `_plus_race` would return the empty set regardless.
+        return frozenset()
     row = db.execute(
         "SELECT skill_choices FROM class WHERE lower(name) = ?", (cls.lower(),)
     ).fetchone()
     picks = int((row["skill_choices"] if row else 0) or 0)
     given = {r["skill"] for r in rows if r["granted"]}
     pool = sorted({r["skill"] for r in rows if not r["granted"]} - given)
-    # Sampled from the pool the class prints, then the feats added. A feat
-    # training a skill the class also offers is one training, not two --
-    # the set does that for free -- but it does **not** buy a free pick in
-    # exchange, which is the printed rule and the reason the sample is
-    # taken before the union rather than from `pool - from_feats`.
-    # **Drawn even when the answer is thrown away**, which is the trap this
-    # kind of override sets. `rng` is the character's own stream and
-    # everything after this reads from it, so skipping the sample for a
-    # pinned character would shift every later draw -- its race's pick, and
-    # whatever the caller takes next. Pinning the *skills* must not change
-    # the rest of the character. `content.terrain.dress` records the same
-    # hazard about a trap it has already decided not to lay: drawn, then
-    # cut.
     chosen = set(rng.sample(pool, min(picks, len(pool))))
-    return frozenset(
-        _plus_race(db, cls, race, given | chosen | from_feats, rng)
-    )
+    # **The race last within this half**, which is `_plus_race`'s own first
+    # reason and still holds: a draw taken before `rng.sample` would shift
+    # the class picks.
+    return frozenset(_plus_race(db, cls, race, given | chosen, rng))
 
 
 @cache
@@ -4381,19 +4429,33 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # Its own stream, like the loadout's and for the same reason: dealing
     # a character's feats must not move the dice the fight is about to
     # roll, or adding one would change every later roll in the game.
+    # **Skills before feats, which is the book's own step order.** Steps 4
+    # and 5, in that order precisely so a feat reading *"you must be
+    # trained in Thievery"* has an answer. `#1135`, on Camille's call:
+    #
+    #   > *"At first level, skills should be chosen before feats."*
+    #
+    # The same key and the same helper `_trained_skills` uses below, so the
+    # set the feats are judged against is the set the character ends up
+    # with -- plus whatever the feats themselves train, which is additive.
+    # A pinned character skips this: its training is already decided and
+    # `Party.of` recorded it (`#1113`).
+    skills_key = f"{world.rng.seed}:{who.ref}:{who.level}:skills"
+    before_feats = who.skills or sorted(
+        class_training(who.cls, who.race, Random(skills_key))
+    )
     feats = who.feats or feats_for(
         who.cls, who.level, build,
         Random(f"{world.rng.seed}:{who.cls}:{build.name}:feats"),
         list(powers), who.race,
-        # **The pin, when there is one.** `#1113`: a character whose
-        # training is already decided -- a campaign party, which `Party.of`
-        # pins -- has its skill-gated feats answered off the real set. A
-        # character being dealt fresh passes nothing and the pool is
-        # unchanged, so this moves no existing draw.
-        skills=who.skills,
-        # **Unlike skills, this one is always known by now**: the deal four
-        # lines up settles it before the feats are drawn, which is the
-        # step order `#1135` is about having for skills too. `#454`.
+        # **The pin when there is one, and the fresh draw otherwise.**
+        # `#1113` answered this off a pinned set only, so a character dealt
+        # from scratch passed nothing and 67 skill-gated feats could never
+        # be dealt to one. `#1135` is the other half.
+        skills=before_feats,
+        # **Unlike skills, this one was always known by now**: the deal four
+        # lines up settles it before the feats are drawn, which is the step
+        # order skills now have too. `#454`.
         worships=who.worships,
     )
     # A feat that hands over a card takes one back, and both halves happen
@@ -4539,7 +4601,12 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
             trained=_trained_skills(
                 who.cls,
                 feats,
-                Random(f"{world.rng.seed}:{who.ref}:{who.level}:skills"),
+                # **A fresh stream on the same key as the pre-feat draw
+                # above.** Both start from the same place and the class
+                # half is the same prefix of draws, so the set the feats
+                # were judged against is the set the character keeps.
+                # #1135.
+                Random(skills_key),
                 who.race,
                 # **The pin, and it is why this seed no longer decides a
                 # campaign character's training.** The stream above is keyed
