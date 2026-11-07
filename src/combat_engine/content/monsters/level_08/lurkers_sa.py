@@ -1642,14 +1642,40 @@ def m5581a6(c: Cast) -> None:
     regenerating through the whole phase change with every other clause
     landing and nothing reporting it.
 
-    **The insubstantial half is `dropped=` because the trait does not
-    exist to lose.** The printed stat block has it and the extraction does
-    not: `m5581` declares seven rows, `a0` through `a6`, none of them an
-    insubstantial trait, and `monster` has no column for one. The only
-    mention of it in any `m5581` spec is inside *this* row's own text. So
-    she plays without it from the start, a removal has nothing to remove,
-    and writing one would be a call that does nothing -- the shape
-    `#564` is about. The other four clauses are unaffected.
+    **The insubstantial half is `dropped=` because the PAGE never grants
+    the trait, and this note used to blame the extraction for it.** It
+    said *"The printed stat block has it and the extraction does not"*.
+    The compendium was then read, which is the one thing `#1122` said had
+    to happen, and the first clause is false:
+
+        occurrences of the keyword in her WHOLE compendium row       2
+        ...and both are the same sentence, in Txt and in PlainTxt
+        that sentence is this row's own REMOVAL clause
+
+    The page's bolded trait headers run HP, Bloodied, Initiative, AC,
+    Fortitude, Reflex, Will, Perception, Speed, Immune, Resist,
+    Vulnerable, Saving Throws, Action Points, **Regeneration**, and then
+    the abilities. There is **no standing trait row for the keyword** --
+    not a trait, not the `Keywords` column, not `Resist`, not `Immune`.
+
+    `Regeneration` being there is exactly why that half of the clause
+    works: `monster` has a `regeneration` column. The other half has
+    nothing behind it anywhere on the page.
+
+    So the printed card removes a trait it never granted. That is a defect
+    in the card rather than in our reading of it -- the source is a
+    magazine issue, which the root `CLAUDE.md` records as running 5-11x
+    the blank-attack-defence rate of the books -- and `#1086`'s finding
+    stands untouched: the ETL path for a standing keyword trait exists and
+    31 rows use it.
+
+    **Deliberately still `dropped=` and not `defect=`.** That is the
+    tempting reading and the wrong one: `loader.defective` derives a
+    defect for the whole stat block and `pick` stops offering the
+    creature, so marking it would take an elite level-8 lurker out of the
+    game to express a clause that removes nothing. The clause is
+    unsupportable by print; the creature is fine. The other four clauses
+    are unaffected.
 
     The four defences take four separate penalties rather than one on
     `Defense.ANY`: `query` resolves `ANY` to the **lowest of the four**,
