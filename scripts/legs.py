@@ -77,6 +77,19 @@ def _owners(tree: ast.Module) -> Iterator[tuple[ast.FunctionDef, str]]:
     A helper with no decorator of its own is attributed to nothing and
     falls back to the path -- which is right: a module-level `_beside(c)`
     under `powers/warlord/` is a warlord's.
+
+    **And a `cf:` ref names its class, which this did not read.**
+    `_class_of`'s docstring already said rows under `features/` are
+    *"attributed by the ref they are declared with instead -- that is the
+    only honest answer"*, and nothing here did it: only `cls=` was read, so
+    every row in `features/` came back attributed to no class at all.
+
+    That made the ambiguity check below report **2 findings that were not
+    faults** -- `c.build('shielding')` on `cf:warlord-marshal-f1` and
+    `c.build('elemental')` on a shaman's and a warlock's own feature rows.
+    All three are scoped by their ref; the instrument could not see it.
+    With the ref read, the check is **0** and the two are correctly quiet.
+    #235.
     """
     for node in tree.body:
         if not isinstance(node, ast.FunctionDef):
@@ -85,6 +98,8 @@ def _owners(tree: ast.Module) -> Iterator[tuple[ast.FunctionDef, str]]:
         for dec in node.decorator_list:
             if not isinstance(dec, ast.Call):
                 continue
+            first = dec.args[0] if dec.args else None
+            ref = getattr(first, "value", None)
             for kw in dec.keywords:
                 value = getattr(kw, "value", None)
                 if kw.arg == "cls" and isinstance(value, ast.Constant):
@@ -95,8 +110,123 @@ def _owners(tree: ast.Module) -> Iterator[tuple[ast.FunctionDef, str]]:
                 # `todo.py` the day one arrives.
                 if kw.arg in ("todo", "dropped"):
                     marked = marked or "chargen.BUILDS" in ast.dump(value)
+            # **After the keywords, not before, and that ordering is the
+            # whole of it.** The ref is only a fallback for a row that
+            # declares no class -- but `cls=""` is an explicit keyword, so
+            # inferring first and then reading the keywords put the empty
+            # string straight back and the fallback did nothing. It cost
+            # one debugging pass and read exactly like the lookup failing.
+            if isinstance(ref, str) and not cls:
+                cls = (_class_in_ref(ref) if ref.startswith("cf:")
+                       else _one_class_in_prereq(ref))
         if not marked:
             yield node, cls
+
+
+def _class_in_ref(ref: str) -> str:
+    """The class a `cf:` ref names, or `""`.
+
+    Matched against `chargen.BUILDS`' own keys **longest first**, not by
+    splitting on the first hyphen: a chassis segment is hyphenated too
+    (`cf:wizard-sha-ir-f0`), so a split would answer `wizard` by luck here
+    and something wrong the first time a class slug carries a hyphen.
+    """
+    from combat_engine import chargen
+
+    body = ref[len("cf:"):]
+    for cls in sorted(chargen.BUILDS, key=len, reverse=True):
+        if body == cls or body.startswith(f"{cls}-"):
+            return cls
+    return ""
+
+
+def ambiguous() -> list[tuple[str, str, int, list[str]]]:
+    """Readers of a leg name that more than one class owns, unscoped. #235.
+
+    `Build.name` is an **identity** -- it is what `c.build("two-blade")`
+    gates on -- and it does not identify a leg. Measured over all of
+    `chargen.BUILDS`:
+
+        99 legs, 76 distinct names
+        13 names owned by MORE THAN ONE class
+
+    `f1s0` belongs to four classes at once (assassin, bard, druid, warden)
+    and `f0s2` to four more. `query.on_build` resolves by **string**
+    against `Build.choices` with no class scoping at all, so the name alone
+    cannot say which leg is being asked about.
+
+    **It is latent rather than live, and that was checked rather than
+    assumed.** Every reader today is reached through a class-scoped ref or
+    a printed prerequisite naming the class: the sharpest candidate was
+    `f2413`, a feat with `cls=""` reading `c.build('shielding')`, which the
+    swordmage also owns -- and its printed prereq is
+    `{"all": [{"class": "warlord"}, ...]}`, so `legal_feats` offers it to
+    none of the swordmage's three legs. Verified.
+
+    So this is the gate that keeps it latent: a reader of an ambiguous name
+    must be attributable to a class that owns the name. Nothing enforced
+    that, which is why it is worth a check rather than a comment -- the
+    first unscoped one would read exactly like the twenty-two scoped ones.
+    """
+    from combat_engine import chargen
+
+    owners: dict[str, set[str]] = collections.defaultdict(set)
+    for cls, builds in chargen.BUILDS.items():
+        for leg in builds:
+            owners[leg.name].add(cls)
+    shared = {name for name, who in owners.items() if len(who) > 1}
+
+    out: list[tuple[str, str, int, list[str]]] = []
+    for cls, names in sorted(asked().items()):
+        for name, count in sorted(names.items()):
+            if name in shared and (not cls or cls not in owners[name]):
+                out.append((cls or "(no class)", name, count,
+                            sorted(owners[name])))
+    return out
+
+
+def _one_class_in_prereq(ref: str) -> str:
+    """Classes a row's **printed prerequisite** names. #235.
+
+    The third way a row is scoped, after `cls=` and a `cf:<class>-` ref,
+    and the one `f2413` uses: a feat declared `cls=""` whose printed
+    prereq is `{"all": [{"class": "warlord"}, ...]}`. `legal_feats` reads
+    that, so a swordmage is never offered it -- verified against all three
+    of the swordmage's legs.
+
+    Counted as scoping because it is the same guarantee by a different
+    route. Not counted as *equivalent*: a prereq is checked at build time
+    and `c.build(...)` is asked mid-fight, so a row that somehow reached
+    the wrong class would still answer wrongly. That is the latency this
+    whole check is about, and it is stated rather than papered over.
+    """
+    import json
+
+    from combat_engine.db import game
+
+    row = game().execute(
+        "SELECT prereq FROM feat WHERE ref = ?", (ref,)).fetchone()
+    if row is None or not (row["prereq"] or "").strip():
+        return ""
+    found: set[str] = set()
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            named = node.get("class")
+            if isinstance(named, str):
+                found.add(named.lower())
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    try:
+        walk(json.loads(row["prereq"]))
+    except (ValueError, TypeError):
+        return ""
+    # **Exactly one, or nothing.** Two classes in a prereq is not scoping.
+    return next(iter(found)) if len(found) == 1 else ""
 
 
 def _class_of(path: pathlib.Path) -> str:
@@ -310,7 +440,19 @@ def main() -> int:
             print(line)
     print(f"{len(counts)} class(es) declare more than one feature chassis; "
           f"`drivers.chassis` is what asserts a character gets only one")
-    return 1 if dead or wrong or shrunk else 0
+
+    loose = ambiguous()
+    if loose:
+        print()
+        for cls, name, count, who in loose:
+            print(f"  {cls:14} c.build({name!r}) asked {count:3}x, and that"
+                  f" name belongs to {', '.join(who)}")
+        print("  `query.on_build` matches a leg by STRING with no class"
+              " scoping, so an unscoped reader cannot say which leg it"
+              " means. Scope the row -- a `cls=` or a `cf:<class>-` ref.")
+    print(f"{len(loose)} row(s) ask about a leg name more than one class owns"
+          " without being scoped to one of them")
+    return 1 if dead or wrong or shrunk or loose else 0
 
 
 if __name__ == "__main__":
