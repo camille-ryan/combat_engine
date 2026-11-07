@@ -1276,6 +1276,34 @@ class Director:
                     " offer into somebody's mouth that one side might take"
                     " up: a concession, a price, a thing neither of them has"
                     " weighed yet.")
+        # **A challenge's attemptables, every beat, and the reasoning is
+        # the vignette branch's one line for line.** #1145.
+        #
+        # `THE SCENE` is withheld after beat one because it holds one-time
+        # offers. A **roleplay** scene survives that: `WHO IS HERE` and a
+        # vignette's conflict are re-sent every beat and keep the model
+        # where it is. A challenge has neither -- no npcs, no vignette --
+        # so after beat one the DM held a spent detail, `recent()`, and
+        # nothing at all that said where it was.
+        #
+        # Measured by playing the chapter-1 challenge with a live model:
+        # beat one was on-scene, and beats two, three and four narrated a
+        # **door**. There is no door in that room and nobody mentioned
+        # one.
+        #
+        # These carry nothing re-offerable, which is the test the vignette
+        # branch states for itself: an attemptable is a description of an
+        # action, not an offer that gets consumed. `playing.options` is
+        # non-empty only on the challenge path (`run._challenge_options`),
+        # so this selects it without asking about `scene.kind`.
+        if playing.options:
+            told.append(
+                "WHAT CAN BE ATTEMPTED here, and it is the whole of what"
+                " this scene is about. Write about these things and the"
+                " room they are in; do not invent somewhere else for them"
+                " to be:\n"
+                + "\n".join(f"  {a.what or a.id}"
+                            for a in playing.open_affordances()))
         # **An intent that matched nothing changes nothing**, and the DM
         # has to be told which those were. It was not, and the result was
         # that the one thing this layer refuses -- the model deciding what

@@ -65331,6 +65331,7 @@ def the_fixture_challenge_can_run_beats(out: Result) -> None:
     from pathlib import Path
 
     from combat_engine.story import beat as beat_mod
+    from combat_engine.story import llm as llm_mod
     from combat_engine.story import module as mod
 
     here = Path(__file__).resolve().parent.parent
@@ -65576,7 +65577,26 @@ def the_fixture_challenge_can_run_beats(out: Result) -> None:
                            director, beat_mod.silent)
         return made.lines
 
-    narrated = through_challenge_scene(Narrator(scripted=False))
+    # **Count the rolls at their source, so the printing can be compared
+    # against something that is not the printing.** #1146's duplication
+    # printed every roll twice and every ordering assertion below stayed
+    # green on it -- measured, not feared: the plant that re-enabled the
+    # trailing block alongside the inline rolls reddened **nothing**. A
+    # count taken from `challenge.resolve` is the independent source the
+    # tally could not be (the tally counts *scored* rolls, and `Narrator`
+    # names one skill so the per-skill cap refuses most of them).
+    resolved: list[int] = [0]
+    _real_resolve = ch.resolve
+
+    def _counting_resolve(*a, **kw):  # noqa: ANN002, ANN003, ANN202
+        resolved[0] += 1
+        return _real_resolve(*a, **kw)
+
+    ch.resolve = _counting_resolve  # ty: ignore[invalid-assignment]
+    try:
+        narrated = through_challenge_scene(Narrator(scripted=False))
+    finally:
+        ch.resolve = _real_resolve  # ty: ignore[invalid-assignment]
     automatic = through_challenge_scene(beat_mod.Director(scripted=True))
     out.that(any(ln.kind == "dm" for ln in narrated),
              "the setup landed: the narrated path ran beats at all. Without"
@@ -65610,6 +65630,126 @@ def the_fixture_challenge_can_run_beats(out: Result) -> None:
     out.that(bool(automatic) and any(ln.kind == "roll" for ln in automatic),
              "and the automatic path still prints its rolls, so the fallback"
              " is intact rather than merely silent")
+
+    # -- #1146: a roll sits beside the beat that caused it ----------------
+    # `_challenge` ends with a loop over `run.attempts`, which **is** the
+    # automatic path's output. On the narrated path the rolls have already
+    # happened inside the beats, so that loop printed them a second time
+    # and all together -- four paragraphs of prose, then five mechanical
+    # lines detached from the moments that produced them.
+    #
+    # **Stated from both sides, because either alone is weak.** A roll
+    # before the last reply says one got placed; fewer rolls after the
+    # last reply than in total says the trailing block is gone. Reverting
+    # either half of the fix reddens both.
+    roll_at = [i for i, ln in enumerate(narrated) if ln.kind == "roll"]
+    last_dm = max((i for i, ln in enumerate(narrated) if ln.kind == "dm"),
+                  default=-1)
+    out.that(any(i < last_dm for i in roll_at),
+             "a narrated challenge prints a roll **before** its last DM"
+             " reply, so the number sits with the moment rather than in a"
+             " block at the end (#1146)",
+             f"{sum(1 for i in roll_at if i < last_dm)} of {len(roll_at)}"
+             f" roll line(s) precede the last reply, at index {last_dm}")
+    out.that(len(roll_at) and sum(1 for i in roll_at if i > last_dm)
+             < len(roll_at),
+             "and not every roll is after the last reply, which is what the"
+             " trailing block looked like",
+             f"{sum(1 for i in roll_at if i > last_dm)} of {len(roll_at)}"
+             " after it")
+    # **The rolls are spread over more than one place in the transcript**,
+    # which is the claim a single count cannot make. A trailing block is
+    # one position; a roll per beat is several.
+    #
+    # **And the tally is NOT the control it looks like.** My first version
+    # here compared the roll-line count against `run.tally` on the ground
+    # that `challenge.py` writes it independently -- and it read 18 roll
+    # lines against 1. The tally counts **scored** rolls, and `Narrator`
+    # names one skill every beat, so the per-skill cap refuses almost all
+    # of them. They roll, they print, they score nothing. An independent
+    # source measuring a different quantity is worse than no control: it
+    # fails on correct code and the message blames the wrong half.
+    places = 0
+    prev = -2
+    for i in roll_at:
+        if i != prev + 1:
+            places += 1
+        prev = i
+    out.that(places >= 2,
+             "and they are spread over at least two places in the"
+             " transcript -- a trailing block is one, a roll per beat is"
+             " several (#1146)",
+             f"{len(roll_at)} roll line(s) in {places} run(s)")
+    out.that(resolved[0] and len(roll_at) == resolved[0],
+             "and every roll is printed exactly **once** -- counted at"
+             " `challenge.resolve` rather than off the lines, because the"
+             " duplication this fixes is invisible to any assertion about"
+             " ordering (measured: the plant that re-enabled the trailing"
+             " block beside the inline rolls reddened nothing else)",
+             f"{len(roll_at)} roll line(s) for {resolved[0]} resolved"
+             " check(s)")
+
+    # -- #1145: the DM is told what this scene is about, every beat -------
+    # `THE SCENE` reaches the DM on the **opening beat only**, because that
+    # text holds one-time offers and re-reading it had the model re-making
+    # an invitation every beat (#936). A roleplay scene survives that:
+    # `WHO IS HERE` and a vignette's conflict are re-sent and keep it
+    # where it is. A challenge has **neither** -- no npcs, no vignette --
+    # so after beat one it held a spent detail, `recent()`, and nothing
+    # that said where it was.
+    #
+    # Found by playing it with a live model: beat one was on-scene and
+    # beats two, three and four narrated a **door**, in a room that has
+    # none and that nobody had mentioned.
+    #
+    # Asserted on the wire, like `scene_audience`, because what is being
+    # claimed is **what the DM was asked** rather than what it wrote.
+    seen_dm: list[str] = []
+    _real_chat = llm_mod.chat
+
+    def _tap(role, messages, schema=None):  # noqa: ANN001, ANN202
+        del role, schema
+        seen_dm.append(messages[-1]["content"])
+        return "The sigils flare."
+
+    llm_mod.chat = _tap  # ty: ignore[invalid-assignment]
+    try:
+        opts = run_mod._challenge_options(scene)
+        after_one = beat_mod.Playing(
+            scene=scene, options=opts,
+            beats=[beat_mod.Beat(n=1, situation="earlier")])
+        beat_mod.Director(roles=llm_mod.ROLES).react(after_one, [], [])
+        asked_with = seen_dm[-1] if seen_dm else ""
+        # The control, and it is the plant: the same beat with nothing
+        # attemptable must not carry the block. A roleplay scene is this
+        # case in production -- `options` is empty for every one of them.
+        bare_play = beat_mod.Playing(
+            scene=scene, options=(),
+            beats=[beat_mod.Beat(n=1, situation="earlier")])
+        beat_mod.Director(roles=llm_mod.ROLES).react(bare_play, [], [])
+        asked_without = seen_dm[-1] if seen_dm else ""
+    finally:
+        llm_mod.chat = _real_chat  # ty: ignore[invalid-assignment]
+
+    phrasings = [a.what for a in opts if a.what]
+    out.that(bool(phrasings) and len(opts) > 1,
+             "the setup landed: the fixture challenge offers more than one"
+             " phrased attemptable, so the two arms below differ in more"
+             " than a single word",
+             f"{len(opts)} option(s), {len(phrasings)} phrased")
+    out.that(all(p in asked_with for p in phrasings),
+             "after the opening beat the DM is still told what can be"
+             " attempted here -- a challenge has no npcs and no vignette to"
+             " re-anchor it, so without this it invented a room (#1145)",
+             f"{sum(1 for p in phrasings if p in asked_with)} of"
+             f" {len(phrasings)} phrasing(s) in the prompt")
+    out.that(not any(p in asked_without for p in phrasings),
+             "and a scene with nothing attemptable does not carry the"
+             " block -- the control, because a prompt that always named"
+             " attemptables would pass the assertion above while saying"
+             " nothing about the challenge",
+             f"{sum(1 for p in phrasings if p in asked_without)} leaked"
+             " into a scene with no options")
 
     # -- the router sends a group skill through the group door ------------
     # **The plan's second named plant**, and it needed posing: `Names`

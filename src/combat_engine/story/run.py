@@ -1569,6 +1569,8 @@ def _challenge_beats(campaign: Campaign, module: Module, scene: Scene,
     run = ch.open_challenge(scene, party_level=module.party_level,
                             record=campaign.record)
     meant: set[str] = set()
+    #: How many of `run.attempts` `tell` has already printed. #1146.
+    shown = 0
 
     def resolve(playing: Any, tbl: Any, intent: Any, chosen: Any,
                 party_level: int) -> beat_mod.Ruling:
@@ -1625,6 +1627,28 @@ def _challenge_beats(campaign: Campaign, module: Module, scene: Scene,
                 step.say(f"  {intent}", "mine")
         if made.reaction:
             step.say(f"  {made.reaction}", "dm")
+        # **The roll beside the beat that caused it.** #1146. `_challenge`
+        # ends with a loop over `run.attempts`, which is the whole of the
+        # automatic path's output and is right there -- but on this path
+        # the rolls have already happened inside the beats, so printing
+        # them only at the end gave a reader four paragraphs of prose and
+        # then five mechanical lines detached from it.
+        #
+        # Matched to `_roleplay`, which prints its roll with its beat, and
+        # to this function's own next clause -- the comment below the fact
+        # loop already said the fact goes *"after the prose, like the roll
+        # in `_roleplay`"*, which was true of the fact and not of the roll.
+        #
+        # **`run.attempts`, not the `Ruling`, so there is one formatter.**
+        # `Attempt.__str__` is what the automatic path prints and what
+        # every transcript on this issue quotes; rebuilding the line from
+        # `Ruling.roll` would be a second spelling of the same fact and
+        # the two would drift. Sliced from a high-water mark because a beat
+        # may add several and `resolve` is what appends them.
+        nonlocal shown
+        for attempt in run.attempts[shown:]:
+            step.say(f"  {attempt}", "roll")
+        shown = len(run.attempts)
         # The fact after the prose, like the roll in `_roleplay`: what the
         # check *meant* is the result of the moment and reads as one.
         for ruling in made.rulings:
@@ -1676,7 +1700,12 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
     if tension.footing(campaign.record):
         step.say(tension.says(campaign.record), "note")
     meant_already: set[str] = set()
-    for made in run.attempts:
+    # **Skipped when the beats already printed them.** #1146. This loop is
+    # the whole of the automatic path's output and stays exactly as it was;
+    # on the narrated path `_challenge_beats.tell` prints each roll beside
+    # the beat that caused it, and running both gave every roll twice --
+    # once in place and once in a block at the end.
+    for made in () if narrated else run.attempts:
         step.say(f"  {made}", "roll")
         # **What the roll meant, when the module said.** The challenge
         # printed five mechanical lines and a tally and nothing else: the
