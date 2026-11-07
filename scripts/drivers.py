@@ -54963,12 +54963,12 @@ def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None
     def play(scenes: list[dict], quests: list[dict] | None = None,
              size: int = 4, *, god: bool = False, drama: bool = False,
              director: bt.Director | None = None,
-             level: int = 2) -> tuple:
+             level: int = 2, seed: int = 11) -> tuple:
         built = mod.parse(
             {"id": "probe", "party_level": level, "party_size": size,
              "start": scenes[0]["id"], "scenes": scenes,
              "quests": quests or []}, Path("<driver>"))
-        campaign = run_mod.begin(built, seed=11)
+        campaign = run_mod.begin(built, seed=seed)
         campaign.drama = drama
         if director is not None:
             # **Every slot defaults to `"human"`, and `silent` declares
@@ -54986,7 +54986,7 @@ def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None
             steps.append(made)
         return campaign, said, steps
 
-    four, said, steps = play([FIGHT, CHAL, TALK])
+    four, _said, steps = play([FIGHT, CHAL, TALK])
     fight = steps[0]
     worth = xp.for_creatures(fight.enemies)
     out.that(
@@ -55077,39 +55077,88 @@ def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None
     )
 
     # -- a challenge pays on winning only ---------------------------------
-    chal = steps[1]
-    paid_for_chal = any("Challenge" in n for n in said)
+    #
+    # **On its own seed, because the default one stopped losing.** This read
+    # `steps[1]` off the shared `play` above at seed 11, and `#1078`'s
+    # background gives every character +2 to one skill -- which flipped
+    # that challenge from lost to **won**, so the arm asserting "a lost
+    # challenge pays nothing" was posing a win.
+    #
+    # The rule's own note two assertions down already said why that is the
+    # wrong shape: *"an assertion that only holds for one of the two
+    # outcomes is an assertion about the seed"*. This one was, and the fix
+    # is to name the seed rather than inherit it. Measured over seeds 1-24
+    # after the background landed: 19 lose, 5 win.
+    #
+    # It still asserts the outcome, so a future change that flips this seed
+    # too goes red here rather than passing on a win -- which is exactly
+    # how the background was caught.
+    _, said_lost, steps_lost = play([CHAL, TALK], seed=1)
+    chal = steps_lost[0]
+    paid_for_chal = any("Challenge" in n for n in said_lost)
     out.that(
         chal.outcome == "lost" and not paid_for_chal,
         "a challenge the party lost pays nothing, where `charge` already "
         "makes them pay a cost -- otherwise the cost would be the only "
         "difference between winning and losing",
-        f"outcome={chal.outcome}, said={[n for n in said if 'hallenge' in n]}",
+        f"outcome={chal.outcome}, said={[n for n in said_lost if 'hallenge' in n]}",
     )
 
-    # Posed again on its own board, because which way the roll falls is
-    # the seed's to decide and an assertion that only holds for one of the
-    # two outcomes is an assertion about the seed.
-    _, said_c, steps_c = play([CHAL, TALK])
-    if steps_c[0].outcome == "won":
-        out.that(
-            any("Challenge" in n and str(xp.for_challenge(2, 2)) in n
-                for n in said_c),
-            "and a challenge the party won pays complexity times a monster "
-            "of its level",
-            f"{[n for n in said_c if 'hallenge' in n]}",
-        )
-    else:
-        out.that(
-            not any("Challenge" in n for n in said_c)
-            and steps_c[0].outcome == "lost",
-            "and a challenge the party lost pays nothing on its own board "
-            "either -- posed twice because the roll is the seed's to make",
-            f"outcome={steps_c[0].outcome}",
-        )
+    # **Both outcomes posed on named seeds, where this used to branch on
+    # whichever way one seed fell.** The old shape was
+    # `if steps_c[0].outcome == "won": ... else: ...`, and at seed 11 the
+    # party always lost -- so the `won` arm had **never run**. `#1078`'s
+    # background flipped that seed, the arm ran for the first time, and it
+    # was wrong: it looked for `xp.for_challenge(2, 2)` -- **250**, the
+    # total -- in a line that pays `62 XP each`, which is that total shared
+    # between four. A total against a per-head figure, dead long enough
+    # that nothing noticed.
+    #
+    # Naming a seed per outcome is what stops either arm going dead again:
+    # a branch nobody takes cannot fail, and `out.that` has no way to say
+    # "this assertion did not run".
+    _, said_won, steps_won = play([CHAL, TALK], seed=11)
+    out.that(
+        steps_won[0].outcome == "won",
+        "seed 11 wins the challenge -- the setup for the assertion below,"
+        " asserted so a seed that stops winning reddens here rather than"
+        " quietly skipping it",
+        f"outcome={steps_won[0].outcome}",
+    )
+    out.that(
+        any("Challenge" in n
+            and str(xp.share(xp.for_challenge(2, 2), 4)) in n
+            for n in said_won),
+        "and a challenge the party won pays complexity times a monster of"
+        " its level, **shared between the party** -- 2 x 125 is 250 and"
+        " four heads make it 62 each. `for_challenge` returns the total,"
+        " which is what the page prices, and the line states the share",
+        f"{[n for n in said_won if 'hallenge' in n]}",
+    )
+    out.that(
+        steps_lost[0].outcome == "lost"
+        and not any("Challenge" in n for n in said_lost),
+        "and the losing seed pays nothing on its own board -- posed on a"
+        " named seed rather than as the other half of a branch, so both"
+        " outcomes are exercised every run",
+        f"outcome={steps_lost[0].outcome}",
+    )
 
     # -- god mode pays nothing, because there was no risk -----------------
-    free, _, steps_g = play([FIGHT, CHAL, TALK], god=True)
+    #
+    # **`[FIGHT, TALK]`, with `CHAL` removed, and that is a fix rather than
+    # a convenience.** The assertion is about a fight that fields nobody,
+    # and it read `sheets[0].xp`, which is **cumulative across every scene
+    # in the module** -- so the challenge's own payment counted against a
+    # claim about the fight. It passed only because that challenge used to
+    # lose; `#1078`'s +2 made it win and the 62 XP showed up here.
+    #
+    # The challenge was never part of what this asserts, so it goes.
+    #: `FIGHT` with its exit pointed straight at `TALK`, since dropping
+    #: `CHAL` from the list would leave its own `exits: ["chal"]` naming a
+    #: scene that is not there -- `module.parse` refuses that, correctly.
+    ONLY_FIGHT = dict(FIGHT, exits=["talk"])
+    free, _, steps_g = play([ONLY_FIGHT, TALK], god=True)
     out.that(
         steps_g[0].outcome == "won" and not steps_g[0].enemies
         and free.party.sheets[0].xp == 0,
