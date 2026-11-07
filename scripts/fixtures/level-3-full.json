@@ -1461,7 +1461,7 @@
   "PowerResolved(actor=2, power='p12648', targets=[16], rolls=[AttackResult(hit=True, critical=False, natural=9, total=18, target_defence=15, advantage=False, cancelled=False, forced=False, turned=False, weapon='w3596', target=16, treated='', rolls=[9], rerolled_by=[])])",
   "ActionSpent(actor=2, cost=<ActionType.MINOR: 'minor'>)",
   "CheckDeclared(actor=2, skill='perception', dc=22)",
-  "SkillCheck(actor=2, skill='perception', dc=22, natural=11, bonus=5, total=16, success=False)",
+  "SkillCheck(actor=2, skill='perception', dc=22, natural=11, bonus=7, total=18, success=False)",
   "TurnEnd(actor=2, round=3)",
   "EffectExpired(actor=1, what=\"e132[p13944 attack+2, end of source's next turn]\", why='end of turn')",
   "EffectExpired(actor=2, what=\"e133[p13944 attack+2, end of source's next turn]\", why='end of turn')",
