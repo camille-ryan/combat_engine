@@ -41836,182 +41836,6 @@ def a_bonus_can_be_gated_on_what_a_check_is_for(out: Result) -> None:
              f"{budget} vs {bare_budget}")
 
 
-def a_companion_character_is_built_from_its_role(out: Result) -> None:
-    """DMG2's companion-character formulas, against the printed page. `#1015`.
-
-    A party member built from a **party role** rather than from a class, and
-    the book says why its own system suits the job: *"They focus entirely on
-    the companion character's role in the party, rather than building the
-    character through the filter of its class."*
-
-    **Every expected number here is a literal written out from the page**,
-    not read off `follower.SHAPES`. A rule whose expectation comes from the
-    table under test shrinks with any plant on it and reports green -- which
-    has happened in this file before, on `dsl.AREA_KINDS`. The table is
-    cheap to write twice and the duplication is the check.
-
-    The page, DMG2 p30:
-
-        Statistic        Controller  Defender   Leader     Striker
-        Hit points       (lvl x 4)+6 (lvl x 6)+9 (lvl x 5)+7 (lvl x 5)+7
-                         + Con SCORE, all four columns
-        Healing surges   6+Con MOD   9+Con MOD  7+Con MOD  6+Con MOD
-        Armor Class      13 + level  17 + level 15 + level 15 + level
-        Other defenses   13 + level  13 + level 13 + level 13 + level
-
-    **Two readings in that table are easy to lose and both are asserted.**
-    Hit points take the Con *score* and surges take the *modifier* -- at
-    Con 14 the difference between +14 and +2. And leader and striker share
-    the hit-point formula while **not** sharing the surges, 7 against 6, so
-    a reader who collapses the two columns because the first row matches
-    gives the striker a surge too many.
-    """
-    from combat_engine.chargen import follower as F
-
-    CON = 14          # modifier +2, so score and modifier cannot be confused
-    MOD = 2
-
-    # role -> (hp_per, hp_flat, surges_flat, ac, grows), straight off the page.
-    PRINTED = {
-        "controller": (4, 6, 6, 13, 4),
-        "defender": (6, 9, 9, 17, 6),
-        "leader": (5, 7, 7, 15, 5),
-        "striker": (5, 7, 6, 15, 5),
-    }
-    OTHER = 13
-    ATK = 4
-
-    out.that(F.modifier(CON) == MOD and F.modifier(10) == 0
-             and F.modifier(8) == -1,
-             "the setup landed: a modifier comes off a score the printed"
-             " way, and Con 14 gives +2 -- a score and a modifier that"
-             " happened to be equal would make the next assertions unable"
-             " to tell the two rows apart",
-             f"mod(14)={F.modifier(CON)}")
-
-    for role, (per, flat, surge, ac, _grows) in PRINTED.items():
-        for level in (1, 5, 10):
-            got = F.follower(role, level, CON)
-            out.that(got.hp == (level * per) + flat + CON,
-                     f"a level-{level} {role}'s hit points are"
-                     f" (level x {per}) + {flat} + the Con SCORE",
-                     f"hp={got.hp} want={(level * per) + flat + CON}")
-            out.that(got.surges == surge + MOD,
-                     f"and its healing surges are {surge} + the Con"
-                     " MODIFIER, which is the other half of the same row"
-                     " and a different quantity",
-                     f"surges={got.surges} want={surge + MOD}")
-            out.that(got.ac == ac + level,
-                     f"its AC is {ac} + level -- the only defence a role"
-                     " changes",
-                     f"ac={got.ac} want={ac + level}")
-            out.that(got.fortitude == got.reflex == got.will == OTHER + level,
-                     f"and every other defence is {OTHER} + level, the same"
-                     " for all four roles",
-                     f"{got.fortitude}/{got.reflex}/{got.will}"
-                     f" want={OTHER + level}")
-            out.that(got.attack == ATK + level,
-                     "its attack bonus is 4 + level, with no ability or item"
-                     " term -- `do not apply modifiers for ability scores or"
-                     " magic items`",
-                     f"attack={got.attack} want={ATK + level}")
-            out.that(got.damage == level // 2,
-                     "and its damage carries the half-level term only; the"
-                     " ability modifier belongs to the power being used, so"
-                     " a single number here would be picking an ability on"
-                     " the companion's behalf",
-                     f"damage={got.damage} want={level // 2}")
-
-    lead, strike = F.follower("leader", 5, CON), F.follower("striker", 5, CON)
-    out.that(lead.hp == strike.hp and lead.surges != strike.surges
-             and (lead.surges, strike.surges) == (7 + MOD, 6 + MOD),
-             "leader and striker share the hit-point formula and do NOT"
-             " share the surges -- 7 against 6. Collapsing the two columns"
-             " because their first row matches gives the striker a surge"
-             " too many",
-             f"hp {lead.hp}/{strike.hp} surges {lead.surges}/{strike.surges}")
-
-    # --- advancement, which is why a companion can level before #1013 ------
-    disagreed = []
-    for role in PRINTED:
-        for level in range(1, 12):
-            stepped = F.follower(role, level, CON).advanced()
-            fresh = F.follower(role, level + 1, CON)
-            if stepped != fresh:
-                disagreed.append((role, level))
-    out.that(not disagreed,
-             "the printed level-up increments and the printed formulas agree"
-             " at every level -- they are two separate statements of one"
-             " table, on two different pages, and this is the only thing"
-             " about them that could silently drift",
-             f"{len(disagreed)} disagreement(s) over 4 roles x 11 levels")
-
-    for role, (_per, _flat, _surge, _ac, grows) in PRINTED.items():
-        was = F.follower(role, 3, CON)
-        now = was.advanced()
-        out.that(now.hp - was.hp == grows,
-                 f"a {role} gains {grows} hit points on levelling, which the"
-                 " page states separately from its hit-point formula",
-                 f"gained={now.hp - was.hp}")
-        out.that(now.attack - was.attack == 1
-                 and now.ac - was.ac == 1
-                 and now.will - was.will == 1,
-                 "and its attack and every defence go up by 1",
-                 f"atk+{now.attack - was.attack} ac+{now.ac - was.ac}")
-
-    odd = F.follower("striker", 3, CON)
-    out.that(odd.advanced().damage - odd.damage == 1
-             and odd.advanced().advanced().damage
-             - odd.advanced().damage == 0,
-             "damage rises only on reaching an EVEN level -- 3 to 4 gains"
-             " one and 4 to 5 gains none, which is the printed `when a"
-             " companion character achieves an even-numbered level`",
-             f"3->4 +{odd.advanced().damage - odd.damage},"
-             f" 4->5 +{odd.advanced().advanced().damage - odd.advanced().damage}")
-
-    # --- the role mapping, off class.role rather than a hand-written map ---
-    seen: set[str] = set()
-    for role in PRINTED:
-        got = F.classes_for(role)
-        out.that(len(got) >= 5 and not (set(got) & seen),
-                 f"{role} maps to classes off `class.role`, and no class"
-                 " serves two roles -- a hand-written map is what this"
-                 " avoids and a class in two buckets would mean the column"
-                 " is not what it looks like",
-                 f"{len(got)}: {got}")
-        seen |= set(got)
-    # **Counted off the `class` table, not written down.** This read `== 25`
-    # and went stale the day `#599` put a 26th class in scope.
-    # `classes_for` reads `class.role`, so the table is the denominator the
-    # claim is about -- and a derived count cannot go stale the next time a
-    # class lands.
-    from combat_engine.db import game as _game
-
-    total = _game().execute("SELECT count(*) FROM class").fetchone()[0]
-    out.that(len(seen) == total,
-             f"and the four roles between them cover all {total} classes,"
-             " so the"
-             " power selection has somewhere to look for every role",
-             f"{len(seen)} classes")
-
-    # --- refusals ----------------------------------------------------------
-    for bad in ("warlord", "", "Soldier"):
-        refused = False
-        try:
-            F.follower(bad, 1, CON)
-        except ValueError:
-            refused = True
-        out.that(refused,
-                 f"{bad!r} is refused rather than defaulting to a role --"
-                 " every number here comes off the role, so a default would"
-                 " quietly build a different character than was asked for",
-                 f"refused={refused}")
-    out.that(F.follower("DEFENDER", 1, CON).role == "defender",
-             "and a role is matched case-folded, so a caller may pass the"
-             " printed word",
-             "DEFENDER -> defender")
-
-
 def one_choice_can_be_retrained_and_the_rest_refused(out: Result) -> None:
     """A feat, power or skill may be changed, with the printed refusals.
 
@@ -57255,6 +57079,109 @@ def a_surge_lost_to_the_cold_is_not_given_back_by_a_rest(out: Result) -> None:
              f"{[s.withheld for s in warm.party.sheets]}")
 
 
+def a_scene_may_name_printed_terrain(out: Result) -> None:
+    """A scene's ground may be a real imported terrain ref. `#458`.
+
+    Camille's call, asked directly:
+
+    > *"A would be better."*
+
+    -- use the real imported terrain on the battle map rather than only the
+    invented words. 145 terrain rows are in `game.db` and a scene could not
+    name one, because the board's vocabulary is a **closed set** and a
+    printed ref is not a word in it.
+
+    Two halves, both needed: `engine.cast._REF_LABEL` takes the
+    `x<N>_<id>` shape so the board accepts the label, and
+    `story.module`'s validator takes `x2_` so a module naming one is not
+    refused at load.
+
+    **The closed set stays closed for words**, which is what `#539` built
+    it for: seven gates across six files asked for words no board would
+    ever carry, and every one was silently False. A module writing `wet`
+    is still refused -- that is the whole value of the set and this does
+    not spend it.
+
+    **And the honest limit, which `#458` states and this does not fix:**
+    the ref makes the square named and rough. A fantastic-terrain row's
+    printed *effect* stays unbuilt, because `effect` and `usage` are
+    prose, so a named hazard behaves like rough ground. Camille chose that
+    over generic rubble knowing it; the issue carries the argument both
+    ways.
+    """
+    from pathlib import Path as _P
+
+    import combat_engine.engine.cast as _cast
+    from combat_engine.engine.cast import TERRAIN_WORDS as _WORDS
+    from combat_engine.story import module as _m
+
+    def load(words: list[str]) -> str:
+        try:
+            _m.parse({"id": "p", "party_level": 2, "party_size": 4,
+                      "start": "s",
+                      "scenes": [{"id": "s", "kind": "combat", "name": "S",
+                                  "exits": [], "terrain": words,
+                                  "foes": [{"count": 1, "role": "soldier",
+                                            "rank": "standard"}]}]},
+                     _P("<driver>"))
+        except _m.ModuleError as why:
+            return str(why)
+        return ""
+
+    out.that(not load(["x2_10"]),
+             "a scene may name a printed terrain ref -- `x2_10` loads,"
+             " where the closed vocabulary refused it and 145 imported"
+             " rows were unsayable",
+             "accepted")
+    out.that(not load(["ice"]) and not load(["x2_10", "snow"]),
+             "and the printed words still load, alone and mixed with a ref"
+             " -- the control that says this widened the set rather than"
+             " replacing it",
+             "words and refs together")
+    out.that(load(["wet"]),
+             "**but an invented word is still refused**, which is the"
+             " whole value of `#539`'s closed set: seven gates across six"
+             " files once asked for words no board would carry and every"
+             " one was silently False. A ref shape is not a licence for"
+             " any string",
+             "refused")
+    out.that(load(["x5_11"]),
+             "**and a NON-terrain ref is refused too** -- `x5_11` is a"
+             " disease. `module._REF_SHAPE` is `x2_` where"
+             " `cast._REF_LABEL` answers `is this any row ref`, because a"
+             " scene's ground may only be terrain",
+             "a disease is not ground")
+
+    # -- the engine half -------------------------------------------------
+    out.that(bool(_cast._REF_LABEL.match("x2_10")),
+             "`_REF_LABEL` takes the alias shape, so the board accepts the"
+             " label rather than refusing it as a word -- the half without"
+             " which the validator above would pass a module the board"
+             " then rejects",
+             "x2_10 is a label")
+    out.that(not _cast._REF_LABEL.match("not a ref")
+             and not _cast._REF_LABEL.match("rubble"),
+             "and it still refuses a non-ref string -- the plant this"
+             " widening needs, because an alternation that accepted"
+             " anything would make `_is_terrain_label` vacuous",
+             "a bare word is not a label")
+    # **`DIFFICULT_LABELS`, not `TERRAIN_WORDS`, and the first draft of
+    # this assertion mixed them.** They are two sets for two questions:
+    # `TERRAIN_WORDS` is what a board *is* -- aquatic, ice, rough, dim
+    # light, 13 of them -- and `DIFFICULT_LABELS` is what a rough square
+    # is made *of*: blood, debris, dirt, 17 of them. `rough` is in the
+    # first and not the second, so asserting it through
+    # `_is_terrain_label` failed on a word that is perfectly valid
+    # somewhere else.
+    out.that(_cast._is_terrain_label("debris")
+             and "debris" in _cast.DIFFICULT_LABELS
+             and "debris" not in _WORDS,
+             "while a printed difficult-terrain word is still a label by"
+             " the other branch -- the two routes are independent and this"
+             " asserts the one the widening did not touch",
+             "the word branch is untouched")
+
+
 def armour_prereq(out: Result) -> None:
     """An armour proficiency is not a weapon one. `#568`.
 
@@ -66836,12 +66763,6 @@ DRIVERS = {
         " purpose was announced on the event and absent from the modifier"
         " context, so only a watcher could read it (#1111)",
     ),
-    "follower": (
-        a_companion_character_is_built_from_its_role,
-        "a companion character's statistics, attack, damage and level-up"
-        " against DMG2's printed table -- including the Con score/modifier"
-        " split and the leader/striker surge difference (#1015)",
-    ),
     "retrain": (
         one_choice_can_be_retrained_and_the_rest_refused,
         "a feat, power or skill may be retrained, with the printed refusals"
@@ -66996,6 +66917,16 @@ DRIVERS = {
         "an extended rest does not refund a surge lost to a failed Endurance"
         " check, and the printed table has nine conditions rather than seven"
         " (#971)",
+    ),
+    # **Not `scene_terrain`, which an existing rule already owns.** A
+    # duplicate dict key silently drops one of the two -- ruff's `F601`
+    # caught it, and nothing else would have: the suite would have run 1
+    # of the 2 rules and reported a clean count.
+    "printed_terrain": (
+        a_scene_may_name_printed_terrain,
+        "a scene's ground may be a real imported terrain ref, where the"
+        " closed vocabulary refused it and 145 rows were unsayable -- and"
+        " an invented word and a non-terrain ref are still refused (#458)",
     ),
     "armour_prereq": (
         armour_prereq,

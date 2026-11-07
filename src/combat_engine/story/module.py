@@ -65,6 +65,14 @@ from .objective import POSITIONS, THING_KINDS, Objective
 from .objective import ROUNDS as OBJECTIVE_ROUNDS
 from .objective import SHARE as OBJECTIVE_SHARE
 
+#: The shape a printed terrain ref takes. `#458`.
+#:
+#: Narrower than `cast._REF_LABEL` on purpose: that one answers *"is this
+#: any row ref"* and a scene's ground may only be **terrain**, so a
+#: disease or a deity ref is still refused here. `x2_` is the terrain
+#: table's index in `etl/build.py`'s `_ALIAS_TABLES`.
+_REF_SHAPE = re.compile(r"x2_\d+")
+
 #: What sort of thing a scene is. The first four are the four the module in
 #: `modules/` is made of -- its outline has a heading for each -- and the last
 #: two are printed kinds no converted adventure holds, because both are DM
@@ -2072,10 +2080,31 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
 
     terrain = tuple(str(w).strip().lower() for w in raw.get("terrain", ()) if str(w).strip())
     for word in terrain:
-        if word not in TERRAIN_WORDS:
+        # **A printed terrain ref is allowed beside the closed vocabulary.**
+        # Camille's call on `#458`, asked directly: *"A would be better"* --
+        # use the real imported terrain on the battle map rather than only
+        # the invented words. 145 rows are in `game.db` and a scene could
+        # not name one, because this set is closed.
+        #
+        # `engine.cast._REF_LABEL` takes the `x<N>_<id>` shape now, so the
+        # board accepts the label; this is the other half, and without it a
+        # module naming a real ref is refused at load.
+        #
+        # **The honest limit, which `#458` states and this does not fix:**
+        # the ref makes the square named and rough. A fantastic-terrain
+        # row's printed *effect* stays unbuilt, because `effect` and
+        # `usage` are prose. So a named hazard behaves like rough ground
+        # until somebody builds the effect -- Camille chose that over
+        # generic rubble knowing it.
+        #
+        # The closed set stays closed for *words*, which is what `#539`
+        # built it for: seven gates across six files asked for words no
+        # board would carry, and every one was silently False.
+        if word not in TERRAIN_WORDS and not _REF_SHAPE.fullmatch(word):
             problems.append(
-                f"{where}: terrain {word!r} is not a terrain word. "
-                f"Known: {', '.join(sorted(TERRAIN_WORDS))}"
+                f"{where}: terrain {word!r} is neither a terrain word nor a "
+                f"printed terrain ref. Known words: "
+                f"{', '.join(sorted(TERRAIN_WORDS))}"
             )
 
     going = str(raw.get("going", "")).strip().lower()

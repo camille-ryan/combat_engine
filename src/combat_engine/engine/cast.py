@@ -312,9 +312,27 @@ DIFFICULT_LABELS = frozenset({
 #: The shapes a ref takes, for `_is_terrain_label`. The same alternation
 #: `lint._REF_SHAPE` uses, kept here rather than imported because `engine/`
 #: must not reach into `scripts/`.
+#:
+#: **`x\d+_\d+` is here on Camille's call, `#458`:** *"A would be better"*
+#: -- use the real imported terrain on the battle map rather than the four
+#: invented words. Without this shape a printed terrain ref was refused as
+#: a label, so `dress` could only choose from the invented vocabulary and
+#: the 145 imported rows were unsayable.
+#:
+#: **The honest limit, which that issue states and this does not fix:** the
+#: ref makes the square named and rough, and a fantastic-terrain row's
+#: printed *effect* stays unbuilt, because `effect` and `usage` are prose.
+#: So a named hazard behaves like rough ground until somebody builds the
+#: effect. Camille chose that over generic rubble; the issue carries the
+#: argument both ways.
+#:
+#: It widens what every `c.difficult` call accepts, which is why
+#: `drivers.terrain_label` plants a non-ref word and proves it is still
+#: refused -- an alternation that accepted anything would make the whole
+#: check vacuous.
 _REF_LABEL = re.compile(
     r"\A(?:p\d+|m\d+(?:c\d+)?a\d+|i\d+[px]\d+|f\d+[a-z]?"
-    r"|cf:[\w-]+|rt:[\w-]+)\Z"
+    r"|cf:[\w-]+|rt:[\w-]+|x\d+_\d+)\Z"
 )
 
 
