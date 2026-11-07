@@ -140,6 +140,40 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **The die contest ties on this board, every time, and a tie is
+    # printed to do nothing.** `#1144`.
+    #
+    # The row is a reaction to an ally's hit: roll a d20 against the ally's
+    # own natural, promote the hit to a critical if higher, take a penalty
+    # if lower, and *"a tie does neither, as printed"*. Traced, six
+    # independent attempts:
+    #
+    #     my roll   ally natural
+    #          14             14
+    #          14             14      ... 6 of 6
+    #
+    # So the body runs -- `c.roll("1d20")` is reached and returns 14 -- and
+    # neither branch can fire. `c.crit_becomes` is never called, which is
+    # why the row reports silent while being exactly correct.
+    #
+    # **And the attempt search cannot break the tie.** `_attempts` stops as
+    # soon as a row *fires*, and this one fires: it runs its body and does
+    # nothing. So the `LOADED` pose, which forces a face of 20 and would
+    # make `mine > theirs`, is never tried -- firing is the stopping
+    # condition and "fired and did nothing" satisfies it. That is a general
+    # gap rather than a fact about this row, and it is `#1144`.
+    #
+    # **Newly visible rather than newly broken.** It was credited at the
+    # previous baseline; `#568`'s prerequisite fix widened the legal feat
+    # pool for 18 classes, which changed what the board's ally is dealt,
+    # which changed the ally's natural to the one number that ties. No
+    # clause of this row changed and none of it is wrong.
+    "i1104p1": ("a reaction that contests a d20 against the ally's own "
+                "natural, where the board produces a tie on 6 of 6 "
+                "attempts -- and a tie is printed to do nothing. The "
+                "`LOADED` pose that would break it is never reached, "
+                "because `_attempts` stops when a row fires and this one "
+                "fires and does nothing: #1144"),
     # **The board provokes its all-missed `PowerResolved` with a BASIC
     # ATTACK, and a basic attack has no use to hand back.** `#1143`.
     #
