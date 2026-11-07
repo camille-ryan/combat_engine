@@ -1348,6 +1348,68 @@ def _chassis_map() -> dict[str, str]:
             for row in game().execute("SELECT ref, build FROM class_feature")}
 
 
+@cache
+def superseded_for(cls: str, chassis: str) -> frozenset[str]:
+    """Class-wide feature refs a **named** chassis replaces. #1136.
+
+    Camille, asked directly:
+
+    > *"A character should only get what its class says, so for example the
+    > hexblade should not get the features of the standard warlock and vice
+    > versa. IIRC the major thing they share is just power selection."*
+
+    `class_feature.build` is empty for the original ladder, and empty read
+    as *"every character of this class"* -- so a character on an Essentials
+    chassis held **both** ladders. Measured on the warlock: 69 rows of one
+    chassis, 60 of another, and 29 class-wide ones that are the first
+    book's own pact ladder, all seven pacts included. Twice the character.
+
+    **The compendium is inconsistent about this rather than silent, which
+    is the fact that decides the rule.** Of the 12 classes carrying more
+    than one chassis, **4 name the base one** -- so for those every row
+    already says which chassis it belongs to and nothing leaks. The other
+    8 leave it blank. There is nothing to invent: the data names the base
+    chassis where it bothered to.
+
+    **The rule is level coverage, not a per-class table**, and that is
+    measurable rather than a judgement. A chassis that *replaces* the
+    ladder has a row at every `ord` the blank one occupies. Measured over
+    all 12 pairings:
+
+        blank ords a named chassis does NOT cover:  0, in 11 of 12
+        the exception: bard -- Skald covers 0-5, the blank ladder has 6
+
+    So a blank row applies only where the chosen chassis has no row at
+    that `ord`. That drops **144** blank rows across the 12 pairings and
+    keeps exactly **2** -- `cf:bard-f6` and `cf:bard-f6c0`, at the one
+    uncovered level.
+
+    **And those two are a power grant**, which is the one thing Camille
+    named as shared -- `cf:bard-f6`'s whole spec is *"You gain the p2887
+    power"*. So the rule and the ruling agree on the only case where a
+    blanket "drop every blank" would have been wrong, which is why the
+    coverage test is the rule rather than a carve-out beside it.
+
+    **Empty when the chassis is blank**, deliberately: a class with no
+    named chassis has the blank rows *as* its ladder, and dropping them
+    would leave a character with no features at all. Half of the 26
+    classes are in that state.
+    """
+    if not chassis:
+        return frozenset()
+    from combat_engine.db import game
+
+    rows = game().execute(
+        "SELECT ref, ord, build FROM class_feature WHERE lower(class) = ?",
+        (cls.lower(),),
+    ).fetchall()
+    covered = {r["ord"] for r in rows
+               if _slug_chassis(r["build"] or "") == chassis}
+    return frozenset(r["ref"] for r in rows
+                     if not (r["build"] or "").strip()
+                     and r["ord"] in covered)
+
+
 def _slug_chassis(name: str) -> str:
     """The ref spelling of a printed chassis name. Mirrors `etl/build._slug`."""
     import re
@@ -2463,11 +2525,26 @@ def loadout(
     # everywhere it is read: the sheet, the page, and the policy's menu.
     chassis = chassis_of(cls, who_chassis)
     belongs = _chassis_map()
+    # **And a named chassis REPLACES the class-wide ladder rather than
+    # adding to it**, which `in ("", chassis)` above does not say.
+    # Camille's ruling on `#1136`:
+    #
+    #   > *"A character should only get what its class says, so for example
+    #   > the hexblade should not get the features of the standard warlock
+    #   > and vice versa."*
+    #
+    # It was worth twice the character: a warlock on either Essentials
+    # chassis held its own 60-or-69 rows **and** the first book's 29,
+    # all seven pacts among them. `superseded_for` is the rule and the
+    # measurement behind it -- level coverage, 144 rows dropped across the
+    # 12 pairings, 2 kept.
+    replaced = superseded_for(cls, chassis)
     out = sorted(p.ref for p in mine
                  if p.level == 0
                  and _Kw.BLADESPELL not in (p.keywords or ())
                  and leg_named_by(p) in ("", build.name)
-                 and belongs.get(p.ref, "") in ("", chassis))
+                 and belongs.get(p.ref, "") in ("", chassis)
+                 and p.ref not in replaced)
     # Not already dealt: a class whose heal is itself a level-0 row was
     # handed it twice, so `Powers.known` carried the ref twice over. The
     # bard and the ardent are the two.

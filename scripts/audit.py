@@ -140,6 +140,34 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **The harness has no pass where an ALLY makes the kill.** `#1149`.
+    #
+    # The printed trigger is "an ally you can see reduces a creature to 0
+    # hit points", and `_provoke_passes`' own docstring names the three
+    # situations it stages -- somebody swings at the owner, the owner swings
+    # at somebody, somebody walks past. An ally's killing blow is none of
+    # them, so this row fires only when an ally happens to land one during
+    # another pass.
+    #
+    # **It did, until an unrelated commit moved the dice.** `#1135`
+    # reordered the chargen draw, which changed the party's feats and so
+    # their gear and damage, and this row went from firing to silent with
+    # its body untouched. That is the evidence it was luck rather than
+    # coverage: 20 of the 26 rows with this trigger shape still pass the
+    # same way and are deliberately **not** listed here.
+    #
+    # **And the row is right.** Posed by hand -- an ally struck the killing
+    # blow and `Dropped(source=ally)` was announced:
+    #
+    #     Dropped actor=2                   the enemy down, by the ally
+    #     PowerUsed i2838p1 actor=1         the item answers
+    #     MoveStart/Moved/MoveEnd actor=7   the ALLY shifts, as printed
+    #     PowerResolved i2838p1
+    #
+    # So this is a board limit and not a half-written row. The fix is a
+    # fourth provocation pass, which moves every verdict and wants its own
+    # sweep -- hence the issue rather than the change.
+    "i2838p1": "the harness never stages an ally's killing blow (#1149)",
     # **The die contest ties on this board, every time, and a tie is
     # printed to do nothing.** `#1144`.
     #

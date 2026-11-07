@@ -46044,6 +46044,57 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
              " chassis filter",
              f"classes with none: {empty or 'none'}")
 
+    # -- a named chassis REPLACES the class-wide ladder -- #1136 ----------
+    #
+    # Camille: *"the hexblade should not get the features of the standard
+    # warlock and vice versa."* The warlock is the worked case and the
+    # sharpest one: 29 class-wide rows are the first book's own pact
+    # ladder, and a character on either Essentials chassis held all of
+    # them beside its own.
+    #
+    # **Asserted through `loadout`, not `superseded_for`.** A rule that
+    # called the new helper would stay green with the filter reverted,
+    # which is half of what this is here to hold -- the same reasoning
+    # `weapon_is_mine` states about calling a verb instead of the body.
+    from random import Random as _Rng
+
+    pacts = {f"cf:warlock-f1s{i}" for i in range(7)} | {"cf:warlock-f1"}
+    wl_legs = chargen.BUILDS["warlock"]
+    wl_leg = wl_legs[0] if isinstance(wl_legs, (list, tuple)) else wl_legs
+    base_held = {r for r in chargen.loadout("warlock", 1, wl_leg, _Rng(3))
+                 if r in pacts}
+    out.that(base_held,
+             "the setup landed: a warlock naming no chassis does hold a"
+             " class-wide pact row, so the refusal below is a change rather"
+             " than an empty set",
+             f"held with no chassis named: {sorted(base_held) or 'none'}")
+    for chassis in ("hexblade", "binder"):
+        got = chargen.loadout("warlock", 1, wl_leg, _Rng(3),
+                              who_chassis=chassis)
+        out.that(not (set(got) & pacts),
+                 f"and a {chassis} warlock holds none of them -- its chassis"
+                 " replaces that ladder, it does not add to it",
+                 f"still held: {sorted(set(got) & pacts)}")
+    # **The negative control, and it is the one that stops this becoming a
+    # blanket strip.** `Skald` covers the bard's ords 0-5 and the
+    # class-wide ladder has a row at 6 -- a power grant, which is the one
+    # thing Camille named as genuinely shared -- so that row survives.
+    kept = chargen.superseded_for("bard", "skald")
+    out.that("cf:bard-f6" not in kept,
+             "a class-wide row at a level the chassis does NOT cover"
+             " survives -- replacement is per level, not wholesale",
+             f"superseded for skald: {len(kept)} rows, cf:bard-f6 among"
+             f" them: {'cf:bard-f6' in kept}")
+    out.that(len(chargen.superseded_for("warlock", "hexblade")) == 29,
+             "and the warlock's whole 29-row class-wide ladder is"
+             " superseded, which is the measurement the rule was built on",
+             f"{len(chargen.superseded_for('warlock', 'hexblade'))} dropped")
+    out.that(not chargen.superseded_for("warlock", ""),
+             "a character on NO named chassis keeps the class-wide ladder,"
+             " or half the classes in the tree would have no features",
+             f"dropped for a blank chassis: "
+             f"{len(chargen.superseded_for('warlock', ''))}")
+
     # And the familiar, which is what a sha'ir chassis is for.
     world = World(Grid(24, 16), Rng(1), Bus())
     who = chargen.Character(cls="wizard", level=1, chassis="sha-ir")
