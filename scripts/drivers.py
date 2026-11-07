@@ -59647,31 +59647,67 @@ def a_power_named_by_its_colon_tail_resolves(out: Result) -> None:
             stale.append(f"{table}/{row[0]}")
     # **Pinned at the measured residue, which is NOT the same as accepting
     # it.** The alias makes the tail resolvable; where it then fires is the
-    # positional pass's decision, and that pass claims specific printed
-    # frames -- *"when you use X"*, *"the X power"*. It does not claim the
-    # **continuation** of a frame: *"when you use `<first>` or `<second>`"*
-    # resolves the first and leaves the second, which is every one of the
-    # ten occurrences left. So this is a positional gap rather than an
-    # alias that half-worked, and it is filed rather than absorbed.
+    # positional pass's decision.
     #
-    # Pinned as a list, not a count, so the assertion goes red if the
-    # residue **grows** and also if it shrinks without anybody noticing --
-    # a shrink means the positional pass changed and this comment is stale.
-    RESIDUE = {
-        "feat/f3023", "feat/f3032", "feat/f3033", "feat/f3034",
-        "feat/f3038", "feat/f3042", "feat/f3047",
-        "class_feature/cf:artificer-f2",
-    }
+    # **Down from 10 occurrences in 8 rows to 4 in 2**, and the pin went
+    # red to say so -- which is what it is for. Its own note said it would
+    # redden "if the residue shrinks without anybody noticing", because a
+    # shrink means the positional pass changed and the comment beside it
+    # is stale. Both happened.
+    #
+    # `_CITING_LATE` is what moved them: a conjunct following a `p<N>` the
+    # general pass had already resolved. Six feats and -- unasked for, and
+    # correct -- one `item_block` row whose spec read *"with p5389 or
+    # spirit's fangs"*, where that second phrase is `p5388` and had been
+    # sitting in the spec as a printed name.
+    #
+    # **And what this used to claim about the residue was false.** It said
+    # the ten were *"every one a second phrase in `when you use X or Y`"*,
+    # and `build.py` said the same thing in the note by `_CITE_STOP_THROUGH_AND`.
+    # Read in place, **none of the ten was in a use frame**. They were
+    # three frames, which is why the remaining four are not reachable by
+    # the same mechanism and are not costed as if they were:
+    #
+    #     6   "<ref> or <tail>"        resolved by `_CITING_LATE`
+    #     1   "end the <tail> effect"  f3023 -- an EFFECT frame
+    #     3   "the <tail> infusion"    cf:artificer-f2 -- a CHOICE frame
+    #
+    # A choice frame and an effect frame are not citing positions, so
+    # putting them in `_CITING` to clear the count would be the drift
+    # `#1080` warns about. They stay.
+    RESIDUE = {"feat/f3023", "class_feature/cf:artificer-f2"}
     out.that(
         set(stale) == RESIDUE,
-        "**and what still prints a tail is exactly the ten occurrences the "
-        "positional pass does not claim** -- 8 rows, every one a second "
-        "phrase in *\"when you use `<first>` or `<second>`\"*. Before this "
-        "change all 15 rows printed both as prose; now the first resolves "
-        "and the continuation does not. A partial fix, pinned rather than "
-        "rounded up",
+        "**what still prints a tail is 4 occurrences in 2 rows**, down from "
+        "10 in 8 -- and neither of the two is a citing position: `f3023` "
+        "says *\"end the `<tail>` effect\"* and `cf:artificer-f2` says "
+        "*\"the `<tail>` infusion\"*, a choice. Pinned as a list so this "
+        "reddens if the residue grows AND if it shrinks without anybody "
+        "noticing -- it did exactly that when `_CITING_LATE` landed",
         f"left {sorted(set(stale))}\nexpected {sorted(RESIDUE)}",
     )
+    # **The conjunct pass, asserted where it fired rather than only by the
+    # count above.** A residue going down says something moved; this says
+    # what, and the `item_block` row is the one worth naming because
+    # nothing asked for it.
+    conj = con.execute(
+        "SELECT spec FROM item_block WHERE ref = 'i2356p1'").fetchone()
+    out.that(conj is not None and "p5389 or p5388" in (conj["spec"] or ""),
+             "`i2356p1` reads `with p5389 or p5388` -- two shaman at-wills,"
+             " where the second was the printed phrase `spirit's fangs`"
+             " sitting in the spec. `p5388` IS that card, checked against"
+             " the localisation rather than assumed from the refs being"
+             " adjacent",
+             f"{(conj['spec'] or '')[:0] if conj else 'no row'}"
+             f"{'found' if conj and 'p5389 or p5388' in (conj['spec'] or '') else 'not found'}")
+    gated = [r[0] for r in con.execute(
+        "SELECT ref FROM feat WHERE spec LIKE '%p7635 or p10187%'")]
+    out.that(len(gated) == 5,
+             "and five feats read `p7635 or p10187` where they read"
+             " `p7635 or <tail>` before -- the two artificer healing"
+             " infusions as a pair. The sixth, `f3034`, prints `or YOUR"
+             " <tail>` and resolves through the same position",
+             f"{len(gated)}: {sorted(gated)}")
     # **The scope guard.** The armour and druid tails must stay unindexed.
     loose = []
     for table in ("feat", "class_feature", "power", "racial_trait"):

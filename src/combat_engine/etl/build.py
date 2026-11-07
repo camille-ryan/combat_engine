@@ -6265,6 +6265,14 @@ def _cross_reference_rest(
                 # heading for `_ASSOCIATED` to match. After it, so a feat
                 # printing both forms is unaffected.
                 fixed = _cited_members(fixed, by_class_power, by_name)
+            # **A conjunct after a ref, which can only run here.** `#1080`.
+            # `_CITING_LATE`'s anchor is a `p<N>` already in the text, so
+            # it has to come after the general substitution above rather
+            # than with the other citing positions -- putting it in
+            # `_CITING` resolved nothing at all and looked like a pass with
+            # no work to do. Its note has the measurement.
+            fixed = _granted(fixed, by_name, by_other, ref, rules,
+                             _CITING_LATE)
             # **Last, and for every table.** A labelled clause is a ref by
             # now whichever pass resolved it, and this is the only pass that
             # looks *inside* one. See `_self_named_clauses`.
@@ -6560,12 +6568,24 @@ _CITE_STOP = (
 #: `_CITE_STOP` ended the group at ` or `, so the second phrase was outside
 #: `m.group(1)` entirely and `swap` never saw it.
 #:
-#: **Scoped to one position, deliberately.** All ten residues `#1080`
-#: measured are `when you use`, so widening the other four citing positions
-#: would be a change with no evidence behind it -- which is the mistake this
-#: file's own notes record twice (`(see ...)` left owed rather than
-#: automated, and the first draft of the colon alias moving two rows nobody
-#: asked about).
+#: **Scoped to one position, deliberately** -- and this note used to give
+#: a false reason for it. It said *"all ten residues `#1080` measured are
+#: `when you use`"*. Read in place, **none of the ten was**: they were six
+#: `"<ref> or <tail>"` conjuncts, one `"end the <tail> effect"`, and three
+#: `"the <tail> infusion"` on `cf:artificer-f2`, which is a choice frame
+#: and not a citation at all.
+#:
+#: That mattered because it is the sentence the remaining work was planned
+#: from -- six more entries in this table -- and five of the six were
+#: really one position away rather than five frames away. They are resolved
+#: by `_CITING_LATE`, which anchors on an already-resolved ref instead of
+#: claiming a frame.
+#:
+#: The scoping itself still stands: widening the other four citing
+#: positions would be a change with no evidence behind it, which is the
+#: mistake this file's own notes record twice (`(see ...)` left owed rather
+#: than automated, and the first draft of the colon alias moving two rows
+#: nobody asked about).
 #: `<power source> power` is a **power source**, never a citation. #1080.
 #:
 #: Found by the measurement that widening the capture needs: the first run
@@ -6659,12 +6679,66 @@ _CITING: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
+#: Citing positions that must run **after** the general name substitution,
+#: not before it. `#1080`.
+#:
+#: Everything in `_CITING` claims a printed *frame* and so can run on raw
+#: text. This table claims nothing about the sentence: its anchor is a
+#: `p<N>` **already standing in the spec**, which means the general pass
+#: has already decided that conjunct is a power citation -- so
+#: *"<ref> or <phrase>"* is a second citation by construction, whatever
+#: frame the pair happens to sit in.
+#:
+#: **Which is why it is a second table rather than a sixth entry, and the
+#: first attempt put it in `_CITING` and silently did nothing.**
+#: `_granted` is called at the `fixed = _granted(...)` line *above*
+#: `scrub` and `_named_powers`, so when `_CITING` runs the text still
+#: holds the printed name and no `p<N>` exists for the pattern to anchor
+#: on. The rebuild came back with the residue unchanged at 10 -- a pass
+#: that reads exactly like a pass with nothing to do.
+#:
+#: That distinction is also why this is ONE entry and not six. `#1080`'s
+#: remaining ten residues were costed as six more frames, on the premise
+#: recorded at `_CITE_STOP_THROUGH_AND` that all ten are *"when you
+#: use"*. Read in place, **none of the ten is**. They are three frames:
+#:
+#:     6   "<ref> or <tail>"      -- this table resolves these
+#:     1   "end the <tail> effect"
+#:     3   "the <tail> infusion"  -- cf:artificer-f2, a CHOICE frame
+#:
+#: A choice frame and an effect frame are not citing frames and do not
+#: belong in `_CITING`; adding them there to clear a residue is the drift
+#: `#1080` itself warns about. They stay, measured, on the issue.
+#:
+#: **92 characters and not the 46 the other positions use**, for the same
+#: reason the `when you use` entry raised its own bound: the capture is
+#: lazy and runs to the first stop word, which here sits past the name
+#: rather than beside it. `f3042` reads *"...or shielding elixir deals 1d6
+#: extra necrotic damage **on** its next attack"*, so the run is 48
+#: characters and a 46 bound made the whole pattern fail to match -- one
+#: residue of six left behind by two characters. `one` shrinks from the
+#: longest prefix and every candidate is still an exact index hit plus
+#: `cited`, so a longer run costs attempts rather than precision.
+#:
+#: `p\d+` and not a general ref shape, deliberately. All six residues
+#: follow a power ref, and a loose pattern would let this fire after an
+#: item or monster-ability ref where the second conjunct is far less
+#: likely to be a power -- `_MONSTER_ABILITY`'s note records three wrong
+#: swaps that arrived exactly that way, two of them in no finding list.
+_CITING_LATE: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(
+        r"\bp\d+\s+or\s+(?:your|the|a|an)?\s*(.{0,92}?)" + _CITE_STOP,
+        re.I | re.S), _AT_START),
+)
+
+
 def _granted(
     spec: str,
     by_name: dict[str, str],
     by_other: dict[str, str],
     own: str,
     rules: set[str],
+    positions: tuple[tuple[re.Pattern[str], str], ...] | None = None,
 ) -> str:
     """Swap the name of a power a row says it grants you for its ref.
 
@@ -6744,7 +6818,12 @@ def _granted(
         )
         return m.group(0).replace(run, done, 1)
 
-    for pattern, anchor in _CITING:
+    # **Parameterised rather than copied**, so the late table at
+    # `_CITING_LATE` gets every guard in `one` -- the monster-ability
+    # refusal, the `_OWN_THING` determiner test, `cited`, the power-source
+    # collision -- without a second resolver to keep in step. Each of those
+    # four exists because something shipped a wrong ref without it.
+    for pattern, anchor in (positions or _CITING):
         spec = pattern.sub(lambda m, a=anchor: swap(m, a), spec)
     return spec
 
