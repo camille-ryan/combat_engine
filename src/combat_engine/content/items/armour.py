@@ -59,6 +59,7 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
+    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
@@ -3105,11 +3106,26 @@ def i545p1(c: Cast) -> None:
 
 
 @power("i545p2", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=Ranged(5), target=ONE_CREATURE, keywords=[Keyword.HEALING])
+       reach=Ranged(5), target=ONE_ALLY, keywords=[Keyword.HEALING])
 def i545p2(c: Cast) -> None:
     """You spend the surge; the ally heals "as though" one had been
-    spent, so none leaves their pool."""
-    mate = next(iter(c.within(5, side="ally")), None)
+    spent, so none leaves their pool.
+
+    **`ONE_ALLY`, and it was `ONE_CREATURE` by default rather than by
+    decision.** `#1139`. The card prints *"One ally within 5 squares of
+    you regains hit points"* -- there is no enemy in it -- and a row with
+    no `target=` line inherits `dsl.ONE_CREATURE`, whose pool is the
+    **enemy** side. Measured: with every enemy down and two allies
+    standing, `candidates` returned `[]`, so the one moment this item is
+    most wanted was the one it could not be used in.
+
+    The chosen ally is honoured now rather than discarded. The search
+    stays as the fallback, because `c.target` is None on a body run
+    without a pick -- which is how the audit board poses a row.
+    """
+    mate = c.target
+    if mate is None:
+        mate = next(iter(c.within(5, side="ally")), None)
     c.spend_surge(on=c.me)
     if mate is not None:
         c.heal(c.surge_value(of=mate), on=mate)
