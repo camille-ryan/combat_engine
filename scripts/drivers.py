@@ -34040,6 +34040,65 @@ def a_weapon_the_build_chose(out: Result) -> None:
                  f"{ref} waits on {want_marks or 'nothing'}",
                  f"{REGISTRY[ref].unfinished}")
 
+    # -- #727: a declared matching pair is not displaced ------------------
+    # Camille's call, asked twice and reaffirmed after the measurement:
+    # *"A"* -- keep a matching pair over a single better weapon, for the
+    # builds whose whole premise is two weapons.
+    #
+    # Four legs declare the **same ref twice** and the ranking did not
+    # know. At level 10 a marauder carries three feat-bought arms, two of
+    # them outrank a short sword, and **both** twins went on the belt --
+    # the two-blade build held a whip and a garrote.
+    #
+    # **Asserted through `loadout`, not through `outfit`**, so a plant
+    # reverting the sort reddens here: a rule calling the sort's own
+    # helper would be asserting the implementation rather than the deal.
+    PAIRED = (("ranger", "two-blade"), ("ranger", "marauder"),
+              ("ranger", "companion"), ("fighter", "tempest"))
+    for cls, leg_name in PAIRED:
+        legs = chargen.BUILDS[cls]
+        leg = next(b for b in legs
+                   if b.name == leg_name)  # type: ignore[union-attr]
+        declared = [w.ref for w in leg.weapons]
+        out.that(len(declared) == 2 and declared[0] == declared[1],
+                 f"the setup: {cls}/{leg_name} declares the same weapon"
+                 " twice, which is the leg saying what it is for",
+                 f"declared {declared}")
+        for level in (1, 10):
+            world = World(Grid(16, 12), Rng(5), Bus())
+            who = chargen.Character(cls=cls, level=level, build=leg_name)
+            eid = chargen.spawn(world, who, (2, 3))
+            gear = world.get(eid, Gear)
+            melee = [w.ref for w in (gear.held if gear else [])
+                     if w.group != "implement" and not w.ranged]
+            out.that(melee == declared,
+                     f"a {cls}/{leg_name} at level {level} holds its"
+                     " declared pair, not two better single weapons"
+                     " (#727)",
+                     f"holds {melee}, declared {declared}")
+    # **The control, and it is what stops this becoming "the pair always
+    # wins".** A leg that declares no pair keeps the ranking it always
+    # had: a great-weapon fighter holds the one two-hander its leg names,
+    # and nothing about this change may hand it a second weapon.
+    solo = next(b for b in chargen.BUILDS["fighter"]
+                if b.name == "great-weapon")  # type: ignore[union-attr]
+    world = World(Grid(16, 12), Rng(5), Bus())
+    eid = chargen.spawn(
+        world, chargen.Character(cls="fighter", level=10,
+                                 build="great-weapon"), (2, 3))
+    gear = world.get(eid, Gear)
+    solo_melee = [w.ref for w in (gear.held if gear else [])
+                  if w.group != "implement" and not w.ranged]
+    out.that(len({w.ref for w in solo.weapons}) == len(solo.weapons),
+             "the control's setup: great-weapon declares no matching"
+             " pair, so it is the case the pair rule must not reach",
+             f"declares {[w.ref for w in solo.weapons]}")
+    out.that(len(solo_melee) == 1,
+             "and a leg with no declared pair still holds one melee"
+             " weapon -- the pair rule is keyed on the duplicate, not on"
+             " wanting two",
+             f"holds {solo_melee}")
+
 
 def death_ends_what_the_dead_creature_laid(out: Result) -> None:
     """*"Death Ends: If you die, the zone ends immediately."* And the same

@@ -3253,11 +3253,46 @@ def outfit(
     hands = {
         role: max(1, sum(1 for w in carried if _role(w) == role)) for role in pool
     }
+    # **A declared matching pair is not displaced.** Camille's call on
+    # `#727`, asked twice and reaffirmed after the measurement below:
+    #
+    #   > *"A"* -- keep a matching pair over a single better weapon, for
+    #   > the builds whose whole premise is two weapons.
+    #
+    # Four legs declare the **same ref twice** -- the tempest fighter and
+    # the ranger's two-blade, marauder and companion -- and that duplicate
+    # is the leg saying what it is for. The ranking did not know: at level
+    # 10 a marauder carries three feat-bought arms, the two best of them
+    # outrank a short sword, and **both** twins went on the belt. The
+    # build whose premise is two matching blades held a whip and a
+    # garrote.
+    #
+    # Measured through `outfit` at the two levels:
+    #
+    #     L1   carried=[w3611, w3611]  granted=[whip]
+    #          held=[whip, w3611]                 one twin survives
+    #     L10  carried=[w3611, w3611]  granted=[garrote, flail, whip]
+    #          held=[whip, garrote]               neither does
+    #
+    # **Read off `carried`, not off the `Build`.** `outfit` is handed the
+    # list rather than the leg, and a duplicated ref in it *is* the
+    # declaration -- the same fact, one layer nearer the decision, and it
+    # keeps this function taking no new argument.
+    pairs = {
+        role: ref
+        for role in pool
+        for ref in {w.ref for w in carried if _role(w) == role}
+        if sum(1 for w in carried if w.ref == ref and _role(w) == role) > 1
+    }
     held: list[Weapon] = []
     for role, arms in sorted(pool.items()):
         ranked = wield_options(arms, bought, list(known))
         order = {choice.ref: i for i, choice in enumerate(ranked)}
-        arms.sort(key=lambda w: (order.get(w.ref, len(order)), w.ref))
+        # The pair first, then the ranking. A leg that declared no pair is
+        # untouched, which is 95 of the 99 legs.
+        pair = pairs.get(role, "")
+        arms.sort(key=lambda w: (w.ref != pair,
+                                 order.get(w.ref, len(order)), w.ref))
         keep = hands[role]
         held.extend(arms[:keep])
         belt.extend(arms[keep:])
