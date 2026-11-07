@@ -2285,6 +2285,16 @@ class Character:
     #: the clauses name a specific god and a character with none meets none
     #: of them.
     worships: str = ''
+    #: The background this character was dealt, as a ref. `#1078`.
+    #:
+    #: A ref because the printed name is campaign flavour and the
+    #: mechanical half is the **associated skills**, which `background`
+    #: already carries as a JSON column -- so a ref reaches the benefit by
+    #: lookup, exactly as `worships` reaches `deity.domains`.
+    #:
+    #: Empty means none was dealt, which is what every pinned character
+    #: and every monster has.
+    background: str = ''
     #: Which **feature chassis** this character has, as the ref spells it --
     #: `arcanist`, `templar`, `warpriest`. Empty takes the class's first,
     #: which is `chassis_of`'s business and is the only chassis for 23 of
@@ -2723,6 +2733,113 @@ def deal_deity(rng: Random, cls: str = "") -> str:
     """
     pool = _all_deities()
     return rng.choice(list(pool)) if pool else ""
+
+
+#: Deal a background, like `DEAL_DEITY`. Separate so the two can be
+#: measured apart -- a background grants a **skill bonus**, so turning it
+#: on moves every character's skill numbers where a deity moves only which
+#: prerequisites are answerable.
+DEAL_BACKGROUND = True
+
+#: What the printed background benefit is worth, and which one of the four
+#: this takes. PHB2 p178, verbatim:
+#:
+#: > *"Regardless of how many background elements you use, when you create
+#: > a character you can (with your DM's consent) select **one** of the
+#: > following background benefits:*
+#: > * *Gain a +2 bonus to checks with a skill associated with your
+#: >   background.*
+#: > * *Add a skill associated with your background to your class's skills
+#: >   list before you choose your trained skills.*
+#: > * *Choose one language connected to your background [...]*
+#: > * *If you are using a campaign setting that offers regional benefits
+#: >   [...] gain a regional benefit."*
+#:
+#: **The +2, and the choice is Camille's ruling on `#456`** -- *"If they
+#: give skill bonuses, then they are eventually consumed in skill
+#: challenges."*
+#:
+#: It is also the only one of the four this project can take cleanly. The
+#: second has an ordering in its own sentence -- *"before you choose your
+#: trained skills"* -- so it widens the pool the trained-skill draw reads
+#: and would have to land ahead of that draw. A language has no combat or
+#: challenge meaning. A regional benefit needs a campaign setting, and
+#: `general` is this project's default, so there is nothing to grant.
+BACKGROUND_BONUS = 2
+
+
+@cache
+def _background_pool() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Backgrounds a character with no setting may be dealt, with skills.
+
+    Camille's ruling on `#456` is *"drawn at random from **valid options
+    for the character**"*, and three filters are what "valid" can honestly
+    mean off this table:
+
+    ```
+    general = 1           not tied to a published setting -- 516
+    skills != '[]'        names at least one engine skill -- 711
+    kind != 'Racial'      209 of the 511 that pass both
+    ```
+
+    **The racial exclusion is the one that needs saying.** A racial
+    background belongs to one race, and `background` has **no race
+    column** -- so there is no way to tell whether a given one is valid
+    for a given character. Dealing them anyway would hand a dwarf an
+    elf's history, so they are out until the table can say. That leaves
+    **302**.
+
+    `kind` is NULL on 123 of the 302 and they are kept: a missing category
+    is the importer not classifying the page, not a claim that the
+    background is race-specific.
+    """
+    import json as _json
+
+    from combat_engine import db as _db
+
+    got: list[tuple[str, tuple[str, ...]]] = []
+    for row in _db.game().execute(
+            "SELECT ref, skills FROM background"
+            " WHERE general = 1 AND skills IS NOT NULL AND skills != '[]'"
+            " AND (kind IS NULL OR kind != 'Racial') ORDER BY ref"):
+        try:
+            skills = tuple(_json.loads(row["skills"]) or ())
+        except Exception:
+            continue
+        if skills:
+            got.append((row["ref"], skills))
+    return tuple(got)
+
+
+def deal_background(rng: Random) -> str:
+    """Pick a background for a character that has none. `#1078`.
+
+    Uniform over `_background_pool`, which is the honest default for the
+    same reason `deal_deity` is: **which** history a character has is
+    campaign flavour, and what the mechanics need is that it has one so
+    the skill bonus exists to be consumed in a challenge.
+
+    Ordered by ref inside the pool, so the same seed deals the same
+    background twice.
+    """
+    pool = _background_pool()
+    return rng.choice(pool)[0] if pool else ""
+
+
+def background_skill(ref: str) -> str:
+    """The associated skill the +2 lands on, or `""`.
+
+    **The first printed, which is `_build_options`' precedent and the same
+    reasoning**: the card says *"a skill associated with your
+    background"*, so it is a choice among the two the page lists, and
+    taking the first is reproducible and needs no scoring. Choosing the
+    better of the two is a draw change of its own and would move every
+    character holding a background, so it is not smuggled in here.
+    """
+    for got, skills in _background_pool():
+        if got == ref:
+            return skills[0] if skills else ""
+    return ""
 
 
 @cache
@@ -4187,6 +4304,14 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 who.cls,
             ),
         )
+    # Its own stream again, for the third time and the same reason. `#1078`.
+    if DEAL_BACKGROUND and not who.background:
+        who = replace(
+            who,
+            background=deal_background(
+                Random(f"{world.rng.seed}:{who.cls}:{build.name}:background"),
+            ),
+        )
     race = RACES.get(who.race)
     # **A copy each, always.** `LONGSWORD` and its siblings are module-level
     # singletons, so every fighter ever built shared one object -- and
@@ -4482,6 +4607,27 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         for skill, value in race.skills:
             mods.items.append(
                 Mod(what=f"skill:{skill}", value=value, kind="racial", label=race.ref)
+            )
+    # **The background's +2, in `Mods` for every reason the racial bonus
+    # is**: it is a sheet number rather than a thing that happens in a
+    # fight, `engine/skills.py` reads `skill:<name>` off exactly this list,
+    # and a row could not say it because a row arms at the top of an
+    # encounter while a skill check is rolled outside one. `#1078`.
+    #
+    # `kind="background"` and not `"racial"`, so the two are
+    # distinguishable on a sheet and so a later house rule can switch one
+    # off without the other.
+    if who.background:
+        from combat_engine.engine.components import Mod as _Mod
+
+        skill = background_skill(who.background)
+        if skill:
+            # `need`, not `get`: the latter is `Mods | None` and the
+            # attribute read is a `types` diagnostic the baseline does not
+            # hold. `spawn` added `Mods()` above, so there is one.
+            world.need(eid, Mods).items.append(
+                _Mod(what=f"skill:{skill}", value=BACKGROUND_BONUS,
+                     kind="background", label=who.background)
             )
     if line.power_points:
         world.add(eid, PowerPoints(points=line.power_points, maximum=line.power_points))

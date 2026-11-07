@@ -57206,6 +57206,120 @@ def a_surge_lost_to_the_cold_is_not_given_back_by_a_rest(out: Result) -> None:
              f"{[s.withheld for s in warm.party.sheets]}")
 
 
+def a_background_grants_a_skill_bonus(out: Result) -> None:
+    """A dealt character has a background, and its +2 reaches a check. `#1078`.
+
+    `background` has been a real table with 817 rows and a parsed `skills`
+    column since `#456`'s ETL half, and **nothing read it**.
+
+    The printed rule, read off PHB2 p178 rather than off the issue, which
+    guessed at it:
+
+    > *"Regardless of how many background elements you use, when you
+    > create a character you can (with your DM's consent) select **one**
+    > of the following background benefits:*
+    > * *Gain a +2 bonus to checks with a skill associated with your
+    >   background.*
+    > * *Add a skill associated with your background to your class's
+    >   skills list before you choose your trained skills.*
+    > * *Choose one language connected to your background [...]*
+    > * *If you are using a campaign setting that offers regional benefits
+    >   [...] gain a regional benefit."*
+
+    **Four, where the issue's paraphrase had two.** The two it had are
+    right; the missing pair is a language and a regional benefit, both
+    correctly out of scope -- and naming them matters, because *"one of"*
+    makes taking the +2 a **choice among four** rather than the only thing
+    on offer.
+
+    The +2 is Camille's ruling on `#456` -- *"If they give skill bonuses,
+    then they are eventually consumed in skill challenges"* -- and it is
+    also the only one of the four that lands cleanly: the second carries
+    an ordering in its own sentence (*"before you choose your trained
+    skills"*), so it widens the pool the trained-skill draw reads.
+    """
+    from random import Random as _Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed_board
+    from combat_engine import chargen as _cg
+    from combat_engine import db as _db
+    from combat_engine.engine import skills as _sk
+    from combat_engine.engine.components import Mods as _Mods
+
+    pool = _cg._background_pool()
+    out.that(len(pool) == 302,
+             "**302 backgrounds are drawable**, which is the honest reading"
+             " of Camille's `valid options for the character`: general (not"
+             " tied to a published setting), naming at least one engine"
+             " skill, and NOT racial",
+             f"{len(pool)}")
+    con = _db.game()
+    both = con.execute(
+        "SELECT COUNT(*) AS n FROM background WHERE general = 1"
+        " AND skills IS NOT NULL AND skills != '[]'").fetchone()["n"]
+    racial = con.execute(
+        "SELECT COUNT(*) AS n FROM background WHERE general = 1"
+        " AND skills IS NOT NULL AND skills != '[]'"
+        " AND kind = 'Racial'").fetchone()["n"]
+    out.that(both == 511 and racial == 209 and both - racial == len(pool),
+             "**and the racial exclusion is what the 302 is**: 511 pass the"
+             " first two filters and 209 of them are racial. `background`"
+             " has NO race column, so there is no way to tell whether a"
+             " given racial background is valid for a given character --"
+             " dealing them would hand one race another's history",
+             f"{both} - {racial} = {both - racial}")
+
+    first = _cg.deal_background(_Random("drivers:bg:1"))
+    again = _cg.deal_background(_Random("drivers:bg:1"))
+    other = _cg.deal_background(_Random("drivers:bg:2"))
+    out.that(first and first == again,
+             "the same seed deals the same background twice -- the pool is"
+             " ordered by ref, so nothing here depends on dict order",
+             f"{first} twice")
+    out.that(other and other != first,
+             "and a different seed deals a different one, so the draw is a"
+             " draw rather than a constant",
+             f"{first} vs {other}")
+
+    # -- it reaches a real check, on the board the audit builds ----------
+    got = _posed_board("f2441", 1)
+    world, who = got[0], got[1]
+    # `need` rather than `get`, which is `Mods | None` -- the attribute
+    # read on the optional is a `types` diagnostic, invisible to ruff, and
+    # the fourth time today the same shortcut cost a red run.
+    mods = world.need(who, _Mods)
+    laid = [m for m in mods.items if m.kind == "background"]
+    out.that(len(laid) == 1,
+             "a dealt character carries exactly ONE background modifier --"
+             " the printed rule is `select one of the following`, so two"
+             " would be two benefits from one background",
+             f"{len(laid)} mod(s)")
+    skill = laid[0].what.split(":", 1)[1] if laid else ""
+    out.that(skill in _sk.SKILLS,
+             "and it names a real engine skill, which is what the `skills`"
+             " column is filtered to -- a bonus on a word `skills.modifier`"
+             " cannot read would apply to nothing",
+             f"{laid[0].what if laid else '-'}")
+    out.that(laid and laid[0].value == 2 and laid[0].kind == "background",
+             "+2, and `kind='background'` rather than `racial` so the two"
+             " are distinguishable on a sheet and a later house rule can"
+             " switch one off without the other",
+             f"+{laid[0].value if laid else '?'}"
+             f" kind={laid[0].kind if laid else '?'}")
+
+    before = _sk.modifier(world, who, skill)
+    mods.items.remove(laid[0])
+    after = _sk.modifier(world, who, skill)
+    out.that(before - after == 2,
+             "**and `skills.modifier` really reads it**: taking the mod"
+             " away drops the check by exactly 2. The assertion that"
+             " separates `a bonus was laid` from `a bonus is applied`,"
+             " which is the whole failure mode of a sheet number nothing"
+             " consults",
+             f"{before} with, {after} without")
+
+
 def a_feat_draws_its_swap_from_the_class_list(out: Result) -> None:
     """`Swap.pool` draws the incoming power, so four feats play. `#1114`.
 
@@ -66611,6 +66725,12 @@ DRIVERS = {
         "an extended rest does not refund a surge lost to a failed Endurance"
         " check, and the printed table has nine conditions rather than seven"
         " (#971)",
+    ),
+    "background": (
+        a_background_grants_a_skill_bonus,
+        "a dealt character has a background drawn from the 302 valid"
+        " options, and PHB2's +2 to an associated skill reaches"
+        " skills.modifier (#1078)",
     ),
     "swap_pool": (
         a_feat_draws_its_swap_from_the_class_list,
