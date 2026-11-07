@@ -57352,6 +57352,51 @@ def a_feat_draws_its_swap_from_the_class_list(out: Result) -> None:
                  " `blocked.py --group` keeps listing the real remainder",
                  f"todo={getattr(row, 'todo', ())}"
                  f" dropped={getattr(row, 'dropped', ())}")
+    # -- the board must be able to POSE it, which is where this went red --
+    #
+    # The first version of this change un-marked all four and the wide
+    # sweep came back `0 raise, 3 newly silent (f2441, f2446, ...)`.
+    # `audit.board` **composes** a hand -- the row under test, its
+    # siblings and the class features -- so it holds at-wills and
+    # utilities and no daily or encounter attack. A row whose whole effect
+    # is trading one away then has nothing to trade.
+    #
+    # That is why two of four needed a pose and two did not: `f2443`
+    # (utility) and `f2445` (at-will) found their trade in a class feature
+    # and left `refused_refs` outright; `f2441` (daily) and `f2446`
+    # (encounter) went to `silent_refs`. Identical rows, different board.
+    #
+    # `audit._pooled_trade_for` is the pose. Asserted here rather than by
+    # running `audit.audit`, which would warm the module mid-suite -- the
+    # first audit in a process is a different measurement.
+    from audit import _pooled_trade_for as _bait
+
+    bait = _bait("f2441", "fighter", 10)
+    got = _REG.get(bait)
+    out.that(got is not None
+             and getattr(got, "cls", "") == "fighter"
+             and got.usage is _U.DAILY
+             and got.attack is not None,
+             "the board poses a `Swap.pool` row by adding a power it can"
+             " trade -- a fighter daily attack for `f2441`, matched on the"
+             " row's own `Swap` rather than on a list of refs",
+             f"{bait}")
+    out.that(_bait("f2443", "fighter", 10)
+             and _bait("f2445", "fighter", 10)
+             and _bait("f2446", "fighter", 10),
+             "and one for each of the four, so the two that happened to"
+             " work on a composed hand are posed deliberately rather than"
+             " by luck -- which is what stops this going red again the"
+             " next time the class features change",
+             "all four posed")
+    out.that(not _bait("f2103", "fighter", 10),
+             "**and a `Swap` row with no pool gets nothing** -- `f2103`"
+             " trades for a card the feat hands over itself, so adding a"
+             " power to its hand would change what it is audited against"
+             " for no reason. The negative control, and the thing that"
+             " keeps the pose's blast radius at exactly these four rows",
+             f"{_bait('f2103', 'fighter', 10)!r}")
+
     # Built in a loop rather than a comprehension: the checker cannot
     # narrow `Swap | None` across two separate subscripts of the same key,
     # so the ternary form was still one diagnostic above the baseline.

@@ -2445,8 +2445,16 @@ def board(ref: str, seed: int, pose: bool = False,
         # on its neighbour's work. Traits are never UNUSED anyway, which
         # is what siblings are here to fix.
         named = [] if _is_trait(declared) else _siblings(ref)
+        # **And a power to trade, for a `Swap.pool` row.** `#1114`. The
+        # hand below is composed rather than dealt, so it holds no daily
+        # or encounter attack -- and a row whose whole effect is trading
+        # one away then has nothing to do and reports silent. See
+        # `_pooled_trade_for`; a row that does not ask this gets `""`.
+        trade_bait = _pooled_trade_for(ref, cls, max(1, declared.level))
         # Siblings first, so a second card's parent is armed before it.
         hand = [*named, *features] if a_feat else [ref, *named, *features]
+        if trade_bait and trade_bait not in hand:
+            hand.append(trade_bait)
         caster = chargen.spawn(
             world,
             chargen.Character(
@@ -5857,6 +5865,52 @@ def _asks_a_rest_long_history(ref: str) -> bool:
     """
     src = _source_of(getattr(REGISTRY.get(ref), "body", None), ref)
     return bool(src) and bool(_SINCE_REST.search(src))
+
+
+def _pooled_trade_for(ref: str, cls: str, level: int) -> str:
+    """`_trades_for_a_pooled_power` for a feat, whose own `cls` is empty.
+
+    `#1114`. Four feats print *"choose one martial daily attack power of
+    your level or lower from your class"*, and `chargen.power_swap` can
+    only draw the incoming card if there is an outgoing one to take. The
+    board's hand is **composed** -- the row under test, its siblings and
+    the class features -- so it holds at-wills and utilities and no daily
+    or encounter attack.
+
+    **Measured, and it is why two of the four needed this and two did
+    not.** Un-marking all four moved `f2443` (utility) and `f2445`
+    (at-will) out of `refused_refs` entirely, because a class feature
+    supplied their trade; `f2441` (daily) and `f2446` (encounter) went to
+    `silent_refs`, because nothing in a composed hand matches. The rows
+    are identical in structure and only the board differed -- so the
+    honest fix is to pose the question the row asks, not to excuse two of
+    them.
+
+    Takes `cls` because a feat carries `cls=""`: the class is the one the
+    board chose for it, so the pool is read against that rather than
+    against the row. Lowest qualifying level at or under the character's,
+    which is the card a player would actually have.
+
+    Returns one ref to add to the hand, or `""` for a row that does not
+    ask this -- the same shape as `_asks_for_a_corpse` and
+    `_asks_an_allys_kind`.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.dsl import get as _get
+
+    row = _get(ref)
+    trade = getattr(row, "swap", None) if row is not None else None
+    if trade is None or not trade.pool or not cls:
+        return ""
+    offer = [
+        p
+        for p, other in REGISTRY.items()
+        if getattr(other, "cls", "") == cls
+        and other.level <= max(1, level)
+        and (trade.usage is None or other.usage is trade.usage)
+        and (other.attack is None) is trade.utility
+    ]
+    return min(offer, key=lambda p: (REGISTRY[p].level, p)) if offer else ""
 
 
 def _asks_for_a_corpse(ref: str) -> bool:
