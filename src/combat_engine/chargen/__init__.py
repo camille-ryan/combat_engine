@@ -3117,7 +3117,9 @@ def _stock_thrown(gear: Gear | None) -> None:
             gear.thrown_left.setdefault(arm.ref, THROWN)
 
 
-def power_swap(powers: list[str], feats: list[str]) -> list[str]:
+def power_swap(powers: list[str], feats: list[str], *,
+               cls: str = "", level: int = 0,
+               record: set[str] | None = None) -> list[str]:
     """The hand that is left after the feats that trade a card for one.
 
     "You can swap one of your 3rd-level or higher encounter attack powers
@@ -3129,7 +3131,33 @@ def power_swap(powers: list[str], feats: list[str]) -> list[str]:
     up, and ties break by ref so that the same seed deals the same
     character twice. A feat whose trade finds nothing to take costs
     nothing, which is what happens to a character too junior to have one.
+
+    **And for `Swap.pool`, something also comes in.** `#1114`'s four rows
+    print no card of their own -- *"choose one martial daily attack power
+    of your level or lower from your class"* -- so the incoming power is
+    drawn from the class list rather than handed over by the feat. Drawn
+    at the **same level and usage** as the power going out, which is the
+    printed *"of the same level"*, and excluding what the character
+    already knows, because a trade for a card already in hand is not a
+    trade.
+
+    **No stream, and the pick is the highest-rated rather than random.**
+    Every other dealer here takes an rng of its own so that dealing a
+    character cannot move the dice the fight is about to roll. This needs
+    none: `ratings.score` is a static table, so the choice is
+    deterministic for a given hand and the character is reproducible
+    without one. It also answers the printed *"you **can** swap"* the way
+    the removal half already does -- by making the beneficial trade -- and
+    a default of "do not swap" would leave four drawable feats inert,
+    which this repo treats as a fault rather than a safe no-op.
+
+    `cls` and `level` are keyword-only and default to nothing, so a caller
+    that does not pass them gets exactly the old behaviour and a `pool`
+    row finds no pool to draw from. That is the honest direction and the
+    same one `chargen.proficiency` takes about itself: the row does nothing
+    and keeps its marker, where an invention would look finished.
     """
+    from combat_engine import ratings
     from combat_engine.engine.dsl import REGISTRY
 
     out = list(powers)
@@ -3147,8 +3175,48 @@ def power_swap(powers: list[str], feats: list[str]) -> list[str]:
             # `spellbook` tells the two apart as well.
             and (row.attack is None) is trade.utility
         ]
-        if pool:
-            out.remove(min(pool, key=lambda p: (REGISTRY[p].level, p)))
+        if not pool:
+            continue
+        gone = min(pool, key=lambda p: (REGISTRY[p].level, p))
+        out.remove(gone)
+        if trade.pool != "class" or not cls:
+            continue
+        # **The incoming half.** Same level as the one that went, same
+        # usage, this character's class, and not already in hand.
+        want = REGISTRY[gone].level
+        offer = [
+            p
+            for p, row in REGISTRY.items()
+            if p not in out
+            and getattr(row, "cls", "") == cls
+            and row.level == want
+            and row.level <= (level or want)
+            and (trade.usage is None or row.usage is trade.usage)
+            and (row.attack is None) is trade.utility
+        ]
+        if not offer:
+            # Nothing to draw is not a reason to lose the power as well:
+            # put it back, so a class with no alternative at that level is
+            # left exactly as it was rather than a card down.
+            out.append(gone)
+            continue
+        took = max(offer, key=lambda p: (ratings.score(p, cls), p))
+        # **Recorded, not put in the hand, and that is what makes the row
+        # writable.** The hand is the wrong place: a row whose whole
+        # effect is a header field has an empty body, and **0 of the
+        # 23,000 rows in this tree are drawable with an empty body** --
+        # every one carries a marker. So a silent hand edit would leave
+        # four feats drawable and inert, which `lint` refuses outright and
+        # is right to.
+        #
+        # Written as `option:<feat>:<power>` instead, which is the
+        # convention `#758` established and `Cast.chosen_option` already
+        # reads. The feat's body then hands the card over with
+        # `c.grant_row`, exactly as `_granted` does for the rows whose
+        # card arrives with the feat -- same shape, same verb, and
+        # observable, where a hand edit is not.
+        if record is not None:
+            record.add(f"option:{ref}:{took}")
     return out
 
 
@@ -4185,7 +4253,17 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     )
     # A feat that hands over a card takes one back, and both halves happen
     # here: a `Cast` opens on a board with the hand already dealt.
-    powers = power_swap(list(powers), list(feats))
+    #
+    # `cls` and `level` because `Swap.pool` rows draw the **incoming**
+    # power from the class list rather than being handed one. Passing them
+    # cannot move an existing draw: every row that shipped before `#1114`
+    # has `pool=""` and never reaches the branch that reads them.
+    #: `option:<feat>:<power>` for each `Swap.pool` row, filled by the
+    #: call below and spliced into `BuildState.choices` further down so
+    #: the feat's body can read what it drew. #1114.
+    swapped_in: set[str] = set()
+    powers = power_swap(list(powers), list(feats), cls=who.cls,
+                        level=who.level, record=swapped_in)
     # A race's traits and its one racial power are known rows like any
     # other: a trait arms itself at the top of the fight and a racial
     # power goes on the action menu, with no machinery of their own.
@@ -4303,6 +4381,9 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 *who.choices,
                 *(f"chose:{w.ref}" for w in carried),
                 *_build_options(list(feats)),
+                # The pool draw above, under the same `option:` key, so
+                # one reader (`Cast.chosen_option`) answers both. #1114.
+                *swapped_in,
             }
         ),
         # **Training, which nothing recorded until #565.** Its own stream,

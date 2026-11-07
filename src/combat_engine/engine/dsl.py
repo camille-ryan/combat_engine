@@ -1240,6 +1240,23 @@ class Swap:
     #: an encounter or a daily, and only the attack lines name a usage.
     usage: Usage | None = None
     utility: bool = False
+    #: Where the **incoming** power comes from, when the feat does not hand
+    #: one over itself. `""` is every row that shipped before this: the
+    #: card arrives with the feat and `power_swap` only has to decide what
+    #: goes back.
+    #:
+    #: `"class"` is *"choose one martial daily attack power of your level
+    #: or lower **from your class**"* -- four rows, `#1114`, where the feat
+    #: prints no card of its own and the exchange is with the class list.
+    #: `chargen.power_swap` draws it at the same level and usage as the
+    #: power going out, which is the printed *"of the same level"*.
+    #:
+    #: A string rather than a flag because two more pools are printed and
+    #: are **not** buildable yet (`#1142`): the class a character
+    #: multiclassed into, which nothing in `chargen` records at all, and
+    #: the skill-power list, which needs a prerequisite check per row.
+    #: Naming the pool leaves room for those without implying they work.
+    pool: str = ""
 
 
 @dataclass

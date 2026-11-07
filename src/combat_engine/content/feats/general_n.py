@@ -2247,30 +2247,121 @@ def f2420(c: Cast) -> None:
 
 
 @power("f2441", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.retrain_on_rest()",))
+       reach=PERSONAL, target=SELF,
+       # **`level=0`, because these cards print no floor.** The other
+       # `Swap` rows say "3rd-level **or higher**"; this one says the
+       # incoming power is "of your level or lower" and the outgoing
+       # one is "of the same level", so there is no minimum to state
+       # and 0 is that rather than a guess.
+       swap=Swap(level=0, usage=Usage.DAILY, utility=False,
+                 pool="class"),
+       # **`dropped=`, and the SAME symbol it used to carry as
+       # `todo=`.** The row plays now -- the pool half is what a
+       # fight sees -- and what is still missing is a rest-time
+       # re-tune, which is the thing that symbol names. So the
+       # marker moves category rather than disappearing, and
+       # `blocked.py --group` keeps listing it for the clause that
+       # really is owed. #1114.
+       dropped=("chargen.retrain_on_rest()",))
 def f2441(c: Cast) -> None:
-    """Not the one-way trade `chargen.power_swap` applies: this one
-    exchanges two powers the character already knows, back and forth,
-    once per extended rest. Nothing models a rest as a moment at which
-    a hand is re-dealt."""
+    """A martial daily attack from the class list, traded for one of the
+    same level already in hand. `#1114`.
+
+    **`Swap(pool="class")` rather than the rest-time store the issue
+    designed.** The card has two clauses and only the first has combat
+    meaning: *"choose one martial daily attack power of your level or
+    lower from your class"* widens what this character may hold, which is
+    what a fight sees. *"You can substitute the original power back in
+    after another extended rest"* is campaign re-tuning -- it needs a rule
+    for **when** a character re-tunes and changes nothing inside an
+    encounter, so it is the `dropped=` clause rather than the blocker the
+    marker made it.
+
+    `martial` is not tested here: the printed Prerequisite is
+    `{"source": "martial"}` and `chargen.meets` answers it, so a
+    non-martial class never draws this row.
+    """
+    got = c.chosen_option(c.ref)
+    if got:
+        c.grant_row(got, on=c.me, until=When.ENCOUNTER)
+
 
 
 @power("f2443", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.retrain_on_rest()",))
+       reach=PERSONAL, target=SELF,
+       # **`level=0`, because these cards print no floor.** The other
+       # `Swap` rows say "3rd-level **or higher**"; this one says the
+       # incoming power is "of your level or lower" and the outgoing
+       # one is "of the same level", so there is no minimum to state
+       # and 0 is that rather than a guess.
+       swap=Swap(level=0, usage=None, utility=True,
+                 pool="class"),
+       # **`dropped=`, and the SAME symbol it used to carry as
+       # `todo=`.** The row plays now -- the pool half is what a
+       # fight sees -- and what is still missing is a rest-time
+       # re-tune, which is the thing that symbol names. So the
+       # marker moves category rather than disappearing, and
+       # `blocked.py --group` keeps listing it for the clause that
+       # really is owed. #1114.
+       dropped=("chargen.retrain_on_rest()",))
 def f2443(c: Cast) -> None:
-    """Same as f2441 for a utility power."""
+    """`f2441` for a utility power -- the one printed line that names no
+    usage, which is why `Swap.utility` exists beside `Swap.usage`. See
+    `f2441`."""
+    got = c.chosen_option(c.ref)
+    if got:
+        c.grant_row(got, on=c.me, until=When.ENCOUNTER)
+
 
 
 @power("f2445", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.retrain_on_rest()",))
+       reach=PERSONAL, target=SELF,
+       # **`level=0`, because these cards print no floor.** The other
+       # `Swap` rows say "3rd-level **or higher**"; this one says the
+       # incoming power is "of your level or lower" and the outgoing
+       # one is "of the same level", so there is no minimum to state
+       # and 0 is that rather than a guess.
+       swap=Swap(level=0, usage=Usage.AT_WILL, utility=False,
+                 pool="class"),
+       # **`dropped=`, and the SAME symbol it used to carry as
+       # `todo=`.** The row plays now -- the pool half is what a
+       # fight sees -- and what is still missing is a rest-time
+       # re-tune, which is the thing that symbol names. So the
+       # marker moves category rather than disappearing, and
+       # `blocked.py --group` keeps listing it for the clause that
+       # really is owed. #1114.
+       dropped=("chargen.retrain_on_rest()",))
 def f2445(c: Cast) -> None:
-    """Same as f2441 for an at-will."""
+    """`f2441` for an at-will attack. See `f2441`."""
+    got = c.chosen_option(c.ref)
+    if got:
+        c.grant_row(got, on=c.me, until=When.ENCOUNTER)
+
 
 
 @power("f2446", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.retrain_on_rest()",))
+       reach=PERSONAL, target=SELF,
+       # **`level=0`, because these cards print no floor.** The other
+       # `Swap` rows say "3rd-level **or higher**"; this one says the
+       # incoming power is "of your level or lower" and the outgoing
+       # one is "of the same level", so there is no minimum to state
+       # and 0 is that rather than a guess.
+       swap=Swap(level=0, usage=Usage.ENCOUNTER, utility=False,
+                 pool="class"),
+       # **`dropped=`, and the SAME symbol it used to carry as
+       # `todo=`.** The row plays now -- the pool half is what a
+       # fight sees -- and what is still missing is a rest-time
+       # re-tune, which is the thing that symbol names. So the
+       # marker moves category rather than disappearing, and
+       # `blocked.py --group` keeps listing it for the clause that
+       # really is owed. #1114.
+       dropped=("chargen.retrain_on_rest()",))
 def f2446(c: Cast) -> None:
     """Same as f2441 for an encounter power."""
+    got = c.chosen_option(c.ref)
+    if got:
+        c.grant_row(got, on=c.me, until=When.ENCOUNTER)
+
 
 
 @power("f2444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

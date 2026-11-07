@@ -57206,6 +57206,167 @@ def a_surge_lost_to_the_cold_is_not_given_back_by_a_rest(out: Result) -> None:
              f"{[s.withheld for s in warm.party.sheets]}")
 
 
+def a_feat_draws_its_swap_from_the_class_list(out: Result) -> None:
+    """`Swap.pool` draws the incoming power, so four feats play. `#1114`.
+
+    The four print *"choose one martial daily attack power of your level or
+    lower **from your class**"*, where every `Swap` row before them had its
+    card handed over by the feat itself. So `power_swap` knew what goes
+    back and nothing about what comes in.
+
+    **The design the issue proposed is not the one here, and the reason is
+    worth keeping.** `#1114` asks for a field on `story.Sheet` and a call
+    site in `Party.rest`. Reading the four cards shows two clauses and only
+    the first has combat meaning: the pool widening, which a fight sees.
+    The re-tune (*"substitute the original power back in after another
+    extended rest"*) needs a rule for **when** a character re-tunes and
+    changes nothing inside an encounter -- so it stays as the `dropped=`
+    clause under the symbol it always carried.
+
+    **And the incoming power is recorded rather than put in the hand.**
+    Measured: **0 of the declared rows are drawable with an empty body** --
+    every empty body in the tree carries a marker, and `lint` refuses a
+    `dropped=` row whose body does nothing. A silent hand edit would have
+    left four feats drawable and inert. So the draw is written as
+    `option:<feat>:<power>` -- `#758`'s convention, which
+    `Cast.chosen_option` already reads -- and the body hands the card over
+    with `c.grant_row`, which is exactly what `_granted` does for the rows
+    whose card arrives with the feat.
+    """
+    # **`content` first, and this rule reported `0 row(s)` without it.**
+    # `REGISTRY` is populated by importing the content tree, and a rule
+    # that reads it before that import sees an empty dict -- which looks
+    # exactly like a corpus with no fighter dailies in it.
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen as _cg
+    from combat_engine import ratings as _rt
+    from combat_engine.engine.dsl import REGISTRY as _REG
+    from combat_engine.engine.dsl import Swap as _Swap
+    from combat_engine.engine.types import Usage as _U
+
+    out.that(_Swap(level=3).pool == "",
+             "`Swap.pool` defaults to empty, so every row that shipped"
+             " before this keeps the behaviour it had -- the incoming card"
+             " arrives with the feat and the pool branch is never reached",
+             f"{_Swap(level=3).pool!r}")
+
+    dailies = [r for r, row in _REG.items()
+               if getattr(row, "cls", "") == "fighter"
+               and row.usage is _U.DAILY and row.attack is not None
+               and row.level == 1]
+    out.that(len(dailies) >= 2,
+             "the fighter has at least two level-1 daily attacks declared,"
+             " so there is something to trade and something to draw -- the"
+             " setup landing rather than the assertion",
+             f"{len(dailies)} row(s)")
+
+    hand = sorted(dailies)[:1]
+    rec: set[str] = set()
+    after = _cg.power_swap(list(hand), ["f2441"], cls="fighter", level=10,
+                           record=rec)
+    out.that(hand[0] not in after,
+             "the traded power leaves the hand -- the half that already"
+             " worked, asserted so the next two are about the new half",
+             f"{hand} -> {sorted(after)}")
+    out.that(len(rec) == 1 and next(iter(rec)).startswith("option:f2441:"),
+             "**and the incoming power is recorded as"
+             " `option:f2441:<ref>`** -- the key `Cast.chosen_option`"
+             " reads, so the feat's body can hand over what it drew",
+             f"{sorted(rec)}")
+
+    took = next(iter(rec)).split(":")[-1]
+    drawn = _REG.get(took)
+    out.that(drawn is not None
+             and getattr(drawn, "cls", "") == "fighter"
+             and drawn.usage is _U.DAILY
+             and drawn.attack is not None,
+             "and what it drew is from THIS character's class, at the"
+             " printed usage, and is an attack rather than a utility --"
+             " `Swap.utility` is the half `Usage` alone cannot say",
+             f"{took}: cls={getattr(drawn, 'cls', None)}"
+             f" usage={drawn.usage if drawn else None}")
+    out.that(drawn is not None and drawn.level == _REG[hand[0]].level,
+             "**at the SAME level as the power that went**, which is the"
+             " printed `of the same level` -- not merely at or below the"
+             " character's level, which would let a level-10 fighter trade"
+             " a level-1 daily for a level-9 one",
+             f"took L{drawn.level if drawn else '?'},"
+             f" gave L{_REG[hand[0]].level}")
+
+    offers = [r for r, row in _REG.items()
+              if getattr(row, "cls", "") == "fighter"
+              and row.usage is _U.DAILY and row.attack is not None
+              and row.level == _REG[hand[0]].level and r not in after]
+    best = max(offers, key=lambda r: (_rt.score(r, "fighter"), r))
+    out.that(took == best,
+             "and it is the **highest-rated** of the offers rather than a"
+             " random one -- `ratings.score` is a static table, so the"
+             " choice is deterministic without a stream and the same seed"
+             " deals the same character twice. It also answers the printed"
+             " `you CAN swap` the way the removal half does, by making the"
+             " beneficial trade: a default of `do not` would leave four"
+             " drawable feats inert",
+             f"took {took}, best of {len(offers)} is {best}")
+
+    # -- the control: no class, no pool, today's behaviour exactly --------
+    bare: set[str] = set()
+    plain = _cg.power_swap(list(hand), ["f2441"], record=bare)
+    out.that(not bare and hand[0] not in plain,
+             "a caller passing no class records NOTHING and still trades"
+             " away -- so every existing call site is unchanged, and a"
+             " `pool` row reached without a class does nothing and keeps"
+             " its marker rather than inventing a draw",
+             f"recorded {sorted(bare) or 'nothing'}")
+
+    # -- and the row that cannot be served keeps its power ---------------
+    lonely: set[str] = set()
+    kept = _cg.power_swap(list(hand), ["f2441"], cls="nosuchclass",
+                          level=10, record=lonely)
+    out.that(hand[0] in kept and not lonely,
+             "**a class with no alternative at that level keeps the power"
+             " it was going to trade**, rather than ending a card down."
+             " Losing the outgoing and drawing nothing is the one outcome"
+             " worse than not firing at all",
+             f"{sorted(kept)}")
+
+    # -- the four rows, re-marked rather than un-marked -------------------
+    for ref in ("f2441", "f2443", "f2445", "f2446"):
+        row = _REG[ref]
+        # **A local, not `row.swap.pool` through a `getattr` guard.**
+        # `Power.swap` is `Swap | None` and the checker cannot narrow it
+        # across a `getattr(...) is not None` test, so the attribute read
+        # is two `types` diagnostics above the baseline -- invisible to
+        # `ruff`, which is the second time this exact shortcut has cost a
+        # red run.
+        trade = row.swap
+        out.that(not getattr(row, "todo", ())
+                 and getattr(row, "dropped", ())
+                 == ("chargen.retrain_on_rest()",)
+                 and trade is not None
+                 and trade.pool == "class",
+                 f"`{ref}` carries `Swap(pool=\"class\")` and is"
+                 " `dropped=` on the SAME symbol it used to carry as"
+                 " `todo=` -- it plays now, and what is still owed is the"
+                 " rest-time re-tune that symbol names. The marker moves"
+                 " category rather than vanishing, so"
+                 " `blocked.py --group` keeps listing the real remainder",
+                 f"todo={getattr(row, 'todo', ())}"
+                 f" dropped={getattr(row, 'dropped', ())}")
+    # Built in a loop rather than a comprehension: the checker cannot
+    # narrow `Swap | None` across two separate subscripts of the same key,
+    # so the ternary form was still one diagnostic above the baseline.
+    usages: dict[str, object] = {}
+    for r in ("f2441", "f2443", "f2445", "f2446"):
+        got = _REG[r].swap
+        usages[r] = got.usage if got is not None else "no swap"
+    out.that(usages == {"f2441": _U.DAILY, "f2443": None,
+                        "f2445": _U.AT_WILL, "f2446": _U.ENCOUNTER},
+             "and the four differ only in the printed usage -- one per"
+             " card, with the utility one carrying `None` because its"
+             " printed line names no usage at all",
+             f"{ {k: str(v) for k, v in usages.items()} }")
+
+
 def a_power_s_printed_prerequisite_is_a_tree(out: Result) -> None:
     """137 power rows print a `Prerequisite:` and now carry it. `#1044`.
 
@@ -66405,6 +66566,12 @@ DRIVERS = {
         "an extended rest does not refund a surge lost to a failed Endurance"
         " check, and the printed table has nine conditions rather than seven"
         " (#971)",
+    ),
+    "swap_pool": (
+        a_feat_draws_its_swap_from_the_class_list,
+        "Swap.pool draws the incoming power from the character's own class"
+        " at the same level and usage, recorded as option:<feat>:<power>"
+        " so the body can hand it over -- four feats play (#1114)",
     ),
     "power_prereq": (
         a_power_s_printed_prerequisite_is_a_tree,
