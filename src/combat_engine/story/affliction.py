@@ -94,9 +94,33 @@ if TYPE_CHECKING:
 TRACKED = ("fixed",)
 
 #: The stage a cured character is at. Stage counting runs **upward into the
-#: disease**: 0 is cured and `Printed.stages` is as bad as it gets, which is
-#: the direction the printed stage tracks are written in.
+#: disease**: 0 is cured and the worst stage is `Printed.stages - 1`, which
+#: is the direction the printed stage tracks are written in.
+#:
+#: **This said `Printed.stages` was "as bad as it gets" and that was the
+#: wrong end of an off-by-one.** `disease.stages` is a **count** of printed
+#: paragraphs and every page prints a stage 0 -- *"the target recovers"* --
+#: so a page printing stages 0 to 3 stores `stages = 4`. Measured: all 69
+#: rows, `stages == top printed stage + 1`, no exceptions.
+#:
+#: The cost was real and silent. `tick` capped a worsening at `stages`, so a
+#: character at the worst printed stage could be pushed one past it, to a
+#: stage with no paragraph -- proven reachable, `[2, 3, 4]` from stage 3 of a
+#: four-count disease over 40 seeds. The disease then did **nothing**, since
+#: `arm_afflictions` runs the row and every branch declines, and the line
+#: said "stage 4 of 4". Invisible until `#948`'s rows existed to decline.
 CURED = 0
+
+
+def worst(got: Printed) -> int:
+    """The highest stage this disease prints, which is one below its count.
+
+    One place for the arithmetic rather than two, because `tick` needs it
+    to cap a worsening **and** to report how bad the stage is -- and the
+    first version of this had the raw count in both, so the cap and the
+    wording were wrong together and looked consistent.
+    """
+    return max(CURED, got.stages - 1)
 
 
 @dataclass(frozen=True)
@@ -225,7 +249,7 @@ def tick(party: Party, seed: int) -> list[str]:
                 now = stage - 1
                 went = "improves"
             elif rolled.total < got.worsen_dc:
-                now = min(stage + 1, got.stages)
+                now = min(stage + 1, worst(got))
                 went = "worsens"
             else:
                 now, went = stage, "holds"
@@ -235,6 +259,6 @@ def tick(party: Party, seed: int) -> list[str]:
                 continue
             sheet.afflictions[ref] = now
             said.append(
-                f"{sheet.cls}'s {ref} {went} -- stage {now} of {got.stages}"
+                f"{sheet.cls}'s {ref} {went} -- stage {now} of {worst(got)}"
             )
     return said

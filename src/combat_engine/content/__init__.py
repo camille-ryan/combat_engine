@@ -75,3 +75,11 @@ _load("races")
 # file, so they partition by file and the package is what the seventh
 # `_load` walks. A new batch module now needs no line here. #980, #1123.
 _load("terrain_powers")
+
+# **`diseases` is the eighth, and it needs this line for the same reason
+# `terrain_powers` does.** `_load` walks packages, so a disease module that
+# nothing imports registers nothing -- and the symptom would be quiet
+# rather than loud: `turns.arm_afflictions` looks the row up with
+# `dsl.get`, finds `None` for an unregistered ref and skips it, so every
+# disease would simply do nothing with no error anywhere. #948.
+_load("diseases")

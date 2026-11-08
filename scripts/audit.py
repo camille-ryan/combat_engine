@@ -1541,6 +1541,27 @@ THEME_REF = re.compile(r"^x\d+_\d+$")
 
 
 @cache
+def _worst_stage(ref: str) -> int:
+    """The highest stage a disease prints, which is `stages - 1`.
+
+    **`disease.stages` is a count, not a top index.** Measured across all
+    69 rows: every one of them prints a stage 0 -- *"the target
+    recovers"* -- so a page printing stages 0 to 3 stores `stages = 4`.
+    `story.affliction.tick` carried the same off-by-one and could push a
+    character to a stage with no printed paragraph.
+
+    1 for anything the table does not price, which is the initial effect
+    every disease prints and so is never a stage that does nothing.
+    """
+    from combat_engine.db import game
+
+    row = game().execute(
+        "SELECT stages FROM disease WHERE ref = ?", (ref,)
+    ).fetchone()
+    return max(1, int(row[0]) - 1) if row and row[0] else 1
+
+
+@cache
 def _skill_words() -> frozenset[str]:
     """The 17 printed skills, as the engine spells them.
 
@@ -2240,6 +2261,12 @@ def board(ref: str, seed: int, pose: bool = False,
         world.terrain = {terrain}
     declared = get(ref)
     named: list[str] = []
+    # Set before the branch, because the stage is put on the board well
+    # after it and a monster row never reaches the `else` that computes
+    # this. The first version read it unconditionally and `m145a0` --
+    # which three `drivers` rules build a board from -- died on an
+    # `UnboundLocalError` rather than on anything to do with diseases.
+    diseased = False
 
     if MONSTER_ABILITY.match(ref):
         caster = loader.spawn(world, ref.split("a")[0], (6, 8), team=Team.ENEMY)
@@ -2398,6 +2425,18 @@ def board(ref: str, seed: int, pose: bool = False,
         # diagnostics for a convenience is the wrong trade.
         skill_word = (getattr(declared, "cls", "") or "").lower()
         skilled = skill_word in _skill_words()
+        # **Nor is a disease, which is the fifth thing in this column that
+        # is not a class.** A disease row carries the literal word
+        # `disease` in `cls` -- `#948`'s package design, lower case so it
+        # can never read as one of the 25 -- and `chargen.CLASSES[...]`
+        # raised on every one of them, exactly as it did for the items,
+        # races, themes and skills above. Found by three authoring agents
+        # independently, each reporting all five of its rows as RAISED.
+        #
+        # Unlike a theme there is something to put on the character: the
+        # row is only ever run against a stage, so the stage goes on below
+        # and the class underneath takes the classless fallback.
+        diseased = skill_word == "disease"
         wears = ref[3:].split("-")[0] if ref.startswith("rt:") else declared.cls
         worn_race = wears if wears in chargen.RACES else ""
         gate = _gates().get(ref)
@@ -2454,7 +2493,7 @@ def board(ref: str, seed: int, pose: bool = False,
                     break
         legged = _class_of_leg(gate_leg)
         cls = (not carried and not racial and not themed and not skilled
-               and declared.cls) or (
+               and not diseased and declared.cls) or (
             gated or legged
         ) or (
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
@@ -3038,6 +3077,34 @@ def board(ref: str, seed: int, pose: bool = False,
     # other two wants are not. #666.
     if pose and _wants_milestone(declared):
         world.milestones = 1
+    # **A disease needs a stage before anything arms it.** `cls="disease"`
+    # rows are run by `turns.arm_afflictions`, off
+    # `Afflictions.contracted`, which `Encounter.start()` below reaches --
+    # so a board with no stage recorded arms nothing and every disease row
+    # reports UNUSED for the harness's reason rather than its own.
+    #
+    # **The stage walks with the seed**, so the 48 attempts cover every
+    # printed stage rather than asking about one. `disease.stages` counts
+    # the stage-0 *"the target recovers"* paragraph, so the top printed
+    # stage is one below it -- the same off-by-one
+    # `story.affliction.tick` carried.
+    #
+    # Posing only the **worst** stage was the first version and it is
+    # wrong in a way worth recording: a row whose top stage is the one
+    # clause it had to mark `dropped=` reports SILENT while every earlier
+    # stage works. Measured -- `x5_34` and `x5_93` both did, and both are
+    # correct rows. The audit's question is whether the row does anything,
+    # so it has to be asked at a stage the row writes.
+    #
+    # Hoisted here for the same reason the milestone above is: it is state
+    # the row reads at arming, and set afterwards it is state the row
+    # never saw.
+    if diseased:
+        from combat_engine.engine.components import Afflictions
+
+        caught = (world.get(caster, Afflictions)
+                  or world.add(caster, Afflictions()))
+        caught.contracted[ref] = 1 + (seed % _worst_stage(ref))
     world.setup_effects = set(world.effects.live)
     Encounter(world).start()
     # And again once every trait on the board is armed. Two snapshots,

@@ -60948,6 +60948,54 @@ def a_disease_moves_at_an_extended_rest(out: Result) -> None:
         "`afflictions` is a state and not a history",
     )
 
+    # -- and it cannot WORSEN past the last stage either -------------------
+    # The mirror of the assertion above, and it was missing while the code
+    # was wrong. `disease.stages` is a **count** of printed paragraphs and
+    # every page prints a stage 0, so a disease printing 0-3 stores 4 --
+    # measured, all 69 rows, no exceptions. `tick` capped at the count, so
+    # a character at the worst printed stage could be pushed to a stage
+    # with **no paragraph**, where `arm_afflictions` runs the row and every
+    # branch declines: the disease silently stops doing anything at its
+    # worst point, and the line read "stage 4 of 4".
+    #
+    # Only findable once a row existed to decline, which is `#948` step 3.
+    import re as _re2
+
+    from combat_engine.story import Party as _Party
+
+    known = af.printed()
+    deep = next((p for p in known.values() if p.stages >= 3), None)
+    # **The bound comes off the printed card, not off `af.worst`.** Reading
+    # the function under test makes the expectation move with the plant:
+    # the first version compared against `af.worst(deep)` and breaking that
+    # to return the raw count left the assertion green, because the stage it
+    # posed rose with the cap it checked. Counting `Stage N:` paragraphs in
+    # the spec is an independent answer the plant cannot reach.
+    printed_top = 0
+    if deep is not None:
+        row = game().execute(
+            "SELECT spec FROM disease WHERE ref = ?", (deep.ref,)
+        ).fetchone()
+        printed_top = max(
+            (int(n) for n in _re2.findall(r"Stage (\d+)\s*:", row[0] or "")),
+            default=0,
+        )
+    seen: set[int] = set()
+    if deep is not None and printed_top:
+        for seed in range(40):
+            probe = _Party.of(level=max(1, deep.level), seed=7)
+            probe.sheets[0].afflictions[deep.ref] = printed_top
+            af.tick(probe, seed)
+            seen.add(probe.sheets[0].afflictions.get(deep.ref, 0))
+    out.that(deep is not None and bool(seen) and max(seen) <= printed_top,
+             "**a worsening check cannot push past the worst PRINTED"
+             " stage**, which is `stages - 1` and not `stages` -- the"
+             " column counts the stage-0 *recovers* paragraph. Over 40"
+             " seeds from the worst stage, nothing reaches a stage the"
+             " page does not print",
+             f"{deep.ref if deep else '-'}: stages={deep.stages if deep else 0}"
+             f" top printed={printed_top} reached={sorted(seen)}")
+
     # -- ONE roll per disease, which the forced DCs above cannot see -------
     # Worth its own assertion and worth saying why. With an improve DC
     # nothing can miss, two `check` calls agree, so every assertion above

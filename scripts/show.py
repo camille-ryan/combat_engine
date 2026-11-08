@@ -268,8 +268,13 @@ def _board(
         themed = bool(re.fullmatch(r"x\d+_\d+", declared.cls or "")) \
             or declared.cls == "wild talent"
         skilled = (declared.cls or "").lower() in SKILLS
+        # **And a disease is the fifth.** `cls="disease"` is `#948`'s
+        # package design and `CLASSES` has no such entry, so every disease
+        # row raised here exactly as it did in `audit.board`. Three
+        # authoring agents reported it independently.
+        diseased = (declared.cls or "").lower() == "disease"
         cls = (not carried and not racial and not themed and not skilled
-               and declared.cls) or (
+               and not diseased and declared.cls) or (
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
         )
         # And the build whose gear can hold the row, the way `audit.py`
@@ -288,6 +293,25 @@ def _board(
             ),
             (4, 6),
         )
+        # **A disease needs a stage, or there is nothing to show.** The row
+        # is run by `turns.arm_afflictions` off `Afflictions.contracted`,
+        # so without one this prints the card and then an empty "what it
+        # did". The worst printed stage, because this script is read by a
+        # person asking what the row does and that is the fullest answer;
+        # `audit.board` walks every stage instead, because it is asking a
+        # different question. `disease.stages` counts the stage-0
+        # paragraph, so the top is one below it. #948.
+        if diseased:
+            from combat_engine.db import game
+            from combat_engine.engine.components import Afflictions
+
+            row = game().execute(
+                "SELECT stages FROM disease WHERE ref = ?", (ref,)
+            ).fetchone()
+            caught = (world.get(caster, Afflictions)
+                      or world.add(caster, Afflictions()))
+            caught.contracted[ref] = max(
+                1, int(row[0]) - 1) if row and row[0] else 1
         foe_team = Team.ENEMY
 
     # Targets in a line just past the caster, so a melee power reaches the
