@@ -911,7 +911,7 @@ def _against_suffocation(ctx: dict[str, Any]) -> bool:
 
 
 @power("i3478p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF)
 def i3478p1(c: Cast) -> None:
     """A +5 to Endurance against suffocation, which something rolls now.
 
@@ -922,9 +922,12 @@ def i3478p1(c: Cast) -> None:
     against. The row was declared inert on a premise that expired and
     carried no marker, so nothing could report it.
 
-    `out_of_combat` stays: a minor action whose whole payout is a bonus to
-    a check the AI cannot plan for does not belong in the action menu. What
-    changed is that it lays the bonus it prints.
+    **`out_of_combat` had to go**, and `audit.py` is what said so: the
+    flag means the row is **inert on a board** and the audit checks it,
+    reporting *"N declared out of combat, N of them silent on a board as
+    claimed"*. A row laying a standing bonus is not silent. Whether the AI
+    should ever spend a minor action on it is a *policy* question --
+    `expect.expected` prices it at 0 damage -- not a declaration one.
 
     `kind="item"`, because the card says *"item bonus"* -- and that is
     load-bearing rather than bookkeeping: two item bonuses do not stack, so

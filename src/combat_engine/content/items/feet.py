@@ -1122,7 +1122,7 @@ def _to_swim(ctx: dict[str, Any]) -> bool:
 
 
 @power("i761p1", level=10, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF)
 def i761p1(c: Cast) -> None:
     """A +5 to swimming, which something rolls now.
 
@@ -1134,10 +1134,15 @@ def i761p1(c: Cast) -> None:
     and so could never be reported: `out_of_combat=True` tells `audit.py`
     to stop expecting anything of it.
 
-    `out_of_combat` stays, and that is not a contradiction: a swim check is
-    not a thing a fight rolls, so the row is still correctly absent from
-    the action menu. What changed is that it now lays the bonus it prints
-    instead of nothing at all.
+    **`out_of_combat` had to go, and the audit is what said so.** I kept
+    it on the ground that a swim check is not a thing a fight rolls -- but
+    the flag's contract is narrower than that: it means the row is **inert
+    on a board**, and `audit.py` checks exactly that, reporting *"N
+    declared out of combat, N of them silent on a board as claimed"*. A row
+    laying a standing bonus is not silent, so with the flag it read as
+    declared-inert-and-not, which is a mismatch and not a nuance. Keeping
+    the row off the action menu is a *policy* question -- `expect.expected`
+    prices it at 0 damage -- and not a declaration one.
 
     `kind="power"`, because the card says *"power bonus"*.
     """
