@@ -37,9 +37,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import fight
 from combat_engine.engine import Ident
 from combat_engine.engine.query import alive, creatures
-from combat_engine.policy import install, take_turn
+from combat_engine.policy import WEIGHTS, install, take_turn
 from combat_engine.policy import threat as T
 from combat_engine.policy.doctrine import DOCTRINE, DoctrinePolicy, forget
+
+#: Every weight the policy holds, both tables.
+#:
+#: **This report covered `DOCTRINE` alone -- 20 of 58 -- and was built to
+#: catch "a weight nothing consults".** `policy.WEIGHTS` holds the other 38,
+#: including every `is_<kind>` term, so the one instrument that answers
+#: *"does this weight ever fire"* was blind to the table `#1065` is about:
+#: that issue records *"whether the three newly-priced kinds are ever
+#: actually chosen"* as unmeasured, and it was unmeasurable here.
+#:
+#: Reported as two tables rather than one dict, because the names do not
+#: collide and the two are scored on different branches -- collapsing them
+#: would make a term's provenance unreadable.
+EVERY_WEIGHT: dict[str, float] = {**WEIGHTS, **DOCTRINE}
 
 
 class Watched(DoctrinePolicy):
@@ -65,15 +79,20 @@ class Watched(DoctrinePolicy):
         d = self.weighed(world, encounter, actor, action)
         self.scored += 1
         for k, v in d.items():
-            if v and k in DOCTRINE:
+            if v and k in EVERY_WEIGHT:
                 self.offered[k] += 1
         return super().score(world, encounter, actor, action)
 
     def act(self, world, encounter, actor, options):  # noqa: ANN001, ANN201
         picked = super().act(world, encounter, actor, options)
         self.chosen += 1
-        for k, v in self.explain(world, encounter, actor, picked).items():
-            if v:
+        # **`weighed`, not `explain`.** `policy/CLAUDE.md`: *"Read
+        # `weighed()` when you want everything; `explain()` only promises
+        # the doctrine half, and says so."* With both tables reported, an
+        # `explain` here would leave every `WEIGHTS` term showing `offered`
+        # without ever showing `decided`.
+        for k, v in self.weighed(world, encounter, actor, picked).items():
+            if v and k in EVERY_WEIGHT:
                 self.decided[k].append(v)
         return picked
 
@@ -218,20 +237,52 @@ def main() -> int:
           f"{policy.scored} actions scored, {policy.chosen} chosen\n")
     print(f"{'term':<18} {'weight':>7} {'offered':>8} {'decided':>8} "
           f"{'mean':>8} {'total':>9}")
-    for term, weight in sorted(DOCTRINE.items(),
+    for term, weight in sorted(EVERY_WEIGHT.items(),
                                key=lambda kv: -abs(kv[1])):
         took = policy.decided.get(term, [])
         mean = statistics.fmean(took) if took else 0.0
-        flag = "" if policy.offered.get(term) else "   <-- never fired"
+        if policy.offered.get(term):
+            flag = ""
+        elif weight == 0.0:
+            flag = "   <-- declared zero"
+        else:
+            flag = "   <-- never fired"
         print(f"{term:<18} {weight:>7.1f} {policy.offered.get(term, 0):>8} "
               f"{len(took):>8} {mean:>8.2f} {sum(took):>9.1f}{flag}")
-    dead = [t for t in DOCTRINE if not policy.offered.get(t)]
+    # **A declared zero is not the bug this instrument exists for**, and
+    # conflating the two is the third time this report has had to tell two
+    # cases apart -- `#292` is the second, recorded in `score` above.
+    #
+    # The alarm is about *a weight nothing consults*: a non-zero number in
+    # the table that multiplies something nobody computes, which is this
+    # component's own commonest bug. A term whose weight is **exactly 0.0**
+    # multiplies nothing by construction, so "it never fired" carries no
+    # information about it -- and `policy/CLAUDE.md` already has the word
+    # for these, *"declared zeros"*, of which it counts 8 across the two
+    # tables.
+    #
+    # `party_enabled` is the worked case and is why this changed.  Its own
+    # comment says it was *"folded into `hp_swing` via `T.enabled`"*, so it
+    # is a record of a completed migration; nothing writes
+    # `f["party_enabled"]` anywhere in the tree. Every run printed it as
+    # the bug, and an alarm that fires on correct code every time is one
+    # that gets read past. #1065.
+    zeros = [t for t, w in EVERY_WEIGHT.items()
+             if w == 0.0 and not policy.offered.get(t)]
+    dead = [t for t, w in EVERY_WEIGHT.items()
+            if w != 0.0 and not policy.offered.get(t)]
+    if zeros:
+        print(f"\n{len(zeros)} declared zero(s) never offered, which is not a"
+              f" fault -- a 0.0 weight multiplies nothing: {', '.join(zeros)}")
     if dead:
-        print(f"\n{len(dead)} of {len(DOCTRINE)} terms never fired: "
+        print(f"\n{len(dead)} of {len(EVERY_WEIGHT)} WEIGHTED terms never"
+              f" fired: "
               f"{', '.join(dead)}")
         print("A weight nothing consults is the bug this instrument exists for.")
     else:
-        print(f"\nAll {len(DOCTRINE)} terms fired at least once.")
+        print(f"\nEvery weighted term fired at least once"
+              f" ({len(EVERY_WEIGHT)} terms across both tables,"
+              f" {len(zeros)} declared zero(s)).")
     return 0
 
 
