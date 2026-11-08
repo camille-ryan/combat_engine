@@ -57903,12 +57903,26 @@ def armour_prereq(out: Result) -> None:
         n = len(set(_legal(cls, 5, leg, race="", taken=())) & gated)
         pairs += n
         classes += 1 if n else 0
-    out.that(pairs == 51 and classes == 18,
-             "**51 (class, feat) pairs are legal across 18 of 26 classes,"
-             " where every one was 0 before** -- the assertion that this"
-             " is a gate answering rather than a column being written. A"
-             " count of atoms says the parse changed; this says `meets`"
-             " changed its mind",
+    # **51 -> 92 and 18 -> 20, and the move is attributed exactly.**
+    # `#568`'s content half un-marked seven rows whose benefit is an armour
+    # proficiency -- `f3595`-`f3601`, each now declaring `proficiency=` and
+    # `out_of_combat=True`. They are themselves armour-gated, so becoming
+    # legal puts them in this very set:
+    #
+    #     the seven              41 pairs
+    #     everything else        51 pairs  <- unchanged
+    #
+    # So the pre-existing 51 did not move at all, which is what says this
+    # is seven rows arriving rather than the gate changing its mind about
+    # anything it already answered. **A row got better**, which is the one
+    # reason to move a pinned census.
+    out.that(pairs == 92 and classes == 20,
+             "**92 (class, feat) pairs are legal across 20 of 26 classes,"
+             " where every one was 0 before `045878ee`** -- the assertion"
+             " that this is a gate answering rather than a column being"
+             " written. A count of atoms says the parse changed; this says"
+             " `meets` changed its mind. 41 of the 92 are the seven rows"
+             " #568 un-marked; the other 51 are unmoved",
              f"{pairs} pairs, {classes} classes")
 
 
