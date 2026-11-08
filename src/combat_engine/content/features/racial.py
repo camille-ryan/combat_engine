@@ -1437,7 +1437,7 @@ def _resisting_deprivation(ctx: dict[str, Any]) -> bool:
 
 @power("rt:r60-t4", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       dropped=("story.deprivation_grace()",))
+       grace_doubled=_DEPRIVED)
 def rt_r60_t4(c: Cast) -> None:
     """The +5 against going without, which was declared inert and is not.
 
@@ -1459,12 +1459,17 @@ def rt_r60_t4(c: Cast) -> None:
 
     `kind="racial"`, because the card says *"racial bonus"*.
 
-    **`dropped=`, for the middle clause.** *"You can survive for twice the
-    normal time period before you are required to make such checks"* has
-    nowhere to land: `Campaign.without[cause]` is hours on the **campaign**
-    rather than per sheet, so there is no per-character clock to double.
-    That is `#1140`, and the row plays without it -- the checks fall due on
-    the shared clock and this character is merely better at them.
+    **And the middle clause is declared, not dropped.** *"You can survive
+    for twice the normal time period before you are required to make such
+    checks"* reads as wanting a per-character **clock**, and `#971`'s is
+    shared on the campaign for a stated reason. It does not need one: the
+    card is about when **you** must check, and `run.deprive` computes how
+    many checks fell due **once, outside its per-slot loop**. So only the
+    *grace* is per character, and `grace_doubled=` says which causes --
+    the shared clock and the shared DC ladder are untouched.
+
+    The same three purposes as the bonus, so one tuple serves both and they
+    cannot drift apart.
 
     The no-sleep and meditation clauses are narrative: an extended rest's
     benefit by another route, with no combat or campaign number in it.

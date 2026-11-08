@@ -2669,6 +2669,25 @@ PURPOSE_OF = {
 }
 
 
+def _grace_doubled_for(sheet: Any) -> frozenset[str]:
+    """The deprivation purposes this sheet's character survives twice of.
+
+    A thin wrapper so the loop below reads as one question, and so the
+    `chargen` import stays function-local the way every other one in this
+    module is. Empty for every character but the one race that prints it,
+    which is what keeps the arithmetic unchanged by default. `#1140`.
+    """
+    from combat_engine.chargen import grace_doubled
+
+    try:
+        return grace_doubled(sheet.character)
+    except Exception:
+        # A sheet whose character cannot be rebuilt is not a character with
+        # a doubled grace -- the honest direction, and the same one
+        # `chargen.proficiency` takes for a ref it cannot resolve.
+        return frozenset()
+
+
 def _checks_due(hours: int, grace_days: int) -> int:
     """How many deprivation checks have fallen due after `hours` of it.
 
@@ -2776,6 +2795,31 @@ def deprive(campaign: Campaign, module: Module, scene: Scene,
                 target = DEPRIVATION_DC + DEPRIVATION_STEP * nth
                 ladder.setdefault(cause, []).append(target)
                 for slot in range(len(campaign.party.sheets)):
+                    # **A character may survive twice as long, and that is
+                    # the GRACE and not the clock.** `#1140`. The card is
+                    # *"you can survive for twice the normal time period
+                    # before **you** are required to make such checks"* --
+                    # a statement about when this character must check, not
+                    # about the party's clock, which `#971` keeps shared
+                    # for a reason its own field records: the party goes
+                    # thirsty together and started at the same moment.
+                    #
+                    # So `campaign.without`, the DC ladder and `before`/
+                    # `after_` above are all untouched. What differs per
+                    # character is how many of those checks have fallen due
+                    # *for them*, which is `_checks_due` asked again with a
+                    # doubled grace. A character the clock has not caught
+                    # up with yet simply does not roll.
+                    #
+                    # Declared by the row, read by `chargen`, so `story/`
+                    # never names a trait ref -- the layering `#1140`'s own
+                    # note argued for.
+                    mine = grace
+                    sheet = campaign.party.sheets[slot]
+                    if PURPOSE_OF[cause] in _grace_doubled_for(sheet):
+                        mine = grace * 2
+                        if _checks_due(now, mine) <= nth:
+                            continue
                     rolled += 1
                     # **The purpose is the page's word, not the field's.**
                     # A row prints *"to resist the effects of starvation,

@@ -633,6 +633,51 @@ def armour_opened(feats: list[str]) -> tuple[frozenset[str], int]:
     return frozenset(words), shield
 
 
+def grace_doubled(who: Character) -> frozenset[str]:
+    """The deprivation purposes this character survives twice as long of.
+
+    **Read off the rows' own `grace_doubled=` headers**, the way
+    `armour_opened` one function up reads `proficiency=` -- a build-time
+    sentence with no moment in a fight to happen in, and the campaign's
+    clock asks about it hours later.
+
+    Takes a `Character` rather than a ref list, because the rows that carry
+    this are **racial traits**: a character's feats are a list it holds and
+    its traits come from its race, so the caller cannot hand them over
+    without knowing how to enumerate them. `_racial_trait_refs` is that,
+    and it is the same question `spawn` already answers when it arms them.
+
+    Empty for every character but the one race that prints it, so the
+    caller's arithmetic is unchanged by default -- which is what keeps
+    `#971`'s shared clock and shared DC ladder exactly as they were. #1140.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+
+    out: set[str] = set()
+    for ref in _racial_trait_refs(who.race):
+        declared = REGISTRY.get(ref)
+        out |= {str(w).strip().lower()
+                for w in (getattr(declared, "grace_doubled", ()) or ())}
+    return frozenset(out)
+
+
+@cache
+def _racial_trait_refs(race: str) -> tuple[str, ...]:
+    """Every declared racial-trait ref a race carries.
+
+    Off the registry rather than the database, for `_declared_chassis`'s
+    reason: a row the tree has not written cannot carry a header, so the
+    database's wider list would only add refs with nothing to read.
+    """
+    if not race:
+        return ()
+    import combat_engine.content
+    from combat_engine.engine.dsl import REGISTRY
+
+    want = f"rt:{race}-"
+    return tuple(sorted(r for r in REGISTRY if r.startswith(want)))
+
+
 def _heaviest(printed: str) -> str:
     """The best armour the class is trained in, which is what it wears."""
     for kind in ("plate", "scale", "chain", "hide", "leather", "cloth"):

@@ -1620,6 +1620,27 @@ class Power:
     #: made, and one ref stands for a whole printed group the way
     #: `chargen._arms` deals one weapon per proficiency line.
     proficiency: tuple[str, ...] = ()
+    #: The deprivation causes this row lets a character survive **twice**
+    #: as long before the first check falls due, by the page's own word --
+    #: `("starvation", "thirst", "suffocation")`. **Build-time data, never
+    #: run**, exactly like `proficiency=` above: "you can survive for twice
+    #: the normal time period" has no moment in a fight to happen in, and
+    #: the campaign's clock asks about it hours later.
+    #:
+    #: **The purposes, not the module's cause words.** A page prints
+    #: *"starvation, thirst, or suffocation"*; a module declares `food` and
+    #: `water`, and `run.PURPOSE_OF` maps between them. Naming the printed
+    #: words keeps the row saying what its card says, which is the same
+    #: call the `+5` half of that card's trait already made.
+    #:
+    #: **One row uses it today and that is measured, not assumed**: a
+    #: corpus-wide search for a doubled or extended deprivation period
+    #: finds exactly one printed card. The field exists anyway because the
+    #: alternative is `story/run.py` knowing a particular trait's ref,
+    #: which inverts the layering -- content declares its own properties
+    #: and the campaign reads them, the way `chargen.armour_opened` reads
+    #: `proficiency=`. #1140.
+    grace_doubled: tuple[str, ...] = ()
     #: What taking this row costs, for a feat printed "you can swap one of
     #: your 3rd-level or higher encounter attack powers for this one". The
     #: card is handed over by the body; this is the half that goes back,
@@ -2001,6 +2022,7 @@ def power(
     wants: str = "",
     implemented_in: Iterable[str] = (),
     proficiency: Iterable[str] = (),
+    grace_doubled: Iterable[str] = (),
     swap: Swap | None = None,
     augments: Iterable[Augment] = (),
 ) -> Callable[[Body], Body]:
@@ -2214,6 +2236,7 @@ def power(
             wants=wants,
             implemented_in=implemented_in,
             proficiency=tuple(proficiency),
+            grace_doubled=tuple(grace_doubled),
             swap=swap,
             augments=tuple(augments),
         )

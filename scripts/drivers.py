@@ -58919,6 +58919,54 @@ def the_rule_of_three_charges_a_surge_a_day(out: Result) -> None:
              " not the check",
              f"{[endurance('r1', p) - other_base for p in (*DEPRIVED, OTHER)]}")
 
+    # -- and it can survive twice as long before checking at all ---------
+    #
+    # `#1140`'s half. The card reads as wanting a per-character **clock**
+    # and does not need one: it says *"before **you** are required to make
+    # such checks"*, and `_checks_due` is computed once outside the
+    # per-slot loop, so only the **grace** differs. `campaign.without`, the
+    # DC ladder and the party's shared start are untouched -- which is what
+    # keeps `#971`'s own stated reason for a shared clock true.
+    #
+    # **Asserted on the surges actually withheld**, not on a note. The
+    # notes are the row's own announcement and a row that announced
+    # correctly while charging nothing would pass a note test; `withheld`
+    # is what the party really paid.
+    from dataclasses import replace as _replace3
+
+    out.that(_r._checks_due(24 * 5, 3) == 3
+             and _r._checks_due(24 * 5, 6) == 0,
+             "five days thirsty is three checks on the printed three-day"
+             " grace and **none** on a doubled one -- the arithmetic the"
+             " trait turns on, asserted before any board",
+             f"{_r._checks_due(24 * 5, 3)} vs {_r._checks_due(24 * 5, 6)}")
+
+    def thirsty(race: str) -> list[dict]:
+        """Five days without water, for a party all of one race."""
+        built = _m.parse(
+            {"id": "probe", "party_level": 2, "party_size": 4,
+             "start": "s0", "quests": [], "scenes": [
+                 {"id": "s0", "kind": "roleplay", "name": "March",
+                  "exits": [], "hours": 24 * 5, "without": ["water"]}]},
+            _Path2("<driver>"))
+        campaign = _r.begin(built, seed=5)
+        campaign.party.sheets = [_replace3(sh, race=race)
+                                 for sh in campaign.party.sheets]
+        _r.step(campaign, built)
+        return [dict(sh.withheld) for sh in campaign.party.sheets]
+
+    spared, charged = thirsty("r60"), thirsty("r1")
+    out.that(all(not w for w in spared),
+             "a party of the race that prints the doubled grace is charged"
+             " **nothing** after five days without water -- no check has"
+             " fallen due for them, because their grace is six days",
+             f"{spared}")
+    out.that(all(w.get("water") for w in charged),
+             "while a party without it is charged on every sheet -- the"
+             " control, and the thing that says the line above is the trait"
+             " and not a scene that never ran",
+             f"{charged}")
+
 
 def hours_in_the_cold_cost_the_party_healing_surges(out: Result) -> None:
     """A healing surge could only ever be lost to a fight, and the printed
