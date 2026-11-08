@@ -42314,6 +42314,7 @@ def a_party_keeps_its_training_between_fights(out: Result) -> None:
     # claim really is: the board no longer deals its own, which is exactly
     # "`deal_background` is not called while fielding".
     from dataclasses import replace as _replace
+    from random import Random as _Random
 
     from combat_engine import chargen as _cg
 
@@ -42326,15 +42327,25 @@ def a_party_keeps_its_training_between_fights(out: Result) -> None:
     def dealt_while_spawning(sheets: list[_Sheet]) -> int:
         seen: list[str] = []
         real = _cg.deal_background
-        _cg.deal_background = lambda rng: (
-            seen.append(real(rng)) or seen[-1])
+
+        def recorder(rng: _Random) -> str:
+            got = real(rng)
+            seen.append(got)
+            return got
+
+        # **`setattr` with the name in a variable**, which this file already
+        # records as the one spelling all three gates accept -- `ty` reads a
+        # direct `module.fn = other` as an invalid assignment, and a lambda
+        # here tripped exactly that on the wide run.
+        name = "deal_background"
+        setattr(_cg, name, recorder)
         try:
             for seed in SEEDS:
                 world = World(Grid(20, 12), Rng(seed), Bus())
                 for i, sheet in enumerate(sheets):
                     spawn(world, sheet.character, (2, 2 + i * 2))
         finally:
-            _cg.deal_background = real
+            setattr(_cg, name, real)
         return len(seen)
 
     out.that(dealt_while_spawning(list(party.sheets)) == 0,
