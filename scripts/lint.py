@@ -3473,8 +3473,23 @@ def _attack_result_fields() -> frozenset[str]:
 # announces. If that ever stops being true, the check is right again.
 
 
-def _rows(tree: ast.Module) -> list[tuple[int, int, str, ast.AST]]:
-    """Every `@power("ref", ...)` function, with the lines it spans."""
+def _rows(
+    tree: ast.Module,
+) -> list[tuple[int, int, str, ast.FunctionDef | ast.AsyncFunctionDef]]:
+    """Every `@power("ref", ...)` function, with the lines it spans.
+
+    **The return type names the node it really yields**, which it did not:
+    it said `ast.AST`, and the loop below only ever appends a node it has
+    already `isinstance`-checked as a function. Every caller then reads
+    `.body` or `.decorator_list` off it, and `ty` reported each of those as
+    an `unresolved-attribute` on `AST` -- four diagnostics carried in the
+    baseline for a type that was simply understated. `#1140`'s own check
+    added two more and that is what surfaced it.
+
+    Narrowing the annotation removes them at the source rather than
+    blessing them, which is the direction `types.py`'s baseline is built
+    for: it may shrink and must not grow.
+    """
     out = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
