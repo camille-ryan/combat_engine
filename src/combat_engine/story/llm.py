@@ -287,6 +287,131 @@ def _anthropic(role: Role, messages: list[dict], schema: dict | None) -> str:
     return next((b.text for b in got.content if b.type == "text"), "")
 
 
+#: The two phases a streamed reply arrives in, in order. ollama's own
+#: field names, deliberately: `thinking` is what the API calls the chain
+#: of thought and `content` is what it calls the answer, so a reader of
+#: this module and a reader of ollama's docs see one vocabulary.
+#:
+#: **Not added to `run.KINDS`**, and that is the whole reason this is a
+#: callback rather than a `Line`. `run.Line.__new__` silently relabels an
+#: unknown kind `"scene"` -- it did that to 18 lines once and cost four
+#: rounds of diagnosis aimed at the wrong half -- so a phase is reported
+#: *beside* the transcript and never into it.
+PHASES = ("thinking", "content")
+
+
+def stream(role: Role, messages: list[dict],
+           on: Callable[[str, str], None] | None = None) -> str:
+    """One turn, streamed, reporting which phase each chunk belongs to. #931.
+
+    Camille, playing: *"When we do the UI there should be a 'thinking...'
+    displayed while reasoning is happening."* It can be **the model's
+    actual phase rather than a spinner on a timer**: ollama keeps the chain
+    of thought in a separate `thinking` field and emits those chunks
+    **before** any `content`, so `on("thinking", chunk)` fires for exactly
+    as long as the model is thinking and `on("content", chunk)` the moment
+    the first answer token lands.
+
+    Returns the finished answer, so a caller that wants no phase reporting
+    gets `chat`'s behaviour with `on=None`.
+
+    **On a model with no reasoning phase the callback simply never fires
+    with `"thinking"`**, which is the right behaviour and comes free from
+    reading the field rather than timing anything. The local 7B has none;
+    the 14B on the desktop has a long one.
+
+    **`schema` is deliberately not a parameter.** Every other call in a
+    beat returns a JSON enum, and a partial object is worth nothing -- so
+    `structured` keeps the non-streaming path and only `Director.react`
+    reaches this. `#931` says so in as many words.
+
+    **The prompt is passed through untouched**, which is not a nicety:
+    `story/CLAUDE.md` records a reflow of identical words flipping this
+    model 5 times out of 5, so a streaming variant that rebuilt or
+    re-wrapped `messages` would be a different prompt wearing the same
+    text. Nothing here reads inside them.
+
+    The non-streaming `chat` stays for `check.py`, which must never depend
+    on a server.
+    """
+    if not role.local:
+        # The Anthropic path has its own streaming shape and `dm.py` is
+        # unexercised live (#794), so this would be an untested branch
+        # claiming a capability. Fall back rather than pretend.
+        return chat(role, messages)
+    options: dict[str, Any] = {
+        "num_ctx": role.num_ctx,
+        "temperature": role.temperature,
+        "num_predict": role.max_tokens,
+    }
+    if role.seed is not None:
+        options["seed"] = role.seed
+    request = urllib.request.Request(
+        f"{role.base_url.rstrip('/')}/api/chat",
+        data=json.dumps({
+            "model": role.model,
+            "stream": True,
+            "options": options,
+            "messages": messages,
+        }).encode(),
+        headers={"content-type": "application/json"},
+    )
+    said: list[str] = []
+    thought: list[str] = []
+    try:
+        with urllib.request.urlopen(request, timeout=role.timeout) as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    frame = json.loads(line)
+                except ValueError:
+                    # A partial frame is not an error worth raising on: the
+                    # stream is newline-delimited JSON and a short read can
+                    # split one. Skipping loses a chunk of text, where
+                    # raising loses the whole reply.
+                    continue
+                chunk = frame.get("message") or {}
+                for phase in PHASES:
+                    piece = str(chunk.get(phase) or "")
+                    if not piece:
+                        continue
+                    (thought if phase == "thinking" else said).append(piece)
+                    if on is not None:
+                        on(phase, piece)
+                if frame.get("done"):
+                    break
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")[:300]
+        raise NoModel(
+            f"{role.base_url} refused the request ({exc.code}): {detail}\n"
+            f"Is {role.model!r} pulled? `ollama pull {role.model}`"
+        ) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise NoModel(
+            f"nothing answered at {role.base_url}: {exc}\n"
+            "Start it with `ollama serve`, or play with --no-llm, which needs "
+            "no model at all."
+        ) from exc
+    text = "".join(said)
+    # **The same refusal `_ollama` makes, and it has to be here too.** A
+    # reasoning model spends `num_predict` on thinking first, so an empty
+    # answer beside a long chain is a budget fault and not a model with
+    # nothing to say -- and `beat.py` would quietly print "The moment
+    # passes." Two copies of one message would drift, so this names the
+    # same cause in the same words as `_ollama`'s.
+    if not text.strip() and thought:
+        raise NoModel(
+            f"{role.model} spent its whole {role.max_tokens}-token budget "
+            f"thinking and left no answer "
+            f"({len(''.join(thought))} characters of it).\n"
+            f"A reasoning model needs `max_tokens` to cover thinking as "
+            f"well: set it in saves/<campaign>.roles.json."
+        )
+    return text
+
+
 def chat(role: Role, messages: list[dict], schema: dict | None = None) -> str:
     """One turn, against whichever backend the role names."""
     return (_ollama if role.local else _anthropic)(role, messages, schema)

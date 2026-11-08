@@ -45169,6 +45169,154 @@ def a_garbled_module_is_refused_with_every_problem_at_once(out: Result) -> None:
     )
 
 
+def the_dm_reports_which_phase_it_is_in(out: Result) -> None:
+    """The DM can say it is thinking, so a UI shows a phase and not a timer.
+
+    Camille, playing: *"When we do the UI there should be a 'thinking...'
+    displayed while reasoning is happening."* #931. It is the model's
+    **actual** phase: ollama keeps the chain of thought in a separate
+    `thinking` field and emits those chunks **before** any `content`, so
+    the indicator lasts exactly as long as the thinking does.
+
+    **Structural first, live second, and the live half SKIPS.** The phase
+    half needs a *reasoning* model, which the default roles are not -- the
+    local 7B has no thinking phase at all. `scripts/CLAUDE.md` is explicit
+    that a check needing a network reports a skip and counts it, which is
+    `affordance_match`'s pattern and the reason this does not go red when
+    the desktop is off.
+    """
+    from combat_engine.story import beat as bt
+    from combat_engine.story import llm
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    # -- the trap this design exists to avoid, asserted ------------------
+    # `run.Line.__new__` silently relabels an unknown kind `"scene"`. It
+    # did that to 18 lines once and cost four rounds of diagnosis aimed at
+    # the resolver, so a phase is reported through a **callback** and never
+    # as a `Line`. If somebody later adds one, this goes red and tells them
+    # which half to change.
+    out.that(llm.PHASES == ("thinking", "content"),
+             "the two phases are ollama's own field names, in the order it"
+             " emits them -- one vocabulary for a reader of this module and"
+             " a reader of ollama's docs",
+             f"PHASES={llm.PHASES}")
+    out.that(not (set(llm.PHASES) & set(run_mod.KINDS)),
+             "and neither is a `run.KINDS` entry, because a phase is"
+             " reported beside the transcript rather than into it --"
+             " `Line.__new__` silently relabels an unknown kind `scene`",
+             f"overlap: {sorted(set(llm.PHASES) & set(run_mod.KINDS))}")
+    out.that(bt.Director().phases is None,
+             "a Director reports no phase unless somebody asks, so the"
+             " offline path `check.py` runs is untouched",
+             f"default phases={bt.Director().phases!r}")
+
+    # -- one prompt, two transports -------------------------------------
+    # The messages are built once and handed to whichever path is wanted.
+    # `story/CLAUDE.md` records a reflow of identical words flipping this
+    # model 5 of 5, so a streaming branch assembling its own copy would be
+    # a different prompt wearing the same text. Caught on the wire.
+    raw = {
+        "id": "probe", "party_level": 2, "party_size": 3, "start": "talk",
+        "scenes": [{
+            "id": "talk", "kind": "roleplay", "name": "Talk",
+            "brief": "A friar offers the party a job over dinner.",
+            "sets": "The friar pours wine and does not meet your eye.",
+            "exits": [],
+            "npcs": [{"name": "the friar", "wants": "the job taken",
+                      "voice": "warm, never hurried",
+                      "knows": ["he will pay"]}],
+        }],
+    }
+    scene = mod.parse(raw, Path("<driver>")).scene("talk")
+    asked: list[list[dict]] = []
+
+    def tap_chat(role, messages, schema=None):  # noqa: ANN001, ANN202
+        del role, schema
+        asked.append(messages)
+        return "The friar refills his cup."
+
+    def tap_stream(role, messages, on=None):  # noqa: ANN001, ANN202
+        del role
+        asked.append(messages)
+        if on is not None:
+            on("thinking", "...")
+            on("content", "The friar refills his cup.")
+        return "The friar refills his cup."
+
+    was_chat, was_stream = llm.chat, llm.stream
+    heard: list[tuple[str, str]] = []
+    llm.chat = tap_chat        # ty: ignore[invalid-assignment]
+    llm.stream = tap_stream    # ty: ignore[invalid-assignment]
+    try:
+        bt.Director(roles=llm.ROLES).react(bt.Playing(scene=scene), [], [])
+        bt.Director(roles=llm.ROLES,
+                    phases=lambda p, c: heard.append((p, c))).react(
+            bt.Playing(scene=scene), [], [])
+    finally:
+        llm.chat = was_chat      # ty: ignore[invalid-assignment]
+        llm.stream = was_stream  # ty: ignore[invalid-assignment]
+
+    out.that(len(asked) == 2 and asked[0] == asked[1],
+             "the streamed and the unstreamed call are handed the **same**"
+             " prompt, word for word and wrap for wrap -- a reflow of"
+             " identical words flipped this model 5 of 5, so two copies"
+             " would be two prompts",
+             f"{len(asked)} prompt(s) caught; identical:"
+             f" {asked[0] == asked[1] if len(asked) == 2 else 'n/a'}")
+    out.that([p for p, _ in heard] == ["thinking", "content"],
+             "and a Director with a sink is told both phases, in order",
+             f"heard {[p for p, _ in heard]}")
+
+    # -- live, and it skips rather than failing --------------------------
+    reasoning = llm.Role(model="deepseek-r1:14b", temperature=0.6,
+                         max_tokens=1200, timeout=400,
+                         base_url="http://100.106.140.121:11434")
+    why = llm.reachable(reasoning)
+    if why:
+        out.skip(f"no reasoning model to ask: {why.splitlines()[0]}")
+        return
+    order: list[str] = []
+    counts: dict[str, int] = {}
+
+    def note(phase: str, chunk: str) -> None:
+        del chunk
+        counts[phase] = counts.get(phase, 0) + 1
+        if not order or order[-1] != phase:
+            order.append(phase)
+
+    text = llm.stream(reasoning, [
+        {"role": "system", "content": "You are a terse dungeon master."},
+        {"role": "user", "content": "The party opens the door. One sentence."},
+    ], on=note)
+    out.that(order == ["thinking", "content"],
+             "a reasoning model really does emit every thinking chunk"
+             " **before** the first answer token, which is what lets the"
+             " indicator be a phase rather than a timer",
+             f"order {order}, counts {counts}")
+    out.that(bool(text.strip()),
+             "and the answer still comes back whole, so streaming is a"
+             " second report rather than a different result",
+             f"answer {text.strip()[:60]!r}")
+    # The control, and it is the behaviour on every default role: a model
+    # with no reasoning phase must report none, so the indicator never
+    # appears rather than appearing for zero seconds.
+    plain = llm.ROLES["dm"]
+    if llm.reachable(plain):
+        out.skip("no local model for the no-reasoning control")
+        return
+    flat: list[str] = []
+    llm.stream(plain, [
+        {"role": "system", "content": "You are a terse dungeon master."},
+        {"role": "user", "content": "The party opens the door. One sentence."},
+    ], on=lambda p, c: flat.append(p))
+    out.that("thinking" not in flat and "content" in flat,
+             "and a model with no reasoning phase reports none at all --"
+             " the control, since a timer-driven indicator would show one"
+             " for every model",
+             f"phases seen: {sorted(set(flat))}")
+
+
 def a_model_matches_an_intent_to_the_right_affordance(out: Result) -> None:
     """The bet the whole story layer rests on, asked of whatever is serving.
 
@@ -67106,6 +67254,11 @@ DRIVERS = {
     "scene_audience": (
         a_scene_shows_the_player_less_than_it_tells_the_dm,
         "a scene's brief is the DM's and its sets is the player's (#805)",
+    ),
+    "dm_phases": (
+        the_dm_reports_which_phase_it_is_in,
+        "the DM reports whether it is thinking or answering, so a UI shows"
+        " a phase and not a timer; the live half skips (#931)",
     ),
     "affordance_match": (
         a_model_matches_an_intent_to_the_right_affordance,

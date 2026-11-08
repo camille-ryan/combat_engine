@@ -61,6 +61,27 @@ class Story:
     lines: list[dict[str, Any]] = field(default_factory=list)
     #: Out-of-story remarks -- a budget clamp, the god-mode banner.
     notes: list[str] = field(default_factory=list)
+    #: **Which phase the DM is in, as the model itself reports it.** #931.
+    #:
+    #: `"thinking"` while a reasoning model is still reasoning,
+    #: `"content"` from the first answer token, and `""` when nothing is
+    #: being asked of a model. The page shows its indicator off this
+    #: rather than off *"the worker is busy and has not asked anything"*,
+    #: which is what `web/story.js` had to infer.
+    #:
+    #: **A model with no reasoning phase never sets `"thinking"`**, so the
+    #: indicator simply never appears for it -- which is the right
+    #: behaviour and comes free from reading ollama's field rather than
+    #: timing anything. The local 7B has no such phase; the 14B has a long
+    #: one, measured at 298 thinking chunks before the first of 113
+    #: content chunks on one beat.
+    #:
+    #: Not a `lines` entry, deliberately: `run.Line` carries a kind from a
+    #: closed set and an unknown one is **silently relabelled** `"scene"`,
+    #: which once cost four rounds of diagnosis on 18 lines. A phase is
+    #: not a line of the transcript -- it is what is happening to the
+    #: transcript -- so it is a field of its own.
+    phase: str = ""
     #: The party wins every fight and none is played. Off unless the page
     #: asks. `story/CLAUDE.md`: it hands over every fight and **says so,
     #: every time**, which is why the banner is a `note` line and the page
@@ -107,10 +128,25 @@ def start(module_path: str, *, seed: int = 0, god: bool = False) -> Story:
 
 
 def advance(story: Story, *, director: beat_mod.Director | None = None) -> None:
-    """Play the scene the campaign is on. Returns when it parks or ends."""
+    """Play the scene the campaign is on. Returns when it parks or ends.
+
+    **The director is handed a phase sink, when there is a director.**
+    #931. `Director.phases` makes `react` stream, so `story.phase` is the
+    model's own report rather than the page inferring one from the worker
+    being busy.
+
+    Wired here rather than inside `Director` so a caller with no `Story`
+    -- `play.py`, `drivers.py` -- is untouched, and so the sink cannot
+    outlive the request that made it.
+    """
     if story.over or story.gate.busy:
         return
     scene = story.campaign.scene
+    if director is not None:
+        def phase(which: str, chunk: str) -> None:
+            del chunk
+            story.phase = which
+        director.phases = phase
 
     def ask(actor: beat_mod.Actor, situation: str) -> tuple[str, str]:
         said = story.gate.ask_free(actor.slot, "say", situation)
@@ -126,6 +162,10 @@ def advance(story: Story, *, director: beat_mod.Director | None = None) -> None:
             ask_human=ask,
             narrate=lambda line: story.seen(line, scene),
         )
+        # **Cleared when the beat ends**, so the page stops showing a
+        # phase for a model nobody is asking. A flag nothing clears is
+        # the fault `campaign.denied` and the fight aftermath both record.
+        story.phase = ""
         story.notes = list(made.notes)
         story.outcome = made.outcome
         story.over = story.campaign.finished or not made.next_id
@@ -154,6 +194,10 @@ def state(story: Story) -> dict[str, Any]:
         "outcome": story.outcome,
         "over": story.over,
         "god": story.god,
+        # **The DM's own phase**, where `thinking` used to be inferred from
+        # the worker being busy. #931. Empty whenever no model is being
+        # asked, and never `thinking` for a model with no reasoning phase.
+        "phase": story.phase,
         "party": run_mod.party_line(story.campaign),
         # Set when the worker is parked waiting for the person to speak.
         "asking": (

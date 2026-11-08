@@ -914,6 +914,23 @@ class Director:
     #: No model at all. Every answer below is canned and deterministic, which
     #: is what lets `check.py` run the whole loop offline.
     scripted: bool = False
+    #: **Where the DM's phase goes, when anybody is listening.** #931.
+    #:
+    #: `on(phase, chunk)` with `phase` one of `llm.PHASES`. Set it and
+    #: `react` streams, so a UI can show *"thinking…"* for exactly as long
+    #: as the model is thinking rather than for a guessed interval;
+    #: leave it `None` and the non-streaming path runs unchanged, which is
+    #: what `check.py` does and must keep doing -- it may never depend on
+    #: a server.
+    #:
+    #: **On `react` alone, and that is `#931`'s own call.** Every other
+    #: model call in a beat returns a JSON enum through `structured`, and
+    #: a partial object is worth nothing, so streaming them would buy a
+    #: phase nobody can use at the cost of a second parser.
+    #:
+    #: A plain field rather than a subclass, because `scripted` already
+    #: establishes that this class carries its own switches.
+    phases: Callable[[str, str], None] | None = None
 
     # -- declaring ---------------------------------------------------------
 
@@ -1435,13 +1452,19 @@ class Director:
             if facts else
             "NOTHING NEW IS TRUE. Nobody learnt anything; react only."
         )
-        text = llm.chat(
-            self.roles["dm"],
-            [
-                {"role": "system", "content": _DM},
-                {"role": "user", "content": "\n\n".join(told)},
-            ],
-        ).strip()
+        # **One prompt, two transports.** #931. The messages are built
+        # once and handed to whichever path is wanted, because
+        # `story/CLAUDE.md` records a reflow of identical words flipping
+        # this model 5 of 5 -- so a streaming branch that assembled its
+        # own copy would be a different prompt wearing the same text.
+        asked = [
+            {"role": "system", "content": _DM},
+            {"role": "user", "content": "\n\n".join(told)},
+        ]
+        speak = llm.stream if self.phases is not None else llm.chat
+        text = (speak(self.roles["dm"], asked, self.phases)
+                if self.phases is not None
+                else speak(self.roles["dm"], asked)).strip()
         self.spend.note("dm", ok=bool(text))
         return _whole(text) or "The moment passes."
 

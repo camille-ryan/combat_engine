@@ -69,9 +69,19 @@ function draw(st) {
   $("over").hidden = !st.over;
   // "Continue" only when the server is idle and there is more to play.
   $("advance").hidden = asking || st.over;
-  // Thinking: the worker is busy and has not asked anything. Today that is
-  // inferred; #931 is about the model reporting its own phase instead.
-  $("waiting").hidden = asking || st.over;
+  // Thinking: the model's own phase, not an inference. #931. The server
+  // reports "thinking" while a reasoning model is still reasoning and
+  // "content" from the first answer token, so this lasts exactly as long
+  // as the thinking does.
+  //
+  // The fallback is the old inference and is load-bearing rather than
+  // tidy: a model with NO reasoning phase never reports "thinking", and
+  // for it the honest indicator is still "the worker is busy" -- which
+  // is every default role, since the local 7B has no such phase.
+  const thinking = st.phase === "thinking";
+  const busy = !asking && !st.over;
+  $("waiting").hidden = !(st.phase ? thinking : busy);
+  $("waiting").textContent = thinking ? "thinking\u2026" : "working\u2026";
   if (asking) $("speech").focus();
 }
 
