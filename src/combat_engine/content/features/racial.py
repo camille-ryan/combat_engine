@@ -1415,9 +1415,62 @@ def rt_r53_t4(c: Cast) -> None:
 
 # -- r60 ---------------------------------------------------------------
 
-_inert("rt:r60-t4",
-       "Endurance against starvation and thirst, and meditation instead "
-       "of sleep.")
+#: The three purposes this trait's Endurance bonus narrows to, which are
+#: the three the card names. `run.deprive` rolls with `starvation` and
+#: `thirst` (`#971`) and `engine.suffocation` with `suffocation` (`#1115`),
+#: so all three are words a check actually carries -- an ordinary Endurance
+#: check reads `""` and the bonus stands down.
+_DEPRIVED = ("starvation", "thirst", "suffocation")
+
+
+def _resisting_deprivation(ctx: dict[str, Any]) -> bool:
+    """An Endurance check made against going without, and not any other.
+
+    The card is *"to resist the effects of starvation, thirst, or
+    suffocation"*, so a flat bonus to every Endurance check would be a row
+    stronger than its card -- the direction this tree's rules say never to
+    guess in. `i589p1`'s `_holding_breath` is the same narrowing for one of
+    the three purposes.
+    """
+    return ctx.get("purpose") in _DEPRIVED
+
+
+@power("rt:r60-t4", level=0, cls="", usage=AT_WILL,
+       action=ActionType.NONE, reach=PERSONAL, target=SELF,
+       dropped=("story.deprivation_grace()",))
+def rt_r60_t4(c: Cast) -> None:
+    """The +5 against going without, which was declared inert and is not.
+
+    **The `_inert` call this replaces was right when it was written and
+    stopped being right twice.** It said *"Endurance against starvation and
+    thirst, and meditation instead of sleep"* -- and `_inert` is for a trait
+    with **no combat consequence**, which was true while nothing rolled such
+    a check. Two issues changed that: `#971` gave `run.deprive` purposed
+    Endurance checks for `starvation` and `thirst`, and `#1115` gave
+    `engine/suffocation.py` one for `suffocation`. So all three purposes the
+    card names are now rolled, and a bonus to them is a bonus to something.
+    Found by its premise rather than its name, which is the only way a
+    stale marker is ever found.
+
+    **It rolls on a laid board, which is why the trait is armed for it.**
+    `run.deprive` asks `board.check(slot, "endurance", ...)`, and
+    `table.lay` starts an encounter precisely so traits arm -- so a standing
+    bonus laid here is in place when the campaign's clock falls due.
+
+    `kind="racial"`, because the card says *"racial bonus"*.
+
+    **`dropped=`, for the middle clause.** *"You can survive for twice the
+    normal time period before you are required to make such checks"* has
+    nowhere to land: `Campaign.without[cause]` is hours on the **campaign**
+    rather than per sheet, so there is no per-character clock to double.
+    That is `#1140`, and the row plays without it -- the checks fall due on
+    the shared clock and this character is merely better at them.
+
+    The no-sleep and meditation clauses are narrative: an extended rest's
+    benefit by another route, with no combat or campaign number in it.
+    """
+    c.bonus("skill:endurance", 5, kind="racial", on=c.me, until=_HOLDS,
+            when=_resisting_deprivation)
 _origin("r60", "fey", instead_of="natural")
 
 

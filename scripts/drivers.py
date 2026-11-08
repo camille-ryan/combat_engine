@@ -58870,6 +58870,55 @@ def the_rule_of_three_charges_a_surge_a_day(out: Result) -> None:
              " about the validator refusing everything",
              fine[-60:] or "accepted")
 
+    # -- and a race can be better at resisting it ------------------------
+    #
+    # `rt:r60-t4` prints a **+5 racial bonus to Endurance checks to resist
+    # the effects of starvation, thirst, or suffocation**, and was declared
+    # `_inert` -- correctly, while nothing rolled such a check. `#971` gave
+    # `run.deprive` purposed checks for two of those words and `#1115` gave
+    # `engine/suffocation.py` the third, so the premise expired and the
+    # marker outlived it. Written now; `#1140` is the middle clause.
+    #
+    # **Asserted as an exact figure against an ordinary check**, not as
+    # "greater than": a flat +5 on every Endurance check would also pass a
+    # `>` test and is precisely the row-stronger-than-its-card direction
+    # this tree says never to guess in. So `swim` is in the list -- it is a
+    # purpose the engine really rolls (`movement.walk`) and this card does
+    # not name it.
+    from combat_engine import chargen as _cg
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.skills import modifier as _mod
+    from combat_engine.engine.turns import arm_traits as _arm_traits
+
+    def endurance(race: str, purpose: str) -> int:
+        world = World(Grid(20, 12), Rng(1), Bus())
+        who = _cg.Character("fighter", 1, race=race)
+        eid = _cg.spawn(world, who, (2, 2))
+        _arm_traits(world, eid)
+        return _mod(world, eid, "endurance", purpose=purpose)
+
+    DEPRIVED, OTHER = ("starvation", "thirst", "suffocation"), "swim"
+    base = endurance("r60", "")
+    out.that(all(endurance("r60", p) - base == 5 for p in DEPRIVED),
+             "a character of the race whose trait prints it gets **+5** to"
+             " an Endurance check against starvation, thirst or"
+             " suffocation -- the three purposes the card names and the"
+             " three the engine rolls (#971, #1115)",
+             f"{[endurance('r60', p) - base for p in DEPRIVED]}")
+    out.that(endurance("r60", OTHER) - base == 0,
+             "and **nothing** on a swim check, which is a purpose the"
+             " engine does roll and the card does not name -- the"
+             " narrowing, without which a flat bonus would pass the"
+             " assertion above",
+             f"{endurance('r60', OTHER) - base:+d}")
+    other_base = endurance("r1", "")
+    out.that(all(endurance("r1", p) - other_base == 0
+                 for p in (*DEPRIVED, OTHER)),
+             "while a race without the trait gets nothing anywhere -- the"
+             " control that says the five figures above are the trait and"
+             " not the check",
+             f"{[endurance('r1', p) - other_base for p in (*DEPRIVED, OTHER)]}")
+
 
 def hours_in_the_cold_cost_the_party_healing_surges(out: Result) -> None:
     """A healing surge could only ever be lost to a fight, and the printed
