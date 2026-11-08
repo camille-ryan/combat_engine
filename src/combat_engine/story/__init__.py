@@ -448,7 +448,12 @@ class Party:
                 deal_race(Random(f"{seed}:{key}:race"), key, build)
                 if DEAL_RACES else ""
             )
-            hand = dealt_hand(seed, key, level, build)
+            # `race=` so `dealt_hand`'s own pre-feat training derivation is
+            # the one this dealer would compute: a skill power is drawn from
+            # the trained set, and the race trains a character as surely as
+            # the class does. Same key as the `_trained_skills` call below.
+            # #1162.
+            hand = dealt_hand(seed, key, level, build, race=race)
             taken = list((feats or {}).get(key, [])) or feats_for(
                 key, level, build,
                 Random(f"{seed}:{key}:{build.name}:feats"), list(hand), race,

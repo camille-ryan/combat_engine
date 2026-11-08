@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cache
 from random import Random
@@ -2565,7 +2565,7 @@ def second_card(ref: str) -> str:
 
 def loadout(
     cls: str, level: int = 1, build: Build | None = None, rng: Random | None = None,
-    who_chassis: str = "",
+    who_chassis: str = "", trained: Iterable[str] = (),
 ) -> list[str]:
     """What one character knows, drawn from the leg of the fork it took.
 
@@ -2581,6 +2581,11 @@ def loadout(
     build and is always in the pool. If a leg turns out to be too thin to
     fill a slot, the rest of the class makes up the difference rather than
     the character going short.
+
+    `trained` is the skills this character is trained in, and it widens the
+    **utility** pool with the skill powers those skills open. Empty is the
+    honest default for a caller that has not settled training yet: it deals
+    a class-only hand, which is what every caller got before `#1162`.
     """
     # Imported for the side effect: this is what registers the rows.
     import combat_engine.content
@@ -2589,6 +2594,13 @@ def loadout(
     pick = rng or Random(0)
     build = build or build_of(cls)
     mine = [p for p in REGISTRY.values() if p.cls == cls]
+    # **Skill powers, whose `cls` is a skill rather than a class.** `#999`'s
+    # import decision and the only thing that makes one identifiable, so it
+    # is also what selects them here. A character holds none unless it is
+    # trained in the skill, which is the printed gate and the first of the
+    # four clauses on PHB3 p164.
+    opened = {s.lower() for s in trained}
+    by_skill = [p for p in REGISTRY.values() if p.cls.lower() in opened] if opened else []
     riders: dict[str, list[str]] = {}
     for p in list(mine):
         printed_beside = second_card(p.ref)
@@ -2668,6 +2680,17 @@ def loadout(
         """
         here = [p for p in mine
                 if p.level == at and (usage is None or p.usage is usage)]
+        # **"of the same level as or lower in level than the class power you
+        # would have gained"** -- the third of the four printed clauses, and
+        # the one a level-equality filter silently drops. At level 10 a
+        # trained character may take a level-2 or level-6 skill power, so the
+        # pool is every opened row **at or below** this level, not at it.
+        #
+        # Only at a utility level, which is what `usage is None` says here:
+        # a skill power is a utility power by print, so it never competes for
+        # an attack slot. `UTILITY_GAINS` is the only caller passing None.
+        if usage is None:
+            here = here + [p for p in by_skill if p.level <= at]
         on_leg = [p for p in here if _fits(p, build)]
         pool = sorted(p.ref for p in (on_leg or here) if p.ref not in out)
         spare = sorted(p.ref for p in here if p.ref not in out and p.ref not in pool)
@@ -2690,7 +2713,8 @@ def loadout(
 
 
 def dealt_hand(seed: int | str, cls: str, level: int,
-               build: Build, who_chassis: str = "") -> list[str]:
+               build: Build, who_chassis: str = "", race: str = "",
+               trained: Iterable[str] | None = None) -> list[str]:
     """The hand a seed deals this class, **before** `power_swap` takes its
     card back. One derivation, for everybody who needs to predict it.
 
@@ -2711,9 +2735,27 @@ def dealt_hand(seed: int | str, cls: str, level: int,
     *after* the swap and then fed back through `spawn` would lose another row
     every time. Pinning the pre-swap hand lets the single swap in `spawn` run
     exactly as it always has, which is what makes the pin behaviour-neutral.
+
+    **`trained` defaults rather than being required, and that is what stops
+    the dealers diverging.** A skill power is drawn from the character's
+    trained skills (`#1162`), so the hand now depends on a third fact about
+    the character -- and three dealers plus `replay.py` would each have had
+    to derive it. `None` means "derive it here", on the same key and from the
+    same helper `Party.of` and `maker.dealt` already use for the pre-feat
+    set, so a caller that passes nothing gets the answer they would compute.
+    `spawn` passes its own, because it must honour a pinned `Character.skills`
+    over any derivation.
+
+    The set is the **pre-feat** one, which is a stated narrowing: a feat that
+    trains a skill cannot open that skill's powers, because feats are drawn
+    after the hand (`feats_for` reads it) and the printed step order puts
+    skills before feats and powers after both. Reordering that is a draw move
+    of its own and is not this.
     """
+    if trained is None:
+        trained = class_training(cls, race, Random(f"{seed}:{cls}:skills"))
     return loadout(cls, level, build, Random(f"{seed}:{cls}:{build.name}"),
-                   who_chassis=who_chassis)
+                   who_chassis=who_chassis, trained=trained)
 
 
 def _best_of(
@@ -4728,14 +4770,6 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
             scores[build.primary] += 1
             scores[build.secondary] += 1
 
-    # An empty power list means "deal me a hand", which is what both callers
-    # want and what neither of them used to do: each kept its own list of
-    # ids and both had gone stale. The draw is seeded off the fight, so the
-    # same seed deals the same character, and off a stream of its own, so
-    # dealing one does not move the dice the fight is about to roll.
-    powers = who.powers or dealt_hand(
-        world.rng.seed, who.cls, who.level, build, who_chassis=who.chassis
-    )
     # Its own stream, like the loadout's and for the same reason: dealing
     # a character's feats must not move the dice the fight is about to
     # roll, or adding one would change every later roll in the game.
@@ -4750,9 +4784,30 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # with -- plus whatever the feats themselves train, which is additive.
     # A pinned character skips this: its training is already decided and
     # `Party.of` recorded it (`#1113`).
+    #
+    # **And it is settled before the hand now, not after it**, because a
+    # skill power is drawn from the trained set (`#1162`). The book agrees --
+    # skills are step 4 and powers step 7 -- and it costs no draw movement
+    # of its own: this is a stream of its own on a key of its own, so
+    # hoisting the call above the deal changes neither set.
     skills_key = f"{world.rng.seed}:{who.ref}:{who.level}:skills"
     before_feats = who.skills or sorted(
         class_training(who.cls, who.race, Random(skills_key))
+    )
+    # An empty power list means "deal me a hand", which is what both callers
+    # want and what neither of them used to do: each kept its own list of
+    # ids and both had gone stale. The draw is seeded off the fight, so the
+    # same seed deals the same character, and off a stream of its own, so
+    # dealing one does not move the dice the fight is about to roll.
+    #
+    # `trained` is passed rather than left to `dealt_hand`'s own derivation
+    # because a **pinned** `Character.skills` has to win: a sheet dealt by
+    # `Party.of` recorded its training, and re-deriving it here would hand
+    # the board a character trained in one set and holding powers opened by
+    # another.
+    powers = who.powers or dealt_hand(
+        world.rng.seed, who.cls, who.level, build, who_chassis=who.chassis,
+        race=who.race, trained=before_feats,
     )
     feats = who.feats or feats_for(
         who.cls, who.level, build,

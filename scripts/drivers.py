@@ -38823,30 +38823,52 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # their target**, so their printed Target line is who they *hit* and
     # ally-only points a character's attack at their own ally. `replay`
     # named it from one event in 1,321. The live population was 2.
+    #
+    # **And moved by eleven rows at once, 2026-11-08, for the first time
+    # by a wave rather than by a re-reading.** `#1163` declared the 134
+    # imported skill powers and eleven of them heal, so the population
+    # grew: **584 -> 595**, with 116 -> 122 reaching an ally, 331 -> 335
+    # self-only and 137 -> 138 reaching no friend. Every one of the eleven
+    # was read against its printed card before this was re-pinned:
+    #
+    #   reach an ally   p11550 p16520 p9307 p9315 p9318 p9335
+    #                   "You or one ally" x2, "Each ally in the burst" x2,
+    #                   "One dying creature", "One creature"
+    #   self-only       p11546 p11548 p12166 p12171   all print Personal
+    #                   or act on the trigger's own ally
+    #   no friend       p11542   "Target: The triggering enemy"
+    #
+    # **`undeclared` did not move, and that is the load-bearing part.**
+    # It was 120 before and is 120 after, so every one of the eleven
+    # writes the target line its card prints. It went to 121 on the first
+    # run and the row was fixed rather than the number: `p11542` named the
+    # `ONE_CREATURE` singleton, which this counter reads by identity as *no
+    # header written*. That is the content fault the split exists to
+    # surface, and it surfaced one on its first wave.
     reach = SC._heal_reach()
-    out.that(reach["reaches_an_ally"] == 116
-             and reach["holdable"] == 584,
-             "116 of the 584 character-holdable healing rows can reach an"
+    out.that(reach["reaches_an_ally"] == 122
+             and reach["holdable"] == 595,
+             "122 of the 595 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
-             " refusal counter is about, and it has gone up by one twice:"
-             " `i545p2` (#1139) and `p3847` (#1153), each read against its"
-             " printed card",
+             " refusal counter is about, and it has moved three times:"
+             " `i545p2` (#1139) and `p3847` (#1153) by one each against"
+             " their printed cards, and six at once with `#1163`'s wave",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
-    out.that(reach["self_only"] == 331
-             and reach["cannot_reach_an_ally"] == 137
+    out.that(reach["self_only"] == 335
+             and reach["cannot_reach_an_ally"] == 138
              and reach["reaches_an_ally"] + reach["self_only"]
              + reach["cannot_reach_an_ally"] == reach["holdable"],
-             "and the three buckets partition it -- 331 self-only, 137"
-             " that reach no friend, 116 that do. They have to add up or"
+             "and the three buckets partition it -- 335 self-only, 138"
+             " that reach no friend, 122 that do. They have to add up or"
              " the census is reading something twice",
              f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
              f" + {reach['reaches_an_ally']}")
     out.that(reach["undeclared"] == 120,
-             "**120 of those 137 declare no target line at all** and"
+             "**120 of those 138 declare no target line at all** and"
              " inherit `dsl.ONE_CREATURE`, so they read `enemy` by"
              " default rather than by design. Told apart by identity"
              " against the singleton, which is the only way to see it --"
-             " the other 17 print an enemy target for real, and a heal"
+             " the other 18 print an enemy target for real, and a heal"
              " aimed at an enemy is a drain that heals its caster."
              " `#1139` closed with 0 of its 12 live: 8 are fired by a"
              " trigger that requires having hit an enemy, so an enemy"
@@ -39240,6 +39262,38 @@ def a_non_combat_scene_does_not_spend_the_party_s_powers(out: Result) -> None:
         all(s.hp is not None and s.max_hp > 0 for s in party.sheets),
         "while the wear the harvest is for still comes back",
         f"{[(s.hp, s.max_hp) for s in party.sheets]}",
+    )
+
+    # **The positive control, which this rule had no assertion for.** Every
+    # check above is about something being DISCARDED, so a `strike` that
+    # harvested nothing at all would pass all of them -- and `#1162` made
+    # the discard broader (anything already spent when the table opened,
+    # whatever its action), which is exactly the change that could start
+    # eating a real spend without a single line going red.
+    #
+    # So: a row the party spends DURING the scene, on its own turn, must
+    # reach the sheet. Marked on the board after `lay` has taken its
+    # snapshot, which is what tells the two apart.
+    from combat_engine.engine.components import Powers as _Pw
+
+    kept_party = Party.of(level=2, seed=7)
+    kept_table = tbl.lay(kept_party, seed=6)
+    mine = kept_table.eids[0]
+    spent_now = next(
+        (r for r in kept_party.sheets[0].powers
+         if r not in kept_table.opened_with.get(mine, frozenset())),
+        "",
+    )
+    kept_table.world.need(mine, _Pw).used[spent_now] = 1
+    kept_table.strike()
+    out.that(
+        bool(spent_now) and spent_now in kept_party.sheets[0].spent,
+        "**and a row spent DURING the scene still reaches the sheet** --"
+        " the positive control, and the one assertion here that fails if"
+        " `strike` discards too much. Every other check in this rule is"
+        " satisfied by harvesting nothing, so without this the broader"
+        " discard `#1162` needed could have eaten a real spend silently",
+        f"{spent_now!r} -> {sorted(kept_party.sheets[0].spent)}",
     )
 
 
@@ -58134,6 +58188,151 @@ def a_background_grants_a_skill_bonus(out: Result) -> None:
              f"{before} with, {after} without")
 
 
+def a_trained_character_can_be_dealt_a_skill_power(out: Result) -> None:
+    """A skill power is drawn from the trained set, at or below the level. `#1162`.
+
+    `#999` imported 134 of them and no character could be dealt one: a skill
+    power carries the **skill** in `cls`, and `loadout`'s pool is filtered to
+    the character's class, so every one sat outside every pool. The whole
+    block was reachable by nobody.
+
+    The printed rule is four clauses (PHB3 p164) and three of them are
+    assertable here. Training gates it; the level clause is *at or lower*,
+    not equal; and it replaces a **utility**, never an attack. The fourth --
+    no paragon or epic utility may be replaced -- costs nothing in a heroic
+    tree and has nothing to pose.
+
+    **The level clause is the one worth a rule.** `deal` filters `p.level ==
+    at` for every class row, and a skill power written into that filter would
+    silently give a level-10 character only the level-10 rows -- 36 of 134.
+    Nothing would raise and no count would move, because the hand would still
+    be the right size. So the assertion is that a hand dealt at level 10
+    holds a skill power printed *below* 10, which a level-equality filter
+    cannot produce.
+
+    Reads the population off `REGISTRY` rather than naming refs, because any
+    ref named here is one an author may later mark `todo=` -- and a rule
+    pinned to a row that stops being drawable goes vacuous while still
+    printing ok.
+
+    **Eligible is not dealt, and the first draft of this rule asserted the
+    wrong one.** It required a character trained in one skill to be dealt a
+    skill power, and that was red: measured over 30 level-10 hands each,
+    **6 of 17 skills are dealt one alone and 11 are not**:
+
+        athletics 12   endurance 35   bluff 10   nature 10
+        streetwise 11  insight 6      the other eleven  0
+
+    The cause is the scorer, not the pool. `_best_of` samples the top
+    `POWER_TOP` (6) of the level's candidates, and a skill power is priced by
+    `power_options` like any other card -- so the fighter's own level-2
+    utilities at `+5.500` and `+4.000` fill the cut and a lone skill row at
+    `+1.500` can never be reached. Markers are **not** the cause and that was
+    checked: `religion` has 7 clean rows, 0 marked, and is dealt none.
+
+    So the honest reading is that the scorer is working: it judges several
+    classes' own utilities better than those skill powers, which is a balance
+    question and not a draw bug. The rule therefore asserts **containment**
+    plus a **floor** -- nothing outside the trained skills is ever dealt, and
+    at least one single skill really is reached -- and never a rate.
+    """
+    from random import Random as _Rng
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen as _cg
+    from combat_engine.engine.dsl import REGISTRY as _REG
+    from combat_engine.engine.skills import SKILLS as _SK
+
+    words = {s.lower() for s in _SK}
+    pool = {r: p for r, p in _REG.items() if p.cls.lower() in words}
+    out.that(bool(pool),
+             "there are skill powers declared at all -- the premise every"
+             " assertion below rests on, and `#1163` is the block. Stated"
+             " first so an empty tree reds here rather than making the"
+             " negative controls below pass for the wrong reason",
+             f"{len(pool)} declared, cls values {len(
+                 {p.cls.lower() for p in pool.values()})}")
+
+    # -- the gate: training, and nothing else -----------------------------
+    one = "acrobatics"
+    mine = {r for r, p in pool.items() if p.cls.lower() == one}
+    untrained: set[str] = set()
+    trained: set[str] = set()
+    for seed in range(12):
+        leg = _cg.build_of("fighter", "")
+        untrained |= set(_cg.loadout("fighter", 10, leg, _Rng(seed))) & set(pool)
+        trained |= set(_cg.loadout("fighter", 10, leg, _Rng(seed),
+                                   trained=(one,))) & set(pool)
+    out.that(not untrained,
+             "**an untrained character is dealt none of them**, over twelve"
+             " seeds -- the negative control, and the half that says the"
+             " pool is gated rather than merely widened. Without it a run"
+             " could pass by handing skill powers to everybody",
+             f"{len(untrained)} dealt untrained")
+    out.that(trained <= mine,
+             "and a character trained in exactly one skill is dealt only"
+             " THAT skill's powers -- not every skill power in the tree,"
+             " which is what a pool keyed on the wrong thing would give."
+             " **Containment, not a count**: see the docstring on why a"
+             " single skill is often dealt nothing, which is the scorer"
+             " and not the pool",
+             f"{len(trained)} dealt, all within the {len(mine)} of one skill")
+
+    # **And the single-skill path is live, not merely containment-safe.**
+    # The assertion above passes when nothing is dealt, so on its own it
+    # cannot tell a working one-skill pool from a dead one. This is the half
+    # that can: SOME single skill reaches the draw.
+    live = 0
+    for sk in sorted(words):
+        for seed in range(6):
+            leg = _cg.build_of("fighter", "")
+            if set(_cg.loadout("fighter", 10, leg, _Rng(seed),
+                               trained=(sk,))) & set(pool):
+                live += 1
+                break
+    out.that(live > 0,
+             "**and at least one single trained skill really is dealt**,"
+             " which is what stops the containment assertion above passing"
+             " over a pool that nothing can reach. A skill power competes"
+             " on score like any other card, so this is a floor and not a"
+             " rate -- the measured spread is in the docstring",
+             f"{live} of {len(words)} skills reach the draw alone")
+
+    # -- the third printed clause: at or LOWER in level --------------------
+    everything = sorted(words)
+    wide: set[str] = set()
+    for seed in range(20):
+        leg = _cg.build_of("fighter", "")
+        wide |= set(_cg.loadout("fighter", 10, leg, _Rng(seed),
+                                trained=everything)) & set(pool)
+    levels = sorted({_REG[r].level for r in wide})
+    out.that(bool(wide) and min(levels, default=99) < 10,
+             "**a level-10 hand holds a skill power printed BELOW level"
+             " 10**, which is the printed *at or lower* clause and the one"
+             " a `p.level == at` filter silently drops. Nothing raises"
+             " under that filter and the hand is still the right size, so"
+             " this is the only thing that can tell the two apart",
+             f"levels dealt {levels}")
+    out.that(all(_REG[r].level in _cg.UTILITY_GAINS for r in wide),
+             "and every one of them is printed at a level that grants a"
+             " utility -- the clause that says a skill power replaces a"
+             " utility and never competes for an attack slot",
+             f"UTILITY_GAINS={_cg.UTILITY_GAINS}, dealt {levels}")
+
+    # -- and a first-level character has no utility to trade --------------
+    first: set[str] = set()
+    for seed in range(12):
+        leg = _cg.build_of("fighter", "")
+        first |= set(_cg.loadout("fighter", 1, leg, _Rng(seed),
+                                 trained=everything)) & set(pool)
+    out.that(not first,
+             "a first-level character is dealt none, because it has gained"
+             " no utility power to replace. The lower bound of the same"
+             " clause, and it is what stops the widening handing a level-2"
+             " card to a character entitled to nothing",
+             f"{len(first)} dealt at level 1")
+
+
 def a_feat_draws_its_swap_from_the_class_list(out: Result) -> None:
     """`Swap.pool` draws the incoming power, so four feats play. `#1114`.
 
@@ -67626,6 +67825,12 @@ DRIVERS = {
         "a feat, power or skill may be retrained, with the printed refusals"
         " -- same type, same level or lower, same class, and not one the"
         " class predetermined (#991)",
+    ),
+    "skill_power_draw": (
+        a_trained_character_can_be_dealt_a_skill_power,
+        "a skill power is dealt only to a character trained in its skill,"
+        " at or BELOW the utility level it replaces -- 134 imported rows"
+        " were outside every pool (#1162)",
     ),
     "party_training": (
         a_party_keeps_its_training_between_fights,

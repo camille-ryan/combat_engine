@@ -201,18 +201,27 @@ def _drawn_powers(case: dict) -> dict[str, list[str]]:
     post-swap hand mixed in with class features, racial rows and item powers,
     and picking "the powers" back out of that by ref shape is how a pin comes
     to cover less than it says.
+
+    **The race has to come off the board, not be left blank.** Since #1162
+    the hand depends on the pre-feat trained set, and a race trains a
+    character -- so a pin derived racelessly is a pin for a character this
+    seed does not deal. `Build.choices` carries it as `race:<ref>`, which
+    `query.race_of` reads, and that is the one place on the board that
+    knows.
     """
     from combat_engine.chargen import build_of, dealt_hand
     from combat_engine.engine import Ident
+    from combat_engine.engine.query import race_of
 
     world, _ = build(case["seed"], case["level"], case["scaling"])
     out: dict[str, list[str]] = {}
-    for _eid, ident in sorted(world.each(Ident)):
+    for eid, ident in sorted(world.each(Ident)):
         if not ident.ref.startswith("c:"):
             continue
         key = ident.ref.removeprefix("c:")
         out[key] = dealt_hand(
-            case["seed"], key, case["level"], build_of(key, "")
+            case["seed"], key, case["level"], build_of(key, ""),
+            race=race_of(world, eid) or "",
         )
     return out
 

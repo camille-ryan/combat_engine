@@ -249,11 +249,27 @@ def _board(
         # is a race with rows written for it that nobody can play. Fielded as
         # a class it raised; fielded as a race that does not exist it is a
         # raceless character, which is the honest answer.
+        # **And a skill is the fourth kind, which this comment's own count
+        # predates.** A skill power carries the skill in `cls`
+        # -- `acrobatics` -- so `CLASSES[...]` raised on all 134 of them, in
+        # exactly the shape the paragraph above describes. Found by the first
+        # authoring agent to write one: `audit.board` coped and `show.py`
+        # did not, so the printed-beside-emitted comparison this script
+        # exists for was unavailable for the whole block.
+        #
+        # Unlike a theme there IS something to put on the character: the row
+        # is held only by somebody trained in the skill, so the training goes
+        # on as `skills=` and the class underneath takes the fallback. Same
+        # treatment and same reasoning as `audit.board`. #1162.
+        from combat_engine.engine.skills import SKILLS
+
         carried = declared.cls == "item"
         racial = bool(re.fullmatch(r"r\d+", declared.cls or ""))
         themed = bool(re.fullmatch(r"x\d+_\d+", declared.cls or "")) \
             or declared.cls == "wild talent"
-        cls = (not carried and not racial and not themed and declared.cls) or (
+        skilled = (declared.cls or "").lower() in SKILLS
+        cls = (not carried and not racial and not themed and not skilled
+               and declared.cls) or (
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
         )
         # And the build whose gear can hold the row, the way `audit.py`
@@ -265,6 +281,10 @@ def _board(
                 cls, max(1, declared.level), [ref],
                 build=chargen.build_for(cls, ref),
                 race=declared.cls if racial else "",
+                # The training the row needs to be held at all, pinned so
+                # `spawn` does not deal its own set and leave the row
+                # refused for the board's reason rather than its own.
+                skills=(declared.cls.lower(),) if skilled else (),
             ),
             (4, 6),
         )

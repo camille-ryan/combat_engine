@@ -1540,6 +1540,25 @@ RACE_REF = re.compile(r"^r\d+$")
 THEME_REF = re.compile(r"^x\d+_\d+$")
 
 
+@cache
+def _skill_words() -> frozenset[str]:
+    """The 17 printed skills, as the engine spells them.
+
+    What a **skill power** carries in `cls` -- `#999`'s import decision, and
+    the fourth thing in this file's `cls` column that is not a class. Read
+    off `engine.skills.SKILLS` rather than listed here, because the ETL
+    already validates every imported skill word against that same set and a
+    second copy is a second place for the vocabulary to drift.
+
+    A function rather than a module constant for the reason the imports
+    inside `board` are function-local: this module is imported by
+    instruments that do not want the engine pulled in for a name.
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    return frozenset(s.lower() for s in SKILLS)
+
+
 def _event_names() -> set[str]:
     """Every event class the engine declares, by name.
 
@@ -2359,6 +2378,26 @@ def board(ref: str, seed: int, pose: bool = False,
         # is the honest answer for a row a character reaches by a route
         # that does not exist yet.
         themed = bool(THEME_REF.match(declared.cls)) or declared.cls == "wild talent"
+        # **Nor is a skill.** A skill power carries the skill in `cls` --
+        # `acrobatics` -- which is `#999`'s import decision and the only
+        # thing that makes one identifiable, since the compendium gives them
+        # no category and no empty class. `chargen.CLASSES[...]` would raise
+        # on every one of the 134, exactly as it did for the races, themes
+        # and item rows above, so all 134 would have reported as broken rows
+        # rather than as rows needing a trained character.
+        #
+        # Unlike a theme, there **is** something to put on the character:
+        # the row is held only by somebody trained in the skill, so the
+        # training goes on as `skills=` below and the class underneath is
+        # free. Off `engine.skills.SKILLS`, which is the vocabulary the ETL
+        # already validates these against, rather than a second list here.
+        # `getattr`, not `declared.cls`, for the reason the `gate_leg` read
+        # below gives: `get(ref)` is typed `Power | None` and this branch has
+        # no guard, so the neighbouring `declared.cls` reads are carried in
+        # the `types` baseline and a new one is not. Two more blessed
+        # diagnostics for a convenience is the wrong trade.
+        skill_word = (getattr(declared, "cls", "") or "").lower()
+        skilled = skill_word in _skill_words()
         wears = ref[3:].split("-")[0] if ref.startswith("rt:") else declared.cls
         worn_race = wears if wears in chargen.RACES else ""
         gate = _gates().get(ref)
@@ -2414,7 +2453,8 @@ def board(ref: str, seed: int, pose: bool = False,
                     gate_leg, leg_ref = found, named
                     break
         legged = _class_of_leg(gate_leg)
-        cls = (not carried and not racial and not themed and declared.cls) or (
+        cls = (not carried and not racial and not themed and not skilled
+               and declared.cls) or (
             gated or legged
         ) or (
             "ranger" if declared.reach.kind in ("ranged", "area_burst") else "fighter"
@@ -2475,6 +2515,13 @@ def board(ref: str, seed: int, pose: bool = False,
                 build=chargen.build_for(cls, leg_ref),
                 feats=[ref] if a_feat else [],
                 race=race,
+                # **The training a skill power needs to be held at all.**
+                # Pinning `skills` also stops `spawn` dealing its own set,
+                # which is what makes the pose answer the row's question
+                # rather than the dealer's: a row gated on being trained in
+                # one skill, audited on a character trained in whatever the
+                # seed gave it, would report SILENT for the board's reason.
+                skills=(skill_word,) if skilled else (),
             ),
             (6, 8),
         )

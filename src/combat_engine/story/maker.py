@@ -166,7 +166,10 @@ def interview(
         race = options[answer(question)].ref if options else dealt
 
     # -- the hand ----------------------------------------------------------
-    dealt_hand = chargen.dealt_hand(seed, cls, level, build)
+    # `race=` for the reason `Party.of` passes it: the hand now depends on
+    # the pre-feat trained set, and `drivers.chargen_defaults` asserts this
+    # dealer and that one produce the identical `Sheet`. #1162.
+    dealt_hand = chargen.dealt_hand(seed, cls, level, build, race=race)
     hand: list[str] = []
     for slot, printed in enumerate(dealt_hand):
         # Candidates for this slot are the powers the dealer could have put

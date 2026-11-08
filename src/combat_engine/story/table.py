@@ -75,6 +75,15 @@ class Table:
     #: no entity id on purpose, because an id belongs to a world and a sheet
     #: outlives one.
     eids: list[int] = field(default_factory=list)
+    #: What was already spent on the board the moment this table opened,
+    #: per entity. `strike` treats every one of these as an artefact of
+    #: needing a board at all, rather than inferring it from the row's
+    #: action cost -- see the method for why the inference was not enough.
+    #:
+    #: Filled by `lay`, which builds a **scratch** board, and left empty by
+    #: `borrow`, where the board is a real fight and anything already spent
+    #: on it was genuinely spent. #1162.
+    opened_with: dict[int, frozenset[str]] = field(default_factory=dict)
 
     def who(self, index: int) -> int:
         """The entity for a party slot."""
@@ -189,16 +198,44 @@ class Table:
         needing a board at all -- no turn is ever taken here -- while a feat
         that really did spend something to help with a check took an action to
         do it and should stay spent.
+
+        **The action-cost test is not sufficient, and `opened_with` is the
+        half that was missing.** It infers "costs an action, so the party
+        chose it", and that is false for any row answering an event the
+        scratch board's own start-up emits. `Encounter.start()` rolls
+        initiative, so a card printed *"when you and your allies roll
+        initiative"* fires correctly, charges its action, and is consumed by
+        a **conversation** -- and a daily at that. Measured on the first row
+        in the tree with that trigger that a party member can hold
+        (`p16508`, dealt to a level-2 fighter): present in `used` before any
+        check was rolled, nothing used during the scene, and kept by the
+        action test because `FREE` is not `NONE`. That is `#792`'s own bug
+        arriving through a second door.
+
+        So the question is now **when** the row fired rather than what it
+        cost: anything already spent when the table opened is the artefact,
+        whatever its action. That is an observation instead of a proxy, and
+        it subsumes the trait case the action test was written for -- a
+        trait armed by `start()` is in `opened_with` too.
+
+        A borrowed board leaves `opened_with` empty, so a real fight's
+        spends are harvested exactly as before.
         """
         from combat_engine.engine.dsl import get
         from combat_engine.engine.types import ActionType
 
         before = [dict(sheet.spent) for sheet in self.party.sheets]
         harvest(self.world, self.party)
-        for sheet, had in zip(self.party.sheets, before, strict=False):
+        for i, (sheet, had) in enumerate(
+            zip(self.party.sheets, before, strict=False)
+        ):
+            eid = self.eids[i] if i < len(self.eids) else -1
+            opened = self.opened_with.get(eid, frozenset())
             kept = dict(had)
             for ref, when in sheet.spent.items():
                 if ref in had:
+                    continue
+                if ref in opened:
                     continue
                 row = get(ref)
                 if row is not None and getattr(row, "action", None) is not ActionType.NONE:
@@ -275,4 +312,15 @@ def lay(party: Party, *, seed: int = 0) -> Table:
         _wear(world, eid, sheet)
     encounter = Encounter(world)
     encounter.start()
-    return borrow(world, encounter, party)
+    table = borrow(world, encounter, party)
+    # **Snapshot what starting the board cost, before anybody rolls.**
+    # `strike` needs to tell a row the scratch board consumed from one the
+    # party chose to spend, and its action-cost test could not: see there.
+    # Taken here rather than in `borrow` because a borrowed board is a real
+    # fight, where everything already spent was spent on purpose. #1162.
+    from combat_engine.engine.components import Powers
+
+    table.opened_with = {
+        eid: frozenset(world.need(eid, Powers).used) for eid in table.eids
+    }
+    return table
