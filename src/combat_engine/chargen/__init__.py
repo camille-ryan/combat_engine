@@ -2892,9 +2892,33 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     if "deity_domain" in node:
         return str(node["deity_domain"]).strip().lower() in domains_of(
             who.worships)
-    # term: still answered False. 586 feats, 14 classified kinds, and
-    # `#1094`/`#1044` carry what each kind would need -- an ETL import, a
-    # matching pass, and a residue nobody has read.
+    # **term: still answered False, and it is now `#1160` and nothing
+    # else.** This said *"586 feats ... `#1094`/`#1044` carry what each kind
+    # would need"* and both halves were wrong:
+    #
+    # * **both issues are closed.** `#1094` fixed `source` and `skill` --
+    #   the two atoms that were in this same state -- and `term` stayed
+    #   behind, so the sentence sent a reader to two dead issues. The
+    #   in-code variant of the stale-pointer problem the root `CLAUDE.md`
+    #   opens with, and exactly as hard to notice.
+    # * **586 is not the count.** Measured: **392 feats** carry a `term`
+    #   atom, 430 atoms, 230 distinct values, and **0** are satisfied for
+    #   any of ten classes.
+    #
+    # Failing closed is still right, and the docstring above says why. The
+    # work is an ETL one rather than a `chargen` one: every value is a `q…`
+    # glossary ref -- a printed *phrase* and not a structured fact -- so it
+    # wants the treatment `#279` gave the Glossary. A handful name a thing
+    # the engine already holds -- one is a racial trait, by ref, and would
+    # resolve mechanically -- and most of the rest carry only a
+    # description, which is prose.
+    #
+    # **No example quoted here, deliberately.** The first draft of this
+    # note gave the resolvable one as a phrase to make the point concrete,
+    # and the phrase *is* that trait's printed name: `hooks/commit-msg`
+    # refused the commit and HEAD did not move. Describe the shape and cite
+    # the ref -- the same correction this tree's own notes record twice, in
+    # the paragraphs that explain the rule.
     return False
 
 
