@@ -28759,6 +28759,70 @@ def the_expectation_model_prices_high_crit(out: Result) -> None:
                      " in the same hand lends it nothing",
                      f"{float(bare):.4f} -> {float(armed):.4f}")
 
+    # -- and ongoing damage is priced at its expected ticks ---------------
+    #
+    # `#1138`. The module header recorded this as a stated absence --
+    # *"ongoing damage is applied by a duration on a later turn and not
+    # through a `Cast` at all, so a row whose damage is mostly ongoing
+    # scores low here"* -- and it priced **162 rows at 0.0 for damage**, 95
+    # of them monsters, so it was the AI under-valuing its own attacks.
+    #
+    # **An exact figure, for the reason the high-crit half gives.** The
+    # valuation is `amount x ONGOING_TICKS` and nothing else, so a `> 0`
+    # assertion would pass for a model that paid one tick, or ten. The
+    # ticks come off the printed save: `durations.save` is
+    # `roll.total + bonus >= 10` on a d20, so 11 of 20, and the count is
+    # geometric at `20/11`.
+    from combat_engine.engine.expect import ONGOING_TICKS, worth
+
+    out.that(Fraction(20, 11) == ONGOING_TICKS,
+             "ongoing ticks are the printed save's expectation -- a save is"
+             " `roll + bonus >= 10` on a d20, 11 of 20, so the geometric"
+             " count is 20/11 and not a chosen number",
+             f"{ONGOING_TICKS}")
+
+    # Priced through `worth` on hand-built lines, which is the one way to
+    # read the valuation without a board deciding how often the row fires.
+    out.that(worth([("ongoing", 0, 10, 0, False, 0)])
+             == ONGOING_TICKS * 10,
+             "10 ongoing is worth 10 x 20/11, about 18.2 -- the whole of the"
+             " valuation, so this reddens if anybody adds a delay discount"
+             " without saying so",
+             f"{float(worth([('ongoing', 0, 10, 0, False, 0)])):.4f}")
+
+    out.that(worth([("flat", 0, 10, 0, False, 0)]) == 10,
+             "while 10 immediate is worth 10 -- the control, and it is what"
+             " says the multiplier is on the ongoing line and not on every"
+             " line alike",
+             f"{float(worth([('flat', 0, 10, 0, False, 0)])):.4f}")
+
+    # **And the recorder is wired, asserted through a row rather than by
+    # asking whether the method exists.** `worth` prices an `ongoing` line
+    # correctly whether or not anything ever appends one -- and before this
+    # issue nothing did, so every assertion above passes on a `Ledger` that
+    # drops it. A `hasattr(Ledger, "ongoing")` check was the first draft
+    # and a plant that gutted the method's body **stayed green**, which is
+    # #1014's lesson arriving one more time: assert through the caller.
+    #
+    # `m6510a3`'s body is exactly one `c.ongoing(5)` and no immediate
+    # damage, so its whole expectation is the valuation and the figure is
+    # exact -- 5 x 20/11 = 100/11, about 9.09.
+    ONGOING_ONLY, ONGOING_AMOUNT = "m6510a3", 5
+    world, me, _ = audit_board(ONGOING_ONLY, 1)
+    foe = next(iter(enemies(world, me)), None)
+    out.that(foe is not None,
+             f"{ONGOING_ONLY}'s board fields somebody to measure against",
+             f"{foe}")
+    if foe is not None:
+        got = expected(world, me, ONGOING_ONLY, foe)
+        out.that(got == ONGOING_TICKS * ONGOING_AMOUNT,
+                 f"{ONGOING_ONLY} deals nothing but {ONGOING_AMOUNT} ongoing,"
+                 f" so its whole expectation is the valuation --"
+                 f" {ONGOING_AMOUNT} x 20/11. It priced 0.0 before #1138,"
+                 " and this is what reddens if the recorder stops recording",
+                 f"{float(got):.4f}, want"
+                 f" {float(ONGOING_TICKS * ONGOING_AMOUNT):.4f}")
+
 
 def _an_implement_row() -> str:
     """A level-1 **character** implement attack, not a weapon one.

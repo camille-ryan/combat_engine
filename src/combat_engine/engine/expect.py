@@ -355,6 +355,40 @@ class Ledger(Cast):
         self.lines.append(("flat", 0, amount, 0, False, 0))
         return amount
 
+    def ongoing(self, amount: int, *_a: Any, on: int | None = None,
+                **kw: Any) -> None:
+        """Ongoing damage, priced at its expected number of ticks.
+
+        **This is what `#1138` is**, and the module docstring used to record
+        it as a stated absence: *"ongoing damage is applied by a duration on
+        a later turn and not through a `Cast` at all, so a row whose damage
+        is mostly ongoing scores low here."* It priced **162 rows at 0.0 for
+        damage** -- 95 of them monsters, so it was the AI under-valuing its
+        own attacks rather than a content curiosity.
+
+        `ONGOING_TICKS` is the whole of the valuation and is derived from
+        the printed save. Two things it does **not** read, said here so the
+        next reader does not take the figure for more than it is:
+
+        * **a save bonus or penalty.** The target's `save_mod` moves the
+          real number and is not consulted, so a creature with a bonus to
+          saves is priced as though it had none. That is a bounded error in
+          a known direction and reading it would mean pricing against a
+          *particular* target's modifiers, which the rest of this ledger
+          deliberately does not do.
+        * **resistance and immunity**, which `Cast.ongoing` applies when the
+          damage lands. Same reasoning as the dice above: this records what
+          the row offers, and `expected` is handed a board to measure
+          against rather than a creature to special-case.
+
+        Returns `None` rather than the amount, matching `Cast.ongoing`'s
+        `Effect | None` -- no body in the corpus reads it as a number.
+        """
+        if self._who(on) is None:
+            return None
+        self.lines.append(("ongoing", 0, int(amount), 0, False, 0))
+        return None
+
     def hit(self, *, on: int | None = None, half: bool = False) -> int:
         """The header's declared damage, routed through the recorders above."""
         from .dsl import get
@@ -369,12 +403,36 @@ class Ledger(Cast):
         return self.damage(dice, bonus, on=on)
 
 
+#: How many times ongoing damage is expected to tick, from the printed save
+#: and nothing else. `durations.save` is `roll.total + bonus >= 10` on a d20,
+#: so an unmodified save succeeds on 10-20 -- **11 of 20**. The damage is
+#: taken at the start of the creature's turn and the save is rolled at the
+#: end of it, so it always ticks at least once and the count is geometric:
+#: `1 / (11/20)` = **20/11**, about 1.82 ticks.
+#:
+#: **Derived, not chosen.** The repo's rule is to never invent a number the
+#: page settles, and the page settles this one: the save chance is printed
+#: and the expectation of a geometric variable is arithmetic. A save bonus
+#: would move it and is not read here, which is stated in `Ledger.ongoing`.
+#:
+#: **And no discount for delay**, which is the one judgement in this
+#: constant and is deliberate: nothing else in this pricer discounts a later
+#: turn, so a factor here would be the only such number in the file and
+#: would be invented rather than derived. A tick that lands after the fight
+#: ends is worth nothing, which argues for one -- but fights here run 8-10
+#: rounds and ongoing is saved out in under two, so the overlap is small.
+#: #1138.
+ONGOING_TICKS = Fraction(20, 11)
+
+
 def worth(lines: list[tuple[str, str | int, int, int, bool, str | int]]) -> Fraction:
     """Expected damage of one recorded path, exactly."""
     total = Fraction(0)
     for kind, dice, bonus, enh, crit, hc in lines:
         if kind == "half":
             total += halved(dice, bonus)
+        elif kind == "ongoing":
+            total += ONGOING_TICKS * bonus
         elif kind == "flat":
             total += bonus
         elif crit:
