@@ -140,40 +140,6 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
-    # **The die contest ties on this board, every time, and a tie is
-    # printed to do nothing.** `#1144`.
-    #
-    # The row is a reaction to an ally's hit: roll a d20 against the ally's
-    # own natural, promote the hit to a critical if higher, take a penalty
-    # if lower, and *"a tie does neither, as printed"*. Traced, six
-    # independent attempts:
-    #
-    #     my roll   ally natural
-    #          14             14
-    #          14             14      ... 6 of 6
-    #
-    # So the body runs -- `c.roll("1d20")` is reached and returns 14 -- and
-    # neither branch can fire. `c.crit_becomes` is never called, which is
-    # why the row reports silent while being exactly correct.
-    #
-    # **And the attempt search cannot break the tie.** `_attempts` stops as
-    # soon as a row *fires*, and this one fires: it runs its body and does
-    # nothing. So the `LOADED` pose, which forces a face of 20 and would
-    # make `mine > theirs`, is never tried -- firing is the stopping
-    # condition and "fired and did nothing" satisfies it. That is a general
-    # gap rather than a fact about this row, and it is `#1144`.
-    #
-    # **Newly visible rather than newly broken.** It was credited at the
-    # previous baseline; `#568`'s prerequisite fix widened the legal feat
-    # pool for 18 classes, which changed what the board's ally is dealt,
-    # which changed the ally's natural to the one number that ties. No
-    # clause of this row changed and none of it is wrong.
-    "i1104p1": ("a reaction that contests a d20 against the ally's own "
-                "natural, where the board produces a tie on 6 of 6 "
-                "attempts -- and a tie is printed to do nothing. The "
-                "`LOADED` pose that would break it is never reached, "
-                "because `_attempts` stops when a row fires and this one "
-                "fires and does nothing: #1144"),
     # **The board provokes its all-missed `PowerResolved` with a BASIC
     # ATTACK, and a basic attack has no use to hand back.** `#1143`.
     #
@@ -872,38 +838,6 @@ KNOWN_SILENT = {
     # A rider the board has nobody to be. Its one ally is a copy of the caster
     # at full health, so it is never hurt, never undead and never a minion.
     "m6675a3": "heals an undead ally; the board's one ally is a copy of the caster",
-    #: **Newly silent as a consequence of un-marking `f1166`, not of
-    #: anything wrong with this row.** `#1046` made that feat live, which
-    #: shifted the chargen draw -- the documented cost of un-marking -- and
-    #: this interrupt's board changed with it.
-    #:
-    #: Verified before writing this: the body **works**. Called directly on
-    #: three seeds its `c.strike()` hits on two of them and the damage
-    #: lands. What changed is the trigger's reach -- it needs a foe's melee
-    #: attack to *hit* the caster, and it now fires on **2 of 8** seeds
-    #: where it used to fire more often, with the strike missing on both.
-    #:
-    #: **And it is this row rather than its family**, which I filed as
-    #: `#1133` and then refuted. Measured over every row declared as an
-    #: immediate interrupt or reaction whose trigger names a melee attack:
-    #:
-    #:     327 such rows        272 of 315 fire and do something   (86%)
-    #:                           15 silent, 1 of them this one
-    #:
-    #: So the harness reaches that family perfectly well. `Rng.loaded` is
-    #: **sticky** rather than one-shot -- every d20 returns the forced face
-    #: while it is set -- so the row's own attack is loaded exactly as the
-    #: provoking one is, which was the mechanism I had suspected and it
-    #: does not hold.
-    #:
-    #: What remains unexplained is narrow and specific to this board: why
-    #: the trigger fires on only 2 of 48 attempts here when 272 sibling
-    #: rows manage it. Not a family gap, and not worth an issue -- the row
-    #: is proven correct by hand and the draw that reaches it changed.
-    "p5910": "an interrupt needing a melee hit ON the caster; this draw"
-             " fires the trigger on 2 of 48 attempts and the strike missed"
-             " both times. Body proven correct by hand; its family is 86%"
-             " firing, so this is the row's board and not the harness",
     "m1531a2": "heals allies in a burst; the board's one ally is at full health",
     "m6343a3": "commands a minion plant ally; the board has neither",
     "m3184a2": "grants its rider concealment; the board sets up no rider",
@@ -3996,6 +3930,26 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     for attacker, target in pairs:
         if not alive(world, target):
             continue
+        # **A dead attacker swings nothing, and this pass only checked the
+        # target.** `foes` is filtered for life once, at the top, and an
+        # earlier pass can drop `foes[0]` before this one runs -- so the
+        # swing was declared, refused for want of an attacker who can act,
+        # and emitted no `AttackRolled` at all. Traced on `p5910`, whose
+        # printed trigger is *"an enemy hits you with a melee attack"*: 33
+        # swings in one provocation, **0 of them rolled at the caster**,
+        # and the one aimed there had `alive=False, can_act=False`.
+        #
+        # So a standing foe is substituted rather than the pair skipped.
+        # Skipping would be the honest minimum and would leave the trigger
+        # unreachable whenever the first foe happens to die early, which is
+        # the board luck #1149 is about. #1149.
+        if not alive(world, attacker):
+            if attacker != foes[0]:
+                continue
+            standing = next((f for f in foes if alive(world, f)), None)
+            if standing is None:
+                continue
+            attacker = standing
         _swing_from_reach(world, attacker, target, basic(attacker))
         if probe():
             return True
@@ -4148,8 +4102,22 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     # none, which is why `m3014a2` is on `KNOWN_SILENT`. "When it makes an
     # opportunity attack" and "when one is made against it" are printed
     # triggers on a dozen rows, every one of which reported UNUSED.
-    for attacker, target in ((caster, foes[0]), (foes[0], caster)):
-        if not alive(world, target):
+    # **An ally swings one too**, which neither direction above can produce.
+    # 1,100-odd rows print a trigger about somebody *else's* attack, and the
+    # pair below is caster-and-foe only -- so *"an ally hits with an
+    # attack"* was never true on this board and `i1104p1` reported UNUSED
+    # for its whole life. The same shape as the ally killing blow further
+    # down and found by the same route: #1149's four rows, re-audited after
+    # that pass landed, left three still never offered.
+    #
+    # An ally against `foes[0]` specifically, for that pass's stated reason:
+    # it is the creature the class features were aimed at.
+    _mates = [a for a in _allies_of(world, caster) if a != caster]
+    _pairs = [(caster, foes[0]), (foes[0], caster)]
+    if _mates:
+        _pairs.append((_mates[0], foes[0]))
+    for attacker, target in _pairs:
+        if not alive(world, target) or not alive(world, attacker):
             continue
         _swing_from_reach(
             world, attacker, target, basic(attacker), opportunity=True,
@@ -4214,7 +4182,18 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         # to 0 hit points" -- a printed trigger on several rows -- could
         # never be true, and the row reported UNUSED as though it were
         # unwritable rather than unasked.
-        killer = foes[0] if victim == caster else caster
+        # **An enemy swings it whenever the victim is on the caster's side**,
+        # not only when the victim *is* the caster. This read
+        # `foes[0] if victim == caster else caster`, so an ally was always
+        # killed by the caster -- and *"an enemy reduces an ally to 0 hit
+        # points"* is a printed trigger that could therefore never be true.
+        # `p5002` reported UNUSED for its whole life on exactly that.
+        #
+        # The direction matters because `Dropped.source` is what these rows
+        # read, and the caster killing its own ally is the one arrangement
+        # the printed sentence excludes. #1149.
+        friendly = victim == caster or victim in _allies_of(world, caster)
+        killer = foes[0] if friendly else caster
         world.damage(killer, victim, health.hp + health.max_hp)
         if probe():
             return True
