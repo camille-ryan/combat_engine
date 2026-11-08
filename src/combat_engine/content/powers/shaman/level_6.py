@@ -14,7 +14,6 @@ from combat_engine.engine import (
     MINOR,
     NO_TARGET,
     ONE_ALLY,
-    ONE_CREATURE,
     PERSONAL,
     REF,
     SELF,
@@ -243,13 +242,22 @@ def p12873(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_CREATURE,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PRIMAL, Keyword.HEALING],
 )
 def p3847(c: Cast) -> None:
     """`c.no_advantage` takes no gate, so the standing half goes to the
     allies beside the spirit as the row goes off rather than being read
-    continuously."""
+    continuously.
+
+    **The target is who spends the surge**, so the pool is the party and not
+    the enemy one `ONE_CREATURE` names. The card prints *"One creature in
+    the burst"* and an enemy cannot spend your healing surge, so the row was
+    offerable only while a foe stood in the burst and did nothing when aimed
+    at one. Camille's ruling on `#1153`, and her reason is the narrowing
+    rather than the page: *"It'd be fine to limit it to allies only for most
+    situations ... a good reason to do that is to limit the action space."*
+    """
     mate = c.target
     if mate is not None and c.may("spend a healing surge", who=mate):
         c.surge(on=mate, bonus=c.roll("1d6"))

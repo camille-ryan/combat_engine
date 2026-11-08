@@ -163,7 +163,7 @@ def p12608(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.DIVINE, Keyword.HEALING],
     requires_text="must be used at the end of an extended rest",
     out_of_combat=True,
@@ -171,7 +171,16 @@ def p12608(c: Cast) -> None:
 def p12614(c: Cast) -> None:
     """Raising the dead happens between fights, on a creature the encounter
     no longer holds, and the lingering -1 is measured in milestones. None of
-    it is a combat effect."""
+    it is a combat effect.
+
+    **The pool is the party**, because the card's target is *"one creature
+    that died no more than 24 hours ago"* -- a fallen companion, not a foe.
+    `ONE_CREATURE` is the *enemy* pool, so the declaration said the opposite
+    of the page. Inert either way on this row, since the body only notes
+    what happened and `out_of_combat` keeps it off every board -- changed
+    because a declaration that reads backwards is what the next author
+    copies. Camille's ruling on `#1153`.
+    """
     c.note(f"{c.ref}: the dead are restored, at -1 until three milestones")
 
 
