@@ -204,6 +204,50 @@ RULES_TERMS = {
 _NOISE = {"the", "of", "and", "a", "an", "in", "on", "to", "with", "its", "it"}
 
 
+#: `<power source> power` is a **power source**, never a citation -- and one
+#: card is printed under the very phrase that names its own source, so the
+#: two collide. The six sources are a closed printed list, written down once
+#: more in `etl/power.py:_KEYWORDS`.
+#:
+#: **This lived in `build.py` and was read by one of the two passes that
+#: needs it**, which is the drift `#1014` is this tree's worked case of.
+#: `#1080` wrote it for the citing-position resolver; the general swap in
+#: `scrub` never asked, so it substituted the ref for the source phrase
+#: **9 times** across 6 feats and a power. Nothing reported it: `identifies`
+#: answers True for the phrase as readily as for a real name -- it is two
+#: words and neither is waived -- and the stored spec reads both in lower
+#: case, so case cannot help either.
+#:
+#: **The discriminator is grammar, and it is narrow on purpose.** A power's
+#: printed name is a proper noun, so an indefinite article in front of this
+#: one means the ref replaced a category. Measured over all 14 citations and
+#: the split is exact, with no exceptions: the 5 in a citing position
+#: (`invoke <name>`) are the card and are right, and the 9 behind an article
+#: are the source and are wrong.
+#:
+#: **Scoped to this collision rather than to the article**, because the
+#: general rule was measured and is false: 63 power refs corpus-wide sit
+#: behind an indefinite article and **54 of them are ordinary proper nouns**
+#: -- a conjured creature or a conjured wall, where the article is correct
+#: English and the ref is the right substitution. Guarding on the article
+#: alone would have broken 54 rows to fix 9.
+#:
+#: Describe the collision and cite the ref: two earlier drafts of the note
+#: in `build.py` quoted the colliding phrase to make it concrete, and the
+#: phrase *is* the name, so `leaks.py` caught both. #1080, #1152.
+POWER_SOURCE_PHRASE = re.compile(
+    r"^(?:martial|arcane|divine|primal|psionic|shadow)\s+powers?$", re.I)
+
+#: An indefinite article immediately before a name, which is the half of the
+#: rule above that only the citing-position reader needs: `_granted`'s
+#: position (*"you gain the <name> power"*) refuses the phrase outright,
+#: because a definite article there is the card or nothing.
+#:
+#: **And it lives here rather than beside its one caller** so the two halves
+#: of one rule cannot drift apart again -- which is exactly what #1152 was.
+BEHIND_AN_ARTICLE = re.compile(r"\ban?\s+$", re.I)
+
+
 @lru_cache(maxsize=1)
 def _MECHANICAL_WORDS() -> frozenset[str]:
     """Every word the engine itself has a name for. Never scrubbed.

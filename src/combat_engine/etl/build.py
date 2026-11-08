@@ -6610,8 +6610,13 @@ _CITE_STOP = (
 #:
 #: Checked both ways: with this guard the `when you use` position swaps
 #: `f3032` and nothing else, and the false swap on `i1071p1` is gone.
-_POWER_SOURCE_PHRASE = re.compile(
-    r"^(?:martial|arcane|divine|primal|psionic|shadow)\s+powers?$", re.I)
+#: **Moved to `sanitise` and read from there, which is the fix for #1152.**
+#: It was defined here and consulted by this pass only, while the general
+#: name-to-ref swap in `sanitise.scrub` -- which is what writes most of the
+#: corpus -- never asked. Nine wrong substitutions, in a database every run
+#: of `leaks.py` called clean. One rule, one definition; the note on it
+#: there carries the measurement.
+_POWER_SOURCE_PHRASE = sanitise.POWER_SOURCE_PHRASE
 
 _CITE_STOP_THROUGH_AND = (
     r"(?=\s+(?:until|while|that|for|to|in|on|with|as|when|if|from)\b"
@@ -6988,7 +6993,15 @@ def _named_powers(
         return m.group(0).replace(m.group(1), ref, 1) if ref else m.group(0)
 
     def cited(m: re.Match) -> str:
-        ref = _cited_name(m.group(1), by_name, own, rules or set(), cls)
+        # `_THE` holds `a` and `an`, so the article the page printed is
+        # inside the match and in front of the captured run. That is the
+        # only thing separating the card from the power source it shares a
+        # name with -- see `_cited_name`.
+        before = m.group(0)[: m.start(1) - m.start(0)]
+        ref = _cited_name(
+            m.group(1), by_name, own, rules or set(), cls,
+            behind_article=bool(sanitise.BEHIND_AN_ARTICLE.search(before)),
+        )
         return m.group(0).replace(m.group(1), ref, 1) if ref else m.group(0)
 
     spec = _NAMED.sub(swap, spec)
@@ -6999,7 +7012,7 @@ def _named_powers(
 
 def _cited_name(
     phrase: str, by_name: dict[str, str], own: str, rules: set[str],
-    cls: str = "",
+    cls: str = "", *, behind_article: bool = False,
 ) -> str:
     """The longest prefix of `phrase` that is a cited power's printed name.
 
@@ -7031,6 +7044,16 @@ def _cited_name(
         if ref.startswith(own) or own.startswith(ref):
             continue
         if not sanitise.cited(name, rules):
+            continue
+        # **A power source, not a power** -- the same guard `_granted` has
+        # carried since #1080, arriving here because this is the reader
+        # that was missing it. `_granted`'s position refuses the phrase
+        # outright; a citing verb takes the card as readily as the
+        # category, so here it is the **article** that tells them apart.
+        # See `sanitise.POWER_SOURCE_PHRASE` for the measurement: 5 of 5
+        # citing positions are the card, 9 of 9 behind an article are the
+        # source. #1152.
+        if behind_article and sanitise.POWER_SOURCE_PHRASE.match(name):
             continue
         return " ".join([ref, *words[size:]])
     return ""
