@@ -36,11 +36,104 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 #: Where a type error is worth hearing about. `content/` is deliberately out:
-#: 677 modules of hand-written rows, written by many agents over a long time,
-#: and a row is data more than logic -- the per-file run below still covers
-#: any content file that actually changed, which is the case that matters.
+#: 783 modules of hand-written rows, written by many agents over a long time,
+#: and a row is data more than logic.
+#:
+#: **This used to end "the per-file run below still covers any content file
+#: that actually changed, which is the case that matters", and that was
+#: false.** A file outside this tuple is compared against a whole-scope run
+#: that never reads it, so `seen` is empty by construction, every diagnostic
+#: compares `0 <= baseline`, and `_compare` called all of them scope
+#: artifacts. The per-file run looked at content files and discarded
+#: everything it found.
+#:
+#: What it cost: `ty` printed `Object of type Effect has no attribute live`
+#: for a content row, exactly and correctly, and this instrument reported
+#: `ok`. That row raised `AttributeError` every time its watch fired.
+#: `audit.py` reports `0 raise` either way -- its board never poses the
+#: trigger -- so the crash was found by a probe playing real fights for an
+#: unrelated issue. #1155.
 SCOPE = ("src/combat_engine/engine", "src/combat_engine/chargen",
          "src/combat_engine/api", "src/combat_engine/etl", "scripts")
+
+
+#: An `unresolved-attribute` on a file outside `SCOPE` that is a **real
+#: crash** rather than a loose annotation.
+#:
+#: Measured over `ty check src/combat_engine/content/`: 177 of them, in 14
+#: distinct `(type, attribute)` pairs, and **13 of the 14 are benign** for
+#: one of two reasons --
+#:
+#: * the handler is annotated with a **looser or sibling** event class and
+#:   receives one that does have the field. `Moved` has no `kind_`;
+#:   `MoveStart` and `MoveEnd` both declare it, and that is what the rows
+#:   actually get. 37 of the 177 are `Event . actor/target/attacker/...`,
+#:   same shape;
+#: * the attribute is **attached at runtime** by `engine/`. `expect.py` does
+#:   `ev.result = ...`, so `Hit . result` exists when a handler sees it --
+#:   22 of the 177.
+#:
+#: The fourteenth was a genuine `AttributeError` that fired every time its
+#: row's watch ran: `Effect . live`. `live` is the **registry**
+#: (`Effects.live`), never a field on a hold, and `Effect` has no subclass
+#: that carries it.
+#:
+#: So the discriminator is: **an Event subclass is waived, anything else has
+#: to really have the attribute.** Both endemic excuses above are properties
+#: of the event hierarchy and of nothing else, so outside it a missing
+#: attribute is missing. #1155.
+_UNRESOLVED = re.compile(
+    r"Object of type `([A-Za-z_][\w]*)` has no attribute `([A-Za-z_]\w*)`")
+
+
+def _really_absent(fingerprint: str) -> bool:
+    """Is this `unresolved-attribute` a crash rather than a loose annotation?
+
+    Fails **closed** -- an unknown type, an unimportable module or a type
+    whose name does not resolve is reported as benign, because a guess in
+    the other direction reddens ordinary content work and that is how an
+    instrument gets routed around.
+    """
+    if not fingerprint.startswith("unresolved-attribute|"):
+        return False
+    found = _UNRESOLVED.search(fingerprint)
+    if found is None:
+        return False
+    name, attr = found.groups()
+    try:
+        import dataclasses
+
+        from combat_engine.engine import components, durations
+        from combat_engine.engine import events as ev_mod
+    except Exception:
+        return False
+    if issubclass(getattr(ev_mod, name, type(None)) or type(None),
+                  getattr(ev_mod, "Event", type(None))):
+        return False
+    cls = None
+    for mod in (ev_mod, durations, components):
+        cls = getattr(mod, name, None)
+        if cls is not None:
+            break
+    if cls is None or not isinstance(cls, type):
+        return False
+    family = [cls, *_subclasses(cls)]
+    for one in family:
+        if not dataclasses.is_dataclass(one):
+            if hasattr(one, attr):
+                return False
+            continue
+        if attr in {f.name for f in dataclasses.fields(one)} or hasattr(one, attr):
+            return False
+    return True
+
+
+def _subclasses(cls: type) -> list[type]:
+    out: list[type] = []
+    for sub in cls.__subclasses__():
+        out.append(sub)
+        out.extend(_subclasses(sub))
+    return out
 
 
 def _changed() -> list[str]:
@@ -350,7 +443,55 @@ def _compare(text: str, targets: list[str], wide: bool) -> int:
                 over[f] = left
             else:
                 del over[f]
+        outside = set(explained) - _asked_about(
+            dict.fromkeys(explained, 0), list(SCOPE))
         for f, ok in sorted(explained.items()):
+            if f in outside:
+                # **A file the wide run never looked at cannot be explained
+                # by it**, and this is where a real crash was thrown away.
+                # `SCOPE` holds `engine`, `chargen`, `api`, `etl` and
+                # `scripts` -- not `content`, `story` or `policy` -- so for
+                # a file outside it `seen` is empty by construction, every
+                # diagnostic compares `0 <= baseline`, and the answer is
+                # always "a scope artifact". That is vacuous rather than
+                # reassuring: it proves the wide run is blind to the file,
+                # not that the finding is an artefact of narrowing.
+                #
+                # Measured: `ty` printed `Object of type Effect has no
+                # attribute live` for a content row, exactly and correctly,
+                # and this instrument reported `ok`. The row raised
+                # `AttributeError` every time its watch fired; `audit.py`
+                # reports `0 raise` because its board never poses that
+                # trigger; it was found by a probe playing real fights for
+                # another issue. Row fixed in `07b9e72b`.
+                #
+                # **Printed and not failed, deliberately.** Un-blinding
+                # these makes a content file report its pre-existing
+                # diagnostics too, and 13 of the 14 (type, attribute) pairs
+                # under `content/` are a base-class annotation artefact or
+                # an attribute `engine/` really does attach at runtime --
+                # so failing here would redden ordinary content work, which
+                # is how an instrument gets routed around. Adopting those
+                # paths into `SCOPE` with a bless is the real fix and is a
+                # decision rather than a line: #1155.
+                crashes = {fp: v for fp, v in ok.items()
+                           if _really_absent(fp)}
+                print(f"  {f}: {len(ok)} diagnostic(s), and this file is"
+                      f" OUTSIDE SCOPE -- the whole-scope run never read"
+                      f" it, so it cannot call them artifacts. Read them;"
+                      f" see #1155")
+                for fp, (now_n, was) in sorted(ok.items()):
+                    mark = "  <- ABSENT, a real crash" if fp in crashes else ""
+                    print(f"      {fp}  (now {now_n}, baseline {was}){mark}")
+                if crashes:
+                    over[f] = crashes
+                    continue
+                # `pop`, not `del`: the loop above has already removed this
+                # file when every one of its diagnostics was explained, so a
+                # bare `del` raised `KeyError` on the clean path -- which is
+                # the control, i.e. the one run that has to pass.
+                over.pop(f, None)
+                continue
             print(f"  {f}: {len(ok)} diagnostic(s) at this scope that the"
                   f" whole scope does not report above baseline -- a scope"
                   f" artifact, not a regression")
