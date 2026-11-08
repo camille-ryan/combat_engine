@@ -1108,12 +1108,41 @@ def i761x1(c: Cast) -> None:
         c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
+def _to_swim(ctx: dict[str, Any]) -> bool:
+    """An Athletics check made **to swim**, and not any other.
+
+    `movement.walk` is the one caller that says what its check is for --
+    `check(world, eid, "athletics", dc, purpose="swim")` -- so an ordinary
+    Athletics check reads `""` and the bonus stands down. `i589p1`'s
+    `_swimming` is the same gate in `items/waist.py`; two files, one
+    question, and the duplication is one line rather than an import across
+    content modules.
+    """
+    return ctx.get("purpose") == "swim"
+
+
 @power("i761p1", level=10, cls=ITEM, usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i761p1(c: Cast) -> None:
-    """Swimming, which no fight rolls. Declared inert so the action menu
-    stops offering a free action whose whole payout is a bonus to a check
-    that never happens."""
+    """A +5 to swimming, which something rolls now.
+
+    **This said "which no fight rolls" and was right when written.**
+    `movement.walk` rolls Athletics with `purpose="swim"`, and `#1111`'s
+    engine half put the purpose in the modifier context -- so a *standing*
+    bonus can be narrowed to it, which is what `i589p1` already does. The
+    row was declared inert on a premise that expired, carried no marker,
+    and so could never be reported: `out_of_combat=True` tells `audit.py`
+    to stop expecting anything of it.
+
+    `out_of_combat` stays, and that is not a contradiction: a swim check is
+    not a thing a fight rolls, so the row is still correctly absent from
+    the action menu. What changed is that it now lays the bonus it prints
+    instead of nothing at all.
+
+    `kind="power"`, because the card says *"power bonus"*.
+    """
+    c.bonus("skill:athletics", 5, kind="power", on=c.me,
+            until=When.ENCOUNTER, when=_to_swim)
 
 
 @power("i776x1", level=10, cls=ITEM, action=ActionType.NONE,

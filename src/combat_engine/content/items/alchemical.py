@@ -900,10 +900,40 @@ def i3310p1(c: Cast) -> None:
         c.dazed(until=When.EONT)
 
 
+def _against_suffocation(ctx: dict[str, Any]) -> bool:
+    """An Endurance check made **to avoid suffocation**, and not any other.
+
+    `engine/suffocation.py` is the printed in-fight rule (`#1115`) and rolls
+    with `purpose="suffocation"`, so an ordinary Endurance check reads `""`
+    and the bonus stands down. Same gate as `i589p1`'s `_holding_breath`.
+    """
+    return ctx.get("purpose") == "suffocation"
+
+
 @power("i3478p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i3478p1(c: Cast) -> None:
-    """Endurance against suffocation, and nothing else."""
+    """A +5 to Endurance against suffocation, which something rolls now.
+
+    **This said "and nothing else" and was right when written.** `#1115`
+    built `engine/suffocation.py` -- DMG p159's DC 20 at the end of a turn
+    in a round the creature took damage -- and it rolls with
+    `purpose="suffocation"`, so there is a check for the bonus to narrow
+    against. The row was declared inert on a premise that expired and
+    carried no marker, so nothing could report it.
+
+    `out_of_combat` stays: a minor action whose whole payout is a bonus to
+    a check the AI cannot plan for does not belong in the action menu. What
+    changed is that it lays the bonus it prints.
+
+    `kind="item"`, because the card says *"item bonus"* -- and that is
+    load-bearing rather than bookkeeping: two item bonuses do not stack, so
+    the kind is what stops a second air flask doubling it.
+
+    The Level 14 and 24 steps are out of scope, as elsewhere in this file.
+    """
+    c.bonus("skill:endurance", 5, kind="item", on=c.me,
+            until=When.ENCOUNTER, when=_against_suffocation)
 
 
 @power("i633p1", level=4, cls=ITEM, usage=DAILY, action=STANDARD,
