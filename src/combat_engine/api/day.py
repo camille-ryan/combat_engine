@@ -247,6 +247,19 @@ class _Leg:
     rested: list[dto.DaySheetDTO] = field(default_factory=list)
     rest_text: str = ""
     exhausted: bool = False
+    #: The slots the dead held, as `Party.bury` returned them, so `rested`
+    #: can be matched against the **surviving** wire ids rather than against
+    #: all of them. Empty on a leg nobody died in, which is every leg this
+    #: field did not exist for.
+    #:
+    #: `bury` returns slots for exactly this reason and its own docstring
+    #: says so -- *"dropping a sheet without dropping the same index from
+    #: each silently hands a dead character's name [...] to whoever was
+    #: behind them"*. This caller discarded the return value and the comment
+    #: beside it argued that was safe, *"no `Campaign` state to keep in step
+    #: here because a day has no personas or formation"*. A day has no
+    #: personas; it does have this order.
+    buried: list[int] = field(default_factory=list)
     #: `max_hp`/`max_surges` per wire id, captured off the world while there
     #: was one. `story.Sheet` carries `max_hp` but **not** a surge maximum,
     #: and `rested` is read off the sheets after the world is gone -- so the
@@ -448,9 +461,23 @@ class Day:
         #
         # The seam is crossed deliberately: the fix is `story`'s, but a
         # `Day` holds a `Party` and no `Campaign`, so this is the only place
-        # arcade mode can make the call. One line, no `Campaign` state to
-        # keep in step here because a day has no personas or formation.
-        self.party.bury()
+        # arcade mode can make the call.
+        #
+        # **The slots are kept, and discarding them was a bug.** This line
+        # read `self.party.bury()` and the comment here argued that was
+        # enough -- "no `Campaign` state to keep in step here because a day
+        # has no personas or formation". True of personas and false of the
+        # thing that matters: `_leg.pinned` and `leg.ended` are wire ids
+        # **parallel to the sheets by index**, so a sheet removed from the
+        # middle shifts every sheet behind it against them.
+        #
+        # Measured: the Rogue dies in slot 2 of 4 and `rested` published the
+        # Wizard's hit points under the Rogue's id and label, with every
+        # count agreeing. It was invisible until now because the only death
+        # the pinned day had ever produced was in the **last** slot, where
+        # dropping the last sheet and dropping the last id coincide. #1101
+        # exercised exactly that case.
+        here.buried = self.party.bury()
 
         # **Rested is read off the sheets, not off the board.** `Party.rest`
         # is the copy that outlives the fight and is the only one that spends
@@ -601,8 +628,15 @@ class Day:
         which is what `story.harvest` matches on and for the same reason: a
         `Sheet` carries no entity id, because an id belongs to a world and a
         sheet outlives one.
+
+        **Minus the slots the dead held**, because `bury` has already run by
+        the time this is called and `self.party.sheets` is the shorter list.
+        Matching by position against the full order hands a dead
+        character's id and label to whoever was behind them -- see
+        `leg.buried`.
         """
         order = [s.id for s in leg.ended] or [s.id for s in leg.entering]
+        order = [w for i, w in enumerate(order) if i not in set(leg.buried)]
         out: list[dto.DaySheetDTO] = []
         for i, sheet in enumerate(self.party.sheets):
             wid = order[i] if i < len(order) else f"c{i}"
