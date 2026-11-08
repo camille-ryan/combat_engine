@@ -132,6 +132,18 @@ class Sheet:
     #: Dealt once in `Party.of` off its own stream, exactly as `kit` is, and
     #: read back by `Sheet.character`. #793.
     skills: list[str] = field(default_factory=list)
+    #: The background this character was dealt, as a ref. Carried for the
+    #: same reason `skills` is, and against the same measurement: `spawn`
+    #: deals one keyed on the **fight's** seed, so the same cleric came out
+    #: of three fights with three histories -- `x6_461`, `x6_194`, `x6_311`
+    #: -- and three different `background_skill` bonuses: athletics, heal,
+    #: arcana. A +2 that moves when nothing about the character moved is
+    #: this component's named failure mode.
+    #:
+    #: `spawn` already honours a background it is handed, so dealing it here
+    #: is what stops the board dealing its own. #1156, and `#1079` is what
+    #: wants it stable.
+    background: str = ""
     #: Healing surges left. `None` is the full pool.
     surges: int | None = None
     #: What a fresh pool holds, read off the board the way `max_hp` is and
@@ -365,6 +377,11 @@ class Sheet:
             self.cls, self.level, build=self.build, race=self.race,
             powers=list(self.powers), feats=list(self.feats),
             skills=tuple(self.skills),
+            # **Handed back, or `spawn` deals a fresh one.** This is the
+            # read half of #1156: the field exists so the board stops
+            # dealing its own off the fight's seed, and it only stops if
+            # the request carries it.
+            background=self.background,
             # **Rebuilt from the stored dicts, not re-dealt.** `Magic` takes
             # tuples where JSON gives lists, so `base` and `powers` are
             # coerced back -- without that an item compares unequal to the
@@ -415,6 +432,7 @@ class Party:
             Character,
             _trained_skills,
             build_of,
+            deal_background,
             deal_race,
             dealt_hand,
             feats_for,
@@ -465,9 +483,16 @@ class Party:
             # Its own stream, keyed the way the others are.
             trained = sorted(_trained_skills(
                 key, list(taken), Random(f"{seed}:{key}:skills"), race))
+            # **And the background, for the reason directly above.** `spawn`
+            # deals one off the *fight's* seed, so the same cleric came out
+            # of three fights with three histories and three different
+            # `background_skill` bonuses -- athletics, heal, arcana. Its own
+            # stream, keyed the way the others are. #1156.
+            history = deal_background(Random(f"{seed}:{key}:background"))
             sheets.append(Sheet(
                 cls=key, level=level, build=build.name, race=race,
                 powers=kept, feats=taken, kit=kit, skills=trained,
+                background=history,
             ))
         return cls(sheets=sheets)
 

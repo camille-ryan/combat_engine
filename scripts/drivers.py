@@ -42300,6 +42300,69 @@ def a_party_keeps_its_training_between_fights(out: Result) -> None:
                  f" skill ({sheet.cls})",
                  f"board={seen[0]} sheet={sorted(sheet.skills)}")
 
+    # -- and the background, which is the same bug one field further on ---
+    #
+    # `#1156`. `deal_background` was called only from `spawn`, keyed on
+    # `world.rng.seed`, so the same cleric came out of three fights with
+    # three histories -- and `background_skill` grants a **+2 skill bonus**,
+    # so this moved a number and not just flavour. Measured before the fix:
+    # `x6_461` / athletics, `x6_194` / heal, `x6_311` / arcana.
+    #
+    # **Asserted by watching the dealer rather than by reading the board**,
+    # because `Character` is not kept as a component -- `spawn` reads it and
+    # drops it -- so there is nothing on the board to compare. What the
+    # claim really is: the board no longer deals its own, which is exactly
+    # "`deal_background` is not called while fielding".
+    from dataclasses import replace as _replace
+
+    from combat_engine import chargen as _cg
+
+    out.that(all(s.background for s in party.sheets),
+             "every sheet carries a pinned background -- `Party.of` deals it"
+             " once off its own stream, the way it deals the kit and the"
+             " training (#1156)",
+             f"{[s.background for s in party.sheets]}")
+
+    def dealt_while_spawning(sheets: list[_Sheet]) -> int:
+        seen: list[str] = []
+        real = _cg.deal_background
+        _cg.deal_background = lambda rng: (
+            seen.append(real(rng)) or seen[-1])
+        try:
+            for seed in SEEDS:
+                world = World(Grid(20, 12), Rng(seed), Bus())
+                for i, sheet in enumerate(sheets):
+                    spawn(world, sheet.character, (2, 2 + i * 2))
+        finally:
+            _cg.deal_background = real
+        return len(seen)
+
+    out.that(dealt_while_spawning(list(party.sheets)) == 0,
+             "and the board deals none of its own across four fight seeds --"
+             " `spawn` honours a background it is handed, so a pinned one is"
+             " what stops it re-dealing",
+             f"{dealt_while_spawning(list(party.sheets))} call(s)")
+
+    # **The control, and it is the assertion that has teeth**: with the
+    # field blank -- the pre-#1156 state -- the board deals one per
+    # character per board again. Without this, a `Sheet` that silently
+    # stopped carrying the field would read as the fix working.
+    blanked = [_replace(s, background="") for s in party.sheets]
+    again = dealt_while_spawning(blanked)
+    out.that(again == len(SEEDS) * len(blanked),
+             "while a sheet with the field blank makes it deal one per"
+             " character per board -- 16 over four seeds and four"
+             " characters, which is the state this fixed",
+             f"{again} call(s)")
+
+    out.that(all(s.background == _maker.dealt(s.cls, level=3,
+                                              seed=7).background
+                 for s in party.sheets),
+             "and both dealers pin the same background -- `maker.dealt`"
+             " forked the moment `Party.of` started dealing one and it did"
+             " not, which `chargen_defaults` caught in five assertions",
+             f"{[(s.cls, s.background) for s in party.sheets]}")
+
     # The second dealer, which this repo has already had fork once.
     for cls in ("rogue", "wizard"):
         made = _maker.dealt(cls, level=3, seed=7)
@@ -55339,10 +55402,20 @@ def xp_is_awarded_by_the_printed_arithmetic_and_never_spent(out: Result) -> None
     # Naming a seed per outcome is what stops either arm going dead again:
     # a branch nobody takes cannot fail, and `out.that` has no way to say
     # "this assertion did not run".
-    _, said_won, steps_won = play([CHAL, TALK], seed=11)
+    #
+    # **Seed 11 -> 3, and the cause is the paragraph above happening a
+    # second time.** `#1156` moved the background from the *fight's* seed
+    # to the party's, so the +2 `background_skill` lands on a different
+    # skill and seed 11 stops winning. Re-measured over 30 seeds rather
+    # than nudged: 3, 16, 20, 26, 28 and 30 win and the rest lose, so the
+    # losing arm keeps seed 1 and the winning arm takes 3. This assertion
+    # firing is the mechanism working -- it is here precisely so a seed
+    # that stops winning reddens instead of silently skipping the award
+    # check below.
+    _, said_won, steps_won = play([CHAL, TALK], seed=3)
     out.that(
         steps_won[0].outcome == "won",
-        "seed 11 wins the challenge -- the setup for the assertion below,"
+        "seed 3 wins the challenge -- the setup for the assertion below,"
         " asserted so a seed that stops winning reddens here rather than"
         " quietly skipping it",
         f"outcome={steps_won[0].outcome}",

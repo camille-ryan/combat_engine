@@ -239,9 +239,14 @@ def interview(
     # `#1101` pinned one dealer and not the other. Same key, same stream.
     trained = sorted(chargen._trained_skills(
         cls, list(taken), Random(f"{seed}:{cls}:skills"), race))
+    # **And the background, on the same key for the same reason.** The rule
+    # named above caught this the moment `Party.of` started dealing one and
+    # this dealer did not -- five assertions red, naming the field. #1156.
+    history = chargen.deal_background(Random(f"{seed}:{cls}:background"))
     return Sheet(
         cls=cls, level=level, build=build.name, race=race,
         powers=kept, feats=taken, kit=kit, skills=trained,
+        background=history,
     )
 
 
