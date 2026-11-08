@@ -38746,32 +38746,47 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # to move a pinned census: this is the same tightening-not-loosening
     # rule `audited.json` is built on, and the sum still has to partition
     # the 584.
+    #
+    # **Moved by one row again, 2026-11-08, and the same way.** `#1153`
+    # read `p3847` against its card -- *"One creature in the burst"*, body
+    # `c.surge(on=mate)*, and an enemy cannot spend your healing surge --
+    # so it is the team pool now. 115 -> 116 reach an ally, 138 -> 137
+    # reach no friend, 121 -> 120 declare nothing.
+    #
+    # **And the census is what caught the first attempt at that issue.**
+    # Camille's ruling reads as 91 rows; 56 declare the enemy pool, and
+    # moving all 56 was wrong -- **53 of them declare an `attack=` against
+    # their target**, so their printed Target line is who they *hit* and
+    # ally-only points a character's attack at their own ally. `replay`
+    # named it from one event in 1,321. The live population was 2.
     reach = SC._heal_reach()
-    out.that(reach["reaches_an_ally"] == 115
+    out.that(reach["reaches_an_ally"] == 116
              and reach["holdable"] == 584,
-             "115 of the 584 character-holdable healing rows can reach an"
+             "116 of the 584 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
-             " refusal counter is about, and it went up by one when"
-             " `i545p2`'s printed target line was honoured (#1139)",
+             " refusal counter is about, and it has gone up by one twice:"
+             " `i545p2` (#1139) and `p3847` (#1153), each read against its"
+             " printed card",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
     out.that(reach["self_only"] == 331
-             and reach["cannot_reach_an_ally"] == 138
+             and reach["cannot_reach_an_ally"] == 137
              and reach["reaches_an_ally"] + reach["self_only"]
              + reach["cannot_reach_an_ally"] == reach["holdable"],
-             "and the three buckets partition it -- 331 self-only, 138"
-             " that reach no friend, 115 that do. They have to add up or"
+             "and the three buckets partition it -- 331 self-only, 137"
+             " that reach no friend, 116 that do. They have to add up or"
              " the census is reading something twice",
              f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
              f" + {reach['reaches_an_ally']}")
-    out.that(reach["undeclared"] == 121,
-             "**121 of those 138 declare no target line at all** and"
+    out.that(reach["undeclared"] == 120,
+             "**120 of those 137 declare no target line at all** and"
              " inherit `dsl.ONE_CREATURE`, so they read `enemy` by"
              " default rather than by design. Told apart by identity"
              " against the singleton, which is the only way to see it --"
              " the other 17 print an enemy target for real, and a heal"
              " aimed at an enemy is a drain that heals its caster."
-             " 12 of the 121 attack nobody at all, which is `#1139`'s"
-             " live population",
+             " `#1139` closed with 0 of its 12 live: 8 are fired by a"
+             " trigger that requires having hit an enemy, so an enemy"
+             " exists by construction",
              f"{reach['undeclared']} undeclared")
     # -- and the filter exercised, which is the load-bearing pair -------
     #
