@@ -10079,6 +10079,34 @@ class Cast:
         caught.contracted[ref] = stage
         return effect
 
+    @property
+    def stage(self) -> int:
+        """Which stage of **this row's own disease** the caster is at. #948.
+
+        `0` when the caster does not carry it, which is also what a cured
+        disease reads as -- so a body may branch on `c.stage` with no guard
+        and a stage-0 branch is the page's own *"the target recovers"*.
+
+        **The row's ref is the disease's ref**, which is what makes this a
+        property rather than a lookup taking one: a disease page prints one
+        card with a paragraph per stage, so `x5_11`'s body is the whole of
+        `x5_11` and asks which paragraph applies.
+
+        Read off `Afflictions.contracted` rather than from `pending`:
+        pending is caught-but-not-settled, with the end-of-encounter saving
+        throw still owed (`c.expose`), and a disease that may yet be thrown
+        off must not be applying a stage's penalty.
+
+        `turns.arm_afflictions` is what calls the row, once per fight, off
+        the stage the `Sheet` carried in.
+        """
+        from .components import Afflictions
+
+        caught = self.world.get(self.me, Afflictions)
+        if caught is None:
+            return 0
+        return int(caught.contracted.get(self.ref, 0))
+
     def expose(
         self,
         ref: str,

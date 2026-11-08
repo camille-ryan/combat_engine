@@ -755,6 +755,29 @@ def _wear(world: World, eid: int, sheet: Sheet) -> str:
     points = world.get(eid, ActionPoints)
     if points is not None:
         points.points = sheet.action_points
+    # **The diseases the party is carrying, and nothing read them back.**
+    # `harvest` has written `Afflictions.contracted` onto the sheet since
+    # `503512fb` and this function carried every other kind of wear, so a
+    # disease caught in one fight was recorded and then **forgotten by the
+    # next board**: measured, a sheet holding `x5_11` at stage 2 produced a
+    # board with no `Afflictions` component at all.
+    #
+    # Added rather than assigned, because the component may already hold
+    # something: `chargen.spawn` does not make one, but a future grant
+    # might, and the worse stage is the one that matters -- the same
+    # `max` `harvest` takes in the other direction.
+    #
+    # This is what `turns.arm_afflictions` reads, so without it the
+    # dispatcher would have nothing to dispatch on any board but the one
+    # the disease was caught on. #948.
+    if sheet.afflictions:
+        from combat_engine.engine.components import Afflictions
+
+        caught = world.get(eid, Afflictions) or world.add(eid, Afflictions())
+        for ref, stage in sheet.afflictions.items():
+            caught.contracted[ref] = max(
+                int(stage), int(caught.contracted.get(ref, 0))
+            )
     powers = world.get(eid, Powers)
     if powers is not None:
         # Only what the character actually has. A sheet written at one level and

@@ -13,11 +13,24 @@ at an extended rest.
 and `Cast.expose` are live at **54 call sites across 33 files, 23 distinct
 refs** -- so something does inflict a disease, and has for a while.
 
-Step 3 -- the per-stage content rows -- is still absent, and `#948` records
-why it is not merely unwritten: nothing reads `Afflictions.contracted` to
-*apply* a stage's effect, so an `x5_` row would have no caller, and
-`spec.py` has no `disease` branch, so no author can be handed a brief for
-one. Writing them first is the drawable-and-inert shape.
+**Step 3 is now writable, and both reasons this paragraph gave for it not
+being are gone.** It said *"nothing reads `Afflictions.contracted` to apply
+a stage's effect, so an `x5_` row would have no caller, and `spec.py` has
+no `disease` branch, so no author can be handed a brief for one"*. Live:
+
+* `turns.arm_afflictions` is the caller -- it runs the `x5_` row whose ref
+  **is** the disease's, once per fight, and `Cast.stage` is what the body
+  branches on;
+* `story._wear` carries `Sheet.afflictions` onto the board's
+  `Afflictions.contracted`, which nothing did -- a disease was recorded by
+  `harvest` and then forgotten by the next board, measured as no
+  `Afflictions` component at all;
+* `spec.py`'s `_disease` renderer landed in `2203a8cf` and carries both
+  DCs, the skill, the level, `dc_shape` and the stage count.
+
+So the rows are a token spend rather than an impossibility. The remaining
+69 are still unwritten; what changed is that writing one is no longer the
+drawable-and-inert shape.
 
 **The roll follows `run.weather`'s shape and not a new one.** That function
 already rolls a party-wide Endurance check between scenes -- lay a
@@ -67,6 +80,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Under `TYPE_CHECKING` only: this module is imported by `run.py`, which
+    # `story/__init__.py` does not import, and a real import here would make
+    # the pair a cycle. `from __future__ import annotations` above is what
+    # lets the annotation be a string at runtime.
+    from . import Party
 
 #: The DC shapes this can resolve. See the module docstring for the other
 #: three and why each is refused.
@@ -153,7 +174,7 @@ def refused() -> dict[str, str]:
     return out
 
 
-def tick(party: object, seed: int) -> list[str]:
+def tick(party: Party, seed: int) -> list[str]:
     """Roll each afflicted character's check at an extended rest. #948.
 
     One line per character who rolled, saying which way it went. `[]` when

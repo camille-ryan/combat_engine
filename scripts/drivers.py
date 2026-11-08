@@ -39218,6 +39218,124 @@ def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     )
 
 
+def a_carried_disease_arms_its_stage_on_the_next_board(out: Result) -> None:
+    """The dispatcher `#948` step 3 was blocked on. `#948`.
+
+    The track has worked for a while -- `c.contract` records a stage,
+    `harvest` carries it to a `Sheet`, `affliction.tick` moves it at an
+    extended rest -- and **two links were missing between the record and
+    any effect**:
+
+    * nothing carried `Sheet.afflictions` back onto a board, so a disease
+      caught in one fight was forgotten by the next. Measured before the
+      fix: a sheet holding a stage-2 disease produced a board with no
+      `Afflictions` component at all;
+    * nothing read a stage to *apply* what it does, so an `x5_` row had no
+      caller and writing the 69 rows first would have been
+      drawable-and-inert.
+
+    `turns.arm_afflictions` is the caller and `Cast.stage` is what a body
+    branches on. The disease's ref **is** the row's ref, so there is no
+    lookup table -- `x5_11` at stage 2 runs `x5_11`.
+
+    **Declares its own row, because zero are declared.** There is nothing
+    in the registry to assert against yet, so the probe registers one and
+    removes it in a `finally`, the arrangement `#1029`'s manifestation
+    probe already uses. The last assertion is that the cleanup happened,
+    because this registry is shared with every other rule.
+    """
+    from combat_engine import story as _st
+    from combat_engine.engine import (
+        NO_TARGET,
+        ActionType,
+        Cast,
+        Melee,
+        power,
+    )
+    from combat_engine.engine.components import Afflictions, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Usage as _U
+    from combat_engine.story import table as _tbl
+
+    ran: list[tuple[int, int]] = []
+    ref = "x5_11"
+
+    @power(ref=ref, cls="disease", level=3, usage=_U.AT_WILL,
+           action=ActionType.NONE, target=NO_TARGET, reach=Melee(0))
+    def _probe(c: Cast) -> None:
+        ran.append((c.me, c.stage))
+
+    def board_with(stage: int | None):  # noqa: ANN202
+        ran.clear()
+        party = _st.Party.of(level=3, seed=7)
+        if stage is not None:
+            party.sheets[0].afflictions[ref] = stage
+        return party, _tbl.lay(party, seed=6)
+
+    try:
+        # -- the carry, which is the link nothing had -------------------
+        _, table = board_with(2)
+        caught = table.world.get(table.eids[0], Afflictions)
+        out.that(caught is not None and caught.contracted.get(ref) == 2,
+                 "**a disease on the sheet reaches the next board** --"
+                 " `harvest` wrote it one way and `_wear` read nothing"
+                 " back, so a carried disease was recorded and then"
+                 " forgotten. Measured before the fix as no `Afflictions`"
+                 " component at all, which is not a wrong stage but an"
+                 " absent one",
+                 f"{dict(caught.contracted) if caught else 'NO COMPONENT'}")
+        out.that(ran == [(table.eids[0], 2)],
+                 "and the row is run once, on that character, with ITS OWN"
+                 " stage -- the whole dispatcher in one assertion. A body"
+                 " branches on `c.stage`, so handing it the wrong number"
+                 " applies the wrong paragraph of the page silently",
+                 f"{ran}")
+
+        # -- it is the board's row, not a card in the hand --------------
+        known = table.world.get(table.eids[0], Powers)
+        out.that(known is not None and ref not in known.all,
+                 "**and the creature does not know the row** -- a disease"
+                 " is something happening TO somebody, so it is used with"
+                 " `board=True` the way a terrain power is. Without that"
+                 " `dsl.usable` refuses a ref absent from `Powers.all`,"
+                 " which is every disease on every board",
+                 f"known: {ref in (known.all if known else [])}")
+        out.that(known is not None and ref not in known.used,
+                 "nor is it spent -- `spend=False`, because a disease has"
+                 " no uses to run out of. Spending would leave `used`"
+                 " carrying a ref the character does not hold",
+                 f"used: {sorted(known.used) if known else '-'}")
+
+        # -- the negative controls -------------------------------------
+        _, _ = board_with(None)
+        out.that(ran == [],
+                 "a party carrying nothing arms nothing, so the dispatcher"
+                 " is gated on the state rather than running for everybody",
+                 f"{ran}")
+        _, _ = board_with(0)
+        out.that(ran == [],
+                 "and stage 0 arms nothing -- it is the page's own *cured*"
+                 " paragraph, so a sheet written by hand to 0 must not"
+                 " apply a stage. `tick` deletes a ref that reaches 0, so"
+                 " this is the belt to that braces",
+                 f"{ran}")
+
+        # -- the stage really is read, not assumed ---------------------
+        _, table3 = board_with(3)
+        out.that(ran == [(table3.eids[0], 3)],
+                 "a different stage reads as that stage, which is what"
+                 " says `c.stage` is a read and not a constant -- the two"
+                 " assertions above would both pass against a hard-coded 2",
+                 f"{ran}")
+    finally:
+        REGISTRY.pop(ref, None)
+
+    out.that(ref not in REGISTRY,
+             "and the probe cleans up after itself, so the registry it"
+             " shares with every other rule is as it was",
+             f"{ref} present: {ref in REGISTRY}")
+
+
 def a_non_combat_scene_does_not_spend_the_party_s_powers(out: Result) -> None:
     """Arming is not spending, which cost the party its whole encounter kit.
 
@@ -68169,6 +68287,12 @@ DRIVERS = {
     "group_check": (
         a_group_check_scores_the_party_once_against_a_threshold,
         "a group check scores the party once against a threshold (#984)",
+    ),
+    "disease_dispatch": (
+        a_carried_disease_arms_its_stage_on_the_next_board,
+        "a disease on the sheet reaches the next board and arms its own"
+        " stage's row -- 69 rows had no caller and a carried disease was"
+        " forgotten by the next board (#948)",
     ),
     "challenge_costs_nothing": (
         a_non_combat_scene_does_not_spend_the_party_s_powers,

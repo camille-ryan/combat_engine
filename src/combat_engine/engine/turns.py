@@ -92,6 +92,68 @@ def arm_traits(world: World, eid: int) -> None:
             # nowhere, and never again.
             if p is not None and p.action is ActionType.NONE and not p.triggers:
                 use(world, eid, ref, spend=True)
+        arm_afflictions(world, eid)
+
+
+def arm_afflictions(world: World, eid: int) -> None:
+    """Turn on the stage effect of each disease this creature carries. #948.
+
+    **The dispatcher `#948` step 3 was blocked on.** The track has worked
+    for a while -- `Cast.contract` records a stage, `story.harvest` carries
+    it onto a `Sheet`, `story.affliction.tick` moves it at an extended rest
+    -- and nothing ever read a stage back to *apply* what it does. So the 69
+    disease rows had no caller, and writing them first would have produced
+    the drawable-and-inert shape that issue twice refused to ship.
+
+    A disease's ref **is** the row's ref, so there is no lookup table and no
+    second naming: `x5_11` at stage 2 runs `x5_11`'s body, which asks
+    `c.stage` and branches. One row per disease, because that is how the
+    page prints them -- a single card with a paragraph per stage.
+
+    `board=True`, because the creature does not *know* the row. `dsl.usable`
+    refuses a ref absent from `Powers.all` unless told the row belongs to
+    the board rather than the hand, which is the arrangement terrain powers
+    already use (`#1127`). A disease is the same shape: something happening
+    *to* a creature rather than a card it holds.
+
+    `spend=False`, because a disease is not a resource with uses. Spending
+    would mark it used on the first arming and leave `Powers.used` carrying
+    a ref nobody has.
+
+    **Stage 0 is cured and arms nothing.** `affliction.tick` deletes a ref
+    that reaches 0, so this is belt-and-braces against a sheet written by
+    hand -- but it is the difference between "no disease" and "a disease
+    whose stage-0 paragraph says the target recovers", and every page prints
+    that paragraph.
+
+    ## The lifetime is re-arming, not a new `When`
+
+    `#948` asks for "a rest-length lifetime" and the honest answer is that
+    one is not needed. A `World` does not outlive its fight, and this runs
+    at the start of each one off state the `Sheet` carries -- so an effect
+    laid `until=When.ENCOUNTER` is re-laid next fight and expires when the
+    disease is cured, which is what a rest-length lifetime would have
+    bought. The same reasoning `arm_traits` above rests on.
+
+    **What that asks of an author, and it is the one trap here:** a stage
+    body must lay a *standing* effect, never charge a one-time cost. "While
+    affected by stage 1, the target loses a healing surge" is a reduction
+    that holds while diseased -- re-arming a `c.surge()` spend instead would
+    take a surge per fight, which no page says. Said here because the rows
+    are delegable and this is the sentence their brief has to carry.
+    """
+    from .components import Afflictions
+    from .dsl import get, use
+
+    got = world.get(eid, Afflictions)
+    if got is None or not got.contracted:
+        return
+    # Sorted, so two diseases on one creature arm in a stable order and a
+    # fixture cannot depend on dict insertion.
+    for ref, stage in sorted(got.contracted.items()):
+        if stage <= 0 or get(ref) is None:
+            continue
+        use(world, eid, ref, spend=False, board=True)
 
 
 def _acts(world: World, eid: int) -> bool:
