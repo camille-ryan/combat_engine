@@ -2772,20 +2772,43 @@ def meets(node: dict | None, who: Character, powers: list[str]) -> bool:
     # chainmail"* -- so one word is enough to answer any rung at or below
     # it, which is what `armour.trains_in` does and why the ETL's collapse
     # to a single word costs nothing here.
+    # **The chassis line *and* what a feat opened up**, which this read in
+    # one half only. `armour_opened` has existed since `045878ee` and
+    # `spawn` consults it; `meets` did not, so a feat granting plate could
+    # not satisfy a feat gated on plate. `#568`'s own plan said *"meets
+    # answers `armour_prof` off `line.armour` + armour_opened"* and only the
+    # first half shipped.
+    #
+    # **Composed exactly as `spawn` composes it** -- `_heaviest` over the
+    # line and the opened categories joined -- rather than comparing a
+    # category against the ladder directly. That is not tidiness: the two
+    # vocabularies differ. `category_of` answers `chainmail` where `LADDER`
+    # holds `chain`, so `trains_in("chain", "chainmail")` is **False**, and
+    # a second composition here would have refused every chain feat while
+    # looking right. `_heaviest` matches as a substring, which is what makes
+    # the one reading work for both. #1014's rule: one reading, not two.
+    #
+    # `powers` is every ref the character holds, feats included -- see the
+    # `ref` atom above -- and `feats_for` takes feats one at a time
+    # precisely so a feat can satisfy another taken in the same career.
     if "armour_prof" in node:
         from combat_engine.armour import trains_in
 
-        return trains_in(_heaviest(who.line.armour or ""),
-                         str(node["armour_prof"]).lower())
+        opened, _shield = armour_opened(list(powers))
+        best = _heaviest(" ".join([who.line.armour or "", *sorted(opened)]))
+        return trains_in(best, str(node["armour_prof"]).lower())
     # `ClassLine.shield` is already 0, 1 or 2 -- see `Gear.shield`, which
     # records the kind and not merely whether -- so a printed *"heavy
-    # shields"* is a comparison and not a lookup.
+    # shields"* is a comparison and not a lookup. The feat half goes through
+    # `max` the same way `spawn` does it.
     if "shield_prof" in node:
         try:
             want = int(node["shield_prof"])
         except (TypeError, ValueError):
             return False
-        return int(getattr(who.line, "shield", 0) or 0) >= want
+        _opened, opened_shield = armour_opened(list(powers))
+        return max(int(getattr(who.line, "shield", 0) or 0),
+                   opened_shield) >= want
     if "weapon_prof" in node:
         wanted = node["weapon_prof"].lower()
         return any(

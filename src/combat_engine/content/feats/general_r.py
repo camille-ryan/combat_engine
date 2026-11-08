@@ -439,17 +439,39 @@ def _i_bloodied_them(world: Any, me: int, ev: Any) -> bool:
 # -- the shapes several rows share ------------------------------------------
 
 
-def _proficiency(ref: str):  # noqa: ANN202
+def _proficiency(ref: str, wears: str):  # noqa: ANN202
     """A feat whose entire printed benefit is an armour proficiency.
 
-    Re-aimed: `chargen.proficiency` answers weapons and implements, and
-    a suit of armour is a different column -- `ClassLine.armour` is one
-    string and `ClassLine.shield` is a number, so there is nowhere for a
-    second suit a character *may* wear to be written down.
+    **The place to write it down now exists**, and this helper's own
+    docstring said it did not: *"`ClassLine.armour` is one string and
+    `ClassLine.shield` is a number, so there is nowhere for a second suit a
+    character may wear to be written down"*. True until `045878ee`, which
+    added `chargen.armour_opened` -- it reads this row's `proficiency=`
+    header for any `a...` ref, resolves it with `armour.category_of`, and
+    `spawn` folds it into the line it builds. `#568`.
+
+    `wears` is the printed suit's own armour ref, so the row states what the
+    card states and the category is a lookup rather than a word written
+    here. A shield ref works through the same header -- `armour_opened`
+    tells them apart by category and takes the heavier.
+
+    **The marker named a symbol that never existed.** These rows carried
+    `todo=("chargen.armor_proficiency()",)`, and the facility shipped as
+    `proficiency=` plus `armour_opened`, so `todo.py` could never have
+    reported them ready however finished it got. That is the stale-marker
+    failure found by its premise rather than its name.
     """
 
+    # **`out_of_combat=True`, because the whole benefit is build-time.**
+    # The body is `pass` by construction -- what a character may wear is
+    # settled before initiative -- so without this the row audits SILENT
+    # ("fired 48/8 times and did nothing"), which is the bucket for a row
+    # that should have paid and did not. `rt:r2-t2` and `rt:r3-t1` are the
+    # precedent: same `proficiency=` header, same empty body, declared out
+    # of combat and reported *"silent on a board as claimed"*.
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=NONE,
-           reach=PERSONAL, target=SELF, todo=ARMOUR)
+           reach=PERSONAL, target=SELF, proficiency=(wears,),
+           out_of_combat=True)
     def row(c: Cast) -> None:
         pass
 
@@ -1241,13 +1263,13 @@ def f3594(c: Cast) -> None:
     )
 
 
-f3595 = _proficiency("f3595")
-f3596 = _proficiency("f3596")
-f3597 = _proficiency("f3597")
-f3598 = _proficiency("f3598")
-f3599 = _proficiency("f3599")
-f3600 = _proficiency("f3600")
-f3601 = _proficiency("f3601")
+f3595 = _proficiency("f3595", "a95")
+f3596 = _proficiency("f3596", "a98")
+f3597 = _proficiency("f3597", "a94")
+f3598 = _proficiency("f3598", "a97")
+f3599 = _proficiency("f3599", "a96")
+f3600 = _proficiency("f3600", "a93")
+f3601 = _proficiency("f3601", "a99")
 
 
 # -- power strike, and the weapon groups that ride on it --------------------
