@@ -254,6 +254,17 @@ def main() -> int:
         )
         faults += 1
 
+    for where, ref, word in _inert_but_rollable():
+        print(
+            f"{where}: {ref} is declared `out_of_combat=True` with an empty"
+            f" body, and its card prints a bonus to a check this tree now"
+            f" rolls -- it names {word!r}, which is a purpose a caller passes"
+            f" today. The declaration says complete-and-inert; the row lays"
+            f" nothing. Three rows were in this state and each was found by"
+            f" hand, so the baseline here is 0."
+        )
+        faults += 1
+
     for where, read, event in _event_attrs():
         print(
             f"{where}: `{read}` -- a {event} has no such attribute and nothing"
@@ -1210,6 +1221,134 @@ def _dropped_but_empty() -> list[tuple[str, str]]:
             ]
             if not real or all(isinstance(n, ast.Pass) for n in real):
                 out.append((f"{path.relative_to(ROOT)}:{start}", ref))
+    return out
+
+
+def _rolled_purposes() -> frozenset[str]:
+    """Every word a skill check in this tree is rolled *for*.
+
+    **Read off the callers, never written down here.** The set grows
+    whenever somebody gives a check a purpose -- `#1111` added `swim`,
+    `#1115` added `suffocation`, `#971` added `starvation` and `thirst`
+    through `run.PURPOSE_OF`, and `run.DANGERS` carries the exposure words.
+    A hand-kept copy would go stale exactly when the check below starts
+    mattering, which is the moment a new purpose lands.
+    """
+    import re as _re
+
+    # **`rglob`, not `_under`.** `_under` narrows to the files the run was
+    # *asked* about, so it answers 0 for an arbitrary directory -- which is
+    # exactly what it did here, leaving `swim` and `suffocation` out of the
+    # set and the check below permanently green. A plant is what found it:
+    # restoring a row to the state it had this morning did not fire this
+    # check, and the exit code was 1 for an unrelated fault.
+    found: set[str] = set()
+    for path in (
+        *(ROOT / "src" / "combat_engine" / "engine").rglob("*.py"),
+        *(ROOT / "src" / "combat_engine" / "story").rglob("*.py"),
+    ):
+        try:
+            text = path.read_text()
+        except OSError:
+            continue
+        found |= set(_re.findall(r'purpose="([a-z_ ]+)"', text))
+    try:
+        from combat_engine.story.run import DANGERS, PURPOSE_OF
+
+        found |= set(PURPOSE_OF.values()) | set(DANGERS)
+    except Exception:
+        pass
+    return frozenset(w for w in found if w)
+
+
+def _inert_but_rollable() -> list[tuple[str, str, str]]:
+    """Rows declared finished-and-inert whose card prints a bonus to a
+    check this tree now rolls.
+
+    **The blind spot every other instrument has by construction.** `todo.py`
+    reports a row ready the moment its *named symbol* arrives, and
+    `written.py` reads the markers -- so a row carrying **no marker at all**,
+    an empty body and `out_of_combat=True` is counted **done** by both. It
+    claims the row is complete and inert in a fight, and nothing asks
+    whether that claim is still true.
+
+    It stops being true when somebody gives a skill check a **purpose**. A
+    trait printing *"+5 to Endurance checks to resist starvation, thirst or
+    suffocation"* was correctly inert while nothing rolled such a check;
+    `#971` and `#1115` made all three rollable and the row went on claiming
+    to be finished while laying nothing. Three rows were in that state and
+    each was found **by hand**:
+
+        rt:r60-t4   +5 Endurance vs starvation/thirst/suffocation
+        i761p1      +5 Athletics to swim
+        i3478p1     +5 Endurance vs suffocation
+
+    So the baseline is **0** and a new one is a finding. It is a narrow
+    check on purpose: the general question "does this row implement its
+    card" is not decidable, and this is the slice where an *expired premise*
+    is machine-readable -- the card names a numeric bonus to a skill, and
+    the skill is one the tree rolls with a purpose the card's own words
+    match.
+
+    **It reads the purposes off the callers** (`_rolled_purposes`), so the
+    check widens by itself the next time a purpose is added, which is the
+    only moment it can fire.
+    """
+    import re as _re
+
+    purposes = _rolled_purposes()
+    if not purposes:
+        return []
+    try:
+        from combat_engine import db as _db
+    except Exception:
+        return []
+    try:
+        con = _db.game()
+    except Exception:
+        return []
+    specs: dict[str, str] = {}
+    for table in ("power", "item_block", "item", "feat", "class_feature",
+                  "racial_trait"):
+        try:
+            for ref, spec in con.execute(f"select ref, spec from {table}"):
+                if spec:
+                    specs.setdefault(ref, " ".join(str(spec).split()))
+        except Exception:
+            continue
+
+    bonus = _re.compile(r"[+-]\s?\d+\s+(?:\w+\s+){0,2}bonus", _re.I)
+    skills = _re.compile(r"\b(athletics|endurance)\b", _re.I)
+    words = _re.compile("|".join(_re.escape(w) for w in sorted(purposes)),
+                        _re.I)
+    out = []
+    for path in _asked_for():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for start, _end, ref, node in _rows(tree):
+            dec = " ".join(ast.unparse(d) for d in node.decorator_list)
+            if "out_of_combat=True" not in dec:
+                continue
+            if any(m in dec for m in ("todo=", "dropped=", "narrative=",
+                                      "obsolete=", "declined=", "defect=")):
+                continue
+            real = [
+                n for n in node.body
+                if not (isinstance(n, ast.Expr)
+                        and isinstance(n.value, ast.Constant)
+                        and isinstance(n.value.value, str))
+            ]
+            if real and not all(isinstance(n, ast.Pass) for n in real):
+                continue
+            spec = specs.get(ref, "")
+            if not spec or not bonus.search(spec) or not skills.search(spec):
+                continue
+            got = words.search(spec)
+            if got:
+                out.append((f"{path.relative_to(ROOT)}:{start}", ref,
+                            got.group(0).lower()))
     return out
 
 
