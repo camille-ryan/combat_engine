@@ -68,6 +68,8 @@ class Watched(DoctrinePolicy):
         self.decided: dict[str, list[float]] = defaultdict(list)
         self.scored = 0
         self.chosen = 0
+        self.margins: list[float] = []
+        self.unpriced = 0
 
     def score(self, world, encounter, actor, action):  # noqa: ANN001, ANN201
         # **`weighed`, not `doctrine_features`.** This used to build its own copy of
@@ -86,6 +88,30 @@ class Watched(DoctrinePolicy):
     def act(self, world, encounter, actor, options):  # noqa: ANN001, ANN201
         picked = super().act(world, encounter, actor, options)
         self.chosen += 1
+        # **How close the call was**, which is the number `#314` turns on and
+        # nothing reported. A weight is only worth building if it can beat
+        # the gap between the best option and the next one -- and that gap
+        # is measured here rather than argued about. `policy/CLAUDE.md`
+        # records a term *"worth 0.58 where the decision needed about 7"*
+        # and generalises it to the currency being an order of magnitude too
+        # small; the median gap says otherwise.
+        #
+        # Scored with the same `weighed` the report above uses, so the two
+        # halves of this instrument cannot disagree about what a term is
+        # worth. Proven by a plant: pricing every option identically takes
+        # the median to 0.00 and 100% under 1.0.
+        if len(options) >= 2:
+            try:
+                scored = sorted(
+                    (sum(EVERY_WEIGHT.get(k, 0.0) * v for k, v in
+                         self.weighed(world, encounter, actor, opt).items())
+                     for opt in options), reverse=True)
+                self.margins.append(scored[0] - scored[1])
+            except Exception:
+                # A pose `weighed` cannot price is not a margin; counting it
+                # as 0.0 would read as a tie, which is the one value that
+                # would flatter the headline.
+                self.unpriced += 1
         # **`weighed`, not `explain`.** `policy/CLAUDE.md`: *"Read
         # `weighed()` when you want everything; `explain()` only promises
         # the doctrine half, and says so."* With both tables reported, an
@@ -267,6 +293,24 @@ def main() -> int:
     # `f["party_enabled"]` anywhere in the tree. Every run printed it as
     # the bug, and an alarm that fires on correct code every time is one
     # that gets read past. #1065.
+    # -- how close the calls were ----------------------------------------
+    if policy.margins:
+        ordered = sorted(policy.margins)
+        mid = ordered[len(ordered) // 2]
+        tenth = ordered[len(ordered) // 10]
+        tight = sum(1 for m in ordered if m < 1.0)
+        print(f"\n{len(ordered)} decision(s) had 2+ options. Gap between the"
+              f" best and the next:")
+        print(f"   median {mid:.2f}   10th pct {tenth:.2f}   "
+              f"{tight} of {len(ordered)} under 1.0"
+              f"   ({100 * tight / len(ordered):.0f}%)")
+        print("   A term has to beat this gap to change a decision, which is"
+              " what `#314` is about -- a weight smaller than the median"
+              " moves nothing most of the time.")
+        if policy.unpriced:
+            print(f"   ({policy.unpriced} decision(s) could not be priced and"
+                  f" are excluded rather than counted as ties)")
+
     zeros = [t for t, w in EVERY_WEIGHT.items()
              if w == 0.0 and not policy.offered.get(t)]
     dead = [t for t, w in EVERY_WEIGHT.items()
