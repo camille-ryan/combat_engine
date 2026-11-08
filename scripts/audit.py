@@ -3944,12 +3944,7 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
         # unreachable whenever the first foe happens to die early, which is
         # the board luck #1149 is about. #1149.
         if not alive(world, attacker):
-            if attacker != foes[0]:
-                continue
-            standing = next((f for f in foes if alive(world, f)), None)
-            if standing is None:
-                continue
-            attacker = standing
+            continue
         _swing_from_reach(world, attacker, target, basic(attacker))
         if probe():
             return True
@@ -4011,6 +4006,31 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
             _swing_from_reach(world, attacker, target, swung)
             if probe():
                 return True
+
+    # **A foe who is still standing swings at the caster**, which the basic
+    # loop above cannot guarantee: `foes` is filtered for life once, at the
+    # top, and an earlier pass can drop `foes[0]` before that loop runs --
+    # so the swing was declared, refused for want of somebody who could
+    # act, and emitted no `AttackRolled` at all. Traced on `p5910`, whose
+    # printed trigger is *"an enemy hits you with a melee attack"*: **33
+    # swings in one provocation, 0 of them rolled at the caster**, and the
+    # one aimed there had `alive=False, can_act=False`.
+    #
+    # **Here and not in that loop, which is the whole of why this is a pass
+    # of its own.** Substituting a living attacker up there fixed `p5910`
+    # and four others and broke `f2470` -- a pinned verdict -- because the
+    # extra attack shifts the die stream and the class-attack pass then
+    # stops landing the critical that row needs. Measured: `f2470`'s caster
+    # finished `alive=False`, and 1 critical landed per seed on a monster
+    # ability rather than on a class power.
+    #
+    # So every pass above sees exactly the board it saw before, and this
+    # runs only if none of them fired the row. #1149.
+    standing = next((f for f in foes if alive(world, f)), None)
+    if standing is not None and standing != foes[0] and alive(world, caster):
+        _swing_from_reach(world, standing, caster, basic(standing))
+        if probe():
+            return True
 
     # Shoved about. "When you are pushed, pulled or slid" and "when an enemy
     # knocks you prone" are printed triggers, and a harness that only swings
