@@ -1800,6 +1800,29 @@ POSITION_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
     ("power", "p13952b", "x1_122"),
     ("terrain", "x2_68", "m6361a4"),
     ("terrain", "x2_140", "m5441a5"),
+    # **A power source, not the card printed under the same phrase**, and
+    # the clearest instance in this list of what it is for: the position is
+    # a citing one (*use*, *using*, *with*) and the name really is there,
+    # so every test this walk has says swap it -- and swapping it states a
+    # rule the page does not state.
+    #
+    # These four held the **ref** until `d63088a2` and now hold the phrase,
+    # so the baseline grew. That is the one direction a shrink-only
+    # baseline may move: the specs got better. #1152 measured the split
+    # over all 14 citations -- 5 in a citing position are the card and are
+    # still swapped, 9 behind an indefinite article are the source and are
+    # not.
+    #
+    # **Corpus vocabulary rather than a leak**, which is the evidence that
+    # this is a coincidence and not a debt: 130 specs across the 15 tables
+    # print one of the six source phrases -- arcane 63, divine 21, psionic
+    # 16, martial 15, primal 13, shadow 2 -- and five of the six name no
+    # card, so 109 of the 130 have never been a finding. The gate can only
+    # see the one that collides.
+    ("feat", "f1509", "p929"),
+    ("feat", "f1511", "p929"),
+    ("feat", "f1754", "p929"),
+    ("feat", "f3621", "p929"),
 })
 
 #: **Real misses, hand-read, with no position built for them yet.** Separate
