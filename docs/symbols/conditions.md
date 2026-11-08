@@ -134,10 +134,14 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
 
 ## disease
 
+- `c.contract(self, ref: 'str', *, on: 'int | None' = None, stage: 'int' = 1, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "...and the target contracts `x5_23`." 47 rows print this. #389.
 - `c.expose(self, ref: 'str', *, on: 'int | None' = None, stage: 'int' = 1, bonus: 'int' = 0) -> 'Effect | None'`
   - "At the end of the encounter, the target makes a saving throw. On
 - `c.exposed(self, ref: 'str' = '', *, on: 'int | None' = None, pending: 'bool' = False) -> 'bool'`
   - Has this creature caught a disease -- that one, or any?
+- `c.stage`
+  - Which stage of **this row's own disease** the caster is at. #948.
 
 ## `Condition` (25 members)
 

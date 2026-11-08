@@ -237,8 +237,15 @@ CATEGORIES: dict[str, dict] = {
             # rather than a duration from `When`. Filed under cover and
             # concealment in `modifiers` until the cross-references printed
             # the docstring next to the heading.
+            # **`contract` is here and was filed under `size`**, on the
+            # other meaning of its own name -- it is the disease verb, 47
+            # rows print it, and an author opening the disease section
+            # could not find the one verb that gives somebody a disease
+            # while an author wanting to shrink a creature found it. The
+            # category-is-not-where-you-would-look problem the content
+            # rules warn about, inside the page that warning points at.
             ("disease", [
-                "expose", "exposed",
+                "contract", "expose", "exposed", "stage",
             ]),
         ],
     },
@@ -263,7 +270,11 @@ CATEGORIES: dict[str, dict] = {
                 # another row's area: that one changes a size, this one
                 # changes the shape. #614.
                 "reshape_area",
-                "floor", "scenery", "set_origin", "terraform", "terrain",
+                # `grow` spreads a map feature into the clear ground
+                # beside it. It was under `size` with `contract` and
+                # `resize`, on its name rather than its meaning.
+                "floor", "grow", "scenery", "set_origin", "terraform",
+                "terrain",
                 "unlit",
                 "wall", "zone",
             ]),
@@ -286,7 +297,7 @@ CATEGORIES: dict[str, dict] = {
                 "beast_independent", "call_beast", "call_companion",
                 "dismiss_companion", "summon", "summon_inline",
             ]),
-            ("size", ["contract", "grow", "resize"]),
+            ("size", ["resize"]),
             ("ending, suspending, watching", [
                 "aftereffect", "arm_trigger", "cancel", "dispel", "end_effect",
                 "endable", "lingers_label", "on_attack", "on_sustain",

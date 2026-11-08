@@ -21,6 +21,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Take a map feature off the board. It does not come back.
 - `c.floor(self, area: 'Iterable[Square]', *, until: 'When' = <When.SUSTAIN: 'sustain'>, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'Effect | None'`
   - Lay ground where the ground is against you: a bridge, a plank.
+- `c.grow(self, squares_: 'int' = 1, *, on: 'int | None' = None) -> 'bool'`
+  - Spread a map feature into the clear ground beside it.
 - `c.hazard(self, area: 'Iterable[Square]', amount: 'str | int', dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, difficult: 'bool' = False, blocks_sight: 'bool' = False, exempt: 'frozenset[int] | set[int] | None' = None, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'int'`
   - A zone that hurts whoever is standing in it.
 - `c.illuminate(self, *settings: 'tuple[Light, int] | None', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
@@ -88,10 +90,6 @@ Things that persist on the board or on a creature, and the windows that fire whi
 
 ## size
 
-- `c.contract(self, ref: 'str', *, on: 'int | None' = None, stage: 'int' = 1, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
-  - "...and the target contracts `x5_23`." 47 rows print this. #389.
-- `c.grow(self, squares_: 'int' = 1, *, on: 'int | None' = None) -> 'bool'`
-  - Spread a map feature into the clear ground beside it.
 - `c.resize(self, size: 'Size', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Take up more room, or less, and shove whoever is standing in it.
 
