@@ -855,7 +855,10 @@ def f2106b(c: Cast) -> None:
         return
 
     def topple(ev: Any) -> None:
-        if ev.target == foe and ev.amount > 0 and held.live:
+        # `Effect` has no `live`, so this raised `AttributeError` every time
+        # the watch fired. `not held.ended` is what the tree already uses to
+        # ask whether a hold is still standing -- three sibling rows do.
+        if ev.target == foe and ev.amount > 0 and not held.ended:
             c.prone(on=foe)
 
     c.watch(DamageApplied, topple, on=c.me, until=When.EONT, once=True)
