@@ -320,9 +320,28 @@ def main() -> int:
               f" fault -- a 0.0 weight multiplies nothing: {', '.join(zeros)}")
     if dead:
         print(f"\n{len(dead)} of {len(EVERY_WEIGHT)} WEIGHTED terms never"
-              f" fired: "
+              f" fired on THESE boards: "
               f"{', '.join(dead)}")
-        print("A weight nothing consults is the bug this instrument exists for.")
+        # **"never fired here" is not "nothing consults it", and this line
+        # used to say the second.** `#1157` was filed off that wording --
+        # six weights reported `offered 0` across 18 fights and 12 classes,
+        # which read as the bug this instrument exists for. Measured
+        # afterwards: four of the six are one precondition, 15 rows in the
+        # corpus set it, `engine.actions` offers the action for any of
+        # them, and posing one makes the weight fire at 1.0 immediately.
+        # They were **unexercised**, not unconsulted -- a random level-10
+        # draw rarely fields one of those 15 rows.
+        #
+        # So the honest reading of this list is "these states did not arise
+        # in this sample", and the next step for an entry on it is to
+        # **pose the precondition on one board**, not to run more fights.
+        # The old wording sent me to the wrong conclusion and I filed an
+        # issue on it.
+        print("These states did not arise in this sample. Before calling one"
+              " a dead weight, pose its precondition on a single board --"
+              " `#1157` closed because four of six fired the moment one was"
+              " posed. A weight nothing consults IS the bug this instrument"
+              " exists for; this list is weaker evidence than that.")
     else:
         print(f"\nEvery weighted term fired at least once"
               f" ({len(EVERY_WEIGHT)} terms across both tables,"
