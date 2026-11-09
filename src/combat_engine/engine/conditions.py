@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from .types import Condition, Defense
+from .types import DEFENCES, Condition, Defense
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,30 @@ class Rules:
     grants_ca: bool = False
     #: Penalty to the creature's own attack rolls.
     attack: int = 0
+    #: Flat change to the creature's defences, applied to every attack.
+    #: One user -- `UNCONSCIOUS: {AC: -5}`.
     defences: dict[Defense, int] = field(default_factory=dict)
+    #: Change to the creature's defences **against a ranged attack from a
+    #: nonadjacent enemy**, and against nothing else.
+    #:
+    #: A second dict rather than a gate on `defences`, because there is
+    #: exactly one printed instance of this shape and a general
+    #: `defences_when=` would be a mechanism with one caller. The same call
+    #: `_NEUTRAL` makes about itself: a closed list beats an extension
+    #: point nobody else reaches.
+    #:
+    #: **Why prone cannot use `defences`.** `query.defence` sums that one
+    #: for every active condition and never looks at the context, so a `+2`
+    #: there would raise the prone creature's defences against melee and
+    #: against adjacent ranged attacks too -- both of which the printed
+    #: rule excludes. Camille, asked directly, 2026-11-09:
+    #:
+    #:   *"Being prone grants a +2 bonus to your defenses against ranged
+    #:   attacks coming from non-adjacent enemies."*
+    #:
+    #: Read in `query.defence` off the attack context, which already
+    #: carries `attacker`, `target` and `ranged`. #1198.
+    ranged_defences: dict[Defense, int] = field(default_factory=dict)
     #: No actions at all.
     cannot_act: bool = False
     #: One action per turn instead of the full budget.
@@ -83,7 +106,20 @@ RULES: dict[Condition, Rules] = {
     #
     # Forced movement is untouched by this: a slide is not a shift, and
     # `movement.forced` does not go through `can_shift`.
-    Condition.PRONE: Rules(grants_ca=True, attack=-2, no_shift=True),
+    # **The defence bonus is the printed bullet this table was missing**,
+    # and it is not small: without it every prone creature in every fight
+    # was 2 easier to shoot from range than the page says. #1198.
+    #
+    # `grants_ca=True` is still wider than print, which restricts the grant
+    # to **melee** attackers. That half is not fixable here --
+    # `query.grants_ca` is a creature-level question and
+    # `_has_combat_advantage` does not know whether the attack is melee or
+    # ranged -- so it is filed rather than guessed at. Until it lands, an
+    # adjacent archer still gets a combat-advantage +2 it should not.
+    Condition.PRONE: Rules(
+        grants_ca=True, attack=-2, no_shift=True,
+        ranged_defences={d: 2 for d in DEFENCES},
+    ),
     Condition.REMOVED: Rules(cannot_act=True, cannot_move=True),
     Condition.RESTRAINED: Rules(grants_ca=True, attack=-2, cannot_move=True),
     # "Cannot shift" on its own. Named for what it does rather than

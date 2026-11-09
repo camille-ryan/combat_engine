@@ -69243,6 +69243,129 @@ def the_draw_is_declared_not_inherited(out: Result) -> None:
     )
 
 
+
+def prone_defences(out: Result) -> None:
+    """A prone creature is harder to shoot from a distance, and only then.
+
+    Camille, asked directly, 2026-11-09:
+
+        *"Being prone grants a +2 bonus to your defenses against ranged
+        attacks coming from non-adjacent enemies."*
+
+    `conditions.RULES[PRONE]` carried `grants_ca`, an attack penalty and
+    `no_shift` and **not this**, so every prone creature in every fight was
+    2 easier to shoot from range than the page says. #1198.
+
+    **The negative controls are the whole of it.** The bonus has two
+    narrowings and a flat `+2` would get both wrong -- an adjacent archer
+    would meet it where the rule excludes them, and so would a melee
+    attacker. Asserting only the positive would pass on an implementation
+    that raised the defence against everything, which is the commonest way
+    a gated modifier ships broken here.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.conditions import RULES
+    from combat_engine.engine.query import adjacent, defence, enemies
+    from combat_engine.engine.types import DEFENCES, Condition, Defense
+
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    here = world.get(caster, Position)
+    there = world.get(foe, Position)
+
+    def seen(d: Defense, **ctx: object) -> int:
+        return defence(world, caster, d, {"attacker": foe, "target": caster,
+                                          **ctx})
+
+    # **Stand them well apart first**, so "nonadjacent" is true of the board
+    # rather than of the assertion. A control measured on an adjacent pair
+    # cannot tell the gate from its absence.
+    here.square = (there.square[0] + 5, there.square[1])
+    out.that(
+        not adjacent(world, foe, caster),
+        "the two stand apart, so the printed narrowing has something to be"
+        " true of -- a control taken on an adjacent pair could not tell the"
+        " gate from its absence",
+        f"{here.square} against {there.square}",
+    )
+
+    standing = {d: seen(d, ranged=True) for d in DEFENCES}
+    cast = Cast(world=world, me=caster, ref="drivers")
+    cast.prone(on=caster)
+    out.that(
+        cast.is_(Condition.PRONE, on=caster),
+        "and the creature is prone, which is the state under test",
+        "c.prone laid it",
+    )
+
+    # -- the positive: a ranged attack from a nonadjacent enemy ------------
+    shot = {d: seen(d, ranged=True) for d in DEFENCES}
+    out.that(
+        all(shot[d] == standing[d] + 2 for d in DEFENCES),
+        "every one of the four defences is **2 higher** against a ranged"
+        " attack from a nonadjacent enemy -- the printed bullet the"
+        " condition table was missing",
+        ", ".join(f"{d.name} {standing[d]}->{shot[d]}" for d in DEFENCES),
+    )
+    out.that(
+        seen(Defense.ANY, ranged=True) == min(shot.values()),
+        "and `vs. Any` picks up the bonus too, because it resolves to the"
+        " lowest of the four *after* this is applied -- a row attacking the"
+        " weakest defence must not route around the gate",
+        f"ANY {seen(Defense.ANY, ranged=True)} against lowest {min(shot.values())}",
+    )
+
+    # -- negative: an ADJACENT ranged attacker gets nothing ----------------
+    here.square = (there.square[0] + 1, there.square[1])
+    out.that(
+        adjacent(world, foe, caster),
+        "stepping the shooter adjacent is the setup for the next"
+        " assertion, and the grid agrees it is adjacent",
+        f"{here.square} against {there.square}",
+    )
+    close = {d: seen(d, ranged=True) for d in DEFENCES}
+    out.that(
+        all(close[d] == standing[d] for d in DEFENCES),
+        "an **adjacent** enemy shooting it meets no bonus at all -- the word"
+        " 'non-adjacent' is in the printed rule and a flat `+2 vs ranged`"
+        " would be wrong here",
+        ", ".join(f"{d.name} {close[d]}" for d in DEFENCES),
+    )
+
+    # -- negative: a MELEE attacker gets nothing, at any distance ----------
+    here.square = (there.square[0] + 5, there.square[1])
+    melee = {d: seen(d, ranged=False) for d in DEFENCES}
+    out.that(
+        all(melee[d] == standing[d] for d in DEFENCES),
+        "and a **melee** attack meets no bonus even from a nonadjacent"
+        " square -- a reach weapon swings two squares away, so distance"
+        " alone cannot stand in for the ranged test",
+        ", ".join(f"{d.name} {melee[d]}" for d in DEFENCES),
+    )
+
+    # -- negative: no context, no bonus ------------------------------------
+    out.that(
+        all(defence(world, caster, d) == standing[d] for d in DEFENCES),
+        "a reader that names no attacker gets the **unraised** defence,"
+        " which is the safe direction: the ~60 callers asking about a"
+        " creature rather than a swing cannot say whether an attack is"
+        " ranged, and claiming the bonus for them would raise a defence"
+        " against a melee blow",
+        ", ".join(f"{d.name} {defence(world, caster, d)}" for d in DEFENCES),
+    )
+
+    # -- the half that is NOT fixed, asserted so nobody reads it as done ---
+    out.that(
+        RULES[Condition.PRONE].grants_ca,
+        "prone still grants combat advantage to **everyone**, where the page"
+        " restricts it to melee attackers. Left alone deliberately --"
+        " `_has_combat_advantage` does not know an attack's mode and sixty"
+        " callers pass no power -- and asserted here so a later reader"
+        " cannot mistake #1198 for finished",
+        "grants_ca is still True; the melee restriction is filed separately",
+    )
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -70277,6 +70400,10 @@ DRIVERS = {
         "one extra square on every shift, and not on a teleport",
     ),
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
+    "prone_defences": (
+        prone_defences,
+        "a prone creature's +2 against nonadjacent ranged attacks (#1198)",
+    ),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
     "blindness": (blindness, "a blinded creature cannot see, and can again after"),
     "hiding": (hiding, "attacking gives you away, and AFTER is where you get it back"),

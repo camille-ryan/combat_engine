@@ -760,7 +760,25 @@ def defence(world: World, eid: int, d: Defense, ctx: dict | None = None) -> int:
     if mods is not None:
         base += mods.total(d.value, ctx or {})
     for c in active(world, eid):
-        base += rules_for(world, eid, c).defences.get(d, 0)
+        rules = rules_for(world, eid, c)
+        base += rules.defences.get(d, 0)
+        # **The gated half, and the gate is the whole of its correctness.**
+        # Prone's printed bonus applies only to a ranged attack from a
+        # nonadjacent enemy, so a flat `+2 vs ranged` would be wrong for an
+        # adjacent archer and a flat `+2` wrong for everything. Both halves
+        # come out of the context the caller already passes -- `ranged` and
+        # `attacker`, two of the 23 keys `resolve.attack` builds.
+        #
+        # **No context means no bonus**, which is the safe direction here
+        # and deliberate: the ~60 callers that ask about a creature rather
+        # than about a swing cannot say whether an attack is ranged, and
+        # claiming the bonus for them would raise a defence against a melee
+        # attack. A reader wanting the forecast has to name the attacker.
+        if rules.ranged_defences and ctx:
+            shooter = ctx.get("attacker")
+            if (ctx.get("ranged") and isinstance(shooter, int)
+                    and not adjacent(world, shooter, eid)):
+                base += rules.ranged_defences.get(d, 0)
     return base
 
 
