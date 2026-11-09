@@ -2028,11 +2028,13 @@
  "c.decay(magic=False)": {
   "at": "2026-10-12",
   "by": "slice3",
-  "found": "c.decay (enhancement bonus only), items.__init__.magic_for",
+  "corrected_by": "main session 2026-11-09, #1173 -- the note named a module that never held the symbol, and the rows were written another way",
+  "found": "monsters.level_08.brutes_sa._rust, monsters.level_06.skirmishers._worsen, chargen.magic_for",
   "refused_rows": 1,
   "rows": 4,
-  "verdict": "real",
-  "why": "A mundane weapon has no enhancement for decay to take down, and nothing else records an item as degrading -- so the stacking penalty has no hook and c.destroy has nothing marked to take."
+  "verdict": "mis-marked",
+  "was": "`real`, on \"A mundane weapon has no enhancement for decay to take down, and nothing else records an item as degrading -- so the stacking penalty has no hook and c.destroy has nothing marked to take.\" The engine half of that still reads true; the conclusion did not survive the rows.",
+  "why": "Re-judged #1173. The old note named `items.__init__.magic_for` and no module of that name has ever held the symbol: `magic_for` lived in `content/chargen.py` and `dbfc54f6` moved it to `chargen/__init__.py` two weeks *before* this verdict, so that half of the evidence was wrong on the day rather than rotted. `c.decay` itself is unchanged and still enhancement-only -- \"Take an item's enhancement bonus down\", reading `self.held(on=who, what=\"magic\")` -- but the four rows never wanted it. `fa48c93a` wrote them two days after this verdict: \"`c.decay(magic=False)` was wrong -- `c.decay` moves an item's *enhancement*, where the card prints a flat stacking -1.\" `m115879a0`'s own body says the same -- \"**Not `c.decay`, which this row was marked for and which is the wrong verb.** `c.decay` takes an item's enhancement bonus down; the printed clause is a flat -1 to attack rolls that has nothing to do with the enhancement, and it applies to a mundane weapon exactly as it does to a magic one.\" The facility is `_rust` in that file, and `_worsen` one block over is \"this helper without the label\". No row waits on the symbol now; `m115879a2` is the only rust row still marked and it names `c.destroy(armour=)`."
  },
  "c.decay_bonus()": {
   "at": "2026-10-13",
@@ -3172,11 +3174,13 @@
  "c.hit_twice()": {
   "at": "2026-10-12",
   "by": "slice3",
-  "found": "feats.exploits._twice",
+  "corrected_by": "main session 2026-11-09, #1173 -- the deleted helper's premise was already known false when it was deleted",
+  "found": "items.weapon_b._hit_twice",
   "refused_rows": 1,
   "rows": 3,
-  "verdict": "probable",
-  "why": "'The one creature a resolved use hit with two separate attacks' is written and answers off PowerResolved.rolls, so a single use's second hit is askable. Not run down: i2981p1 may mean two hits across different uses -- check whether its printed trigger is one use or an encounter tally, which _twice cannot see."
+  "verdict": "mis-marked",
+  "was": "`probable`, on `feats.exploits._twice`: \"'The one creature a resolved use hit with two separate attacks' is written and answers off PowerResolved.rolls, so a single use's second hit is askable. Not run down: i2981p1 may mean two hits across different uses -- check whether its printed trigger is one use or an encounter tally, which _twice cannot see.\" The doubt was aimed at the wrong half: what failed was the premise, not the row.",
+  "why": "Re-judged #1173. `309dc530` deleted `_twice` as caller-less, but the question had been settled eight days after this verdict by `be8493b9`: \"**#810**: `PowerResolved.rolls` is one result per target, not per swing. `dsl.use` clears `cast.result` before the body and appends once after it, so a row swinging twice at one target loses its first roll -- and `exploits._twice`, the helper written for exactly that clause, cannot answer for `p87`. The three 'both attacks' rows here were written against the use's own span of `world.bus.log` instead, so they are correct and do not wait on it.\" So the facility exists under another name: `items.weapon_b._hit_twice`, \"The one creature a finished use hit with two separate attacks. **Not off `PowerResolved.rolls`**, which is the obvious reading and is blind to exactly this question.\" All three rows carry no marker -- `i2981p1` in `items/weapon_b.py`, `f1102` and `f1304` in the feat files. Not run down, and this verdict does not need it: `309dc530` reports \"`p87` resolves with **2** rolls at one target and 2 at two, so `#810` fixed it\", which contradicts `_hit_twice`'s own docstring. One of the two is stale and neither changes the answer here."
  },
  "c.host(decoy=)": {
   "at": "2026-10-13",
@@ -4501,11 +4505,12 @@
  "c.on_miss_all()": {
   "at": "2026-10-12",
   "by": "slice3",
-  "found": "feats.exploits._all_missed, items.weapon_c._all_missed, and i1675p1's own _missed_everything",
+  "corrected_by": "main session 2026-11-09, #1173 -- `found:` re-pointed; the verdict stands and had already been applied",
+  "found": "items.weapon_c._all_missed, items.misc._missed_everything, items.wondrous._missed_everything",
   "refused_rows": 1,
   "rows": 1,
   "verdict": "mis-marked",
-  "why": "'Every roll this use made came up short' is answerable off PowerResolved and is written three times over, so f2448's 'Miss is announced per target so it cannot be asked' is stale. Its residue -- a reroll from PowerResolved buying nothing -- is c.reroll_attack(rolls=)'s symbol, not this one."
+  "why": "'Every roll this use made came up short' is answerable off PowerResolved and is written three times over, so f2448's 'Miss is announced per target so it cannot be asked' is stale. Its residue -- a reroll from PowerResolved buying nothing -- is c.reroll_attack(rolls=)'s symbol, not this one. Re-pointed #1173, verdict unchanged: only the evidence moved. `feats.exploits._all_missed` went with `309dc530`'s caller-less helpers; the other two spellings of the same read are live. `items/weapon_c.py`'s `_all_missed` is \"Every roll this use made came up short -- 'you miss every target'. `PowerResolved` carries the whole set of `AttackResult`s, which is the only place the question can be asked: a `Miss` is one target's\", and `_missed_everything` says it again in `items/misc.py` and `items/wondrous.py`. **And the verdict was applied.** `f2448` carries no `c.on_miss_all()` now and its body records this finding in its own words: \"Two of the three holds had already gone, and the third was named wrong: **the condition is askable.** `PowerResolved` carries every `AttackResult` ... written three times over in the tree.\" The residue went where this verdict said it belonged -- `c.reroll_attack(rolls=)` first, then re-pointed again, because taking a set of rolls was never the hard half: \"What is wanted is to *replay* what each new number lands, which is a re-resolution and belongs in `resolve`. #775.\" That is the `resolve.replay()` marker `f2448`, `i1675p1` and `p10354` wear today."
  },
  "c.on_pact_boon()": {
   "at": "2026-10-12",
@@ -6473,21 +6478,23 @@
  "c.tome_powers()": {
   "at": "2026-10-12",
   "by": "slice6 + hand",
-  "corrected_by": "main session 2026-10-20, after reading each waiting row",
-  "found": "items.implement_b._tome_power, c.borrow_row",
+  "corrected_by": "main session 2026-10-20, after reading each waiting row; `found:` re-pointed 2026-11-09, #1173",
+  "found": "items.implement_b._tome_trade, c.borrow_row, c.unspent",
   "rows": 10,
   "verdict": "real",
   "was": "Upgraded from my own `probable`, deferring to slice 6. I marked it probable because I had not run it down; the agent did, and found `_tome_power` is live and reaches the dailies through `c.borrow_row`, walking the level ladder the card describes. A hand verdict outranks an agent's by default -- but not when the agent is the one who did the reading.",
-  "why": "Corrected to `real`, #777, reversing my own upgrade from `probable`. `_tome_power` is live and does reach the dailies through `c.borrow_row` -- the agent's reading was accurate about the code. It is the wrong code for this clause. `c.borrow_row` samples the set at the moment of use and records nothing, and its own note says a campaign carrying between fights would want `chargen` to hold the pick. `i2899x1` and `i2900x1` are both the pick *surviving acquisition*, which is the sub-choice store, not a sampler. `i2899p1`/`i2900p1` are written off the sampling and are fine; the `x1` halves are not the same clause."
+  "why": "Corrected to `real`, #777, reversing my own upgrade from `probable`. `_tome_power` is live and does reach the dailies through `c.borrow_row` -- the agent's reading was accurate about the code. It is the wrong code for this clause. `c.borrow_row` samples the set at the moment of use and records nothing, and its own note says a campaign carrying between fights would want `chargen` to hold the pick. `i2899x1` and `i2900x1` are both the pick *surviving acquisition*, which is the sub-choice store, not a sampler. `i2899p1`/`i2900p1` are written off the sampling and are fine; the `x1` halves are not the same clause. Re-pointed #1173, verdict unchanged: `_tome_power` was renamed `_tome_trade` by `877785e4`, and `items/implement_b.py`'s module docstring now carries this verdict's own conclusion -- \"`c.tome_powers()` named a store that turns out to have no business in a round -- `_tome_trade` is what a fight reaches the tome's dailies through.\" The two `x1` halves are still the ones waiting, and each body restates the finding: `i2899x1`, \"`c.borrow_row` is **not** that store, though it is what `i2899p1` was written with: it samples the set at the moment of use and records nothing, and its own note says a campaign carrying between fights would want `chargen` to hold the pick. This clause is the pick surviving acquisition, so the marker stays\"; `i2900x1`, \"this clause is the pick surviving acquisition, which is `chargen`'s to hold.\" `rows: 10` is left as recorded and 2 are live -- only those two were read here, so the other 8 leaving the queue is unexplained rather than explained."
  },
  "c.trade_accuracy()": {
   "at": "2026-10-12",
   "by": "slice3",
-  "found": "c.may (a per-use election), Weapon.thrown (no heavy/light split -- powers.warlord._heavy_thrown says no weapon in the model carries it)",
+  "corrected_by": "main session 2026-11-09, #1173 -- both holds are refuted in the tree's own words, one of them by a sibling verdict in this file",
+  "found": "c.may (from an AttackDeclared handler), c.weapon_of, powers.warlord.level_1_c._heavy_thrown (also level_5_b, level_9_b)",
   "refused_rows": 1,
   "rows": 1,
-  "verdict": "real",
-  "why": "Two holds and both are real: the weapon property is absent from the table, and c.may asks once when a trait arms where this card elects per attack, so there is no per-attack choice to offer."
+  "verdict": "mis-marked",
+  "was": "`real`, on \"Two holds and both are real: the weapon property is absent from the table, and c.may asks once when a trait arms where this card elects per attack, so there is no per-attack choice to offer.\" Both holds were false.",
+  "why": "Re-judged #1173, and both halves of the old note are refuted in the tree's own words. **The weapon half**: `_heavy_thrown` moved with the `powers/warlord.py` to `powers/warlord/` package split and now says the opposite of what this verdict quoted off it -- \"**The inference this replaces was false, and both docstrings stated the premise outright**: 'no weapon in the model carries a thrown flag -- what a thrown one has is a `ranged` band on something you also swing'. `game.db`'s `weapon.properties` carries `heavy thrown` on exactly **9** weapons\" (#824). `Weapon.heavy_thrown`'s verdict in this file said the same thing on the same day -- \"the table does carry the property\" -- and this one did not read it. **The election half**: `f2610` is written and unmarked, and its body answers it -- \"**The old note said nothing offers a per-attack choice. `c.may` does**, and from inside an `AttackDeclared` handler ... `Window.BEFORE`, so the penalty is standing when the roll is made\", with \"**The weapon half was never the gap either.** `weapon.properties` holds `heavy thrown` for nine entries (#226).\" The one real subtlety it found is a reading, not a gap: `c.weapon_of(ev)` rather than `c.wielding(\"heavy thrown\")`, because the latter asks `Gear.main` and \"every bowshot would have taken the trade\"."
  },
  "c.trade_resistance()": {
   "at": "2026-10-13",
@@ -7538,11 +7545,12 @@
  "query.damaged_since()": {
   "at": "2026-10-12",
   "by": "slice6",
-  "found": "feats.exploits._hurt_me_since",
+  "corrected_by": "main session 2026-11-09, #1173 -- `found:` re-pointed at the engine door this verdict asked for, which was built",
+  "found": "query.damaged_since in engine/query.py, c.hurt_me_since",
   "refused_rows": 1,
   "rows": 2,
   "verdict": "mis-marked",
-  "why": "That helper keeps exactly this memory -- filled from DamageApplied, emptied at my own TurnEnd, 'stashed on the world, not in a module dict', memoised per (board, creature) and armed when the trait arms -- and four cards in that file already gate on it. i2803p1's 'nothing keeps that history' and i2303p1's 'nothing asks the world who has attacked whom since when' are both answered by importing it; the gap is a query-layer door."
+  "why": "That helper keeps exactly this memory -- filled from DamageApplied, emptied at my own TurnEnd, 'stashed on the world, not in a module dict', memoised per (board, creature) and armed when the trait arms -- and four cards in that file already gate on it. i2803p1's 'nothing keeps that history' and i2303p1's 'nothing asks the world who has attacked whom since when' are both answered by importing it; the gap is a query-layer door. Re-pointed #1173, verdict unchanged and applied: the door was built and the helper deleted in one commit. `7dfaa5d2` -- \"The promotion had already landed and nobody had noticed. `c.hurt_me_since` answers the question off `world.bus.log`, through `query.damaged_since`, bounded by `since_turn_ended` -- so **there is nothing to arm** and a body is no longer too late\", and \"`_hurt_me_since` is **deleted** and its two readers use the verb. The attack-bonus one is better for it: its `when=` gate now reads the log **at the moment of the roll** where it used to close over a set snapshotted when the clause ran, so a creature that hurt the character in between was missed.\" Live today: `damaged_since(world, victim, by, *, since=None, or_an_ally=False)` in `engine/query.py`, walking `world.bus.log` for `DamageApplied`; `Cast.hurt_me_since` is the content-facing verb. Neither row this verdict names carries a marker any more."
  },
  "query.deals_half(ctx=)": {
   "at": "2026-10-13",
