@@ -25143,6 +25143,88 @@ def every_printed_contraction_matches_the_card(out: Result) -> None:
                      f" finding -- shrink the baseline")
 
 
+def a_disease_is_armed_once_a_board(out: Result) -> None:
+    """A stage body runs once per board, however many arming passes there are.
+
+    `turns.arm_traits` arms in passes, because a trait may hand over a row
+    that then needs arming itself. `arm_afflictions` used to sit **inside**
+    that loop, so every pass after the first ran every stage body again --
+    and a disease comes from `Afflictions.contracted`, not `Powers.all`, so
+    no grant can add one and there was never anything for a second pass to
+    find. #1182.
+
+    **Asserted on the bus, not with a spy.** Arming a disease goes through
+    `dsl.use`, which announces `PowerUsed`, so "how many times did this
+    stage body run" is an ordinary event count. A monkeypatched counter
+    would have asserted the same number and told a future reader nothing
+    about what a second arming *does*.
+
+    **And the vacuity guard is the load-bearing half.** The second pass
+    exists only when something was granted during the first, so a rule
+    posed on draws that grant nothing would read 1 either way and pass
+    forever -- which is how `at_most_one_applies` came to assert
+    exclusivity on chains whose branches could not both fire. Measured
+    across six classes at three seeds: **9 of 18 draws grant a row during
+    arming**, and those are exactly the 9 that armed twice before the fix.
+    So the rule requires at least one granting draw in its own sample and
+    says so if it loses one.
+
+    What a second arming cost, since the count alone does not show it:
+    `c.vulnerable` is a running total in `Defences.vulnerable`, so `x5_66`
+    laid 10 at stage 2 where the page prints 5. `c.penalty` collapses by
+    `Mod.label`, which is why most stages hid it.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine import Bus, Encounter, Grid, Rng, World
+    from combat_engine.engine.components import Afflictions, Powers
+    from combat_engine.engine.events import PowerUsed
+
+    ref = "x5_66"
+    draws = [(cls, seed) for cls in
+             ("monk", "fighter", "cleric", "rogue", "wizard", "warlord")
+             for seed in (1, 3, 7)]
+    armed: dict[tuple[str, int], int] = {}
+    granted: list[tuple[str, int]] = []
+    for cls, seed in draws:
+        world = World(bus=Bus(), grid=Grid(16, 12), rng=Rng(seed))
+        who = chargen.spawn(world, chargen.Character(cls, 5, []), (4, 6))
+        known = world.get(who, Powers)
+        assert known is not None
+        before = len(known.all)
+        caught = world.get(who, Afflictions)
+        if caught is None:
+            world.add(who, Afflictions())
+            caught = world.get(who, Afflictions)
+        assert caught is not None
+        caught.contracted[ref] = 2
+        seen: list[str] = []
+        # Bound explicitly: each `world` has its own bus and the handler is
+        # consumed inside this iteration, so the late binding is harmless
+        # here -- but a loop-captured accumulator is how a rule comes to
+        # count another board's events, so it is not left to luck.
+        world.bus.on(PowerUsed, lambda ev, into=seen: into.append(ev.power))
+        Encounter(world).start()
+        armed[(cls, seed)] = sum(1 for power in seen if power == ref)
+        if len(known.all) > before:
+            granted.append((cls, seed))
+
+    out.that(bool(granted),
+             f"at least one draw grants a row during arming, so a second"
+             f" pass really happens and this rule is not vacuous"
+             f" ({len(granted)} of {len(draws)} draws: {granted[:4]})")
+    out.that(all(n >= 1 for n in armed.values()),
+             f"every draw arms the disease at all -- without this, a rule"
+             f" asserting 'exactly one' would pass on a board that armed"
+             f" none ({sorted(set(armed.values()))})")
+    twice = {d: n for d, n in armed.items() if n != 1}
+    out.that(not twice,
+             f"every draw arms it exactly once, granting draws included"
+             f" ({len(twice)} armed a different number: {twice})")
+    out.that(all(armed[d] == 1 for d in granted),
+             f"and specifically the {len(granted)} draws that DO grant a"
+             f" row arm once, which is the case the bug lived in")
+
+
 def penalty_scoped_to_an_aura(out: Result) -> None:
     """A penalty against "this creature and its allies within its aura 5".
 
@@ -69782,6 +69864,9 @@ DRIVERS = {
     "every_printed_contraction_matches_the_card": (
         every_printed_contraction_matches_the_card,
         "a row printing a contraction makes it, with the printed verb"),
+    "a_disease_is_armed_once_a_board": (
+        a_disease_is_armed_once_a_board,
+        "a stage body runs once a board, however many arming passes"),
     "once_spend_moments": (once_spend_moments,
                            "a one-shot bonus is spent where it is read"),
     "once_spent": (once_spent,

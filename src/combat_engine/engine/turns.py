@@ -81,7 +81,7 @@ def arm_traits(world: World, eid: int) -> None:
     while True:
         fresh = [ref for ref in known.all if ref not in seen]
         if not fresh:
-            return
+            break
         seen.update(fresh)
         for ref in fresh:
             p = get(ref)
@@ -92,7 +92,31 @@ def arm_traits(world: World, eid: int) -> None:
             # nowhere, and never again.
             if p is not None and p.action is ActionType.NONE and not p.triggers:
                 use(world, eid, ref, spend=True)
-        arm_afflictions(world, eid)
+    # **Once, after the passes, and it used to be once per pass.** A
+    # disease does not come from `Powers.all` -- it comes from
+    # `Afflictions.contracted` -- so no grant can add one and there was
+    # never anything for a second pass to find. Being inside the loop
+    # meant every pass after the first ran every stage body again.
+    #
+    # Measured before the fix, planting a stage and counting the calls for
+    # one entity on one board: **9 of 18** draws armed twice, across six
+    # classes at level 5 over three seeds. It depends on the hand, because
+    # the second pass exists only when something was granted during the
+    # first, and 175 trait-shaped rows call `c.grant_row`. So a disease was
+    # right for half the party and wrong for the other half, decided by
+    # the draw.
+    #
+    # What it cost where the effect is not idempotent: `c.vulnerable` is a
+    # running total in `Defences.vulnerable`, so two identical calls give
+    # 10 where the page prints 5 -- `x5_66` laid 10 at stage 2 and 30 at
+    # stage 3. `c.penalty` collapses by `Mod.label` and so hid it for every
+    # row whose stages print defence penalties, which is most of them.
+    #
+    # The `once_per_board` guards in `diseases.lost_surges` and
+    # `paragon_b._vulnerable` stay: the first is load-bearing for its own
+    # reason (`story._wear` clamping), and a guard in 69 rows written
+    # months apart was never the right place for this. #1182.
+    arm_afflictions(world, eid)
 
 
 def arm_afflictions(world: World, eid: int) -> None:
