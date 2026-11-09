@@ -1221,8 +1221,7 @@ def f1743(c: Cast) -> None:
 
 
 @power("f1969", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("cast.reroll_pick_honours_when",))
+       reach=PERSONAL, target=SELF,)
 def f1969(c: Cast) -> None:
     """Lets the ally you flank with reroll damage dice showing a 1.
 
