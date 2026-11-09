@@ -7174,7 +7174,18 @@ def hollowed(ref: str):  # noqa: ANN201
 #: nonsense value by hand and which still reported
 #: `ok  ConditionApplied, DamageApplied`.
 VERDICT_ROWS = (
-    "f1305",     # the issue's example: watches Hit from its body
+    # **`f1338`, where this was `f1305` until `#1174`.** The pin wants a
+    # row that watches `Hit` from its own body and reports a verdict off
+    # it; `#550` moved `f1305`'s last clause into `p2248`, so it carries
+    # `implemented_in=` and `audit.py` does not fire it at all -- which
+    # made the pin report `f1305 is credited with nothing as written`.
+    # That is the fixture going stale, not the row going silent.
+    #
+    # `f1338`, `f1339`, `f1340` and `f1342` are the same shape and each
+    # answers clean; the first is taken. A row named here must not be one
+    # `#550` can migrate, or this recurs -- these four are unbracketed
+    # and name no associated power, so none is a migration candidate.
+    "f1338",     # the issue's example: watches Hit from its body
     "f2206",     # a trait laying a standing modifier
     "f2896",     # a trait laying a conditional one
     "p14271",    # an ordinary melee attack

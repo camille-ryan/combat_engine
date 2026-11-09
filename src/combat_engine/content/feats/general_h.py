@@ -120,16 +120,12 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.durations import keywords_of
-from combat_engine.engine.grid import Square
 from combat_engine.engine.query import (
     allies,
     bloodied,
     distance_between,
     since_turn_began,
 )
-
-#: The racial zone `p2473` lays, by the label it carries.
-CLOUD = "p2473"
 
 #: The class feature f1225 hands over, and the label its extra damage is
 #: filed under -- `features/strikers.py:extra_damage` stamps it as the
@@ -1360,38 +1356,10 @@ def f1295b(c: Cast) -> None:
 # `implemented_in=` instead, which `audit.py` buckets as ELSEWHERE and does
 # not fire -- the row is not silent, it is written somewhere else.
 #
-# `_splash_in_cloud` was here, f1305's clause on p992, written into p992's
-# body now (#550) along with a copy of `_others_in_cloud`. That reader
-# stays: `_rattle_in_cloud` below is the same feat's clause on p2248, which
-# is held back rather than unwritable -- see the call site.
-
-
-def _others_in_cloud(c: Cast, ev: Any) -> list[int]:
-    """"All other enemies within the area" of the caster's own `p2473`.
-
-    Empty unless the creature just hit is standing in it, which is the
-    clause's first half. `Cast.zone` labels a zone with the ref that laid
-    it when the row passes no `label=`, so that ref is the whole match.
-    """
-    area: frozenset[Square] = frozenset()
-    for _zid, zone in c.world.zones.all():
-        if zone.owner == c.me and zone.label == CLOUD:
-            area = zone.squares
-            break
-    inside = c.in_squares(area, side="enemy") if area else []
-    return [] if ev.target not in inside else [f for f in inside if f != ev.target]
-
-
-def _rattle_in_cloud(c: Cast, ev: Any) -> None:
-    """The rattling keyword, paid to creatures the blow never touched.
-
-    `Cast._rattle` pays it out on damage dealt and these enemies take
-    none, so the two halves of the word -- the penalty, and the hold
-    `c.rattled` reads -- are laid directly.
-    """
-    for foe in _others_in_cloud(c, ev):
-        c.penalty("attack", 2, on=foe, until=When.EONT)
-        c.effect("rattled", on=foe, until=When.EONT)
+# `_splash_in_cloud` and `_rattle_in_cloud` were here, f1305's two clauses
+# on p992 and p2248. Both are written into those bodies now (#550, #1174),
+# each with its own copy of the `_others_in_cloud` reader, so nothing out
+# here reads the cloud any more and the helpers went with the clauses.
 
 
 # -- the rows ---------------------------------------------------------------
@@ -1743,21 +1711,20 @@ _riders("f1304", {}, implemented_in=("p87", "p653", "p992", "p4541"))
 # **p992's entry has moved into p992's body** (#550), and `_others_in_cloud`
 # went with it as a copy -- p2248's clause below still reads this one.
 #
-# **p2248's is written and ready to move and is held back, which is an
-# instrument cost rather than a reading of the card.** Moving it empties
-# this card's last live leg, so the row would want `implemented_in=` --
-# and `audit.VERDICT_ROWS` pins `f1305` as its one example of a row that
-# watches `Hit` from its own body, calling `audit()` on it directly rather
-# than through the sweep's bucketing. Measured with the clause migrated:
-# `audit.py --verdicts` reported 12 of 13 and `f1305 is credited with
-# nothing as written`, which is the fixture going stale and not the row
-# going silent. `audit.verdicts(("f1338",))` and the same for `f1339`,
-# `f1340` and `f1342` each answer clean, so the swap is one word -- but
-# `scripts/audit.py` is in `audit.WIDE`, and a wide sweep is not worth
-# paying for one clause. It goes with whatever next touches that file.
-_riders("f1305", {
-    "p2248": _rattle_in_cloud,
-}, dropped=("c.move_zone(with_me=)", "c.zone_exempt()"))
+# **p2248's has moved now, and the fixture moved with it** (`#1174`).
+# Migrating it emptied this card's last live leg, so the row is a pointer
+# -- and `audit.VERDICT_ROWS` pinned `f1305` as its one example of a row
+# watching `Hit` from its own body, which `implemented_in=` stops being
+# true of. Measured before the swap: `audit.py --verdicts` reported 12 of
+# 13 and `f1305 is credited with nothing as written`, the fixture going
+# stale rather than the row going silent. `f1338` is the replacement and
+# `f1339`, `f1340` and `f1342` each answer clean too.
+#
+# It waited for something else to touch `scripts/audit.py`, since that
+# file is in `audit.WIDE` and a wide sweep is not worth one clause. This
+# change is batched with that sweep.
+_riders("f1305", {}, implemented_in=("p992", "p2248"),
+        dropped=("c.move_zone(with_me=)", "c.zone_exempt()"))
 
 # p2105 and p4542 both put the exploit in the place of a charge's melee
 # basic attack -- but only "during the surprise round", and `c.as_basic`

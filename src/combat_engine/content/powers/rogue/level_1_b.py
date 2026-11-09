@@ -55,6 +55,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Skills,
+    Square,
     Trigger,
     UpTo,
     When,
@@ -88,6 +89,31 @@ _HELD = (Condition.GRABBED, Condition.RESTRAINED)
 def _light_blade(world: World, eid: int) -> bool:
     gear = world.get(eid, Gear)
     return bool(gear and gear.main and gear.main.is_light_blade)
+
+
+#: The zone `f1305`'s clause reads. `Cast.zone` labels a zone with the ref
+#: that laid it when the row passes no `label=`, so the ref is the match.
+_CLOUD = "p2473"
+
+
+def _others_in_cloud(c: Cast, hit: int) -> list[int]:
+    """"All other enemies within the area" of the caster's own `p2473`.
+
+    Empty unless the creature just hit is standing in it, which is the
+    clause's first half.
+
+    Copied from `feats/general_h.py`, as `powers/fighter/level_1.py`
+    already copies it for the same feat's clause on `p992` -- a body cannot
+    reach a feat module's privates. Takes the creature hit rather than a
+    `Hit` event, because a body has `c.target` and no event.
+    """
+    area: frozenset[Square] = frozenset()
+    for _zid, zone in c.world.zones.all():
+        if zone.owner == c.me and zone.label == _CLOUD:
+            area = zone.squares
+            break
+    inside = c.in_squares(area, side="enemy") if area else []
+    return [] if hit not in inside else [f for f in inside if f != hit]
 
 
 def _trained_in(c: Cast, skill: str) -> bool:
@@ -646,11 +672,11 @@ def p2248(c: Cast) -> None:
     `f978`'s half asks for a **superior** weapon, which is `c.wielding`'s
     category word rather than a weapon group.
 
-    `f1305` also names this row and is **still a rider in its own file**,
-    held back rather than unwritable: migrating it empties that card's last
-    live leg, and `audit.VERDICT_ROWS` pins `f1305` as its example of a row
-    that watches `Hit` from its body. The call site in `feats/general_h.py`
-    carries the measurement.
+    `f1305` also names this row and its clause is at the foot of this body
+    (#1174), the last of that card's legs to move. It is **unbracketed** --
+    `feat.category` is empty -- so it is a plain `if c.feat(...)` outside
+    the Arena Fighting chain above and stacks with whichever of those is
+    declared.
     """
     arena = c.declare("Arena Fighting", "f971", "f978", "f993")
     if not c.strike():
@@ -685,6 +711,21 @@ def p2248(c: Cast) -> None:
     if c.feat("f1306") and _surprise_round(c):
         with c.credit("f1306"):
             c.grants_advantage(on=foe, until=When.EONT, to="me")
+    if c.feat("f1305") and foe is not None:
+        # "All other enemies within the area of the cloud of darkness also
+        # suffer the effect of the rattling keyword."
+        #
+        # **Both halves of the keyword, which the rider laid only one of.**
+        # `Cast._rattle` is the authority and it lays two things -- the -2
+        # and an effect labelled `rattled` -- and `c.rattled` reads the
+        # second. The rider wrote the penalty alone while its own docstring
+        # said it wrote both, so every creature it rattled answered False to
+        # `c.rattled`. Laid directly rather than through `_rattle` because
+        # that pays out on damage dealt and these enemies take none.
+        with c.credit("f1305"):
+            for other in _others_in_cloud(c, foe):
+                c.penalty("attack", 2, on=other, until=When.EONT)
+                c.effect("rattled", on=other, until=When.EONT)
 
 
 @power(
