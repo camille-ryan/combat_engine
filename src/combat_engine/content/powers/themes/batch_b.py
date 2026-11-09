@@ -1275,7 +1275,16 @@ def p15929(c: Cast) -> None:
     trigger is the hit and not the swing; the bonus therefore lands on the
     defence for the rest of its printed duration rather than turning the
     triggering hit into a miss."""
-    if not c.held():
+    # **`on=c.me`, because `c.held` follows `c.target`.** The printed
+    # trigger is *"you are hit ... while you are holding a weapon"* and the
+    # row is Personal, so the hands are the caster's. Bare, it read the
+    # target's -- `None` on a Personal row -- so `c.held()` answered `[]`
+    # and this returned on **every** use: the row was dead in every fight.
+    #
+    # Measured on an `audit.board`: a caster holding two weapons gives
+    # `c.held()` 0 and `c.held(on=c.me)` 2. Found by the `#550` wave, which
+    # hit the same fault six times in the rows it was migrating.
+    if not c.held(on=c.me):
         return
     defence = getattr(c.trigger, "vs", None)
     if defence is not None:

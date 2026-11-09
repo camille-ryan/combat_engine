@@ -5,17 +5,21 @@ standalone ones worth the space.
 feat, the clause picked by which power hit -- so an Associated Powers row
 is one short entry rather than four `c.watch` calls.
 
-**Three of the four such rows are left, and they are shrinking.** #550's
-convention writes a feat's clause into the body of the power it names, so
-each migration takes a power out of a registration here; `f995` has no
-registration at all any more and is a declared pointer. Each `_riders`
-call carries a note saying which of its powers moved and why the rest have
-not.
+**No clause rides from this file any more.** #550's convention writes a
+feat's clause into the body of the power it names, and the last three
+registrations here moved with it: `f990`'s `p2105`, `p919` and `p1063`,
+`f993`'s `p4541` and `p4369`, and `f991`'s `p917`. So all four of the
+Associated Powers cards in this file are declared pointers carrying
+`implemented_in=`, and each call below says which rows hold its clauses.
+
+Three of those six moves also **changed window**, which is the thing a
+migration can fix and a rider cannot: `_riders`' default table is a `Hit`
+watcher, and `p2105`'s and `p4369`'s clauses print "before the attack"
+while `p4541`'s is about a swing somebody else makes. Each host's
+docstring says so where the clause now lives.
 """
 
 from __future__ import annotations
-
-from typing import Any
 
 from combat_engine.content.feats.exploits import _riders
 from combat_engine.engine import (
@@ -36,95 +40,49 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.query import allies, enemies, holding
+from combat_engine.engine.query import allies, holding
 
-
-def _shift_after(c: Cast, ev: Any) -> None:
-    c.shift(1)
-
-
-def _temp_hp(mod: str):  # noqa: ANN202
-    def clause(c: Cast, ev: Any) -> None:
-        c.temp_hp(getattr(c, mod), on=c.me)
-
-    return clause
-
-
-def _ally_shift(c: Cast, ev: Any) -> None:
-    for friend in allies(c.world, c.me):
-        if c.adjacent(to=friend):
-            c.shift(1, who=friend)
-            return
-
-
-def _companion_steps(c: Cast, ev: Any) -> None:
-    """"Before the attack" is why this hangs on `used=` rather than a hit."""
-    beast = c.companion()
-    if beast is not None:
-        c.shift(1, who=beast)
-
-
-def _second_shot(c: Cast, ev: Any) -> None:
-    """A miss bought back with a ranged basic, paid for in openings.
-
-    `c.may` is the printed "you can", asked of the caster because it is
-    the caster's defence being sold. `c.grants_advantage`'s words name
-    my own side, so handing it to the other one is `to=<that enemy>`,
-    once per enemy.
-    """
-    gear = c.world.get(c.me, Gear)
-    if gear is None or gear.ranged is None:
-        return
-    if not c.may("grant combat advantage for a second shot"):
-        return
-    for foe in enemies(c.world, c.me):
-        c.grants_advantage(on=c.me, to=foe, until=When.SONT)
-    c.basic(on=ev.target, ranged=True)
-
-
-# **`p971`'s clause is written into `p971`**, per #550: a feat naming one
-# power has its clause in that power. It did not survive the move unchanged
-# and that is the point of the move -- `_shift_after` was one bare
-# `c.shift(1)` serving two cards, and only `p2105`'s says "shift 1 square"
-# with no condition. `p971`'s says *"if you score a critical hit"*, which a
-# body reads as `c.crit` and the shared helper could not say at all.
+# **Every clause of this card is written into the row it names**, per #550.
+# `p971`'s moved first and the other three now. None of the four survived
+# the move unchanged, which is the point of it rather than a cost:
 #
-# `_shift_after` stays for `p2105`, whose clause is **before** the attack
-# and so wants `used=` rather than this `Hit` table -- registered here it
-# pays on the hit instead, which is a window the migration fixes and a
-# rider cannot. Left as it stands rather than half-corrected: moving it is
-# a one-line edit in that row's body and belongs with the clause.
-_riders("f990", {"p2105": _shift_after,
-                 "p919": _ally_shift, "p1063": _ally_shift})
+# * `p971`'s says *"if you score a critical hit"*, where the shared
+#   `c.shift(1)` helper this file used to hold could say no condition at
+#   all.
+# * `p2105`'s is *"before the attack"*, so registered in the `Hit` table
+#   here it paid after the swing -- the one moment the step is no use. It
+#   is above that row's `c.strike()` now.
+# * `p919`'s is *"if you shift after the attack"*, which a `Hit` rider
+#   cannot see; that row reads it off the step's own return, and the
+#   printed second sentence about where the ally must end up is written
+#   too, which the rider dropped.
+# * `p1063`'s wants combat advantage on the blow, read off `c.result`.
+_riders("f990", {}, implemented_in=("p971", "p2105", "p919", "p1063"))
 
-# **Two of this feat's four clauses are written in the rows they name**,
-# per #550: `p992` behind `c.declare("Arena Fighting", "f993")` (#780) and
-# now `p2248`, whose Intimidate bonus moved into that row's hit branch.
+# **Every clause of this card is written into the row it names**, per #550:
+# `p992` behind `c.declare("Arena Fighting", "f993")` (#780), `p2248`'s
+# Intimidate bonus in that row's hit branch, and now `p4541` and `p4369`.
 #
-# `p4369` keeps its rider and the reason is a collision, not the clause:
-# another session is writing two other Arena Fighting feats into that body
-# at the same time, and a **second** `c.declare` call for one category in
-# one body is defeated by the memo -- `Cast.declared_feats` answers the
-# first call's pick for every later one, so the two chains would silently
-# break each other. It belongs in whichever change lands that body's chain.
+# `p4369` was held back by a collision rather than by the clause -- a
+# **second** `c.declare` call for one category in one body is defeated by
+# the memo, `Cast.declared_feats` answering the first call's pick for every
+# later one -- so the clause joins that body's existing chain and the one
+# call moved to the top of the body, which is where its `used=` window is.
 #
-# `p4541`'s clause cannot move as it stands, and it is in the wrong window
-# here as well. The card reads *"if your **ally** hits the target with the
-# granted basic attack"*, and this table is a `Hit` watcher gated on
-# `ev.attacker == me` -- so it pays on the character's own hit with the row
-# and never on the ally's. `landed=` (`PowerResolved`, `granted_by` me) is
-# the window the sentence names. Written into the body it would need the
-# ally's hit read back off the log, because `c.grant_attack` returns
-# whether the swing *happened*. Not migrated and not corrected here: it is
-# a defect in the clause rather than in its address.
-_riders("f993", {"p4541": _temp_hp("con_mod")},
-        used={"p4369": _companion_steps})
+# `p4541`'s was in the wrong window here as well as in the wrong file: the
+# card reads *"if your **ally** hits the target with the granted basic
+# attack"* and this table is a `Hit` watcher gated on `ev.attacker == me`,
+# so it paid on the character's own hit and never once on the ally's. That
+# row already had `_granted_hit` for the same reading of the same swing,
+# and the two clauses share the one call -- two would be two swings.
+_riders("f993", {}, implemented_in=("p4541", "p992", "p2248", "p4369"))
 
-# **`p970`'s half is written into `p970`**, per #550. `p917`'s is not: that
-# body is being rewritten by another session in the same hour, and the
-# clause wants the `missed=` window -- an `else` branch on a body whose
-# shape is moving under it.
-_riders("f991", {}, missed={"p917": _second_shot})
+# **Both clauses of this card are written into the rows they name**, per
+# #550: `p970`'s first and `p917`'s now. `p917`'s is the `missed=` window,
+# so it is the `else` of that row's `c.strike()`, and the ranged weapon it
+# asks about is the one in the character's hand rather than the attack
+# branch the use took -- a ranger can hold a bow and swing a blade.
+_riders("f991", {}, implemented_in=("p917", "p970"))
 
 
 # **Fully migrated, so there is no rider left and no clause here.** Both of
@@ -132,10 +90,15 @@ _riders("f991", {}, missed={"p917": _second_shot})
 # #550's first pair and `p1000` now -- so the row is a pointer and
 # `audit.py` buckets it ELSEWHERE rather than firing it.
 #
-# Declared by hand rather than through `_riders`, because `_riders` with
-# every table empty generates the docstring *"No clause of this card is
-# writable yet; see the marker"*, which is the opposite of what is true
-# here. The header is the one `_riders` builds, field for field.
+# Declared by hand rather than through `_riders`, and **the reason given
+# here was false.** It said `_riders` with every table empty generates
+# *"No clause of this card is writable yet; see the marker"*: that fallback
+# needs `implemented_in=` to be empty **too**, and with hosts named the
+# generated line is "Every clause of this card is written into the row it
+# names", which is exactly right -- the three pointers above take it. What
+# a hand-written row buys is the paragraph below, saying *where in each
+# host* the clause sits, which no generated line can. The header is the one
+# `_riders` builds, field for field.
 @power("f995", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, implemented_in=("p4542", "p1000"))
 def f995(c: Cast) -> None:

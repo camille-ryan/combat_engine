@@ -1225,16 +1225,12 @@ def f1295b(c: Cast) -> None:
 # so that row is written by hand on `PowerUsed` -- which is announced
 # before the body and carries `targets`, both of which suit it.
 
-#: The four holds f1300's clauses name together.
-_HELD_FAST = (
-    Condition.IMMOBILIZED,
-    Condition.RESTRAINED,
-    Condition.STUNNED,
-    Condition.UNCONSCIOUS,
-)
-
-#: The four creature types every clause of f1298 names together.
-_NAMED_KINDS = ("demon", "drow", "orc", "spider")
+# `_HELD_FAST` (the four holds f1300's clauses name together) and
+# `_NAMED_KINDS` (the four creature types f1298's name together) were here.
+# Both had one caller left -- the p1061 clause of each feat -- and both are
+# written into p1061's body now (#550), with a copy of the tuple each, for
+# the reason every other migration in this file gives: a body cannot reach
+# a feat module's privates.
 
 
 # `_melee_half` was here -- "was this the melee half of a melee-or-ranged
@@ -1244,55 +1240,20 @@ _NAMED_KINDS = ("demon", "drow", "orc", "spider")
 # `c.ranged`, so the event reader had nowhere left to be read from.
 
 
-def _swings(c: Cast, ev: Any) -> list[int]:
-    """Who a finished use hit, **one entry per swing**, oldest first.
-
-    **The premise this paragraph used to give is false, and `#810` fixed
-    it.** It said `PowerResolved.rolls` is *"one entry per target, not per
-    attack"*, that `p87`'s two swings at one creature resolve with **one**
-    roll, and therefore that *"`exploits._twice` could never answer at
-    all"*. Re-measured through `dsl.use` on an `audit.board`:
-
-        p87 at one target    PowerResolved.rolls = 2
-        p87 at two targets   PowerResolved.rolls = 2
-
-    So the single-target blindness it describes is gone, and a clause
-    reading the rolls for "if you hit with both attacks" works. Recorded
-    rather than deleted because the docstring was **arguing against** a
-    mechanism the `#550` wave then built on `p87`, and a reader finding
-    this would have taken the argument for a measurement.
-
-    This function stays, for the reason in the next paragraph rather than
-    that one: it reads the bus, which is one entry per **swing** whatever
-    the rolls hold, and a clause in `general_g` still depends on that
-    ordering. This file's own last caller -- `f1304`'s clause on p87 --
-    is written into that row's body now (#550) and reads
-    `PowerResolved.rolls` there, which is what the paragraph below says
-    the rolls are good for.
-
-    Every swing is on the bus either way -- `Hit` is emitted per roll -- so
-    the use's own span of the log is the honest reader. Back to the
-    `PowerUsed` that opened it, which `dsl.use` announces before the body; a
-    row cannot nest inside itself (`dsl._IN_FLIGHT` refuses it), so the
-    first one walking back is this use's own.
-
-    `PowerResolved.rolls` is now the one place this can be asked, and its
-    own docstring always said so ("every `AttackResult` the use
-    produced"). `f1102`'s clause in `general_g` reads this instead, and may
-    be moved onto the rolls whenever somebody is in that file -- what it
-    needs is the per-swing ordering, which both now give.
-    `exploits._hits` is still right for a clause about a swing the row
-    hands somebody else, which is one roll per target by construction.
-    """
-    hits: list[int] = []
-    for past in reversed(c.world.bus.log[:ev.seq]):
-        same = getattr(past, "power", "") == ev.power
-        if past.kind == "PowerUsed" and same and past.actor == ev.actor:
-            break
-        if past.kind == "Hit" and same and past.attacker == ev.actor:
-            hits.append(past.target)
-    hits.reverse()
-    return hits
+# `_swings` was here -- "who a finished use hit, one entry per swing,
+# oldest first", walked back over `world.bus.log` to the `PowerUsed` that
+# opened the use. **Both clauses its docstring named as dependents now read
+# `PowerResolved.rolls` instead**: `f1304`'s and `f1102`'s clauses on p87
+# are written into that row's body (#550), inside `_p87_both_swings`, and
+# `#810` measured `ev.rolls` at 2 for that row whether the two swings go
+# into one creature or two -- which is the per-swing ordering this reader
+# existed to supply. So it lost its last caller in an earlier wave and
+# `lint._unreferenced_defs` named it the moment this file was next touched.
+#
+# Deleted rather than kept: its own docstring argued it should stay because
+# "a clause in `general_g` still depends on that ordering", and `general_g`
+# holds only a comment about f1102 now. Said at this length because that
+# argument is the thing a reader would otherwise restore it on.
 
 
 # `_surprise_round` was here -- an enemy still holding
@@ -1315,8 +1276,10 @@ def _swings(c: Cast, ev: Any) -> list[int]:
 # with the last of them.
 
 
-def _is_named_kind(c: Cast, who: int) -> bool:
-    return any(c.is_kind(word, on=who) for word in _NAMED_KINDS)
+# `_is_named_kind` was here -- "is this creature one of the four kinds
+# f1298 names" -- and its last caller was `_ally_adds_half_int`, that
+# feat's clause on p1061, which is written into p1061's body now (#550).
+# The body asks `c.is_kind` over its own copy of the tuple.
 
 
 # `_temp_hp_off_kind` was here, called only by f1298's entry on p2099,
@@ -1329,8 +1292,10 @@ def _is_named_kind(c: Cast, who: int) -> bool:
 # written into that row's body now, inside the riposte closure, where the
 # counter *is* the branch and `as_` is no longer the discriminator.
 #
-# `_is_named_kind` stays: `_ally_adds_half_int` below reads it, and that
-# entry has not migrated because p1061 hands out no swing for it to read.
+# `_is_named_kind` went with them. This said it stayed because
+# `_ally_adds_half_int` read it and "that entry has not migrated because
+# p1061 hands out no swing for it to read" -- p1061 grants the swing now,
+# so that clause moved too and nothing here is left to ask the question.
 
 
 # `_ongoing_if_alone` was here, called only by f1299's entry on p992,
@@ -1377,8 +1342,9 @@ def _is_named_kind(c: Cast, who: int) -> bool:
 
 
 # `_extra_if_held` was here -- f1300's entry on p917 -- and is written into
-# p917's body now (#550). `_HELD_FAST` stays: `_ally_adds_con` below is the
-# same feat's clause on the swing p1061 hands an ally, which has not moved.
+# p917's body now (#550). `_HELD_FAST` went with `_ally_adds_con`, this
+# feat's clause on the swing p1061 hands an ally: that one has moved as
+# well, so the tuple has no reader left in this file.
 
 
 # `_mark_the_hit` was here -- f1304's whole `clauses` leg, on p992 -- and
@@ -1494,35 +1460,16 @@ def f1296(c: Cast) -> None:
 # clause.
 _riders("f1297", {}, implemented_in=("p917", "p1000", "p2248", "p4369"))
 
-def _ally_adds_half_int(c: Cast, ev: Any) -> None:
-    """Half the caster's Intelligence on the granted swing's attack roll.
-
-    Laid on the ally rather than on the warlord, because the modifier is
-    read off whoever is rolling. A one-shot gated on the grant, so an
-    ordinary swing the ally takes later does not spend it.
-    """
-    half = -(-c.int_mod // 2)  # "round up", as printed
-    if half <= 0 or not any(_is_named_kind(c, foe) for foe in ev.targets):
-        return
-    c.bonus(
-        "attack", half, on=ev.actor, until=When.EOT, once=True,
-        when=lambda ctx: ctx.get("granted_by") == c.me,
-    )
-
-
-def _ally_adds_con(c: Cast, ev: Any) -> None:
-    """The caster's Constitution on the granted swing, against a target
-    that is being held still."""
-    if c.con_mod <= 0:
-        return
-    if not any(
-        any(c.is_(hold, on=foe) for hold in _HELD_FAST) for foe in ev.targets
-    ):
-        return
-    c.bonus(
-        "attack", c.con_mod, on=ev.actor, until=When.EOT, once=True,
-        when=lambda ctx: ctx.get("granted_by") == c.me,
-    )
+# `_ally_adds_half_int` (f1298 on p1061) and `_ally_adds_con` (f1300 on
+# p1061) were here, in the `granted=` window, and both are written into
+# p1061's body now (#550) -- the last two `granted=` clauses in the tree.
+#
+# **The move changed nothing about the reading and one thing about the
+# window.** Both still lay the modifier on the *ally*, because it is read
+# off whoever is rolling, and both are still one-shot and gated on this
+# row's own grant. What `granted=` bought was running before the swing;
+# in the body that is simply being written above `c.grant_attack`, which
+# is where a modifier has to be laid for the sum to see it.
 
 
 # `_ongoing_on_granted_hit` was here -- f1299's entry on p315, in the
@@ -1554,15 +1501,15 @@ def _ally_adds_con(c: Cast, ev: Any) -> None:
 # p653's riposte closure the fact is a local read and the damage half is
 # `c.flat` on the counter's own hit.
 #
-# **p1061's stays and no `implemented_in=` goes with it**, which is the
-# `f994` case in `exploits.py` rather than the `f972` one: that pointer
-# takes a row out of `audit.py` altogether, and this leg is a real
-# registration rather than archaeology. It is the attack roll of the free
-# melee basic attack p1061 hands an ally, and p1061's body hands out
+# **p1061's has moved too, so this is a pointer and nothing is armed.**
+# The note here said the leg had to stay because "p1061's body hands out
 # nothing -- it records what would happen with `c.note` -- so a clause
-# written there would be a branch that can never be true. The work owed is
-# p1061's own Effect line, not this clause.
-_riders("f1298", {}, granted={"p1061": _ally_adds_half_int})
+# written there would be a branch that can never be true". That premise
+# was false for three waves: `c.grant_attack` had always existed and takes
+# the `damage_bonus=` p1061's own Effect line needs. The row grants the
+# swing now, so "your ally can add half your Intelligence modifier to the
+# attack roll" is a plain unbracketed `if` above that grant.
+_riders("f1298", {}, implemented_in=("p87", "p653", "p1061", "p2099"))
 
 # **Every clause of this card is in the body of the row it names** (#550),
 # so this is a pointer and nothing is armed. p992's moved earlier; p653's,
@@ -1581,20 +1528,22 @@ _riders("f1299", {}, implemented_in=("p315", "p653", "p992", "p4369"))
 # existed. The clause read `ev.target`, which `Miss` carries beside `Hit`,
 # so one clause served both windows. p1061 is the granted attack.
 #
-# **p704's, p997's and p917's entries have moved into those rows' bodies**
-# (#550), and the `missed=` note above went with p997's. p1061's is the
-# last one out here and stays: it is the swing that row hands an ally,
-# which arrives as the *ally's* `PowerUsed` with `granted_via` naming
-# p1061 -- not anything p1061's own body can reach. That body hands out
-# nothing at all, in fact: it records what would happen with `c.note`, so a
-# clause written there would be a branch that can never be true.
+# **p704's, p997's and p917's entries moved earlier and p1061's is the
+# last**, so every clause of this card is in the body of the row it names
+# and this is a pointer with nothing armed. The `missed=` note above went
+# with p997's.
 #
-# **No `implemented_in=("p704", "p917", "p997")` for the three that moved**,
-# deliberately, and the reason is `f994`'s in `exploits.py`: the pointer
-# takes the whole row out of `audit.py`, which buckets it ELSEWHERE and
-# does not fire it, and this leg is a live registration rather than
-# archaeology. It is owed and belongs with whatever closes the p1061 half.
-_riders("f1300", {}, granted={"p1061": _ally_adds_con})
+# The reason p1061's stayed was a false premise rather than a gap: the note
+# in that body claimed granting an ally an attack was not expressible, so
+# this comment read "that body hands out nothing at all, in fact". It hands
+# out a real swing through `c.grant_attack`, and "your ally can add your
+# Constitution modifier to the attack roll" is written above it.
+#
+# The withheld `implemented_in=` this comment used to argue for is now
+# simply the pointer: with no live leg left there is nothing for `audit.py`
+# to fire, so bucketing the row ELSEWHERE costs nothing and
+# `lint._dangling_implementations` gains four hosts it can check.
+_riders("f1300", {}, implemented_in=("p704", "p917", "p997", "p1061"))
 
 
 @_trait("f1301")

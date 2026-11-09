@@ -46,8 +46,10 @@ from combat_engine.engine import (
     When,
     World,
     power,
+    spread,
 )
 from combat_engine.engine.events import AttackDeclared
+from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.triggers import Trigger, both, by_melee, targets_me
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
@@ -103,6 +105,64 @@ def _two_melee(world: World, eid: int) -> bool:
     if gear is None:
         return False
     return len([w for w in gear.weapons if w.ranged is None]) >= 2
+
+
+def _ally_steps_beside(c: Cast, who: int | None) -> None:
+    """"One ally adjacent to you can shift 1 square as a free action. The
+    ally's shift must end in a square adjacent to the target."
+
+    `f990`'s clause on `p919`. The second sentence is a hard filter and
+    `toward=` is not one: `c.shift(1, who=friend, toward=who)` only
+    *offers* the near squares first, so a step ending out of reach is
+    still allowed. So the destination is narrowed to the target's own ring
+    and named to `c.shift` outright.
+
+    Written here rather than reached for: `warlord/level_1._shift_beside`
+    says the same printed sentence, but it steps the **caster**, and the
+    whole of this clause is that somebody else moves. A free action costs
+    nothing, so the only gate the sentence prints is which ally.
+    """
+    if who is None:
+        return
+    pool = [a for a in c.within(1, side="ally") if a != c.me]
+    friend = c.choose(pool, f"{c.ref}: which ally steps") if pool else None
+    if friend is None:
+        return
+    wanted = spread(squares_of(c.world, who), 1)
+    here = squares_of(c.world, friend)
+    options = sorted(
+        sq for sq in c.world.reachable_squares(friend, 1)
+        if sq in wanted and sq not in here
+    )
+    where = (c.choose(options, f"{c.ref}: where that ally ends up")
+             if options else None)
+    if where is not None:
+        c.shift(1, who=friend, to=where)
+
+
+def _second_shot(c: Cast, who: int | None) -> None:
+    """"If you are wielding a ranged weapon and this attack misses, you can
+    grant combat advantage to all enemies until the start of your next turn
+    to make a ranged basic attack against the same target as a free
+    action."
+
+    `f991`'s clause on `p917`. One optional trade and not two clauses, so a
+    declined `c.may` leaves both halves alone -- the price is the character's
+    own defence and the thing bought is the second shot.
+
+    `c.grants_advantage`'s own words name the caster's side, so handing it
+    to the other one is `to=<that enemy>`, once per enemy, with `on=c.me`
+    for who is exposed. A bare call would say the **target** grants it,
+    which is the opposite of what is being sold.
+
+    "Against the same target" is this body's own target, which `c.strike`
+    has already resolved against by the time the miss is known.
+    """
+    if who is None or not c.may("grant combat advantage for a second shot"):
+        return
+    for foe in c.enemies():
+        c.grants_advantage(on=c.me, to=foe, until=When.SONT)
+    c.basic(on=who, ranged=True)
 
 
 def _has_ranged(world: World, eid: int) -> bool:
@@ -178,18 +238,26 @@ def p1505(c: Cast) -> None:
     requires_text="needs two melee weapons or a ranged weapon",
 )
 def p917(c: Cast) -> None:
-    """Three feats write a clause into this hit, which is #550's convention:
+    """Four feats write a clause into this row, which is #550's convention:
     a feat naming one power has its clause in that power rather than
     registering a rider against it, credited back to the feat with
     `c.credit`.
 
-    **Two plain `if`s and a one-branch chain.** Neither `f1297` nor `f1300`
+    **Two plain `if`s and a two-branch chain.** Neither `f1297` nor `f1300`
     carries a category bracket in the compendium (`feat.category` is empty
     for both), so nothing limits how many of them apply to one use -- an
     `if`/`elif` would hand a character holding both only one of the two it
-    is entitled to. `f981` is `[Arena Fighting]`, where one feat of the
-    bracket applies per use, so it is read off `c.declare` and never off
-    `c.feat`, which is true of every feat held.
+    is entitled to. `f981` and `f991` are both `[Arena Fighting]`, where one
+    feat of the bracket applies per use, so they are read off `c.declare`
+    and never off `c.feat`, which is true of every feat held.
+
+    **`f991`'s is the one clause that is not about the hit.** It prints "if
+    this attack **misses**", which was `_riders`' `missed=` window, so it is
+    the `else` of the strike and nothing below it can see. The weapon it
+    asks about is the character's and not this row's **branch**:
+    `_has_ranged` is the same read `requires_alt` makes, but the card asks
+    whether a bow is in hand rather than which of the two attack lines was
+    taken -- a ranger can be holding one and swinging the other.
 
     `f981`'s half asks whether the target has damaged this character since
     the end of their last turn. `c.hurt_me_since` reads that off the bus
@@ -210,8 +278,11 @@ def p917(c: Cast) -> None:
     `f1300`'s half is Constitution-gated, and the gate has to survive the
     move -- a modifier of 0 or less pays nothing.
     """
-    arena = c.declare("Arena Fighting", "f981")
+    arena = c.declare("Arena Fighting", "f981", "f991")
     if not c.strike():
+        if arena == "f991" and _has_ranged(c.world, c.me):
+            with c.credit("f991"):
+                _second_shot(c, c.target)
         return
     c.damage(c.w(1), c.attack_mod)
     foe = c.target
@@ -242,20 +313,32 @@ def p917(c: Cast) -> None:
     attack=Attack(DEX, vs=AC),
 )
 def p919(c: Cast) -> None:
-    """**`f973`'s clause is written in here**, which is #550's convention,
-    with `c.credit` naming the feat for the step this body takes.
+    """**`f973`'s and `f990`'s clauses are written in here**, which is
+    #550's convention, with `c.credit` naming the feat for what this body
+    does.
 
-    Read off `c.declare` rather than `c.feat`, because `f973` is
+    Read off `c.declare` rather than `c.feat`, because both are
     `[Arena Fighting]` and one feat of that bracket applies to one use.
-    The chain is one branch long: `f980` lays a standing modifier on this
-    row from its own file and `f994` substitutes the shift below through
-    `c.pre_empt`, so neither is in the chain and both can still apply
-    alongside it.
+    `f980` lays a standing modifier on this row from its own file and
+    `f994` substitutes the shift below through `c.pre_empt`, so neither is
+    in the chain and both can still apply alongside whichever branch pays.
 
-    The clause sits **inside the hit branch**, which is the window its
+    `f973`'s clause sits **inside the hit branch**, which is the window its
     rider was registered in.
+
+    **`f990`'s turns on the shift happening, so it is read off the step's
+    own return.** "If you shift after the attack, one ally adjacent to you
+    can shift 1 square" -- and `c.instead_of` hands back whatever ran, so a
+    character who took `f994`'s substitution and forwent the shift gets a
+    falsy answer and no ally step. That is the printed condition exactly,
+    with nothing to remember and nothing to re-read.
+
+    Its rider could not say any of that: it was in `_riders`' `Hit` table,
+    which fires before this line and cannot see whether the shift was taken
+    -- so out there it paid on any hit, and it dropped the second printed
+    sentence about where the ally has to end up as well.
     """
-    arena = c.declare("Arena Fighting", "f973")
+    arena = c.declare("Arena Fighting", "f973", "f990")
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
         if arena == "f973":
@@ -264,7 +347,10 @@ def p919(c: Cast) -> None:
                 # hit, with no further gate.
                 c.shift(1)
     # "Before or after": after is the half that can be taken here.
-    c.instead_of("shift", lambda: c.shift(1))
+    stepped = c.instead_of("shift", lambda: c.shift(1))
+    if arena == "f990" and stepped:
+        with c.credit("f990"):
+            _ally_steps_beside(c, c.target)
 
 
 def _both_hands(c: Cast, *groups: str) -> bool:
@@ -273,12 +359,21 @@ def _both_hands(c: Cast, *groups: str) -> bool:
     `c.wielding` reads the *main* weapon's group, so it answers False for
     the off-hand one and the printed pair could never both be true.
     `c.held` is every weapon in hand.
+
+    **`on=c.me`, and it was missing: `c.held` follows `c.target`.** It is
+    one of the verbs in `docs/AUTHORING.md`'s "theirs" list -- `c.my_weapon`'s
+    own docstring says so outright -- so a bare call asked what the
+    *creature being hit* was holding. A monster is spawned with an empty
+    `Gear()`, so this answered False in every fight and `f974`'s clause on
+    `p87` could never pay. Driven on a board: `c.held()` returned 0 weapons
+    for a caster holding two.
     """
-    return all(c.held(what=group) for group in groups)
+    return all(c.held(what=group, on=c.me) for group in groups)
 
 
-def _p87_both_swings(c: Cast, arena: str, doom: bool) -> None:
-    """The four clauses on `p87` that are about **both** of its swings.
+def _p87_both_swings(c: Cast, arena: str, doom: bool,
+                     hunts_undead: bool) -> None:
+    """The five clauses on `p87` that are about **both** of its swings.
 
     A `PowerResolved` watcher rather than a reading taken in the body, and
     the reason is that row's target line: it spreads two attacks over one
@@ -312,6 +407,27 @@ def _p87_both_swings(c: Cast, arena: str, doom: bool) -> None:
     sentence about the whole use. Its rider counted the swings off the bus
     log through `general_h._swings`; `ev.rolls` is one `AttackResult` per
     swing and is the reader that function's own docstring points at.
+
+    **`hunts_undead` is `f1102`'s clause and is the fifth, also unbracketed**,
+    so it pays alongside whichever arena branch did and alongside `doom`.
+    Same window and the same reader for the same reason: "extra damage ...
+    if you hit with both attacks". Its rider read the swings through
+    `general_h._swings` too, and that function's own docstring says what it
+    needs is the per-swing ordering, "which both now give" -- `ev.rolls` is
+    2 on this row whether the two swings went into one creature or two.
+
+    The pair of blades is asked of the **hands** and not of the branch: the
+    row's own Requirement is "two melee weapons *or* a ranged weapon", so
+    the branch would say nothing, and the card asks about the character,
+    who can hold two blades while taking the ranged leg. `ranged is None`
+    is how the rows here count a melee weapon. One lot of damage on one
+    creature, because the clause names an undead creature in the singular
+    and two swings can catch two.
+
+    **Every `c.held` here passes `on=c.me` and none of them did** --
+    `f977`'s and `f989`'s as well as the new one. See `_both_hands` above
+    for the measurement: that verb follows `c.target`, so all three asked
+    the *monster* what it was holding and answered False in every fight.
     """
     me, ref = c.me, c.ref
     held: list[Any] = []
@@ -327,7 +443,7 @@ def _p87_both_swings(c: Cast, arena: str, doom: bool) -> None:
         # happened.
         all_missed = bool(ev.rolls) and not caught
         if (arena == "f977" and all_missed
-                and len(c.held(what="light thrown")) >= 2):
+                and len(c.held(what="light thrown", on=c.me)) >= 2):
             # The pair is counted rather than asked for: `c.wielding` reads
             # the main hand only, so it answers True for one such weapon
             # and a shield, which is not the printed hand.
@@ -344,7 +460,7 @@ def _p87_both_swings(c: Cast, arena: str, doom: bool) -> None:
                 c.bonus(AC, 2, on=me, until=When.EONT, kind="shield",
                         when=lambda ctx: ctx.get("attacker") in against)
         elif (arena == "f989" and len(caught) > 1
-                and len(c.held(what="light blade")) > 1):
+                and len(c.held(what="light blade", on=c.me)) > 1):
             with c.credit("f989"):
                 c.flat(c.dex_mod, on=caught[-1])
         if doom and len(caught) > 1:
@@ -358,6 +474,16 @@ def _p87_both_swings(c: Cast, arena: str, doom: bool) -> None:
             if who is not None:
                 with c.credit("f1304"):
                     c.penalty("attack", 2, on=who, until=When.EONT)
+        if (hunts_undead and len(caught) > 1 and c.wis_mod > 0
+                and len([w for w in c.held(on=c.me) if w.ranged is None]) >= 2):
+            dead = [foe for foe in dict.fromkeys(caught)
+                    if c.is_kind("undead", on=foe)]
+            if dead:
+                who = (dead[0] if len(dead) == 1 else c.choose(
+                    dead, f"{ref}: who takes the extra damage"))
+                if who is not None:
+                    with c.credit("f1102"):
+                        c.flat(c.wis_mod, on=who)
 
     held.append(c.watch(PowerResolved, finished, until=When.EOT, on=me,
                         label=f"{ref} both swings"))
@@ -402,9 +528,14 @@ def p87(c: Cast) -> None:
 
     **Six more feats print a clause here and all six are
     `[Arena Fighting]`**, so they are one `c.declare` chain and exactly one
-    of them pays per use. `f1298`, `f1304` and `f1306` carry no bracket and
-    stay plain `if`s beside the chain, each stacking with whichever branch
-    paid and with each other.
+    of them pays per use. `f1298`, `f1304`, `f1306` and `f1102` carry no
+    bracket and stay plain `if`s beside the chain, each stacking with
+    whichever branch paid and with each other.
+
+    **`f1102`'s clause is written in here too** (#550), off
+    `feats/general_g.py`, and it is about both swings -- so it is in
+    `_p87_both_swings` with `f1304`'s and for the same reason. It was the
+    last `_riders` registration that file held.
 
     **`f1304`'s and `f1306`'s clauses are written in here** (#550), off
     `feats/general_h.py`. `f1306`'s goes inside the swing loop beside
@@ -425,7 +556,9 @@ def p87(c: Cast) -> None:
       is asked twice because the hand word lives in two places and neither
       is populated on every object a character can hold: `chargen`'s
       hand-written weapon constants set `properties` and leave `hands`
-      empty, and a magic weapon is a copy of one of those.
+      empty, and a magic weapon is a copy of one of those. Its `c.held`
+      half needed `on=c.me` and did not have it -- `_both_hands` above has
+      the measurement, and `c.wielding` beside it was already right.
     * `f992`'s "+1 to the second attack's attack roll" needs no ordering
       machinery: a bonus laid by a hit with `once=True` is spent by the
       next roll, and for a two-swing use that is the second attack.
@@ -446,8 +579,10 @@ def p87(c: Cast) -> None:
     arena = c.declare(
         "Arena Fighting", "f974", "f977", "f978", "f985", "f989", "f992")
     doom = c.feat("f1304")
-    if c.first and (doom or arena in ("f977", "f985", "f989")):
-        _p87_both_swings(c, arena, doom)
+    hunts_undead = c.feat("f1102")
+    if c.first and (doom or hunts_undead
+                    or arena in ("f977", "f985", "f989")):
+        _p87_both_swings(c, arena, doom, hunts_undead)
     shots = 2 if (c.first and c.last) else 1
     landed: list[int] = []
     for swing in range(shots):
@@ -455,7 +590,8 @@ def p87(c: Cast) -> None:
         hit = c.strike()
         if (arena == "f978" and c.first and swing == 0
                 and (c.wielding("double")
-                     or any(w.hands.lower() == "double" for w in c.held()))):
+                     or any(w.hands.lower() == "double"
+                             for w in c.held(on=c.me)))):
             with c.credit("f978"):
                 c.shift(1)
         if not hit:

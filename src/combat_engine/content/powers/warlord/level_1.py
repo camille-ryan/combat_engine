@@ -4,13 +4,26 @@ The warlord spends its turn making somebody else's turn better, so most of
 these bodies are a `c.choose` for which friend benefits followed by a bonus,
 a shift or a heal aimed at them with `on=`.
 
-Three printed lines have no vocabulary here and are marked with `c.note`
-rather than approximated: granting an ally an attack, granting an ally an
-opportunity attack, and a conditional "cannot shift".
+**This said three printed lines have no vocabulary here, and one of the
+three never did.** "Granting an ally an attack" is `c.grant_attack`, which
+has existed throughout and takes the `damage_bonus=` both lines that print
+it need -- `p1061`'s Intelligence and `p1412`'s Charisma. Both are written
+now; the `c.note` each carried said the opposite and was believed by three
+`#550` waves, which left four feat registrations as riders on the strength
+of it.
+
+Two remain genuinely unexpressible and keep their `c.note`: granting an
+ally an **opportunity** attack, and a conditional "cannot shift".
+
+The lesson is the one `triage.py`'s docstring opens with -- the facility
+usually exists under another name -- with the twist that a claim written as
+**prose in a body** is invisible to `todo.py` and `blocked.py`, so nothing
+ever re-asks it.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from combat_engine.engine import (
@@ -26,9 +39,11 @@ from combat_engine.engine import (
     WILL,
     Attack,
     Cast,
+    Condition,
     Keyword,
     Melee,
     When,
+    Window,
     power,
     spread,
 )
@@ -63,6 +78,66 @@ def _shift_beside(c: Cast, squares_: int, who: int) -> bool:
     return where is not None and c.shift(squares_, to=where)
 
 
+#: The four holds `f1300`'s clauses name together. Copied from
+#: `feats/general_h._HELD_FAST` with the clause that reads it; that module
+#: keeps no other caller, so the tuple moved rather than being shared.
+_HELD_FAST = (
+    Condition.IMMOBILIZED,
+    Condition.RESTRAINED,
+    Condition.STUNNED,
+    Condition.UNCONSCIOUS,
+)
+
+#: The four creature types every clause of `f1298` names together, from
+#: `feats/general_h._NAMED_KINDS` for the same reason.
+_NAMED_KINDS = ("demon", "drow", "orc", "spider")
+
+
+def _granted_hit(c: Cast, who: int, foe: int,
+                 at_hit: Callable[[], None] | None = None,
+                 **kw: Any) -> bool:
+    """Did the swing somebody else was handed land? `c.grant_attack` reports
+    that a row went off, not that it connected.
+
+    Copied from `warlord/level_1_c._granted_hit` with the clauses that need
+    it, for the reason `_shift_beside` above gives: a body cannot reach
+    another module's privates and a dozen lines is the cheap end of that
+    duplication. `**kw` is this file's one caller passing `damage_bonus=`,
+    which that copy had no need of.
+
+    **`at_hit` runs on the `Hit` itself, at `Window.BEFORE`**, and both
+    halves of that are the point. `f994`'s clause on `p1061` is "one ally
+    adjacent to the **target**", and the swing can move the target out from
+    under that read: on two of eight audit boards the swinging ally's own
+    magic weapon slid the creature two squares *off its own hit*, so a pool
+    taken after `grant_attack` returned was empty and the clause paid
+    nothing on a board where it should have paid.
+
+    `Window.AFTER` -- the default, and what this subscription used first --
+    is not early enough either, because that weapon's rider is itself a
+    `Hit` watcher registered before this one, so it had already slid the
+    creature by the time an AFTER listener ran. Measured: `BEFORE` pays on
+    6 of 6 hitting seeds, `AFTER` on 4.
+
+    Use it to *snapshot* what the clause reads, not to act -- the caller
+    pays out below, after the swing, in the order the card prints.
+    """
+    landed: list[int] = []
+
+    def tally(ev: Hit) -> None:
+        if ev.attacker == who and ev.target == foe:
+            landed.append(ev.target)
+            if at_hit is not None:
+                at_hit()
+
+    sub = c.world.bus.on(Hit, tally, owner=c.me, window=Window.BEFORE)
+    try:
+        c.grant_attack(who, on=foe, **kw)
+    finally:
+        c.world.bus.off(sub)
+    return bool(landed)
+
+
 def _beside(c: Cast, foe: int | None) -> list[int]:
     """Allies adjacent to you or to the target, which is the warlord's pool.
 
@@ -91,21 +166,51 @@ def _beside(c: Cast, foe: int | None) -> list[int]:
 def p1061(c: Cast) -> None:
     """No attack of your own: the whole power is an ally's free attack.
 
-    Nothing in `Cast` makes another creature attack, so this records what
-    would happen instead of pretending something did.
+    **This said "nothing in `Cast` makes another creature attack" and that
+    was never true.** `c.grant_attack` does, and takes the `damage_bonus=`
+    this card's Intelligence clause needs. Five content files call it, two
+    of them in this class. The row recorded a `c.note` instead and handed
+    out nothing.
 
-    **`f985`'s clause is written in here** (#550), read off `c.declare`
-    because that feat is `[Arena Fighting]` and one feat of the bracket
-    applies per use. It was a `used=` rider -- the `PowerUsed` window,
-    announced before the body -- and the card pays on the *use*, so it
-    does not wait on a swing this row never makes.
+    The note is also why four `#550` registrations stayed riders through
+    three waves: `f972`, `f994`, `f1298` and `f1300` are all clauses about
+    the swing this row grants, and each wave read the claim and believed
+    it. **All four are written in here now** -- the last of this row's
+    migration -- which is what the swing being real buys. A marker written
+    as prose in a body is invisible to `todo.py` and to `blocked.py`, so
+    nothing ever asked whether it was still true.
 
-    `f972`'s and `f994`'s clauses on this row could **not** move and are
-    still riders in their own file: both are about the granted attack
-    hitting, and this body does not make that attack. Reported with the
-    migration.
+    **`f985`'s, `f972`'s and `f994`'s clauses are one `c.declare` chain**:
+    all three are `[Arena Fighting]`, so one of them applies per use and
+    `c.feat` cannot say which. `f985` pays on the *use* and so sits above
+    the swing; the other two are about that swing **landing** and sit
+    below it.
+
+    **`f1298`'s and `f1300`'s go BEFORE the grant**, and that is the one
+    ordering decision here. Both add to the attack roll of the swing this
+    row hands over, and a modifier has to be in place before the sum is
+    taken -- laid after `_granted_hit` returns they would be a bonus to
+    nothing. Both are unbracketed (`feat.category` is empty), so each is a
+    plain `if` that stacks with whichever arena branch pays.
+
+    **Neither names a bonus type**, so neither call carries a `kind=`:
+    `f1298` prints *"your ally can add half your Intelligence modifier
+    (round up) to the attack roll"* and `f1300` *"your ally can add your
+    Constitution modifier to the attack roll"* -- no "bonus" word at all,
+    let alone a type in front of one.
+
+    They are laid on the **ally**, not on the warlord, because the
+    modifier is read off whoever is rolling, and gated on this row's own
+    grant so an ordinary swing that ally takes later does not spend them.
+    `once=True` is "the attack roll", singular.
+
+    **The grant is not given a `ref=`, deliberately.** `c.grant_attack`
+    sets `granted_via` to the *granting* row by construction, so the swing
+    already identifies itself as this row's; `ref=` names which row the
+    ally uses, and the card says a melee basic attack, which is the
+    default. Nothing here needed it.
     """
-    arena = c.declare("Arena Fighting", "f985")
+    arena = c.declare("Arena Fighting", "f972", "f985", "f994")
     if arena == "f985" and c.first and c.wielding("shield"):
         # "One ally adjacent to you gains a +1 shield bonus to AC."
         # `c.wielding("shield")` and not `c.held(what="shield")`: a shield
@@ -117,13 +222,63 @@ def p1061(c: Cast) -> None:
             with c.credit("f985"):
                 c.bonus(AC, 1, on=pick, until=When.EONT, kind="shield")
     foe = c.target
+    # Allies adjacent to the target, because the card says a **melee** basic
+    # attack: an ally out of reach cannot make the attack the row is
+    # offering.
     helpers = [a for a in c.within(1, of=foe, side="ally") if a != c.me]
     who = c.choose(helpers, "which ally strikes")
-    name = f"ally {who}" if who is not None else "an ally"
-    c.note(
-        f"p1061: {name} would make a melee basic attack against {foe} as a free action, "
-        f"with {c.int_mod:+d} damage -- granting an ally an attack is not expressible"
+    if who is None or foe is None:
+        return
+    mine = lambda ctx: (  # noqa: E731
+        ctx.get("granted_by") == c.me and ctx.get("granted_via") == c.ref
     )
+    if c.feat("f1298"):
+        half = -(-c.int_mod // 2)  # "round up", as printed
+        if half > 0 and any(c.is_kind(word, on=foe) for word in _NAMED_KINDS):
+            with c.credit("f1298"):
+                c.bonus("attack", half, on=who, until=When.EOT, once=True,
+                        when=mine)
+    if (c.feat("f1300") and c.con_mod > 0
+            and any(c.is_(hold, on=foe) for hold in _HELD_FAST)):
+        with c.credit("f1300"):
+            c.bonus("attack", c.con_mod, on=who, until=When.EOT, once=True,
+                    when=mine)
+    # **The note this replaced claimed the clause was not expressible, and
+    # it was wrong.** It read: *"granting an ally an attack is not
+    # expressible"*, and `c.grant_attack` has existed throughout -- with a
+    # `damage_bonus=` parameter that is exactly this card's *"bonus to the
+    # damage roll equal to your Intelligence modifier"*. Five content files
+    # already call it, two of them in this very class.
+    #
+    # The cost was not only this row. **Four `#550` registrations across
+    # two feat files were left as riders** because the waves read that note
+    # and believed it. A marker in a row body is invisible to `todo.py`,
+    # which is why nothing asked for three waves.
+    #
+    # `f994`'s pool is read **at the hit** and spent below. See
+    # `_granted_hit`: the swing can slide the target out from under
+    # "adjacent to the target" before it finishes, and did on two of eight
+    # audit boards.
+    beside_foe: list[int] = []
+
+    def at_hit() -> None:
+        beside_foe[:] = [a for a in c.within(1, of=foe, side="ally")
+                         if a != c.me]
+
+    if not _granted_hit(c, who, foe, at_hit, damage_bonus=c.int_mod):
+        return
+    if arena == "f972":
+        # "If the ally hits, you can shift 1 square." You, so no `who=`.
+        with c.credit("f972"):
+            c.shift(1)
+    elif arena == "f994" and beside_foe:
+        # "One ally adjacent to the target can shift 1 square" -- any ally
+        # beside it, which includes the one that swung, and never the
+        # warlord, which is what `side="ally"` minus `c.me` answers.
+        pick = c.choose(beside_foe, f"{c.ref}: who steps")
+        if pick is not None:
+            with c.credit("f994"):
+                c.shift(1, who=pick)
 
 
 @power(
@@ -138,15 +293,19 @@ def p1061(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p1063(c: Cast) -> None:
-    """**`f973`'s, `f980`'s and `f982`'s clauses are written in here**,
-    which is #550's convention, with `c.credit` naming the feat for what
-    this body lays.
+    """**`f973`'s, `f980`'s, `f982`'s and `f990`'s clauses are written in
+    here**, which is #550's convention, with `c.credit` naming the feat for
+    what this body lays.
 
-    **One chain, not three `if`s**: all three are `[Arena Fighting]`, so
-    one of them applies to one use and `c.declare` picks it before the
-    attack. `c.feat` is true of every feat held and cannot say which.
-    `f990` also prints a clause on this row and is still a rider in its
-    own file, so it stacks with whichever of these pays.
+    **One chain, not four `if`s**: all four are `[Arena Fighting]`, so one
+    of them applies to one use and `c.declare` picks it before the attack.
+    `c.feat` is true of every feat held and cannot say which.
+
+    **`f990`'s is the only one with a gate on the swing's own quality.**
+    "If you have combat advantage against the target **and** hit with this
+    exploit, one ally adjacent to you can shift 1 square" -- read off
+    `c.result`, because asking the board again after the roll is too late:
+    a one-shot grant has already been spent by then.
 
     **`f980`'s clause needed `_shift_beside`**, which used to be the reason
     it stayed a rider: the helper lived in the feat's own file and a body
@@ -162,7 +321,7 @@ def p1063(c: Cast) -> None:
     would attribute the grant to this row -- which is the whole thing the
     convention exists to avoid.
     """
-    arena = c.declare("Arena Fighting", "f973", "f980", "f982")
+    arena = c.declare("Arena Fighting", "f973", "f980", "f982", "f990")
     if c.strike():
         c.damage(c.w(1), c.str_mod)
         victim = c.target
@@ -212,6 +371,18 @@ def p1063(c: Cast) -> None:
 
             c.watch(Moved, followed, until=When.EONT, on=c.me,
                     label=f"{c.ref} follow {victim}")
+        elif (arena == "f990" and c.result is not None
+                and c.result.advantage):
+            # "One ally adjacent to you can shift 1 square." Adjacent to
+            # the character, which is `c.within(1, side="ally")` -- not
+            # `_beside`, whose pool is the wider "you or the target" phrase
+            # the other rows in this file print.
+            pool = [a for a in c.within(1, side="ally") if a != c.me]
+            pick = (c.choose(pool, f"{c.ref}: which ally steps")
+                    if pool else None)
+            if pick is not None:
+                with c.credit("f990"):
+                    c.shift(1, who=pick)
     # The Effect line lands hit or miss. The trigger is armable, but what it
     # would fire -- an ally's opportunity attack -- is not.
     c.note(
@@ -450,16 +621,27 @@ def p1066(c: Cast) -> None:
     attack=Attack(STR, vs=REF),
 )
 def p1412(c: Cast) -> None:
+    """**The `c.note` this replaced said the clause was not expressible.**
+    It was the same false claim `p1061` carried -- *"granting an ally an
+    attack is not expressible"* -- and `c.grant_attack` has existed
+    throughout, with the `damage_bonus=` this card's Charisma clause needs.
+
+    Found by the `#550` wave that corrected `p1061`'s copy of it. Fixed
+    here in the same pass rather than left, because the sentence was
+    identical and a reader finding one corrected and one not would
+    reasonably conclude the second was a different case.
+
+    "One ally adjacent to the target", so the pool is allies in reach of
+    the creature rather than of the warlord -- a melee basic attack needs
+    the reach the card asks for.
+    """
     if c.strike():
         c.damage(c.w(1), c.str_mod)
         foe = c.target
         helpers = [a for a in c.within(1, of=foe, side="ally") if a != c.me]
         who = c.choose(helpers, "which ally strikes")
-        name = f"ally {who}" if who is not None else "an ally"
-        c.note(
-            f"p1412: {name} would make a melee basic attack against {foe} as a free action, "
-            f"with {c.cha_mod:+d} damage -- granting an ally an attack is not expressible"
-        )
+        if who is not None and foe is not None:
+            c.grant_attack(who, on=foe, damage_bonus=c.cha_mod)
 
 
 @power(

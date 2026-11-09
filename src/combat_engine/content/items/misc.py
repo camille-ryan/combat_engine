@@ -1325,7 +1325,13 @@ def i3378p1(c: Cast) -> None:
     `c.trigger` is None and `c.redirect` has nothing to move either way.)
 
     The free-hand requirement is read off what is in hand."""
-    if len(c.held()) < 2:
+    # **`on=c.me`, because `c.held` follows `c.target`.** The card says *"if
+    # **you** keep one hand free"*, so the hands are the wielder's. Bare, it
+    # read the target's -- `None` here -- so `c.held()` answered `[]`,
+    # `len([]) < 2` was always True, and the +4 to every defence applied
+    # whatever was in hand. Wrong in the generous direction, where
+    # `p15929`'s identical fault was wrong in the strict one.
+    if len(c.held(on=c.me)) < 2:
         for d in (AC, FORT, REF, WILL):
             c.bonus(d, 4, on=c.me, until=When.EONT, kind="power",
                     when=_ranged_ctx)

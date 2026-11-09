@@ -146,17 +146,35 @@ def p4369(c: Cast) -> None:
     it is asked here: the range line aims from the beast and the target line
     wants the ranger beside it too.
 
-    **`f975`'s and `f982`'s clauses are written in here**, which is #550's
-    convention, with `c.credit` naming the feat for what this body lays.
+    **`f975`'s, `f982`'s and `f993`'s clauses are written in here**, which
+    is #550's convention, with `c.credit` naming the feat for what this
+    body lays.
 
-    **They are one chain and not two `if`s.** Both are `[Arena Fighting]`,
-    and one feat of that bracket applies to one use of a power, so the
-    choice is made by `c.declare` before the attack -- the printed rule is
-    that the declaration cannot depend on the roll. `c.feat` is true of
-    every feat held and cannot say which one is being applied.
+    **They are one chain and not three `if`s.** All three are
+    `[Arena Fighting]`, and one feat of that bracket applies to one use of
+    a power, so the choice is made by `c.declare` before the attack -- the
+    printed rule is that the declaration cannot depend on the roll.
+    `c.feat` is true of every feat held and cannot say which one is being
+    applied.
 
-    Both sit **inside the hit branch**, the window their riders were
-    registered in: `_riders`' default table is a `Hit` watcher.
+    `f975`'s and `f982`'s sit **inside the hit branch**, the window their
+    riders were registered in: `_riders`' default table is a `Hit` watcher.
+
+    **`f993`'s does not, and that is why the `c.declare` call moved to the
+    top of the body.** Its clause is "your beast companion can shift 1
+    square *before* the attack", which was `_riders`' `used=` table --
+    this creature's own `PowerUsed`, announced above the body -- so it goes
+    beside `f1297`'s and **above the adjacency guard**, for the reason that
+    one is there: a use whose target line fails still announced
+    `PowerUsed`, so the beast still got its step, and moving the clause
+    below the guard would narrow the card rather than move it.
+
+    One `c.declare` call and not two, which is load-bearing rather than
+    tidy: `Cast.declared_feats` memoises the first call's pick for the
+    whole use, so a second call for the same category answers the first
+    one's choice and the two chains would silently break each other.
+    Declaring above the guard asks the question on a use that then does
+    nothing, which costs a question and no mechanics.
 
     Neither clause reads an ability modifier the ranger's builds are
     scored on, which is deliberate -- `chargen._leans_on` reads the body's
@@ -203,6 +221,16 @@ def p4369(c: Cast) -> None:
     and it is asked after the strike, because the damage expression is
     what the choice decides and the target is only settled by then.
     """
+    arena = c.declare("Arena Fighting", "f975", "f982", "f993")
+    if arena == "f993":
+        with c.credit("f993"):
+            # "Your beast companion can shift 1 square before the attack",
+            # with no further gate. `c.beast` answers None for a character
+            # that keeps none, so the gate is honest rather than silently
+            # true.
+            pet = c.beast()
+            if pet is not None:
+                c.shift(1, who=pet)
     if c.feat("f1297"):
         with c.credit("f1297"):
             # "Your beast companion can shift 1 square before the attack",
@@ -216,7 +244,6 @@ def p4369(c: Cast) -> None:
                 c.shift(1, who=beast)
     if not c.adjacent():
         return
-    arena = c.declare("Arena Fighting", "f975", "f982")
     if c.strike():
         pet = c.beast()
         instead = bool(

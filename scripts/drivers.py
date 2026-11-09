@@ -23925,15 +23925,15 @@ MIGRATED = {
     # matters because the wave ran as four parallel agents and three of them
     # wrote into these same power files, so no single report knows the whole
     # chain -- `p4369` took clauses from two agents and `p1063` from two.
-    "p919": {"Arena Fighting": ("f973",)},
+    "p919": {"Arena Fighting": ("f973", "f990")},
     "p970": {"Arena Fighting": ("f975", "f984", "f991")},
     "p971": {"Arena Fighting": ("f973", "f990")},
     "p1000": {"Arena Fighting": ("f995",)},
-    "p1063": {"Arena Fighting": ("f973", "f980", "f982")},
+    "p1063": {"Arena Fighting": ("f973", "f980", "f982", "f990")},
     "p2248": {"Arena Fighting": ("f971", "f978", "f993")},
     "p2620": {"Arena Fighting": ("f983",)},
-    "p4369": {"Arena Fighting": ("f975", "f982")},
-    "p4541": {"Arena Fighting": ("f978", "f983")},
+    "p4369": {"Arena Fighting": ("f975", "f982", "f993")},
+    "p4541": {"Arena Fighting": ("f978", "f983", "f993")},
     "p4542": {"Arena Fighting": ("f971", "f984", "f995")},
     # -- the `feats/exploits.py` wave: 29 clauses off one feat file ---------
     #
@@ -23942,11 +23942,26 @@ MIGRATED = {
     # call, as the wave above was, rather than off the migration report.
     "p87": {"Arena Fighting": ("f974", "f977", "f978", "f985", "f989",
                                "f992")},
+    # -- `feats/general_e.py` and `feats/general_g.py`: the last 7 clauses --
+    #
+    # `f990`'s three, `f993`'s two, `f991`'s one and `f1102`'s one, which
+    # emptied the last two feat files of registrations. Six joined an
+    # existing chain -- read off each body's own `c.declare` call, as above;
+    # `p2105` is the one new row, and `f1102` is unbracketed so it is a
+    # plain `if` on `p87` and joins no chain.
+    "p2105": {"Arena Fighting": ("f990",)},
     "p315": {"Arena Fighting": ("f981", "f992")},
     "p620": {"Arena Fighting": ("f975",)},
     "p653": {"Arena Fighting": ("f981", "f994")},
     "p917": {"Arena Fighting": ("f981",)},
-    "p1061": {"Arena Fighting": ("f985",)},
+    # -- the last 4 registrations of #550, off two feat files --------------
+    #
+    # `f972` and `f994` joined `f985`'s chain when `p1061` stopped recording
+    # its Effect line as a `c.note` and started granting the swing. Both are
+    # clauses about that swing landing, and three earlier waves read the note
+    # and left them as riders. `f1298`'s and `f1300`'s moved in the same
+    # change and join no chain: both are unbracketed.
+    "p1061": {"Arena Fighting": ("f985", "f972", "f994")},
     "p1505": {"Arena Fighting": ("f980", "f988")},
     "p2104": {"Arena Fighting": ("f982", "f988", "f989")},
     "p4368": {"Arena Fighting": ("f971", "f983")},
@@ -24041,15 +24056,39 @@ NO_CHAIN_YET = {
 #: substitution means the walk never happens and the two could not both
 #: pay. `f973` is in the chain now and its clause is about the damage the
 #: walk provokes, so a character holding `f973` and `f980` collects both.
+#:
+#: **Five entries were paid by the `general_e`/`general_g` wave**, which was
+#: the last of the four `#550` feat-file waves: `f990` came off `p919` and
+#: `p1063`, `f991` off `p917`, and `f993` off `p4369` and `p4541`. `p917`,
+#: `p919`, `p1063` and `p4369` have no entry left at all.
+#:
+#: **And this list is incomplete in a way no wave has paid for -- see the
+#: report on that wave rather than reading the gap as closed.** Seven
+#: `[Arena Fighting]` feats in `feats/general_q.py` -- `f3188`, `f3210`,
+#: `f3230`, `f3234`, `f3245`, `f3246`, `f3249` -- each name several rows and
+#: ride them through `general_q._on_hit_with`, a trait-level `Hit` watcher
+#: that pays alongside whatever the body's chain pays. Between them they
+#: name `p620`, `p653`, `p917`, `p919`, `p971`, `p992`, `p997`, `p1063`,
+#: `p1505`, `p2104`, `p2105`, `p4369` and `p4541` -- most of `MIGRATED`'s
+#: keys -- and **not one of the seven is listed here**.
+#: `f3230` is a deliberate exception (its "once per encounter" hold spans
+#: the powers it names, so a body cannot hold it -- `content/CLAUDE.md`);
+#: the other six are not known to be.
+#:
+#: Left as found rather than half-corrected: deriving it needs each feat's
+#: mechanism read against each row, which is a sweep of its own and not
+#: this wave's files.
 STILL_RIDERS: dict[str, tuple[str, ...]] = {
-    "p917": ("f991",),
-    "p919": ("f990",),
     "p971": ("f980",),
     "p1000": ("f986",),
-    "p1061": ("f972", "f987", "f994"),
-    "p1063": ("f990",),
-    "p4369": ("f993",),
-    "p4541": ("f976", "f993"),
+    # **`f972` and `f994` came off this entry**, which was the last of
+    # #550's 50 (feat, power) registrations: both are in `p1061`'s chain
+    # now. `f987` is not a `_riders` registration at all -- it is
+    # hand-written, watching `PowerUsed` for `ev.power == "p1061"` and
+    # lending the swing to the rider's mount -- so it still stacks with
+    # whichever branch of that chain pays.
+    "p1061": ("f987",),
+    "p4541": ("f976",),
     "p4542": ("f986",),
 }
 
@@ -24072,11 +24111,12 @@ UNPOSABLE = {
     "p1000": "f995's clause pays an AC bonus to each ally ADJACENT to the"
              " target (`c.adjacent_to`), and nothing places an ally there"
              " on a drawn encounter. A position read, like p992's zone.",
-    "p4369": "both branches need a beast companion -- `c.beast()` is None"
-             " for a character that keeps none -- and then a world read on"
-             " top: f975 wants the beast to have combat advantage, f982"
-             " wants the ranger and the beast to be the pair flanking"
-             " (`query.flankers`). The drawn character has no companion.",
+    "p4369": "all three branches need a beast companion -- `c.beast()` is"
+             " None for a character that keeps none -- and two of them a"
+             " world read on top: f975 wants the beast to have combat"
+             " advantage, f982 wants the ranger and the beast to be the pair"
+             " flanking (`query.flankers`). f993's is the bare step and"
+             " wants only the companion. The drawn character has none.",
     # -- six from the `feats/exploits.py` wave ------------------------------
     #
     # Every one is the case the rule's own comment refuses to patch around,
@@ -24095,9 +24135,19 @@ UNPOSABLE = {
     "p917": "f981's clause asks `c.hurt_me_since(foe)` -- a read of"
             " `world.bus.log` for damage the target dealt since this"
             " character's last turn ended. Nothing on this board has hit"
-            " the character, and faking the log is not faking a Cast.",
-    "p1061": "f985's clause guards 'one ally adjacent to you', read through"
-             " `c.within` -- faked empty here. p620's reason exactly.",
+            " the character, and faking the log is not faking a Cast."
+            " f991's is the miss branch and asks `_has_ranged`, a `Gear`"
+            " read: the drawn character carries no ranged weapon, which is"
+            " a component read like `wielding` -- but one the spy cannot"
+            " fake, because the row's own `requires_alt` reads the same"
+            " function and faking it would change which branch the row is"
+            " offered on.",
+    "p1061": "all three branches die on the same read. f985's clause guards"
+             " 'one ally adjacent to you' and f972's and f994's are about"
+             " the swing the row hands an ally adjacent to the TARGET --"
+             " both pools are `c.within`, faked empty here, so no ally is"
+             " offered and no swing is granted for the other two to read."
+             " p620's reason exactly.",
     "p2104": "f988's and f989's clauses both need the off-hand swing to"
              " land, and the off-hand's victim is chosen out of"
              " `c.within(1, side='enemy')` -- faked empty -- so the body"
@@ -38901,26 +38951,48 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # `ONE_CREATURE` singleton, which this counter reads by identity as *no
     # header written*. That is the content fault the split exists to
     # surface, and it surfaced one on its first wave.
+    #
+    # **And by one more, 2026-11-08, from `#550` rather than a new row.**
+    # `f993`'s clause migrated into `p4541` gives temporary hit points, so
+    # `doctrine.heals` counts that row for the first time: holdable
+    # 595 -> 596, reaching no friend 138 -> 139.
+    #
+    # Read against both cards before the pin moved. `p4541` prints
+    # *"Target: One creature"* -- an enemy, which gets a free swing at you
+    # -- and `f993`'s line for it is *"If your ally hits the target with
+    # the granted basic attack, **you** gain temporary hit points"*. So the
+    # heal lands on the caster and the target is a foe: `cannot_reach_an_
+    # ally` is the right bucket.
+    #
+    # **`undeclared` goes to 121 and that is a false positive**, which is
+    # worth stating because the figure's own assertion calls these a
+    # *missing header*. The test is `target is dsl.ONE_CREATURE` by
+    # identity, and `p4541`'s card really does print "One creature" -- so
+    # it names the singleton **by design**, not by omission. Declaring a
+    # fresh `Target("enemy", 1)` would move the number and change nothing
+    # about the row, which is gaming the identity check rather than fixing
+    # anything. The proxy is right about most of the 121 and cannot be
+    # right about all of them.
     reach = SC._heal_reach()
     out.that(reach["reaches_an_ally"] == 122
-             and reach["holdable"] == 595,
-             "122 of the 595 character-holdable healing rows can reach an"
+             and reach["holdable"] == 596,
+             "122 of the 596 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
              " refusal counter is about, and it has moved three times:"
              " `i545p2` (#1139) and `p3847` (#1153) by one each against"
              " their printed cards, and six at once with `#1163`'s wave",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
     out.that(reach["self_only"] == 335
-             and reach["cannot_reach_an_ally"] == 138
+             and reach["cannot_reach_an_ally"] == 139
              and reach["reaches_an_ally"] + reach["self_only"]
              + reach["cannot_reach_an_ally"] == reach["holdable"],
-             "and the three buckets partition it -- 335 self-only, 138"
+             "and the three buckets partition it -- 335 self-only, 139"
              " that reach no friend, 122 that do. They have to add up or"
              " the census is reading something twice",
              f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
              f" + {reach['reaches_an_ally']}")
-    out.that(reach["undeclared"] == 120,
-             "**120 of those 138 declare no target line at all** and"
+    out.that(reach["undeclared"] == 121,
+             "**121 of those 139 declare no target line at all** and"
              " inherit `dsl.ONE_CREATURE`, so they read `enemy` by"
              " default rather than by design. Told apart by identity"
              " against the singleton, which is the only way to see it --"

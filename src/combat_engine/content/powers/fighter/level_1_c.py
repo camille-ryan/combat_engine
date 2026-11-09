@@ -262,7 +262,15 @@ def p2104(c: Cast) -> None:
         with c.credit("f988"):
             # "Shift 1 square to a square adjacent to either target."
             _shift_beside(c, 1, primary, second)
-    elif arena == "f989" and len(c.held(what="light blade")) > 1:
+    # **`on=c.me`, and it was missing.** `c.held` follows `c.target` --
+    # `docs/AUTHORING.md` lists it among the verbs that do and
+    # `c.my_weapon`'s docstring says so outright -- so a bare call asked
+    # what the *creature being hit* was holding. A monster is spawned with
+    # an empty `Gear()`, so this gate answered False in every fight and
+    # `f989`'s clause here could never pay. Driven on a board:
+    # `c.held()` returns 0 for a caster holding two weapons. The same fault
+    # was in four places in `powers/ranger/level_1.py`.
+    elif arena == "f989" and len(c.held(what="light blade", on=c.me)) > 1:
         with c.credit("f989"):
             # "+2 feat bonus to attack rolls and damage rolls with
             # opportunity attacks" -- the damage context carries
@@ -285,7 +293,30 @@ def p2104(c: Cast) -> None:
 )
 def p2105(c: Cast) -> None:
     """The slide is into the square the fighter just left, so the square is
-    read before the step and named to `c.slide` afterwards."""
+    read before the step and named to `c.slide` afterwards.
+
+    **`f990`'s clause is written in here**, which is #550's convention: a
+    feat naming one power has its clause in that power rather than
+    registering a rider against it, with `c.credit` naming the feat for the
+    step this body takes.
+
+    Read off `c.declare` and not `c.feat`: `f990` is `[Arena Fighting]`, so
+    one feat of that bracket applies to one use and `c.feat` is true of
+    every feat held. The chain is one branch long, and the two other Arena
+    Fighting feats naming this row are not candidates for it -- both are
+    `swaps=` entries, which **substitute** the printed shift below rather
+    than paying beside it.
+
+    **It goes above `c.strike()`, and that window is the half the rider had
+    wrong.** The printed clause is "you can shift 1 square *before* the
+    attack" and it was registered in `_riders`' default table, which is a
+    `Hit` watcher -- so out there it paid after the swing, which is the one
+    moment the step cannot be taken at. Moving the clause is what fixes it.
+    """
+    arena = c.declare("Arena Fighting", "f990")
+    if arena == "f990":
+        with c.credit("f990"):
+            c.shift(1)
     if not c.strike():
         return
     c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod)

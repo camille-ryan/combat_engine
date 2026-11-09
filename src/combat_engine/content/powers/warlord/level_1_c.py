@@ -421,13 +421,24 @@ def p4541(c: Cast) -> None:
     one-shot grant put on the caster; the ally's is the mirror of it. Both
     are spent by the swing they were printed for.
 
-    **`f978`'s and `f983`'s clauses are written in here**, which is #550's
-    convention, with `c.credit` naming the feat for what this body lays.
-    Read off `c.declare` and not `c.feat`: both are `[Arena Fighting]` and
-    one feat of that bracket applies to one use.
+    **`f978`'s, `f983`'s and `f993`'s clauses are written in here**, which
+    is #550's convention, with `c.credit` naming the feat for what this
+    body lays. Read off `c.declare` and not `c.feat`: all three are
+    `[Arena Fighting]` and one feat of that bracket applies to one use.
 
-    `f976` and `f993` also name this row and are still riders in their own
-    files, so they stack with whichever branch pays.
+    `f976` also names this row and is still a rider in its own file, so it
+    stacks with whichever branch pays.
+
+    **`f993`'s was in the wrong window out in `exploits._riders` as well as
+    in the wrong file**, which is why it reads differently from its rider.
+    The card says "if your **ally** hits the target with the granted basic
+    attack", and that table is a `Hit` watcher gated on `ev.attacker == me`
+    -- so it paid on the character's own hit with this row and never once
+    on the ally's. `_granted_hit` is the question the sentence asks, and
+    the clause is in the ally's branch below rather than the hit branch.
+
+    Its Constitution modifier needs no `> 0` gate: the feat's own printed
+    prerequisite is Constitution 13, so a character holding it has one.
 
     They sit in two different windows and neither is a choice. `f978`'s is
     **inside the hit branch**, where its `Hit` rider fired. `f983`'s turns
@@ -445,8 +456,12 @@ def p4541(c: Cast) -> None:
     `c.grant_attack`, for the reason that helper exists: the verb reports
     that a row went off and not that it connected. The grant is inside the
     helper, so it happens exactly once whether or not the swing lands.
+
+    `f993` wants the same reading of the same swing, so the two share one
+    `_granted_hit` call: two calls would be two granted attacks, which is
+    one more swing than the card prints.
     """
-    arena = c.declare("Arena Fighting", "f978", "f983")
+    arena = c.declare("Arena Fighting", "f978", "f983", "f993")
     if c.strike():
         c.damage(c.w(1), c.str_mod)
         if arena == "f978" and c.wielding("superior"):
@@ -482,10 +497,15 @@ def p4541(c: Cast) -> None:
     friend = c.choose(pool, "who takes the opening") if pool else None
     if friend is not None:
         c.grants_advantage(on=foe, to=friend, once=True)
-        if c.feat("f1304"):
+        doom = c.feat("f1304")
+        if doom or arena == "f993":
             if _granted_hit(c, friend, foe):
-                with c.credit("f1304"):
-                    c.penalty("attack", 2, on=foe, until=When.EONT)
+                if doom:
+                    with c.credit("f1304"):
+                        c.penalty("attack", 2, on=foe, until=When.EONT)
+                if arena == "f993":
+                    with c.credit("f993"):
+                        c.temp_hp(c.con_mod, on=c.me)
         else:
             c.grant_attack(friend, on=foe)
 

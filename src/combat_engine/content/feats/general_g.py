@@ -39,7 +39,6 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.feats.exploits import _riders
-from combat_engine.content.feats.general_h import _swings
 from combat_engine.content.feats.styles import among
 from combat_engine.engine import (
     AC,
@@ -817,55 +816,17 @@ def f923(c: Cast) -> None:
     )
     # Reliable, recorded against the creature -- see `f921`.
     c.counts_as_keyword("p1766", Keyword.RELIABLE)
-# -- the undead-hunting riders, where a clause per power is printed ---------
+# -- the undead-hunting feats, where a clause per power is printed ---------
 #
-# **Six of the seven clauses this section registered are written into the
-# rows they name** (#550, and `p4542` is the worked pair): p1567, p841,
-# p835 twice -- two feats name it -- p1758 and p620. The seventh is `_p87`
-# below, which is the only one not about a single blow and so the only one
-# with no moment in a body to move to. f1097's other two are a third
-# thing again: laid at arming, never registered in a window at all.
-
-
-def _p87(c: Cast, ev: Any) -> None:
-    """"Extra damage if you hit with both attacks", against undead, while
-    armed with two melee weapons.
-
-    A `resolved` clause: the question is about the whole use, and no
-    earlier window has both swings in it. p87 rolls exactly two, so two
-    hits is both of them landing.
-
-    **Counted with `general_h._swings`, not with `exploits._hits`.** The
-    rolls on the resolved event are one per *target*, so the commonest
-    shape of this card -- both swings into one creature -- resolves with a
-    single roll on the event and read as one hit. That helper's docstring
-    has the measurement.
-
-    **The weapon pair is asked of the hands, not of the branch.** p87's
-    melee leg carries the same printed requirement, so reading the branch
-    would make the gate say nothing -- and the card asks about the
-    character, who can be holding two blades while taking the row's ranged
-    leg. `ranged is None` is how the ranger rows count a melee weapon, and
-    `Gear.held` is what is in hand rather than on the belt.
-
-    The extra damage is one lot, laid on the undead creature the use
-    caught: the clause names "an undead creature" in the singular, and the
-    row can hit two creatures with its two swings.
-    """
-    if c.wis_mod <= 0:
-        return
-    caught = _swings(c, ev)
-    if len(caught) < 2:
-        return
-    if len([w for w in c.held() if w.ranged is None]) < 2:
-        return
-    dead = [foe for foe in dict.fromkeys(caught) if _undead(c, foe)]
-    if not dead:
-        return
-    who = dead[0] if len(dead) == 1 else c.choose(
-        dead, "who takes the extra damage")
-    if who is not None:
-        c.flat(c.wis_mod, on=who)
+# **All seven clauses this section registered are written into the rows
+# they name** (#550, and `p4542` is the worked pair): p1567, p841, p835
+# twice -- two feats name it -- p1758, p620 and p87. f1097's other two are
+# a third thing again: laid at arming, never registered in a window at all.
+#
+# `_p87` was the last and was here because its clause is about the whole
+# use rather than a single blow. That is still true and was never a reason
+# it could not move -- p87's body arms a `PowerResolved` watcher for the
+# four clauses in that position and this is the fifth.
 
 
 def _f1097_necrotic(using: Cast) -> None:
@@ -971,17 +932,20 @@ def f1100(c: Cast) -> None:
     """
 
 
-# p87's clause is the only one of the four that is not about a single
-# blow: "if you hit with both attacks" is a question about the whole use,
-# which is the `resolved` window and nothing earlier -- and this row's
-# body runs once per *target*, so with two targets neither run can see
-# both swings. There is no moment in that body to move the clause to, so
-# it stays a rider.
+# **Every clause of this card is written into the row it names** (#550):
+# p835's swarm damage, p1758's natural-15 rider, p620's ally shift, and
+# now p87's.
 #
-# **The other three are written into their rows** (#550): p835's swarm
-# damage, p1758's natural-15 rider and p620's ally shift. No
-# `implemented_in=` while p87 is still here -- see `f1097`.
-_riders("f1102", {}, resolved={"p87": _p87})
+# p87's was the last and read as the hard one: "if you hit with both
+# attacks" is a question about the whole use, which is the `resolved`
+# window and nothing earlier, and that row's body runs once per *target*
+# -- so with two targets neither run can see both swings. **The premise
+# that there was no moment in the body to move it to was wrong.** That row
+# already carries `_p87_both_swings`, a `PowerResolved` watcher armed on
+# the first target for the four clauses in exactly this position, and this
+# is the fifth. A body may open the window it needs; it is not limited to
+# the moments it already passes through.
+_riders("f1102", {}, implemented_in=("p1758", "p835", "p87", "p620"))
 
 
 # -- the feats that grant a card -------------------------------------------
