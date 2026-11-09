@@ -1254,15 +1254,24 @@ def _melee_half(ev: Any) -> bool:
 def _swings(c: Cast, ev: Any) -> list[int]:
     """Who a finished use hit, **one entry per swing**, oldest first.
 
-    `exploits._hits` reads `PowerResolved.rolls`, and that is one entry per
-    *target*, not per attack: `dsl.use` appends `cast.result` after the body
-    has run, so a row making two attacks inside one body run leaves the
-    second roll behind and the first is simply gone. Measured on p87, which
-    is exactly that row -- two swings at one creature resolve with **one**
-    roll on the event, so "if you hit with both attacks" read as one hit and
-    `exploits._twice` could never answer at all. Against two creatures the
-    body runs twice and both rolls are there, so the blindness is in the
-    single-target case alone, which is the half the cards care most about.
+    **The premise this paragraph used to give is false, and `#810` fixed
+    it.** It said `PowerResolved.rolls` is *"one entry per target, not per
+    attack"*, that `p87`'s two swings at one creature resolve with **one**
+    roll, and therefore that *"`exploits._twice` could never answer at
+    all"*. Re-measured through `dsl.use` on an `audit.board`:
+
+        p87 at one target    PowerResolved.rolls = 2
+        p87 at two targets   PowerResolved.rolls = 2
+
+    So the single-target blindness it describes is gone, and a clause
+    reading the rolls for "if you hit with both attacks" works. Recorded
+    rather than deleted because the docstring was **arguing against** a
+    mechanism the `#550` wave then built on `p87`, and a reader finding
+    this would have taken the argument for a measurement.
+
+    This function stays, for the reason in the next paragraph rather than
+    that one: it reads the bus, which is one entry per **swing** whatever
+    the rolls hold, and three clauses already depend on that ordering.
 
     Every swing is on the bus either way -- `Hit` is emitted per roll -- so
     the use's own span of the log is the honest reader. Back to the
@@ -1270,12 +1279,14 @@ def _swings(c: Cast, ev: Any) -> list[int]:
     row cannot nest inside itself (`dsl._IN_FLIGHT` refuses it), so the
     first one walking back is this use's own.
 
-    `PowerResolved.rolls` should be the one place this is asked, and its
-    own docstring says it is ("every `AttackResult` the use produced").
-    Until that is true, this is what `f1304`'s p87 clause here and
-    `f1102`'s in `general_g` read instead -- and `exploits._hits` is still
-    right for every clause about a swing the row hands somebody else,
-    which is one roll per target by construction.
+    `PowerResolved.rolls` is now the one place this can be asked, and its
+    own docstring always said so ("every `AttackResult` the use
+    produced"). `f1304`'s p87 clause here and `f1102`'s in `general_g`
+    read this instead, and may be moved onto the rolls whenever somebody
+    is in the file -- what they need is the per-swing ordering, which both
+    now give. `exploits._hits` is still right for a clause about a swing
+    the row hands somebody else, which is one roll per target by
+    construction.
     """
     hits: list[int] = []
     for past in reversed(c.world.bus.log[:ev.seq]):

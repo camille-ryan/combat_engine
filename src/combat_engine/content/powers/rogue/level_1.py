@@ -160,33 +160,62 @@ def p704(c: Cast) -> None:
     requires_text="needs a crossbow, a light blade or a sling",
 )
 def p970(c: Cast) -> None:
-    """**`f991`'s clause is written in here**, which is #550's convention: a
-    feat naming one power has its clause in that power rather than
-    registering a rider against it from its own file. `c.credit` is
-    Camille's call on the attribution fork, so the modifier this body lays
-    is reported as the feat's.
+    """**Three feats' clauses are written in here**, which is #550's
+    convention: a feat naming one power has its clause in that power rather
+    than registering a rider against it from its own file. `c.credit` is
+    Camille's call on the attribution fork, so the modifiers this body lays
+    are reported as the feats'.
 
-    **Read off `c.declare` and never off `c.feat`.** `f991` is
+    **Read off `c.declare` and never off `c.feat`.** All three are
     `[Arena Fighting]`, and one feat of that bracket applies to one use of a
     power -- `c.feat` is true of every feat the character holds and cannot
-    say which one is being applied. The chain is one branch long: the other
-    Arena Fighting feats naming this row are still riders in their own
-    files, so they still stack with this one, which the printed rule
-    forbids. That is the migration being partway through rather than a
-    reading of the cards.
+    say which one is being applied.
 
-    **It goes before `c.strike()`**, which is the window its rider was
-    registered in: `_riders`' `used=` table is a `PowerUsed` watcher, and
-    `PowerUsed` is announced above the body. A waiver laid after the roll
-    would be too late to have decided anything.
+    `f977` also prints a clause on this row and is **unwritten**: it turns
+    on a racial power changing a hit into a miss, which is its own piece of
+    work and not a migration.
+
+    **`f991`'s branch goes before `c.strike()`**, which is the window its
+    rider was registered in: `_riders`' `used=` table is a `PowerUsed`
+    watcher, and `PowerUsed` is announced above the body. A waiver laid
+    after the roll would be too late to have decided anything. The other
+    two are crit riders off the `Hit` window and sit after the damage.
     """
-    if c.declare("Arena Fighting", "f991") == "f991":
+    arena = c.declare("Arena Fighting", "f975", "f984", "f991")
+    if arena == "f991":
         with c.credit("f991"):
             # "With this exploit, you take no penalty to your attack roll
             # for attacking targets at long range."
             c.ignores_long_range(on=c.me, until=When.EOT)
-    if c.strike():
-        c.damage(c.w(1), c.dex_mod + c.cha_mod)
+    if not c.strike():
+        return
+    c.damage(c.w(1), c.dex_mod + c.cha_mod)
+    foe = c.target
+    if foe is None or not c.crit:
+        return
+    if arena == "f975":
+        # "The next ally that hits the target before the end of your next
+        # turn deals extra damage equal to your Charisma modifier." One
+        # ally's blow and not every one of them, so the watcher carries its
+        # own latch; and its own `c.credit`, because the outer block is
+        # popped when this body returns and the blow comes later.
+        spent: list[bool] = []
+
+        def ally_hit(ev: Hit) -> None:
+            if spent or ev.target != foe or ev.attacker not in c.allies():
+                return
+            spent.append(True)
+            with c.credit("f975"):
+                c.flat(c.cha_mod, on=foe)
+
+        c.watch(Hit, ally_hit, until=When.EONT, on=c.me,
+                label=f"{c.ref} next ally")
+    elif arena == "f984":
+        with c.credit("f984"):
+            # "A penalty to attack rolls equal to one-half your Charisma
+            # modifier (minimum 1)."
+            c.penalty("attack", max(1, c.cha_mod // 2), on=foe,
+                      until=When.EONT)
 
 
 @power(
@@ -209,7 +238,27 @@ def p653(c: Cast) -> None:
     outright -- so it is rolled longhand. The latch is kept here rather than
     with `once=True`, which would burn the trigger on an attack aimed at
     somebody else.
+
+    **`f981`'s and `f994`'s clauses are written in here** (#550), and both
+    are about the *counter* rather than the opening blow -- so they sit
+    inside the closure, on the riposte's own hit, which is the one place
+    that outcome is in hand.
+
+    **Neither could fire where it was.** `f981` registered its clause in
+    `_riders`' `landed=` table, which gates on `ev.granted_by == me and
+    ev.actor != me` -- the printed "if **you** hit with the immediate
+    interrupt attack this exploit grants" is a swing this character makes,
+    so that gate was false every time. `f994` sat in the `Hit` table and
+    needed `as_="riposte"` to tell the counter from the standard action;
+    here the branch is simply inside the counter and the tag is not the
+    discriminator. Reported in the migration rather than fixed in place.
+
+    Both are `[Arena Fighting]`, so one chain, declared before the attack
+    as the printed rule requires. `f985` and `f988` also print a clause on
+    this row -- both trade the interrupt away rather than adding to it --
+    and both are still marked on `c.decline_trigger(ref=)`.
     """
+    arena = c.declare("Arena Fighting", "f981", "f994")
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
     victim = c.target
@@ -224,8 +273,21 @@ def p653(c: Cast) -> None:
         # `as_="riposte"` so the counter can be told from the opening blow:
         # both carry this row's `power`, and two feats print a clause about
         # the counter alone.
-        if c.attack(c.str_, AC, on=victim, as_="riposte"):
-            c.damage(c.w(1), c.str_mod, on=victim)
+        if not c.attack(c.str_, AC, on=victim, as_="riposte"):
+            return
+        c.damage(c.w(1), c.str_mod, on=victim)
+        if arena == "f981":
+            with c.credit("f981"):
+                # Two penalties on two different keys, so neither collapses
+                # into the other.
+                c.penalty(AC, 2, on=victim, until=When.EONT)
+                c.penalty(REF, 2, on=victim, until=When.EONT)
+        elif arena == "f994":
+            # "A -3 penalty to its attack roll with the triggering attack."
+            # `once=True` is what names that one roll: it is the very next
+            # one this enemy makes, which is the attack being interrupted.
+            with c.credit("f994"):
+                c.penalty("attack", 3, on=victim, until=When.EONT, once=True)
 
     c.on_attack(riposte, by=victim, until=When.SONT, label=f"{c.ref} riposte")
 
@@ -271,11 +333,10 @@ def p971(c: Cast) -> None:
     naming the feat for what the body does.
 
     **It is read off `c.declare` and not off `c.feat`**, because `f990` is
-    `[Arena Fighting]` too and `c.feat` is true of every feat held. The
-    chain is one branch long -- `f973`, `f976`, `f980`, `f3196` and `f3230`
-    all name this row and are still riders or substitutions in their own
-    files, so they still stack with this one, which the printed rule
-    forbids. That is the migration being partway through.
+    `[Arena Fighting]` too and `c.feat` is true of every feat held.
+    `f3196` and `f3230` also name this row and are still riders in their
+    own files, so they still stack with whichever branch pays, which the
+    printed rule forbids. That is the migration being partway through.
 
     **The crit gate came with the move, and the rider did not have it.**
     The printed clause is *"if you score a critical hit with this
@@ -290,10 +351,40 @@ def p971(c: Cast) -> None:
     `Moved` and no effect, so there is nothing for the block to stamp
     today; it is the convention's wrapper and it is what makes a later
     effect in this clause the feat's rather than this row's.
+
+    **`f973`'s clause is written in here too** and it is about the walk
+    rather than the swing: "if you take damage from an opportunity attack
+    provoked by the movement this exploit grants, reduce that damage by
+    your Constitution modifier". A gated `c.resist` and not an interrupt,
+    because the damage context carries `opportunity` -- so the reduction is
+    a standing modifier that reads it.
+
+    **And it covers the walk and nothing else**, which the rider could not
+    say: out in `exploits._riders` the narrowest window to hand was this
+    row's own `PowerResolved`, so the reduction also covered the swing.
+    Here the move is a line in the body, so the gate is open across that
+    line and shut under it. It joins the same chain, so a character holding
+    both `f973` and `f990` pays exactly one of them.
     """
-    arena = c.declare("Arena Fighting", "f990")
+    arena = c.declare("Arena Fighting", "f973", "f990")
     if c.first:
+        # **The window is a flag the gate reads, not an effect ended
+        # afterwards.** `c.resist(when=)` is a gated modifier, so the hold
+        # has nowhere to be cancelled from without naming the `Effect` it
+        # returns -- and the clause wants exactly the walk below, which a
+        # `When` member cannot say. Cleared under the move, so the
+        # reduction is false for every later opportunity attack of the
+        # turn.
+        walking: list[bool] = []
+        if arena == "f973":
+            with c.credit("f973"):
+                walking.append(True)
+                c.resist(
+                    c.con_mod, on=c.me, until=When.EOT,
+                    when=lambda ctx: bool(walking and ctx.get("opportunity")),
+                )
         c.instead_of("move", lambda: c.move(c.squares_for(c.ref, 2)))
+        walking.clear()
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
         # "If you score a critical hit with this exploit, you can shift 1

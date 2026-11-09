@@ -14,6 +14,8 @@ twice, with `hand=` telling the second one which fist it came from.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -32,6 +34,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     MeleeOrRanged,
+    Moved,
     Ranged,
     Target,
     UpTo,
@@ -173,9 +176,51 @@ def p2602(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p4368(c: Cast) -> None:
-    """The Effect is a step by the beast companion and is not written."""
-    if c.strike():
+    """The Effect is a step by the beast companion and is not written.
+
+    **`f971`'s and `f983`'s clauses are written in here** (#550), as one
+    `c.declare` chain because both are `[Arena Fighting]` and one feat of
+    that bracket applies per use. `c.credit` names the feat for what this
+    body does.
+
+    `f971`'s card widens this row's own "before **or** after" to "before
+    **and** after", so the gated branch takes both steps. It was two
+    registrations -- `used=` and `resolved=` -- which is `PowerUsed` above
+    the body and `PowerResolved` below it; in a body those are simply the
+    two sides of the attack. #1091 settled that the pair is the printed
+    sentence rather than a double registration.
+
+    `f983`'s turns on the target moving afterwards, so it is a `Moved`
+    watcher with its own latch and its own `c.credit` block -- the outer
+    one is popped when this body returns.
+
+    `c.beast()` answers None for a character that keeps none, so the gate
+    is honest rather than silently true.
+    """
+    arena = c.declare("Arena Fighting", "f971", "f983")
+    beast = c.beast() if arena else None
+    if arena == "f971" and beast is not None:
+        with c.credit("f971"):
+            c.shift(1, who=beast)
+    landed = c.strike()
+    if landed:
         c.damage(c.w(1), c.str_mod)
+    if arena == "f971" and beast is not None:
+        with c.credit("f971"):
+            c.shift(1, who=beast)
+    elif arena == "f983" and landed and beast is not None and c.target is not None:
+        victim, companion = c.target, beast
+        spent: list[bool] = []
+
+        def moved(ev: Any) -> None:
+            if spent or ev.actor != victim:
+                return
+            spent.append(True)
+            with c.credit("f983"):
+                c.shift(1, who=companion)
+
+        c.watch(Moved, moved, until=When.EONT, on=c.me,
+                label=f"{c.ref} beast follows")
 
 
 @power(

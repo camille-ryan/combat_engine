@@ -19,6 +19,8 @@ out whether it is the only target and takes both shots if so.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -38,6 +40,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     MeleeOrRanged,
+    PowerResolved,
     Ranged,
     UpTo,
     When,
@@ -111,10 +114,37 @@ def _has_ranged(world: World, eid: int) -> bool:
     attack=Attack(STR, vs=AC),
 )
 def p1505(c: Cast) -> None:
+    """**`f980`'s and `f988`'s clauses are written in here** (#550): a feat
+    naming one power has its clause in that power rather than registering a
+    rider against it, with `c.credit` naming the feat for what this body
+    does.
+
+    Both are `[Arena Fighting]`, so one `c.declare` chain and one of them
+    pays. Both were `resolved=` riders -- the `PowerResolved` window, after
+    the whole use -- so both sit after the attack and neither reads the
+    outcome, which is what their printed sentences say.
+
+    **`f980`'s clause is a speed modifier and never `c.extend_move`.** This
+    row moves nobody: its Effect line is about not provoking on the way
+    out, so "if you move after the attack, you can move up to your speed +
+    2" is about the character's *own* move action later in the turn and
+    there is no distance here to lengthen. `When.EOT` is wider than the
+    card by any second move in the same turn, which a standard action
+    usually leaves none of.
+    """
+    arena = c.declare("Arena Fighting", "f980", "f988")
     # The Effect line -- moving away afterwards does not provoke from this
     # target -- has nowhere to go yet, so only the attack is here.
     if c.strike():
         c.damage(c.w(1), c.str_mod)
+    if arena == "f980":
+        with c.credit("f980"):
+            c.bonus("speed", 2, on=c.me, until=When.EOT)
+    elif arena == "f988" and c.race_of() == "r3":
+        with c.credit("f988"):
+            # "If it is available" is `c.use_power`'s own return, and the
+            # free action costs nothing because the verb never charges one.
+            c.use_power("p1449")
 
 
 @power(
@@ -133,18 +163,25 @@ def p1505(c: Cast) -> None:
     requires_text="needs two melee weapons or a ranged weapon",
 )
 def p917(c: Cast) -> None:
-    """Two feats write a clause into this hit, which is #550's convention:
+    """Three feats write a clause into this hit, which is #550's convention:
     a feat naming one power has its clause in that power rather than
-    registering a rider against it, gated on `c.feat` and credited back to
-    the feat with `c.credit`.
+    registering a rider against it, credited back to the feat with
+    `c.credit`.
 
-    **Two plain `if`s rather than a chain.** Neither `f1297` nor `f1300`
+    **Two plain `if`s and a one-branch chain.** Neither `f1297` nor `f1300`
     carries a category bracket in the compendium (`feat.category` is empty
     for both), so nothing limits how many of them apply to one use -- an
     `if`/`elif` would hand a character holding both only one of the two it
-    is entitled to.
+    is entitled to. `f981` is `[Arena Fighting]`, where one feat of the
+    bracket applies per use, so it is read off `c.declare` and never off
+    `c.feat`, which is true of every feat held.
 
-    **Both go after the strike**, because both were registered in
+    `f981`'s half asks whether the target has damaged this character since
+    the end of their last turn. `c.hurt_me_since` reads that off the bus
+    log (#556), so there is nothing to arm and a body is not too late --
+    which is the whole reason the clause could move.
+
+    **All three go after the strike**, because all three were registered in
     `exploits._riders`' `clauses` table and that table is the `Hit` window.
 
     `f1297`'s half asks for the melee branch of this two-branch row and
@@ -158,12 +195,16 @@ def p917(c: Cast) -> None:
     `f1300`'s half is Constitution-gated, and the gate has to survive the
     move -- a modifier of 0 or less pays nothing.
     """
+    arena = c.declare("Arena Fighting", "f981")
     if not c.strike():
         return
     c.damage(c.w(1), c.attack_mod)
     foe = c.target
     if foe is None:
         return
+    if arena == "f981" and c.hurt_me_since(foe):
+        with c.credit("f981"):
+            c.flat(c.wis_mod, on=foe)
     if (c.feat("f1297") and not c.ranged
             and c.result is not None and c.result.advantage):
         with c.credit("f1297"):
@@ -211,6 +252,82 @@ def p919(c: Cast) -> None:
     c.instead_of("shift", lambda: c.shift(1))
 
 
+def _both_hands(c: Cast, *groups: str) -> bool:
+    """"While you wield a spear and a flail" -- both hands, not just the main.
+
+    `c.wielding` reads the *main* weapon's group, so it answers False for
+    the off-hand one and the printed pair could never both be true.
+    `c.held` is every weapon in hand.
+    """
+    return all(c.held(what=group) for group in groups)
+
+
+def _p87_both_swings(c: Cast, arena: str) -> None:
+    """The three clauses on `p87` that are about **both** of its swings.
+
+    A `PowerResolved` watcher rather than a reading taken in the body, and
+    the reason is that row's target line: it spreads two attacks over one
+    **or two** creatures, and a body runs once per target -- so with two
+    targets neither call can see the other's roll. `PowerResolved.rolls` is
+    every `AttackResult` the use made, which is the only place "both
+    attacks miss" can be answered, and it is the window all three were
+    registered in out in `exploits._riders`.
+
+    Armed on the first target, and each clause carries its own `c.credit`
+    block: the outer one is popped when the body returns and the event
+    comes after.
+
+    **The watch ends itself on the use that armed it, paid or not**, rather
+    than latching a flag. An action point buys a second standard action, so
+    two uses of this row in one turn are possible -- and a flag only stops
+    the double payment when the first use *paid*. Two live watchers would
+    otherwise both answer the second use's one event.
+
+    The gate is `ev.power != ref` and that is load-bearing: a use of this
+    row announces a second `PowerResolved` for the quarry feature it
+    triggers, with an empty `rolls`, and it arrives **first**. A handler
+    that only checked the actor would spend itself on that one and read no
+    swings at all.
+    """
+    me, ref = c.me, c.ref
+    held: list[Any] = []
+
+    def finished(ev: Any) -> None:
+        if ev.actor != me or ev.power != ref:
+            return
+        if held:
+            c.end_effect(held.pop(), why="this use is over")
+        caught = [roll.target for roll in ev.rolls if roll.hit]
+        # Not `not caught`: a use that rolled **nothing** also has no hits,
+        # and "both attacks miss" is a sentence about two attacks that
+        # happened.
+        all_missed = bool(ev.rolls) and not caught
+        if (arena == "f977" and all_missed
+                and len(c.held(what="light thrown")) >= 2):
+            # The pair is counted rather than asked for: `c.wielding` reads
+            # the main hand only, so it answers True for one such weapon
+            # and a shield, which is not the printed hand.
+            with c.credit("f977"):
+                c.shift(1)
+        elif arena == "f985" and all_missed and c.wielding("two-weapon"):
+            # "+2 shield bonus to AC **against the target or targets of
+            # your attacks**" -- gated, because the card is explicit that it
+            # is worth nothing against anybody else. `ctx["attacker"]` is
+            # who is swinging, and `resolve` puts it in the defence context
+            # for exactly this.
+            against = {roll.target for roll in ev.rolls if roll.target}
+            with c.credit("f985"):
+                c.bonus(AC, 2, on=me, until=When.EONT, kind="shield",
+                        when=lambda ctx: ctx.get("attacker") in against)
+        elif (arena == "f989" and len(caught) > 1
+                and len(c.held(what="light blade")) > 1):
+            with c.credit("f989"):
+                c.flat(c.dex_mod, on=caught[-1])
+
+    held.append(c.watch(PowerResolved, finished, until=When.EOT, on=me,
+                        label=f"{ref} both swings"))
+
+
 @power(
     "p87",
     level=1,
@@ -247,18 +364,63 @@ def p87(c: Cast) -> None:
     The Intelligence gate has to survive the move: a modifier of 0 or less
     pays nothing. `foe` is read back *after* `c.strike()`, because the
     strike writes the target it actually resolved against.
+
+    **Six more feats print a clause here and all six are
+    `[Arena Fighting]`**, so they are one `c.declare` chain and exactly one
+    of them pays per use. `f1298` carries no bracket and stays a plain
+    `if` beside the chain, stacking with whichever branch paid.
+
+    Each clause sits in the window its printed sentence names, which is
+    four different places in one body:
+
+    * `f978`'s -- "shift 1 square after the **first** attack" -- is after
+      the first swing and does not read the outcome. The double-weapon test
+      is asked twice because the hand word lives in two places and neither
+      is populated on every object a character can hold: `chargen`'s
+      hand-written weapon constants set `properties` and leave `hands`
+      empty, and a magic weapon is a copy of one of those.
+    * `f992`'s "+1 to the second attack's attack roll" needs no ordering
+      machinery: a bonus laid by a hit with `once=True` is spent by the
+      next roll, and for a two-swing use that is the second attack.
+    * `f974`'s names **one creature hit by both attacks**, which this row
+      can only do when it has a single target -- with two, each gets one
+      swing -- so it reads the landings this body made rather than the use's
+      whole roll list.
+    * the other three are about both swings together and are in
+      `_p87_both_swings`, which says why.
     """
+    arena = c.declare(
+        "Arena Fighting", "f974", "f977", "f978", "f985", "f989", "f992")
+    if c.first and arena in ("f977", "f985", "f989"):
+        _p87_both_swings(c, arena)
     shots = 2 if (c.first and c.last) else 1
+    landed: list[int] = []
     for swing in range(shots):
         hand = "off" if (swing and c.branch == 0) else "main"
-        if not c.strike():
+        hit = c.strike()
+        if (arena == "f978" and c.first and swing == 0
+                and (c.wielding("double")
+                     or any(w.hands.lower() == "double" for w in c.held()))):
+            with c.credit("f978"):
+                c.shift(1)
+        if not hit:
             continue
         c.damage(c.w(1, hand=hand), c.attack_mod)
         foe = c.target
+        if arena == "f992":
+            with c.credit("f992"):
+                c.bonus("attack", 1, on=c.me, until=When.EOT, kind="feat",
+                        once=True)
+        if foe is not None:
+            landed.append(foe)
         if (foe is not None and c.feat("f1298") and c.int_mod > 0
                 and _is_named_kind(c, foe)):
             with c.credit("f1298"):
                 c.flat(c.int_mod, on=foe)
+    if (arena == "f974" and len(landed) == 2 and landed[0] == landed[1]
+            and _both_hands(c, "spear", "flail")):
+        with c.credit("f974"):
+            c.slide(1, on=landed[0])
 
 
 @power(

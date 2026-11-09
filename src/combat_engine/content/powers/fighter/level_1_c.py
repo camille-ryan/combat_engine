@@ -11,6 +11,8 @@ is in the report.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -27,13 +29,17 @@ from combat_engine.engine import (
     Health,
     Keyword,
     Melee,
+    Miss,
     MoveEnd,
     Position,
     UpTo,
     When,
     power,
+    spread,
 )
 from combat_engine.engine.events import AttackDeclared
+from combat_engine.engine.query import squares as squares_of
+from combat_engine.engine.query import unseen_by
 
 from .grips import heavy_rider, two_handed, two_melee
 
@@ -42,6 +48,85 @@ MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 #: The four creature types `f1298`'s clause on `p2099` names together.
 #: Copied with the clause, for the reason `p997`'s `_HELD_FAST` gives.
 _NAMED_KINDS = ("demon", "drow", "orc", "spider")
+
+
+def _shift_beside(c: Cast, squares_: int, *whom: int) -> bool:
+    """Shift up to `squares_` and finish next to one of `whom`.
+
+    `f988`'s clause on `p2104` names **two** creatures -- "a square
+    adjacent to either target" -- so the wanted set is the union of their
+    rings rather than one creature's. `c.shift(squares_, toward=...)` only
+    *offers* the near squares first and would still allow a step that ends
+    out of reach, which is not "you must end the shift adjacent".
+
+    Squares already stood in are excluded: standing still satisfies the
+    sentence when we are already beside somebody, and is never what the
+    clause is for.
+
+    Copied in from `feats/exploits` with the clause it serves, for the
+    reason `_NAMED_KINDS` above gives.
+    """
+    wanted: set[Any] = set()
+    for who in whom:
+        wanted |= spread(squares_of(c.world, who), 1)
+    here = squares_of(c.world, c.me)
+    options = sorted(
+        sq for sq in c.world.reachable_squares(c.me, squares_)
+        if sq in wanted and sq not in here
+    )
+    where = c.choose(options, f"{c.ref}: where to end up") if options else None
+    return where is not None and c.shift(squares_, to=where)
+
+
+def _reroll_against_the_unsighted(c: Cast) -> Any:
+    """"Against a target that cannot see you, you can reroll one attack roll
+    for this exploit, but you must use the second result." `f982` on `p2104`.
+
+    **A `Miss` watcher armed before the swing, because that is the only
+    window from which the roll can still be changed.** `resolve.attack`
+    re-announces while the outcome keeps moving, so a die changed from
+    inside that loop is the one judged; a body that has already returned
+    from `c.strike()` is too late and nothing recomputes.
+
+    Hung on the miss, which is the only outcome where a reroll is worth
+    taking: the card allows it either way and "you must use the second
+    result" makes rerolling a hit strictly a loss.
+
+    **`ev=` is the half the rider could not do.** Out in
+    `exploits._riders` the clause called `c.reroll_attack()` bare, which
+    defaults to `c.trigger` -- and the `Cast` there belongs to a trait
+    armed at the start of the fight, which is answering nothing. So
+    `result` was None and the verb returned False every time.
+
+    `query.unseen_by(world, watcher, who)` asks it from the target's side;
+    `c.can_see` is our own sight and answers the opposite question.
+
+    **One reroll per use, which is the printed "one attack roll", and the
+    watch has to carry that rather than a flag.** It must outlive the first
+    swing -- the primary may miss a target that can see the character and
+    the off-hand hit one that cannot -- so it ends itself on the reroll and
+    the body ends it at the bottom either way. A flag would leave an
+    unspent watcher live, and an action point buys a second standard
+    action: two watchers would both answer one miss and reroll it twice.
+    The rider had neither, and offered a reroll on every qualifying miss
+    the row ever made.
+    """
+    me, ref = c.me, c.ref
+    held: list[Any] = []
+
+    def again(ev: Any) -> None:
+        if ev.attacker != me or getattr(ev, "power", "") != ref:
+            return
+        if ev.target is None or not unseen_by(c.world, ev.target, me):
+            return
+        if held:
+            c.end_effect(held.pop(), why="the one reroll is spent")
+        with c.credit("f982"):
+            c.reroll_attack(keep="new", ev=ev)
+
+    held.append(c.watch(Miss, again, until=When.EOT, on=me,
+                        label=f"{ref} reroll"))
+    return held[0]
 
 
 @power(
@@ -130,17 +215,61 @@ def p2099(c: Cast) -> None:
     requires_text="needs two melee weapons",
 )
 def p2104(c: Cast) -> None:
-    """The errata'd text, which drops the level 21 line from both halves."""
-    if c.strike():
+    """The errata'd text, which drops the level 21 line from both halves.
+
+    **Three feats' clauses are written in here** (#550): a feat naming one
+    power has its clause in that power rather than registering a rider
+    against it from its own file, with `c.credit` naming the feat for what
+    this body does. All three are `[Arena Fighting]`, so they are one
+    `c.declare` chain and exactly one pays per use -- read off the
+    declaration and never off `c.feat`, which is true of every feat held
+    and cannot say which is being applied.
+
+    `f974` also prints a clause on this row and is **not** in the chain: it
+    is a `swaps=` entry, registered with `c.pre_empt` against the
+    `off_damage` word below, and substitutes the off-hand's damage rather
+    than paying beside it.
+
+    Both of this row's swings happen in one body call -- its target line is
+    one creature and the off-hand picks its own victim -- so "if both
+    attacks hit" is readable here and needs no `PowerResolved`. The
+    declaration comes first, which is the printed rule, and `f982`'s
+    clause has to arm before the roll as well: see
+    `_reroll_against_the_unsighted`.
+    """
+    arena = c.declare("Arena Fighting", "f982", "f988", "f989")
+    offered = _reroll_against_the_unsighted(c) if arena == "f982" else None
+    primary = c.target
+    first_landed = c.strike()
+    if first_landed:
         c.damage(c.w(1))
     others = sorted(e for e in c.within(1, side="enemy") if e != c.target)
     second = c.choose(others, "who the off-hand catches") if others else None
-    if second is not None and c.attack(c.str_, AC, on=second):
+    second_landed = second is not None and c.attack(c.str_, AC, on=second)
+    if second_landed:
         # `on=second` because the clause is about the off-hand's victim and
         # not the primary target, which is what `c.target` still holds.
         c.instead_of("off_damage",
                      lambda: c.damage(c.w(1, hand="off"), on=second),
                      on=second)
+    # Both swings are over, so the one reroll this use offered is spent or
+    # declined either way.
+    if offered is not None:
+        c.end_effect(offered, why="this use is over")
+    if not (first_landed and second_landed) or primary is None:
+        return
+    if arena == "f988":
+        with c.credit("f988"):
+            # "Shift 1 square to a square adjacent to either target."
+            _shift_beside(c, 1, primary, second)
+    elif arena == "f989" and len(c.held(what="light blade")) > 1:
+        with c.credit("f989"):
+            # "+2 feat bonus to attack rolls and damage rolls with
+            # opportunity attacks" -- the damage context carries
+            # `opportunity`, so both halves are gated modifiers.
+            for what in ("attack", "damage"):
+                c.bonus(what, 2, on=c.me, until=When.SONT, kind="feat",
+                        when=lambda ctx: bool(ctx.get("opportunity")))
 
 
 @power(

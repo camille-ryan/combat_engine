@@ -109,6 +109,36 @@ def _granted_hit(c: Cast, who: int, foe: int, ref: str = "") -> bool:
     return bool(landed)
 
 
+def _granted_crit(c: Cast, who: int, foe: int) -> bool:
+    """Did the swing somebody else was handed come up a **critical**?
+
+    `_granted_hit` above is the same subscription for the hit alone; kept
+    separate because `f984`'s clause on `p4542` turns on the crit and
+    nothing else, and one helper answering both would make each caller
+    carry the other's reading.
+
+    **Read off `ev.result`, not `ev.critical`.** The field on the event is
+    a copy taken before the interrupt window opened, so a swing promoted
+    by something else -- `c.maximise(critical=True)` is in the tree and
+    sets only the result -- carries `False` on a blow that crits.
+    """
+    crit: list[int] = []
+
+    def tally(ev: Hit) -> None:
+        if ev.attacker != who or ev.target != foe:
+            return
+        result = getattr(ev, "result", None)
+        if result.critical if result is not None else ev.critical:
+            crit.append(ev.target)
+
+    sub = c.world.bus.on(Hit, tally, owner=c.me)
+    try:
+        c.grant_attack(who, on=foe)
+    finally:
+        c.world.bus.off(sub)
+    return bool(crit)
+
+
 def _heavy_thrown(world: World, eid: int) -> bool:
     """A heavy thrown weapon, read off the printed property.
 
@@ -391,17 +421,21 @@ def p4541(c: Cast) -> None:
     one-shot grant put on the caster; the ally's is the mirror of it. Both
     are spent by the swing they were printed for.
 
-    **`f978`'s clause is written in here**, which is #550's convention,
-    with `c.credit` naming the feat for what this body lays. Read off
-    `c.declare` and not `c.feat`: `f978` is `[Arena Fighting]` and one
-    feat of that bracket applies to one use. The chain is one branch long
-    -- `f983` prints a clause on the swing this row *hands out*, which is
-    a `granted=` rider and a different window, so it is not in the chain.
+    **`f978`'s and `f983`'s clauses are written in here**, which is #550's
+    convention, with `c.credit` naming the feat for what this body lays.
+    Read off `c.declare` and not `c.feat`: both are `[Arena Fighting]` and
+    one feat of that bracket applies to one use.
 
-    It sits **inside the hit branch**, the window its rider was registered
-    in.
+    `f976` and `f993` also name this row and are still riders in their own
+    files, so they stack with whichever branch pays.
+
+    They sit in two different windows and neither is a choice. `f978`'s is
+    **inside the hit branch**, where its `Hit` rider fired. `f983`'s turns
+    on the swing this row *hands the target* -- "if the target makes a
+    melee basic attack against you" -- so it is asked where that grant is
+    made and taken, which is `c.grant_attack`'s own return.
     """
-    arena = c.declare("Arena Fighting", "f978")
+    arena = c.declare("Arena Fighting", "f978", "f983")
     if c.strike():
         c.damage(c.w(1), c.str_mod)
         if arena == "f978" and c.wielding("superior"):
@@ -423,6 +457,16 @@ def p4541(c: Cast) -> None:
     c.grants_advantage(on=c.me, to=foe, once=True)
     if not c.grant_attack(foe, on=c.me):
         return
+    if arena == "f983":
+        # "It grants combat advantage to one ally within 5 squares until
+        # the end of your next turn." One named beneficiary, which is what
+        # `c.grants_advantage(to=<id>)` says; `to="ally"` would be the
+        # whole side. Within 5 of the warlord, as the rider measured it.
+        near = c.within(5, side="ally")
+        pick = c.choose(near, f"{c.ref}: who reads the opening") if near else None
+        if pick is not None:
+            with c.credit("f983"):
+                c.grants_advantage(on=foe, to=pick, until=When.EONT)
     pool = sorted(a for a in c.within(5, of=foe, side="ally") if a != c.me)
     friend = c.choose(pool, "who takes the opening") if pool else None
     if friend is not None:
@@ -456,17 +500,26 @@ def p4542(c: Cast) -> None:
     and a bonus laid after the roll would be too late to have decided
     anything.
 
-    **Read off `c.declare`, not `c.feat`.** `f995` is `[Arena Fighting]`,
-    and the card's rule is one feat of a bracketed category per use -- so
-    the branch asks which one *applies*, which `c.feat` cannot answer
-    because it is true of every feat held. The chain names only `f995`
-    today; `f971`, `f984` and `f986` also print clauses on this row and
-    join this call as each is migrated, which is what makes them exclusive
-    of one another. Until then their riders still fire independently:
-    `_riders` arms one watcher per feat and gates nothing, so exclusivity
-    on this row arrives only with its last migration.
+    **Read off `c.declare`, not `c.feat`.** All three are
+    `[Arena Fighting]`, and the card's rule is one feat of a bracketed
+    category per use -- so the branch asks which one *applies*, which
+    `c.feat` cannot answer because it is true of every feat held. `f986`
+    also prints a clause on this row and is hand-written in its own file,
+    so it still stacks with whichever branch pays.
+
+    **`f971`'s clause is about the ally that STEPS, and its rider had the
+    wrong branch.** The printed sentence is "if the ally shifts and ends
+    its movement in a space adjacent to you or your target"; out in
+    `exploits._riders` it sat in the `granted=` table, which is keyed on
+    the swing this row hands out -- the other half of the same choice. So
+    it paid the ally that attacked and never the ally that moved. Written
+    here it is read where the step happens.
+
+    **`f984`'s is about the granted swing and needs the crit off it**, so
+    the grant goes through `_granted_crit` rather than `c.grant_attack`
+    directly: the verb reports that a row went off, not what it rolled.
     """
-    arena = c.declare("Arena Fighting", "f995")
+    arena = c.declare("Arena Fighting", "f971", "f984", "f995")
     if arena == "f995":
         with c.credit("f995"):
             # "Add your shield bonus as a feat bonus to your attack roll."
@@ -485,7 +538,30 @@ def p4542(c: Cast) -> None:
     if friend is None:
         return
     if c.choose(["swing at it", "step"], "what that ally does") == "step":
-        c.shift(c.int_mod, who=friend)
+        # **`toward=` only when `f971` is declared**, and it is the
+        # difference between a clause that can pay and one that cannot.
+        # This row's step names no destination, so `c.shift` hands its
+        # decider an unsorted list of reachable squares -- and the feat's
+        # whole condition is *where the step ends*. Measured over 38 boards
+        # with the step forced: the ally finished beside the caster or the
+        # target on **none** of them, so the clause was drawable and inert.
+        # `toward=` offers the near squares first rather than forcing one,
+        # which is what a "you can" step wants.
+        c.shift(c.int_mod, who=friend,
+                toward=foe if arena == "f971" else None)
+        if arena == "f971" and (c.adjacent(to=friend)
+                                or (foe is not None
+                                    and c.adjacent_to(foe, friend))):
+            with c.credit("f971"):
+                # "That ally gains a +1 power bonus to AC until the end of
+                # your next turn."
+                c.bonus(AC, 1, on=friend, until=When.EONT, kind="power")
+    elif arena == "f984" and foe is not None:
+        # The grant is inside the helper, so it happens exactly once
+        # whether or not the swing crits.
+        if _granted_crit(c, friend, foe):
+            with c.credit("f984"):
+                c.push(1, on=foe, by=friend)
     else:
         c.grant_attack(friend, on=foe)
 

@@ -23926,15 +23926,30 @@ MIGRATED = {
     # wrote into these same power files, so no single report knows the whole
     # chain -- `p4369` took clauses from two agents and `p1063` from two.
     "p919": {"Arena Fighting": ("f973",)},
-    "p970": {"Arena Fighting": ("f991",)},
-    "p971": {"Arena Fighting": ("f990",)},
+    "p970": {"Arena Fighting": ("f975", "f984", "f991")},
+    "p971": {"Arena Fighting": ("f973", "f990")},
     "p1000": {"Arena Fighting": ("f995",)},
-    "p1063": {"Arena Fighting": ("f973", "f982")},
-    "p2248": {"Arena Fighting": ("f993",)},
+    "p1063": {"Arena Fighting": ("f973", "f980", "f982")},
+    "p2248": {"Arena Fighting": ("f971", "f978", "f993")},
     "p2620": {"Arena Fighting": ("f983",)},
     "p4369": {"Arena Fighting": ("f975", "f982")},
-    "p4541": {"Arena Fighting": ("f978",)},
-    "p4542": {"Arena Fighting": ("f995",)},
+    "p4541": {"Arena Fighting": ("f978", "f983")},
+    "p4542": {"Arena Fighting": ("f971", "f984", "f995")},
+    # -- the `feats/exploits.py` wave: 29 clauses off one feat file ---------
+    #
+    # Every `_riders` registration that file still held and a body could
+    # take. Read off each power body's own `c.declare("Arena Fighting", …)`
+    # call, as the wave above was, rather than off the migration report.
+    "p87": {"Arena Fighting": ("f974", "f977", "f978", "f985", "f989",
+                               "f992")},
+    "p315": {"Arena Fighting": ("f981", "f992")},
+    "p620": {"Arena Fighting": ("f975",)},
+    "p653": {"Arena Fighting": ("f981", "f994")},
+    "p917": {"Arena Fighting": ("f981",)},
+    "p1061": {"Arena Fighting": ("f985",)},
+    "p1505": {"Arena Fighting": ("f980", "f988")},
+    "p2104": {"Arena Fighting": ("f982", "f988", "f989")},
+    "p4368": {"Arena Fighting": ("f971", "f983")},
 }
 
 #: Rows migrated under #550 that have **no** chain yet to assert on, with
@@ -24013,16 +24028,29 @@ NO_CHAIN_YET = {
 #: `_riders` keys and so missed `f986`, which rides `p1000` and `p4542`
 #: **hand-written**, with the ref in a guard (`ev.power == "p4542"`) and the
 #: payout a bare `c.shift(1)` that names no ref at all.
+#: **Six entries were paid by the `feats/exploits.py` wave and the list
+#: shrank from nine rows to nine feats.** `p970`, `p2248` and `p971`'s
+#: `f973` came off it because those clauses are in the bodies now, and
+#: `p4541` and `p4542` each lost the ones that moved.
+#:
+#: **`f980` on `p971` is a new entry rather than a new rider**, and it is
+#: the one correction this list needed. That feat lengthens `p971`'s walk
+#: with `c.extend_move`, which the earlier derivation did not count as
+#: paying alongside -- fairly, while the only other Arena Fighting clause
+#: reaching that row was `f976`'s substitution, because taking the
+#: substitution means the walk never happens and the two could not both
+#: pay. `f973` is in the chain now and its clause is about the damage the
+#: walk provokes, so a character holding `f973` and `f980` collects both.
 STILL_RIDERS: dict[str, tuple[str, ...]] = {
+    "p917": ("f991",),
     "p919": ("f990",),
-    "p970": ("f975", "f984"),
-    "p971": ("f973",),
+    "p971": ("f980",),
     "p1000": ("f986",),
-    "p1063": ("f980", "f990"),
-    "p2248": ("f971", "f978"),
+    "p1061": ("f972", "f987", "f994"),
+    "p1063": ("f990",),
     "p4369": ("f993",),
-    "p4541": ("f976", "f983", "f993"),
-    "p4542": ("f971", "f984", "f986"),
+    "p4541": ("f976", "f993"),
+    "p4542": ("f986",),
 }
 
 
@@ -24049,6 +24077,34 @@ UNPOSABLE = {
              " top: f975 wants the beast to have combat advantage, f982"
              " wants the ranger and the beast to be the pair flanking"
              " (`query.flankers`). The drawn character has no companion.",
+    # -- six from the `feats/exploits.py` wave ------------------------------
+    #
+    # Every one is the case the rule's own comment refuses to patch around,
+    # and the shapes are only three: a neighbourhood this spy answers empty,
+    # a companion a drawn character has not got, and a branch that lives
+    # inside a closure nothing here fires.
+    "p620": "f975's clause offers the step to 'an ally adjacent to you or"
+            " the target', which is built on `c.within` -- faked empty"
+            " here, deliberately, so the pool is empty and nothing is"
+            " offered. The same position read as p1000's.",
+    "p653": "both branches are inside the riposte closure, which runs when"
+            " the target attacks this character before the start of its"
+            " next turn. The spy runs the body and no `AttackDeclared`"
+            " ever arrives, so neither branch is entered. An event read,"
+            " not a Cast read.",
+    "p917": "f981's clause asks `c.hurt_me_since(foe)` -- a read of"
+            " `world.bus.log` for damage the target dealt since this"
+            " character's last turn ended. Nothing on this board has hit"
+            " the character, and faking the log is not faking a Cast.",
+    "p1061": "f985's clause guards 'one ally adjacent to you', read through"
+             " `c.within` -- faked empty here. p620's reason exactly.",
+    "p2104": "f988's and f989's clauses both need the off-hand swing to"
+             " land, and the off-hand's victim is chosen out of"
+             " `c.within(1, side='enemy')` -- faked empty -- so the body"
+             " returns before either. f982's arms a `Miss` watcher that no"
+             " roll reaches, which is p653's reason.",
+    "p4368": "both branches need a beast companion, `c.beast()` being None"
+             " for a character that keeps none. p4369's reason exactly.",
 }
 
 #: Migrated rows whose chain lays something **outside** a `c.credit` block,

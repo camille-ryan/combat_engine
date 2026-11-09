@@ -54,6 +54,7 @@ from combat_engine.engine import (
     Powers,
     Ranged,
     Relation,
+    Skills,
     Trigger,
     UpTo,
     When,
@@ -87,6 +88,22 @@ _HELD = (Condition.GRABBED, Condition.RESTRAINED)
 def _light_blade(world: World, eid: int) -> bool:
     gear = world.get(eid, Gear)
     return bool(gear and gear.main and gear.main.is_light_blade)
+
+
+def _trained_in(c: Cast, skill: str) -> bool:
+    """"...and are trained in <skill>", asked of the caster.
+
+    There is no `Cast` verb for it: `Skills.trained` is the set (#565) and
+    it holds the words in lower case, which is what `skills.modifier`
+    reads for its +5. `terrain_powers/batch_c._trained` is the same read
+    from a `requires=` gate.
+
+    Asked when the clause pays rather than when the row was offered: a
+    training the character has not got it will not gain mid-fight, but the
+    reverse costs nothing and the rule here is to ask the board.
+    """
+    held = c.world.get(c.me, Skills)
+    return held is not None and skill in held.trained
 
 
 def _rogue_weapon(world: World, eid: int) -> bool:
@@ -580,22 +597,25 @@ def p13217(c: Cast) -> None:
     requires_text="needs a crossbow, a light blade or a sling",
 )
 def p2248(c: Cast) -> None:
-    """Three feats write a clause into this hit, which is #550's convention:
-    a feat naming one power has its clause in that power, gated on
-    `c.feat` and credited back to the feat with `c.credit`.
+    """Five feats write a clause into this hit, which is #550's convention:
+    a feat naming one power has its clause in that power rather than
+    registering a rider against it, credited back to the feat with
+    `c.credit`.
 
     **Two plain `if`s and one declared chain.** Neither `f1297` nor `f1306`
     carries a category bracket in the compendium (`feat.category` is empty
     for both), so nothing limits how many of them apply to one use.
-    `f993` is `[Arena Fighting]`, where one feat of the bracket applies to
-    one use, so it is read off `c.declare` and never off `c.feat` -- which
-    is true of every feat held and cannot say which one is being applied.
-    Its chain is one branch long: `f971`, `f978` and `f3245` also name this
-    row and are still riders in their own files, so they still stack with
-    it, which the printed rule forbids. That is the migration being partway
-    through rather than a reading of the cards.
+    `f971`, `f978` and `f993` are all `[Arena Fighting]`, where one feat of
+    the bracket applies to one use, so they are read off `c.declare` and
+    never off `c.feat` -- which is true of every feat held and cannot say
+    which one is being applied.
 
-    **All three go after the strike**, because all three were registered in
+    `f3245` also names this row and is still a rider in its own file, so it
+    still stacks with whichever of the three pays, which the printed rule
+    forbids. That is the migration being partway through rather than a
+    reading of the cards.
+
+    **All five go after the strike**, because all five were registered in
     `exploits._riders`' `clauses` table and that table is the `Hit`
     window. `c.declare` is called before it, which is the printed rule:
     the declaration cannot depend on the roll.
@@ -618,19 +638,38 @@ def p2248(c: Cast) -> None:
     `_surprise_round` answers off the holds `Encounter.start` laid. That
     card's other two clauses are still marked -- the duration they want
     has no `When` member -- and this one never depended on it.
+
+    `f971`'s half lands on **one enemy adjacent to the target**, never the
+    target itself, and carries that card's own second condition -- "and are
+    trained in Intimidate", which `_trained_in` reads off `Skills`.
+
+    `f978`'s half asks for a **superior** weapon, which is `c.wielding`'s
+    category word rather than a weapon group.
     """
-    arena = c.declare("Arena Fighting", "f993")
+    arena = c.declare("Arena Fighting", "f971", "f978", "f993")
     if not c.strike():
         return
     c.damage(c.w(1), c.dex_mod)
-    if arena == "f993":
+    foe = c.target
+    if arena == "f971" and foe is not None and _trained_in(c, "intimidate"):
+        # "One enemy adjacent to your target takes a -2 penalty to attack
+        # rolls until the end of your next turn" -- a neighbour of the
+        # target and never the target itself.
+        beside = [e for e in c.within(1, of=foe, side="enemy") if e != foe]
+        pick = c.choose(beside, f"{c.ref}: who is rattled") if beside else None
+        if pick is not None:
+            with c.credit("f971"):
+                c.penalty("attack", 2, on=pick, until=When.EONT)
+    elif arena == "f978" and c.wielding("superior"):
+        with c.credit("f978"):
+            c.push(1)
+    elif arena == "f993":
         with c.credit("f993"):
             # "If you hit with this exploit, you can add your Strength
             # modifier as a feat bonus to Intimidate checks until the end
             # of the encounter."
             c.bonus("skill:intimidate", c.str_mod, on=c.me,
                     until=When.ENCOUNTER, kind="feat")
-    foe = c.target
     if foe is None:
         return
     if (c.feat("f1297") and not c.ranged
