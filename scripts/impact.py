@@ -354,7 +354,7 @@ def record(sample: int = 0, jobs: int = 0, core: str = "",
         return 1
 
     # The combined data is left on disk: it is the only way to re-derive the
-    # map without re-sweeping for 83 minutes. **Reading it back needs
+    # map without re-sweeping for 1.3-2.8 hours. **Reading it back needs
     # `Coverage.load()`** -- a fresh `Coverage` over an existing data file
     # that is asked for `get_data()` without loading first initialises an
     # empty one and can overwrite the file, which is how 87MB of this run's
@@ -638,7 +638,7 @@ def _load() -> dict | None:
     #
     # This matters because the condition is the normal consequence of any
     # content wave, so the old refusal meant every wave silently disabled
-    # the map until a nightly re-recorded the corpus in 83 minutes.
+    # the map until a nightly re-recorded the corpus, 1.3-2.8 hours.
     if live_refs:
         got["unrecorded"] = sorted(live_refs - seen)
         got["retired"] = sorted(seen - live_refs)

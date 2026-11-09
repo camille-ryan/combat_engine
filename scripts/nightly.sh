@@ -408,7 +408,7 @@ cp "$LOG" logs/nightly-latest.log
 # narrow instead of sweeping 23,062 rows. #853, #865.
 #
 # **After the verdict, always.** The marker and the exit code above are the
-# night's product and must not wait 83 minutes behind an artifact, nor be
+# night's product and must not wait hours behind an artifact, nor be
 # affected if the recording dies. Everything below is additive.
 #
 # **#853 proposed folding this into the sweep itself "for the overhead rather
@@ -431,7 +431,7 @@ cp "$LOG" logs/nightly-latest.log
 #   * a clean tree, for the reason the dirty-tree refusal at the top gives:
 #     a map attributable to no commit cannot be checked against one.
 #
-# And the same question is asked again afterwards, because 83 minutes is a
+# And the same question is asked again afterwards, because 1.3-2.8 hours is a
 # long window: if the tree moved under the recording, the map is **deleted**
 # rather than left in place. `impact._load` fails open with no map, so
 # deleting costs a night of wide sweeps and keeping a misattributed one costs
@@ -461,14 +461,14 @@ else
     {
         echo
         echo "-- impact map --"
-        echo "recording at ${AT} -- about 87 minutes"
+        echo "recording at ${AT} -- 1.3 to 2.8 hours (bimodal; see CLAUDE.md)"
         PYTHONUNBUFFERED=1 uv run scripts/impact.py --record 2>&1 \
             | grep -Ev '^#   [0-9]+/' || true
         ENDED=$(git rev-parse --short HEAD)
         # **Uncommitted edits as well as a moved HEAD, and that was the
         # hole.** `_build_map` parses every engine file from disk at the
         # *end* to turn recorded lines into functions, so any edit during
-        # the 87 minutes misattributes coverage -- and an uncommitted edit
+        # the recording window misattributes coverage -- and an uncommitted edit
         # moves the lines without moving `HEAD`, which is the normal state
         # of a session doing work. Watching only `HEAD` could not see it.
         #
@@ -498,7 +498,7 @@ else
         else
             # **And it says so when nothing went wrong**, which it did not
             # before. The 07:00 log's last line is `recording at 783fb2c7 --
-            # about 87 minutes` and then the file ends: a killed or voided
+            # 1.3 to 2.8 hours` and then the file ends: a killed or voided
             # recording was indistinguishable from one that finished, and a
             # reader had to infer the difference from the map's age, which
             # is reasoning from a stamp. #1038.

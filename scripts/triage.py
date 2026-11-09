@@ -336,8 +336,23 @@ def _dead_evidence(judged: dict) -> list[tuple[str, str, str]]:
                                     "monsters.", "races.", "features.")):
                 continue
             mod, _, name = path.rpartition(".")
-            where = root / (mod.replace(".", "/") + ".py")
-            if not where.exists():
+            # **A package is a module too, and reading only `<mod>.py` made
+            # this report two false reasons out of seven.** `powers/warden/`
+            # is a package whose `__init__.py` defines `zone_named`, so the
+            # verdict naming it was sound and this check called the module
+            # absent; `powers/warlord/` is also a package, so its genuinely
+            # missing symbol was reported as a missing *module*. Two
+            # different findings, and neither was the one printed.
+            #
+            # The issue this feeds (#1173) argues that a verdict without
+            # followable evidence is an unsourced claim. The same standard
+            # applies here: a reason that sends the reader to look for a
+            # file that was never going to exist is not evidence either.
+            stem = root / mod.replace(".", "/")
+            where = next((cand for cand in
+                          (stem.with_suffix(".py"), stem / "__init__.py")
+                          if cand.exists()), None)
+            if where is None:
                 out.append((symbol, path, "no such module"))
             elif not re.search(rf"def {re.escape(name)}\b", where.read_text()):
                 out.append((symbol, path, "module exists, symbol gone"))

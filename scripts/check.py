@@ -1274,11 +1274,31 @@ def _map_state() -> list[str]:
     path = ROOT / "logs" / "impact.json"
     if not path.exists():
         return ["impact map: none recorded -- every engine change audits all"
-                " rows (`impact.py --record`, 87 minutes)"]
+                " rows (`impact.py --record`, 1.3-2.8 HOURS -- see"
+                " CLAUDE.md; 87 minutes is its fast arm only)"]
     try:
         got = json.loads(path.read_text())
     except (OSError, ValueError):
         return ["impact map: unreadable, so it narrows nothing"]
+    # **Void against the database, which is the one way a map dies that this
+    # line could not report.** `impact._load` voids a map whose
+    # `game_db_mtime` predates `data/game.db`, because every row's numbers
+    # come out of that file -- and it says so only from `impact.py:609`,
+    # reachable just inside a *narrowing* run. A content-only commit never
+    # narrows, so the message never printed, and this line went on
+    # describing a 23,095-row recording that was selecting everything.
+    #
+    # It misled a session into declining a nightly re-record on the grounds
+    # that the map was merely stale. It was void, and that recording was the
+    # repair. Reported first, before the age, because an age is a property
+    # of a map that is being used. #1185.
+    game = ROOT / "data" / "game.db"
+    if game.exists() and got.get("game_db_mtime", 0) < game.stat().st_mtime:
+        return ["impact map: VOID -- recorded against an older"
+                " `data/game.db`, so it narrows nothing and every engine"
+                " change audits all rows. Only a full re-record repairs it"
+                " (`impact.py --record`); a `--refs` top-up cannot, because"
+                " it carries the stale stamp over on purpose."]
     # **Age comes from the recorded commit, not the file's mtime**, and the
     # difference is a lie this line told as soon as the top-up existed: a
     # per-commit `--record --refs` rewrites the file, so three re-measured
@@ -1679,7 +1699,7 @@ def _top_up_map(failed: list[str]) -> list[str]:
     """Record the rows this commit touched, so the map never goes stale.
 
     **This is what stops "the map had no entry" being a standing excuse.**
-    A full recording is 83 minutes, so before `--record --refs` existed the
+    A full recording is 1.3-2.8 hours, so before `--record --refs` existed the
     only way a row or a verb entered the map was to wait for the nightly --
     and `selection` fails *closed* on a function it has never seen, so a
     new verb's own edit selected **0 rows** and the run reported clean.

@@ -24953,7 +24953,9 @@ def _contraction_census() -> tuple[dict[str, list], list[str]]:
         if {"ref", "spec"} <= {d[1] for d in con.execute(f"pragma table_info({t})")}
     ]
     throw = re.compile(r"makes? a saving throw|must make a saving throw", re.I)
-    printed: dict[str, tuple[set[str], bool]] = {}
+    # `{ref: stage}` rather than a set of refs, because the stage the card
+    # prints is one of the four things that can be wrong -- see `reach`.
+    printed: dict[str, tuple[dict[str, int], bool]] = {}
     for table in tables:
         rows = con.execute(
             f"select ref, spec from {table}"

@@ -549,9 +549,31 @@ push is still affordable — but do not quote 25 minutes.
   `recorded_at` — it re-measures three rows, not the corpus — and stamping
   HEAD on it put every new verb straight back into the fail-closed branch.
 
+  **A full recording is 1.3 to 2.8 hours, not 83 minutes, and the spread
+  is bimodal rather than a trend.** Six completed pooled recordings in
+  `logs/launchd-nightly.out`:
+
+  ```
+  10-25  9,487s  2.4 rows/s      10-30  4,788s  4.8 rows/s
+  10-27 10,217s  2.3 rows/s      11-01  4,789s  4.8 rows/s
+  11-03  9,208s  2.5 rows/s      11-05  8,555s  2.7 rows/s
+  ```
+
+  Two clusters at a corpus that moves by 33 rows across the whole set, so
+  this is machine load, not the corpus growing. **83 minutes is the fast
+  arm** — 4,788s is 80 minutes — so the figure was never invented, it was
+  the best case quoted as the expected one, and **four of six runs are
+  2.4–2.8 hours**. A session that must hold the tree still for the whole
+  run needs the worst case, which is why the number is a range now.
+
+  Do not quote 1.0 rows/s either: that came from 1,800 rows at the front
+  of an abandoned run, and the corpus is **sorted** with the expensive feat
+  and power families first. See *"a rate from the front of a sorted corpus
+  is not a rate"*. #1159.
+
   **And the map tops itself up, so nobody has to remember.** A clean
   `check.py` records the rows the commit touched — `impact.py --record
-  --refs`, measured at **9s for two rows** against 83 minutes for the
+  --refs`, measured at **9s for two rows** against hours for the
   corpus — so a verb is in the map one commit after it is written rather
   than one nightly. It declines out loud on a red run (a raising row
   records a short ref list), on a sampled map, and above a 40-row budget,
@@ -699,7 +721,7 @@ push is still affordable — but do not quote 25 minutes.
   HEAD, on a clean tree: a red sweep means rows are raising, and a row that
   raises records only the lines it reached before raising, so its ref list
   comes out short in the direction that omits rows. If the tree moves during
-  the 83 minutes the map is **deleted**, because no map audits everything and
+  the 1.3-2.8 hours the map is **deleted**, because no map audits everything and
   a misattributed one narrows wrongly. That makes the nightly ~110 minutes.
 
   `#853` proposed folding the recording into the sweep itself "for the
