@@ -24062,25 +24062,68 @@ NO_CHAIN_YET = {
 #: `p1063`, `f991` off `p917`, and `f993` off `p4369` and `p4541`. `p917`,
 #: `p919`, `p1063` and `p4369` have no entry left at all.
 #:
-#: **And this list is incomplete in a way no wave has paid for -- see the
-#: report on that wave rather than reading the gap as closed.** Seven
-#: `[Arena Fighting]` feats in `feats/general_q.py` -- `f3188`, `f3210`,
-#: `f3230`, `f3234`, `f3245`, `f3246`, `f3249` -- each name several rows and
-#: ride them through `general_q._on_hit_with`, a trait-level `Hit` watcher
-#: that pays alongside whatever the body's chain pays. Between them they
-#: name `p620`, `p653`, `p917`, `p919`, `p971`, `p992`, `p997`, `p1063`,
-#: `p1505`, `p2104`, `p2105`, `p4369` and `p4541` -- most of `MIGRATED`'s
-#: keys -- and **not one of the seven is listed here**.
-#: `f3230` is a deliberate exception (its "once per encounter" hold spans
-#: the powers it names, so a body cannot hold it -- `content/CLAUDE.md`);
-#: the other six are not known to be.
+#: **That gap is paid now, and it was ten feats rather than seven.** This
+#: said *"seven `[Arena Fighting]` feats in `feats/general_q.py` ... not one
+#: of the seven is listed here"*, naming `f3188`, `f3210`, `f3230`, `f3234`,
+#: `f3245`, `f3246`, `f3249`. It is **ten**: `f3196`, `f3199` and `f3218`
+#: reach `_on_hit_with` through a module constant rather than a literal, so
+#: a search for the literal form missed them -- the same blind spot that
+#: undercounted four other censuses in this tree.
+#:
+#: Nine of the ten are listed below, with `f3230` the documented exception:
+#: its "once per encounter" hold spans the powers it names, so a body
+#: cannot hold it (`content/CLAUDE.md`, `#924`).
+#:
+#: **Two limits of this list that the entries cannot express**, both from
+#: the card-reading pass:
+#:
+#: * `STILL_RIDERS` is consulted **only inside the `MIGRATED` loop**, so an
+#:   entry for a row with no chain does nothing. Nine rows these feats name
+#:   carry no chain yet -- `p992`, `p10470`, `p10472`, `p10591`, `p10592`,
+#:   `p10733`, `p10734`, `p10889`, `p10890` -- and `p992` has two written
+#:   Arena Fighting clauses that `f3188` stacks beside. A structural limit
+#:   of where the list is read, not a missing entry.
+#: * `MIGRATED["p917"]` records a chain of **one** where the body declares
+#:   two, so the exclusivity assertion on that row is vacuous whatever is
+#:   listed here. `#1187`.
 #:
 #: Left as found rather than half-corrected: deriving it needs each feat's
 #: mechanism read against each row, which is a sweep of its own and not
 #: this wave's files.
 STILL_RIDERS: dict[str, tuple[str, ...]] = {
-    "p971": ("f980",),
-    "p1000": ("f986",),
+    # **The nine `general_q` trait-level riders, read card by card.** #1175.
+    # All ten of that file's `_on_hit_with` feats carry `feat.category =
+    # Arena Fighting` in `game.db`, and `f3230` is the **only** one whose
+    # printed clause opens "Once per encounter" -- which is what makes its
+    # trait-level watch correct and keeps it out of this list. The other
+    # nine print a plain per-use trigger, so each stacks with whatever the
+    # body's chain paid, which the printed rule forbids.
+    #
+    # 22 (feat, row) pairs, and **all 22 are holes**. Checked for the three
+    # shapes that would make a pair safe and found none: no printed trigger
+    # that cannot co-occur (the near miss is `p917`'s `f991`, its *miss*
+    # branch -- but the same row's `f981` pays on a hit), no Requirement
+    # excluding another feat (the row Requirements are about gear and the
+    # chain gates read gear, skills, companions and the board), and no
+    # once-per-encounter spanning named powers outside `f3230`.
+    #
+    # Three of the rows' own docstrings already said it -- `p971`, `p1000`
+    # and `p2248` each record that the feat "still stacks with whichever
+    # branch pays, which the printed rule forbids". The finding was in the
+    # tree and never reached the list the rule reads, which is the whole
+    # argument for this dict existing.
+    #
+    # `f3196` is the widest: its card prints **no** outcome condition at
+    # all, so it pays on every use and stacks with a roll bonus and a crit
+    # rider alike. That also makes it the one to re-read -- the tree gates
+    # it on a hit through `_on_hit_with`, which is narrower than its text.
+    "p315": ("f3196", "f3218"),
+    "p620": ("f3199", "f3249"),
+    "p653": ("f3199", "f3246"),
+    "p917": ("f3188", "f3234"),
+    "p919": ("f3210",),
+    "p971": ("f980", "f3196"),
+    "p1000": ("f986", "f3199"),
     # **`f972` and `f994` came off this entry**, which was the last of
     # #550's 50 (feat, power) registrations: both are in `p1061`'s chain
     # now. `f987` is not a `_riders` registration at all -- it is
@@ -24088,8 +24131,23 @@ STILL_RIDERS: dict[str, tuple[str, ...]] = {
     # lending the swing to the rider's mount -- so it still stacks with
     # whichever branch of that chain pays.
     "p1061": ("f987",),
+    "p1063": ("f3188", "f3246"),
+    "p1505": ("f3246",),
+    "p1758": ("f3196",),
+    "p2104": ("f3249",),
+    "p2105": ("f3210",),
+    "p2248": ("f3245",),
+    "p2620": ("f3218",),
+    "p4368": ("f3196",),
+    # **A printed hole whose rider is dead in the tree**, and the two facts
+    # needed separating. `p4369`'s header is `by="companion"`, so the `Hit`
+    # names the beast and `_on_hit_with`'s `ev.attacker == c.me` gate can
+    # never match -- `f3249` gets nothing on this row today. Listed anyway,
+    # because this dict records what the printed rule forbids and the entry
+    # must not disappear when the gate is fixed. #1188.
+    "p4369": ("f3249",),
     "p4541": ("f976",),
-    "p4542": ("f986",),
+    "p4542": ("f986", "f3245"),
 }
 
 
@@ -25225,6 +25283,168 @@ def a_disease_is_armed_once_a_board(out: Result) -> None:
     out.that(all(armed[d] == 1 for d in granted),
              f"and specifically the {len(granted)} draws that DO grant a"
              f" row arm once, which is the case the bug lived in")
+
+
+#: The one trait-level rider that belongs outside `STILL_RIDERS`: its
+#: printed clause opens "Once per encounter" and that hold spans the powers
+#: it names, so a body cannot carry it. `content/CLAUDE.md` and `#924`.
+TRAIT_RIDER_EXEMPT = {"f3230"}
+
+
+def every_trait_level_rider_is_listed(out: Result) -> None:
+    """`STILL_RIDERS` holds every feat that rides a row from a trait (#1175).
+
+    The list is hand-maintained and was missing **ten** feats, which is how
+    `at_most_one_applies` came to assert exclusivity on 22 (feat, row)
+    pairs while blind to a second claimant on each. Three of the ten were
+    missed by a literal search because they reach the watcher through a
+    module constant -- so the fix is to derive the pairs rather than to
+    have counted more carefully.
+
+    **Derived from the call, not from a name.** `general_q._on_hit_with`
+    is handed the feat refs it rides for, so the pairing is in the AST:
+    resolve each argument, including a module-level constant, and read the
+    rows off the feat's `implemented_in`/registration. A list that checks
+    itself against the source cannot drift the way this one did.
+
+    What this does **not** assert is whether each pair is a genuine
+    exclusivity hole -- that is a reading of two printed cards and lives in
+    the entries' own comments. It asserts only that no feat rides a row
+    from a trait without the list saying so, which is the failure that
+    happened.
+    """
+    import ast
+    import pathlib
+
+    here = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/combat_engine/content/feats/general_q.py")
+    tree = ast.parse(here.read_text())
+    # **The feat is the enclosing declared row, not an argument.**
+    # `_on_hit_with(c, refs)` takes the *rows* it rides -- `ev.power in
+    # refs` -- so reading the second argument finds row refs and no feats.
+    # Written that way first, and the "finds any at all" assertion below
+    # caught it on the first run, which is what that assertion is for.
+    # **Pairs, not feats, and the plant is why.** Checking feat membership
+    # against a flat set of everything `STILL_RIDERS` names passes as soon
+    # as a feat appears under *any* row -- so dropping `f3218` from
+    # `p2620` left the rule green, because `p315` also lists it. A gate
+    # that cannot see a row lose its rider is not the gate this list
+    # needs. The rows are the `_on_hit_with` argument, which the first
+    # draft read as the feat and discarded.
+    rows_of: dict[str, set[str]] = {}
+    unreadable: list[str] = []
+
+    def rowrefs(node: ast.expr) -> set[str] | None:
+        """The row refs an argument names, through a module constant."""
+        if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+            got = {e.value for e in node.elts
+                   if isinstance(e, ast.Constant) and isinstance(e.value, str)}
+            return got if len(got) == len(node.elts) else None
+        if isinstance(node, ast.Name):
+            for top in tree.body:
+                if (isinstance(top, ast.Assign) and len(top.targets) == 1
+                        and isinstance(top.targets[0], ast.Name)
+                        and top.targets[0].id == node.id):
+                    return rowrefs(top.value)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
+                and node.func.id in ("frozenset", "set", "tuple") and node.args:
+            return rowrefs(node.args[0])
+        return None
+
+    for fn in tree.body:
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        calls = [node for node in ast.walk(fn)
+                 if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name)
+                 and node.func.id == "_on_hit_with" and len(node.args) > 1]
+        if not calls:
+            continue
+        ref = next((a.value for d in fn.decorator_list
+                    for a in getattr(d, "args", [])
+                    if isinstance(a, ast.Constant) and isinstance(a.value, str)),
+                   None)
+        if ref is None:
+            unreadable.append(f"general_q.py:{fn.lineno} {fn.name}"
+                              f" calls _on_hit_with and declares no ref")
+            continue
+        for call in calls:
+            got = rowrefs(call.args[1])
+            if got is None:
+                unreadable.append(f"general_q.py:{call.lineno} {ref}"
+                                  f" rides {ast.unparse(call.args[1])}")
+            else:
+                rows_of.setdefault(ref, set()).update(got)
+    riders = set(rows_of)
+
+    out.that(not unreadable,
+             f"every row calling `_on_hit_with` declares a ref, so none is"
+             f" skipped unread ({len(unreadable)}: {unreadable[:3]})")
+    out.that(len(riders) >= 10,
+             f"the walk finds the trait-level riders at all -- a matcher"
+             f" that found none would read as a complete list"
+             f" ({len(riders)} found)")
+
+    # **Only a BRACKETED feat can be an exclusivity hole**, and the category
+    # comes from `game.db` rather than from the printed name -- reading it
+    # off the name got four of five migrated rows wrong once
+    # (`content/CLAUDE.md`). An unbracketed feat stacks with anything by the
+    # printed rule, so listing one would assert a hole the page allows.
+    #
+    # This is what the first draft of this rule got wrong. The walk finds
+    # **17** rows calling `_on_hit_with` and **7 carry no category at all**,
+    # so a gate demanding all 17 be listed was demanding seven wrong
+    # entries. It took the measurement to see it; the ten in `#1175` are
+    # exactly the bracketed ten.
+    from combat_engine import db
+
+    con = db.game()
+    bracketed = {
+        ref for ref in riders
+        if ((con.execute("select category from feat where ref=?",
+                         (ref,)).fetchone() or {"category": ""})["category"]
+            or "")
+    }
+    out.that(bool(bracketed) and len(bracketed) < len(riders),
+             f"the category filter does something -- all or nothing would"
+             f" mean it is not being read ({len(bracketed)} bracketed of"
+             f" {len(riders)})")
+    # **Every rider must resolve to at least one row, or the pair check
+    # below has nothing to check and passes.** Found by planting: breaking
+    # the constant resolver so it returns an empty set left the rule green,
+    # because `rows_of` still had all 17 keys and `missing` was computed
+    # over no pairs. A list with no pairs is a blind walk, not a clean one
+    # -- the third time in this session that a gate of mine needed this
+    # guard and the plant is what found each.
+    blind = sorted(ref for ref, rows in rows_of.items() if not rows)
+    out.that(not blind,
+             f"every rider resolves to the rows it rides, so the pair check"
+             f" has pairs to check ({len(blind)} resolve to nothing:"
+             f" {blind[:5]})")
+
+    # Pair by pair, and only for rows the rule actually reads: an entry for
+    # a row absent from `MIGRATED` does nothing, because `STILL_RIDERS` is
+    # consulted inside that loop. Nine such rows exist and are named in the
+    # dict's docstring; demanding entries for them would demand nine dead
+    # ones.
+    missing = sorted(
+        (feat, row)
+        for feat in bracketed - TRAIT_RIDER_EXEMPT
+        for row in rows_of[feat]
+        if row in MIGRATED and feat not in STILL_RIDERS.get(row, ())
+    )
+    out.that(not missing,
+             f"every (bracketed feat, migrated row) pair it rides is in"
+             f" STILL_RIDERS ({len(missing)} missing: {missing[:6]})")
+    listed = {feat for feats in STILL_RIDERS.values() for feat in feats}
+    wrongly = sorted((riders - bracketed) & listed)
+    out.that(not wrongly,
+             f"and no unbracketed rider is listed, which would assert a"
+             f" hole the printed rule allows ({len(wrongly)}: {wrongly})")
+    out.that(riders >= TRAIT_RIDER_EXEMPT,
+             f"the exemption names a feat that really does ride this way,"
+             f" so it cannot go stale silently"
+             f" ({sorted(TRAIT_RIDER_EXEMPT - riders)} do not)")
 
 
 def a_resettled_attack_announces_only_a_change(out: Result) -> None:
@@ -69974,6 +70194,9 @@ DRIVERS = {
     "a_disease_is_armed_once_a_board": (
         a_disease_is_armed_once_a_board,
         "a stage body runs once a board, however many arming passes"),
+    "every_trait_level_rider_is_listed": (
+        every_trait_level_rider_is_listed,
+        "STILL_RIDERS holds every feat that rides a row from a trait"),
     "a_resettled_attack_announces_only_a_change": (
         a_resettled_attack_announces_only_a_change,
         "c.settle_attack says so when it turns a hit into a miss, and not"
