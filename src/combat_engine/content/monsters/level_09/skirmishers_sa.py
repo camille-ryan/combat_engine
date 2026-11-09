@@ -2415,16 +2415,22 @@ def m5819a2(c: Cast) -> None:
     on=Trigger(Died, about_me, "it dies"),
 )
 def m5819a3(c: Cast) -> None:
-    """The burst, its poison damage and the disease all play now.
+    """The burst, its poison damage and the exposure all play now.
 
-    The card contracts `x5_62` on a failed save *at the end of the
-    encounter*, and this engine cannot tell that moment from the end of the
-    fight -- so it lands on the hit, which is the closest this horizon
-    allows and errs toward the creature catching it. #389 built the table;
-    the stage does not advance, which is what the page prints."""
+    The card contracts `x5_62` at stage 1 on a *failed* saving throw at
+    the end of the encounter, and that moment exists: `c.expose` records
+    the exposure here and rides the `When.ENCOUNTER` effect's own ending
+    to roll the throw, contracting only on a failure. #515.
+
+    This used to read `c.contract`, which catches the disease outright --
+    the throw the card prints never happened, so the row was strictly
+    stronger than the page and silent about it. #389 built the table; the
+    stage does not advance, which is what the page prints.
+
+    On the Hit line, so it stays inside the hit branch."""
     if c.strike():
         c.hit()
-        c.contract("x5_62")
+        c.expose("x5_62")
 
 
 # ==========================================================================

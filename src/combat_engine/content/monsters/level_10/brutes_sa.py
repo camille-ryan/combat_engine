@@ -2464,17 +2464,25 @@ def m5596a2(c: Cast) -> None:
     damage=Damage("1d12", 10),
 )
 def m5596a3(c: Cast) -> None:
-    """Requirement: wolf or hybrid form, asked in the body. The blow
-    lands; contracting a disease at the end of the encounter has nowhere
-    to go -- there is no disease model in this engine at all, no stages
-    and no progression to fail a save into."""
+    """Requirement: wolf or hybrid form, asked in the body.
+
+    The blow lands and the exposure plays. The card prints a saving throw
+    at the end of the encounter and `x5_27` at stage 1 only on a failure,
+    which is `c.expose`: the exposure is recorded now and settled on the
+    `When.ENCOUNTER` effect's own ending. #515.
+
+    This used to read `c.contract`, which catches the disease outright
+    with no throw -- stronger than the page, and invisible, because
+    catching a disease is what the row looks like it should do.
+
+    On the Hit line, so it stays inside the hit branch."""
     if _m5596_form(c) == "human":
         return
     victim = c.target
     plus = 2 if victim is not None and c.bloodied(on=victim) else 0
     if c.strike(plus=plus):
         c.hit()
-        c.contract("x5_27")
+        c.expose("x5_27")
 
 
 @power(

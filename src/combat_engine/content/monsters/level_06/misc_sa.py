@@ -733,13 +733,22 @@ def m6347a5(c: Cast) -> None:
     dropped=("c.emerge()",),
 )
 def m6347a6(c: Cast) -> None:
-    """The poison blow plays. The disease it seeds on an end-of-encounter
-    save, and the creature's own replacement emerging from a dead or
-    diseased body, are both named gaps: nothing stages a disease and
-    nothing spawns a creature off a delayed end-of-encounter check."""
+    """The poison blow plays, and so does the exposure it seeds.
+
+    The card prints two steps -- a saving throw at the end of the
+    encounter, and `x5_91` at stage 1 only on a failure -- so this is
+    `c.expose` and not `c.contract`. `c.contract` catches the disease
+    outright and was strictly stronger than the page: the throw never
+    happened. `c.expose` records the exposure now and settles it on the
+    `When.ENCOUNTER` effect's own ending. #515.
+
+    On the Hit line, so it stays inside the hit branch.
+
+    Still named: the replacement creature emerging from the remains of a
+    target the disease or the blow killed."""
     if c.strike():
         c.hit()
-        c.contract("x5_91")
+        c.expose("x5_91")
 
 
 # ==========================================================================

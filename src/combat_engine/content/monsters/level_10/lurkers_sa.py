@@ -1317,10 +1317,13 @@ def m5817a4(c: Cast) -> None:
     free `m5817a3` -- `c.use_power` never charges an action, which is
     exactly "with a single standard action", the standard being this one.
 
-    The card contracts it *at the end of the encounter*, which this engine
-    cannot tell from the end of the fight -- so it lands on the hit, one
-    round early and the closest this horizon allows. `c.contract` records it;
-    the stage does not advance, which is what the page prints."""
+    The disease is **not** caught on the hit. The card prints a saving
+    throw at the end of the encounter and only a failure contracts it, so
+    this is `c.expose` and not `c.contract`: the exposure is recorded now,
+    rides the `When.ENCOUNTER` effect's own ending, and throws there.
+    `c.contract` would catch it outright, which is stronger than the page.
+    The clause is on the **Hit** line, so it sits inside the hit branch.
+    Stage 1, which is what the page prints."""
     paired = c.first and _m5817_paired(c.world, c.me)
     if c.strike():
         c.hit()
@@ -1328,7 +1331,7 @@ def m5817a4(c: Cast) -> None:
         c.gains_advantage(
             lambda ctx: ctx.get("target") in c.grabbing(of=c.me), until=When.ENCOUNTER,
         )
-        c.contract("x5_62")
+        c.expose("x5_62")
     # After the swing this row is about, and asked before it: the hold is
     # read at the top because a `When.EONT` effect is still standing either
     # way, and the free attack is the *second* of the two the card pairs.

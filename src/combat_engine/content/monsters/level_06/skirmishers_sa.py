@@ -2891,12 +2891,14 @@ def m5891a2(c: Cast) -> None:
     requires_text="it must be in beast or hybrid form",
 )
 def m5891a3(c: Cast) -> None:
-    """The bite and the prone are exact; the disease a failed end-of-encounter
-    save hands over has no track to carry it."""
+    """All three clauses are exact. The end-of-encounter throw is `c.expose`,
+    which settles the disease only on a failure; the stage it lands at never
+    advances, and that is the printed rules rather than a gap -- see
+    `Cast.contract`."""
     if c.strike():
         c.hit()
         c.prone()
-        c.contract("x5_54")
+        c.expose("x5_54")
 
 
 @power("m5891a4", level=6, usage=AT_WILL, action=STANDARD, reach=PERSONAL, target=NO_TARGET)

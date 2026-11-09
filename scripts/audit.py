@@ -1111,7 +1111,18 @@ KNOWN_SILENT = {
     # The last three, each its own shape.
     "m1193a2": "douses a light source; the board models no light",
     "m3315a5": "stays hidden on a miss; it is not hidden to begin with",
-    "m5596a3": "contracts a disease; no disease system exists to carry one",
+    # **This said "contracts a disease; no disease system exists to carry
+    # one" and was wrong twice over.** The disease system exists -- #515
+    # built `c.expose`, #948 the dispatcher, and this row exposes `x5_27`
+    # and settles it -- and that was never why the row is silent anyway:
+    # `_m5596_form(c)` reads `human` on this board, so the body returns at
+    # its first line and never reaches the attack. The same cause its
+    # sibling `m5596a6` two lines up has recorded correctly all along.
+    #
+    # An excuse that names the wrong cause is worse than none: it reads as
+    # a known limit of the engine when it is a limit of the pose, and it
+    # survived #948 landing precisely because nobody re-read it.
+    "m5596a3": "its Requirement is a form the creature has not changed into",
     # The one that is an instrument gap rather than a board gap, and is filed as
     # #374 rather than excused: `c.set_origin` labels its effect `origin:<word>`
     # because `kinds_of` reads the word back out of the label, so it cannot carry

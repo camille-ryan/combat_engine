@@ -2270,17 +2270,23 @@ def m5998a2(c: Cast) -> None:
     header and a second one that is poison *and* psychic at once, which is
     what `dtypes` is for.
 
-    The disease at the end of the encounter is the dropped clause -- nothing
-    contracts one, and forty-five rows wait on the same verb.
+    The disease is `c.expose` and not `c.contract`: the card prints a saving
+    throw at the end of the encounter and only a failure catches it, so the
+    exposure is recorded now and settled on the `When.ENCOUNTER` effect's own
+    ending. Contracting it outright would be stronger than the page.
+
+    **It is printed on the Effect line, so it is outside both branches.** A
+    creature the swing missed is exposed too -- which is the half a verb swap
+    gets wrong -- and the stage the page prints is 2, not the default 1.
     """
     both_types = (DamageType.POISON, DamageType.PSYCHIC)
     if c.strike():
         c.hit()
         c.damage("4d10", dtypes=both_types)
-        c.contract("x5_65")
     else:
         c.hit(half=True)
         c.half_damage("4d10", dtypes=both_types)
+    c.expose("x5_65", stage=2)
 
 
 @power(

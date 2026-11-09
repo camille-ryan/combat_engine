@@ -1782,7 +1782,6 @@ def m4950a4(c: Cast) -> None:
 # m709
 # ==========================================================================
 
-_M709_PHAGE = "m709a0 contagion"
 _M709_BLED = "the m709 is first bloodied"
 
 
@@ -1803,9 +1802,20 @@ def m709a0(c: Cast) -> None:
 
     The secondary is a second attack line against a different defence, so it
     cannot live in the header; its printed +16 is trimmed by hand the way
-    `Attack.bonus_for` trims the header's. The contagion is a disease track
-    the engine has no model of, so it is a named hold on the save-ends clock
-    rather than an invented condition.
+    `Attack.bonus_for` trims the header's.
+
+    **`c.contract`, not `c.expose`, and the card decides which.** The
+    secondary reads "on a hit, the target contracts `x5_18`" and prints no
+    saving throw, so the disease is caught outright -- where the commoner
+    printed shape puts an end-of-encounter throw in between and wants
+    `c.expose`. #1181 is the family that got this backwards.
+
+    This docstring used to say the contagion was "a disease track the
+    engine has no model of", and laid a named hold on the save-ends clock
+    instead. Both halves were false by then: `Cast.contract` records a
+    stage, `turns.arm_afflictions` reads it back at the start of every
+    fight, and `x5_18` is a declared row. The invented hold was also the
+    wrong *clock* -- a disease is not something a save ends.
     """
     if not c.strike():
         return
@@ -1814,7 +1824,7 @@ def m709a0(c: Cast) -> None:
     if victim is None:
         return
     if c.attack(c.world.scaling.trim(16, c.level), FORT, on=victim):
-        c.effect(_M709_PHAGE, until=When.SAVE_ENDS, on=victim)
+        c.contract("x5_18", on=victim)
 
 
 @power(

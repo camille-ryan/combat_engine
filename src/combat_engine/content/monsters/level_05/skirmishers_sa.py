@@ -1978,9 +1978,12 @@ def m5597a1(c: Cast) -> None:
     requires_text="it must be in its beast or hybrid form",
 )
 def m5597a2(c: Cast) -> None:
+    """The card prints the two-step -- a throw at the end of the encounter,
+    and the disease only on a failure -- so this is `c.expose`, not
+    `c.contract`, which catches it outright."""
     if c.strike():
         c.hit()
-        c.contract("x5_54")
+        c.expose("x5_54")
 
 
 @power(

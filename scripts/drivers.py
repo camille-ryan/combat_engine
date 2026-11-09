@@ -24833,6 +24833,316 @@ def every_held_gate_is_credited(out: Result) -> None:
              f" {sum(len(v) for v in UNCREDITED_GATE.values())} listed)")
 
 
+#: Rows printing a contraction that the walk below cannot satisfy, keyed
+#: `ref` -> why in one line. Shrink-only, and a listed entry that is no
+#: longer a finding is **red**, the same per-ref semantics
+#: `UNCREDITED_GATE` and `keywords.py` use.
+#:
+#: **Every entry here has one reason: the printed disease has no declared
+#: row**, so a correct call would record a stage nothing ever reads --
+#: `#948`'s refused set rather than a fault in the row. Checked per ref
+#: rather than assumed; two of the ten diseases named below are in
+#: `affliction.refused()` for a `dc_shape` nothing can resolve, so those
+#: will never get a row at all.
+#:
+#: The seven `wrong ref` entries are the sharper judgement and it is
+#: deliberately **not** made here. Each contracts a declared substitute
+#: for an undeclared printed disease, so correcting the ref trades a row
+#: that plays the wrong rules for one that plays incomplete ones. That is
+#: the better trade by this repo's own ordering -- the printed row wins --
+#: but it leaves seven calls recording a stage nothing reads, which is the
+#: shape `#948` refuses. It wants deciding once, on `#1180`, not seven
+#: times by whoever touches the file next.
+CONTRACTION_OWED: dict[str, str] = {
+    # Prints a contraction, calls neither verb. The disease has no row.
+    "m145a0": "x5_19 has no declared row (#948)",
+    "m364a2": "x5_29 has no declared row (#948)",
+    "m3615a0": "x5_56 has no declared row, and is refused outright --"
+               " dc_shape='source_level', so it can never get one",
+    "m259a0": "x5_38 has no declared row, and is refused outright --"
+              " dc_shape='source_level', so it can never get one",
+    "m4981a2": "x5_41 has no declared row (#948)",
+    "m4755a1": "x5_30 has no declared row (#948)",
+    # Contracts a declared substitute for an undeclared printed disease.
+    # Also collapses a printed throw in six of the seven. #1180.
+    "m115824a2": "x5_11 has no declared row; contracts x5_23 instead (#1180)",
+    "m5952a2": "x5_11 has no declared row; contracts x5_23 instead (#1180)",
+    "m5599a2": "x5_21 has no declared row; contracts x5_23 instead (#1180)",
+    "m5591a2": "x5_52 has no declared row; contracts x5_36 instead (#1180)",
+    "m6550a2": "x5_52 has no declared row; contracts x5_36 instead (#1180)",
+    "m115863a2": "x5_26 has no declared row; contracts x5_23 instead (#1180)",
+    "m115864a3": "x5_26 has no declared row; contracts x5_23 instead (#1180)",
+}
+
+
+def _contraction_census() -> tuple[dict[str, list], list[str]]:
+    """Every row whose spec prints a contraction, bucketed against what its
+    body actually calls.
+
+    **The printed text decides the verb, and that is the whole check.**
+    `etl` resolves the printed disease name to its ref, so the spec itself
+    carries the clause, and it either prints a saving throw or it does not:
+
+        "... and the target contracts x5_NN."        -> c.contract
+        "At the end of the encounter, the target
+         makes a saving throw. On a failure, the
+         target contracts x5_NN (stage 1)."          -> c.expose
+
+    `c.expose` records the exposure and calls `c.contract` only when the
+    throw fails, so the two are not interchangeable in either direction:
+    `c.contract` on a throw-printing card is stronger than print, and
+    `c.expose` without one is weaker.
+
+    Five buckets, exclusive, so the count reconciles:
+
+    ===============  ========================================
+    ``correct``      the printed verb with the printed ref
+    ``no verb``      prints a contraction, calls neither
+    ``wrong ref``    contracts a disease the card does not name
+    ``collapsed``    `c.contract` where a throw is printed
+    ``weakened``     `c.expose` where none is
+    ===============  ========================================
+
+    **Tables come from the schema, never a list.** Every table with both a
+    `ref` and a `spec` column -- 15 today, and it grows whenever an
+    importer lands. The census that produced `#1179` queried four by hand
+    and reported 59 printed contractions where there are 60: the one it
+    missed was the `disease` table's own.
+
+    **And it reads both verbs**, which is the error this gate exists
+    because of. `#1179` was filed off a grep for `c.contract` alone, so
+    15 rows doing the printed thing correctly were reported as doing
+    nothing, and its headline of 24 was really 7. Three separate agents
+    caught it within minutes. `content/CLAUDE.md` puts "check the verb
+    does not already exist" first for rows; it applies to instruments.
+
+    What it cannot see is **placement**: `m6112a2` had its `c.expose`
+    inside the hit branch while the card prints the clause on the Effect
+    line, so a creature caught in the burst and missed went unexposed.
+    Both verbs are present and correct there and this walk calls it clean.
+    Said out loud rather than implied, because a gate that looks like it
+    covers a family and does not is worse than no gate.
+
+    The AST machinery here deliberately duplicates `_gate_census`'s rather
+    than sharing it: that function had just been plant-tested green when
+    this was written, and refactoring a proven gate to save thirty lines
+    is the wrong trade.
+    """
+    import ast
+    import pathlib
+    import re
+
+    import combat_engine.content  # noqa: F401 -- the import IS what fills REGISTRY
+    from combat_engine import db
+    from combat_engine.engine.dsl import REGISTRY
+
+    # **Imported here rather than relied on**, because `REGISTRY` is filled
+    # by that import and by nothing else: run this census in a process that
+    # has not imported content and every bucket comes out **0**, which
+    # reads exactly like a clean tree. `impact.py` had the same bug from
+    # the other side -- `declared()` answering differently depending on who
+    # had imported what put its corpus count off by two and silently
+    # disabled a guard for every run.
+    #
+    # The `correct` assertion in the caller is the backstop: a walk that
+    # finds nothing to approve is a broken walk, not a clean tree.
+    con = db.game()
+    tables = [
+        t for t in (r[0] for r in con.execute(
+            "select name from sqlite_master where type='table'"))
+        if {"ref", "spec"} <= {d[1] for d in con.execute(f"pragma table_info({t})")}
+    ]
+    throw = re.compile(r"makes? a saving throw|must make a saving throw", re.I)
+    printed: dict[str, tuple[set[str], bool]] = {}
+    for table in tables:
+        rows = con.execute(
+            f"select ref, spec from {table}"
+            r" where spec like '%contracts x5\_%' escape '\'")
+        for row in rows:
+            text = re.sub(r"\s+", " ", row["spec"] or "")
+            wants: dict[str, int] = {}
+            for found in re.finditer(r"contracts (x5_\d+)(?: \(stage (\d+)\))?", text):
+                wants[found.group(1)] = int(found.group(2) or 1)
+            printed[row["ref"]] = (wants, bool(throw.search(text)))
+
+    root = pathlib.Path(__file__).resolve().parent.parent / "src/combat_engine/content"
+    trees, consts, funcs, imports = {}, {}, {}, {}
+    for path in sorted(root.rglob("*.py")):
+        src = path.read_text()
+        tree = ast.parse(src)
+        trees[path] = (tree, src)
+        here: dict[str, str] = {}
+        for node in tree.body:
+            target = value = None
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target, value = node.targets[0], node.value
+            elif isinstance(node, ast.AnnAssign):
+                target, value = node.target, node.value
+            if (isinstance(target, ast.Name) and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)):
+                here[target.id] = value.value
+        consts[path] = here
+        funcs[path] = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+        seen: dict[str, pathlib.Path] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+            if not node.module.startswith("combat_engine.content"):
+                continue
+            rel = node.module[len("combat_engine.content"):].lstrip(".")
+            cand = root.joinpath(*rel.split(".")).with_suffix(".py")
+            for alias in node.names:
+                seen[alias.asname or alias.name] = cand
+        imports[path] = seen
+
+    unreadable: list[str] = []
+
+    def arg(path: pathlib.Path, node: ast.expr) -> str | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.Name):
+            return consts[path].get(node.id)
+        return None
+
+    def reach(path: pathlib.Path, fn: ast.FunctionDef,
+              seen: set[tuple[pathlib.Path, str]] | None = None,
+              ) -> tuple[dict[str, int], dict[str, int]]:
+        """What this function and its same-tree helpers contract and expose,
+        each ref mapped to the **stage** the call asks for.
+
+        The stage is the fourth way to get this wrong and the one that
+        found me out: `m5998a2`'s card prints `(stage 2)` and its call took
+        the default of 1, so the creature handed over a milder disease than
+        the page gives. 35 cards print stage 1, 24 print no stage at all
+        (which means 1), and exactly **one** prints anything else -- so this
+        condition will almost always be vacuous, and that is the argument
+        for a gate rather than against one.
+        """
+        seen = seen if seen is not None else set()
+        if (path, fn.name) in seen:
+            return {}, {}
+        seen.add((path, fn.name))
+        got: dict[str, dict[str, int]] = {"contract": {}, "expose": {}}
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Call):
+                continue
+            if (isinstance(node.func, ast.Attribute)
+                    and node.func.attr in got and node.args):
+                ref = arg(path, node.args[0])
+                if ref is None:
+                    unreadable.append(
+                        f"{path.relative_to(root)}:{node.lineno}"
+                        f" c.{node.func.attr}({ast.unparse(node.args[0])})")
+                else:
+                    asked = next(
+                        (k.value.value for k in node.keywords
+                         if k.arg == "stage" and isinstance(k.value, ast.Constant)
+                         and isinstance(k.value.value, int)),
+                        1)   # both verbs default to stage 1
+                    got[node.func.attr][ref] = asked
+            if isinstance(node.func, ast.Name):
+                name = node.func.id
+                where = path if name in funcs[path] else imports[path].get(name)
+                if where is not None and name in funcs.get(where, {}):
+                    sub = reach(where, funcs[where][name], seen)
+                    got["contract"].update(sub[0])
+                    got["expose"].update(sub[1])
+        return got["contract"], got["expose"]
+
+    buckets: dict[str, list] = {
+        "correct": [], "no verb": [], "wrong ref": [],
+        "collapsed": [], "weakened": [], "wrong stage": [],
+    }
+    for path in trees:
+        for fn in funcs[path].values():
+            ref = next((a.value for d in fn.decorator_list
+                        for a in getattr(d, "args", [])
+                        if isinstance(a, ast.Constant) and isinstance(a.value, str)),
+                       None)
+            if ref is None or ref not in printed or ref not in REGISTRY:
+                continue
+            wants, saves = printed[ref]
+            made, exposed = reach(path, fn)
+            got = {**made, **exposed}
+            where = path.relative_to(root).as_posix()
+            off = {d: (s, got[d]) for d, s in wants.items()
+                   if d in got and got[d] != s}
+            if not got:
+                buckets["no verb"].append((ref, sorted(wants), where))
+            elif set(wants) - set(got):
+                buckets["wrong ref"].append(
+                    (ref, sorted(wants), sorted(got), where))
+            elif saves and (set(wants) & set(made)):
+                buckets["collapsed"].append((ref, sorted(wants), where))
+            elif not saves and (set(wants) & set(exposed)):
+                buckets["weakened"].append((ref, sorted(wants), where))
+            elif off:
+                buckets["wrong stage"].append((ref, off, where))
+            else:
+                buckets["correct"].append(ref)
+    return buckets, unreadable
+
+
+def every_printed_contraction_matches_the_card(out: Result) -> None:
+    """A row printing a contraction makes it, with the printed verb (#1181).
+
+    Four ways to be wrong and they are not the same bug, which is why
+    `#1179`, `#1180` and `#1181` are three issues: a missing call, a
+    disease the card does not name, a printed saving throw collapsed, and
+    a throw invented where none is printed. The first costs a clause, the
+    second plays the wrong rules, and the third is strictly stronger than
+    print.
+
+    None of it is visible to the instruments that already run. `audit.py`
+    asks whether a row fires and does something, and every row in all four
+    buckets attacks, deals damage and -- in three of the four -- lays a
+    disease effect, which is the most emphatic "did something" available.
+    `cards.py` reads the numbers in a header, not an Effect line.
+    `drivers.py` proves `c.expose` settles correctly and never asks which
+    rows ought to be using it.
+    """
+    buckets, unreadable = _contraction_census()
+
+    out.that(not unreadable,
+             f"every `c.contract`/`c.expose` argument resolves to a ref, so"
+             f" nothing is skipped unread ({len(unreadable)} unreadable:"
+             f" {unreadable[:4]})")
+    out.that(bool(buckets["correct"]),
+             f"the walk finds rows it calls correct, so a matcher that went"
+             f" blind would not read as a clean run"
+             f" ({len(buckets['correct'])} correct)")
+
+    faults = {
+        "no verb": "prints a contraction and calls neither verb",
+        "wrong ref": "contracts a disease its card does not name",
+        "collapsed": "calls c.contract where the card prints a saving throw"
+                     " -- stronger than print",
+        "weakened": "calls c.expose where the card prints no throw"
+                    " -- weaker than print",
+        "wrong stage": "hands over a stage the card does not print"
+                       " (printed, asked)",
+    }
+    found: set[str] = set()
+    for kind, what in faults.items():
+        for row in buckets[kind]:
+            ref = row[0]
+            found.add(ref)
+            if ref in CONTRACTION_OWED:
+                out.skip(f"{ref}: {what} -- {CONTRACTION_OWED[ref]}")
+            else:
+                out.that(False, f"{ref} {what}: {row[1:]}")
+
+    # **A listed row that is no longer a finding is RED.** Without this the
+    # baseline can only rot: a row that gets fixed leaves a stale entry and
+    # the run stays green, which is the one thing a shrink-only list must
+    # not do.
+    for ref in sorted(CONTRACTION_OWED):
+        if ref not in found:
+            out.that(False,
+                     f"{ref} is in CONTRACTION_OWED and is no longer a"
+                     f" finding -- shrink the baseline")
+
+
 def penalty_scoped_to_an_aura(out: Result) -> None:
     """A penalty against "this creature and its allies within its aura 5".
 
@@ -69469,6 +69779,9 @@ DRIVERS = {
     "every_held_gate_is_credited": (every_held_gate_is_credited,
                                     "a body gating on something it does not"
                                     " represent credits it, chain or no chain"),
+    "every_printed_contraction_matches_the_card": (
+        every_printed_contraction_matches_the_card,
+        "a row printing a contraction makes it, with the printed verb"),
     "once_spend_moments": (once_spend_moments,
                            "a one-shot bonus is spent where it is read"),
     "once_spent": (once_spent,

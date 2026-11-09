@@ -548,9 +548,11 @@ def m115825a1(c: Cast) -> None:
     requires_text="it must be in beast or hybrid form",
 )
 def m115825a2(c: Cast) -> None:
+    """The disease is printed behind a throw at the end of the encounter, so
+    `c.expose` rather than `c.contract`, which would catch it outright."""
     if c.strike():
         c.hit()
-        c.contract("x5_54")
+        c.expose("x5_54")
 
 
 @power(

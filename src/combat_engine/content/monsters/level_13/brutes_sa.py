@@ -2137,12 +2137,17 @@ def m6146a2(c: Cast) -> None:
     requires_text="the m6146 must not be in its walking form",
 )
 def m6146a3(c: Cast) -> None:
-    """The bite lands. The disease is the dropped clause: the card names a
-    track by ref and the engine holds no diseases, no stages and nothing that
-    rolls a saving throw at the end of an encounter."""
+    """The bite lands and exposes the target to the track it names.
+
+    `c.expose` rather than `c.contract`: the card prints a saving throw at
+    the end of the encounter and only a failure catches the disease, where
+    `c.contract` catches it outright. The exposure rides the
+    `When.ENCOUNTER` effect's own ending, which is where the throw happens.
+    The clause is on the **Hit** line, so it stays inside the hit branch,
+    and the page prints stage 1."""
     if c.strike():
         c.hit()
-        c.contract("x5_25")
+        c.expose("x5_25")
 
 
 @power(
