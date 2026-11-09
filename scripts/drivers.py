@@ -25227,6 +25227,111 @@ def a_disease_is_armed_once_a_board(out: Result) -> None:
              f" row arm once, which is the case the bug lived in")
 
 
+def a_resettled_attack_announces_only_a_change(out: Result) -> None:
+    """`c.settle_attack` says so when it turns a hit into a miss (#1166).
+
+    The verb re-judges an attack from numbers the row has just changed --
+    *"the ally gains +2 to the defence against the triggering attack"* --
+    and announced nothing, so a row whose whole printed effect is that the
+    blow now misses fired, was correct, and reported SILENT. Its sibling
+    `c.hit_becomes` has emitted `BlowTurned` since `#862` for exactly this
+    reason; this is the same shape one verb over.
+
+    **Both arms, because only announcing a change is half the rule.** A
+    re-settle that confirms the outcome is the common case -- most rows
+    that call this change something and find the blow lands anyway -- and
+    announcing those would credit a row for asking rather than for
+    changing anything. That is the trap `UseSpent`'s own docstring records
+    about emitting from the ordinary spend inside `dsl.use`.
+    """
+    import types
+
+    from combat_engine.content import loader
+    from combat_engine.engine import Bus, Cast, Grid, Rng, World
+    from combat_engine.engine.components import Team
+    from combat_engine.engine.events import BlowTurned
+    from combat_engine.engine.resolve import AttackResult
+
+    def resettle(total: int, defence: int) -> tuple[bool, list]:
+        world = World(bus=Bus(), grid=Grid(12, 10), rng=Rng(1))
+        foe = loader.spawn(world, "m145", (5, 6), team=Team.ENEMY)
+        me = loader.spawn(world, "m145", (6, 6), team=Team.PC)
+        seen: list = []
+        world.bus.on(BlowTurned, lambda ev, into=seen: into.append(ev))
+        result = AttackResult(hit=True, critical=False, natural=10,
+                              total=total, target_defence=defence, target=foe)
+        ev = types.SimpleNamespace(result=result, attacker=me, target=foe,
+                                   power="probe", ctx={})
+        Cast(world=world, me=me, ref="probe").settle_attack(ev=ev)
+        return result.hit, seen
+
+    turned, said = resettle(12, 20)
+    out.that(turned is False,
+             f"a defence raised past the total turns the hit into a miss"
+             f" (hit={turned})")
+    out.that(len(said) == 1,
+             f"and that is announced exactly once ({len(said)} BlowTurned)")
+    out.that(bool(said) and said[0].hit is False and said[0].by == "probe",
+             f"the event carries the new outcome and the row that caused it"
+             f" ({[(e.hit, e.by) for e in said]})")
+
+    held, quiet = resettle(25, 20)
+    out.that(held is True,
+             f"a re-settle that still clears leaves the hit standing"
+             f" (hit={held})")
+    out.that(not quiet,
+             f"and announces nothing, so a row is not credited for asking"
+             f" ({len(quiet)} BlowTurned)")
+
+
+def a_boosted_check_announces_itself_once(out: Result) -> None:
+    """`c.boost_check` emits `Boosted`, and only one of them (#1168).
+
+    `c.boost_roll(kind="check")` reached `_boosted` and announced; this
+    verb did the same arithmetic to the same event and said nothing, so a
+    row whose whole printed effect is "add N to the check" fired, was
+    correct, and reported SILENT. Eight rows came off `silent_refs` when
+    the emit landed.
+
+    **The second assertion is the one worth having.** `boost_roll`'s check
+    branch called `boost_check` *and* `_boosted`, so moving the emit down
+    without removing the one above would announce twice for one effect --
+    worse than the silence it replaced, because `audit._claimed` would
+    credit the row twice and a rider counting boosts would pay twice. Both
+    entry points are asserted, because the fault lives in the pair rather
+    than in either.
+    """
+    from combat_engine.content import loader
+    from combat_engine.engine import Bus, Cast, Grid, Rng, World
+    from combat_engine.engine.components import Team
+    from combat_engine.engine.events import Boosted, SkillCheck
+
+    def boost(through: str) -> tuple[bool, int, list]:
+        world = World(bus=Bus(), grid=Grid(12, 10), rng=Rng(1))
+        me = loader.spawn(world, "m145", (6, 6), team=Team.PC)
+        seen: list = []
+        world.bus.on(Boosted, lambda ev, into=seen: into.append(ev))
+        check = SkillCheck(actor=me, skill="athletics", natural=10, bonus=0,
+                           total=10, dc=15, success=False)
+        c = Cast(world=world, me=me, ref="probe")
+        c.trigger = check
+        got = (c.boost_check(3) if through == "boost_check"
+               else c.boost_roll(3, kind="check"))
+        return got, check.total, seen
+
+    for through in ("boost_check", "boost_roll"):
+        got, total, said = boost(through)
+        out.that(got is True and total == 13,
+                 f"{through} adds to the check ({got}, total {total})")
+        out.that(len(said) == 1,
+                 f"{through} announces it exactly once"
+                 f" ({len(said)} Boosted -- two would credit the row twice)")
+        out.that(bool(said) and said[0].roll_kind == "check"
+                 and said[0].by == "probe" and said[0].amount == 3,
+                 f"{through}'s event says which roll and whose doing"
+                 f" ({[(e.amount, e.roll_kind, e.by) for e in said]})")
+
+
 def penalty_scoped_to_an_aura(out: Result) -> None:
     """A penalty against "this creature and its allies within its aura 5".
 
@@ -69869,6 +69974,13 @@ DRIVERS = {
     "a_disease_is_armed_once_a_board": (
         a_disease_is_armed_once_a_board,
         "a stage body runs once a board, however many arming passes"),
+    "a_resettled_attack_announces_only_a_change": (
+        a_resettled_attack_announces_only_a_change,
+        "c.settle_attack says so when it turns a hit into a miss, and not"
+        " when it confirms one"),
+    "a_boosted_check_announces_itself_once": (
+        a_boosted_check_announces_itself_once,
+        "c.boost_check emits Boosted, and exactly one of them"),
     "once_spend_moments": (once_spend_moments,
                            "a one-shot bonus is spent where it is read"),
     "once_spent": (once_spent,

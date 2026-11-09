@@ -5333,9 +5333,14 @@ class Cast:
                                  getattr(ev, "actor", self.me))
 
         if isinstance(ev, SkillCheck) and kind in ("", "check"):
-            self.boost_check(amount)
-            return self._boosted(amount, "check",
-                                 getattr(ev, "actor", self.me))
+            # **`boost_check` announces for itself now, so this branch must
+            # not announce again.** It used to do the arithmetic there and
+            # the emit here, which was the only reason `boost_check` called
+            # alone was silent (#1168). Leaving both would emit `Boosted`
+            # twice for one effect -- and a double emit is worse than the
+            # silence it replaced, because `audit._claimed` would credit the
+            # row twice and a rider counting boosts would pay twice.
+            return self.boost_check(amount)
 
         return False
 
@@ -5364,6 +5369,7 @@ class Cast:
         a row of this shape returning success with nothing to settle would
         look written.
         """
+        from .events import BlowTurned
         from .resolve import _mods
 
         ev = ev if ev is not None else self.trigger
@@ -5372,8 +5378,34 @@ class Cast:
             return False
         who = getattr(ev, "attacker", self.me)
         ctx = getattr(ev, "ctx", None) or {}
+        # **The outcome before the recompute, so a change can be announced.**
+        # This verb re-judged the attack and said nothing, so a row whose
+        # whole printed effect is "raising the defence turns the hit into a
+        # miss" fired, was correct, and reported SILENT -- exactly the
+        # measured shape `hit_becomes` one screen up was built for, and this
+        # is its sibling. `BlowTurned` is already in `audit.DID_SOMETHING`,
+        # so the emit alone makes those rows observable. #1166.
+        #
+        # Announced only when `hit` actually moved. A re-settle that confirms
+        # the outcome is the common case -- most rows that call this change
+        # something and find the blow lands anyway -- and announcing those
+        # would credit a row for asking rather than for changing anything,
+        # which is the trap `UseSpent`'s docstring records about emitting
+        # from the ordinary spend inside `dsl.use`.
+        was = bool(getattr(result, "hit", False))
         settle(result,
                floor=20 - _mods(self.world, who, "crit_range", ctx))
+        now = bool(getattr(result, "hit", False))
+        if now is not was:
+            self.world.bus.emit(
+                BlowTurned(
+                    attacker=int(getattr(ev, "attacker", -1)),
+                    target=int(getattr(ev, "target", -1)),
+                    power=str(getattr(ev, "power", "")),
+                    hit=now,
+                    by=self.ref,
+                )
+            )
         return True
 
     def replace_roll(self, face: int, *, kind: str = "",
@@ -15621,7 +15653,17 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         ev.bonus += bonus
         ev.total = ev.natural + ev.bonus
         ev.success = ev.dc <= 0 or ev.total >= ev.dc
-        return True
+        # **Announced, which it was not.** `c.boost_roll(kind="check")`
+        # reaches `_boosted` and emits `Boosted`; this verb does the same
+        # arithmetic to the same event and said nothing, so a row whose whole
+        # printed effect is "add N to the check" fired, was correct, and
+        # reported SILENT. #1168.
+        #
+        # `_boosted` rather than a hand-rolled emit, so the `roll_kind` and
+        # the `rolled_by`/`actor` split stay the one shape every boost
+        # speaks -- a rider on "an attack benefiting from" must not fire on
+        # a boosted check, and that distinction lives in there.
+        return self._boosted(bonus, "check", int(getattr(ev, "actor", self.me)))
 
     def reroll_check(
         self, *, keep: str = "new", bonus: int = 0, ev: Any = None
