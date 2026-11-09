@@ -419,8 +419,9 @@ def rt_r4_t3(c: Cast) -> None:
     # to reach whoever is standing in the aura and let go when they leave,
     # which is what `c.grants_in` is for.
     if c.feat("f1832"):
-        c.grants_in(ring, "ignore_concealment", 2, side="ally",
-                    kind="ignore concealment")
+        with c.credit("f1832"):
+            c.grants_in(ring, "ignore_concealment", 2, side="ally",
+                        kind="ignore concealment")
 
 
 @power("rt:r4-t4", level=0, cls="", usage=AT_WILL,

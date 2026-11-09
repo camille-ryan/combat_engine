@@ -142,8 +142,9 @@ def p622(c: Cast) -> None:
     # the weaponmaster's miss clause asks after. `dsl.keywords_of` folds the
     # grant in; `Power.keywords` would not see it.
     if c.feat("f2370"):
-        c.counts_as_keyword(c.ref, Keyword.INVIGORATING, on=c.me,
-                            until=When.ENCOUNTER)
+        with c.credit("f2370"):
+            c.counts_as_keyword(c.ref, Keyword.INVIGORATING, on=c.me,
+                                until=When.ENCOUNTER)
     if c.strike():
         heavy = any(c.wielding(group) for group in ("axe", "hammer", "mace"))
         c.damage(c.w(2), c.str_mod + (c.con_mod if heavy else 0))

@@ -24448,6 +24448,391 @@ def at_most_one_applies(out: Result) -> None:
     known.known[:] = was
 
 
+#: Bodies that read `c.feat(X)` about the caster, lay something, and credit
+#: nobody for it -- **because nothing laid is X's doing.** A row may read
+#: whether a thing is held to pick between two of its *own* clauses, or to
+#: choose a number it measures, and in neither case does an effect belong
+#: to X.
+#:
+#: Keyed `ref` -> the refs it may read uncredited, which is the shape
+#: `UNCREDITED_CHAIN` and `keywords.py` use: shrink-only, and a listed
+#: entry that is no longer a finding is **red** rather than quietly stale.
+#:
+#: Each entry says why in one line, because the judgement is the whole
+#: value of the entry and nothing else records it.
+#: The five shapes the 21 fall into, each read row by row:
+#:
+#: **picks a number** -- `2 if held else 5`, on a call the row makes either
+#: way. There is no separate effect to attribute and crediting the whole
+#: call would hand the row's own output away. Twelve of the 21.
+#:
+#: **picks a damage type** -- the `dtype=` of a bonus the row lays
+#: regardless. Same argument.
+#:
+#: **an early-out** -- `if c.feat(X): return`, so the clause fires when X is
+#: **absent**. Nothing it lays can be X's doing; the three ranger features
+#: hand over the feat row itself when the character has not taken it.
+#:
+#: **a disjunctive condition** -- `f1101` prints its own extra damage "if
+#: you benefit from" either of two class features, neither of whose cards
+#: prints anything of the kind. It is an `or`, so there is no single ref a
+#: block could name, and crediting either would make the row silent on its
+#: own printed clause.
+#:
+#: **the gated verb reaches no credit channel** -- `f2851`'s gate causes
+#: only `c.teleport` and `i1252x1`'s only `c.recall_weapon`. Both go
+#: through `engine/movement.py`, which reaches neither `Effects.apply` nor
+#: the damage announce, so a block there is inert. **These two are the
+#: only entries here that are a gap rather than a reading**, and they are
+#: `#1178`: when movement grows a credit channel they come off this list.
+UNCREDITED_GATE: dict[str, tuple[str, ...]] = {
+    # A disjunction over two class features, guarding this row's own
+    # printed damage. Neither gated card prints it.
+    "f1101": ("cf:ranger-f2", "cf:warlock-f2"),
+    # Picks the size of a bonus the row lays either way, and its own
+    # docstring says why it must be one modifier of the settled size
+    # rather than a base plus a gated increment.
+    "f2569": ("f47",),
+    # Eight rows reading `PLAGUE_FEAT` to pick a magnitude or a damage
+    # type: 2-vs-1, 5-vs-2, 6-vs-4, one dtype or a pair, a sustain price,
+    # `c.con_mod` or 1.
+    "f2839": ("f651",),
+    "f2840": ("f651",),
+    "f2842": ("f651",),
+    "f2844": ("f651",),
+    "f2845": ("f651",),
+    "f2850": ("f651",),
+    "f2854": ("f651",),
+    "f2881": ("f651",),
+    # The gate causes `c.teleport` and nothing else -- inert channel, #1178.
+    "f2851": ("f651",),
+    # Removes a choice rather than adding a clause: with the feat both of
+    # this row's own halves fire, without it `c.choose` picks one. Nothing
+    # says which half the feat added, and attributing one would mean
+    # calling `c.choose` where the row currently does not -- a behaviour
+    # change dressed as attribution.
+    "f2856": ("f651",),
+    # Early-outs: the clause runs when the feat is **not** held, and what
+    # it lays is the feature handing that feat row over.
+    "cf:ranger-f0s0": ("f127",),
+    "cf:ranger-f0s3": ("f172",),
+    "cf:ranger-f0s4": ("f171",),
+    # The feature is the printed trigger and build gate; the bonus is the
+    # item's own sentence ("you **also** get a +1 item bonus"). The laying
+    # call is inside a deferred `Bloodied` callback, so a block around the
+    # registration would be popped before it ran in any case.
+    "i1120x1": ("cf:sorcerer-f0",),
+    # A precondition on the item's own effect -- the item recalls, the
+    # feature only qualifies the wielder -- and `c.recall_weapon` reaches
+    # no credit channel either. #1178.
+    "i1252x1": ("cf:swordmage-f0",),
+    # `ring = 10 if c.feat("f1817") else 5` -- the feat widens a radius
+    # this row measures. What is eventually laid is this row's own
+    # `c.grant_attack`, which happens with or without it.
+    "p9501": ("f1817",),
+    # Picks the `bonus=` of a reroll the row makes either way, and the two
+    # are one printed clause: a modifier laid beforehand is read by the
+    # next attack rather than by this one.
+    "p1450": ("f980",),
+    # The gate wraps a bare `c.choose`. The zone is laid either way and the
+    # feat swaps its grade, which is a change to the row's own effect
+    # rather than a cause of a new one.
+    "p2473": ("f765",),
+}
+
+
+def _gate_census() -> tuple[list[tuple[str, str, str]], list[str]]:
+    """Every `(file, ref, held)` where a body reads `c.feat(held)` about
+    itself and no `c.credit(held)` block covers what it lays.
+
+    Static, over `content/`, and the two things it has to get right are
+    both cases that made an earlier hand-census wrong by a third:
+
+    **It follows helpers, across files.** `p87` gates on `f1304` and
+    `f1102` and credits both -- inside `_p87_both_swings`, which is where
+    the laying happens. A census reading only the decorated body reported
+    two findings that were already correct. Imported helpers are resolved
+    through the module's own `ImportFrom`, not by name across the tree:
+    two files hold a `_both_hands` and unioning them would make the check
+    *more* permissive, which is the direction a gate must never fail.
+
+    **It resolves a constant, and refuses what it cannot read.** 26 of the
+    86 `c.feat` calls here pass a name rather than a literal -- a
+    module-level `PLAGUE_FEAT = "f651"` -- so a regex over `c.feat("...")`
+    silently skipped 30% of its own subject. Anything still unreadable is
+    returned in the second list and reddens the rule, because a gate that
+    passes over what it could not parse is the failure
+    `scripts/CLAUDE.md` names first.
+
+    Two exclusions, both principled rather than convenient:
+
+    * **`c.feat(X, on=somebody)` is a question about another creature**, so
+      X is a precondition and not the cause -- an item asking whether the
+      ally it is helping holds `rt:r3-t5` lays the *item's* effect. Those
+      are reads, and `c.credit` would misattribute them.
+    * **X equal to the row's own ref** is a row asking whether it is held,
+      which several traits do about an ally. Everything such a row lays is
+      already its own.
+
+    `c.feat` is not feats-only, which is why the parameter is `held`:
+    `rt:r3-t5` and `cf:rogue-scoundrel-f4` are both asked of it.
+    """
+    import ast
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parent.parent / "src/combat_engine/content"
+    trees: dict[pathlib.Path, ast.Module] = {}
+    srcs: dict[pathlib.Path, str] = {}
+    for path in sorted(root.rglob("*.py")):
+        text = path.read_text()
+        srcs[path] = text
+        trees[path] = ast.parse(text)
+
+    def consts(path: pathlib.Path) -> dict[str, str]:
+        """Module-level `NAME = "<ref>"`."""
+        found: dict[str, str] = {}
+        for node in trees[path].body:
+            # `target` and `value` are both taken inside the narrowing, not
+            # after it: `trees[path].body` is a list of `stmt` and only
+            # `Assign`/`AnnAssign` carry a `.value` at all.
+            target: ast.expr | None = None
+            value: ast.expr | None = None
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target, value = node.targets[0], node.value
+            elif isinstance(node, ast.AnnAssign):
+                target, value = node.target, node.value
+            if (isinstance(target, ast.Name) and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)):
+                found[target.id] = value.value
+        return found
+
+    def funcs(path: pathlib.Path) -> dict[str, ast.FunctionDef]:
+        """Module-level functions only.
+
+        **A nested one is not a subject and reporting it as one was a
+        duplicate finding.** `f1101` defines a `struck` handler inside
+        itself and hands it to `c.watch` as a *value*, so no call-name
+        walk reaches it -- it came out as a second row carrying its
+        parent's own two gates. Its body is already inside the parent's
+        AST, so `ast.walk` on the parent sees every gate and every credit
+        in it.
+        """
+        return {n.name: n for n in trees[path].body
+                if isinstance(n, ast.FunctionDef)}
+
+    def imported(path: pathlib.Path) -> dict[str, pathlib.Path]:
+        """Name -> the file under `content/` it was imported from."""
+        out_: dict[str, pathlib.Path] = {}
+        for node in ast.walk(trees[path]):
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+            if not node.module.startswith("combat_engine.content"):
+                continue
+            rel = node.module[len("combat_engine.content"):].lstrip(".")
+            cand = root.joinpath(*rel.split(".")).with_suffix(".py")
+            if cand not in trees:
+                cand = root.joinpath(*rel.split("."), "__init__.py")
+            if cand in trees:
+                for alias in node.names:
+                    out_[alias.asname or alias.name] = cand
+        return out_
+
+    CONSTS = {p: consts(p) for p in trees}
+    FUNCS = {p: funcs(p) for p in trees}
+    IMPORTS = {p: imported(p) for p in trees}
+
+    def resolve(path: pathlib.Path, node: ast.expr) -> str | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.Name):
+            return CONSTS[path].get(node.id)
+        if isinstance(node, ast.Attribute) and node.attr == "ref":
+            return "<self>"
+        return None
+
+    def credited(path: pathlib.Path, fn: ast.FunctionDef,
+                 seen: set[tuple[pathlib.Path, str]] | None = None) -> set[str]:
+        """Every ref a `c.credit` block is opened for, here or in a helper
+        this function calls."""
+        seen = seen if seen is not None else set()
+        key = (path, fn.name)
+        if key in seen:
+            return set()
+        seen.add(key)
+        got: set[str] = set()
+        for node in ast.walk(fn):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "credit" and node.args):
+                ref = resolve(path, node.args[0])
+                if ref:
+                    got.add(ref)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                name = node.func.id
+                where = path if name in FUNCS[path] else IMPORTS[path].get(name)
+                if where is not None and name in FUNCS.get(where, {}):
+                    got |= credited(where, FUNCS[where][name], seen)
+        return got
+
+    unreadable: list[str] = []
+
+    def own_gates(path: pathlib.Path, fn: ast.FunctionDef) -> set[str]:
+        gates: set[str] = set()
+        for node in ast.walk(fn):
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "feat" and node.args):
+                continue
+            if any(kw.arg == "on" for kw in node.keywords):
+                continue              # a question about another creature
+            ref = resolve(path, node.args[0])
+            if ref is None:
+                unreadable.append(
+                    f"{path.relative_to(root)}:{node.lineno}"
+                    f" c.feat({ast.unparse(node.args[0])})")
+            elif ref != "<self>":
+                gates.add(ref)
+        return gates
+
+    def helpers(path: pathlib.Path, fn: ast.FunctionDef,
+                seen: set[tuple[pathlib.Path, str]] | None = None,
+                ) -> list[tuple[pathlib.Path, ast.FunctionDef]]:
+        """Every same-tree function this one calls, transitively."""
+        seen = seen if seen is not None else set()
+        got: list[tuple[pathlib.Path, ast.FunctionDef]] = []
+        for node in ast.walk(fn):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                continue
+            name = node.func.id
+            where = path if name in FUNCS[path] else IMPORTS[path].get(name)
+            if where is None or name not in FUNCS.get(where, {}):
+                continue
+            if (where, name) in seen:
+                continue
+            seen.add((where, name))
+            got.append((where, FUNCS[where][name]))
+            got.extend(helpers(where, FUNCS[where][name], seen))
+        return got
+
+    def decl(fn: ast.FunctionDef) -> str | None:
+        """The ref a decorator declares this function as, if any."""
+        return next((a.value for d in fn.decorator_list
+                     for a in getattr(d, "args", [])
+                     if isinstance(a, ast.Constant) and isinstance(a.value, str)),
+                    None)
+
+    # **A helper is not a subject of its own, and reading it as one is a
+    # false finding waiting to happen**: `credited` follows calls
+    # *downward*, so a helper that gates while its caller opens the block
+    # would report uncredited while being perfectly attributed. The
+    # subject is the declared row, and a helper's gates and credits are
+    # rolled up into every row that reaches it.
+    #
+    # A helper no declared row reaches is still reported, on its own name,
+    # because the alternative is a gate that goes unexamined -- which is
+    # the one outcome worse than a false positive here.
+    reached: set[tuple[pathlib.Path, str]] = set()
+    findings: list[tuple[str, str, str]] = []
+    for path in sorted(trees):
+        for fn in [FUNCS[path][k] for k in sorted(FUNCS[path])]:
+            ref = decl(fn)
+            if ref is None:
+                continue
+            kin = helpers(path, fn)
+            reached |= {(p, f.name) for p, f in kin}
+            gates = own_gates(path, fn)
+            paid = credited(path, fn)
+            for p, f in kin:
+                gates |= own_gates(p, f)
+            for held in sorted(gates - paid - {ref}):
+                findings.append((path.relative_to(root).as_posix(), ref, held))
+
+    for path in sorted(trees):
+        for name, fn in sorted(FUNCS[path].items()):
+            if decl(fn) is not None or (path, name) in reached:
+                continue
+            gates = own_gates(path, fn)
+            paid = credited(path, fn)
+            for held in sorted(gates - paid - {name}):
+                findings.append((path.relative_to(root).as_posix(), name, held))
+    return findings, unreadable
+
+
+def every_held_gate_is_credited(out: Result) -> None:
+    """A body gating on something it does not represent credits it (#1177).
+
+    `at_most_one_applies` asserts this already and cannot reach here: its
+    subject is the printed rule that one bracketed feat applies per use, so
+    it walks **chains**, and an unbracketed feat is a plain `if c.feat(...)`
+    in no chain. `UNCREDITED_CHAIN` being empty read to me as "every
+    migrated clause is credited", which is true only of the half that rule
+    can see.
+
+    What is lost without credit is the **attribution**, not the row: the
+    effect's label and its `by` say the power, so `audit._claimed` and the
+    credit assertions in this file read the wrong owner. Several of these
+    feats carry `implemented_in=`, which buckets them out of the sweep
+    entirely, so they do not even report SILENT -- the convention is simply
+    not held and nothing notices.
+
+    Static rather than posed on a board, deliberately. The property is
+    about what the source says, every instance of it is reachable by
+    reading, and a board can only show the cases its seed happens to pose
+    -- which is how the bracketed half came to be the only half watched.
+
+    **What it cannot see: where in the body the block is.** `c.credit`
+    pushes a ref and pops it in a `finally`, so a block wrapped round a
+    `c.watch` **registration** is already gone by the time the handler
+    runs -- measured, the stack reads `[]` inside a deferred callback --
+    and this census counts a block anywhere in the function. All three
+    sites in the tree are right today (`f982` nests a second block inside
+    its handler, which is the shape to copy; `f995` lays inside the block
+    and only *ends* the effect from the watcher), so this is a limit
+    rather than a miss. Checking it would mean asking whether the laying
+    call is lexically inside a function passed to a registering verb,
+    which is a different walk.
+    """
+    findings, unreadable = _gate_census()
+
+    out.that(not unreadable,
+             f"every `c.feat` the census meets resolves to a ref, so nothing"
+             f" is skipped unread ({len(unreadable)} unreadable:"
+             f" {unreadable[:4]})")
+
+    by_ref: dict[str, list[str]] = {}
+    for _rel, ref, held in findings:
+        by_ref.setdefault(ref, []).append(held)
+
+    for ref, held in sorted(by_ref.items()):
+        allowed = list(UNCREDITED_GATE.get(ref, ()))
+        if sorted(held) == sorted(allowed) and allowed:
+            out.skip(f"{ref}: reads {sorted(held)} and credits nobody -- a"
+                     f" known read rather than a cause, see UNCREDITED_GATE")
+        else:
+            out.that(False,
+                     f"{ref} gates on {sorted(held)} and opens no"
+                     f" `c.credit` block for {sorted(set(held) - set(allowed))}"
+                     f" -- whatever that clause lays is attributed to"
+                     f" {ref} (baseline {allowed})")
+
+    # **A baseline entry that is no longer a finding is RED**, which is the
+    # per-ref semantics `scripts/CLAUDE.md` states and the half a
+    # shrink-only list gets wrong by default: without this a row that
+    # grows a credit block leaves a stale entry and the run stays green,
+    # so the list could only ever rot.
+    for ref in sorted(UNCREDITED_GATE):
+        if ref not in by_ref:
+            out.that(False,
+                     f"{ref} is in UNCREDITED_GATE but is no longer a"
+                     f" finding -- either it credits now or its gate is"
+                     f" gone, so shrink the baseline")
+
+    out.that(sum(len(v) for v in by_ref.values())
+             == sum(len(v) for v in UNCREDITED_GATE.values()),
+             f"every uncredited gate in content/ is a listed one"
+             f" ({sum(len(v) for v in by_ref.values())} found,"
+             f" {sum(len(v) for v in UNCREDITED_GATE.values())} listed)")
+
+
 def penalty_scoped_to_an_aura(out: Result) -> None:
     """A penalty against "this creature and its allies within its aura 5".
 
@@ -69081,6 +69466,9 @@ DRIVERS = {
     "at_most_one_applies": (at_most_one_applies,
                             "every row migrated under #550 pays exactly one"
                             " of its exclusive feats' clauses"),
+    "every_held_gate_is_credited": (every_held_gate_is_credited,
+                                    "a body gating on something it does not"
+                                    " represent credits it, chain or no chain"),
     "once_spend_moments": (once_spend_moments,
                            "a one-shot bonus is spent where it is read"),
     "once_spent": (once_spent,

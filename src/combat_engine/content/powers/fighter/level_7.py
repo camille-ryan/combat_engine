@@ -90,8 +90,9 @@ def p1428(c: Cast) -> None:
     # the weaponmaster's miss clause asks after. `dsl.keywords_of` folds the
     # grant in; `Power.keywords` would not see it.
     if c.feat("f2370"):
-        c.counts_as_keyword(c.ref, Keyword.INVIGORATING, on=c.me,
-                            until=When.ENCOUNTER)
+        with c.credit("f2370"):
+            c.counts_as_keyword(c.ref, Keyword.INVIGORATING, on=c.me,
+                                until=When.ENCOUNTER)
     if c.strike():
         c.damage(c.w(3), c.str_mod)
 

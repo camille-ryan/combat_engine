@@ -185,8 +185,9 @@ def p1580(c: Cast) -> None:
             if (c.feat("f1099")
                     and c.may("give the ally resist necrotic instead of the"
                               " AC bonus")):
-                c.resist(c.cha_mod, DamageType.NECROTIC, on=mate,
-                         until=When.EONT)
+                with c.credit("f1099"):
+                    c.resist(c.cha_mod, DamageType.NECROTIC, on=mate,
+                             until=When.EONT)
             else:
                 c.bonus(AC, 1, on=mate, kind="power")
 

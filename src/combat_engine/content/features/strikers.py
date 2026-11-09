@@ -120,7 +120,8 @@ def _forgo_f2428(c: Cast, on: int) -> bool:
     if not c.feat("f2428") or not c.may(
             "forgo a die of the rider to slow it"):
         return False
-    c.slowed(on=on, until=When.EONT)
+    with c.credit("f2428"):
+        c.slowed(on=on, until=When.EONT)
     return True
 
 
@@ -129,7 +130,8 @@ def _forgo_f2467(c: Cast, on: int) -> bool:
     if not c.feat("f2467") or not c.may(
             "forgo a die of the rider to push it 1"):
         return False
-    c.push(1, on=on)
+    with c.credit("f2467"):
+        c.push(1, on=on)
     return True
 
 
@@ -139,7 +141,8 @@ def _forgo_f952(c: Cast, on: int) -> bool:
     if not c.feat("f952") or not c.may(
             "forgo a die of the rider for -2 to its attacks"):
         return False
-    c.penalty("attack", 2, on=on, until=When.EONT)
+    with c.credit("f952"):
+        c.penalty("attack", 2, on=on, until=When.EONT)
     return True
 
 

@@ -614,7 +614,8 @@ def f2859(c: Cast) -> None:
             ),
             key=c.stats.mod,
         )
-        c.rolls_with(chosen, best)
+        with c.credit("f651"):
+            c.rolls_with(chosen, best)
 
 
 @power("f2697", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1309,11 +1310,17 @@ def f2846(c: Cast) -> None:
     if foe is None:
         return
     landed = isinstance(c.trigger, Hit)
-    if landed and not c.feat("f651"):
+    if landed:
+        # The hit half pays only with `f651`, so the blow it lays is that
+        # feat's doing; the miss half below is this row's own either way.
+        if not c.feat("f651"):
+            return
+        with c.credit("f651"):
+            c.flat(c.level, dtypes=(DamageType.FIRE, DamageType.NECROTIC),
+                   on=foe)
         return
     c.flat(c.level, dtypes=(DamageType.FIRE, DamageType.NECROTIC), on=foe)
-    if not landed:
-        c.hide(from_=foe, until=When.EONT)
+    c.hide(from_=foe, until=When.EONT)
 
 
 @power("f2849", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1374,9 +1381,10 @@ def f2849(c: Cast) -> None:
     # "The target of that roll and each creature adjacent to it" -- no side
     # is printed, so an ally standing next to the victim takes it too, and
     # `c.within` centred on the victim already includes the victim.
-    for who in c.within(1, of=foe):
-        c.flat(1 + c.level // 2,
-               dtypes=(DamageType.FIRE, DamageType.NECROTIC), on=who)
+    with c.credit("f651"):
+        for who in c.within(1, of=foe):
+            c.flat(1 + c.level // 2,
+                   dtypes=(DamageType.FIRE, DamageType.NECROTIC), on=who)
 
 
 # -- the racial powers that are refs, so the rider is ordinary --------------
@@ -1467,10 +1475,13 @@ def f2841(c: Cast) -> None:
         return
 
     def shifted(ev: Any) -> None:
+        # Inside the callback, not around `c.watch`: the stack is read when
+        # the effect is laid, which is when this fires rather than now.
         if ev.actor == me and getattr(ev, "kind_", "") == "shift":
-            c.bonus(
-                "damage", 2, on=me, until=When.EOT, dtype=DamageType.FIRE
-            )
+            with c.credit("f651"):
+                c.bonus(
+                    "damage", 2, on=me, until=When.EOT, dtype=DamageType.FIRE
+                )
 
     c.watch(Moved, shifted, on=me, until=When.ENCOUNTER)
 
@@ -1535,7 +1546,8 @@ def f2847(c: Cast) -> None:
 
     def burn(ev: Any) -> None:
         if ev.attacker == me and ev.power == "p1448":
-            c.ongoing(5, DamageType.NECROTIC, on=ev.target)
+            with c.credit("f651"):
+                c.ongoing(5, DamageType.NECROTIC, on=ev.target)
 
     c.watch(Hit, burn, on=me, until=When.ENCOUNTER)
 
@@ -1608,10 +1620,11 @@ def f2855(c: Cast) -> None:
         ev.dtypes = (DamageType.COLD, DamageType.NECROTIC)
         if worse:
             hurt = ev.target
-            c.conceal(
-                on=me, until=When.EONT,
-                when=lambda ctx: ctx.get("attacker") == hurt,
-            )
+            with c.credit("f651"):
+                c.conceal(
+                    on=me, until=When.EONT,
+                    when=lambda ctx: ctx.get("attacker") == hurt,
+                )
 
     c.watch(DamageRolled, chill, until=When.ENCOUNTER, on=me,
             window=Window.BEFORE, label=c.ref)
@@ -1647,12 +1660,13 @@ def f2857(c: Cast) -> None:
     c.watch(Hit, bitten, on=me, until=When.EONT)
     if not c.feat(PLAGUE_FEAT):
         return
-    for who in (me, *c.allies(), *c.enemies()):
-        if who != victim:
-            c.conceal(
-                on=who, until=When.EONT,
-                when=lambda ctx: ctx.get("attacker") == victim,
-            )
+    with c.credit("f651"):
+        for who in (me, *c.allies(), *c.enemies()):
+            if who != victim:
+                c.conceal(
+                    on=who, until=When.EONT,
+                    when=lambda ctx: ctx.get("attacker") == victim,
+                )
 
 
 # -- the winter chain -------------------------------------------------------
@@ -2380,7 +2394,8 @@ def f2838(c: Cast) -> None:
 
     c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=against)
     if c.feat(PLAGUE_FEAT):
-        c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=against)
+        with c.credit("f651"):
+            c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=against)
 
 
 @power("f2839", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2510,7 +2525,8 @@ def f2852(c: Cast) -> None:
     bonus prints no type word in front of it, so it is untyped."""
     c.temp_hp(1 + c.level // 2, on=c.me)
     if c.feat(PLAGUE_FEAT):
-        c.bonus("save", 2, on=c.me, until=When.EONT)
+        with c.credit("f651"):
+            c.bonus("save", 2, on=c.me, until=When.EONT)
 
 
 @power("f2853", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2537,7 +2553,8 @@ def f2853(c: Cast) -> None:
            unpreventable=True)
     c.heal(c.level, on=friends[0])
     if c.feat(PLAGUE_FEAT):
-        c.bonus("save", 2, on=friends[0], until=When.EONT, kind="power")
+        with c.credit("f651"):
+            c.bonus("save", 2, on=friends[0], until=When.EONT, kind="power")
 
 
 @power("f2876", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -3231,8 +3248,9 @@ def f2858(c: Cast) -> None:
         who = ctx.get("actor")
         return burning(ctx) and who is not None and c.adjacent(to=who)
 
-    for foe in c.enemies():
-        c.penalty("save", 2, on=foe, until=When.ENCOUNTER, when=near_me)
+    with c.credit("f651"):
+        for foe in c.enemies():
+            c.penalty("save", 2, on=foe, until=When.ENCOUNTER, when=near_me)
 
 
 @power("f2840", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

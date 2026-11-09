@@ -155,7 +155,8 @@ def p833(c: Cast) -> None:
         if (c.feat("f1098") and c.is_kind("undead")
                 and c.may("save against an ongoing effect instead of"
                           " gaining temporary hit points")):
-            c.save(on=c.me, against="ongoing")
+            with c.credit("f1098"):
+                c.save(on=c.me, against="ongoing")
             return
         c.temp_hp(c.wis_mod, on=c.me)
 
@@ -258,7 +259,8 @@ def p836(c: Cast) -> None:
         if (c.feat("f1099") and c.is_kind("undead")
                 and c.may("forgo the attack penalty to make it grant"
                           " combat advantage")):
-            c.grants_advantage(on=c.target, to="enemies", until=When.SONT)
+            with c.credit("f1099"):
+                c.grants_advantage(on=c.target, to="enemies", until=When.SONT)
             return
         c.penalty("attack", 2)
 

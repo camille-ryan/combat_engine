@@ -87,7 +87,9 @@ def _forgo_for_necrotic(c: Cast) -> bool:
         # resistance and then strips it off the **monk**. Written that way
         # first; `drivers.flurry_traded` caught it on all five rows at once,
         # which is what the rule is for.
-        c.resist(-standing, DamageType.NECROTIC, on=c.target, until=When.EONT)
+        with c.credit("f3171"):
+            c.resist(-standing, DamageType.NECROTIC, on=c.target,
+                     until=When.EONT)
     return True
 
 

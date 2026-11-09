@@ -348,12 +348,15 @@ def p992(c: Cast) -> None:
     # how many of them apply to one use.
     if (c.feat("f1299") and c.wis_mod > 0
             and not any(o != foe for o in c.within(1, of=foe, side="enemy"))):
-        c.ongoing(c.wis_mod, on=foe)
+        with c.credit("f1299"):
+            c.ongoing(c.wis_mod, on=foe)
     if c.feat("f1304"):
-        c.mark(on=foe)
+        with c.credit("f1304"):
+            c.mark(on=foe)
     if c.feat("f1305") and c.str_mod > 0:
-        for other in _others_in_cloud(c, foe):
-            c.flat(c.str_mod, on=other)
+        with c.credit("f1305"):
+            for other in _others_in_cloud(c, foe):
+                c.flat(c.str_mod, on=other)
 
 
 @power(
