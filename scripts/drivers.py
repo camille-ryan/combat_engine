@@ -69361,8 +69361,8 @@ def prone_defences(out: Result) -> None:
         "prone still grants combat advantage to **everyone**, where the page"
         " restricts it to melee attackers. Left alone deliberately --"
         " `_has_combat_advantage` does not know an attack's mode and sixty"
-        " callers pass no power -- and asserted here so a later reader"
-        " cannot mistake #1198 for finished",
+        " callers pass no power, so it is #1201 -- and asserted here so a"
+        " later reader cannot mistake #1198 for finished",
         "grants_ca is still True; the melee restriction is filed separately",
     )
 

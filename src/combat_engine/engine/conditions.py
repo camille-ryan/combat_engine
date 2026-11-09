@@ -114,8 +114,9 @@ RULES: dict[Condition, Rules] = {
     # to **melee** attackers. That half is not fixable here --
     # `query.grants_ca` is a creature-level question and
     # `_has_combat_advantage` does not know whether the attack is melee or
-    # ranged -- so it is filed rather than guessed at. Until it lands, an
-    # adjacent archer still gets a combat-advantage +2 it should not.
+    # ranged -- so it is filed as #1201 rather than guessed at. Until it
+    # lands, an adjacent archer still gets a combat-advantage +2 it should
+    # not.
     Condition.PRONE: Rules(
         grants_ca=True, attack=-2, no_shift=True,
         ranged_defences={d: 2 for d in DEFENCES},
