@@ -2240,6 +2240,175 @@ def _class_of_leg(leg: str) -> str:
     return owners[0] if len(owners) == 1 else ""
 
 
+#: The two standing allies, recorded rather than dealt. #1190.
+PARTY = ROOT / "scripts" / "fixtures" / "board_party.json"
+
+#: How many parties the fixture holds, which is `TRIES` -- `_attempts`
+#: walks `range(TRIES)` and nothing in the sweep asks for a seed outside
+#: it. A caller that does (several `drivers` rules pass a literal) is
+#: folded with `% PARTIES`, so the party is one of the eight recorded
+#: rather than a ninth nobody has seen.
+PARTIES = TRIES
+
+
+def _pinned(rec: dict) -> chargen.Character:
+    """A `Character` with every dealt axis supplied, so `spawn` deals none.
+
+    `chargen.spawn` reads each axis as `who.<axis> or deal_<axis>(...)` --
+    `powers`, `gear`, `race`, `race2`, `worships`, `background`, `feats`,
+    `skills` -- so a record that fills all of them turns the dealer off
+    entirely. Measured: an unpinned `Character` calls `dealt_hand`,
+    `loadout`, `legal_feats`, `deal_race` twice, `deal_deity`,
+    `deal_background` and `treasure`; a fully pinned one calls **none**.
+    """
+    from combat_engine.chargen import Magic
+
+    return chargen.Character(
+        rec["cls"], rec["level"], list(rec["powers"]),
+        build=chargen.build_for(rec["cls"], rec["leg"]),
+        feats=list(rec["feats"]),
+        race=rec["race"], race2=rec["race2"],
+        gear=tuple(
+            Magic(ref=m["ref"], slot=m["slot"], plus=m["plus"],
+                  enh_to=m["enh_to"], crit=m["crit"],
+                  powers=tuple(m["powers"]), base=tuple(m["base"]))
+            for m in rec["gear"]),
+        skills=tuple(rec["skills"]),
+        worships=rec["worships"], background=rec["background"],
+    )
+
+
+@cache
+def _party() -> list[dict]:
+    """The recorded parties, by seed.
+
+    **Why this is a fixture and not a draw.** `audit.board` builds two
+    standing allies through `chargen`, so every row in the corpus -- a
+    monster row included, since the monster's victims are these -- had its
+    board depend on the dealer. That is why `chargen/` is in `WIDE`:
+    23,250 rows re-audited for a change to how characters are made.
+
+    Recorded, the dependency becomes one question asked once -- *does the
+    dealer still produce these?* -- which `drivers.board_party_is_what_the`
+    `_dealer_makes` asks in seconds. Camille's call on `#1190`: *"having a
+    preset group of characters for board testing, so that we can separate
+    the impact of chargen from the rest of the system."*
+
+    **Raises rather than falling back to dealing.** A missing fixture that
+    silently dealt would put the dependency back with nothing saying so,
+    which is the shape of every silent-selector bug in this file's history.
+    """
+    import json
+
+    if not PARTY.exists():
+        msg = (f"no recorded party at {PARTY.name} -- run"
+               f" `audit.py --record-party`. Not dealing one instead:"
+               f" that would restore the chargen dependency silently.")
+        raise SystemExit(msg)
+    return json.loads(PARTY.read_text())["parties"]
+
+
+def _record_party() -> int:
+    """Write `fixtures/board_party.json` from what the dealer makes today.
+
+    **Recorded from the dealer, not hand-written**, which is the half of
+    `#1190` that keeps the fixture honest: every party in it is a party
+    `chargen` really produces, so freezing it cannot smuggle in a
+    character the game cannot make. The gaps the dealer leaves -- no
+    psionic, no two-weapon wielder -- are a separate decision and belong
+    in a hand-written *addition*, not in place of this.
+
+    **Captured off the dealers' own return values**, by wrapping them for
+    the length of one unpinned spawn, rather than read back off the
+    components. The components hold the *result* -- `Powers.known` after
+    arming, `Skills.trained` after a feat has added one -- and feeding
+    those back as inputs would drift: a second recording would pin what
+    the first one's arming produced. The dealt value is the input, and
+    only the dealer knows it.
+
+    A re-record is a baseline write: its own commit, and read the
+    per-field diff. `drivers` fails the moment it stops matching the
+    dealer, which is what makes a re-record a decision rather than a
+    reflex.
+    """
+    import json
+
+    out = [_deal_party(seed) for seed in range(PARTIES)]
+    PARTY.write_text(json.dumps({"parties": out}, indent=1, sort_keys=True) + "\n")
+    print(f"recorded {len(out)} parties to {PARTY.name}")
+    for i, p in enumerate(out):
+        print(f"  seed {i}: ally {len(p['ally']['powers'])} dealt powers,"
+              f" {len(p['ally']['gear'])} gear;"
+              f" second {len(p['second']['powers'])} dealt powers")
+    return 0
+
+
+def _deal_party(seed: int) -> dict:
+    """What the dealer makes for one seed, in the fixture's own shape.
+
+    **One function, two callers**, which is the point: `_record_party`
+    writes it and `drivers.the_board_party_is_what_the_dealer_makes` reads
+    it to check the fixture still matches. A gate that captured the dealer
+    its own way could drift from the recorder and report a difference that
+    was only ever a difference in how the two looked.
+    """
+    import combat_engine.chargen.choices as choices
+
+    here: dict[str, dict] = {}
+    for who, cls in (("ally", "cleric"), ("second", "fighter")):
+            seen: dict[str, list[Any]] = {}
+            originals: list[tuple[Any, str, Any]] = []
+            for name in ("dealt_hand", "deal_race", "deal_deity",
+                         "deal_background", "treasure"):
+                for mod in (chargen, choices):
+                    fn = getattr(mod, name, None)
+                    if not callable(fn):
+                        continue
+
+                    def wrap(n: str = name, f: Any = fn,
+                             into: dict = seen) -> Any:
+                        def spy(*a: Any, **k: Any) -> Any:
+                            got = f(*a, **k)
+                            into.setdefault(n, []).append(got)
+                            return got
+                        return spy
+                    originals.append((mod, name, fn))
+                    setattr(mod, name, wrap())
+            try:
+                world = World(bus=Bus(), grid=Grid(20, 16), rng=Rng(seed))
+                eid = chargen.spawn(
+                    world, chargen.Character(cls, 1, []), (5, 8))
+            finally:
+                for mod, name, fn in originals:
+                    setattr(mod, name, fn)
+            races = seen.get("deal_race") or []
+            gear = (seen.get("treasure") or [[]])[0]
+            from combat_engine.engine.components import Powers, Skills
+
+            known = world.get(eid, Powers)
+            skills = world.get(eid, Skills)
+            here[who] = {
+                "cls": cls,
+                "level": 1,
+                "leg": "",
+                "powers": sorted((seen.get("dealt_hand") or [[]])[0]),
+                # Feats come out of the hand the dealer built, which is
+                # where `spawn` puts them -- there is no separate deal.
+                "feats": [],
+                "race": races[0] if races else "",
+                "race2": races[1] if len(races) > 1 else "",
+                "gear": [{"ref": m.ref, "slot": m.slot, "plus": m.plus,
+                          "enh_to": m.enh_to, "crit": m.crit,
+                          "powers": list(m.powers), "base": list(m.base)}
+                         for m in gear],
+                "skills": sorted(getattr(skills, "trained", ()) or ()),
+                "worships": (seen.get("deal_deity") or [""])[0],
+                "background": (seen.get("deal_background") or [""])[0],
+                "_known_after_arming": len(known.known) if known else 0,
+            }
+    return here
+
+
 def board(ref: str, seed: int, pose: bool = False,
           arm: str = "", element: bool = False,
           terrain: str = "") -> tuple[World, int, set[str]]:
@@ -2800,7 +2969,14 @@ def board(ref: str, seed: int, pose: bool = False,
 
     # A wounded ally, because a great many powers heal one and a board of
     # creatures at full health makes every one of them look silent.
-    ally = chargen.spawn(world, chargen.Character("cleric", 1, []), (5, 8))
+    #
+    # **Recorded, not dealt** (#1190). These two were the reason every row
+    # in the corpus depended on `chargen` -- a monster row's victims are
+    # these -- and so the reason `chargen/` is in `WIDE`. Pinned from
+    # `fixtures/board_party.json`, `spawn` deals nothing and the board is
+    # the same board whatever the dealer does.
+    recorded = _party()[seed % PARTIES]
+    ally = chargen.spawn(world, _pinned(recorded["ally"]), (5, 8))
     health = world.need(ally, Health)
     health.hp = max(1, health.max_hp // 2)
     # A second ally, standing apart from the first. A leader row reading
@@ -2808,7 +2984,7 @@ def board(ref: str, seed: int, pose: bool = False,
     # does with exactly one friend on the board -- three warlord rows
     # reported silent while being correct, and the class is half made of
     # this shape.
-    second = chargen.spawn(world, chargen.Character("fighter", 1, []), (4, 9))
+    second = chargen.spawn(world, _pinned(recorded["second"]), (4, 9))
     world.need(second, Health).hp = max(1, world.need(second, Health).max_hp - 8)
 
     caster_health = world.need(caster, Health)
@@ -6614,6 +6790,38 @@ NOTHING_IN_SCOPE = 3
 #: in `check.py`.
 NARROW: tuple[str, ...] = ()
 
+#: The one `WIDE` path whose dependency the board no longer has. #1190.
+CHARGEN = "src/combat_engine/chargen/"
+
+
+@cache
+def _caster_rows() -> list[str]:
+    """Rows whose board still has a `chargen`-built character on it.
+
+    **Monster rows no longer do.** `audit.board` built two standing allies
+    through the dealer, and a monster row's victims *are* those allies --
+    which is why a change to how characters are made re-audited all 23,250
+    rows. The party is `fixtures/board_party.json` now, so a monster board
+    makes **zero** deal calls, measured; its caster comes from
+    `loader.spawn` and its victims are pinned.
+
+    What still deals is the **caster** of a non-monster row, and that is
+    deliberate: for a character row the caster is the thing under test, so
+    auditing it against a frozen hand would stop checking that the row
+    works on a character the game can actually produce.
+
+    So a chargen-only change selects these and not the corpus:
+
+        13,454 monster rows   independent
+         9,796 other rows     caster still dealt
+
+    `drivers.the_board_party_is_what_the_dealer_makes` is what keeps this
+    sound -- it asks, in seconds, the one question the wide sweep was
+    answering. Camille's call on `#1190`.
+    """
+    return [ref for ref in _corpus() if not MONSTER_ABILITY.match(ref)]
+
+
 def _is_wide(name: str) -> bool:
     """Does this changed file widen `--changed` to the whole corpus?
 
@@ -6751,8 +6959,13 @@ def _changed(widen: bool = True) -> list[str]:
         return _corpus()
     files = [line[3:].strip() for line in done.stdout.splitlines() if line[3:].strip()]
     engine = [f for f in files if _is_wide(f)]
+    widened: list[str] = []
     if engine and widen:
-        return _corpus()
+        # **A chargen-only widen is not the corpus any more.** #1190.
+        if all(f.startswith(CHARGEN) for f in engine):
+            widened = _caster_rows()
+        else:
+            return _corpus()
     # **`widen=False` is `--calls` asking for the content half only.** The
     # engine files are still changed and still unaudited; what the caller has
     # undertaken to do is name the verbs instead, and to say so. Suppressing
@@ -6791,7 +7004,7 @@ def _changed(widen: bool = True) -> list[str]:
         if not set(found) & set(_corpus()):
             return _corpus()
         refs += found
-    return sorted(set(refs) & set(_corpus()))
+    return sorted((set(refs) | set(widened)) & set(_corpus()))
 
 
 
@@ -6875,8 +7088,15 @@ def _since(sha: str) -> list[str]:
     if got.returncode != 0:
         return _corpus()
     files = [f.strip() for f in got.stdout.splitlines() if f.strip()]
-    if any(_is_wide(f) for f in files):
-        return _corpus()
+    # Same narrowing as `_changed`, and for the same reason: a chargen
+    # change no longer moves a monster board. #1190.
+    widening = [f for f in files if _is_wide(f)]
+    since_wide: list[str] = []
+    if widening:
+        if all(f.startswith(CHARGEN) for f in widening):
+            since_wide = _caster_rows()
+        else:
+            return _corpus()
     refs: list[str] = []
     for name in files:
         if "/content/" not in name or not name.endswith(".py"):
@@ -6889,7 +7109,8 @@ def _since(sha: str) -> list[str]:
             return _corpus()
         refs += found
     # Uncommitted work too: a sweep is only honest about *now*.
-    return sorted((set(refs) | set(_changed())) & set(_corpus()))
+    return sorted((set(refs) | set(since_wide) | set(_changed()))
+                  & set(_corpus()))
 
 
 def _run_all(refs: list[str], jobs: int = 0) -> list[Result]:
@@ -7815,9 +8036,14 @@ def main() -> int:
                     help="only rows whose source or whose todo=/dropped= "
                          "marker names this verb; repeatable. For adding a "
                          "verb -- see `_calls` for when it is not enough")
+    ap.add_argument("--record-party", action="store_true",
+                    help="re-record fixtures/board_party.json from the dealer")
     ap.add_argument("--jobs", type=int, default=0,
                     help="worker processes; 0 picks one per core, 1 stays serial")
     args = ap.parse_args()
+
+    if args.record_party:
+        return _record_party()
 
     # **A ref list and a way of choosing refs are different arguments, and
     # nothing should be able to be read as both.** `wanted` below is

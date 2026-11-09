@@ -1,0 +1,1378 @@
+{
+ "parties": [
+  {
+   "ally": {
+    "_known_after_arming": 26,
+    "background": "x6_320",
+    "cls": "cleric",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d8",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [],
+      "ref": "i2731",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "1d8",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [],
+      "ref": "i2731",
+      "slot": "implement"
+     },
+     {
+      "base": [
+       "chain"
+      ],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i561x1"
+      ],
+      "ref": "i561",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i2740p1"
+      ],
+      "ref": "i2740",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:cleric-templar-f0",
+     "cf:cleric-templar-f1",
+     "cf:cleric-templar-f2",
+     "cf:cleric-templar-f3",
+     "p12601",
+     "p12608",
+     "p12614",
+     "p12638",
+     "p12650",
+     "p13706",
+     "p13707",
+     "p14260",
+     "p14292",
+     "p14293",
+     "p14293b",
+     "p1455",
+     "p146",
+     "p1589",
+     "p16415",
+     "p5981",
+     "p7885"
+    ],
+    "race": "r10",
+    "race2": "",
+    "skills": [
+     "arcana",
+     "diplomacy",
+     "history",
+     "religion"
+    ],
+    "worships": "x1_21"
+   },
+   "second": {
+    "_known_after_arming": 33,
+    "background": "x6_300",
+    "cls": "fighter",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i2998x1",
+       "i2998p1"
+      ],
+      "ref": "i2998",
+      "slot": "wondrous"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i2986x1"
+      ],
+      "ref": "i2986",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i500p1"
+      ],
+      "ref": "i500",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:fighter-weaponmaster-f0",
+     "cf:fighter-weaponmaster-f1",
+     "cf:fighter-weaponmaster-f2",
+     "cf:fighter-weaponmaster-f3",
+     "p10469",
+     "p10475",
+     "p10481",
+     "p12660",
+     "p12661",
+     "p12662",
+     "p12663",
+     "p12664",
+     "p12665",
+     "p12666",
+     "p12667",
+     "p12668",
+     "p12688",
+     "p12689",
+     "p12690",
+     "p12692",
+     "p13773",
+     "p13774",
+     "p2099",
+     "p7419",
+     "p997"
+    ],
+    "race": "r36",
+    "race2": "",
+    "skills": [
+     "athletics",
+     "endurance",
+     "heal"
+    ],
+    "worships": "x1_42"
+   }
+  },
+  {
+   "ally": {
+    "_known_after_arming": 29,
+    "background": "x6_461",
+    "cls": "cleric",
+    "feats": [],
+    "gear": [
+     {
+      "base": [
+       "axe",
+       "flail",
+       "hammer",
+       "heavy blade",
+       "mace"
+      ],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i2657x1",
+       "i2657p1"
+      ],
+      "ref": "i2657",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [],
+      "ref": "i1782",
+      "slot": "implement"
+     },
+     {
+      "base": [
+       "chain"
+      ],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i561x1"
+      ],
+      "ref": "i561",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i585x1"
+      ],
+      "ref": "i585",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:cleric-templar-f0",
+     "cf:cleric-templar-f1",
+     "cf:cleric-templar-f2",
+     "cf:cleric-templar-f3",
+     "p12601",
+     "p12608",
+     "p12614",
+     "p12638",
+     "p12647",
+     "p14234",
+     "p14235",
+     "p14262",
+     "p14292",
+     "p14293",
+     "p14293b",
+     "p1455",
+     "p146",
+     "p1589",
+     "p16415",
+     "p5981",
+     "p7885"
+    ],
+    "race": "r26",
+    "race2": "",
+    "skills": [
+     "diplomacy",
+     "heal",
+     "history",
+     "religion"
+    ],
+    "worships": "x1_18"
+   },
+   "second": {
+    "_known_after_arming": 32,
+    "background": "x6_362",
+    "cls": "fighter",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1793p1"
+      ],
+      "ref": "i1793",
+      "slot": "weapon"
+     },
+     {
+      "base": [
+       "chain",
+       "scale"
+      ],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i1423p1"
+      ],
+      "ref": "i1423",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i1734x1"
+      ],
+      "ref": "i1734",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:fighter-weaponmaster-f0",
+     "cf:fighter-weaponmaster-f1",
+     "cf:fighter-weaponmaster-f2",
+     "cf:fighter-weaponmaster-f3",
+     "p10469",
+     "p12660",
+     "p12661",
+     "p12662",
+     "p12663",
+     "p12664",
+     "p12665",
+     "p12666",
+     "p12667",
+     "p12668",
+     "p12688",
+     "p12689",
+     "p12690",
+     "p12692",
+     "p13773",
+     "p13774",
+     "p1758",
+     "p2620",
+     "p4312",
+     "p7419",
+     "p9364"
+    ],
+    "race": "r26",
+    "race2": "",
+    "skills": [
+     "endurance",
+     "intimidate",
+     "streetwise"
+    ],
+    "worships": "x1_43"
+   }
+  },
+  {
+   "ally": {
+    "_known_after_arming": 29,
+    "background": "x6_194",
+    "cls": "cleric",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i3140x1"
+      ],
+      "ref": "i3140",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1057x1"
+      ],
+      "ref": "i1057",
+      "slot": "implement"
+     },
+     {
+      "base": [
+       "chain",
+       "scale"
+      ],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i1423p1"
+      ],
+      "ref": "i1423",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i496x1"
+      ],
+      "ref": "i496",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:cleric-templar-f0",
+     "cf:cleric-templar-f1",
+     "cf:cleric-templar-f2",
+     "cf:cleric-templar-f3",
+     "p12601",
+     "p12608",
+     "p12614",
+     "p12638",
+     "p13707",
+     "p14236",
+     "p14292",
+     "p14293",
+     "p14293b",
+     "p1455",
+     "p146",
+     "p1589",
+     "p16415",
+     "p5981",
+     "p7885",
+     "p8286",
+     "p913"
+    ],
+    "race": "r8",
+    "race2": "",
+    "skills": [
+     "heal",
+     "history",
+     "insight",
+     "religion"
+    ],
+    "worships": "x1_86"
+   },
+   "second": {
+    "_known_after_arming": 33,
+    "background": "x6_151",
+    "cls": "fighter",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i2998x1",
+       "i2998p1"
+      ],
+      "ref": "i2998",
+      "slot": "wondrous"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i1513x1"
+      ],
+      "ref": "i1513",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i497x1"
+      ],
+      "ref": "i497",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:fighter-weaponmaster-f0",
+     "cf:fighter-weaponmaster-f1",
+     "cf:fighter-weaponmaster-f2",
+     "cf:fighter-weaponmaster-f3",
+     "p10469",
+     "p10470",
+     "p12190",
+     "p12660",
+     "p12661",
+     "p12662",
+     "p12663",
+     "p12664",
+     "p12665",
+     "p12666",
+     "p12667",
+     "p12668",
+     "p12688",
+     "p12689",
+     "p12690",
+     "p12692",
+     "p13773",
+     "p13774",
+     "p2104",
+     "p4315",
+     "p7419"
+    ],
+    "race": "r36",
+    "race2": "",
+    "skills": [
+     "athletics",
+     "heal",
+     "streetwise"
+    ],
+    "worships": "x1_91"
+   }
+  },
+  {
+   "ally": {
+    "_known_after_arming": 33,
+    "background": "x6_311",
+    "cls": "cleric",
+    "feats": [],
+    "gear": [
+     {
+      "base": [
+       "axe",
+       "flail",
+       "hammer",
+       "heavy blade",
+       "mace"
+      ],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i2657x1",
+       "i2657p1"
+      ],
+      "ref": "i2657",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [],
+      "ref": "i1782",
+      "slot": "implement"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i1552x1",
+       "i1552p1"
+      ],
+      "ref": "i1552",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i2997x1",
+       "i2997p1"
+      ],
+      "ref": "i2997",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:cleric-templar-f0",
+     "cf:cleric-templar-f1",
+     "cf:cleric-templar-f2",
+     "cf:cleric-templar-f3",
+     "p12205",
+     "p12601",
+     "p12604",
+     "p12608",
+     "p12614",
+     "p12635",
+     "p12637",
+     "p12638",
+     "p14292",
+     "p14293",
+     "p14293b",
+     "p1455",
+     "p146",
+     "p1589",
+     "p16415",
+     "p5981",
+     "p7885"
+    ],
+    "race": "r7",
+    "race2": "",
+    "skills": [
+     "arcana",
+     "diplomacy",
+     "heal",
+     "insight",
+     "intimidate",
+     "religion"
+    ],
+    "worships": "x1_48"
+   },
+   "second": {
+    "_known_after_arming": 31,
+    "background": "x6_89",
+    "cls": "fighter",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1045x1"
+      ],
+      "ref": "i1045",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i544x1"
+      ],
+      "ref": "i544",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i1734x1"
+      ],
+      "ref": "i1734",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:fighter-weaponmaster-f0",
+     "cf:fighter-weaponmaster-f1",
+     "cf:fighter-weaponmaster-f2",
+     "cf:fighter-weaponmaster-f3",
+     "p10332",
+     "p10469",
+     "p12660",
+     "p12661",
+     "p12662",
+     "p12663",
+     "p12664",
+     "p12665",
+     "p12666",
+     "p12667",
+     "p12668",
+     "p12688",
+     "p12689",
+     "p12690",
+     "p12692",
+     "p13773",
+     "p13774",
+     "p2620",
+     "p4312",
+     "p4315",
+     "p7419"
+    ],
+    "race": "r25",
+    "race2": "",
+    "skills": [
+     "endurance",
+     "heal",
+     "intimidate"
+    ],
+    "worships": "x1_136"
+   }
+  },
+  {
+   "ally": {
+    "_known_after_arming": 29,
+    "background": "x6_493",
+    "cls": "cleric",
+    "feats": [],
+    "gear": [
+     {
+      "base": [
+       "mace"
+      ],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i2528x1"
+      ],
+      "ref": "i2528",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1793p1"
+      ],
+      "ref": "i1793",
+      "slot": "implement"
+     },
+     {
+      "base": [
+       "chain",
+       "scale",
+       "plate"
+      ],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i1044x1"
+      ],
+      "ref": "i1044",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i3245x1"
+      ],
+      "ref": "i3245",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:cleric-templar-f0",
+     "cf:cleric-templar-f1",
+     "cf:cleric-templar-f2",
+     "cf:cleric-templar-f3",
+     "p12601",
+     "p12608",
+     "p12614",
+     "p12638",
+     "p13940",
+     "p14261",
+     "p14292",
+     "p14293",
+     "p14293b",
+     "p1455",
+     "p146",
+     "p1589",
+     "p16415",
+     "p5981",
+     "p7078",
+     "p7885",
+     "p8286"
+    ],
+    "race": "r33",
+    "race2": "",
+    "skills": [
+     "diplomacy",
+     "heal",
+     "history",
+     "nature",
+     "religion"
+    ],
+    "worships": "x1_99"
+   },
+   "second": {
+    "_known_after_arming": 32,
+    "background": "x6_87",
+    "cls": "fighter",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d8",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [],
+      "ref": "i2731",
+      "slot": "weapon"
+     },
+     {
+      "base": [
+       "scale",
+       "plate"
+      ],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i960p1"
+      ],
+      "ref": "i960",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i2997x1",
+       "i2997p1"
+      ],
+      "ref": "i2997",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:fighter-weaponmaster-f0",
+     "cf:fighter-weaponmaster-f1",
+     "cf:fighter-weaponmaster-f2",
+     "cf:fighter-weaponmaster-f3",
+     "p1000",
+     "p10332",
+     "p10469",
+     "p12660",
+     "p12661",
+     "p12662",
+     "p12663",
+     "p12664",
+     "p12665",
+     "p12666",
+     "p12667",
+     "p12668",
+     "p12688",
+     "p12689",
+     "p12690",
+     "p12692",
+     "p13773",
+     "p13774",
+     "p1429",
+     "p2102",
+     "p7419"
+    ],
+    "race": "r46",
+    "race2": "",
+    "skills": [
+     "athletics",
+     "endurance",
+     "intimidate"
+    ],
+    "worships": "x1_138"
+   }
+  },
+  {
+   "ally": {
+    "_known_after_arming": 30,
+    "background": "x6_143",
+    "cls": "cleric",
+    "feats": [],
+    "gear": [
+     {
+      "base": [
+       "hammer",
+       "flail",
+       "mace",
+       "sling",
+       "staff"
+      ],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i2175p1"
+      ],
+      "ref": "i2175",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1057x1"
+      ],
+      "ref": "i1057",
+      "slot": "implement"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [],
+      "ref": "i1772",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i2740p1"
+      ],
+      "ref": "i2740",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:cleric-templar-f0",
+     "cf:cleric-templar-f1",
+     "cf:cleric-templar-f2",
+     "cf:cleric-templar-f3",
+     "p12205",
+     "p12601",
+     "p12608",
+     "p12614",
+     "p12638",
+     "p12648",
+     "p14236",
+     "p14292",
+     "p14293",
+     "p14293b",
+     "p1455",
+     "p146",
+     "p1589",
+     "p16415",
+     "p5981",
+     "p7885",
+     "p914"
+    ],
+    "race": "r7",
+    "race2": "",
+    "skills": [
+     "arcana",
+     "diplomacy",
+     "heal",
+     "insight",
+     "religion"
+    ],
+    "worships": "x1_139"
+   },
+   "second": {
+    "_known_after_arming": 31,
+    "background": "x6_93",
+    "cls": "fighter",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [],
+      "ref": "i1782",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i3117x1"
+      ],
+      "ref": "i3117",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i488x1"
+      ],
+      "ref": "i488",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:fighter-weaponmaster-f0",
+     "cf:fighter-weaponmaster-f1",
+     "cf:fighter-weaponmaster-f2",
+     "cf:fighter-weaponmaster-f3",
+     "p10469",
+     "p12660",
+     "p12661",
+     "p12662",
+     "p12663",
+     "p12664",
+     "p12665",
+     "p12666",
+     "p12667",
+     "p12668",
+     "p12688",
+     "p12689",
+     "p12690",
+     "p12692",
+     "p12845",
+     "p13773",
+     "p13774",
+     "p1758",
+     "p7419",
+     "p997",
+     "p9992"
+    ],
+    "race": "r33",
+    "race2": "",
+    "skills": [
+     "endurance",
+     "heal",
+     "intimidate"
+    ],
+    "worships": "x1_94"
+   }
+  },
+  {
+   "ally": {
+    "_known_after_arming": 29,
+    "background": "x6_91",
+    "cls": "cleric",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d8",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [],
+      "ref": "i2731",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1057x1"
+      ],
+      "ref": "i1057",
+      "slot": "implement"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i544x1"
+      ],
+      "ref": "i544",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i2997x1",
+       "i2997p1"
+      ],
+      "ref": "i2997",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:cleric-templar-f0",
+     "cf:cleric-templar-f1",
+     "cf:cleric-templar-f2",
+     "cf:cleric-templar-f3",
+     "p12601",
+     "p12608",
+     "p12614",
+     "p12638",
+     "p13709",
+     "p13940",
+     "p14234",
+     "p14235",
+     "p14292",
+     "p14293",
+     "p14293b",
+     "p1455",
+     "p146",
+     "p1589",
+     "p16415",
+     "p5981",
+     "p7885"
+    ],
+    "race": "r43",
+    "race2": "",
+    "skills": [
+     "diplomacy",
+     "heal",
+     "insight",
+     "religion"
+    ],
+    "worships": "x1_56"
+   },
+   "second": {
+    "_known_after_arming": 33,
+    "background": "x6_99",
+    "cls": "fighter",
+    "feats": [],
+    "gear": [
+     {
+      "base": [
+       "axe"
+      ],
+      "crit": "1d10",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1359x1"
+      ],
+      "ref": "i1359",
+      "slot": "weapon"
+     },
+     {
+      "base": [
+       "chain",
+       "scale",
+       "plate"
+      ],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i1147x1",
+       "i1147p1"
+      ],
+      "ref": "i1147",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i497x1"
+      ],
+      "ref": "i497",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:fighter-weaponmaster-f0",
+     "cf:fighter-weaponmaster-f1",
+     "cf:fighter-weaponmaster-f2",
+     "cf:fighter-weaponmaster-f3",
+     "p1015",
+     "p10469",
+     "p10471",
+     "p12191",
+     "p12660",
+     "p12661",
+     "p12662",
+     "p12663",
+     "p12664",
+     "p12665",
+     "p12666",
+     "p12667",
+     "p12668",
+     "p12688",
+     "p12689",
+     "p12690",
+     "p12692",
+     "p13773",
+     "p13774",
+     "p2104",
+     "p7419"
+    ],
+    "race": "r43",
+    "race2": "",
+    "skills": [
+     "athletics",
+     "endurance",
+     "heal"
+    ],
+    "worships": "x1_16"
+   }
+  },
+  {
+   "ally": {
+    "_known_after_arming": 30,
+    "background": "x6_420",
+    "cls": "cleric",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1446x1"
+      ],
+      "ref": "i1446",
+      "slot": "weapon"
+     },
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1793p1"
+      ],
+      "ref": "i1793",
+      "slot": "implement"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i1552x1",
+       "i1552p1"
+      ],
+      "ref": "i1552",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i3238x1"
+      ],
+      "ref": "i3238",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:cleric-templar-f0",
+     "cf:cleric-templar-f1",
+     "cf:cleric-templar-f2",
+     "cf:cleric-templar-f3",
+     "p12601",
+     "p12608",
+     "p12614",
+     "p12638",
+     "p13943",
+     "p14247",
+     "p14292",
+     "p14293",
+     "p14293b",
+     "p1455",
+     "p146",
+     "p1589",
+     "p16415",
+     "p16419",
+     "p5981",
+     "p7885",
+     "p914"
+    ],
+    "race": "r26",
+    "race2": "",
+    "skills": [
+     "arcana",
+     "heal",
+     "insight",
+     "religion"
+    ],
+    "worships": "x1_13"
+   },
+   "second": {
+    "_known_after_arming": 34,
+    "background": "x6_80",
+    "cls": "fighter",
+    "feats": [],
+    "gear": [
+     {
+      "base": [],
+      "crit": "1d6",
+      "enh_to": "attack_damage",
+      "plus": 1,
+      "powers": [
+       "i1045x1"
+      ],
+      "ref": "i1045",
+      "slot": "weapon"
+     },
+     {
+      "base": [
+       "chain",
+       "scale",
+       "plate"
+      ],
+      "crit": "",
+      "enh_to": "ac",
+      "plus": 1,
+      "powers": [
+       "i1147x1",
+       "i1147p1"
+      ],
+      "ref": "i1147",
+      "slot": "armor"
+     },
+     {
+      "base": [],
+      "crit": "",
+      "enh_to": "defences",
+      "plus": 1,
+      "powers": [
+       "i496x1"
+      ],
+      "ref": "i496",
+      "slot": "neck"
+     }
+    ],
+    "leg": "",
+    "level": 1,
+    "powers": [
+     "cf:fighter-weaponmaster-f0",
+     "cf:fighter-weaponmaster-f1",
+     "cf:fighter-weaponmaster-f2",
+     "cf:fighter-weaponmaster-f3",
+     "p10469",
+     "p10478",
+     "p12660",
+     "p12661",
+     "p12662",
+     "p12663",
+     "p12664",
+     "p12665",
+     "p12666",
+     "p12667",
+     "p12668",
+     "p12688",
+     "p12689",
+     "p12690",
+     "p12692",
+     "p13773",
+     "p13774",
+     "p1427",
+     "p2620",
+     "p7419",
+     "p9993"
+    ],
+    "race": "r44",
+    "race2": "",
+    "skills": [
+     "athletics",
+     "endurance",
+     "heal"
+    ],
+    "worships": "x1_114"
+   }
+  }
+ ]
+}

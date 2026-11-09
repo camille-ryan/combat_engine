@@ -25291,6 +25291,137 @@ def a_disease_is_armed_once_a_board(out: Result) -> None:
 TRAIT_RIDER_EXEMPT = {"f3230"}
 
 
+def the_board_party_is_what_the_dealer_makes(out: Result) -> None:
+    """The recorded board party still matches what `chargen` deals (#1190).
+
+    `audit.board` used to deal its two standing allies, which is why every
+    row in the corpus depended on `chargen` -- a monster row's victims are
+    those allies -- and so why `chargen/` was in `audit.WIDE`. They are a
+    fixture now, and **this rule is the whole price of that**: it asks the
+    one question the 23,250-row sweep was answering, which is whether the
+    dealer still produces these characters.
+
+    Camille's call on `#1190`: *"having a preset group of characters for
+    board testing, so that we can separate the impact of chargen from the
+    rest of the system."* The separation is only honest while something
+    checks the preset against the thing it was taken from -- otherwise
+    chargen drifts and every row is audited against a party the game can
+    no longer make, passing all the way.
+
+    **It asserts that it reached the dealer, not only that the numbers
+    agree.** A version of this that compared the fixture against itself
+    would pass forever, which is the blind-matcher failure three separate
+    gates in this file were caught by today. So the dealer is spied on and
+    the run fails if it was never called.
+    """
+    import json
+
+    import audit
+    from combat_engine import chargen
+    from combat_engine.chargen import choices
+
+    fixture = json.loads(audit.PARTY.read_text())["parties"]
+    out.that(len(fixture) == audit.PARTIES,
+             f"the fixture holds one party per seed `_attempts` walks"
+             f" ({len(fixture)} of {audit.PARTIES})")
+    out.that(any(json.dumps(p, sort_keys=True)
+                 != json.dumps(fixture[0], sort_keys=True) for p in fixture),
+             "the parties differ by seed, so the per-seed variation the"
+             " attempt grid walks is preserved rather than collapsed")
+    thin = [i for i, p in enumerate(fixture)
+            if not p["ally"]["powers"] or not p["ally"]["gear"]]
+    out.that(not thin,
+             f"every recorded party has a hand and gear, so an empty"
+             f" recording cannot read as a matching one ({thin})")
+
+    # **Spy on the dealer**, so "it matches" cannot be satisfied by a
+    # comparison that never dealt anything.
+    reached = {"n": 0}
+    originals = []
+    for name in ("dealt_hand", "treasure"):
+        for mod in (chargen, choices):
+            fn = getattr(mod, name, None)
+            if not callable(fn):
+                continue
+
+            def wrap(f: Any = fn) -> Any:
+                def spy(*a: Any, **k: Any) -> Any:
+                    reached["n"] += 1
+                    return f(*a, **k)
+                return spy
+            originals.append((mod, name, fn))
+            setattr(mod, name, wrap())
+    try:
+        fresh = [audit._deal_party(seed) for seed in range(audit.PARTIES)]
+    finally:
+        for mod, name, fn in originals:
+            setattr(mod, name, fn)
+
+    out.that(reached["n"] > 0,
+             f"dealing the comparison really went through `chargen`, so"
+             f" this is a check against the dealer and not against the"
+             f" fixture itself ({reached['n']} deal call(s))")
+
+    drifted = [
+        (seed, who)
+        for seed in range(audit.PARTIES)
+        for who in ("ally", "second")
+        if json.dumps(fresh[seed][who], sort_keys=True)
+        != json.dumps(fixture[seed][who], sort_keys=True)
+    ]
+    out.that(not drifted,
+             f"every recorded party is still what the dealer makes"
+             f" ({len(drifted)} drifted: {drifted[:4]} --"
+             f" `audit.py --record-party` re-records, as its own commit)")
+
+    # **And the property the narrowing rests on, asserted rather than
+    # assumed.** `audit._caster_rows()` leaves monster rows out of a
+    # chargen-only scope *because* a monster board no longer reaches the
+    # dealer. That is a fact about the board, so it is checked here on the
+    # board -- not by asserting the selector's arithmetic, which would
+    # agree with itself. If anything puts a dealt character back on a
+    # monster board, this reddens and the scope is wrong until it is fixed.
+    import io
+    from contextlib import redirect_stdout
+
+    seen = {"n": 0}
+    originals = []
+    for name in ("dealt_hand", "deal_race", "deal_deity",
+                 "deal_background", "treasure", "loadout"):
+        for mod in (chargen, choices):
+            fn = getattr(mod, name, None)
+            if not callable(fn):
+                continue
+
+            def tally(f: Any = fn) -> Any:
+                def spy(*a: Any, **k: Any) -> Any:
+                    seen["n"] += 1
+                    return f(*a, **k)
+                return spy
+            originals.append((mod, name, fn))
+            setattr(mod, name, tally())
+    try:
+        with redirect_stdout(io.StringIO()):
+            audit.board("m145a0", 1)
+        monster_deals = seen["n"]
+        seen["n"] = 0
+        with redirect_stdout(io.StringIO()):
+            audit.board("p2248", 1)
+        power_deals = seen["n"]
+    finally:
+        for mod, name, fn in originals:
+            setattr(mod, name, fn)
+
+    out.that(monster_deals == 0,
+             f"a monster board reaches the dealer zero times, which is why"
+             f" `_caster_rows` may leave monster rows out of a chargen"
+             f" scope ({monster_deals} deal call(s))")
+    out.that(power_deals > 0,
+             f"and a non-monster board still deals its caster, so leaving"
+             f" those rows IN the scope is not over-caution"
+             f" ({power_deals} deal call(s))")
+
+
 def every_trait_level_rider_is_listed(out: Result) -> None:
     """`STILL_RIDERS` holds every feat that rides a row from a trait (#1175).
 
@@ -70194,6 +70325,9 @@ DRIVERS = {
     "a_disease_is_armed_once_a_board": (
         a_disease_is_armed_once_a_board,
         "a stage body runs once a board, however many arming passes"),
+    "the_board_party_is_what_the_dealer_makes": (
+        the_board_party_is_what_the_dealer_makes,
+        "the recorded board party still matches what chargen deals"),
     "every_trait_level_rider_is_listed": (
         every_trait_level_rider_is_listed,
         "STILL_RIDERS holds every feat that rides a row from a trait"),
