@@ -39,20 +39,48 @@ mapped to the **function that encloses them** at record time, and selection
 asks about function names. A docstring edit above a function no longer
 invalidates it.
 
-## Fail open, always
+## Fail open, always -- all sixteen ways, which is the whole list
 
 A selector that guesses is the one thing `scripts/CLAUDE.md` forbids
-outright, so every uncertainty selects everything:
+outright, so every uncertainty selects everything. **This is the canonical
+enumeration and the only one**: it used to be five bullets here, nine in the
+root `CLAUDE.md` and sixteen leaf conditions in the code, and three
+different lists is how the next reader's wrong model gets built. Both other
+places now point here.
 
-* no map on disk, or a map older than the last `data/game.db` rebuild;
-* a changed file the map never saw;
-* a changed line inside no function (module level, a decorator, an import);
-* **anything under `etl/` or `chargen/`**, which stay as wide as they are
-  today. The audit's two genuine catches in 400 commits both followed
-  content changes, and the backtick scrub was visible to *nothing else*, so
-  the content and build paths keep their full width and this narrows the
-  engine case only;
-* a changed function the map has but marked `wide`.
+Six in `check._rows_from_map`, before the map is even opened:
+
+1. `import impact` raised;
+2. `git status` failed;
+3. untracked Python under `src/combat_engine/`, which `git diff` cannot see;
+4. a changed path under `audit.WIDE` that is not narrowable -- **`etl/`,
+   `chargen/`, `scripts/audit.py`**. The audit's two genuine catches in 400
+   commits both followed content changes and the backtick scrub was visible
+   to *nothing else*, so the build paths keep their full width and this
+   narrows the engine case only;
+5. `audit._database_moved()` -- a different question with a different key
+   from the one in `_load` below, and deliberately kept;
+6. the map is a **sample**, so most rows were never observed.
+
+Five in `_load`, about the map as a whole:
+
+7. no map on disk;
+8. the map is unreadable;
+9. the map is invalid against the current `data/game.db` (see *Validity*);
+10. `recorded_at` is not in this tree's history;
+11. the corpus moved **and** the map does not say which rows it saw. A map
+    that does say is not a refusal -- the rows declared since are nameable,
+    so they are unioned in instead. #925.
+
+Five in `selection`, about the change:
+
+12. a changed narrowable file the map never saw;
+13. a changed line inside no function (module level, a decorator, an import);
+14. a changed function absent from the map whose own lines have moved since
+    `recorded_at` -- **unless git says it did not exist then**, which is
+    additive and narrows to the rows that name it. #866, #1194;
+15. a changed function the map has but marked `wide`;
+16. a union across the changed functions exceeding the map's own ceiling.
 
 ## The `wide` mark, which is what keeps the map small
 
@@ -72,8 +100,28 @@ ref lists only where they can actually exclude something.
   `data/` and `logs/`, both because `audited.json`'s own note refuses a
   per-ref map in the tree ("a megabyte of diff nobody reads and Camille is
   short of disk") and because testmon's known pain is sharing this kind of
-  database between machines. `--select` refuses a map recorded before the
-  current `game.db`.
+  database between machines.
+
+## Validity: a content digest, not an mtime
+
+Monster defences, a drawn party's items and every number a row reads come
+out of `data/game.db`, and `audit._attempts` stops as soon as a row fires --
+so the *number of boards played* is outcome-dependent on that file and a
+rebuild really can change which rows reach which function. The map therefore
+carries a key for it.
+
+**`game_db_mtime` was the wrong key in both directions.** It over-fired:
+`etl.build` has no time or random input, so a rebuild with unchanged ETL
+produces byte-identical rows and still threw away a recording that cost 1.3
+to 2.8 hours. And it under-fired: a database copied in with an older mtime
+passed.
+
+`game_db_digest` is a canonical digest of every table's contents -- tables
+sorted, columns sorted, rows ordered by the full column tuple -- so nothing
+about physical layout reaches it and an identical rebuild is identical. 388ms,
+behind the mtime as a fast path, so it is paid once per rebuild rather than
+once per run. `_valid` is the one function that answers this and
+`check._map_state` calls it rather than re-implementing it, which is #1185.
 """
 
 from __future__ import annotations
@@ -82,6 +130,7 @@ import argparse
 import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -121,11 +170,13 @@ SOURCE = "COMBAT_ENGINE_IMPACT_SOURCE"
 #: not -- and blind to a row that does not reach a function today and would
 #: after the change, which is coverage-based selection's documented blind spot.
 #:
-#: The backstop for all three is the overnight wide sweep, which is the same
-#: day-long window the root `CLAUDE.md` already accepts for a regression: "a
-#: regression that lands at 10am being found at 3am is the right trade against
-#: a gate people route around". So a row this omits is swept that night, and
-#: `nightly.sh` re-records the map in the same run. #866, #865.
+#: The backstop for all three is **a wide sweep before a push, by whoever
+#: pushes**. It used to be an overnight schedule and that is retired -- 7
+#: clean runs in 80 attempts, 58 skipped on a dirty tree or a concurrent
+#: run -- so nothing pays this debt automatically. What does happen
+#: automatically is the top-up: every clean `check.py` records the rows its
+#: commit touched, so a new row or verb is in the map one commit after it is
+#: written. #866, #865.
 #:
 #: Only these prefixes are narrowed. `etl/` and `chargen/` are deliberately
 #: absent -- see the fail-open list in the module docstring.
@@ -540,6 +591,14 @@ def _build_map(cov, asked: list[str], whole: int,  # noqa: ANN001
         "game_db_mtime": ((merge_into or {}).get("game_db_mtime", 0)
                           if merge_into is not None
                           else (GAME.stat().st_mtime if GAME.exists() else 0)),
+        # **The real key, with the mtime above kept as its fast path.** A
+        # merge inherits it for the reason the mtime note gives at length:
+        # a forty-row top-up has not re-observed the other 23,023 entries
+        # against whatever database it happened to see, so claiming the
+        # whole map matches is the dangerous direction. See `_valid`.
+        "game_db_digest": ((merge_into or {}).get("game_db_digest", "")
+                           if merge_into is not None
+                           else (_game_db_digest() if GAME.exists() else "")),
         # **A merge must not advance this, and advancing it broke the guard
         # it exists to feed.** `recorded_at` is the sha whose code the map's
         # *silence* can speak for -- `selection` reads it to tell a function
@@ -595,6 +654,116 @@ def _load_raw() -> dict | None:
         return None
 
 
+@cache
+def _game_db_digest() -> str:
+    """A content digest of `data/game.db`, stable across identical rebuilds.
+
+    **The key `game_db_mtime` should have been**, and it was wrong in both
+    directions. It over-fired: `etl.build` has no time or random input and
+    `compendium.sqlite` has not changed since 2026-09-18, so a rebuild with
+    unchanged ETL produces byte-identical *rows* and still threw away a
+    23,095-row recording that cost 1.3-2.8 hours -- which is how the map
+    came to be void on the day this was written, with no way to clear it
+    short of re-recording. And it under-fired: a database copied in with an
+    older mtime passed.
+
+    **Not a whole-file sha256**, though that is the cheapest thing here at
+    15ms: SQLite's page layout is not stable across identical rebuilds --
+    freelist pages, vacuum state and insertion order all move bytes that no
+    row reads -- so a file hash has the same over-firing fault with a
+    bigger constant.
+
+    **Every table, not the `monster` columns `loader.spawn` reads**, which
+    was the first design. The map records which rows execute which engine
+    function, and that depends on far more than monster defences: a drawn
+    party's items, feats and powers come out of `game.db` too, and
+    `audit._attempts` stops as soon as a row fires, so the *number of
+    boards played* is outcome-dependent on any of them. A 25-column
+    hand-list is also the kind of thing that goes stale the first time a
+    reader is added, and the whole point of this change is a key that
+    cannot rot. Measured: 35 tables, 388ms against 38ms for `monster`
+    alone -- and behind the mtime fast path in `_valid` it is paid once per
+    rebuild rather than once per run.
+
+    Canonical by construction: tables sorted, columns sorted, rows ordered
+    by the full column tuple, so nothing about physical layout reaches the
+    hash.
+    """
+    import hashlib
+    import sqlite3
+
+    digest = hashlib.sha256()
+    con = sqlite3.connect(f"file:{GAME}?mode=ro", uri=True)
+    try:
+        tables = sorted(r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+            " AND name NOT LIKE 'sqlite_%'"))
+        for table in tables:
+            cols = sorted(r[1] for r in con.execute(f"PRAGMA table_info({table})"))
+            digest.update(f"{table}:{','.join(cols)}\n".encode())
+            picked = ", ".join(f'"{c}"' for c in cols)
+            for row in con.execute(
+                    f'SELECT {picked} FROM "{table}" ORDER BY {picked}'):
+                digest.update(repr(row).encode())
+    finally:
+        con.close()
+    return digest.hexdigest()
+
+
+def _valid(got: dict) -> str:
+    """"" if the map matches the current `data/game.db`, else why not.
+
+    **One function, because `check._map_state` used to re-implement this and
+    diverged.** That divergence is #1185: the map grew a void state that
+    `check.py` did not know about, so a run printed the map's age and
+    corpus as though it were narrowing while `_load` was refusing it. The
+    rule in `scripts/CLAUDE.md` about a check that passes over its own
+    subject matter is the same shape -- two readers of one fact is one
+    reader too many.
+
+    Reads mtime first and only then the digest, so the 388ms is paid on the
+    run after a rebuild and never again: a digest that matches a moved
+    mtime rewrites the stamp, which is sound because the stamp is the fast
+    path for a question the digest has just answered properly.
+    """
+    if not GAME.exists():
+        return ""
+    when = GAME.stat().st_mtime
+    if got.get("game_db_mtime", 0) >= when:
+        return ""
+    want = got.get("game_db_digest")
+    if not want:
+        # **A map recorded before this field existed cannot be checked**, so
+        # it keeps the old blunt answer rather than being trusted on a key
+        # it does not carry.
+        return ("the map predates the current data/game.db and carries no"
+                " content digest, so nothing can say whether the rebuild"
+                " moved anything it saw")
+    if want == _game_db_digest():
+        got["game_db_mtime"] = when
+        _restamp(got)
+        return ""
+    return ("data/game.db has been rebuilt and its contents moved, so every"
+            " number the recording observed may have")
+
+
+def _restamp(got: dict) -> None:
+    """Persist a validated mtime so the next run takes the fast path.
+
+    Atomic, and silent on failure: this is a cache warm-up rather than a
+    result, and a map that cannot be rewritten is still a map that was just
+    proven valid. The alternative is paying 388ms on every run forever
+    after a rebuild, which is the kind of cost that gets a selector turned
+    off.
+    """
+    try:
+        tmp = MAP.with_suffix(".tmp")
+        tmp.write_text(json.dumps(got))
+        tmp.replace(MAP)
+    except OSError:
+        pass
+
+
 def _load() -> dict | None:
     """The map, or None with a reason printed. Any doubt means fail open."""
     if not MAP.exists():
@@ -605,8 +774,9 @@ def _load() -> dict | None:
     except (OSError, ValueError) as exc:
         print(f"# map unreadable ({exc}). Selecting everything.")
         return None
-    if GAME.exists() and got.get("game_db_mtime", 0) < GAME.stat().st_mtime:
-        print("# map predates the current data/game.db. Selecting everything.")
+    stale = _valid(got)
+    if stale:
+        print(f"# {stale}. Selecting everything.")
         return None
     at = got.get("recorded_at") or ""
     if at and not _in_history(at):
@@ -638,7 +808,7 @@ def _load() -> dict | None:
     #
     # This matters because the condition is the normal consequence of any
     # content wave, so the old refusal meant every wave silently disabled
-    # the map until a nightly re-recorded the corpus, 1.3-2.8 hours.
+    # the map until somebody re-recorded the corpus, 1.3-2.8 hours.
     if live_refs:
         got["unrecorded"] = sorted(live_refs - seen)
         got["retired"] = sorted(seen - live_refs)
@@ -775,6 +945,106 @@ def _changed_lines() -> dict[str, set[int]]:
     return dict(out)
 
 
+#: How content spells a verb from each narrowable engine file. A copy of
+#: `check.NARROWABLE`, not an import: `check` imports *this* module, so the
+#: dependency only runs one way. Two files, deliberately -- the list is
+#: short because the claim is strong, and a file absent from it keeps the
+#: fail-closed answer.
+VERB_PREFIX = {
+    "src/combat_engine/engine/cast.py": "c.",
+    "src/combat_engine/engine/query.py": "",
+}
+
+
+def _engine_names_it(name: str, rel: str) -> bool:
+    """Does any **other** narrowable engine file name `name`?
+
+    The one guard `audit._calls` cannot provide, because it searches
+    *content* only. A verb that did not exist when the map was recorded
+    cannot have an unchanged engine caller -- so an engine reference to it
+    means a committed engine edit the map's entry for *that* caller is now
+    stale about, and the rows naming the new verb are not the whole blast
+    radius. Costs a read of two files and fires ~never for a verb added in
+    the same commit as its callers.
+
+    **A call or a quoted name, not the bare word**, and the difference was
+    measured rather than guessed: a bare `\\bname\\b` search answered True
+    for `Cast.resolve` because the English word "resolve" appears in
+    `query.py`'s prose. That is the safe direction -- it falls back to WIDE
+    -- but it would have refused the narrowing for every verb named with an
+    ordinary word, which is most of them, so the branch would have been
+    dead on arrival for exactly the verbs it is most useful on.
+
+    A quoted form is included because this tree really does reach methods
+    by name: `getattr(c, "shift")` and `setattr` both appear, and
+    `impact.py`'s own blind-spot note is about that habit. What is left
+    uncovered is an exotic indirection no file here uses.
+    """
+    short = re.escape(name.split(".")[-1])
+    reaches = re.compile(rf"\b{short}\s*\(|[\"']{short}[\"']")
+    for other in VERB_PREFIX:
+        if other == rel:
+            continue
+        path = ROOT / other
+        if path.exists() and reaches.search(path.read_text()):
+            return True
+    return False
+
+
+def _existed_at(sha: str, rel: str, name: str) -> bool | None:
+    """Did `name` exist in `rel` at `sha`? `None` if git cannot say.
+
+    **The question `_moved_since` is a proxy for.** That function asks
+    whether a function's text moved, and `selection` reads a move as "the
+    map's silence is about a different function, so it says nothing". That
+    is sound and coarse: it cannot tell a verb whose *meaning changed* from
+    a verb that **did not exist** when the map was recorded, and those want
+    opposite answers. A changed verb can move any row that reaches it. A
+    verb that did not exist cannot have been reached by anything, so the
+    rows that can possibly depend on it are exactly the rows that **name**
+    it -- which is what `audit._calls` finds, in seconds, and what
+    `CLAUDE.md` already prescribes as the evidence for a new verb.
+
+    Measured on the live map before this was written: of 51 `cast.py`
+    functions absent from the table, exactly **one** had moved since
+    `recorded_at` -- and it was exactly the one that did not exist then
+    (`Cast.stage`, 48 content call sites). So this branch is rare and
+    precise rather than a loosening of a hot path.
+
+    Parses the recorded blob rather than the working tree, through the same
+    walk `_functions_of` uses, so a nested or class-scoped name is spelled
+    the same way in both answers.
+    """
+    if not sha or not _in_history(sha):
+        return None
+    done = subprocess.run(["git", "show", f"{sha}:{rel}"],
+                          cwd=ROOT, capture_output=True, text=True)
+    if done.returncode:
+        # The file itself did not exist at that sha, which is a definite
+        # answer about the function and not a failure: a new engine module
+        # is `check._rows_from_map`'s untracked-file case, already WIDE.
+        return False
+    try:
+        tree = ast.parse(done.stdout)
+    except SyntaxError:
+        return None
+    was: set[str] = set()
+
+    def walk(node: ast.AST, prefix: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                here = f"{prefix}{child.name}"
+                was.add(here)
+                walk(child, f"{here}.")
+            elif isinstance(child, ast.ClassDef):
+                walk(child, f"{prefix}{child.name}.")
+            else:
+                walk(child, prefix)
+
+    walk(tree, "")
+    return name in was
+
+
 def _moved_since(sha: str, rel: str) -> set[int] | None:
     """Lines of `rel` that differ from `sha`, in working-tree coordinates.
 
@@ -844,12 +1114,12 @@ def selection(got: dict, changed: dict[str, set[int]]
     a subprocess's stdout -- a selector read through a text format is a
     selector that mis-reads it once and narrows to nothing.
 
-    `None` means **select everything**, and every doubt returns it: a changed
-    file absent from the map, an edit outside any function, a function the
-    recording found too hot to list, or a union that exceeds the map's own
-    ceiling. `[]` means this instrument has no opinion, which is not the same
-    thing -- it is what a content-only change gets, and the caller keeps its
-    present behaviour.
+    `None` means **select everything**, and every doubt returns it -- the
+    five conditions this function owns are numbers 12 to 16 of the module
+    docstring's list, which is the canonical one. `[]` means this instrument
+    has no opinion, which is not the same thing, and the caller tells the
+    two apart by a named verdict rather than by whether `notes` is empty:
+    see `check.NARROWED`.
     """
     notes: list[str] = []
     narrowable = [f for f in changed if f.startswith(NARROWABLE)]
@@ -911,6 +1181,30 @@ def selection(got: dict, changed: dict[str, set[int]]
                     span is not None
                     and any(s in since for s in range(span[0], span[1] + 1)))
                 if fresh:
+                    # **But a function that did not EXIST then is a
+                    # different answer.** `_moved_since` cannot tell a verb
+                    # whose meaning changed from one that is brand new, and
+                    # those want opposite scopes: a changed verb can move
+                    # any row that reaches it, where a new one can only
+                    # reach a row that **names** it -- "a fact about the
+                    # text", as `audit._calls`' own docstring puts it, and
+                    # the evidence `CLAUDE.md` already prescribes for a new
+                    # verb. Asking git costs one `git show`. #1194.
+                    prefix = VERB_PREFIX.get(rel)
+                    existed = _existed_at(got.get("recorded_at", ""), rel, name)
+                    public = not name.split(".")[-1].startswith("_")
+                    if (existed is False and prefix is not None and public
+                            and not _engine_names_it(name, rel)):
+                        import audit
+
+                        named = audit._calls([f"{prefix}{name.split('.')[-1]}"])
+                        notes.append(
+                            f"# {rel}:{name} did not exist at"
+                            f" {got.get('recorded_at', '')[:9]}, so nothing"
+                            f" the map saw could reach it -- scope is the"
+                            f" {len(named)} row(s) that NAME it.")
+                        refs.update(named)
+                        continue
                     notes.append(
                         f"# {rel}:{name} is not in the map and has changed"
                         f" since it was recorded, so the map cannot speak"
@@ -945,7 +1239,8 @@ def selection(got: dict, changed: dict[str, set[int]]
     # Added **after** the ceiling test on purpose: a two-row gap must not be
     # what tips a selection into WIDE, and the gap is small by construction
     # because `_load` prints the command that closes it. A gap big enough to
-    # matter is a content wave, which the nightly re-records anyway. #925.
+    # matter is a content wave, and `check._top_up_map` records up to 250
+    # of them on the next clean run. #925.
     gap = sorted(set(got.get("unrecorded", ())) - refs)
     if gap:
         refs.update(gap)

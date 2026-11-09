@@ -278,7 +278,7 @@ it improves, red when it regresses, never a bare allowance. #372.
   not cover** because nobody had both directories at once when it was
   written. In a worktree `data/game.db` is a symlink into the main checkout,
   so a rebuild here rewrites `master`'s database while `master`'s working tree
-  still holds the old ETL code — and the nightly sweeps there. 21,476
+  still holds the old ETL code — and the wide sweep runs there. 21,476
   rows against data their code does not match, reported as a verdict on
   `master`. `build.py` refuses from a worktree now (`--force` to override),
   rather than relying on anyone remembering. #857.
@@ -309,7 +309,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
 | `questions.py` | does every issue tagged `question` end with a plain-language ask. Three outcomes: parked on Camille, **ANSWERED** (her comment is last, so it is yours), **NO ELI5**. Camille's requirement, 2026-11-06 |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
-| `impact.py` | which rows actually execute a given engine function; `--record`, `--record --refs`, `--select`, `--why`, `--stats`. Not a gate — a selector, and it fails open to WIDE on any doubt. **`check.py` consults it automatically**, with no flag, **and tops it up with the rows each clean commit touched** (9s for two rows); `nightly.sh` re-records the whole corpus after a clean sweep. Proven by a plant: a comment inside one `cast.py` method selects 71 rows of 23,062 and **70 of 70 raise** when that method is broken, with two equal-size controls undisturbed |
+| `impact.py` | which rows actually execute a given engine function; `--record`, `--record --refs`, `--select`, `--why`, `--stats`. Not a gate — a selector, and it fails open to WIDE on any doubt. **`check.py` consults it automatically**, with no flag, **and tops it up with the rows each clean commit touched** (9s for two rows, up to 250). A whole-corpus re-record is 1.3–2.8 hours and is now a **named job** rather than a schedule — the trigger is `check.py` printing `impact map: VOID`, and the owner is whoever rebuilt the database. Validity is keyed on a content digest of `game.db`, not its mtime, so an identical rebuild no longer voids it. Proven by a plant: a comment inside one `cast.py` method selects 71 rows of 23,062 and **70 of 70 raise** when that method is broken, with two equal-size controls undisturbed |
 | `written.py` | written / not written / half-written on purpose. **Was `coverage.py`** and renamed in #853: `scripts/` is first on `sys.path`, so that name shadowed the real `coverage` library and stopped `impact.py` pooling its recording |
 | `types.py` | `ty` over the files that moved, against a **per-diagnostic** baseline keyed `rule|message` — so a new error is named and ten fixed plus ten introduced no longer reads as no change. `--all`, `--bless`, `--migrate` |
 | `localise.py` | does every heroic row carry the localisation fields it needs; `--freeze`, `--drift`, `--snapshot`, `--rules` |

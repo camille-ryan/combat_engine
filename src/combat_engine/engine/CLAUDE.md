@@ -27,7 +27,7 @@ pricing half the corpus. Measured off `dsl.REGISTRY`, which is what
 function and `check.py` consults it with no flag, so an edit inside one
 `cast.py` method audits the rows observed to run it rather than all 23,061 —
 71 rows and 73s against 1,304s on the measured case. It fails open to WIDE
-on nine conditions and names which. So "an engine change has no narrow
+on sixteen conditions and names which. So "an engine change has no narrow
 option" is no longer true, and the root `CLAUDE.md` has the full account.
 
 That cost **has been measured and cannot be tuned away.** Read `_changed`'s

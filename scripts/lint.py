@@ -173,8 +173,9 @@ def _asked_for_package() -> tuple[Path, ...]:
 def main() -> int:
     global _ONLY
     # **An explicit record, never a side effect of checking.** The fixture is
-    # tracked, so writing it during an ordinary run dirties the tree and the
-    # nightly then refuses to sweep. Downward only, which is the same
+    # tracked, so writing it during an ordinary run dirties the tree -- and
+    # a sweep over uncommitted edits certifies no commit. Downward only,
+    # which is the same
     # contract `audited.json` and `types.json` carry: a file with fewer dead
     # suppressions is progress and gets recorded; one with more is the fault
     # above and is never absorbed here.
@@ -319,9 +320,10 @@ def main() -> int:
         # baseline whenever a file improved, on the ground that there is no
         # judgement in "this file has fewer dead comments". True, and still
         # wrong: this fixture is **tracked**, so an auto-write leaves the
-        # tree dirty after an ordinary `check.py` -- and `nightly.sh`
-        # refuses a dirty tree, which is how one uncommitted line already
-        # cost the net two consecutive nights. An instrument must not make
+        # tree dirty after an ordinary `check.py` -- and a sweep over a
+        # dirty tree certifies no commit and withholds the baseline, which
+        # is how one uncommitted line already cost two consecutive nights
+        # of the retired schedule. An instrument must not make
         # the tree dirty as a side effect of reporting.
         tightened = {f: (recorded[f], live.get(f, 0)) for f in recorded
                      if live.get(f, 0) < recorded[f]}

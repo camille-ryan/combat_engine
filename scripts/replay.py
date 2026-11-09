@@ -105,8 +105,8 @@ def _settled(line: str) -> str:
     inviolable.
 
     Sorting the members rather than pinning `PYTHONHASHSEED`, because the
-    seed would have to be set by every caller -- `check.py`, the nightly,
-    a session running this by hand -- and a fixture recorded under one
+    seed would have to be set by every caller -- `check.py`, a session
+    running this by hand -- and a fixture recorded under one
     seed would be unverifiable without it. Normalising the text needs
     nothing from the environment.
     """

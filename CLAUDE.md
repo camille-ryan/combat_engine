@@ -499,20 +499,21 @@ push is still affordable — but do not quote 25 minutes.
   is Camille's caveat on `#1055` and it is the whole reason this line is
   not "run it when in doubt": a sweep per fix cost 102 minutes in one
   session for work that warranted a single run. Finish the batch, run the
-  cheap gates, sweep once. The nightly bullet below has the sequence and
-  the measurement.
+  cheap gates, sweep once. The retirement bullet below has the sequence
+  and the measurement.
 * **A worktree merges on whatever looked at its rows, and `check.py` says
   which.** The rule used to be *"a worktree owes its own `--all` before it
-  merges"* (#848), on the ground that `nightly.sh` is installed against the
-  main checkout and never sweeps a branch. That is still true about the
-  branch — and it made **105 of 106** audit runs wide, because `--all` is
+  merges"* (#848), on the ground that the overnight schedule was installed
+  against the main checkout and never swept a branch. That was true about
+  the branch — and it made **105 of 106** audit runs wide, because `--all` is
   wide by definition, so the impact map saved 21 minutes against 22 hours
   spent sweeping. A selector the gate ignores is a selector nobody uses.
 
-  It also contradicted the cadence directly below it. A worktree merges
-  **into master**, which the nightly *does* sweep, so the pre-merge wide run
-  bought a few hours against the same window this file already calls the
-  right trade for every other regression.
+  It also rested on a net that was not there: it reasoned that a worktree
+  merges **into master**, which the schedule swept. The schedule is retired
+  and swept 7 nights in 80 before that. What survives is the *reason*, which
+  never needed it — a pre-merge wide run cost 22 minutes a merge to look at
+  rows the map had already looked at.
 
   So the gate asks the narrower question — **has anything looked at the rows
   this change can affect?** — and the last line of every run answers it:
@@ -520,7 +521,8 @@ push is still affordable — but do not quote 25 minutes.
   | what ran | verdict |
   |---|---|
   | nothing under `engine/` changed | merge; `audit --changed` covered it |
-  | the map **narrowed** | merge; those rows are green and the overnight sweep is the net |
+  | the map **narrowed** | merge; those rows are green — a wide sweep is still owed before the push |
+  | the map narrowed to **nothing** | merge; every changed function is code no row executes, which is an answer and not a refusal |
   | the map **refused** (wide) | the wide sweep is owed first — nothing has looked at the rows |
   | `--all` already ran clean | merge |
 
@@ -574,16 +576,21 @@ push is still affordable — but do not quote 25 minutes.
   **And the map tops itself up, so nobody has to remember.** A clean
   `check.py` records the rows the commit touched — `impact.py --record
   --refs`, measured at **9s for two rows** against hours for the
-  corpus — so a verb is in the map one commit after it is written rather
-  than one nightly. It declines out loud on a red run (a raising row
-  records a short ref list), on a sampled map, and above a 40-row budget,
-  which is a content wave rather than a commit.
+  corpus — so a verb is in the map one commit after it is written. With the
+  overnight recording retired this is the *only* thing that heals the map
+  short of a hand-run `--record`, which is why the budget went from 40 rows
+  to **250** (~0.85s a row, so ~3.5 minutes on the commit after a content
+  wave). It declines out loud on a red run (a raising row records a short
+  ref list), on a sampled map, on a map **void** against the current
+  `game.db` — a top-up there would carry the stale key forward and make the
+  void permanent — and above the budget, naming the rows so the decision is
+  a human's.
 * **And a worktree must not rebuild the database. ETL work happens on
   `master`, or after the branch merges.** In a worktree `data/game.db` is a
   symlink into the main checkout, and `etl.build` opens by deleting its
   output — so a rebuild here hands `master`'s *old* ETL code a database built
-  by the *new* one, and the overnight nightly then sweeps 21,476 rows against
-  data their code does not match. `scripts/build.py` refuses outright now
+  by the *new* one, and the next wide sweep there then runs 21,476 rows
+  against data their code does not match. `scripts/build.py` refuses outright now
   rather than relying on anyone remembering this, with `--force` for the case
   where it is genuinely wanted. #857.
 * **An engine change no longer selects every row, and this is automatic.**
@@ -594,13 +601,16 @@ push is still affordable — but do not quote 25 minutes.
   0.3%, and when that method is made to raise **70 of 70 selected rows go
   red** while two equal-size control sets stay green.
 
-  **It fails open on nine things and says which every time** — no map, an
-  unreadable one, a sampled one, a corpus that moved, untracked Python under
-  `src/`, a changed file absent from the map, an edit at module level, a
-  function too hot to list, or a union over the map's own ceiling. A change
-  under `etl/`, `chargen/` or to `scripts/audit.py` is refused outright,
-  because `audit.WIDE` names those for reasons the map does not speak to.
-  The content half is **unioned in**, never replaced.
+  **It fails open on sixteen things and says which every time.** The list
+  is in `impact.py`'s module docstring, numbered, and that is now the only
+  copy — this paragraph used to hold nine of them while the code had
+  sixteen, and `selection`'s own docstring held five, so a reader could
+  come away with three different models of when the map is trusted. The
+  shape of it: six in `check._rows_from_map` before the map is opened, five
+  in `_load` about the map, five in `selection` about the change. A change
+  under `etl/`, `chargen/` or to `scripts/audit.py` is among them, refused
+  outright because `audit.WIDE` names those for reasons the map does not
+  speak to. The content half is **unioned in**, never replaced.
 
   No flag, deliberately, and the asymmetry against `--calls` is the point:
   `--calls` narrows on a claim nothing checks, so it is opt-in and refuses
@@ -610,47 +620,67 @@ push is still affordable — but do not quote 25 minutes.
 
   **What it cannot see**: a row added or rewritten since the map was
   recorded, and a row that does not reach the changed function today but
-  would after the change. The overnight sweep is the backstop for all of them,
-  which is the same day-long window this file already accepts. `check.py`
-  prints the map's age and corpus on every run so nobody has to ask.
-  #853, #865, #866.
-* **The nightly does NOT pay the wide debt, and this file said for weeks
-  that it did.** Camille's call on `#1055`, after asking whether the
-  schedule was still earning its keep:
+  would after the change. **The backstop is the wide sweep before a push,
+  by whoever pushes** — it used to say "the overnight sweep", and there is
+  no overnight sweep. `check.py` prints the map's age, corpus and validity
+  on every run so nobody has to ask. #853, #865, #866, #1194, #1195.
+* **There is no overnight net. The nightly is retired.** It was already
+  true that it did not pay the wide debt, and this file said for weeks that
+  it did. Camille's call on `#1055`, after asking whether the schedule was
+  still earning its keep:
 
   > *"option 2 is fine with the caveat that long-duration sweeps should be
   > done infrequently and consequently work should be batched
   > intelligently."*
 
-  Measured over its whole life — **31 attempts, 2026-10-08 to 2026-11-01**:
+  Measured over its whole life — **80 dated attempts**, 2026-10-08 to
+  2026-11-09, re-counted off `logs/nightly-20*.log` for this bullet:
 
   ```
-  completed CLEAN    0
-  completed RED      8
-  SKIPPED           20      "a check.py was running", "a dirty tree"
+  completed CLEAN    7
+  completed RED      9
+  SKIPPED           58      "a check.py was running", "a dirty tree"
+  MOVED              3      commits landed mid-sweep
   no verdict         3
   ```
 
-  **Zero clean sweeps in 24 days.** The skips are structural rather than
-  unlucky: it can only run when nobody is working and the tree is clean, and
-  this project is worked on for most of the day. So every session deferring
-  wide debt to the nightly was deferring it to nothing — and the same false
-  premise pushed a session the *other* way on 2026-11-01, hand-launching
-  four `--all` runs (~102 minutes) because a green sweep felt necessary
-  before closing an issue.
+  **This file used to print `0` clean, over 31 attempts, and both figures
+  were wrong.** The red count matched exactly, so the table was built from
+  real logs and then miscounted five clean sweeps as skips — which is worse
+  than a missing number, because "zero in 24 days" is the kind of figure
+  that settles an argument. Say **7 in 80** instead, and note that 58 skips
+  is the real finding: the schedule can only run when nobody is working and
+  the tree is clean, and this project is worked on for most of the day.
+
+  So every session deferring wide debt to the nightly was deferring it to
+  something that fired one night in ten — and the same false premise pushed
+  a session the *other* way on 2026-11-01, hand-launching four `--all` runs
+  (~102 minutes) because a green sweep felt necessary before closing an
+  issue.
+
+  **The honest case for retiring it was collision, not absence.** It did
+  fire, and it did produce maps; what it did was collide. One 04:08 run
+  duplicated a manual `check.py --all` minutes earlier, and the 1.3–2.8
+  hour recording behind it would have frozen the tree for the rest of the
+  night. Nothing was load-bearing: every reader in `check.py` was
+  print-only, and `_sweep_owed` reads `audited.json`, not the schedule.
 
   **So the gate is narrow checks plus the impact map, and a wide sweep is
-  owed before a push, by whoever pushes.** Nothing settles it automatically.
+  owed before a push, by whoever pushes.** Nothing settles it automatically
+  and nothing claims to.
 
   What actually bought the saving was the **map**, not the schedule —
-  71 rows in 73s against 23,063 in ~1,300s, 18x, with no flag — which is
-  why retiring the net claim costs nothing it was really providing.
+  71 rows in 73s against 23,063 in ~1,300s, 18x, with no flag.
 
-  **`nightly.sh` stays, for the one job it demonstrably does**: re-recording
-  the map. It recorded 23,063 of 23,063 contexts on 2026-11-01 *after* a red
-  sweep, because `#1030` lets a red run whose failing instruments fire no
-  rows record anyway. A recorder that works is worth keeping; a net that has
-  never caught anything is not worth citing.
+  **The one job it demonstrably did was re-recording the map, and that is
+  now a named job rather than a schedule.** The trigger is `check.py`
+  printing `impact map: VOID`; the owner is whoever rebuilt the database;
+  the command is `impact.py --record`, 1.3–2.8 hours. Everything short of
+  void is paid by the per-commit top-up, which records up to 250 rows.
+  Against the retired schedule this trades a once-every-two-or-three-days
+  recording for one triggered by the only event that invalidates a map —
+  and since `#1193` keyed validity on a **content digest** rather than
+  `game.db`'s mtime, an identical rebuild no longer triggers it at all.
 
   And the caveat is the operative half: **a long sweep is rare, so batch the
   work that owes one.** Finish the whole batch, run the cheap gates — `ruff`,
@@ -659,96 +689,50 @@ push is still affordable — but do not quote 25 minutes.
   *discover* breakage instead of confirm it gets paid for three times over;
   that is exactly how the 102 minutes above were spent.
 
-  **It is an hourly poll, not a clock time, and this file must stop naming
-  one.** A stated hour has gone stale here three times — `02:07` against logs
-  reading `03:07` (#566, #746), then `03:07` after `#871` replaced the
-  calendar entry outright. `StartCalendarInterval` does not survive a closed
-  lid: launchd defers it to the next wake and drops it if there is none, which
-  cost three of seventeen nights. So the plist is `StartInterval 3600` and
-  `nightly.sh`'s `_due` decides:
-
-  * nothing unless the last real sweep is **more than 20 hours old**, and
-    then only between **01:00 and 07:00**;
-  * **unless it is more than 48 hours stale**, when it runs at any hour,
-    because two missed nights beats tidiness.
-
-  A not-due wake writes no dated log — 23 a day is noise — only
-  `logs/nightly-heartbeat`, which keeps "alive and not due" distinguishable
-  from "not running at all". **Read the stamp, never predict it**: every
-  `check.py` prints when the net last reached a verdict, and
-  `uv run scripts/check.py --history` has the attempts.
-
-  **And reading the stamp is not the same as reasoning from it.** On
-  2026-10-31 a session read `last run 2026-10-30 05:11 clean`, concluded
-  tonight's had already happened, and started editing `cast.py` — while the
-  poll was mid-sweep. That line was *yesterday's*; the schedule is a poll
-  with a 20-hour window, so a run inside it says nothing about whether the
-  next one is due. The stamp answers "when did the net last reach a verdict",
-  and nothing else.
-
   **An edit voids a running sweep as surely as a rebuild, and far more
-  quietly.** `build.py` refuses outright while it is sweeping; an edit is
-  simply accepted, and `audit.py` reads source from disk through
-  `inspect.getsource`, so shifting line numbers under a module imported
-  earlier makes it tokenise from the wrong offset and report a **raise on a
-  sound row**. The tell that session had and did not read: the sweep logged
-  `symbols 466 placed` while the live count was already 468. Its timings went
-  too — `ruff` 421s against a normal ~90s, because the same session was
-  running its own checks alongside.
+  quietly.** This outlives the schedule, because the hazard is any long
+  run and not a scheduled one. `build.py` refuses outright while a sweep is
+  going; an edit is simply accepted, and `audit.py` reads source from disk
+  through `inspect.getsource`, so shifting line numbers under a module
+  imported earlier makes it tokenise from the wrong offset and report a
+  **raise on a sound row**. The tell one session had and did not read: the
+  sweep logged `symbols 466 placed` while the live count was already 468.
 
   So: `pgrep -f "scripts/"` before **any** tree change, not only before a
   launch. Checking before three destructive launches and then editing during
-  a fourth is how this one happened.
+  a fourth is how that one happened.
 
-  **And it loses to a dirty tree, silently, for days.** It refuses to start
-  on uncommitted edits — rightly, since a sweep over them certifies no
-  commit — so one stray modified file stops the net indefinitely. On
-  2026-10-22 a single uncommitted `.gitignore` line had skipped the 21st and
-  the 22nd, leaving `NIGHTLY-FAILED` describing a red run from the 20th with
-  two non-verdicts after it. If the nightly line says SKIPPED, check
-  `git status` in the **main** checkout first.
-
-  **Read the result without being asked to**: the next `check.py` in any
-  session stops printing `wide sweep owed since <sha>` once a nightly has paid
-  it, which needs nobody to remember. And **every `check.py` run now prints the
-  nightly's state in words** — `last run <when> clean`, `RED`, or
-  `last attempt <when> SKIPPED`, with the age beside it. Read that line; it is
-  the first thing to look at before trusting a clean narrow run.
-
-  **And it re-records the impact map after a clean sweep**, which is what
-  keeps the narrowing above honest — a map more than a day old has seen a
-  day of rows it does not hold. Only after a *clean* sweep, at the same
-  HEAD, on a clean tree: a red sweep means rows are raising, and a row that
-  raises records only the lines it reached before raising, so its ref list
-  comes out short in the direction that omits rows. If the tree moves during
-  the 1.3-2.8 hours the map is **deleted**, because no map audits everything and
-  a misattributed one narrows wrongly. That makes the nightly ~110 minutes.
+  **A sweep on a dirty tree certifies no commit and withholds the
+  baseline.** That was the schedule's commonest skip reason and it is still
+  true of a hand-run sweep: commit the batch *before* launching `--all`, or
+  the 35 minutes buy a verdict that names no sha. #469.
 
   `#853` proposed folding the recording into the sweep itself "for the
   overhead rather than a second sweep". **That premise is false**: recording
-  is ~4.3x, so it is a second 83-minute job either way, and switching the
-  gate's own sweep into a recording run would slow the gate and move every
-  timing it reports.
+  is ~4.3x, so it is a second long job either way, and switching the gate's
+  own sweep into a recording run would slow the gate and move every timing
+  it reports.
 
-  This file used to say `logs/NIGHTLY-FAILED` **exists if and only if the last
-  run was red**, and that was false. A skip leaves the marker alone — rightly,
-  since a skip is no verdict and must not erase a real one — so a red sweep
-  followed by any number of skips leaves a file the invariant says describes the
-  last run. On 2026-10-13 it read `FAILED at 227e2b0` while the last attempt had
-  skipped on a dirty tree, two days and 60 commits later, and following the
-  one-line protocol gave the wrong answer. The marker is evidence about *a*
-  sweep; `check.py` is what reconciles it with the latest attempt. #543.
-
-  It refuses a dirty tree, because a sweep over uncommitted edits certifies no
-  commit, and it never commits the `audited.json` the sweep rewrites — it
-  reports whether a row changed sides or only the sha moved. #469.
+  **The 80 dated logs stay in `logs/`.** They are the only record of the
+  experiment and the timing table above is counted off them. What is gone:
+  `scripts/nightly.sh`, `scripts/combat-engine-nightly.plist`, the launchd
+  agent, `logs/NIGHTLY-FAILED`, `logs/nightly-latest.log`,
+  `logs/nightly-heartbeat`, and `check.py`'s `_nightly_state`, `_stale_net`,
+  `_clear_red`, `_moved`, `_skipped` and `_tree_clean`.
 * **`--calls` is the per-commit evidence for a new verb**, and it is the thing
   five wide sweeps in one session were paid for instead.
   `audit.py --calls 'c.light()'` is seconds. `_changed` widens to all 21,304
   rows for **any** change under `engine/` or `etl/` — a comment included — so
   an engine change has no narrow option and `--calls` is the answer rather
   than the widen. It is evidence the verb works, never that nothing broke;
-  the nightly is what says the second thing.
+  the wide sweep before the push is what says the second thing.
+
+  **And a genuinely new verb is now narrow without `--calls` too.** The map
+  asks git whether the function existed at `recorded_at`: if it did not,
+  nothing the map saw could have reached it, so the scope is the rows that
+  *name* it — the same set `--calls` finds, by the same argument, reached
+  automatically. An edit to an existing verb still goes WIDE, which is the
+  case worth paying for. #1194.
 * **After a rebuild the next run is wide, once.** `data/game.db` is git-ignored
   and every monster number is read from it, so a rebuild moves rows no path test
   can see.
@@ -799,6 +783,23 @@ push is still affordable — but do not quote 25 minutes.
   Baselines stay a separate commit because a batch moving `audited.json`,
   `keywords.json` and `ingest.json` at once cannot say which change shrank
   which — read the per-field diff, never the headline.
+
+  **What `audited.json` actually holds**, because it is asked about and the
+  answer decides how a diff on it is read. Counted off the file on
+  2026-11-09: a `sha`, six counters (`refs` 21,662, `fired` 20,121,
+  `silent` 539, `never` 841, `known_quiet` 161, `raises` 0) and **four
+  per-ref lists** — `silent_refs` 539, `never_refs` 841, `refused_refs`
+  755, `known_quiet_refs` 161. `raises` is the one number treated as
+  inviolable. Note `refused_refs` has no counter beside it, so its 755 is
+  only readable from the list.
+
+  The per-ref lists are the whole point, and they are *stricter* than the
+  counters beside them. A silent row **not** on the list is red; a listed
+  row that **works** is also red. So the gate names what moved in both
+  directions, where a count cannot tell ten rows healing from ten rows
+  breaking — which is exactly the hole `scripts/CLAUDE.md` describes a
+  count-against-zero leaving. Working as designed; it is listed here
+  because the design is not guessable from the file.
 * **What a change costs to gate, by where it lands.** Not every component is
   wide, and the file never said which: `audit.WIDE` names five paths and
   nothing else.
@@ -831,7 +832,7 @@ push is still affordable — but do not quote 25 minutes.
   allow, so it cannot break a row. Costs only — no counts and no running
   order here, because a schedule in a rules file is what rots. This file has
   watched it happen to the seam line numbers twice, to the row count above,
-  and to the nightly's stated hour three times.
+  and to the retired nightly's stated hour three times.
 * **`--only <name>`** while iterating on one instrument's finding.
 * **`--only scorecard` on a `policy/` change**, with `scorecard.py --save` when
   the change *is* the improvement. It is paused out of the default run: 2 red
@@ -894,8 +895,9 @@ more sense to use you here as a controller, and have you delegate tasks to
 agents, and then only you decide when to sweep, check, audit, push."*
 
 Yes — and the friction was never the push. It is **shared mutable state with
-no single owner**. One checkout, one `game.db`, one nightly, one impact map,
-one set of baselines, two writers. What that cost in a single day:
+no single owner**. One checkout, one `game.db`, one impact map, one set of
+baselines, two writers — and, until it was retired, one overnight schedule
+colliding with all of them. What that cost in a single day:
 
 * `#1028` was fixed **twice**, independently, from different sides
   (`968a6c90` and `f17c46cd`) — and the second had to be reverted at the
@@ -940,8 +942,10 @@ piece was that **merging had no owner**, which is how a branch tip became
 
 The failure above was not carelessness about the rule; it was a session that
 checked `pgrep -f "scripts/"` before three destructive **launches** and then
-edited during a fourth, having reasoned from a stale stamp that the nightly
-had already run. An edit is as destructive to a running sweep as a rebuild
-and much quieter — see the nightly bullet in **Checking**.
+edited during a fourth, having reasoned from a stale stamp that the overnight
+sweep had already run. An edit is as destructive to a running sweep as a
+rebuild and much quieter — see the retirement bullet in **Checking**. The
+schedule is gone, which removes the stale stamp but not the hazard: a
+hand-launched 35-minute sweep is just as voidable.
 
 So the check belongs before **any** tree change, not before launches.
