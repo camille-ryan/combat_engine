@@ -3250,11 +3250,55 @@ def given_skills(cls: str, race: str = "") -> frozenset[str]:
 #: are switched over, because each switch changes what a character does.
 BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     "f2743": ("necrotic", "cold"),
+    # **Refs rather than printed words, which this table had not held
+    # before.** `f2694` says *"choose one of the monk's Flurry of Blows
+    # powers"* and there are five; the choice is between **rows**, not
+    # between values, and `Cast.chosen_option` hands back whatever string
+    # is here -- so `c.grant_row` takes it directly.
+    #
+    # **A copy of `content.powers.monk.level_0.FLURRIES`, deliberately.**
+    # `chargen` cannot import `content` -- content imports chargen, so the
+    # edge would be a cycle -- which is the same bind `etl.feat._ARMOUR_RUNG`
+    # is in against `armour.LADDER`. Same answer: copy it, and gate the copy.
+    # `drivers.build_options_mirror` asserts the two are equal, so a sixth
+    # flurry landing in the monk file reddens here rather than being
+    # silently unavailable to this feat.
+    #
+    # Which of the five is a **scoring** question, not a printed one, and
+    # `_build_options` below takes the first by design -- see its docstring.
+    # `#314` is where choosing well lives.
+    "f2694": ("p7448", "p11207", "p13123", "p16131", "p16132"),
+    # **`cf:artificer-f2` is deliberately not here, and the reason is about
+    # this table rather than about that row.** Its card prints a pair --
+    # one of its three infusions taken *in place of* another, with the
+    # other then uncreatable -- so the entry would read
+    # `("p7635", "p10187")`, printed default first, and `c.chosen_option`
+    # reads it back correctly. Both halves were driven and both work.
+    #
+    # What does not work is anything acting on it. `_build_options` records
+    # the **first** option unconditionally and by design, so an exclusion
+    # written in either direction fires for *every* dealt artificer and the
+    # other card of the pair is unreachable by anybody: measured,
+    # `audit.py` moves `p10187` **and** `f3023` -- the feat whose whole
+    # subject is that card -- from "fires and does something" to UNUSED,
+    # and neither is in `audited.json`'s `never_refs`. An entry nothing may
+    # act on is a record nothing reads, which is this tree's commonest bug,
+    # so the row keeps its marker instead. `#314` is where choosing well
+    # lives and is what unblocks it.
 }
 
 
-def _build_options(feats: list[str]) -> set[str]:
+def _build_options(taken: list[str]) -> set[str]:
     """`option:<ref>:<value>` for every row the build took that asks one.
+
+    **`taken`, not `feats`, because a feat is not the only kind of row that
+    asks.** This read only the feat list, so a **class feature** or an
+    **item power** with a `BUILD_OPTIONS` entry got no option and the row
+    could never read one -- measured on `#1112`'s ten claimants, three of
+    them are not feats (`cf:artificer-f2`,
+    `cf:sorcerer-elementalist-f1`, `i2345p1`).
+    `Powers.known` holds `cf:` rows and item powers alike, so the caller
+    passes the hand as well and the dict decides what is asked.
 
     **No random stream, and that is on purpose.** Every other dealer here
     takes one of its own so that dealing a character cannot move the dice
@@ -3268,7 +3312,7 @@ def _build_options(feats: list[str]) -> set[str]:
     """
     return {
         f"option:{ref}:{BUILD_OPTIONS[ref][0]}"
-        for ref in feats if ref in BUILD_OPTIONS
+        for ref in taken if ref in BUILD_OPTIONS
     }
 
 
@@ -4952,7 +4996,11 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
             choices={
                 *who.choices,
                 *(f"chose:{w.ref}" for w in carried),
-                *_build_options(list(feats)),
+                # The hand as well as the feats: a class feature or an
+                # item power may ask a build-time question too, and
+                # reading only `feats` meant three of `#1112`'s ten
+                # claimants could never be answered.
+                *_build_options([*feats, *powers]),
                 # The pool draw above, under the same `option:` key, so
                 # one reader (`Cast.chosen_option`) answers both. #1114.
                 *swapped_in,

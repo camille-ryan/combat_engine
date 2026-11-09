@@ -114,6 +114,49 @@ def empowerments(c: Cast) -> int:
 BANKED_CHARGE = 2
 BANKED_CHARGE_KEY = "artificer:banked-charge"
 
+#: The infusions crafted at an extended rest, and the ref the count is keyed
+#: on. **The ref is this feature's own, not each card's**, which is the whole
+#: of what `cf:artificer-f2` was missing: `p4128`, `p7635` and `p10187` each
+#: counted their own `usage=ENCOUNTER` use, so one printed pool was three
+#: separate allowances.
+#:
+#: Spelled `..._CRAFTED` and not `INFUSIONS`, because `feats/artificer_b`
+#: already has an `INFUSIONS` and it is the **tuple of the three refs** --
+#: two names differing only in which file they are in, meaning a count in
+#: one and a card list in the other, is the near-collision `#719` records.
+INFUSIONS_CRAFTED = 2
+#: "At 16th level, you instead create three." The one tier line on this card
+#: that moves the count rather than a number inside one of the three cards.
+INFUSIONS_TIER = 16
+INFUSIONS_TIER_CRAFTED = 3
+INFUSIONS_REF = "cf:artificer-f2"
+
+#: The other half of the same printed sentence: "but only one per round".
+#: `once_per_round` is per row, so three rows carrying it allow three uses in
+#: one round -- and on a one-use encounter power it is decoration anyway,
+#: since `dsl.usable` already refuses a second use as expended. One label on
+#: `Powers.latched` is the single hold the page describes.
+INFUSION_ROUND = "cf:artificer-f2 this round"
+
+
+def infusions(c: Cast) -> int:
+    """How many infusions this artificer holds today, after anything raising it.
+
+    `c.amount_for` rather than the constant, for the reason `empowerments`
+    above reads one: `f3045` prints "use a cf:artificer-f2 power one extra
+    time during the encounter", so the allowance has to be raisable from
+    outside. That feat is refused in play on a gap of its own, so nothing
+    writes through this door yet -- but a limit written twice is a limit a
+    feat cannot reach, which is exactly what `#666` found here.
+
+    Named without a leading underscore because the three cards are in
+    another file and read it.
+    """
+    printed = (INFUSIONS_TIER_CRAFTED if c.level >= INFUSIONS_TIER
+               else INFUSIONS_CRAFTED)
+    return c.amount_for(INFUSIONS_REF, printed)
+
+
 #: The label on the hold that **is** a banked reservoir, so a row can ask who
 #: is carrying one. `c.lingers_label(BANKED_LABEL, on=ally)`.
 #:
@@ -387,23 +430,77 @@ def artificer_transfer(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE_HEAL,
-    todo=("chargen.power_choice()",),
+    todo=("c.restore_per_day(ref)", "chargen.deal_build_option()"),
 )
 def artificer_infusions(c: Cast) -> None:
     """The budget the class's three infusion cards draw on, and the swap
     offered when the character is made.
 
-    Two infusions are crafted at an extended rest, one is spent per card
-    used, and a spent one is replenished by a healing surge during a short
-    rest. `group=` is a one-per-encounter allowance and would be a third of
-    the printed one, so `p4128`, `p7635` and `p10187` each carry their own
-    `once_per_round` instead -- which is three separate allowances rather
-    than one shared one, and this row is the thing that is missing.
-    The other half is the swap the page offers when the character is made
-    -- one card taken in place of another. That is not an ability leg and
-    `chargen.BUILDS` was the wrong symbol for it: a `Build` records which
-    secondary a fork leans on and carries no card list.
-    `chargen.power_choice()` is what the sorcerer's own swap already names.
+    **The budget is written and has left this row**, which is why the
+    marker is narrower than it was and why the body is still empty. It was
+    `todo=("chargen.power_choice()",)` -- a symbol serving five different
+    needs across ten claimants, `#1112` -- and neither half of what this
+    row wants was among them.
+
+    **The budget, in `powers/artificer/level_0.py`.** Two infusions crafted
+    at an extended rest, three from 16th level, one expended per card used,
+    one per round. `c.spend_per_day` keyed on **this row's ref** is what
+    makes it one pool rather than three, and `c.latch` on one shared label
+    is the single use per round: the three cards each asked their own
+    `usage=ENCOUNTER` use before, which is three allowances where the page
+    prints one, and `once_per_round` on each of them is per row, so three
+    could be spent in a single round.
+
+    It is keyed on the ref and not on the row, so it works while this row
+    is refused -- `Powers.per_day` is a dict of strings. That counter is the
+    printed clock because an extended rest clears it and nothing else does;
+    `Powers.used` is cleared by **both** rests and `Powers.charges` does not
+    outlive the board.
+
+    `group=` is the header field this wanted and it still will not do:
+    `dsl._group_spent` asks whether a sibling has been used *at all*, so a
+    group is one use shared where the page gives two.
+
+    **Missing: the replenishment** -- *"during a short rest, you or an ally
+    can spend a healing surge to replenish one of the infusions expended"*.
+    Both ends of that exist, `events.ShortRested` for the moment and
+    `c.spend_surge` for the price, and nothing hands a spent
+    `Powers.per_day` use back: `c.restore_charge` is the per-encounter
+    store and `c.restore_use` is a row's own use, so neither is this
+    counter. The day's two are therefore all an artificer gets, which is
+    tighter than print rather than looser.
+
+    **Missing: a build that can take the alternative.** *"You can choose to
+    take `p10187` in place of `p7635` ... if you choose it you cannot create
+    `p7635` at all"* is a pick from a named pair made when the character is
+    built, which is exactly what `chargen.BUILD_OPTIONS` holds, and
+    `_build_options` reads the hand as well as the feats now so a `cf:` row
+    reaches it. Both of those were driven and both work: with
+    `("p7635", "p10187")` in the table a dealt artificer carries
+    `option:cf:artificer-f2:p7635` and `c.chosen_option` reads it back, and
+    a build forced to the other value reads that back instead.
+
+    **What does not work is anything acting on it, and the measurement is
+    the reason this row is not written.** `_build_options` records the
+    **first** option unconditionally and by design, so an exclusion written
+    in either direction fires for *every* dealt artificer and the other card
+    of the pair becomes unreachable by anybody: `audit.py` moves `p10187`
+    **and** `f3023` -- the feat whose whole subject is that card -- from
+    "fires and does something" to UNUSED, and neither is in
+    `audited.json`'s `never_refs`. Suppressing the one line puts both back.
+    The verb is not the cause either: dealing one card of the pair instead
+    of forbidding the other reads the same, because the deadness comes from
+    the dealer being deterministic and not from how the row says it.
+
+    Written the other way round -- only the direction the card prints, so
+    nothing is forbidden until a build takes the alternative -- the row
+    plays and does **nothing** on any board, and `audit.py` reports it
+    newly silent. Both readings were driven; `chargen.deal_build_option()`
+    is what either of them needs first, and `#314` is where choosing well
+    lives.
+
+    Both cards are therefore still dealt, which is one card more than print
+    and is the state this row inherited rather than one it introduces.
     """
 
 

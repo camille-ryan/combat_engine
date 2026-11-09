@@ -202,7 +202,13 @@ def _just_bloodied(c: Cast, ev: Any) -> bool:
     off the damage, which carries both the hit points left and how many
     came off.
     """
-    h = c.world.get(getattr(ev, "target", None), Health)
+    # Guarded rather than passed through: `getattr` answers `Any | None`
+    # and `World.get` wants an eid, so an event with no target reached the
+    # store as `None`.
+    whom = getattr(ev, "target", None)
+    if not isinstance(whom, int):
+        return False
+    h = c.world.get(whom, Health)
     if h is None:
         return False
     half = h.max_hp // 2
@@ -2440,7 +2446,7 @@ def i2345x1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("chargen.power_choice()",),
+    todo=("chargen.power_choice(known=)",),
 )
 def i2345p1(c: Cast) -> None:
     """The bound remnant becomes active on a hit, and the binding is the gap.
@@ -2460,10 +2466,23 @@ def i2345p1(c: Cast) -> None:
     choice happens off the board. So nothing records *which* power was
     chosen, and there is no ref to hand `c.bargain`.
 
-    That is a chargen-recorded choice of a power, which is the gap nine
-    other rows already name -- hence `chargen.power_choice()` rather than
-    a tenth synonym. `i457p1` is the precedent for an item row waiting on
-    one.
+    That is a chargen-recorded choice of a power -- but **not the same
+    choice the other nine want**, which is why this now names
+    `chargen.power_choice(known=)` rather than the bare symbol.
+
+    Measured across all ten claimants on `#1112`: six want a pick from a
+    **computed pool** (a class list, a trained skill's powers, an at-will
+    at a level), one is a pick from a **named finite set** (`f2694`, which
+    `BUILD_OPTIONS` answered and is written), and one was a rest-crafted
+    resource mis-marked onto the symbol. This one is the only one that
+    reads the character's **own hand**: the card says *"a daily power you
+    know"*, so the options are the powers this character holds and no pool
+    can produce them.
+
+    A chooser over a pool cannot answer it and would report the row ready
+    the day that chooser landed, which is the `c.ability_for(ref)` failure
+    `content/CLAUDE.md` records -- one symbol for three needs, twelve rows
+    reported ready when a third of it arrived.
 
     Writable the day that store exists: the trigger is an ordinary `Hit`
     under `cursed_by_me` with `c.weapon_is(c.ref)`, and the body is
@@ -4648,7 +4667,12 @@ def i2796p1(c: Cast) -> None:
     if not c.world.effects.suspend(hold, f"{c.ref} shrugged it off"):
         return
     clock = c.world.effects.apply(c.me, c.me, When.EONT, label=f"{c.ref} respite")
-    clock.on_end.append(lambda: c.world.effects.resume(hold))
+    def put_it_back() -> None:
+        # A `def` rather than a lambda: `effects.resume` answers whether it
+        # resumed and `on_end` holds `Callable[[], None]`.
+        c.world.effects.resume(hold)
+
+    clock.on_end.append(put_it_back)
 
 
 @power(

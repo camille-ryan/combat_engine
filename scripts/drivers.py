@@ -39346,6 +39346,43 @@ def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     )
 
 
+def a_build_option_naming_rows_matches_the_rows(out: Result) -> None:
+    """`BUILD_OPTIONS` copies a list `content/` owns, so gate the copy. `#1112`.
+
+    `f2694`'s card says *"choose one of the monk's Flurry of Blows
+    powers"*, and there are five. The authoritative list is
+    `content.powers.monk.level_0.FLURRIES`; `chargen.BUILD_OPTIONS` holds a
+    **copy**, because `chargen` cannot import `content` -- content imports
+    chargen, so the edge would be a cycle.
+
+    That is the same bind `etl.feat._ARMOUR_RUNG` is in against
+    `armour.LADDER`, and this is the same answer: copy it and assert the
+    copy. Without this a sixth flurry landing in the monk file would be
+    silently unavailable to the feat -- the row would go on granting one of
+    five and nothing would say the set had grown.
+
+    **Equal, not a subset.** A subset test would pass a copy that had lost
+    an entry, which is the direction that silently narrows the choice.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen as _cg
+    from combat_engine.content.powers.monk.level_0 import FLURRIES
+    from combat_engine.engine.dsl import REGISTRY as _REG
+
+    out.that(_cg.BUILD_OPTIONS.get("f2694") == FLURRIES,
+             "**`BUILD_OPTIONS['f2694']` is exactly the monk's own"
+             " `FLURRIES`** -- a copy `chargen` cannot import, gated so a"
+             " sixth flurry reddens here instead of being unreachable by"
+             " the feat that chooses among them",
+             f"table {_cg.BUILD_OPTIONS.get('f2694')} vs monk {FLURRIES}")
+    out.that(all(r in _REG for r in _cg.BUILD_OPTIONS.get("f2694", ())),
+             "and every ref it names is a declared row, so the option"
+             " `c.chosen_option` hands back is something `c.grant_row` can"
+             " actually grant -- a value table holding a dead ref would"
+             " read as a working choice",
+             f"{[r for r in _cg.BUILD_OPTIONS.get('f2694', ()) if r not in _REG]}")
+
+
 def a_carried_disease_arms_its_stage_on_the_next_board(out: Result) -> None:
     """The dispatcher `#948` step 3 was blocked on. `#948`.
 
@@ -68463,6 +68500,11 @@ DRIVERS = {
     "group_check": (
         a_group_check_scores_the_party_once_against_a_threshold,
         "a group check scores the party once against a threshold (#984)",
+    ),
+    "build_options_mirror": (
+        a_build_option_naming_rows_matches_the_rows,
+        "a BUILD_OPTIONS entry naming rows matches the list content/ owns,"
+        " and every ref in it is declared (#1112)",
     ),
     "disease_dispatch": (
         a_carried_disease_arms_its_stage_on_the_next_board,

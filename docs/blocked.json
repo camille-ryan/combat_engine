@@ -1,7 +1,10 @@
 {
   "cf:artificer-infusions": {
-    "wants": "a shared per-encounter allowance of more than one use -- group= counts to one -- and chargen.power_choice() for the card the page offers in place of another",
-    "why": "the fourth feature is the budget the three declared infusion rows draw on: two per extended rest, one per round, three from 16th level. Each row is written as its own encounter power with once_per_round, which is three separate allowances rather than one shared one. The second half was filed as chargen.BUILDS and that was the wrong symbol: a Build records which secondary a fork leans on and carries no card list, so a leg could not express one card taken in place of another"
+    "wants": "c.restore_per_day(ref) to hand back one of the day's infusions at a short rest, and chargen.deal_build_option() so a build can take the card the page offers in place of another",
+    "why": "the shared allowance this entry was mostly about is written, and it needed no engine facility: c.spend_per_day keyed on cf:artificer-f2's own ref is one pool the three declared cards draw on, and c.latch on one shared label is the printed single use per round. group= counting to one therefore stopped being the obstacle -- the pool is keyed on the ref, not on the row, so it works while the row is refused. Two clauses are left. The replenishment -- during a short rest, you or an ally can spend a healing surge to replenish one expended infusion -- has its moment (events.ShortRested) and its price (c.spend_surge) and no way to return a spent Powers.per_day use; c.restore_charge is the per-encounter store and c.restore_use is a row's own use. The swap is recorded and readable -- chargen.BUILD_OPTIONS plus c.chosen_option, both driven -- and cannot be acted on: _build_options records the first printed option unconditionally, so an exclusion in either direction fires for every dealt artificer and moves p10187 and f3023 from firing to UNUSED, neither of them in audited.json's never_refs, while the one direction the card prints never fires at all and leaves the row newly silent",
+    "covered_by": [
+      "cf:artificer-f2"
+    ]
   },
   "cf:artificer-items": {
     "wants": "magic items in the engine: an item with a daily power, Gear recording what is worn or carried, and an event announcing that an item's daily power was used",

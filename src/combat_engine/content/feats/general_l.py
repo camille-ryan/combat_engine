@@ -504,10 +504,31 @@ def f2628(c: Cast) -> None:
 
 
 @power("f2694", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.power_choice()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("chargen.PRINTED(implements)",))
 def f2694(c: Cast) -> None:
     """One of the monk's named powers, chosen at build time, plus a
     proficiency.
+
+    **The choice half is written now and the marker has moved.** It was
+    `todo=("chargen.power_choice()",)` and that symbol served five
+    different needs across ten claimants -- see `#1112`. This row is the
+    only one of the ten whose card names a **finite set**, which is what
+    `chargen.BUILD_OPTIONS` holds, so it is the only one that table could
+    ever have answered.
+
+    `BUILD_OPTIONS["f2694"]` carries the five flurry refs and
+    `_build_options` puts `option:f2694:<ref>` on `Build.choices`, which
+    `c.chosen_option` reads back. The grant was already written four lines
+    above, exactly as the old docstring said it would be.
+
+    **What is left is the ki focus**, and it is not this feat's gap: no
+    implement is imported as an arm at all -- `chargen.PRINTED` holds 117
+    weapons and 0 implements, and the `weapon` table has no ki-focus group
+    -- so there is nothing for a proficiency to name. `#1167`.
+
+    The skill-training clause needs nothing: `_trained_skills` already adds
+    what a feat trains, reading the feat's own columns.
 
     **Re-aimed a third time, and `c.flurry_of_blows()` was never the hold.**
     That verb answers "which flurry does this creature *hold*", and the whole
@@ -521,9 +542,19 @@ def f2694(c: Cast) -> None:
     is recorded, `c.grant_row(ref, uses=1)` is the rest of the card and is
     written four lines above this one.
 
-    `chargen.power_choice()` rather than a symbol of its own: eight rows already
-    wait on exactly this -- a build-time pick from a named set of rows -- and a
-    ninth spelling would split the group for no reason."""
+    **The claim this docstring used to end on was wrong**, and it is worth
+    keeping because it is what delayed the row: *"eight rows already wait on
+    exactly this -- a build-time pick from a named set of rows -- and a
+    ninth spelling would split the group for no reason."* Measured against
+    all ten cards, **none** of the other nine is a pick from a named set.
+    Six want a pick from a **computed pool**, one from the character's own
+    hand, one is a rest-crafted resource mis-marked onto the symbol, and
+    one is this. So the shared spelling was not grouping a family; it was
+    hiding four.
+    """
+    chose = c.chosen_option("f2694")
+    if chose:
+        c.grant_row(chose, on=c.me, uses=1, until=When.ENCOUNTER)
 
 
 @power("f2731", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -620,12 +651,27 @@ def f2580(c: Cast) -> None:
 
 
 @power("f2618", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.power_choice()",))
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.skill_power_choice()",))
 def f2618(c: Cast) -> None:
     """Grants a utility power drawn from a trained skill. Not a swap and
-    not a build fork -- it is a power picked out of a pool the spec
-    does not enumerate, and its own ref for that power is this feat,
-    which is an ETL self-reference rather than a card."""
+    not a build fork -- it is a power picked out of a pool, and its own ref
+    for that power is this feat, which is an ETL self-reference rather
+    than a card.
+
+    **Re-pointed, and half the old reason is gone.** This said the pool is
+    one *"the spec does not enumerate"*. It is enumerated now: `#999`
+    imported the 134 skill powers, `#1163` declared them, and `#1162`
+    taught `chargen.loadout` to select them by `cls` against the trained
+    set and filter by level. So the pool exists and is drawable.
+
+    What is left is the **choice**, and it now names
+    `chargen.skill_power_choice()` rather than the generic
+    `chargen.power_choice()`: `f3548` already waited on that precise
+    symbol and widens the eligibility for the very choice this row makes,
+    so the two are one family and were in different groups. The generic
+    symbol served five different needs across ten claimants -- `#1112`.
+    """
 
 
 # -- the multiclass feats whose power the spec does name --------------------
@@ -958,7 +1004,13 @@ def f2842(c: Cast) -> None:
     me = c.me
     # `c.invisible` labels `"p377 unseen"` and passes `by=self.ref`, so the
     # laying row is asked by `by` rather than by parsing the label.
-    hold = next((eff for eff in c.world.effects.of(me) if eff.by == "p377"), None)
+    # `getattr`, because `by` is attached to the `Effect` at runtime
+    # (`durations.py:524`) rather than declared as a field -- the same shape
+    # as `Hit.result`. It reads correctly (`eff.by == "p377"` on a real
+    # board) and `ty` cannot see it, so the defensive spelling is the
+    # honest one rather than a blessed diagnostic.
+    hold = next((eff for eff in c.world.effects.of(me)
+                 if getattr(eff, "by", None) == "p377"), None)
     if hold is None:
         return
     hold.when = When.SUSTAIN
@@ -968,7 +1020,14 @@ def f2842(c: Cast) -> None:
     # one the one that charges -- the printed "until the end of your next
     # turn" with nothing sustained.
     price = 2 if c.feat(PLAGUE_FEAT) else 5
-    c.on_sustain(hold, lambda: c.flat(price, on=me))
+
+    def charge() -> None:
+        # A `def` rather than a lambda: `c.flat` returns the damage dealt
+        # and `on_sustain` wants `Callable[[], None]`, so the lambda was
+        # the right behaviour with the wrong type.
+        c.flat(price, on=me)
+
+    c.on_sustain(hold, charge)
 
     def stop(ev: Any) -> None:
         if ev.attacker == me:
