@@ -308,6 +308,42 @@ def _moved_since(at: str, ref: str, declared: dict) -> bool:
     return done.returncode == 0 and bool(done.stdout.strip())
 
 
+def _dead_evidence(judged: dict) -> list[tuple[str, str, str]]:
+    """Verdicts whose `found:` note names a content symbol that is gone.
+
+    The fifth drift question, and the only one about the **evidence**
+    rather than the rows or the symbol. See `_drift`'s docstring for why it
+    exists and what it measured on its first run.
+
+    **Read off the file, never imported.** A verdict may name a helper in a
+    module that does not import cleanly in isolation, and a drift report
+    that raises is a drift report nobody runs. A `def` search is also the
+    honest test: the note is a pointer for a human to follow, so the
+    question is whether following it lands anywhere.
+
+    Scoped to `content/` paths, because those are the ones a verdict cites
+    as *"already written, see here"*. An engine path is covered by
+    `--signatures` and a bare word is not a path at all.
+    """
+    out: list[tuple[str, str, str]] = []
+    root = ROOT / "src/combat_engine/content"
+    for symbol, entry in sorted(judged.items()):
+        if not isinstance(entry, dict):
+            continue
+        for path in re.findall(r"\b([a-z_]+(?:\.[a-z_0-9]+)+)\b",
+                               entry.get("found") or ""):
+            if not path.startswith(("feats.", "items.", "powers.",
+                                    "monsters.", "races.", "features.")):
+                continue
+            mod, _, name = path.rpartition(".")
+            where = root / (mod.replace(".", "/") + ".py")
+            if not where.exists():
+                out.append((symbol, path, "no such module"))
+            elif not re.search(rf"def {re.escape(name)}\b", where.read_text()):
+                out.append((symbol, path, "module exists, symbol gone"))
+    return out
+
+
 def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
     """Reconcile the recorded verdicts against the tree, and report, not gate.
 
@@ -334,6 +370,20 @@ def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
       finished since, filed under a symbol that now holds different rows.
     * **live and unapplied** -- a `mis-marked` verdict whose symbol is still
       blocked. The actionable queue, which nothing surfaced before.
+    * **dead evidence** -- a `found:` note naming a content symbol that no
+      longer exists. The fifth way, and the one none of the four above can
+      see: all four ask about the *rows* or the *symbol*, and this asks
+      about the **evidence**. A verdict reading *"this is already written,
+      see `feats.exploits._twice`"* is worthless once that helper is
+      deleted, and it reads exactly as authoritative as a live one.
+
+      Found by the `#550` wave deleting 36 helpers that had lost their last
+      caller: three verdicts pointed at them afterwards and nothing noticed.
+      Measured over the whole fixture, **7 of 75** named content paths were
+      already dead -- so four had been rotting before that wave, two of them
+      naming modules that do not exist at all. Resolved by reading the file
+      rather than importing it, because a verdict may name a helper in a
+      module that does not import cleanly on its own.
 
     **Not a gate, and not registered in `check.py`.** Every legitimate day's
     work moves all four numbers, so a check that reddens on normal progress
@@ -343,6 +393,11 @@ def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
     """
     spent, moved, stale, unapplied, suspect = [], [], [], [], []
     undated = 0
+    # **Not `dead`**, which this function already uses inside the
+    # stale-rows loop below. The first spelling was shadowed and
+    # printed a plausible `1` before the unpack gave it away --
+    # a believable wrong number, which is the bad kind.
+    dead_evidence = _dead_evidence(judged)
     for symbol, entry in sorted(judged.items()):
         # `_note` is the fixture's own header, a list of prose lines rather
         # than a verdict. Skipped by shape rather than by name, so a second
@@ -433,6 +488,13 @@ def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
         print(f"      {symbol:<44} {n} row(s) waiting")
     if len(unapplied) > 20:
         print(f"      ... and {len(unapplied) - 20} more")
+
+    print(f"\n  dead evidence -- a `found:` note names a content symbol"
+          f" that is gone: {len(dead_evidence)}")
+    for symbol, path, why in dead_evidence[:20]:
+        print(f"      {symbol:<44} {path}  ({why})")
+    if len(dead) > 20:
+        print(f"      ... and {len(dead_evidence) - 20} more")
 
     print("\n  Read, not gated: every day's work moves all five. The"
           " unapplied list is the one with rows behind it -- and cross it"
