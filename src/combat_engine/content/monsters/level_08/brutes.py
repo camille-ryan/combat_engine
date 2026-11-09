@@ -1302,13 +1302,25 @@ def m479a0(c: Cast) -> None:
     requires_text="the m479 must be in its m485 shape",
 )
 def m479a1(c: Cast) -> None:
-    """The ongoing damage is untyped, as printed. The contagion is a disease
-    track the engine has no model of, so it is noted rather than invented --
-    and it is the same one the m479 is itself immune to."""
+    """The ongoing damage is untyped, as printed.
+
+    **Written, and the note it replaces was the whole gap.** `x5_34` is a
+    declared row and `c.contract` records a stage against it (#389), so the
+    clause plays instead of being described in a `Note` nothing reads.
+
+    `c.contract` and not `c.expose`: this card contracts outright on the
+    hit, with no end-of-encounter saving throw in between -- which is the
+    one case `c.contract`'s own docstring reserves for itself. The ongoing
+    damage and the contraction are both on the hit line.
+
+    It is the same affliction the m479's own type line declares it immune
+    to. Whether `c.contract` honours an immunity is not asked here and not
+    checked -- a stat block never swings this at itself.
+    """
     if c.strike():
         c.hit()
         c.ongoing(5)
-        c.note("m479a1: the target contracts this stat block's disease")
+        c.contract("x5_34")
 
 
 @power(

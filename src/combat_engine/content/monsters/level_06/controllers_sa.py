@@ -542,12 +542,17 @@ def m1057a0(c: Cast) -> None:
     damage=Damage("1d6", 4),
 )
 def m1057a1(c: Cast) -> None:
-    """The disease track itself is a thing the engine does not model, as
-    `level_08/brutes.py`'s `m259a0` already notes it for."""
+    """The blow, the ongoing and the disease all play.
+
+    Written. This card contracts `x5_23` on the hit outright -- it prints no
+    saving throw in between -- so it is `c.contract` here and **not**
+    `c.expose`, which is the verb for the commoner end-of-encounter throw
+    (#515). The ref resolves (#504) and the disease row plays.
+    """
     if c.strike():
         c.hit()
         c.ongoing(2, DamageType.UNTYPED)
-        c.note(f"{c.ref}: the target contracts this stat block's disease")
+        c.contract("x5_23")
 
 
 @power(
@@ -3291,9 +3296,16 @@ def m5611a0(c: Cast) -> None:
     damage=Damage("2d6", 7),
 )
 def m5611a1(c: Cast) -> None:
+    """The blow is exact, and the disease is written now.
+
+    The ref resolves (#504) and the throw exists (#515), so `c.expose`
+    records the exposure and the end-of-encounter saving throw settles it --
+    **not** `c.contract`, which catches the disease outright and would skip
+    the throw this card prints.
+    """
     if c.strike():
         c.hit()
-        c.note(f"{c.ref}: at the end of the encounter the target saves or contracts this disease")
+        c.expose("x5_59")
 
 
 @power(
@@ -4073,9 +4085,17 @@ def m6470a0(c: Cast) -> None:
     requires_text="usable only while in beast or hybrid form",
 )
 def m6470a1(c: Cast) -> None:
+    """The form requirement is the header's `requires=`; the blow is exact,
+    and the disease is written now.
+
+    The ref resolves (#504) and the throw exists (#515), so `c.expose`
+    records the exposure and the end-of-encounter saving throw settles it --
+    **not** `c.contract`, which catches the disease outright and would skip
+    the throw this card prints.
+    """
     if c.strike():
         c.hit()
-        c.note(f"{c.ref}: the target saves at the end of the encounter or contracts this disease")
+        c.expose("x5_54")
 
 
 @power(

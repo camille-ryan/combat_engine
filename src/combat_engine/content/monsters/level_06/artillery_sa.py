@@ -2404,11 +2404,10 @@ def m5957a1(c: Cast) -> None:
     requires_text="it must be in beast or hybrid form",
 )
 def m5957a2(c: Cast) -> None:
-    """Disease contraction has no verb -- the same symbol twenty other rows
-    already wait on. The damage half is exact."""
+    """The second damage line is the bloodied variant, not a rider."""
     if c.strike():
         c.damage("2d6", 6 if c.bloodied() else 2)
-        c.contract("x5_34")
+        c.contract("x5_54")
 
 
 @power(

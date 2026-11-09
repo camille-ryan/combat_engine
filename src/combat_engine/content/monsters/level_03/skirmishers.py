@@ -1095,16 +1095,20 @@ def m478a0(c: Cast) -> None:
     damage=Damage("1d4", 2),
 )
 def m478a1(c: Cast) -> None:
-    """The bleed is written; the disease contracted with it is not.
+    """The bleed is written, and so is the disease contracted with it.
 
-    Diseases are a track of escalating states rolled between encounters and
-    there is nothing in the engine that holds one, so the half of the line
-    that lands in a fight is the only half written. There is no `disease`
-    keyword to carry either.
+    `c.contract` and not `c.expose`, because this card prints no saving
+    throw: the hit hands the disease over outright, where the commoner
+    printing of this clause makes a throw at the end of the encounter first.
+    The ref resolves (#504) and the track exists (#389). #1179.
+
+    `x5_23` is also what this creature is printed immune to, which is a
+    column on the stat block rather than anything this row asks.
     """
     if c.strike():
         c.hit()
         c.ongoing(2)
+        c.contract("x5_23")
 
 
 @power(

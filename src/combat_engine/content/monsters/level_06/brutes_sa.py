@@ -550,7 +550,7 @@ def m115825a1(c: Cast) -> None:
 def m115825a2(c: Cast) -> None:
     if c.strike():
         c.hit()
-        c.contract("x5_34")
+        c.contract("x5_54")
 
 
 @power(

@@ -2534,18 +2534,22 @@ def m6621a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=6),
     damage=Damage("1d8", 4),
-    narrative=("skill:endurance",),
 )
 def m6621a2(c: Cast) -> None:
-    """The bite is exact; the contagion is the clause with no combat meaning.
+    """The blow is exact, and so is the contagion it seeds.
 
-    The saving throw is made "at the end of the encounter" and the stage track
-    that follows is rolled with endurance checks over days. Neither happens on
-    a board, so there is nothing in a fight for the clause to change and no
-    mechanism worth building for it.
+    Written. The ref resolves (#504) and the throw exists (#515), so
+    `c.expose` records the exposure and the end-of-encounter saving throw
+    settles it -- **not** `c.contract`, which catches the disease outright
+    and would skip the throw this card prints.
+
+    `narrative=("skill:endurance",)` came off with the clause: the exposure
+    is laid as an effect on the board and settled while the fight is closing,
+    so the row has combat meaning now. #1179.
     """
     if c.strike():
         c.hit()
+        c.expose("x5_94")
 
 
 @power(

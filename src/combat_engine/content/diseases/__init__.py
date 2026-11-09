@@ -37,14 +37,36 @@ bare call would act on nobody.
 reaches 0 and `arm_afflictions` skips a stage of 0, so the page's *"the
 target recovers"* paragraph needs no branch.
 
-## Scope
+## Scope: reachability, and the level band is a consequence of it
 
-15 of the 69 printed diseases are written here: the ones that are both
-**tickable** (`affliction.printed()` -- a fixed DC pair and a single check
-skill) and **inflicted** by a row in this tree, at heroic level. The rest
-would be rows nothing can give a character, which is the shape `#948`
-twice refused to ship. `affliction.refused()` names each exclusion with a
-reason.
+21 of the 69 printed diseases are written here, and the test is whether a
+character can actually catch one:
+
+* **tickable** -- `affliction.printed()`, a fixed DC pair and a single
+  check skill. 53 of 69 pass; `affliction.refused()` names each of the
+  other 16 with a reason, and they group as 8 wanting a level to resolve a
+  banded DC against, 4 naming no check skill at all, 3 keyed on a source
+  or encounter level, and 1 offering a choice of skills.
+* **inflicted** -- something in this tree calls `c.contract` or
+  `c.expose` with the ref, *and* `loader.pick` offers that creature at its
+  own level. Both halves, because a clause on a creature nobody fields is
+  a disease nobody catches.
+
+Anything failing either test would be a row nothing can give a character,
+which is the shape `#948` twice refused to ship -- and the audit cannot
+tell a wrong row from an unreachable one, so it is worse than a gap.
+
+**This used to say "at heroic level" and that was standing in for the test
+rather than being it.** `etl/build.py` caps *powers* at level 10 and
+*monsters* at 13, so level 11-13 stat blocks are in `game.db`, are
+written, and are fielded -- and six of the rows here are the diseases
+those creatures inflict, at printed levels 12 to 16. They are in scope
+because the creatures are, not because of a band.
+
+Reading the band off the `disease` table instead cost a measurement: 17
+rows looked writable by level and **not one of them is inflicted by
+anything**, so all 17 would have been inert. #948 has the arithmetic for
+all 69.
 """
 
 from __future__ import annotations

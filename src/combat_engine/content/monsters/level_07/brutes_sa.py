@@ -2719,13 +2719,33 @@ def m6112a1(c: Cast) -> None:
     damage=Damage("3d8", 4, dtype=DamageType.POISON, kind=LIMITED, half_on_miss=True),
 )
 def m6112a2(c: Cast) -> None:
+    """The exposure sat in the hit branch and the card prints it on the
+    **Effect** line, which is two corrections rather than one.
+
+    An Effect applies to every target the power took, hit or miss -- and
+    this one prints `Miss: Half damage`, so a missed enemy in the burst is
+    still a target and still owes the throw. Laying the exposure only on a
+    hit narrowed a line the card does not narrow.
+
+    And the card *does* narrow it, differently: the throw is owed only "if
+    it is a living humanoid". `c.living` and `c.is_kind` are that read, so a
+    burst over beasts records no exposure at all. That is the printed line
+    and not a gap -- the party reads as a natural humanoid (#542), which is
+    who the sentence is about.
+
+    `c.expose` and not `c.contract`, because the throw comes first: the
+    sibling `m6112a1` lays the scoped -2 (or -5) penalty against exactly
+    this throw and reads the disease's ref out of the save context.
+    """
     me = c.me
     _recharge_on(c, DamageApplied, lambda ev: ev.target == me and ev.dtype is DamageType.LIGHTNING)
+    victim = c.target
     if c.strike():
         c.hit()
-        c.expose("x5_81")
     else:
         c.hit(half=True)
+    if victim is not None and c.living(on=victim) and c.is_kind("humanoid", on=victim):
+        c.expose("x5_81", on=victim)
 
 
 _M6112_HIT = "a weapon attack hits it"
