@@ -1,8 +1,8 @@
 {
-  "sha": "4bec665df27e5672d75b2a8eac305ddf470d09dc",
-  "refs": 21656,
-  "fired": 20108,
-  "silent": 546,
+  "sha": "60e45a0b50e78bf38775ceb6a3c2898cb1b9ec9f",
+  "refs": 21662,
+  "fired": 20113,
+  "silent": 547,
   "never": 841,
   "never_refs": [
     "cf:barbarian-f2c0",
@@ -1558,7 +1558,8 @@
     "p9744",
     "p9987",
     "rt:r46-t1",
-    "rt:r62-t1"
+    "rt:r62-t1",
+    "x5_65"
   ],
   "refused_refs": [
     "cf:artificer-f2",
