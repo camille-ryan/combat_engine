@@ -372,6 +372,46 @@ def main() -> int:
                 continue
             typed, plain = card
             if not said:
+                # **A credited clause with no type is checked against the
+                # FEAT's card too**, which the typed branch above already
+                # does and this one did not. The `if code and gating` test
+                # needs `code`, and an untyped call has none -- so a
+                # migrated clause whose feat prints "a +2 bonus" with no
+                # type word fell through to here and was flagged for
+                # omitting the type the *power's* card names, which belongs
+                # to a different sentence.
+                #
+                # Measured on `f981`->`p315`: the feat says *"you gain a +2
+                # bonus to the attack roll"* (untyped, which is the reading
+                # 225 specs share) and `p315` prints a **power** bonus for
+                # the ally it helps. Written `kind="feat"` the check said
+                # *disagree*; written untyped, which is correct, it said
+                # *omit*. Unpassable from either side, which is the shape
+                # this file's own note on a mixed card describes.
+                #
+                # **`and not theirs` is belt-and-braces, and a plant on it
+                # is EXPECTED to be green.** Stated rather than discovered,
+                # because the alternative is a later reader deleting it as
+                # dead. Broadening the escape to accept any credited clause
+                # loses no finding today, and the narrower subject plant --
+                # stripping `kind="feat"` from `f985`'s clause in `p1758` --
+                # is not caught either way, because that card prints an
+                # untyped bonus somewhere and `typed and not plain` is
+                # False for it before this branch is reached.
+                #
+                # It stays because it is the correct statement of the rule:
+                # an untyped call is right when the clause it belongs to
+                # names no type, and 11 migrated clauses today have a feat
+                # that DOES name one. Posable the moment one of those lands
+                # in a power whose own card types everything.
+                #
+                # Still a real check for the typed case: `kind=` naming a
+                # type the feat's clause does not print is caught by the
+                # branch above, planted and red.
+                if gating:
+                    theirs = _feat_clauses().get((gating, ref))
+                    if theirs is not None and not theirs:
+                        continue
                 # No kind written. Correct if the card types nothing -- and
                 # also if it prints an untyped bonus somewhere, since this
                 # may be that one. The untyped branch below already made

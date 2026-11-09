@@ -645,6 +645,12 @@ def p2248(c: Cast) -> None:
 
     `f978`'s half asks for a **superior** weapon, which is `c.wielding`'s
     category word rather than a weapon group.
+
+    `f1305` also names this row and is **still a rider in its own file**,
+    held back rather than unwritable: migrating it empties that card's last
+    live leg, and `audit.VERDICT_ROWS` pins `f1305` as its example of a row
+    that watches `Hit` from its body. The call site in `feats/general_h.py`
+    carries the measurement.
     """
     arena = c.declare("Arena Fighting", "f971", "f978", "f993")
     if not c.strike():

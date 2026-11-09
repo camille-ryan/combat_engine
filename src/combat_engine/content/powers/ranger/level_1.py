@@ -78,6 +78,21 @@ def _is_named_kind(c: Cast, who: int) -> bool:
     return any(c.is_kind(word, on=who) for word in _NAMED_KINDS)
 
 
+def _surprise_round(c: Cast) -> bool:
+    """Is this the surprise round?
+
+    `Encounter.start` lays `Condition.SURPRISED` on whoever was caught and
+    lifts every one of them when the round ends, so an enemy still holding
+    it *is* the surprise round. The encounter's own `_surprise` flag is
+    private and there is no query for it.
+
+    Copied from `feats/general_h.py` for `_HELD_FAST`'s reason, and
+    `powers/rogue/level_1_b.py` holds the same copy beside `f1306`'s other
+    clause.
+    """
+    return any(c.is_(Condition.SURPRISED, on=foe) for foe in c.enemies())
+
+
 def _two_melee(world: World, eid: int) -> bool:
     """"You must be wielding two melee weapons."
 
@@ -262,8 +277,8 @@ def _both_hands(c: Cast, *groups: str) -> bool:
     return all(c.held(what=group) for group in groups)
 
 
-def _p87_both_swings(c: Cast, arena: str) -> None:
-    """The three clauses on `p87` that are about **both** of its swings.
+def _p87_both_swings(c: Cast, arena: str, doom: bool) -> None:
+    """The four clauses on `p87` that are about **both** of its swings.
 
     A `PowerResolved` watcher rather than a reading taken in the body, and
     the reason is that row's target line: it spreads two attacks over one
@@ -288,6 +303,15 @@ def _p87_both_swings(c: Cast, arena: str) -> None:
     triggers, with an empty `rolls`, and it arrives **first**. A handler
     that only checked the actor would spend itself on that one and read no
     swings at all.
+
+    **`doom` is `f1304`'s clause and is a fourth, independent decision**
+    rather than a branch of the chain: that feat carries no category
+    bracket, so it pays alongside whichever of the three arena branches
+    did. It was a `resolved=` rider out in `exploits._riders` for the same
+    reason the other three were -- "if you hit with **both** attacks" is a
+    sentence about the whole use. Its rider counted the swings off the bus
+    log through `general_h._swings`; `ev.rolls` is one `AttackResult` per
+    swing and is the reader that function's own docstring points at.
     """
     me, ref = c.me, c.ref
     held: list[Any] = []
@@ -323,6 +347,17 @@ def _p87_both_swings(c: Cast, arena: str) -> None:
                 and len(c.held(what="light blade")) > 1):
             with c.credit("f989"):
                 c.flat(c.dex_mod, on=caught[-1])
+        if doom and len(caught) > 1:
+            # "If you hit with both attacks, **one** target takes the
+            # penalty" -- one and not one per hit. Where both swings went
+            # into the same creature there is nothing to pick; where they
+            # caught two, the choice is the character's.
+            pool = sorted(set(caught))
+            who = (pool[0] if len(pool) == 1
+                   else c.choose(pool, f"{ref}: who takes the penalty"))
+            if who is not None:
+                with c.credit("f1304"):
+                    c.penalty("attack", 2, on=who, until=When.EONT)
 
     held.append(c.watch(PowerResolved, finished, until=When.EOT, on=me,
                         label=f"{ref} both swings"))
@@ -367,8 +402,20 @@ def p87(c: Cast) -> None:
 
     **Six more feats print a clause here and all six are
     `[Arena Fighting]`**, so they are one `c.declare` chain and exactly one
-    of them pays per use. `f1298` carries no bracket and stays a plain
-    `if` beside the chain, stacking with whichever branch paid.
+    of them pays per use. `f1298`, `f1304` and `f1306` carry no bracket and
+    stay plain `if`s beside the chain, each stacking with whichever branch
+    paid and with each other.
+
+    **`f1304`'s and `f1306`'s clauses are written in here** (#550), off
+    `feats/general_h.py`. `f1306`'s goes inside the swing loop beside
+    `f1298`'s and for the same reason: it was in the `Hit` table and this
+    row announces one `Hit` per swing, so outside the loop a two-swing use
+    into one creature would pay once where the rider paid twice. Its "if
+    you are making melee attacks, or ... ranged attacks" is the **branch**
+    this use took rather than the weapon in hand, which `c.ranged` reads
+    off `dsl.reach_of` -- the rider asked the same question of the `Hit`
+    through `general_h._melee_half`. `f1304`'s is about both swings and is
+    in `_p87_both_swings`.
 
     Each clause sits in the window its printed sentence names, which is
     four different places in one body:
@@ -386,13 +433,21 @@ def p87(c: Cast) -> None:
       can only do when it has a single target -- with two, each gets one
       swing -- so it reads the landings this body made rather than the use's
       whole roll list.
-    * the other three are about both swings together and are in
-      `_p87_both_swings`, which says why.
+    * the other three, and `f1304`'s, are about both swings together and
+      are in `_p87_both_swings`, which says why.
+
+    **This body now reads Strength and Dexterity**, which it did not
+    before -- `c.attack_mod` is the branch's own ability and
+    `chargen._leans_on` does not read it. Every one of the ranger's five
+    builds has one or both, so all five score this row higher than they
+    did and the order they are offered in moves. Recorded rather than
+    avoided: the two modifiers are what `f1306`'s card prints.
     """
     arena = c.declare(
         "Arena Fighting", "f974", "f977", "f978", "f985", "f989", "f992")
-    if c.first and arena in ("f977", "f985", "f989"):
-        _p87_both_swings(c, arena)
+    doom = c.feat("f1304")
+    if c.first and (doom or arena in ("f977", "f985", "f989")):
+        _p87_both_swings(c, arena, doom)
     shots = 2 if (c.first and c.last) else 1
     landed: list[int] = []
     for swing in range(shots):
@@ -417,6 +472,9 @@ def p87(c: Cast) -> None:
                 and _is_named_kind(c, foe)):
             with c.credit("f1298"):
                 c.flat(c.int_mod, on=foe)
+        if foe is not None and c.feat("f1306") and _surprise_round(c):
+            with c.credit("f1306"):
+                c.flat(c.dex_mod if c.ranged else c.str_mod, on=foe)
     if (arena == "f974" and len(landed) == 2 and landed[0] == landed[1]
             and _both_hands(c, "spear", "flail")):
         with c.credit("f974"):

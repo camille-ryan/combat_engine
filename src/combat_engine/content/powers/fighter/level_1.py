@@ -411,6 +411,27 @@ def p1000(c: Cast) -> None:
     in the sequence; nothing changed in the move. The bonus survives
     whenever the push is declined or fails, which is what `c.instead_of`
     makes an option.
+
+    **`f1297`'s clause is written in here too** (#550), and it is the one
+    that **replaces** this row's push rather than adding to it: "you can
+    slow the target until the end of your next turn instead of pushing
+    it". It is unbracketed (`feat.category` is empty in `game.db`), so a
+    plain `if` and not a `c.declare` chain.
+
+    Out in `exploits._riders` it was a `Hit` rider that armed a one-shot
+    `Window.BEFORE` veto of this row's own `ForcedMove` and slowed in its
+    place, because by the time a rider runs the push has already happened.
+    In the body the substitution is simply the other arm of an `if`: the
+    push is skipped, so there is nothing to cancel and nothing to get
+    wrong about the window.
+
+    **It skips `c.instead_of` as well as the push, deliberately.** That
+    read is where `f984`'s and `f986`'s registered substitutions for this
+    same clause arrive, and only one card can replace one clause -- so
+    taking this one forecloses those, which is what the printed sentences
+    say. The choice is the same mid-body `c.choose` the rider made, with
+    the same two options in the same order, so a headless fight behaves as
+    it did.
     """
     arena = c.declare("Arena Fighting", "f995")
     if c.strike():
@@ -442,7 +463,12 @@ def p1000(c: Cast) -> None:
                 # step into the space it was driven out of
                 c.shift(to=vacated)
 
-        c.instead_of("push", push_and_follow)
+        if (foe is not None and c.feat("f1297")
+                and c.choose(["slow", "push"], f"{c.ref}:instead") == "slow"):
+            with c.credit("f1297"):
+                c.slowed(on=foe, until=When.EONT)
+        else:
+            c.instead_of("push", push_and_follow)
 
 
 @power(

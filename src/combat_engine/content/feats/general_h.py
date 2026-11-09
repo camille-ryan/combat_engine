@@ -71,7 +71,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.feats.exotic import _swap
-from combat_engine.content.feats.exploits import _hits, _riders
+from combat_engine.content.feats.exploits import _riders
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -114,14 +114,12 @@ from combat_engine.engine import (
     Trigger,
     Usage,
     When,
-    Window,
     about_me,
     get,
     power,
     targets_me,
 )
 from combat_engine.engine.durations import keywords_of
-from combat_engine.engine.events import ForcedMove
 from combat_engine.engine.grid import Square
 from combat_engine.engine.query import (
     allies,
@@ -1239,16 +1237,11 @@ _HELD_FAST = (
 _NAMED_KINDS = ("demon", "drow", "orc", "spider")
 
 
-def _melee_half(ev: Any) -> bool:
-    """Was this the melee half of a melee-or-ranged row?
-
-    `resolve.attack` hangs `branch` on the `Hit` after emitting it, the
-    same way it hangs `opportunity` and `charge`, so it wants a
-    `getattr`. A single-range row answers off branch 0, which is its one
-    range -- so this is also simply "was it a melee attack".
-    """
-    p = get(getattr(ev, "power", ""))
-    return p is not None and p.reach_of(getattr(ev, "branch", 0)).kind == "melee"
+# `_melee_half` was here -- "was this the melee half of a melee-or-ranged
+# row", off `Hit.branch` and `Power.reach_of`. Its last caller was
+# `_extra_in_surprise`, f1306's clause on p87, which is written into that
+# row's body now (#550): a body asks its own `Cast` for the branch through
+# `c.ranged`, so the event reader had nowhere left to be read from.
 
 
 def _swings(c: Cast, ev: Any) -> list[int]:
@@ -1271,7 +1264,11 @@ def _swings(c: Cast, ev: Any) -> list[int]:
 
     This function stays, for the reason in the next paragraph rather than
     that one: it reads the bus, which is one entry per **swing** whatever
-    the rolls hold, and three clauses already depend on that ordering.
+    the rolls hold, and a clause in `general_g` still depends on that
+    ordering. This file's own last caller -- `f1304`'s clause on p87 --
+    is written into that row's body now (#550) and reads
+    `PowerResolved.rolls` there, which is what the paragraph below says
+    the rolls are good for.
 
     Every swing is on the bus either way -- `Hit` is emitted per roll -- so
     the use's own span of the log is the honest reader. Back to the
@@ -1281,12 +1278,11 @@ def _swings(c: Cast, ev: Any) -> list[int]:
 
     `PowerResolved.rolls` is now the one place this can be asked, and its
     own docstring always said so ("every `AttackResult` the use
-    produced"). `f1304`'s p87 clause here and `f1102`'s in `general_g`
-    read this instead, and may be moved onto the rolls whenever somebody
-    is in the file -- what they need is the per-swing ordering, which both
-    now give. `exploits._hits` is still right for a clause about a swing
-    the row hands somebody else, which is one roll per target by
-    construction.
+    produced"). `f1102`'s clause in `general_g` reads this instead, and may
+    be moved onto the rolls whenever somebody is in that file -- what it
+    needs is the per-swing ordering, which both now give.
+    `exploits._hits` is still right for a clause about a swing the row
+    hands somebody else, which is one roll per target by construction.
     """
     hits: list[int] = []
     for past in reversed(c.world.bus.log[:ev.seq]):
@@ -1299,12 +1295,13 @@ def _swings(c: Cast, ev: Any) -> list[int]:
     return hits
 
 
-def _surprise_round(c: Cast) -> bool:
-    """`Encounter.start` lays `Condition.SURPRISED` on whoever was caught
-    and lifts every one of them when the round ends, so an enemy still
-    holding it *is* the surprise round. The encounter's own `_surprise`
-    flag is private and there is no query for it."""
-    return any(c.is_(Condition.SURPRISED, on=foe) for foe in c.enemies())
+# `_surprise_round` was here -- an enemy still holding
+# `Condition.SURPRISED` *is* the surprise round, which `Encounter.start`
+# lays and the round's end lifts. Both of its callers were f1306's clauses,
+# on p2248 and p87, and both are written into those bodies now (#550) with
+# a copy of the reader each. The encounter's own `_surprise` flag is still
+# private and there is still no query for it, which is why the copies
+# exist.
 
 
 # -- the clauses ------------------------------------------------------------
@@ -1314,8 +1311,8 @@ def _surprise_round(c: Cast) -> bool:
 # and p2248 -- and are written into those two bodies now (#550). `c.ranged`
 # replaces `_melee_half` there, because a body asks its own `Cast` for the
 # branch rather than reading it off an event, and `c.result.advantage`
-# replaces `c.had_advantage(ev)` for the same reason. `_melee_half` stays:
-# `_extra_in_surprise` below still reads it.
+# replaces `c.had_advantage(ev)` for the same reason. `_melee_half` is gone
+# with the last of them.
 
 
 def _is_named_kind(c: Cast, who: int) -> bool:
@@ -1328,8 +1325,12 @@ def _is_named_kind(c: Cast, who: int) -> bool:
 # that row's swing loop, because p87 announces one `Hit` per swing and a
 # clause outside the loop would pay once where the rider paid twice.
 #
-# `_is_named_kind` stays: `_riposte_off_kind` and `_ally_adds_half_int`
-# below both read it, and neither of those entries has migrated.
+# `_riposte_off_kind` was the third -- f1298's entry on p653 -- and is
+# written into that row's body now, inside the riposte closure, where the
+# counter *is* the branch and `as_` is no longer the discriminator.
+#
+# `_is_named_kind` stays: `_ally_adds_half_int` below reads it, and that
+# entry has not migrated because p1061 hands out no swing for it to read.
 
 
 # `_ongoing_if_alone` was here, called only by f1299's entry on p992,
@@ -1342,136 +1343,37 @@ def _is_named_kind(c: Cast, who: int) -> bool:
 # target line fails still gave the beast its step.
 
 
-def _beast_ongoing_instead(c: Cast, ev: Any) -> None:
-    """Ongoing damage **instead of** the Wisdom modifier on the damage roll.
-
-    **On the `resolved` window, not `clauses`.** The hit is the *beast's* --
-    `p4369` declares `by="companion"` -- and `clauses` is gated on
-    `ev.attacker == me`. `resolved` fires on the character's own
-    `PowerResolved`, which is where the use is announced and where `ev.rolls`
-    names who was actually hit.
-
-    **The "instead of" half cannot be expressed and is marked.** `p4369` adds
-    the Wisdom modifier to its damage *inside its own body*, and there is no
-    cancellable event for a damage bonus the way `ForcedMove` is cancellable
-    for a shove -- so the ongoing damage lands and the modifier it was meant
-    to replace cannot be taken back. That is `c.pre_empt(ref, clause)`, the
-    symbol 29 rows wait on for exactly this shape.
-    """
-    from combat_engine.engine.query import has_combat_advantage
-
-    beast = c.beast()
-    if beast is None or c.wis_mod <= 0:
-        return
-    for foe in _hits(ev):
-        if has_combat_advantage(c.world, beast, foe):
-            c.ongoing(c.wis_mod, on=foe)
+# `_beast_ongoing_instead` was here -- f1299's entry on p4369, in the
+# `resolved=` window because the hit is the *beast's* and `clauses` gates
+# on `ev.attacker == me`. It is written into p4369's body now (#550), and
+# the move is what made its **"instead of" half expressible**: its note
+# here said the ongoing damage lands beside the Wisdom modifier it was
+# meant to replace, that nothing can take a damage bonus back the way
+# `ForcedMove` takes a shove back, and that `c.pre_empt(ref, clause)` was
+# the symbol owed. In the body the Wisdom term is simply left out of the
+# damage expression, so no verb is owed at all.
+#
+# `_slow_instead_of_push` was here too -- f1297's entry on p1000, the only
+# clause in this family that *replaced* a clause of the row rather than
+# adding to it. Out here that needed a one-shot `Window.BEFORE` veto of the
+# row's own `ForcedMove`, because by the time a `Hit` rider runs the push
+# has already happened. It is written into p1000's body now, where the
+# substitution is the other arm of an `if` and there is nothing to cancel.
 
 
-def _slow_instead_of_push(c: Cast, ev: Any) -> None:
-    """"You can slow the target **instead of** pushing it."
-
-    The hard shape in this family, and the one `c.pre_empt(ref, clause)` marks:
-    the clause does not add to the row, it *replaces* a clause of the row. By
-    the time a `Hit` rider runs, a push laid in the body would already have
-    happened -- so this cannot be written as an effect and has to pre-empt.
-
-    `ForcedMove` is a cancellable `Decision` carrying the `power` doing the
-    shoving, and `c.watch` takes a `BEFORE` window. So the rider arms a
-    one-shot that refuses this row's shove against this target and slows
-    instead. Nothing new was needed in the engine.
-
-    One-shot by a latch rather than `once=True`, for the reason p653 gives
-    about its riposte: `once` would be burnt by a shove aimed at somebody
-    else.
-    """
-    foe = ev.target
-    me = c.me
-    if c.choose(["slow", "push"], f"{c.ref}:instead") != "slow":
-        return
-    done: list[bool] = []
-
-    def swap(shove: Any) -> None:
-        if done or shove.source != me or shove.target != foe:
-            return
-        if getattr(shove, "power", "") != "p1000":
-            return
-        done.append(True)
-        shove.cancel("slowed instead of pushed")
-        c.slowed(on=foe, until=When.EONT)
-
-    c.watch(ForcedMove, swap, until=When.EOT, window=Window.BEFORE, on=me,
-            label=f"{c.ref} instead")
-
-
-def _ongoing_on_riposte(c: Cast, ev: Any) -> None:
-    """Ongoing damage, but only on the **counter** the row grants.
-
-    p653 rolls its riposte longhand with `c.attack`, so the opening blow and
-    the counter both arrive carrying that row's `power` -- which is why this
-    clause had no way to ask and the feat carried `c.on_riposte()`. The swing
-    now says which it is in `as_`, hung on the `Hit` the way `charge` and
-    `opportunity` are.
-    """
-    if getattr(ev, "as_", "") != "riposte" or c.wis_mod <= 0:
-        return
-    c.ongoing(c.wis_mod, on=ev.target)
-
-
-def _riposte_off_kind(c: Cast, ev: Any) -> None:
-    """The counter's attack roll **and** damage roll, after an opening hit.
-
-    Both halves are owed only when the opening blow lands on one of the
-    four kinds, and p653 arms its riposte whether it hit or not -- so the
-    clause fires on the opening blow and has to carry the fact forward to
-    a swing that happens later. The latch is a closure over a one-shot
-    watcher, which is `_slow_instead_of_push`'s shape and keeps the memory
-    off the board.
-
-    The attack half is an ordinary gated bonus: the attack context carries
-    `as_`, so "of your riposte" is one key to read.
-
-    **The damage half cannot be gated the same way** -- the damage context
-    carries no `as_`, and both of this row's damage rolls are p653's
-    against the same creature, so a bonus laid at the opening hit would be
-    spent by the opening blow's own damage. Laid at the counter's `Hit`
-    instead: a one-shot damage bonus is spent by the damage roll that
-    applies it, and the next p653 damage roll after that `Hit` is the
-    counter's. `f992`'s p87 clause leans on the same ordering.
-    """
-    if getattr(ev, "as_", "") == "riposte" or c.int_mod <= 0:
-        return
-    if not _is_named_kind(c, ev.target):
-        return
-    me, amount = c.me, c.int_mod
-    # `once=True` because the card buys one counter's roll, not every
-    # counter until the turn comes round: a one-shot attack bonus is spent
-    # by the roll that *used* it, which is a riposte and nothing else.
-    c.bonus("attack", amount, on=me, until=When.SONT, once=True,
-            when=lambda ctx: ctx.get("as_") == "riposte")
-    paid: list[bool] = []
-
-    def counter(hit: Hit) -> None:
-        if paid or hit.attacker != me or hit.power != "p653":
-            return
-        if getattr(hit, "as_", "") != "riposte":
-            return
-        paid.append(True)
-        foe = hit.target
-        c.bonus("damage", amount, on=me, until=When.SONT, once=True,
-                when=lambda ctx: ctx.get("power") == "p653"
-                and ctx.get("target") == foe)
-
-    c.watch(Hit, counter, until=When.SONT, on=me,
-            label=f"{c.ref} riposte")
-
-
-def _cow_on_riposte(c: Cast, ev: Any) -> None:
-    """The attack penalty, on the counter the row grants rather than on the
-    blow that armed it -- `as_` is what tells those two apart."""
-    if getattr(ev, "as_", "") != "riposte":
-        return
-    c.penalty("attack", 2, on=ev.target, until=When.EONT)
+# Three more clauses about the counter p653 arms -- `_ongoing_on_riposte`
+# (f1299), `_riposte_off_kind` (f1298) and `_cow_on_riposte` (f1304) -- were
+# here and are written into p653's body now (#550), inside the riposte
+# closure. Each of them had to tell the counter from the opening blow by
+# reading `as_` off the `Hit`, because p653 rolls both longhand and both
+# carry that row's `power`; inside the closure the branch *is* the counter.
+#
+# `_riposte_off_kind` is the one the move simplified rather than relocated.
+# Its damage half could not be gated on `as_` at all -- the damage context
+# does not carry it -- so it laid a one-shot damage modifier from a second
+# `Hit` watcher closed over a latch. In the body it is `c.flat` on the
+# counter's own hit, and the opening blow's "one of the four kinds" is a
+# local read taken before the closure is built.
 
 
 # `_extra_if_held` was here -- f1300's entry on p917 -- and is written into
@@ -1483,18 +1385,19 @@ def _cow_on_riposte(c: Cast, ev: Any) -> None:
 # is written into p992's body now (#550).
 
 
-# `_advantage_in_surprise` was here -- f1306's entry on p2248 -- and is
-# written into p2248's body now (#550), with a copy of `_surprise_round`.
-# That reader stays: `_extra_in_surprise` below is the same feat's clause on
-# p87, which has **not** moved, deliberately -- it is the last live clause
-# f1306 has out here, and migrating it too would leave the trait arming no
-# watcher at all and reporting silent.
-
-
-def _extra_in_surprise(c: Cast, ev: Any) -> None:
-    if not _surprise_round(c):
-        return
-    c.flat(c.str_mod if _melee_half(ev) else c.dex_mod, on=ev.target)
+# `_advantage_in_surprise` and `_extra_in_surprise` were here -- f1306's
+# entries on p2248 and p87 -- and both are written into those bodies now
+# (#550), each with its own copy of `_surprise_round`. The note here said
+# the p87 half had **deliberately not** moved, because it was the card's
+# last live leg out here and migrating it would leave the trait arming no
+# watcher, doing nothing, and reporting silent. That is answered by
+# `implemented_in=` instead, which `audit.py` buckets as ELSEWHERE and does
+# not fire -- the row is not silent, it is written somewhere else.
+#
+# `_splash_in_cloud` was here, f1305's clause on p992, written into p992's
+# body now (#550) along with a copy of `_others_in_cloud`. That reader
+# stays: `_rattle_in_cloud` below is the same feat's clause on p2248, which
+# is held back rather than unwritable -- see the call site.
 
 
 def _others_in_cloud(c: Cast, ev: Any) -> list[int]:
@@ -1511,11 +1414,6 @@ def _others_in_cloud(c: Cast, ev: Any) -> list[int]:
             break
     inside = c.in_squares(area, side="enemy") if area else []
     return [] if ev.target not in inside else [f for f in inside if f != ev.target]
-
-
-# `_splash_in_cloud` was here, f1305's clause on p992, written into p992's
-# body now (#550) along with a copy of `_others_in_cloud`. That reader
-# stays: `_rattle_in_cloud` below is the same feat's clause on p2248.
 
 
 def _rattle_in_cloud(c: Cast, ev: Any) -> None:
@@ -1585,17 +1483,16 @@ def f1296(c: Cast) -> None:
     """
 
 
-# p1000's clause slows *instead of* the push its row prints, and the
-# ranger's beast clause is the one name here the matcher still misses.
-#
-# **p917's, p2248's and p4369's entries have moved into those rows'
-# bodies** (#550). p1000's stays: it is the "instead of" shape, which
-# `_slow_instead_of_push` writes as a one-shot veto of this row's own
-# `ForcedMove`, and that is the exception the content rules name -- a
-# clause that *replaces* a clause of the row rather than adding to it.
-_riders("f1297", {
-    "p1000": _slow_instead_of_push,
-})
+# **Every clause of this card is in the body of the row it names** (#550),
+# so this is a pointer and nothing is armed. p917's, p2248's and p4369's
+# moved earlier; p1000's was the last and was the only *substitution* in
+# this family -- "slow the target **instead of** pushing it". Out here that
+# had to be a one-shot `Window.BEFORE` veto of p1000's own `ForcedMove`,
+# because a `Hit` rider runs after the push; in that body it is the other
+# arm of an `if` and skips `c.instead_of` entirely, which is also what
+# stops it stacking with the two registered substitutions for the same
+# clause.
+_riders("f1297", {}, implemented_in=("p917", "p1000", "p2248", "p4369"))
 
 def _ally_adds_half_int(c: Cast, ev: Any) -> None:
     """Half the caster's Intelligence on the granted swing's attack roll.
@@ -1628,68 +1525,55 @@ def _ally_adds_con(c: Cast, ev: Any) -> None:
     )
 
 
-def _ongoing_on_granted_hit(c: Cast, ev: Any) -> None:
-    """Ongoing damage on whoever the granted swing caught."""
-    if c.wis_mod > 0:
-        for foe in _hits(ev):
-            c.ongoing(c.wis_mod, on=foe)
-
-
-def _cow_on_granted_hit(c: Cast, ev: Any) -> None:
-    for foe in _hits(ev):
-        c.penalty("attack", 2, on=foe, until=When.EONT)
-
-
-def _cow_if_both_hit(c: Cast, ev: Any) -> None:
-    """"If you hit with both attacks, **one** target takes the penalty."
-
-    A `resolved` clause: the question is about the whole use, and no
-    earlier window has both swings in it. p87 rolls exactly two, over one
-    creature or two, so two hits is both of them landing -- counted with
-    `_swings` rather than `_hits`, which cannot see the second swing into
-    a single target.
-
-    One penalty rather than one per hit, because the card says one target.
-    Where both swings went into the same creature there is nothing to
-    pick; where they caught two, the choice is the character's.
-    """
-    caught = _swings(c, ev)
-    if len(caught) < 2:
-        return
-    pool = sorted(set(caught))
-    who = pool[0] if len(pool) == 1 else c.choose(pool, "who takes the penalty")
-    if who is not None:
-        c.penalty("attack", 2, on=who, until=When.EONT)
-
-
-# p1061 adds to the attack roll of the basic attack that row hands an
-# ally, which is now an ordinary read; p653's clause rides the riposte,
-# which shares its row's `Hit` and is told apart by `as_`.
-# **All four clauses are written and the marker is gone.** The riposte's
-# attack roll is a gated bonus and its damage roll is paid at the
-# counter's hit -- see `_riposte_off_kind` for why the two halves are
-# written in different places.
-# **p2099's and p87's entries have moved into those rows' bodies** (#550).
-# p653's stays: that clause fires on the *opening* blow and has to carry
-# the fact forward to a counter rolled later, which is a latch and a
-# watcher rather than a line of body. p1061's is a swing this row hands an
-# ally, so it is the ally's `PowerUsed` and not this row's body at all.
-_riders("f1298", {
-    "p653": _riposte_off_kind,
-}, granted={"p1061": _ally_adds_half_int})
-
-# p315's clause rides the swing that row hands an ally, p653 the
-# riposte, and the ranger's beast clause is still a printed name.
-# **All four clauses are written, and the marker was stale.** The card
-# lists four powers and each has its own entry above -- `p992` and `p653`
-# on `Hit`, `p315` on the granted swing's `PowerResolved`, and the ranger
-# variant on this row's own. Nothing was waiting for a verb.
+# `_ongoing_on_granted_hit` was here -- f1299's entry on p315, in the
+# `landed=` table -- and is written into p315's body now (#550).
 #
-# **p992's entry has moved into p992's body** (#550).
-_riders("f1299", {
-    "p653": _ongoing_on_riposte,
-}, landed={"p315": _ongoing_on_granted_hit},
-   resolved={"p4369": _beast_ongoing_instead})
+# **It could never have fired where it was.** `landed=` is keyed on
+# `ev.granted_via` and gates on `ev.granted_by == me and ev.actor != me`,
+# which is a swing the row *hands over*; p315 hands over no swing. What it
+# gives an ally is a power bonus to that ally's next attack roll and damage
+# roll against the target, so no event in any fight carried
+# `granted_via == "p315"` and the clause paid nothing. In the body it is a
+# `Hit` watcher on that ally and that target, inside the window the bonus
+# itself holds for, which is what the card describes.
+#
+# `_cow_on_granted_hit` (f1304 on p4541) and `_cow_if_both_hit` (f1304 on
+# p87) were here too, and both are in those bodies now. p4541 really does
+# hand out two swings, so that one goes through
+# `warlord/level_1_c._granted_hit` -- `c.grant_attack` reports that a row
+# went off and not that it connected. p87's reads `PowerResolved.rolls`
+# rather than walking the bus through `_swings`, which is what that
+# function's own docstring points at.
+
+
+# **p2099's, p87's and p653's clauses are in the bodies of those rows**
+# (#550). p653's was the last to move and the migration simplified it: out
+# here it fired on the *opening* blow and carried "one of the four kinds"
+# forward to a counter rolled later, through a latch and a second `Hit`
+# watcher, because the damage context carries no `as_` to gate on. Inside
+# p653's riposte closure the fact is a local read and the damage half is
+# `c.flat` on the counter's own hit.
+#
+# **p1061's stays and no `implemented_in=` goes with it**, which is the
+# `f994` case in `exploits.py` rather than the `f972` one: that pointer
+# takes a row out of `audit.py` altogether, and this leg is a real
+# registration rather than archaeology. It is the attack roll of the free
+# melee basic attack p1061 hands an ally, and p1061's body hands out
+# nothing -- it records what would happen with `c.note` -- so a clause
+# written there would be a branch that can never be true. The work owed is
+# p1061's own Effect line, not this clause.
+_riders("f1298", {}, granted={"p1061": _ally_adds_half_int})
+
+# **Every clause of this card is in the body of the row it names** (#550),
+# so this is a pointer and nothing is armed. p992's moved earlier; p653's,
+# p315's and p4369's were the last three, and two of them were wrong where
+# they sat. p315's `landed=` leg could never fire -- see
+# `_ongoing_on_granted_hit` above -- and p4369's carried the whole "instead
+# of adding your Wisdom modifier to the damage roll" half as an unwritable
+# gap, because a rider cannot take a damage bonus back. In p4369's body the
+# Wisdom term is left out of the damage expression, so the clause is
+# faithful and owes no verb.
+_riders("f1299", {}, implemented_in=("p315", "p653", "p992", "p4369"))
 
 # p997's clause pays out **on a miss**, which a rider hung on `Hit` never
 # sees -- and `_riders` has carried a `missed=` leg since the family was
@@ -1701,7 +1585,15 @@ _riders("f1299", {
 # (#550), and the `missed=` note above went with p997's. p1061's is the
 # last one out here and stays: it is the swing that row hands an ally,
 # which arrives as the *ally's* `PowerUsed` with `granted_via` naming
-# p1061 -- not anything p1061's own body can reach.
+# p1061 -- not anything p1061's own body can reach. That body hands out
+# nothing at all, in fact: it records what would happen with `c.note`, so a
+# clause written there would be a branch that can never be true.
+#
+# **No `implemented_in=("p704", "p917", "p997")` for the three that moved**,
+# deliberately, and the reason is `f994`'s in `exploits.py`: the pointer
+# takes the whole row out of `audit.py`, which buckets it ELSEWHERE and
+# does not fire it, and this leg is a live registration rather than
+# archaeology. It is owed and belongs with whatever closes the p1061 half.
 _riders("f1300", {}, granted={"p1061": _ally_adds_con})
 
 
@@ -1884,15 +1776,14 @@ def f1303(c: Cast) -> None:
     c.watch(PowerResolved, moved_after, on=me, until=When.ENCOUNTER)
 
 
-# p4541's clause rides the basic attack that row hands an ally -- which
-# `granted_via` names now -- p653's the riposte, which `as_` tells from
-# the blow that armed it, and p87's both of its two attacks landing,
-# which only the `resolved` window sees.
-#
-# **p992's entry has moved into p992's body** (#550).
-_riders("f1304", {"p653": _cow_on_riposte},
-   resolved={"p87": _cow_if_both_hit},
-   landed={"p4541": _cow_on_granted_hit})
+# **Every clause of this card is in the body of the row it names** (#550),
+# so this is a pointer and nothing is armed. p992's moved earlier; p653's,
+# p87's and p4541's were the last three, and each sat in a different window
+# out here -- the riposte told apart by `as_`, both of p87's swings seen
+# only by `resolved`, and p4541's granted basic attack read off `landed=`.
+# In the bodies those three windows are the riposte closure,
+# `PowerResolved.rolls` and `warlord/level_1_c._granted_hit`.
+_riders("f1304", {}, implemented_in=("p87", "p653", "p992", "p4541"))
 
 # All four clauses are about the zone `p2473` lays. The two splash ones
 # are riders on a hit inside it and are written; p87's wants the zone to
@@ -1902,6 +1793,19 @@ _riders("f1304", {"p653": _cow_on_riposte},
 #
 # **p992's entry has moved into p992's body** (#550), and `_others_in_cloud`
 # went with it as a copy -- p2248's clause below still reads this one.
+#
+# **p2248's is written and ready to move and is held back, which is an
+# instrument cost rather than a reading of the card.** Moving it empties
+# this card's last live leg, so the row would want `implemented_in=` --
+# and `audit.VERDICT_ROWS` pins `f1305` as its one example of a row that
+# watches `Hit` from its own body, calling `audit()` on it directly rather
+# than through the sweep's bucketing. Measured with the clause migrated:
+# `audit.py --verdicts` reported 12 of 13 and `f1305 is credited with
+# nothing as written`, which is the fixture going stale and not the row
+# going silent. `audit.verdicts(("f1338",))` and the same for `f1339`,
+# `f1340` and `f1342` each answer clean, so the swap is one word -- but
+# `scripts/audit.py` is in `audit.WIDE`, and a wide sweep is not worth
+# paying for one clause. It goes with whatever next touches that file.
 _riders("f1305", {
     "p2248": _rattle_in_cloud,
 }, dropped=("c.move_zone(with_me=)", "c.zone_exempt()"))
@@ -1911,16 +1815,17 @@ _riders("f1305", {
 # holds its swap for a stretch of time `When` cannot name. Re-aimed
 # there: it is the duration that is missing, not the substitution.
 #
-# **p2248's entry has moved into p2248's body** (#550). **p87's has
-# deliberately not**, and the reason is the trap #550 names from the other
-# side: it is this card's last clause out here, so migrating it too would
-# leave the trait arming no watcher, doing nothing, and reporting silent --
-# and `c.credit` cannot cover that, because the audit board has nobody
-# holding `Condition.SURPRISED` for the clause to pay on. One clause stays
-# a rider until the card has something else keeping it alive.
-_riders("f1306", {
-    "p87": _extra_in_surprise,
-}, dropped=("When.SURPRISE",))
+# **p2248's and p87's entries are both in those bodies now** (#550). The
+# note here said p87's had deliberately *not* moved, because it was the
+# last live clause this card had out here and migrating it would leave the
+# trait arming no watcher, doing nothing, and reporting silent -- and that
+# `c.credit` could not cover it, since the audit board holds nobody
+# carrying `Condition.SURPRISED` for the clause to pay on. The second half
+# is still true and the conclusion was the wrong answer to it:
+# `implemented_in=` says the clause is written elsewhere and `audit.py`
+# does not fire the row at all, which is the state this card is in.
+_riders("f1306", {}, implemented_in=("p87", "p2248"),
+        dropped=("When.SURPRISE",))
 
 
 def _poisoned(c: Cast, who: int) -> bool:

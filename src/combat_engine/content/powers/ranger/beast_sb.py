@@ -179,6 +179,29 @@ def p4369(c: Cast) -> None:
     `Effect` and `c.credit` reaches effects through `Effects.apply`. It is
     written anyway: the clause is `f1297`'s, and anything laid inside it
     later should say so.
+
+    **`f1299`'s clause is written in here as well, and migrating it is
+    what made its "instead of" half expressible.** The card reads "instead
+    of adding your Wisdom modifier to the damage roll, you can have the
+    target take ongoing damage equal to your Wisdom modifier (save ends)",
+    and out in `exploits._riders` only the second half could be said: a
+    rider runs after the damage is paid, and there is no cancellable event
+    for a damage bonus the way `ForcedMove` is cancellable for a shove. So
+    the ongoing landed *beside* the modifier it was meant to replace --
+    strictly stronger than print -- and the gap was named as
+    `c.pre_empt(ref, clause)`. In the body the Wisdom term is simply left
+    out of the damage expression, so no verb is owed and the marker is not
+    needed.
+
+    It is unbracketed, a plain `if`, and it stacks with whichever of the
+    two Arena Fighting feats was declared. The choice is a `c.choose` with
+    the ongoing first, which is the printed "you can" and is also what a
+    headless fight takes.
+
+    The gate is the **beast's** combat advantage and not the ranger's --
+    the card says "against a creature granting combat advantage to it" --
+    and it is asked after the strike, because the damage expression is
+    what the choice decides and the target is only settled by then.
     """
     if c.feat("f1297"):
         with c.credit("f1297"):
@@ -195,8 +218,22 @@ def p4369(c: Cast) -> None:
         return
     arena = c.declare("Arena Fighting", "f975", "f982")
     if c.strike():
-        c.damage(c.b(2 if c.level >= 21 else 1), c.b_mod(Ability.STR) + c.wis_mod)
+        pet = c.beast()
+        instead = bool(
+            c.feat("f1299") and c.wis_mod > 0 and c.target is not None
+            and pet is not None
+            and has_combat_advantage(c.world, pet, c.target)
+            and c.choose(["ongoing", "damage"], f"{c.ref}:instead")
+            == "ongoing"
+        )
+        c.damage(
+            c.b(2 if c.level >= 21 else 1),
+            c.b_mod(Ability.STR) + (0 if instead else c.wis_mod),
+        )
         victim = c.target
+        if instead and victim is not None:
+            with c.credit("f1299"):
+                c.ongoing(c.wis_mod, on=victim)
         if arena == "f975" and victim is not None:
             with c.credit("f975"):
                 # The target falls prone if the beast companion has combat

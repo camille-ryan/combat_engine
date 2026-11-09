@@ -434,6 +434,17 @@ def p4541(c: Cast) -> None:
     on the swing this row *hands the target* -- "if the target makes a
     melee basic attack against you" -- so it is asked where that grant is
     made and taken, which is `c.grant_attack`'s own return.
+
+    **`f1304`'s clause is written in here too** (#550), off
+    `feats/general_h.py`. It is unbracketed, so a plain `if` outside the
+    chain that stacks with whichever branch pays.
+
+    It is about the **second** of the two swings this row hands out -- "if
+    your ally gains a basic attack due to this exploit and hits the
+    target" -- so it goes through `_granted_hit` rather than
+    `c.grant_attack`, for the reason that helper exists: the verb reports
+    that a row went off and not that it connected. The grant is inside the
+    helper, so it happens exactly once whether or not the swing lands.
     """
     arena = c.declare("Arena Fighting", "f978", "f983")
     if c.strike():
@@ -471,7 +482,12 @@ def p4541(c: Cast) -> None:
     friend = c.choose(pool, "who takes the opening") if pool else None
     if friend is not None:
         c.grants_advantage(on=foe, to=friend, once=True)
-        c.grant_attack(friend, on=foe)
+        if c.feat("f1304"):
+            if _granted_hit(c, friend, foe):
+                with c.credit("f1304"):
+                    c.penalty("attack", 2, on=foe, until=When.EONT)
+        else:
+            c.grant_attack(friend, on=foe)
 
 
 @power(

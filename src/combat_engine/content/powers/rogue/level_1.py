@@ -66,6 +66,16 @@ _HELD_FAST = (
     Condition.UNCONSCIOUS,
 )
 
+#: The four creature types every clause of `f1298` names together. Copied
+#: from `feats/general_h.py` for the same reason as `_HELD_FAST`, and the
+#: same tuple is in `powers/ranger/level_1.py` beside that feat's clause on
+#: `p87`.
+_NAMED_KINDS = ("demon", "drow", "orc", "spider")
+
+
+def _is_named_kind(c: Cast, who: int) -> bool:
+    return any(c.is_kind(word, on=who) for word in _NAMED_KINDS)
+
 
 @power(
     "p704",
@@ -257,25 +267,86 @@ def p653(c: Cast) -> None:
     as the printed rule requires. `f985` and `f988` also print a clause on
     this row -- both trade the interrupt away rather than adding to it --
     and both are still marked on `c.decline_trigger(ref=)`.
+
+    **`f1298`'s, `f1299`'s and `f1304`'s clauses are written in here too**
+    (#550), and all three are about the counter rather than the opening
+    blow -- so they sit inside the closure beside the two above. All three
+    are **unbracketed** (`feat.category` is empty in `game.db` for each),
+    so they are plain `if`s and every one of them pays alongside whichever
+    arena branch was declared. That is the printed rule: one feat of a
+    bracketed category per use, any number of unbracketed ones.
+
+    `f1299`'s and `f1304`'s are simply "if you hit with the riposte", and
+    out in `exploits._riders` each had to tell the counter from the opening
+    blow by reading `as_` off the `Hit`. Inside the closure the branch *is*
+    the counter, so the tag is not the discriminator and both are one line.
+
+    **`f1298`'s is the one the migration changes the shape of.** It is
+    owed only when the *opening* blow landed on one of the four kinds that
+    card names, and it pays on a counter rolled later -- so the rider
+    carried the fact forward through a latch and a second `Hit` watcher,
+    and its damage half had to be a modifier gated on the victim because
+    the damage context carries no `as_`. Here the fact is a local read
+    before the closure is built and the damage half is `c.flat` on the
+    counter's own hit. The attack half is still a one-shot modifier,
+    because `c.attack` takes an ability and a defence and not a bonus; it
+    is laid immediately before the roll it buys and gated on `as_` anyway,
+    so an opening blow cannot spend it.
+
+    **This body now reads Intelligence and Wisdom**, which it did not
+    before: `chargen._leans_on` reads a body's source for `c.<ability>_mod`
+    and Wisdom is the `shadowy` build's secondary, so that leg scores this
+    row one higher than it did.
     """
     arena = c.declare("Arena Fighting", "f981", "f994")
-    if c.strike():
+    opened = c.strike()
+    if opened:
         c.damage(c.w(1), c.dex_mod)
     victim = c.target
     if victim is None:
         return
+    kinds = bool(
+        opened and c.feat("f1298") and c.int_mod > 0
+        and _is_named_kind(c, victim)
+    )
     spent: list[bool] = []
 
     def riposte(ev: AttackDeclared) -> None:
         if spent or ev.target != c.me or not c.adjacent(victim):
             return
         spent.append(True)
+        if kinds:
+            with c.credit("f1298"):
+                # Laid immediately before the roll it buys, and gated on
+                # `as_` as well: a one-shot is spent by the next roll that
+                # reads it, and the counter is the only swing this row has
+                # left to roll.
+                c.bonus("attack", c.int_mod, on=c.me, until=When.SONT,
+                        once=True,
+                        when=lambda ctx: ctx.get("as_") == "riposte")
         # `as_="riposte"` so the counter can be told from the opening blow:
         # both carry this row's `power`, and two feats print a clause about
         # the counter alone.
         if not c.attack(c.str_, AC, on=victim, as_="riposte"):
             return
         c.damage(c.w(1), c.str_mod, on=victim)
+        if kinds:
+            with c.credit("f1298"):
+                c.flat(c.int_mod, on=victim)
+        if c.feat("f1299") and c.wis_mod > 0:
+            with c.credit("f1299"):
+                c.ongoing(c.wis_mod, on=victim)
+        if c.feat("f1304"):
+            with c.credit("f1304"):
+                # `label=` because `f994`'s branch below lays a penalty on
+                # the same key and the same creature, and `Mods.total`
+                # buckets penalties by label and takes the worse -- so
+                # unlabelled these two would collapse to one and a
+                # character holding both would collect -3 where the cards
+                # give -5. It does not touch the effect label `c.credit`
+                # stamps.
+                c.penalty("attack", 2, on=victim, until=When.EONT,
+                          label="f1304")
         if arena == "f981":
             with c.credit("f981"):
                 # Two penalties on two different keys, so neither collapses

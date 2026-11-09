@@ -248,11 +248,43 @@ def p315(c: Cast) -> None:
 
     `f992`'s is a crit rider off the `Hit` window and sits after the
     damage.
+
+    **`f1299`'s clause is written in here too** (#550), unbracketed and so
+    a plain `if` that stacks with whichever arena branch paid.
+
+    **Its rider could never fire.** It sat in `_riders`' `landed=` table,
+    which is keyed on `ev.granted_via` and gates on
+    `ev.granted_by == me and ev.actor != me` -- a swing *handed over* by
+    this row. This row hands over no swing: what it gives an ally is a
+    bonus to its next attack roll and damage roll, so no event ever
+    carried `granted_via == "p315"` and the clause paid nothing in any
+    fight. Reported with the migration rather than fixed in place.
+
+    So "the attack this exploit provides" is read as what the card
+    describes -- the swing this row's own bonus is laid on -- and the
+    clause watches for that ally hitting that target inside the same
+    window the bonus holds for. One payout, because the card says "the
+    attack"; its own `c.credit` block, because the blow arrives after this
+    body has returned and the outer block is popped by then.
     """
     arena = c.declare("Arena Fighting", "f981", "f992")
     if arena == "f981":
         with c.credit("f981"):
-            c.bonus("attack", 2, kind="feat", on=c.me, until=When.EOT,
+            # **Untyped, because the feat's card prints no type word.**
+            # `f981`'s clause for this row reads *"you gain a +2 bonus to
+            # the attack roll with this exploit"* -- "a +2 bonus", with
+            # nothing in front of it, which is `bonuses.py`'s own test for
+            # untyped and the reading 225 specs share.
+            #
+            # It was written `kind="feat"`, which no card prints, and
+            # `bonuses` went red naming this row: *"code says 'feat', the
+            # card says ['power']"*. The `power` it compared against is
+            # **this row's own** bonus to the ally, a different sentence --
+            # the checker pools both clauses of a card and cannot see which
+            # one a call came from, which is the cost `BORROWED`'s note
+            # owns. But no waiver is warranted here: the feat names no
+            # type, so untyped is simply correct.
+            c.bonus("attack", 2, on=c.me, until=When.EOT,
                     when=lambda ctx: bool(c.hurt_me_since(ctx.get("target"))))
     if c.strike():
         c.damage(0, c.str_mod)
@@ -275,6 +307,19 @@ def p315(c: Cast) -> None:
             kind="power")
         c.bonus("damage", c.cha_mod, on=friend, until=When.EOTNT, when=against, once=True,
             kind="power")
+        victim, helper = foe, friend
+        if c.feat("f1299") and c.wis_mod > 0 and victim is not None:
+            paid: list[bool] = []
+
+            def ally_hit(ev: Hit) -> None:
+                if paid or ev.attacker != helper or ev.target != victim:
+                    return
+                paid.append(True)
+                with c.credit("f1299"):
+                    c.ongoing(c.wis_mod, on=victim)
+
+            c.watch(Hit, ally_hit, until=When.EOTNT, on=c.me,
+                    label=f"{c.ref} f1299")
 
 
 @power(
