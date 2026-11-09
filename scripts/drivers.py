@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -31673,14 +31674,20 @@ def reroll_after_the_roll(out: Result) -> None:
             hit.damage(dice, on=foe)
         return moved
 
-    def gain(blow: str, row: str, tries: int = 250) -> float:
-        """The mean points the row adds over `tries` separate boards."""
+    def gain(blow: str, row: str, tries: int | None = None) -> float:
+        """The mean points the row adds over `tries` separate boards.
+
+        Defaults to `SAMPLE` rather than to a literal, so `--tries` reaches
+        it. Read at call time, not at definition time: the flag is parsed
+        after this module is imported.
+        """
+        tries = SAMPLE if tries is None else tries
         deltas = [a - b
                   for k in range(tries)
                   for b, a in react(blow, row, seed=600 + k)]
         return sum(deltas) / len(deltas) if deltas else 0.0
 
-    def ever_moved(blow: str, row: str, tries: int = 250) -> int:
+    def ever_moved(blow: str, row: str, tries: int | None = None) -> int:
         """How many of `tries` boards the row changed the amount on.
 
         **Over many boards, for the same reason `gain` is a mean**, and this
@@ -31689,6 +31696,7 @@ def reroll_after_the_roll(out: Result) -> None:
         has no die below par and a row rerolling nothing looks identical to
         a row refusing to act. The plants are what said so.
         """
+        tries = SAMPLE if tries is None else tries
         return sum(1
                    for k in range(tries)
                    for b, a in react(blow, row, seed=600 + k)
@@ -31703,10 +31711,11 @@ def reroll_after_the_roll(out: Result) -> None:
              f"{arcane:+.2f} points on average")
     plain = ever_moved(PLAIN, "p16373")
     out.that(plain == 0,
-             "and over 250 boards touches a blow from a power **without**"
+             f"and over {SAMPLE} boards touches a blow from a power"
+             f" **without**"
              " the keyword not once -- the half that a gate read off the row"
              " instead of off the blow would get wrong",
-             f"it moved {plain} of 250")
+             f"it moved {plain} of {SAMPLE}")
 
     # -- i1756p1: one die, after a melee weapon attack ---------------------
     melee = gain(WEAPON_MELEE, "i1756p1")
@@ -31720,9 +31729,10 @@ def reroll_after_the_roll(out: Result) -> None:
              f"one die {melee:+.2f} against every die {arcane:+.2f}")
     ranged = ever_moved(WEAPON_RANGED, "i1756p1")
     out.that(ranged == 0,
-             "and over 250 boards does nothing after a **ranged** weapon"
+             f"and over {SAMPLE} boards does nothing after a **ranged**"
+             f" weapon"
              " attack, which the card excludes and `ctx['ranged']` answers",
-             f"it moved {ranged} of 250")
+             f"it moved {ranged} of {SAMPLE}")
     # **A melee blow that is not a weapon attack**, which is the only shape
     # that isolates the keyword half. Planting the keyword gate away left
     # the assertion above green, because the ranged control is caught by
@@ -31732,7 +31742,7 @@ def reroll_after_the_roll(out: Result) -> None:
              "and nothing after a **melee** blow that is not a weapon"
              " attack -- the keyword half of the same sentence, which the"
              " ranged control cannot reach",
-             f"it moved {unarmed} of 250")
+             f"it moved {unarmed} of {SAMPLE}")
 
     # -- i1761p1: every weapon die, and only the weapon dice (#835) --------
     #
@@ -71085,20 +71095,73 @@ if _unknown_unscored:
 
 
 
+#: How many separate boards a statistical rule plays. **A loosening, so it
+#: is named, defaulted to the strict value, and reported in every message
+#: that depends on it.**
+#:
+#: Four rules carry half of `drivers`, and the arithmetic says why: a static
+#: count puts **3,334 board builds** across the suite, of which
+#: `reroll_after` alone is **1,504 (45%)** -- `gain()` and `ever_moved()`
+#: each default here and are each called three times. A board is the
+#: expensive thing in this instrument; nothing else in a statistical rule
+#: costs anything beside it.
+#:
+#: `--tries 40` per commit, the default 250 before a push. Both figures
+#: belong in the commit message of anything that changes this, because
+#: `scripts/CLAUDE.md` is blunt that an instrument must never be loosened to
+#: make a number look better -- and the proof owed is a **plant at the
+#: reduced sample**: if a planted fault inside `reroll_after` stops going
+#: red at 40, then 40 is not a cheaper check, it is a blind one.
+#:
+#: **Every message that quotes a sample size reads this**, never the
+#: literal. Five assertions in `reroll_after` said "over 250 boards" and
+#: "it moved 0 of 250" as text, so a reduced run would have printed a
+#: number it did not measure -- the shape of
+#: `scripts/CLAUDE.md`'s "a check that passes over its own subject matter",
+#: arriving through a format string. #1196.
+SAMPLE = 250
+
+
 def main() -> int:
+    global SAMPLE
+
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("only", nargs="*", help="just these drivers")
     ap.add_argument("--list", action="store_true", help="what each one watches")
     ap.add_argument("--quiet", action="store_true", help="only the summary")
+    ap.add_argument("--tries", type=int, metavar="N",
+                    help="boards a statistical rule plays (default 250); 40"
+                         " is the per-commit figure. A LOOSENING -- see"
+                         " SAMPLE")
     args = ap.parse_args()
+
+    if args.tries is not None:
+        if args.tries < 1:
+            print("--tries must be at least 1", file=sys.stderr)
+            return 2
+        SAMPLE = args.tries
+        print(f"# --tries {SAMPLE}, against a default of 250. This is a"
+              f" REDUCED sample: a rule that needs many boards to tell a"
+              f" refusal from an unlucky roll is weaker here, and the"
+              f" default is what a push wants.")
 
     if args.list:
         for name, (_fn, what) in DRIVERS.items():
             print(f"  {name:12} {what}")
         return 0
 
+    # **`or` means an empty selection runs everything, and that is a trap
+    # laid for whoever adds a selector here.** Today the only way to pass
+    # nothing is to pass nothing, and "no argument means all 474" is the
+    # right reading of that. But a future selector -- narrowing by changed
+    # refs, say -- would express "this change needs no rule" as an empty
+    # list, and `or` would silently turn that into the whole suite: the
+    # wrong direction is cheap here, so the bug would be a 17-minute run
+    # nobody asked for rather than a skip. Written down rather than
+    # defended against, because defending against it now would need a
+    # sentinel for a caller that does not exist. #1196.
     wanted = args.only or list(DRIVERS)
     unknown = [n for n in wanted if n not in DRIVERS]
     if unknown:
@@ -71124,16 +71187,26 @@ def main() -> int:
 
     production = True
     results = []
+    # **Per-rule timing, because this suite has never been measured.** It
+    # is the second-biggest instrument at ~1,000s and the wall-clock floor
+    # of every narrow run -- `audit` narrows to a 3.6s median and `drivers`
+    # does not narrow at all -- and the only per-rule figure on record
+    # anywhere is one sentence in the root `CLAUDE.md` claiming four rules
+    # carry half of it. `scripts/CLAUDE.md` says to measure before
+    # optimising; a `perf_counter` here is what that costs. #1196.
+    spent: dict[str, float] = {}
     for name in wanted:
         fn, what = DRIVERS[name]
         if not args.quiet:
             print(f"  {name} -- {what}")
         out = Result(name)
         _chargen.SCORED_CHOICES = name not in UNSCORED_DRAW
+        began = time.perf_counter()
         try:
             fn(out)
         finally:
             _chargen.SCORED_CHOICES = production
+            spent[name] = time.perf_counter() - began
         results.append(out)
 
     bad = [r for r in results if r.failed]
@@ -71151,6 +71224,36 @@ def main() -> int:
         for r in results:
             for why in r.skipped:
                 print(f"    {r.name}: {why}")
+
+    # **The scope line `check.py` parses.** `check._scope` reads
+    # `^# scope: N of M declared rows$` and writes `refs`/`of`/`by` into
+    # `logs/instruments.jsonl` from it. `drivers` never printed one, so
+    # `--history` cannot tell a narrow drivers run from a wide one and
+    # could not price any narrowing if one landed. Printed as rules rather
+    # than rows, which is what this instrument's scope actually is.
+    print(f"# scope: {len(wanted)} of {len(DRIVERS)} declared rows")
+
+    # **The slowest rules, by measurement rather than by reputation.**
+    slowest = sorted(spent.items(), key=lambda kv: -kv[1])[:12]
+    whole = sum(spent.values()) or 1.0
+    print(f"# {whole:.0f}s over {len(spent)} rule(s); the slowest twelve"
+          f" are {sum(t for _n, t in slowest) / whole:.0%} of it:")
+    for rule, took in slowest:
+        print(f"#   {took:7.1f}s  {took / whole:5.1%}  {rule}")
+
+    # **A run that checked nothing is a skip, not a pass**, and this
+    # instrument had no way to say so. `check.py` read any zero exit as
+    # `ok`, so an empty selection would print `ok drivers 0.1s` under a
+    # headline of "N instruments clean" -- the #466 failure already fixed
+    # for `audit`, which is where this exit code comes from.
+    #
+    # It cannot fire today, because `wanted` falls back to the whole suite
+    # when no name is given. That fallback is the trap a future selector
+    # has to avoid: expressing "nothing to run" as an empty argument list
+    # runs all 474 rules and reports them green.
+    if not wanted:
+        print("# drivers checked NOTHING -- a skip, not a pass")
+        return 3            # check.NOTHING_IN_SCOPE
     return 1 if bad else 0
 
 

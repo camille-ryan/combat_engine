@@ -860,10 +860,39 @@ The lanes buy so little because `audit` is solo and `drivers` dominates
 everything left to parallelise. **And `drivers` costs the same standalone
 as it does inside the suite** — 658s against 650/673/685s — so this is its
 own cost and not contention; `#1066` was filed on the opposite premise and
-the measurement refuted it. Four rules carry half of it, `reroll_after`
-alone 147.6s for 15 assertions, because they build 250-board negative
-controls. Whether that sample size is worth 23% of every run is on
-`#1066`.
+the measurement refuted it.
+
+**`drivers` is now measured per rule, and the measurement refuted the plan
+that asked for it.** `drivers.py` prints every rule's seconds and the
+slowest twelve on every run, which nothing did before — everything known
+about where its time went was inference from this paragraph. Measured over
+all 474 rules:
+
+```
+trap_budget            17.1%     dm_phases          6.8%
+reroll_after           11.4%     fight_aftermath    6.8%
+skill_cap              10.0%     treasure           5.7%
+                                 the slowest twelve  68%
+```
+
+The plan behind this change targeted `reroll_after`, on a **static count**
+of board builds that made it 45% of the suite — 1,504 of 3,334, because
+`gain()` and `ever_moved()` each play 250 boards and are each called three
+times. It is **11.4%**, and the biggest rule is one the count never
+mentioned. A board build is not a unit of time: different boards cost
+differently, and counting constructor calls priced them as equal. Reach for
+`--tries` and the slowest-twelve line, not for a static count.
+
+`--tries N` is the knob: `reroll_after` is **43.9s at the default 250 and
+8.3s at 40**, a 5.3x cut with all 15 assertions holding at both. It is a
+loosening, so it carries the plant — forcing `p16373`'s arcane gate True
+reds the negative control at **both** sizes (193 of 250, 31 of 40) — and
+every message that quotes a sample size reads `SAMPLE` rather than the
+literal, because five of them said "over 250 boards" as text and would have
+printed a number the run did not measure.
+
+Default 250 before a push, `--tries 40` per commit. The next rule worth
+cutting is `trap_budget`, and it has not been looked at. `#1196`.
 
 This said *"ten minutes for all 12,197 rows"*, which was wrong on both
 numbers and in the direction that matters: a reader pricing an engine change

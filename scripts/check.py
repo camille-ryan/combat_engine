@@ -1283,15 +1283,28 @@ def _scope(text: str) -> tuple[int, int] | None:
 #: How many instruments may be in flight at once. The loop was a plain `for`
 #: with a blocking `subprocess.run`, so 21 instruments ran strictly one after
 #: another on a ten-core machine where sixteen of them are single-process.
-#: Measured: the twenty non-audit instruments are a stable **480s wide, 464s
-#: narrow**, and the longest single one is `drivers` at ~140s -- so the floor
-#: is the longest member, not the sum.
 #:
 #: Four rather than ten, deliberately. `audit` already runs ten worker
 #: processes of its own (`audit._run_all`), so a wide run has every core busy
 #: for most of its length and more lanes would mostly take cores away from
-#: it. Four collapses the 480s to roughly `drivers`' own 140s without
-#: oversubscribing.
+#: it.
+#:
+#: **The figures this note used to carry were stale by 7x in the one that
+#: matters.** It said *"the longest single one is `drivers` at ~140s -- so
+#: the floor is the longest member, not the sum"*, and `drivers` is **~1,000s
+#: for all 474 rules**. That is not a cosmetic error: the whole argument for
+#: four lanes is that they collapse the suite to its longest member, and if
+#: the longest member is seven times bigger than the note says, the lanes buy
+#: a fraction of what the note implies. Measured on the live ledger: `audit
+#: wide` 1,506s median over 366 runs, `drivers` 89.5s median over 584 runs --
+#: and that median is low because most runs are `--only` subsets, not because
+#: the whole suite is cheap.
+#:
+#: So the honest statement is the one in the root `CLAUDE.md`: the lanes buy
+#: about four minutes of a 35-minute wide run, because `audit` runs solo and
+#: `drivers` dominates everything left to parallelise. Do not re-derive a
+#: per-instrument figure here -- `check.py --history` has it, measured, and a
+#: number in a comment is what went stale.
 _LANES = 4
 
 #: Instruments that must not run beside each other, by group.
