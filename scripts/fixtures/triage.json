@@ -883,11 +883,11 @@
   },
   "Usage.RECHARGE(when=)": {
     "at": "2026-11-09",
-    "by": "lane5",
+    "by": "content1",
     "found": "@power(recharge_when=Trigger(event, pred, text)) and recharge_while= ALREADY EXIST -- dsl",
     "rows": 2,
     "verdict": "mis-marked",
-    "why": "@power(recharge_when=Trigger(event, pred, text)) and recharge_while= ALREADY EXIST -- dsl.Power.recharges, dispatched by triggers.Triggers._recharge off _recharge_events, with ~40 content call sites. m6128a4's \"Recharge when she spends one of her extra lives\" is Trigger(PowerUsed, by_power(\"m6128a4\")); m5403a1's reload is Trigger(WeaponLoaded, about_me). CAVEAT: a monster gets Gear() with no weapons, so the reload action may be unreachable for m5403 -- and that row's own docstring already argues the clause is a no-op."
+    "why": "@power(recharge_when=Trigger(event, pred, text)) and recharge_while= ALREADY EXIST -- dsl.Power.recharges, dispatched by triggers.Triggers._recharge off _recharge_events, with ~40 content call sites. m6128a4's \"Recharge when she spends one of her extra lives\" is Trigger(PowerUsed, by_power(\"m6128a4\")); m5403a1's reload is Trigger(WeaponLoaded, about_me). CAVEAT: a monster gets Gear() with no weapons, so the reload action may be unreachable for m5403 -- and that row's own docstring already argues the clause is a no-op. || CORRECTED IN THE DETAIL by writing it. The trigger this verdict named -- Trigger(PowerUsed, by_power('m6128a4')) -- would have been SILENTLY FALSE: dsl.use calls cast.used() ABOVE powers.note_use, and Triggers._recharge walks Powers.spent, so at the PowerUsed emit there is nothing to give back (measured: 'already spent: False'). Written as recharge_when=Trigger(PowerResolved, _m6128_spent_a_life) with the predicate also asking the extra-life tally, because the printed condition is SPENDING A LIFE rather than using the row. End to end through dsl.use plus usable: exactly 8 uses, refused on the 9th. m6128a4's marker is ready to drop. m5403a1 is NOT and its half of this symbol is unreachable: WeaponLoaded is emitted only by actions.perform's kind=='load', which refuses unless action.ref is in gear.unloaded, and loader.py spawns every stat block with a bare Gear() -- so a monster's unloaded is always empty and the load action is never legal. A recharge_when on it would read correctly and never fire. m5403a1's real blocker is the monster-gear gap (etl.monster.weapon()), and its docstring's claim that 'spending the action IS the reload' is also wrong -- the card's reload is a second minor."
   },
   "Weapon.brutal": {
     "at": "2026-10-12",
@@ -2424,11 +2424,11 @@
   },
   "c.damage_of(ref)": {
     "at": "2026-11-09",
-    "by": "lane0",
-    "found": "dsl",
+    "by": "content3",
+    "found": "nothing",
     "rows": 3,
-    "verdict": "mis-marked",
-    "why": "dsl.REGISTRY[ref].damage.dice IS the printed damage expression and .keywords answers \"is it a nonweapon attack\"; content already reads REGISTRY header fields directly. So \"a row's damage expression cannot be read from outside it\" is false. The clause is REGISTRY[chosen].damage.dice parsed for its face, then c.bonus(\"damage\", 0, dice=f\"1d{face}\", once=True). No Cast verb exists but no engine work is needed either."
+    "verdict": "real",
+    "why": "CORRECTED from mis-marked. The lane0 verdict claimed dsl.REGISTRY[ref].damage.dice IS the printed damage expression, so a row could read another row's die. Measured over the set these rows actually choose from -- c.borrowed_rows, i.e. class rows, at-will, standard action, carrying an attack -- 359 rows, and ZERO carry header damage. Header damage is the MONSTER convention; a class power rolls its dice in its body via c.damage(\"1d8\"), so REGISTRY[chosen].damage.dice is None.dice. Samples with no header damage: p10274 p10275 p10276 p11061 p12932. The roll-time route is closed too -- DamageRolled carries amount, dtype, detail, dtypes and NO dice expression -- so nothing can read the face before or during the roll. The .keywords half of the old verdict is sound (absence of Keyword.WEAPON is askable); the die is not. The three dropped=('c.damage_of(ref)',) markers on f1281b/f1283b/f1287b are correct as written. general_r.py carries a sibling symbol for the same family (DICE = ('c.change_dice()',)) and this may want grouping there."
   },
   "c.damages_with(ref, ability)": {
     "at": "2026-10-12",
@@ -2873,11 +2873,11 @@
   },
   "c.engulf()": {
     "at": "2026-11-09",
-    "by": "lane2",
+    "by": "content2",
     "found": "Every clause the two notes name has a facility",
     "rows": 2,
     "verdict": "mis-marked",
-    "why": "Every clause the two notes name has a facility. Carried along when the engulfer moves -> c.watch(Moved, ...) plus c.pull, worked example monsters/level_03/skirmishers.m2795a0. Sealed line of sight both ways -> c.bonus(\"sealed\", 1, on=victim), read by query.sealed and query.line_of_effect. \"At-will attacks only\" -> c.forbid(usage=(ENCOUNTER, DAILY), attacks_only=True). No opening given -> c.no_provoke. Shift out when the grab breaks -> grabbed.on_end.append plus c.shift. Corpse alternative -> c.fallen(kind=). Only the COMPOSITE verb is absent, and the global rule is to hand-write the row."
+    "why": "PARTLY RIGHT: 4 of 6 clauses written, 2 refused with evidence. m4665a1's three all landed -- c.no_provoke(from_=) vetoes the window by provoker+actor, c.watch(Moved) + c.pull(1, to=) is the m2795a0 shape (Moved fires per square, so a 1-square pull per step is the right grain), and grabbed.on_end runs AFTER Effects._lift so the victim is no longer immobilised when it shifts out; all three end with the grab rather than on the encounter clock. Marker ready to drop for m4665a1. m4741a2 got only the at-will narrowing (c.forbid(usage=(ENCOUNTER, DAILY), attacks_only=True), tied to the ongoing hold's on_end). TWO REFUSALS: (1) SEALED LINE OF SIGHT is a near-miss -> query.sealed feeds query.line_of_effect, which returns False if EITHER side is sealed, and the card leaves the engulfer itself reachable, so laying it would stop the victim attacking ANYTHING -- strictly stronger than print, and it would make the at-will clause inert in the same stroke. No carve-out exists: query.sealed calls mods.total('sealed') with NO ctx, so a when= gate there is False by construction, and its docstring says only c.merge sets it. (2) THE CORPSE ALTERNATIVE is structurally impossible here, not missing: c.fallen(kind=) exists, but the clause is 'INSTEAD, by moving into its space' and the row is gated requires=_grabbing_count>0, so the body only runs after a successful grab and nothing armed here can ever deliver the alternative. Needs its own row or a ruling that it rides a trait with no printed id. #1205."
   },
   "c.escape(as_power=)": {
     "at": "2026-10-13",
@@ -3201,11 +3201,11 @@
   },
   "c.floor_damage_dice(against=)": {
     "at": "2026-11-09",
-    "by": "lane0",
+    "by": "content2",
     "found": "c",
     "rows": 1,
     "verdict": "mis-marked",
-    "why": "c.floor_damage_dice already takes when=lambda ctx and _reroll_ctx returns {\"power\", \"target\", \"attacker\"}. So the docstring's claim that it \"carries the row, its keywords and the roller -- not the victim\" is FALSE; target is in it, and the comment above it says so outright. The clause is when=lambda ctx: c.is_quarry(on=ctx.get(\"target\")) beside the existing keyword=Keyword.WEAPON."
+    "why": "c.floor_damage_dice already takes when=lambda ctx and _reroll_ctx returns {\"power\", \"target\", \"attacker\"}. So the docstring's claim that it \"carries the row, its keywords and the roller -- not the victim\" is FALSE; target is in it, and the comment above it says so outright. The clause is when=lambda ctx: c.is_quarry(on=ctx.get(\"target\")) beside the existing keyword=Keyword.WEAPON. || WRITTEN, with the verdict's READER CORRECTED. It proposed when=lambda ctx: c.is_quarry(on=ctx.get('target')) -- and c.is_quarry is the RANGER's Relation.QUARRY_OF (cast.py:7999), the wrong reader for an avenger feat. It would have been silently false in every fight. The avenger's oath is oath.sworn, already imported in the file. f2162 now reads when=lambda ctx: sworn(c.world, me, ctx.get('target')). Driven: floor 3 against the sworn enemy, 0 against another enemy, 0 with no target -- it was 3 in all three cases before. Marker ready to drop."
   },
   "c.forbid": {
     "at": "2026-11-09",
@@ -3908,11 +3908,11 @@
   },
   "c.hit(dtype=)": {
     "at": "2026-11-09",
-    "by": "lane0",
+    "by": "content0",
     "found": "c",
     "rows": 2,
     "verdict": "mis-marked",
-    "why": "c.deals(dtype, on=c.me, ref=c.ref, once=True) recolours exactly the blow c.hit() deals: c.hit -> c.damage -> if not dtypes: self._typed(dtype) -> _retyped, an OVERRIDE over the printed type. Critically _retyped's named branch SKIPS the keyword gate, so a monster row with no WEAPON keyword is covered, and once=True is spent by the blow it recolours. m2044a3's \"ongoing of the same type\" reuses the same pick."
+    "why": "c.deals(dtype, on=c.me, ref=c.ref, once=True) recolours exactly the blow c.hit() deals: c.hit -> c.damage -> if not dtypes: self._typed(dtype) -> _retyped, an OVERRIDE over the printed type. Critically _retyped's named branch SKIPS the keyword gate, so a monster row with no WEAPON keyword is covered, and once=True is spent by the blow it recolours. m2044a3's \"ongoing of the same type\" reuses the same pick. || WRITTEN, and one limit measured while doing it: _typed is read by c.damage, c.half_damage and c.flat ONLY, so a standing c.deals hold does NOT reach c.ongoing. m2044a3's 'ongoing of the same type' therefore takes the pick DIRECTLY rather than through the retype. m3378a5 carries a marker for exactly that shortfall. m2044a3's single choice for the whole blast is held under c.first in a one-slot module list (p5848's shape), NOT an id(world) latch."
   },
   "c.hit_count()": {
     "at": "2026-10-12",
@@ -5766,11 +5766,11 @@
   },
   "c.place_scenery(kind=)": {
     "at": "2026-11-09",
-    "by": "lane2",
+    "by": "content0",
     "found": "STALE",
     "rows": 1,
     "verdict": "mis-marked",
-    "why": "STALE. content/terrain.py:249 -- put(world, square, *, kind=\"object\", hp=0, size=MEDIUM, fastened=False, solid=True, by=0, ref=\"\") -- constructs Scenery(kind=kind, fastened=fastened, by=by). It landed under #988, THE VERY ISSUE the row's docstring cites as the thing filed about the absence, so \"zero Scenery( call sites outside its own definition\" is no longer true. Caveats: it is a content-module function rather than a Cast verb, and f3015b still needs its separate second symbol query.wearer_of()."
+    "why": "CORRECTED: the verdict's FACTS check out and it still closes no clause. content/terrain.py:249 put(world, square, *, kind='object', hp=0, size=MEDIUM, fastened=False, solid=True, by=0, ref='') does construct Scenery(kind=, fastened=, by=), so f3015b's docstring claim of 'zero Scenery( call sites outside its own definition' is STALE (#988). But f3015b NEVER PLACES SCENERY: its printed Effect targets one object and branches on what that object IS ('if the target is a weapon ... if the target is armor'). A writer for kinded scenery does not fit that clause -- the row would have to call terrain.put, which is not what the card says. Reading the kind was never the gap either: Scenery.kind and query.scenery(kind=) have always existed, which the row's own docstring records. LEFT ALONE. The live lead belongs to the row's OTHER symbol: query.wearer_of() exists nowhere in src/ or scripts/, but components.py:635 documents Scenery.by as 'whoever is holding or controlling it, 0 for a thing nobody has: one field, because held-by and controlled-by are the same question asked by two cards' -- which looks like the tie the armour branch needs. The WEAPON branch stays hard even then: a Scenery of kind 'weapon' has no identity link to a Weapon in anybody's Gear, so 'attacks with it' cannot be tied to the blow, and writing it off Scenery.by would green the row on the wrong clause."
   },
   "c.power_range()": {
     "at": "2026-10-12",

@@ -117,10 +117,10 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
-from combat_engine.engine.events import PowerUsed
+from combat_engine.engine.events import PowerResolved, PowerUsed
 from combat_engine.engine.monster_math import MINION
 from combat_engine.engine.query import alive, distance_between
-from combat_engine.engine.triggers import Trigger, about_me
+from combat_engine.engine.triggers import Trigger, about_me, by_power
 
 #: The four printed words m115940a1 asks about before its extra packet of
 #: poison lands. Any one of them is enough.
@@ -1251,10 +1251,29 @@ def m5722a1(c: Cast) -> None:
 _M6128_LIVES: dict[int, int] = {}
 _M6128_START = 8
 _M6128_FELLED = "the m6128 drops to 0 hit points while an extra life remains"
+_M6128_SPENT_A_LIFE = "the m6128 spends one of her extra lives"
+_M6128_REBIRTH = by_power("m6128a4")
 
 
 def _m6128_lives(c: Cast) -> int:
     return _M6128_LIVES.setdefault(c.me, _M6128_START)
+
+
+def _m6128_spent_a_life(world: World, me: int, ev: Any) -> bool:
+    """The printed recharge condition: a use of m6128a4 that spent a life.
+
+    **`PowerResolved` and not `PowerUsed`.** `dsl.use` announces the use
+    *above* `powers.note_use`, so at `PowerUsed` the row is not yet spent and
+    `Triggers._recharge` -- which walks `Powers.spent` -- finds nothing to
+    give back. The row would have declared its condition and never recharged.
+
+    Asked after the body, so the tally is already down: a life still standing
+    here means the use was not the last one, and the eighth leaves none, so
+    the row stays spent and the creature stops getting up. That is the printed
+    eight rather than a limit invented for it, and it is why the condition
+    carries the count as well as the ref.
+    """
+    return _M6128_REBIRTH(world, me, ev) and _M6128_LIVES.get(me, _M6128_START) > 0
 
 
 @power(
@@ -1359,7 +1378,9 @@ def m6128a3(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.TELEPORTATION],
     trigger=_M6128_FELLED,
     on=Trigger(Dropped, when=about_me, text=_M6128_FELLED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(
+        PowerResolved, when=_m6128_spent_a_life, text=_M6128_SPENT_A_LIFE,
+    ),
 )
 def m6128a4(c: Cast) -> None:
     """It spends a life and gets up somewhere else, unseen.
@@ -1374,6 +1395,11 @@ def m6128a4(c: Cast) -> None:
     "Until she attacks" is the other half of the invisibility's duration, so
     the hold is ended from a watch on the next attack it declares rather than
     left to the clock alone.
+
+    The printed recharge is declared in the header now -- see
+    `_m6128_spent_a_life` for why it answers `PowerResolved` -- so the eight
+    uses come out of the recharge rather than out of this body's guard, which
+    stays as the belt to its braces.
     """
     me = c.me
     if _m6128_lives(c) <= 0:

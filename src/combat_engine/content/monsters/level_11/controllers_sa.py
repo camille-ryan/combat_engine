@@ -75,6 +75,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
+from combat_engine.content.monsters.level_03.skirmishers import _free_square_beside
 from combat_engine.content.monsters.level_07.brutes import (
     _aura,
     _crowded,
@@ -2737,15 +2738,25 @@ def _holds_nobody(world: World, eid: int) -> bool:
     attack=Attack(vs=REF, printed=15),
     requires=_holds_nobody,
     requires_text="usable only when nothing is engulfed",
-    dropped=("c.engulf()",),
 )
 def m4665a1(c: Cast) -> None:
     """Swallowing somebody, as far as the engine holds it.
 
     The grab, the daze and the burn are exact, and so is the automatic hit
-    against an immobilised creature. What `c.engulf` would add is the rest of
-    one printed concept: the victim carried along when the ooze moves, no
-    opening given to it, and a shift out of the square when the grab breaks.
+    against an immobilised creature. **The three clauses the old note
+    reserved for `c.engulf` are written, and none of them wanted a new
+    verb**: the victim is dragged along by a `Moved` watch, the opening it
+    would otherwise be given is taken away by `c.no_provoke(from_=)`, and
+    the shift out is hung on the grab's `on_end` -- which runs after
+    `Effects._lift`, so the creature is no longer immobilised by the time it
+    steps.
+
+    The drag lands the victim **beside** the m4665 rather than inside it,
+    for m2795a0's reason: the square a body this size has just left is the
+    wrong destination, and the pull that put the victim there in the first
+    place leaves it adjacent too. Each hold is ended with the grab rather
+    than left to the encounter clock, so a creature that gets away is not
+    still being dragged about.
 
     No damage line at all: the hold is the whole of a hit.
     """
@@ -2755,21 +2766,39 @@ def m4665a1(c: Cast) -> None:
     held = c.is_(Condition.IMMOBILIZED, on=victim) or c.strike(on=victim)
     if not held:
         return
+    me = c.me
     c.pull(3, on=victim)
     grabbed = c.grab(on=victim)
     if grabbed is None:
         return
     swallowed = c.world.effects.apply(
         victim,
-        c.me,
+        me,
         When.ENCOUNTER,
         label=c.ref,
         conditions=(Condition.DAZED,),
         ongoing=(10, DamageType.ACID),
     )
-    grabbed.on_end.append(
-        lambda: c.world.effects.end(swallowed, "the grab ended")
-    )
+
+    def drag(ev: Moved) -> None:
+        if ev.actor != me or c.adjacent(victim):
+            return
+        landing = _free_square_beside(c, me)
+        if landing is not None:
+            c.pull(1, on=victim, to=landing)
+
+    carried = c.watch(Moved, drag, until=When.ENCOUNTER, on=me, label=c.ref)
+    opening = c.no_provoke(from_=victim, on=me, until=When.ENCOUNTER)
+
+    def released() -> None:
+        c.world.effects.end(swallowed, "the grab ended")
+        c.world.effects.end(carried, "the grab ended")
+        if opening is not None:
+            c.world.effects.end(opening, "the grab ended")
+        if alive(c.world, victim):
+            c.shift(1, who=victim, toward=me)
+
+    grabbed.on_end.append(released)
 
 
 @power(

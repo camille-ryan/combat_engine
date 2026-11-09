@@ -1125,7 +1125,7 @@ def m3249a4(c: Cast) -> None:
 
 @power(
     "m3249a5", level=9, usage=AT_WILL, action=STANDARD, reach=PERSONAL, target=NO_TARGET,
-    dropped=("query.charged(world, eid)", "c.grant_attack(charge=)"),
+    dropped=("query.charged(world, eid)",),
 )
 def m3249a5(c: Cast) -> None:
     """"Usable after it charges" cannot be asked from a `requires=` gate --
@@ -1140,22 +1140,32 @@ def m3249a5(c: Cast) -> None:
     swing is `c.grant_attack`; and that needs a victim, which was the
     second half of the same fault. #631.
 
-    **The run-in is the clause still missing**, and it is now named rather
-    than hidden inside the wrong verb: `c.grant_attack` delivers somebody
-    else's swing but has no notion of a charge, so the +1 and the riders
-    that read one do not apply. `c.no_provoke` is the printed "does not
-    provoke opportunity attacks", which is the part of the movement that
-    can be said.
+    **The run-in is written now, and `c.charge_at(who=)` is the verb** --
+    its own comment names this printed line. It sets `Movement.charging`,
+    walks the runner into reach and spends the swing with `charge=True`,
+    so the +1 and every rider that reads a charge apply where
+    `c.grant_attack` gave the swing alone. `c.no_provoke` is laid before
+    the run, since that is the movement it excuses.
+
+    **The victim is ranked from the ally, not from the caster.** With the
+    move in hand the enemy no longer has to be standing beside the runner,
+    which is what the old adjacency bound was working around, so the
+    offered list is every enemy nearest-first from where the ally stands
+    and `c.charge_at` answers False if the run cannot reach it.
+
+    Still dropped: `query.charged(world, eid)`, the "usable after it
+    charges" gate.
     """
     near = sorted((a for a in c.allies() if a != c.me and c.distance(a) <= 10), key=c.distance)
     mate = c.choose(near, "m3249a5: which ally charges") if near else None
     if mate is None:
         return
-    marks = sorted(c.within(1, of=mate, side="enemy"))
-    if not marks:
+    marks = sorted(c.enemies(), key=lambda f: (distance_between(c.world, mate, f), f))
+    victim = c.choose(marks, "m3249a5: which enemy that ally charges") if marks else None
+    if victim is None:
         return
     c.no_provoke(on=mate, until=When.EOT)
-    c.grant_attack(mate, on=marks[0])
+    c.charge_at(victim, who=mate)
 
 
 # ==========================================================================

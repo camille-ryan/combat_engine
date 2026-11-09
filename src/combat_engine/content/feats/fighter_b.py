@@ -29,6 +29,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     ENCOUNTER,
+    EVERY_DIE,
     FORT,
     MINOR,
     PERSONAL,
@@ -50,6 +51,7 @@ from combat_engine.engine import (
     Size,
     Trigger,
     When,
+    World,
     about_me,
     power,
 )
@@ -65,7 +67,7 @@ from combat_engine.engine.events import (
     RelationSet,
 )
 from combat_engine.engine.grid import distance, neighbours
-from combat_engine.engine.query import allies, enemies, holding
+from combat_engine.engine.query import allies, can_act, enemies, holding, squares
 from combat_engine.engine.types import Forced, Relation
 
 from .styles import among, hit_with_one_of, used_one_of
@@ -104,6 +106,47 @@ def _grip(c: Cast, *groups: str, hands: int) -> bool:
     return any(
         w.group in groups and w.two_handed == (hands == 2)
         for w in gear.melee
+    )
+
+
+def _flanking_pair(world: World, me: int, mate: int, foe: int) -> bool:
+    """Do `me` and `mate` **in particular** hold opposite sides of `foe`?
+
+    `query.flanked_by` asks whether anybody holds the far side, which is the
+    wrong question for a card that pays the partner by name -- so this is
+    that function's inner loop with the mate fixed. `can_act` on both for
+    the printed reason: an ally standing in the right square while stunned
+    is furniture.
+    """
+    if me == mate or mate == foe or foe in (me, mate):
+        return False
+    if not can_act(world, me) or not can_act(world, mate):
+        return False
+    space = squares(world, foe)
+    return any(
+        world.grid.flanks(a, b, space)
+        for a in squares(world, me)
+        for b in squares(world, mate)
+    )
+
+
+def _f1969_pays(c: Cast, me: int, mate: int, ctx: dict[str, Any]) -> bool:
+    """Is this the roll the card pays for?
+
+    Four halves and every one of them is asked here rather than at arming
+    time, because every one can change between the two: the grip, the
+    flanking pair, which creature is being hit, and whether the ally's row
+    is a melee attack at all. `_reroll_ctx` carries `power`, `target` and
+    `attacker`, which is the three of those that are not read off the board.
+    """
+    foe = ctx.get("target")
+    row = get(str(ctx.get("power") or ""))
+    return (
+        foe is not None
+        and row is not None
+        and row.reach.kind == "melee"
+        and c.wielding("two-handed")
+        and _flanking_pair(c.world, me, mate, foe)
     )
 
 
@@ -1183,61 +1226,37 @@ def f1743(c: Cast) -> None:
 def f1969(c: Cast) -> None:
     """Lets the ally you flank with reroll damage dice showing a 1.
 
-    **Re-pointed: `c.reroll_ones(tries=)` landed, as `pick=EVERY_DIE`, and
-    the row is still refused -- for a different reason one level down.**
+    **The marker is stale and the row is written.** `pick=` and `when=`
+    compose: `Cast._reroll_pick` passes `ctx=seen` to all three
+    `reroll_damage_pick#n` count keys now, with #818's own measurement in
+    the comment beside them. The marker is left standing anyway -- dropping
+    it makes the feat drawable, which re-rolls every chargen draw and owes
+    a replay re-record, and that is the gate owner's call rather than an
+    authoring one.
 
-    The old note asked for every low die rerolled exactly once and said
-    neither existing shape could say it. #703 built that shape:
-    `_rolled_pick` is "reroll at most `count` of the dice under `floor`,
-    **once each**", and with the default `below=2` the floor is 2, so every
-    die showing a 1 is rerolled once and the second face stands whatever it
-    is. That half of the note is closed.
+    The shape, and why each piece is where it is:
 
-    **What refuses the row now is that `pick=` and `when=` do not compose.**
-    `Cast._reroll_pick` reads the floor through its own `best()` helper,
-    which passes `ctx=seen`, and then reads the **count** with two bare
-    `self.total("...#n")` calls that pass no context at all. `Mod.applies`
-    is handed `{}`, so any gate reading a key is False and the count comes
-    back 0 -- and `_rolled_pick(dice, floor, 0)` rerolls nothing. Measured
-    on a fresh board:
+    * **The hold goes on the ally, not on the holder**, because the ally is
+      the one rolling. One per ally, each gated on *that* pair, so the card
+      pays the partner it names rather than anybody flanking.
+    * **`below=2`** is "a damage die that displays a 1", and
+      **`pick=EVERY_DIE`** is "each die once" -- not the loop, which rerolls
+      a low die *until* it is not low and is a better card than this one.
+    * **All four printed conditions are asked at the roll** (`_f1969_pays`),
+      because all four can change after the fight starts. Laid ungated the
+      ally would reroll against every enemy and on ranged attacks too,
+      which is stronger than print.
 
-        pick=EVERY_DIE, no gate                 floor 2, count 99
-        pick=EVERY_DIE, gated on ctx.attacker   floor 2, count  0
-
-    So the gated form lays two effects, audits as having done something, and
-    changes no die in any fight -- the exact failure the paragraph below
-    refused this row over once already. The fix is to pass `ctx=seen` to the
-    two `#n` lookups the way the floor's are; it is an engine change and not
-    this row's to make. #818.
-
-    **The symbol names the behaviour, not the parameter.**
-    `c.reroll_ones(pick=, when=)` was the spelling for one commit and
-    `todo.py` was right to go red on it: both parameters *exist*, so a
-    marker naming them can never be satisfied by their arrival, which is the
-    whole job of a marker. What is absent is a `_reroll_pick` whose count
-    lookups honour the gate, so that is what it says.
-
-    **The gate cannot be dropped to get round it.** Two of its four halves
-    are only answerable at the roll: the reroll is for a melee attack
-    *against the flanked enemy*, and `Cast._reroll_ctx` is where `target`
-    and `power` arrive. Laying it ungated gives the ally the reroll against
-    every enemy and on ranged attacks too, which is stronger than print.
-
-    The rest is writable and waits on that one line: `_flanking_pair`-style
-    reads name the exact pair where `query.flanked_by` would answer for any
-    partner, `c.wielding("two-handed")` is the grip asked live, and the hold
-    goes on the ally rather than on the holder.
-
-    **Re-aimed from `dropped` to `todo`.** The whole printed benefit is
-    the reroll; what was written beside the marker was a flanking gate
-    on a bonus of *zero*, which lays an effect, satisfies the audit and
-    changes no number in any fight. A row that plays and does nothing is
-    worse than one that is refused, so the gate goes with it.
-
-    `c.reroll_damage` is not the verb: it rolls the whole expression
-    again, which is a different and better outcome than rerolling the
-    ones. The same symbol the assassin's f1789 wants.
+    `c.reroll_damage` is not the verb: it rolls the whole expression again,
+    which is a different and better outcome than rerolling the ones. The
+    same symbol the assassin's f1789 wants.
     """
+    me = c.me
+    for mate in allies(c.world, me):
+        c.reroll_ones(
+            below=2, pick=EVERY_DIE, on=mate, until=When.ENCOUNTER,
+            when=lambda ctx, mate=mate: _f1969_pays(c, me, mate, ctx),
+        )
 
 
 #: "Light armour or chainmail", in the words `Gear.armour` stores -- the

@@ -1694,21 +1694,27 @@ def i2483x1(c: Cast) -> None:
 
 
 @power("i3204x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.relight()",))
+       reach=PERSONAL, target=SELF,)
 def i3204x1(c: Cast) -> None:
-    """Bright light in a 5-square radius, extinguished for a minor action.
+    """Bright light in a 5-square radius, toggled for a minor action.
 
     **"Light only" was the whole docstring and it stopped being true**
     (#686).
 
-    `c.endable` covers putting it out. **Restoring it is the dropped
-    clause**: the card prints "extinguish the light **or restore it**",
-    which is a toggle, and `c.endable` only ever ends. A property armed
-    once at the start of the fight has no second moment to re-lay itself
-    in."""
-    held = c.light(5, on=c.me, until=When.ENCOUNTER)
-    if held is not None:
-        c.endable(held, ActionType.MINOR)
+    **The restore half is written now, and `c.endable(then=)` is the second
+    moment this row was said not to have.** `drop_then` runs *after* the
+    deliberate end and for nothing else -- not the clock, not a saving throw
+    -- which is exactly the ordering a payout that lays an effect of its own
+    needs, or the re-laid light would be swept up by the ending that bought
+    it. So the payout re-lays the light and re-arms the drop, which is what
+    makes the printed toggle unbounded rather than a single relight."""
+
+    def light_it() -> None:
+        held = c.light(5, on=c.me, until=When.ENCOUNTER)
+        if held is not None:
+            c.endable(held, ActionType.MINOR, then=light_it)
+
+    light_it()
 
 
 @power("i3204p1", level=9, cls=ITEM, usage=DAILY, action=REACTION,

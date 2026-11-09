@@ -1198,16 +1198,42 @@ def f3589(c: Cast) -> None:
     """Trades `cf:cleric-templar-f1` -- a declared row -- for one of the
     nine domain features printed under `cf:cleric-warpriest-f1`.
 
-    The same shape as `f3585` and not the same answer, because the nine
-    options are in the database and **none of them is declared**, so
-    `among=` would be filtered empty and `c.borrow_row` would return `""`.
-    The cost half alone leaves the cleric strictly worse off, so this stays
-    refused rather than part-written, and the symbol names the undeclared
-    parent the way `BERSERKER_FORM` does.
+    **The same shape as `f3585` and now the same answer.** This said the
+    nine options were "in the database and none of them is declared", so
+    `among=` would be filtered empty; all nine `cf:cleric-warpriest-f1s0`
+    through `-s8` are declared rows with bodies, four clean and five
+    carrying `dropped=`, which plays. `c.borrow_row` filters `among` on
+    `todo=` and on what the character already holds, and a dealt cleric
+    holds the templar features rather than these, so the pool is the nine.
 
-    One clause to carry over when those rows land: *if the feature grants
-    powers, this feat does not grant them* -- so the benefit is the feature
-    only, never the cards printed beside it."""
+    `uses=0` for `f3585`'s reason: these are standing traits that
+    `turns.arm_traits` spends on arming, and the default cap of one use
+    would forbid the benefit at the moment it arrived.
+
+    **The third printed sentence is not honoured and the marker stays for
+    it**: *if the feature grants powers, this feat does not grant them*.
+    Five of the nine -- `s1`, `s2`, `s3`, `s6`, `s7` -- hand their domain's
+    cards over with `c.grant_row` inside their own bodies, and a borrowed
+    trait is armed, so borrowing one of those five gives the powers too.
+    Nothing narrows a grant to the feature without the cards it deals, and
+    nothing reads back which rows a feature grants, so the hold is a
+    parameter on `c.borrow_row` rather than anything writable here."""
+    c.forbid("cf:cleric-templar-f1", on=c.me, until=When.ENCOUNTER)
+    c.borrow_row(
+        among=(
+            "cf:cleric-warpriest-f1s0",
+            "cf:cleric-warpriest-f1s1",
+            "cf:cleric-warpriest-f1s2",
+            "cf:cleric-warpriest-f1s3",
+            "cf:cleric-warpriest-f1s4",
+            "cf:cleric-warpriest-f1s5",
+            "cf:cleric-warpriest-f1s6",
+            "cf:cleric-warpriest-f1s7",
+            "cf:cleric-warpriest-f1s8",
+        ),
+        uses=0,
+        until=When.ENCOUNTER,
+    )
 
 
 @power("f3590", level=1, cls="", usage=ENCOUNTER, action=NONE,

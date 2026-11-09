@@ -1698,8 +1698,18 @@ def m1785a3(c: Cast) -> None:
 # ==========================================================================
 #
 # Five printed damage types on three rows, chosen per attack. The header
-# carries the first and the keywords carry all five; `c.hit` takes `on` and
-# `half` and no type, which is the clause named on each of them.
+# carries the first and the keywords carry all five.
+#
+# **The choice is written now, and the old note was looking at the wrong
+# verb.** `c.hit` still takes only `on` and `half` -- it has no type -- but
+# it does not need one: it hands the header's declared type to `c.damage`,
+# which asks `_typed`, and a standing `c.deals` is an *override* there and
+# beats the printed type. So `c.deals(picked, on=c.me, ref=c.ref,
+# once=True)` laid just before the blow recolours exactly that blow and is
+# spent by it. `ref=` narrows the override to the row being rolled, and
+# `_retyped` lets a named row step past the `Keyword.WEAPON` scope -- which
+# is what makes it reach a monster row carrying no weapon keyword at all.
+# `m3378a5` is the precedent for the same card sentence.
 
 
 _M2044_BLED = "the m2044 is first bloodied"
@@ -1712,6 +1722,13 @@ _M2044_TYPES = (
     DamageType.LIGHTNING,
     DamageType.POISON,
 )
+
+#: The type the current use of `m2044a3` picked, carried from the first
+#: target to the rest: a close blast is **one** attack, so one choice, and
+#: the body runs once per target. One slot, written under `c.first` and read
+#: in the same body -- `p5848` is the precedent for this shape, and it is
+#: not the banned `id(world)` latch, which outlives its board.
+_m2044_breath: list[DamageType | None] = [None]
 
 
 @power(
@@ -1747,18 +1764,26 @@ def m2044a0(c: Cast) -> None:
     ],
     attack=Attack(vs=AC, printed=19),
     damage=Damage("2d6", 5, dtype=DamageType.ACID),
-    dropped=("c.hit(dtype=)",),
 )
 def m2044a1(c: Cast) -> None:
     """One of five types, chosen per attack, and the header holds one.
 
-    The damage expression is data so that it rescales, and `c.hit` has no way
-    to be told which type this swing is -- so the first printed type stays in
-    the header, all five ride as keywords, and the choice is the named gap.
-    Dealing it by hand instead would mean writing the dice and the bonus into
-    the body, which is exactly the number the database already holds.
+    The damage expression stays in the header so that it rescales -- dealing
+    it by hand would write the dice and the bonus into the body, which is
+    exactly the number the database already holds. The type is a `c.deals`
+    override instead: see the block comment above for why that reaches a
+    blow `c.hit()` rolls.
+
+    Laid inside the hit branch, because there is no printed miss damage to
+    recolour and `once=True` is spent by the blow rather than by the clock.
+    Chosen afresh on every use, which is what "for each attack" says and
+    which `m2044a2` makes visible -- it makes two of these.
     """
     if c.strike():
+        picked = c.choose(
+            list(_M2044_TYPES), f"{c.ref}: which damage type",
+        ) or _M2044_TYPES[0]
+        c.deals(picked, on=c.me, ref=c.ref, once=True)
         c.hit()
 
 
@@ -1798,15 +1823,28 @@ def m2044a2(c: Cast) -> None:
     ],
     attack=Attack(vs=REF, printed=17),
     damage=Damage("2d6", 5, dtype=DamageType.ACID, kind=LIMITED),
-    dropped=("c.hit(dtype=)",),
 )
 def m2044a3(c: Cast) -> None:
-    """"Ongoing 10 damage of the same type" follows the header's type, which is
-    the first of the five -- so the burn and the blow agree, which is what the
-    printed sentence asks for even though the pair cannot be chosen."""
+    """One type for the whole blast, and the burn is handed the same pick.
+
+    A close blast is one attack, so the choice is made under `c.first` and
+    carried to the other targets; a second `c.choose` per target would be a
+    type per creature, which is more than the card gives.
+
+    "Ongoing 10 damage of the same type" is passed the pick directly rather
+    than left to the override: `_typed` is read by `c.damage`, `c.half_damage`
+    and `c.flat` and by nothing else, so a `c.deals` hold does not reach a
+    burn -- `m3378a5` is marked for exactly that shortfall. Here the type is
+    in hand, so there is nothing to wait for."""
+    if c.first:
+        _m2044_breath[0] = c.choose(
+            list(_M2044_TYPES), f"{c.ref}: which damage type",
+        )
+    dtype = _m2044_breath[0] or _M2044_TYPES[0]
     if c.strike():
+        c.deals(dtype, on=c.me, ref=c.ref, once=True)
         c.hit()
-        c.ongoing(10, DamageType.ACID)
+        c.ongoing(10, dtype)
 
 
 @power(

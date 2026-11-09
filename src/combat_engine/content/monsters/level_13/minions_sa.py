@@ -1044,7 +1044,19 @@ def m6518a0(c: Cast) -> None:
         c.slowed(until=When.EOTNT)
 
 
-_M6518_DROPPED = "it drops to 0 hit points"
+_M6518_DROPPED = "it drops to 0 hit points as a result of a weapon attack"
+
+
+def _m6518_by_a_weapon(_world: World, _me: int, ev: Any) -> bool:
+    """"As a result of a weapon attack", off `Dropped.weapon`.
+
+    The field is the weapon the killing blow came through and is empty for a
+    blow that came through none -- a spell, an aura, ongoing damage, a failed
+    death save -- so the gate is simply whether it is set. `Dropped.power`
+    names the row that swung and not what it swung with, which is the
+    difference this clause turns on. #698.
+    """
+    return bool(str(getattr(ev, "weapon", "") or ""))
 
 
 @power(
@@ -1066,8 +1078,7 @@ _M6518_DROPPED = "it drops to 0 hit points"
     attack=Attack(vs=FORT, printed=16),
     damage=Damage(bonus=10, dtype=DamageType.NECROTIC, kind=MINION),
     trigger=_M6518_DROPPED,
-    on=Trigger(Dropped, about_me, _M6518_DROPPED),
-    dropped=("Dropped.weapon",),
+    on=Trigger(Dropped, both(about_me, _m6518_by_a_weapon), _M6518_DROPPED),
 )
 def m6518a1(c: Cast) -> None:
     """A death throe, handed over in the keyword column as a standard
@@ -1078,11 +1089,18 @@ def m6518a1(c: Cast) -> None:
     the creature setting it off.
 
     "Living" is `kinds_without=` -- the absence of the two type words that
-    deny it -- so it is the target line now. What is still out of reach is
-    "as a result of a weapon attack": `Dropped.power` names the row that
-    struck, which is not the same question -- a weapon is a `Weapon` and
-    the group lives there, not on the row. `Dropped.weapon` is the gap.
-    
+    deny it -- so it is the target line now.
+
+    **"As a result of a weapon attack" is asked now**, in the trigger rather
+    than in the body: the card prints it on the Trigger line, so a blow
+    through no weapon must not offer the row at all. `Dropped.weapon` is the
+    reader -- see `_m6518_by_a_weapon`, and `m4197a2`, which prints the same
+    clause as a Requirement and so asks it in its body.
+
+    It costs a verdict and the cost is honest: `audit.py` kills with
+    `world.damage`, which stamps no weapon on `Dropped`, so the harness
+    cannot present this clause and the row now reports UNUSED where it used
+    to fire on a weaponless kill it should never have answered.
 
     **`Target.living` was the right symbol after all**, and the two
     re-points away from it were each correct at the time. It first went to

@@ -10,9 +10,10 @@ the file is mostly trigger declarations. Two shapes recur:
   `TurnEnd` plus the same question and a distance. `TurnEnd` rather than any
   movement event: the printed line is about where the creature *stopped*.
 
-`p6995` is the one row with a clause that has nowhere to go -- concealment
-is not state this engine keeps -- so the half that is sayable is written and
-the other half is a note, the way the wizard's zones do it.
+`p6995` used to be read here as the one row with a clause that has nowhere
+to go -- *"concealment is not state this engine keeps"* -- and that was
+stale twice over. `c.conceal` lays it and `query.concealment_of` reads it,
+and the printed duration is a live gate rather than a clock: see the row.
 """
 
 from __future__ import annotations
@@ -52,11 +53,17 @@ from combat_engine.engine import (
     hits_me,
     power,
 )
+from combat_engine.engine.components import Health
 from combat_engine.engine.query import adjacent, bloodied, squares
 
 from .oath import swear, sworn
 
 OATH_DROPS = "your oath of enmity target drops to 0 hit points"
+
+
+def _temp_hp_left(c: Cast, who: int) -> bool:
+    """Is there anything left of the pool a gated hold is asked about?"""
+    return (h := c.world.get(who, Health)) is not None and h.temp > 0
 
 
 def _oath_dropped(world: World, me: int, ev: Event) -> bool:
@@ -292,12 +299,18 @@ def p6994(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.DIVINE],
-    dropped=('When.TEMP_HP_GONE',),
 )
 def p6995(c: Cast) -> None:
-    """The concealment has no expression -- the engine keeps no such state
-    -- and neither does a duration that runs until a pool of temporary hit
-    points is gone. The temporary hit points are the half that is sayable.
+    """"Until you have no temporary hit points" is no clock, so it is a gate
+    on the pool instead.
+
+    `c.conceal` is a `c.bonus("concealment", ...)` and `query.concealment_of`
+    is handed the **attack context**, so `Mod.applies` is re-asked at every
+    roll against the avenger -- which makes a live read of `Health.temp`
+    exactly the printed duration rather than an approximation of it. The
+    encounter clock behind it is the outer bound temporary hit points have
+    anyway. `f2197` holds a resistance the same way.
     """
-    c.temp_hp(5 + c.level, on=c.me)
-    c.note(f"{c.ref}: the concealment should last exactly as long as the temporary hit points")
+    me = c.me
+    c.temp_hp(5 + c.level, on=me)
+    c.conceal(on=me, until=When.ENCOUNTER, when=lambda ctx: _temp_hp_left(c, me))

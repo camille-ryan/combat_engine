@@ -1029,7 +1029,6 @@ def _by_hand(ctx: dict[str, Any]) -> bool:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Grid.aperture",),
 )
 def m5431a1(c: Cast) -> None:
     """A swarm's square is enterable by whoever likes and costs them, which is
@@ -1041,9 +1040,20 @@ def m5431a1(c: Cast) -> None:
     **Re-aimed, not written.** The old symbol was `c.move_through()`, and
     `movement.overrun` -- which does exist -- is not it: a trample covers a
     stated distance *through creatures*, where this clause is about fitting
-    through a gap in the terrain. The board has no apertures to fit through,
-    so the gap is in the grid and nothing on `Cast` would close it."""
+    through a gap in the terrain. The gap is in the grid and nothing on
+    `Cast` would close it.
+
+    **The opening is written now.** `Grid.porous` labels a blocker that has
+    a gap in it, where `Grid.blocking` could only say that one blocked, and
+    `c.squeeze_through` is the permission `movement._may_squeeze` reads
+    (#674) -- the same pair `m6086a1` and `m6640a2` use for this sentence.
+    No sort of gap is named: naming none means any gap at all, which is
+    what a swarm of small bodies fitting through "any opening" prints, and
+    a `gap=` sort would be a taxonomy no board fills. Nothing fills
+    `Grid.porous` on a board today, so the line is inert until the map
+    dressing arrives."""
     c.shares_space(difficult=True)
+    c.squeeze_through(on=c.me, until=When.ENCOUNTER)
     c.resist_forced(99, when=_by_hand, on=c.me)
 
 

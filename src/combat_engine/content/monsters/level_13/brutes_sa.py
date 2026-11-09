@@ -94,6 +94,7 @@ from combat_engine.engine import (
     REF,
     STANDARD,
     WILL,
+    ActionSpent,
     ActionType,
     AreaBurst,
     Attack,
@@ -140,7 +141,13 @@ from combat_engine.engine import (
     use,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import alive, bloodied, squares, team
+from combat_engine.engine.query import (
+    alive,
+    bloodied,
+    since_turn_began,
+    squares,
+    team,
+)
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -2592,6 +2599,25 @@ def m6665a2(c: Cast) -> None:
     c.watch(RelationCleared, let_go, until=When.ENCOUNTER, on=me, label=f"{ref} holds")
 
 
+def _no_move_action_yet(world: World, eid: int) -> bool:
+    """"It must not have taken a move action this turn."
+
+    `ActionSpent` carries the **requested** cost and `Encounter.spend` is
+    the one door every action goes through, so a scan bounded by
+    `query.since_turn_began` is the whole question. `Budget.move` is the
+    trap: `DOWNGRADES[MINOR]` is `(MINOR, MOVE, STANDARD)` and `spend`
+    takes the cheapest slot that can pay, so a minor spent with the minor
+    slot empty decrements the move one and this would refuse itself on a
+    turn where nothing moved.
+    """
+    return not any(
+        isinstance(past, ActionSpent)
+        and past.actor == eid
+        and past.cost is ActionType.MOVE
+        for past in since_turn_began(world, eid)
+    )
+
+
 @power(
     "m6665a3",
     level=13,
@@ -2599,8 +2625,8 @@ def m6665a2(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
+    requires=_no_move_action_yet,
     requires_text="the m6665 must not have taken a move action this turn",
-    dropped=("query.moved_this_turn(world, eid)",),
 )
 def m6665a3(c: Cast) -> None:
     """Twice its speed is two trample runs: `c.overrun` walks one speed and
@@ -2611,25 +2637,22 @@ def m6665a3(c: Cast) -> None:
     start -- a window the card leaves open is stale the moment it is
     snapshotted, and the printed clause pays on the very next stomp.
 
-    **The note that stood here was wrong on both counts, and the row is
-    deferred for a different reason.** It said "nothing asks whether a move
-    action has already gone this turn" -- `Encounter.spend` emits
+    **The Requirement is a real gate now, and the note that stood here was
+    wrong on both counts.** It said "nothing asks whether a move action has
+    already gone this turn" -- `Encounter.spend` emits
     `ActionSpent(actor, cost)` on every spend and `world.bus.log` keeps it,
-    so a scan bounded by `query.since_turn_began` answers it exactly. And it
-    said "a `requires=` that is false when a trait is armed refuses the row
-    for the whole fight": `Power.requires_of` is called **per offer**, not
-    once at arming, so a gate that changes during the turn is precisely what
-    the field is for. `m816a1` and `m3435a1` are written against it. #645.
+    so `_no_move_action_yet` above answers it exactly. And it said "a
+    `requires=` that is false when a trait is armed refuses the row for the
+    whole fight": `Power.requires_of` is called **per offer**, not once at
+    arming, so a gate that changes during the turn is precisely what the
+    field is for -- and this row is a standard action rather than a trait,
+    which is the case that warning is not about at all. `m816a1` and
+    `m3435a1` are written against the same reader. #645.
 
-    `ActionSpent.cost` is the right field and `Budget.move` is the trap:
-    `DOWNGRADES[MINOR]` is `(MINOR, MOVE, STANDARD)` and `spend` takes the
-    cheapest slot that can pay, so a minor spent with `minor` already at 0
-    decrements `budget.move` and the row would refuse itself on a turn where
-    nothing moved. `cost` carries the **requested** action type.
-
-    **Not written because this is a level 13 card and the band is heroic** --
-    monsters 1-10. The marker stays so the row is not reported ready, and it
-    names the reader rather than claiming the engine records nothing.
+    Written at level 13 rather than deferred for the band: it is one gate on
+    a reader the tree already leans on, and the band rule is about not taking
+    on paragon *scope*. `m6086a1` is the precedent for writing a one-line
+    paragon clause instead of leaving an arrived symbol standing.
     """
     me, ref = c.me, c.ref
 

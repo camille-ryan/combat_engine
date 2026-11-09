@@ -257,8 +257,7 @@ def f2163(c: Cast) -> None:
 
 
 @power("f2162", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.floor_damage_dice(against=)",))
+       reach=PERSONAL, target=SELF,)
 def f2162(c: Cast) -> None:
     """Treats a 1 or 2 on a damage die as a 3.
 
@@ -271,15 +270,20 @@ def f2162(c: Cast) -> None:
     the floor's figure, not the reroll's -- the gap is half a point a die,
     not nothing. #742.
 
-    The weapon narrowing lands as `keyword=`. **What is still dropped is
-    the other half of the same sentence**: "against a target of your
-    p3069". `_reroll_ctx` is what a gated hold is asked at the moment the
-    dice are rolled, and it carries the row, its keywords and the roller
-    -- not the victim, because `c.damage` has not chosen one yet when the
-    dice come up. So the floor applies to every weapon attack this
-    character makes rather than only to the sworn enemy, which is wider
-    than print, and the row says so rather than reading as finished."""
-    c.floor_damage_dice(3, keyword=Keyword.WEAPON, on=c.me)
+    The weapon narrowing lands as `keyword=`, and **the other half of the
+    same sentence -- "against a target of your p3069" -- is a `when=`.**
+    This note used to say the gate could not be written because
+    `_reroll_ctx` "carries the row, its keywords and the roller -- not the
+    victim". It carries `target`: the three keys are `power`, `target` and
+    `attacker`, the body runs once per target with `c.target` already set,
+    and `c.floor_damage_dice`'s own docstring names this row as the `when=`
+    case. So the floor is the sworn enemy's alone rather than every weapon
+    attack the character makes, which is what the card says."""
+    me = c.me
+    c.floor_damage_dice(
+        3, keyword=Keyword.WEAPON, on=me,
+        when=lambda ctx: sworn(c.world, me, ctx.get("target")),
+    )
 
 
 @power("f2165", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

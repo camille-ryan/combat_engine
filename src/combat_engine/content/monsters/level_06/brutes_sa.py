@@ -1895,10 +1895,17 @@ def m4741a1(c: Cast) -> None:
 def m4741a2(c: Cast) -> None:
     """The absorb half -- pulled into its space, ongoing damage while held,
     temporary hit points each turn it is still holding somebody, and an
-    automatic expulsion past a damage threshold -- all plays. What does
-    not is the sealed-off line of sight, the "at-will attacks only" clause
-    on the swallowed creature, and the goblin-corpse alternative, none of
-    which this engine has a hook for."""
+    automatic expulsion past a damage threshold -- all plays, and so does
+    **"only at-will attacks"** now: `c.forbid(usage=, attacks_only=True)` is
+    that printed category exactly, and it is tied to the ongoing hold's
+    `on_end` so an expelled creature has its own powers back the moment it
+    is out rather than at the end of the encounter.
+
+    Still out: the sealed-off line of sight and the corpse alternative. See
+    the report -- `c.bonus("sealed", ...)` is read in **both** directions by
+    `query.line_of_effect`, where the card leaves the m4741 itself
+    reachable, and taking that reading would make the clause above inert as
+    well as the creature weaker than print."""
     held = c.grabbing()[:2]
     if not held:
         return
@@ -1910,6 +1917,14 @@ def m4741a2(c: Cast) -> None:
         hold = c.ongoing(5, on=victim)
         if hold is None:
             continue
+        caged = c.forbid(
+            usage=(Usage.ENCOUNTER, Usage.DAILY), attacks_only=True,
+            on=victim, until=When.ENCOUNTER,
+        )
+        if caged is not None:
+            hold.on_end.append(
+                lambda e=caged: c.world.effects.end(e, "it was expelled")
+            )
 
         def expel(ev: DamageApplied, v: int = victim, h: Any = hold) -> None:
             if ev.target != me or ev.amount < 16:

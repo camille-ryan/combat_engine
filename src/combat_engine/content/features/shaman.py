@@ -33,6 +33,7 @@ from combat_engine.engine import (
     Healed,
     Keyword,
     Target,
+    TurnStart,
     Usage,
     When,
     Window,
@@ -146,8 +147,7 @@ def shaman_f0(c: Cast) -> None:
     c.grant_row("p6515")
 
 
-@power("cf:shaman-f0s0", **TRAIT,
-       dropped=("actions.call_companion()",))
+@power("cf:shaman-f0s0", **TRAIT,)
 def shaman_f0s0(c: Cast) -> None:
     """The option `chargen` has been offering with no row behind it.
 
@@ -161,22 +161,48 @@ def shaman_f0s0(c: Cast) -> None:
     companion, and the gate is re-asked at each save rather than laid once:
     adjacency is a live condition and the companion moves.
 
-    The second sentence is dropped. "If your spirit companion is not
-    present at the start of your turn, you can summon it once during that
-    turn as a free action" is a conditional line in the action menu, and
-    `c.grant_action` refuses a word no reader looks for (#762) and in any
-    case only changes the cost of an action the menu already offers -- and the menu has no
-    kind for calling a companion. `c.call_companion` is the action; what is
-    missing is offering it for free, once, only while the spirit is away.
+    **The second sentence is written now, and the old note was asking the
+    wrong half of the menu.** It said `c.grant_action` is the lever and that
+    the menu has no kind for calling a companion -- true, and beside the
+    point: the call is not a menu *kind*, it is a declared row, `p6515`, at
+    `action=MINOR`. So what the sentence asks for is that row offered a
+    second time at a cheaper price, which is `c.recast` and is read by
+    `actions._recasts`. The row keeps its own minor-action entry and gains a
+    free one; `_recasts` skips a grant whose cost equals the row's own, so
+    the two cannot collapse into one.
+
+    "Only while the spirit is away" needs nothing here: `_recasts` asks
+    `usable`, and `p6515` carries `requires=_no_spirit`, so the free entry
+    disappears the moment the companion is standing there.
+
+    "At the start of your turn ... once during that turn" is why this is a
+    `TurnStart` watch rather than a standing grant. A grant laid at arming
+    would also pay out on a turn the spirit was present for and then lost
+    mid-turn, which the card does not give; laid here it is offered only on
+    a turn that *began* without one, and `until=When.EOT` is "during that
+    turn". `per_turn=1` is the "once".
     """
     _spirit_choice(c, "elemental", ("p12865", "p12866"))
     if not c.build("elemental"):
         return
+    me = c.me
     for mate in friends(c):
         c.bonus(
             "save", 2, on=mate, until=When.ENCOUNTER,
             when=lambda ctx, m=mate: beside_spirit(c, m),
         )
+
+    def spirit_away(ev: TurnStart) -> None:
+        if ev.actor != me or ev.ghost or c.companion() is not None:
+            return
+        c.recast(
+            "p6515", action=ActionType.FREE, per_turn=1, until=When.EOT, on=me,
+        )
+
+    c.watch(
+        TurnStart, spirit_away, until=When.ENCOUNTER, on=me,
+        label=f"{c.ref} free call",
+    )
 
 
 @power("cf:shaman-f0s1", **TRAIT)

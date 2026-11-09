@@ -716,7 +716,6 @@ def m4185a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("Grid.aperture",),
 )
 def m4185a4(c: Cast) -> None:
     """Everything the shape installs is tied to the form's own hold, or the
@@ -738,8 +737,18 @@ def m4185a4(c: Cast) -> None:
     which is the right behaviour for a form clause; this block prints
     fly 6, so here it returns a hold.
 
-    One clause is still dropped: folding through an aperture a Tiny
-    creature could manage. The grid has no apertures.
+    **The aperture clause is written now and its premise was stale too.**
+    The old note said the grid has no apertures; it has. `Grid.porous`
+    labels a blocker that has a gap in it -- the field `Grid.blocking`
+    could not, which is what made this unwritable -- and
+    `c.squeeze_through` is the permission `movement._may_squeeze` reads
+    (#674). No sort of gap is named: naming none means any gap at all, and
+    a size gate would be inventing a taxonomy no board fills. Nothing
+    fills `Grid.porous` on a board today, so the permission is inert until
+    the map dressing arrives; that is `content/terrain`, not a gap here.
+
+    Hung in the same tuple as the four bans so the form's own `on_end`
+    takes it back: the clause is the form's, not the creature's.
 
     **Re-aimed, not written.** That symbol was `c.move_through()`, and
     `movement.overrun` -- which exists, and which `level_11`'s `_through_them`
@@ -755,6 +764,7 @@ def m4185a4(c: Cast) -> None:
         c.ignores_difficult(on=me, until=When.EONT),
         c.no_provoke(on=me, until=When.EONT),
         c.lose_mode("fly", until=When.EONT, on=me),
+        c.squeeze_through(on=me, until=When.EONT),
     ):
         if held is not None:
             shape.on_end.append(lambda h=held: c.world.effects.end(h, "form ended"))
