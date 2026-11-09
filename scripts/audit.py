@@ -2354,6 +2354,27 @@ def _deal_party(seed: int) -> dict:
     """
     import combat_engine.chargen.choices as choices
 
+    # **`SCORED_CHOICES` is pinned, and the full suite is what taught me
+    # to pin it.** The flag changes which powers the dealer picks, this
+    # module sets it `False` at import for the board's own reasons, and
+    # several `drivers` rules flip it to `True` around their own work. So
+    # a recording made in one mode and a comparison made in the other
+    # disagree on all 16 parties -- which is exactly what happened: the
+    # gate passed standalone and failed inside `check.py --all`, because
+    # standalone was a different measurement.
+    #
+    # Pinned here rather than in the gate, so the recorder and the gate
+    # cannot be in different modes from each other whatever ran before.
+    was_scored = chargen.SCORED_CHOICES
+    chargen.SCORED_CHOICES = False
+    try:
+        return _deal_party_unscored(choices, seed)
+    finally:
+        chargen.SCORED_CHOICES = was_scored
+
+
+def _deal_party_unscored(choices: Any, seed: int) -> dict:
+    """`_deal_party`'s body, with the scoring flag already pinned."""
     here: dict[str, dict] = {}
     for who, cls in (("ally", "cleric"), ("second", "fighter")):
             seen: dict[str, list[Any]] = {}
