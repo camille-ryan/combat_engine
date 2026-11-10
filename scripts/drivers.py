@@ -11261,6 +11261,56 @@ def reroll_as_another_skill(out: Result) -> None:
              " was stood in for, so crediting one would be a loosening")
 
 
+def every_triggered_action_can_be_offered(out: Result) -> None:
+    """A printed Trigger is reachable whatever action the card costs.
+
+    `Triggers._offer` asks `(trig.window or WINDOW_OF[action])` which window
+    a row answers in. An action type absent from `WINDOW_OF` resolves to
+    `None`, which matches no window, so **every row costing that action is
+    unreachable** -- not refused, not silent, never offered.
+
+    It has happened twice. `ActionType.NONE` was missing and four rows that
+    print a Trigger had never fired. `ActionType.STANDARD` was missing and
+    three had: two death throes (`m4741a4`, `m3987a4`) that reported "could
+    not be used on the test board at all", and `p12828`, which fired only
+    because it declared `window=` itself and was riding another row's
+    subscription of the same pair.
+
+    So this is a **census, not an example**: every action type that any
+    declared row carries alongside a trigger must have an entry. A third
+    action type turning up later cannot then be silently unreachable, which
+    is the only way this bug has ever appeared.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.triggers import WINDOW_OF, _watched
+
+    carried = {p.action for p in REGISTRY.values() if p.triggers}
+    out.that(carried, "some declared row carries a trigger, or this rule is"
+                      " asserting over an empty set")
+    missing = sorted(getattr(a, "name", str(a))
+                     for a in carried if WINDOW_OF.get(a) is None)
+    out.that(not missing,
+             f"every action type on a triggered row has a `WINDOW_OF` entry,"
+             f" so no row is unreachable for costing the wrong action."
+             f" Without one: {missing}")
+
+    # **And the subscription has to exist, not only the lookup.** `_watched`
+    # builds the (event, window) pairs the bus is listened on; a row whose
+    # pair is absent is offered only if another row happens to want it.
+    watched = _watched(len(REGISTRY))
+    unsubscribed = []
+    for row in REGISTRY.values():
+        for t in row.triggers:
+            w = t.window or WINDOW_OF.get(row.action)
+            if w is not None and w not in watched.get(t.event, set()):
+                unsubscribed.append(f"{row.ref}:{t.event.__name__}/{w.name}")
+    out.that(not unsubscribed,
+             f"and every triggered row's own (event, window) pair is"
+             f" subscribed, so none depends on a sibling declaring the"
+             f" same one. Unsubscribed: {sorted(unsubscribed)[:6]}")
+
+
 def rerolled(out: Result) -> None:
     """Nothing announced that a roll was a reroll, and 18 rows ride on one.
 
@@ -71942,6 +71992,9 @@ DRIVERS = {
     "reroll_as_another_skill": (reroll_as_another_skill,
                                 "a second check rolled as a different skill,"
                                 " chosen on totals and not on faces"),
+    "every_triggered_action_can_be_offered": (
+        every_triggered_action_can_be_offered,
+        "a printed Trigger is reachable whatever action the card costs"),
     "rerolled": (rerolled,
                  "a roll announced as a second one, and gateable as one"),
     "boost_roll": (boost_roll,

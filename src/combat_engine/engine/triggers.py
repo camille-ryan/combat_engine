@@ -112,6 +112,26 @@ WINDOW_OF = {
     # its trigger does and costs nothing. Without an entry here no such row
     # was ever offered to anybody, and four print it.
     ActionType.NONE: Window.AFTER,
+    # **A standard action with a printed Trigger, which three rows are**, and
+    # the entry is missing for exactly the reason the one above was. Two of
+    # the three are death throes -- *"when reduced to 0 hit points"* and
+    # *"when first bloodied and again when it drops to 0"* -- so `AFTER` is
+    # not a default but the reading: the throe happens once the drop has.
+    #
+    # `m4741a4` and `m3987a4` had **never fired**, both reporting "could not
+    # be used on the test board at all", and neither for a reason any card
+    # of theirs states. `_offer`'s own comment records a death throe being
+    # unreachable once before, for the liveness check, and says three were
+    # written and none had fired; that fix left these two blocked on a
+    # second cause in the same breath.
+    #
+    # `p12828` is the third and fired only by accident: it declared
+    # `window=` itself, and `_watched` drops the subscription for a row
+    # whose action has no entry here, so it was being offered through
+    # *another* row's subscription of the same pair. Re-pointing those rows
+    # took the pair away and the row went from silent to never-offered,
+    # which is how this was found. #1215.
+    ActionType.STANDARD: Window.AFTER,
 }
 
 
@@ -165,10 +185,20 @@ def _watched(_rows: int) -> dict[type[Event], set[Window]]:
     watched: dict[type[Event], set[Window]] = {}
     for p in REGISTRY.values():
         window = WINDOW_OF.get(p.action)
-        if window is None:
-            continue
         for trig in p.triggers:
-            watched.setdefault(trig.event, set()).add(trig.window or window)
+            # **A trigger naming its own window is self-sufficient.** This
+            # used to `continue` on a missing `WINDOW_OF` entry *before*
+            # looking at `trig.window`, so such a row contributed no
+            # subscription and fired only if some other row happened to
+            # want the same (event, window) pair. `p12828` was exactly
+            # that, and it stopped firing when the rows it was riding on
+            # moved to another event -- a dependency nothing declared and
+            # no instrument could see. `_answers` already consults
+            # `trig.window` first; this makes the two agree. #1215.
+            resolved = trig.window or window
+            if resolved is None:
+                continue
+            watched.setdefault(trig.event, set()).add(resolved)
     return watched
 
 

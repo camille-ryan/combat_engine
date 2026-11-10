@@ -3,11 +3,13 @@
 What the group has in common is **answering a roll that is already on the
 table**: four of the ten are immediate interrupts and two move a social
 check off the skill it was printed for, so most of this file reaches for
-the event rather than for the board. Two levers do all of it --
-`SkillCheck.skill`, read by `skills.check` inside its resolve callback,
-and `AttackResult.target_defence`, re-read by `resolve.attack` after the
-`AttackRolled` window -- and both are only reachable from the right window,
-which is why several triggers here name one explicitly.
+the event rather than for the board. Two levers do all of it -- the skill
+a check is about to be rolled as, answered on `CheckDeclared` through
+`c.substitute_check`, and
+`AttackResult.target_defence`, re-read by `resolve.attack` after the
+`AttackRolled` window. Only the second is window-sensitive, which is why
+one trigger here still names a window explicitly; `CheckDeclared` precedes
+the d20, so there is no too-late window for the first.
 
 `p9299`'s card heads itself with a **different skill** from the one the
 database files it under. `cls` follows the database, since that is what
@@ -36,6 +38,7 @@ from combat_engine.engine import (
     WILL,
     YOU_AND_EACH_ALLY,
     Cast,
+    CheckDeclared,
     CloseBurst,
     Keyword,
     Melee,
@@ -135,17 +138,32 @@ def _enemy_moving_willingly(world: Any, me: int, ev: Any) -> bool:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger=_INTIMIDATING,
-    on=Trigger(SkillCheck, my_check("intimidate"), _INTIMIDATING,
-               window=Window.BEFORE),
+    on=Trigger(CheckDeclared, my_check("intimidate"), _INTIMIDATING),
     narrative=("skill:intimidate",),
 )
 def p12828(c: Cast) -> None:
-    """The substitution is the whole mechanical clause and it plays.
-    `skills.check` totals the modifiers inside its resolve callback and
-    reads `ev.skill` *there*, so rewriting the field before that callback
-    runs makes the insight modifier the one applied. `Window.BEFORE` is
-    named on the trigger because a standard action has no window of its own
-    and the number is already settled in the after one.
+    """*"You make an Insight check in place of an Intimidate check."*
+
+    **`CheckDeclared`, and no `window=` any more** -- two separate reasons,
+    and the second one was a latent bug. The event precedes the d20
+    altogether, so there is no window in which the swap is too late; and
+    `ActionType.STANDARD` now has a `WINDOW_OF` entry, where before it had
+    none and this row's own `window=Window.BEFORE` was the only thing
+    making it answerable at all.
+
+    That was not belt-and-braces: `_watched` dropped the subscription for a
+    row whose action had no entry, so this one was being offered through
+    **another row's** subscription of the same pair. Re-pointing those rows
+    to `CheckDeclared` took the pair away and this went from silent to
+    never-offered. The dependency was on nothing it declared and no
+    instrument could see it. #1215.
+
+    The swap is also **said** now: a hand-rolled `ev.skill = x` announces
+    nothing, which is why this was carried silent -- not for being wrong
+    but for being unobservable. #1209, #1212.
+
+    No `instead_of`: the trigger already narrows to the one check the card
+    names.
 
     `narrative=`: the rest of the card is the standard intimidate rules
     restated -- a +5 or +10 to Will depending on whether the creature is
@@ -154,10 +172,7 @@ def p12828(c: Cast) -> None:
     target line's "shares a language with you" is the same circumstance:
     nothing asks what two creatures have in common to speak.
     """
-    ev = c.trigger
-    if ev is None:
-        return
-    ev.skill = "insight"
+    c.substitute_check("insight")
 
 
 @power(
