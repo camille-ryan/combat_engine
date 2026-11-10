@@ -604,25 +604,52 @@ def m1155a3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.HEALING],
-    todo=("c.undouse()",),
+    todo=("c.resume_regeneration(before_tick=)",),
 )
 def m1155a4(c: Cast) -> None:
-    """Nothing can be said here at all, so the row is refused rather than
-    half-written.
+    """*"A creature of its own kind within 2 squares (excluding itself)
+    regenerates normally at the beginning of its turn even if it took fire
+    or acid damage any time since its last turn."*
 
-    The printed line turns a *suppressed* regeneration back on for its own
-    kind nearby, and the asking and the switching are both writable now:
-    `_regenerates(doused=)` holds the suppression as a labelled effect, so
-    the question is a scan of `world.effects.of(other)` and the answer is
-    `c.end_effect` -- provided both blocks share one label constant.
+    **Two premises corrected and the row still refused, so here is all of
+    it measured.**
 
-    What is missing is the regeneration itself. This stat block prints six
-    rows and none of them is a regeneration line, so the clause modifies
-    something the creature has not got and there is no label to share. That
-    is a question about the card rather than about the engine and has been
-    referred up; until it is answered there is nothing here to switch on.
+    The old note said *"this stat block prints six rows and none of them is
+    a regeneration line, so the clause modifies something the creature has
+    not got"*, and referred the card up. That is false. The regeneration is
+    not a row, it is a **column** -- which is how this project models every
+    printed stat-block number. `monster.regeneration` is 10 here with
+    `regen_unless_damaged_by` holding acid and fire, and
+    `loader._lay_regeneration` lays it on every spawn through the same
+    `c.regeneration` the 62 content call sites use. Measured on the audit
+    board: with no fire damage the creature heals **10** at its turn start,
+    and four regeneration effects stand (two creatures, two holds each).
+    Looking for a row rather than a column is what hid it.
+
+    `c.undouse()` was the wrong symbol too. `c.resume_regeneration(on=)`
+    exists and is documented as *"the other side of `c.regeneration`'s
+    `unless_damaged_by=`"*: the exception lays a hold the next tick
+    consumes, and the verb ends it early. Measured: fire damage lays the
+    hold, the verb clears it and answers True.
+
+    **What actually blocks the row is ORDER, and it is worth stating
+    precisely.** Both the regeneration tick and any row that would clear
+    the suppression are `TurnStart` watchers, and the tick is laid at
+    **spawn** -- before any trait arms at `Encounter.start` -- so it is
+    earlier in the subscriber list and runs first. It sees the hold,
+    returns without healing, and a clear laid by this row arrives after the
+    tick it was meant to enable. Written that way and driven, the row heals
+    nobody: hp 101 -> 101 with the row armed and with it absent alike.
+
+    So the gap is a way to resume **before the tick reads it** -- an
+    ordering guarantee, not a new verb. Three shapes were considered and
+    none is right to guess at: a `before_tick=` on the verb, clearing the
+    hold when the damage lands (order-independent, but it measures the
+    2-square distance at damage time rather than at the turn start the card
+    names), or giving `loader`'s tick a later subscription so traits can
+    get in front of it -- which touches every one of the 69 creatures that
+    print a regeneration.
     """
-
 
 @power(
     "m1155a5",
@@ -670,15 +697,74 @@ def m115683a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.extra_turn(script=)",),
 )
 def m115683a1(c: Cast) -> None:
-    """`c.extra_turn` hands back a whole ordinary turn at a count, not one
-    scripted free action -- and a solo handed a free turn at initiative 10 +
-    its check is a different creature from the one on the card. The second
-    sentence is conditional on the first and goes with it; m115683a0 already
-    ends a dominating or stunning hold at the end of each of its turns.
+    """Acting once more at ten over its own check, and only to swing.
+
+    **The marker here said `c.extra_turn(script=)` and refused the whole
+    row, and that was wrong by a sibling.** It reasoned that `c.extra_turn`
+    hands back a whole ordinary turn and not one scripted free action, so a
+    solo given the slot would be a different creature from the one on the
+    card. True about the verb, and `m495a1` settled the shape nine levels
+    down: splice the slot, script the printed line on the *first* of its
+    turns each round -- the spliced one always sorts above its own, because
+    it is ten higher -- and then spend the budget out, so what the slot
+    actually buys is the free action the card prints and nothing else.
+    `m5879a2` writes the same family one level up and still carries a marker
+    for only this half.
+
+    The round is counted in a closure rather than asked of the board: both
+    slots belong to the same creature and carry the same `Initiative`, so
+    nothing on a `TurnStart` tells them apart except which came first.
+
+    **Spending the budget out does not leave an action point as a hole.**
+    `actions._action_points` is offered off the pool rather than off the
+    budget, so the policy could reach for one inside a slot this row has
+    emptied -- but it is capped at one a round for everybody
+    (`pool.spent_round == world.round`), so the extra action lands in one
+    slot or the other and the round's total is the same either way. A solo
+    with two points therefore still gets one a round, which is the printed
+    rule and not this row's doing.
+
+    "This attack does not provoke opportunity attacks" is laid before the
+    swing rather than after it, since `c.no_provoke` is an interrupt on the
+    opportunity window and a window that has already opened is past it.
+
+    The last printed sentence is the alternative, not an addition: a
+    dominating or stunning hold ends *instead of* the attack, so the two
+    branches exclude each other. m115683a0 ends the same holds at the end of
+    each of its turns, which is a different moment and leaves this one with
+    work to do -- a hold laid during somebody else's turn is standing when
+    this slot comes round.
     """
+    me = c.me
+    init = c.world.get(me, Initiative)
+    if init is not None:
+        c.extra_turn(at=init.rolled + 10)
+    slots: dict[int, int] = {}
+
+    def instinct(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me:
+            return
+        slots[c.world.round] = slots.get(c.world.round, 0) + 1
+        if slots[c.world.round] != 1:
+            return
+        gripped = [
+            eff
+            for eff in c.world.effects.of(me)
+            if set(eff.conditions) & {Condition.STUNNED, Condition.DOMINATED}
+        ]
+        if gripped:
+            for eff in gripped:
+                c.world.effects.end(eff, c.ref)
+        else:
+            c.no_provoke(until=When.EOT, on=me)
+            c.use_power("m115683a5")
+        budget = c.world.get(me, Budget)
+        if budget is not None:
+            budget.standard = budget.move = budget.minor = 0
+
+    c.watch(TurnStart, instinct, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -1977,7 +2063,7 @@ def m1599a0(c: Cast) -> None:
     # **The move itself is writable now; the cap is not.** The card reads
     # "can move the zone up to 3 squares as a minor action **once per
     # round**", and `c.grant_action` takes no per-round limit -- so
-    # granting it would offer the move as often as the creature has minor
+    # granting it offers the move as often as the creature has minor
     # actions. One narrowing short, and it is the narrowing that keeps a
     # controller from walking its zone twice a turn. #583
     dropped=("c.grant_action(per_round=)",),
@@ -1991,10 +2077,29 @@ def m1599a1(c: Cast) -> None:
     is laid only when it is not already standing, or every re-entry would
     build another one.
 
-    The dropped clause is moving the zone: `actions._granted` is read for
-    five words and `move_zone` is not one of them, so granting it would lay
-    something nothing consults. `c.move_zone` itself exists and does the
-    work; what is missing is an action a creature can spend on it.
+    **The move is granted now, and the paragraph here used to refuse it on a
+    premise that had stopped being true.** It said "`actions._granted` is
+    read for five words and `move_zone` is not one of them", so granting it
+    would lay something nothing consults. `move_zone` *is* in
+    `actions.GRANTABLE`, it has had a reader in `actions._recovery` and a
+    `perform` branch since #583 -- the branch whose own comment names this
+    family of nine monster rows -- and `c.grant_action` raises on a word
+    without one, so the refusal could not even have been silent.
+
+    The distance rides on the carrier, which is the number `perform` reads
+    back out of `_granted`, and the aura rule and the choice of *which*
+    zone are both the reader's.
+
+    What is still dropped is only the cap. `c.grant_action` lays a bonus
+    under the key `"<what> as <cost>"` and the value is the *distance*, so
+    there is no second slot a count per round could go in. #1219 is the same
+    carrier running out of room for a different reason -- three cards that
+    need the grant to name *which creature* it acts on -- so a keyword here
+    needs somewhere to put its number before it could mean anything, and
+    that is a change to the carrier rather than a parameter.
+
+    In play the overage is one minor action wide: a creature has one minor a
+    turn, so only a second minor spends the move twice.
     """
     if c.strike():
         c.hit()
@@ -2004,6 +2109,7 @@ def m1599a1(c: Cast) -> None:
     if any(z.label == c.ref and z.owner == c.me for _zid, z in c.world.zones.all()):
         return
     zone = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER, difficult=True)
+    c.grant_action("move_zone", MINOR, squares_=3, on=c.me, until=When.ENCOUNTER)
     me, ref = c.me, c.ref
 
     def sting(who: int) -> None:

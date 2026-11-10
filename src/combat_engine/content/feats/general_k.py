@@ -23,9 +23,11 @@ those hand the card over and drop the exchange.
 
 **The f2023b family.** Eleven rows hang off one encounter attack. So
 `f2023b` lays a named hold, `c.effect(c.ref)`, on everything it hits;
-`c.suffering("f2023b")` is then how f2024, f2029, f2037 and f2041 find
-"a target currently affected by your f2023b". Without the hold none of
-the four has a question it can ask.
+`c.suffering("f2023b")` is then how f2037 and f2041 find
+"a target currently affected by your f2023b". Without the hold neither of
+the two has a question it can ask. The rows whose printed trigger is the
+*hit* rather than the standing hold -- f2024 and f2029 -- declare a `Hit`
+trigger on the ref instead, and need no hold.
 
 "Your highest ability modifier" is eight cards in this batch and the
 header can only name one ability, so `_best` computes it and the roll
@@ -80,6 +82,7 @@ from combat_engine.engine import (
     Melee,
     Miss,
     Moved,
+    OpportunityWindow,
     PowerResolved,
     PowerUsed,
     Ranged,
@@ -545,7 +548,18 @@ def f1704(c: Cast) -> None:
     it: `SkillCheck.target` landed and nothing *makes* an Intimidate
     check, so there is no event to carry a target. Untyped is wrong here
     for once -- the
-    card prints the word "feat"."""
+    card prints the word "feat".
+
+    **This card wants a trigger on the check, not a bonus to it**, which
+    is the half of `c.intimidate()` that is genuinely absent and the
+    reason this row stays blocked while `f2130b` -- the other holder of
+    the symbol -- did not. A bonus is writable: `engine/skills.py` totals
+    `skill:<name>` off `Mods` on every check. A *successful* check against
+    a named enemy is not: `actions.py` offers the Bluff feint and the
+    Perception spot in combat and no Intimidate action, and
+    `powers/skills/intimidate.py` says in its own first lines that nothing
+    there rolls one either. So the event the trigger would hang on is never
+    emitted, which is the inert-row shape rather than a missing field."""
     c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
             when=lambda ctx: _wielding_ref(c, "w3611"))
 
@@ -692,9 +706,20 @@ def f1836(c: Cast) -> None:
 def f1848(c: Cast) -> None:
     """The race's thirteen powers are declared, so "a r33 racial power"
     is a list of refs. Dropped: the extra 5 for a second elemental
-    manifestation, which is a build choice nothing records. The 11th and
-    21st level steps are out of scope."""
-    c.temp_hp(5, on=c.me)
+    manifestation. `chargen.RaceLine.manifestations` lists the thirteen
+    "choose one" rows and `granted` picks exactly **one** of them, so a
+    character holding two cannot be built and the row has nothing to ask;
+    `f604` and `f2880` wait on the same thing.
+
+    **The tier steps are written, and the note saying they were out of
+    scope was wrong.** That rule is about an item's `Level 11:`/`21:`
+    enchantment lines; a feat's printed steps are an ordinary clause and
+    thirteen other feat files write them, `f1854` four rows above this one
+    included. Leaving them out made the row quietly weaker than its card
+    from 11th level on. The numbers are the printed ones rather than a
+    multiple derived from 5."""
+    gain = 15 if c.level >= 21 else 10 if c.level >= 11 else 5
+    c.temp_hp(gain, on=c.me)
 
 
 @power("f1854", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -890,10 +915,24 @@ def f1873(c: Cast) -> None:
 
 
 @power("f1983", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.restore_use(item=)",))
+       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
 def f1983(c: Cast) -> None:
-    """Hands back a consumable on a missed attack. Rows can be handed
-    back; an expended item cannot."""
+    """Hands back a consumable on a missed attack.
+
+    **Re-pointed off `c.restore_use(item=)`, which named a facility one
+    layer above the gap.** Restoring an expended item presupposes that an
+    item can be expended, and nothing expends one: `c.consume_item()` is
+    what five item blocks are already waiting on -- `i476x1` measured it,
+    `chargen.loadout` names neither "consumable" nor "alchemical", so a
+    dealt character carries weapons, armour and a shield and no
+    expendables. A `restore` verb landing first would have nothing to put
+    back, and the singleton symbol said the blocker was here when it is
+    there.
+
+    Not `Keyword.ALCHEMICAL` either, though `f2864` and `f2865` wait on
+    it: the 75 alchemical blocks are declared with ordinary
+    `Attack(printed=)` lines and sit in a category of their own in
+    `game.db`, so recognising the attack is not what stops this row."""
 
 
 @power("f1986", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -938,13 +977,45 @@ def f1988(c: Cast) -> None:
     c.darkvision()
 
 
-@power("f2029", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2029", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.cannot_attack(opportunity=)",))
+       dropped=("c.no_immediate()",),
+       trigger="you hit a target with f2023b",
+       on=Trigger(Hit, lambda w, me, ev: (
+           ev.attacker == me and ev.power == "f2023b"
+       ), "you hit with f2023b"))
 def f2029(c: Cast) -> None:
-    """Bars opportunity and immediate attacks only. `c.cannot_attack`
-    bars every attack the creature has, which is a different and much
-    heavier card than the one printed."""
+    """Re-pointed off `c.cannot_attack(opportunity=)`, and the opportunity
+    half is now written. That marker asserted a general absence and was
+    wrong twice: `c.cannot_attack` cancels `AttackDeclared`, which carries
+    no flag saying a swing *is* an opportunity attack, so the parameter
+    could not be read even if it existed -- and the clause is already
+    written elsewhere in the tree. `p13855` prints the same opportunity
+    clause and cancels `OpportunityWindow` before it opens, which is what
+    this does; 179 content sites read that event and a dozen of them
+    refuse it this way.
+
+    What is left is the immediate-action half, and `p13855` carries the
+    argument for its symbol: `query.can_react` reads `Rules.no_reactions`,
+    which only daze, domination and stun write, and each of those carries
+    a great deal this card does not print. Naming the field would report
+    ARRIVED, so the symbol names the writer that is missing. This card
+    says "immediate action *attacks*" where `p13855` says "take immediate
+    actions", which is narrower -- but the missing writer is the same one,
+    so the two share the symbol rather than minting a near-synonym.
+
+    `When.EONT` is "the duration of the power" -- `f2023b`'s hit line runs
+    until the end of the holder's next turn. `AT_WILL` because a declared
+    trigger spends a use each firing and the card prints no limit, which
+    is the shape `f2024` and `f2041` already carry in this family."""
+    victim = c.trigger.target
+
+    def refuse(ev: OpportunityWindow) -> None:
+        if ev.actor == victim:
+            ev.cancel(f"{c.ref}: cannot make opportunity attacks")
+
+    c.watch(OpportunityWindow, refuse, until=When.EONT, window=Window.BEFORE,
+            on=victim, label=f"{c.ref} refuses openings")
 
 
 # -- the standing bonuses ---------------------------------------------------
@@ -1548,8 +1619,18 @@ def f1713b(c: Cast) -> None:
     comes to. It was dropped as `c.destroy(familiar=)` -- that verb
     destroys a carried *item* -- and the row was quietly free.
 
-    Still dropped: the -2 for attacking through the wall, a modifier on
-    *other* people's rolls conditioned on geometry no context carries."""
+    Still dropped: the -2 for attacking through the wall. **The old
+    reason -- "geometry no context carries" -- was wrong**: the attack
+    context carries `attacker` and `target`, and `c.line` and
+    `Barrier.zone` are both readable, so the geometry is computable. What
+    is missing is a verb of the right *shape*. The penalty belongs to the
+    wall and lands on whoever aims **through** it, and every zone verb
+    here runs the other way: `c.grants_in` and `c.cover_in` modify the
+    occupant's own rolls, and `c.penalty` is per-creature, so writing it
+    would mean laying a modifier on each enemy standing there when the
+    wall goes up -- which `c.grants_in`'s own docstring calls a zone that
+    has stopped being a zone, and which misses every enemy that arrives
+    afterwards."""
     if c.familiar() is not None:
         c.dismiss_companion()
     barrier = c.wall(8, difficult=True, solid=False, until=When.EONT,
@@ -1844,9 +1925,11 @@ def f2023(c: Cast) -> None:
        reach=Ranged(10), target=ONE_CREATURE, keywords=[Keyword.CHARM],
        attack=Attack(INT, vs=WILL, plus=3))
 def f2023b(c: Cast) -> None:
-    """The named hold is load-bearing: four other feats in this batch ask
-    "a target currently affected by your f2023b", and `c.suffering`
-    matches on the label, so without it none of them has a question.
+    """The named hold is load-bearing: `f2037` and `f2041` in this batch
+    ask "a target currently affected by your f2023b", and `c.suffering`
+    matches on the label, so without it neither has a question. `f2024`
+    and `f2029` print the *hit* as their trigger and declare one on this
+    ref instead, so they read the event and not the hold.
 
     **"Cannot willingly move closer to you" is written.** The old note was
     right that `c.cannot_shift` and `c.no_walk` bar a kind of movement
@@ -1882,14 +1965,32 @@ def f2024(c: Cast) -> None:
        dropped=("c.cast_from(ref=)",))
 def f2025(c: Cast) -> None:
     """`c.cast_from` moves the origin of *every* ranged and area attack the
-    caster makes; narrowing it to one row is the clause still dropped.
+    caster makes, and the card moves it for one row. So the dropped clause
+    is the narrowing -- `Relation.CASTS_FROM` is read in
+    `dsl.measured_from` when targets are chosen and carries no ref to gate
+    on, and `c.strike(from_=)` is the per-swing form, which a trait armed
+    at the start of the fight cannot reach.
+
+    **The call itself is gone, and that is the fix rather than a loss.**
+    It applied to the creature and not to a row, so wherever a familiar
+    exists every ranged and area power the character holds was measured
+    from it for the whole encounter -- a benefit on every other row the
+    character owns, none of which this card mentions. `m5808a0`'s rule
+    applies: a row stronger than its printed line is worse than an absent
+    one, and with the call out the `dropped=` marker is true instead of
+    describing a clause that was present and too wide.
+
+    Two honest notes on the cost of taking it out. The audit board deals
+    no familiar -- `c.familiar()` is `None` there -- so the call never ran
+    under the instrument either way, and nothing measurable changed; and
+    `cf:wizard-familiar` is itself blocked on `chargen.BUILDS`, so a dealt
+    character may have no familiar at all today. The removal is therefore
+    free in both readings: inert if nobody has one, and correct if anybody
+    does.
 
     **The provoke waiver is written.** `c.no_provoke` takes a `when=`, and the
     row to be safe while using is named on the card, so the gate is an equality
     on the ref `ctx["why"]` carries."""
-    familiar = c.familiar()
-    if familiar is not None:
-        c.cast_from(familiar, on=c.me, until=When.ENCOUNTER)
     c.no_provoke(
         on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: str(ctx.get("why", "")).split(" ", 1)[0] == "f2023b",

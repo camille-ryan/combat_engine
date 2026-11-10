@@ -10,12 +10,17 @@ Seven judgements run through the file.
   used and nothing tracks that; `usage=DAILY` is the closest the engine
   comes. Only the rows whose printed text makes the spending a clause of
   its own -- "using this power turns it to dust" -- carry
-  `dropped=("c.consume()",)`.
+  `dropped=("c.consume_item()",)`.
 
-  **Named `c.expend()` until #418.** That collided with `c.expend_row`, which
-  exists and spends a *power's* use -- a different thing from an item being
-  destroyed -- so the marker read as waiting on a verb the engine already had,
-  and `todo.py` could not see the collision because it fires on the string.
+  **Named `c.expend()` until #418, then `c.consume()`.** The first collided
+  with `c.expend_row`, which exists and spends a *power's* use -- a
+  different thing from an item being destroyed -- so the marker read as
+  waiting on a verb the engine already had, and `todo.py` could not see the
+  collision because it fires on the string. The second was a synonym of a
+  symbol five rows in four other item files already carried, so the group
+  it belonged to could not be read off `blocked.py --group`. The spelling
+  is `c.consume_item()` now, which is where `wondrous.i3466p2` already
+  waits on this exact clause.
 * **A coating cannot be tied to a weapon.** "Apply this to your weapon or
   one piece of ammunition; the next creature you hit with it..." has no
   way to ask which weapon a swing came from, so those rows fire on the
@@ -53,6 +58,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.powers.barbarian.rage import RAGE, raging
 from combat_engine.engine import (
     AC,
     DAILY,
@@ -917,7 +923,21 @@ def i3274p1(c: Cast) -> None:
        reach=PERSONAL, target=SELF, dropped=("c.alignment()",))
 def i3282p1(c: Cast) -> None:
     """Nothing records an alignment, so "against evil creatures" has no
-    gate and the bonuses apply to everything."""
+    gate and the bonuses apply to everything.
+
+    **Measured, and the gap is below this component.** `game.db`'s
+    `monster` table has 34 columns and not one of them is an alignment, so
+    no `Cast` reader could be written against it today -- the symbol names
+    a verb where the hole is really in the ETL. The near-miss was checked
+    and refused: 57 of 3,142 monsters carry "evil" in `keywords`, which is
+    2% of the corpus, so gating on that would read as "almost nothing is
+    evil" rather than as the printed clause.
+
+    Left on `c.alignment()` deliberately. `f1351`, `i2195p1` and `i3142x1`
+    wait on the same symbol and a group only means something while it moves
+    together, so re-spelling it `etl.monster.alignment` -- which is where
+    the evidence above points -- is a decision for all four rows at once
+    and not one this file takes on its own."""
     c.bonus("damage", 1, on=c.me, kind="power", until=When.EONT)
     for defence in (AC, FORT, REF, WILL):
         c.bonus(defence, 1, on=c.me, kind="power", until=When.EONT)
@@ -946,7 +966,16 @@ def i3305p1(c: Cast) -> None:
 
     Dropped: nothing bars a creature from walking into a zone, so "it
     cannot enter the aura willingly, and must use its first action to
-    leave by the shortest route" has nowhere to go."""
+    leave by the shortest route" has nowhere to go.
+
+    **Re-checked against the two things that look like it and are not.**
+    `c.blocks_entry` is a `Mods` key about **one creature's own space**,
+    read by `movement.blocks_entry`, and says nothing about a region.
+    `movement` does know about a hostile zone and its answer is a *warning*
+    -- "walks into an enemy zone" -- with `policy.doctrine`'s
+    `into_enemy_zone` pricing it at -0.6, so the AI is discouraged and
+    nothing is refused. A prohibition would have to be a decision on the
+    move itself, which is where `c.no_enter(zone)` points."""
     from combat_engine.engine.components import Stats
 
     kind = c.choose(list(_SCROLL_KINDS), "the scroll's creature type")
@@ -1209,21 +1238,83 @@ def i566p1(c: Cast) -> None:
 @power("i1071p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="you use an arcane or divine power of 5th level or lower",
-       todo=("c.sustain_free()",))
+       on=Trigger(PowerUsed, _reagent(5, Keyword.ARCANE, Keyword.DIVINE),
+                  "you use an arcane or divine power"))
 def i1071p1(c: Cast) -> None:
-    """Sustaining costs an action the engine spends; nothing waives it for
-    one round.
+    """One round of sustaining, free, on whatever the triggering power put
+    down.
 
-    **`sustain_cost=ActionType.FREE` is not the waiver, and would kill the
-    power.** `actions._sustaining` does ask `can_spend`, which answers True
-    for a free action -- but that menu entry is only the deliberate path.
-    What actually keeps a sustained effect alive is
-    `durations._sustain_by_default`, which reads `getattr(budget,
-    cost.value)` and decrements it, and `Budget` has `standard`, `move` and
-    `minor` and no `free`. So a free cost reads as a slot at zero, the
-    effect is ended "not sustained", and the row would be worse than
-    absent. What the symbol wants is a no-charge branch there, or a slot
-    for it to spend."""
+    **The old marker's premise was the engine as it stood before #776 and
+    is now false in the one place it mattered.** It argued that
+    `durations._sustain_by_default` "reads `getattr(budget, cost.value)`",
+    that `Budget` has no `free`, and that a free cost therefore reads as a
+    slot already at zero. That read is gone: `_sustain_by_default` asks
+    `Encounter.spend` now, which knows the five `ActionType` members that
+    name no `Budget` field *and* the downgrades, and its own docstring
+    records the measurement -- `sustain=free kept by default: False ->
+    True`. `monsters.level_11.controllers_sa.m4460a4` carries the same
+    stale paragraph and should be re-read against that code; it was never
+    this row's mechanism anyway, because the effect being waived is not one
+    this row laid.
+
+    **`Effects.sustain` is the waiver, and it is a round rather than a
+    cost.** The turn-end sweep only consults `_sustain_by_default` when
+    `eff.sustained < world.round`, so marking the effect sustained on the
+    holder's next turn start carries it through that turn's end whatever
+    the actions went on -- which is the printed sentence, and nothing more:
+    "sustaining it for subsequent rounds does require the appropriate
+    action" falls out of the watch lapsing. Measured on a board with the
+    sustainer's standard, move and minor all spent: without the free
+    sustain the effect ends "not sustained", with it the effect lives.
+
+    **Which effect** is read off `PowerResolved` rather than off a ref or a
+    label. `PowerUsed` is announced *before* the triggering power's body,
+    so at the moment this row runs that power has laid nothing yet -- and
+    the ref cannot be recovered afterwards either, since a zone's sustained
+    effect is labelled by `zones._spawn` and carries no `by`. So the set of
+    sustained effects is snapshotted here and diffed when that one power
+    finishes, which names exactly what it put down and nothing a later row
+    in the same round adds.
+
+    **It audits UNUSED, for the board's reason and not its own.** The audit
+    board deals a fighter -- 36 to 39 known powers on three seeds, **none**
+    of them arcane or divine -- so no provocation it can stage satisfies
+    `_reagent(5, ARCANE, DIVINE)` and the row is never offered. Driven by
+    hand instead, on `p4201`, `p2358` and `p4137`, each laying a sustained
+    effect: the effect lapses without this reagent and lives with it, on a
+    board whose sustainer has spent every action. Both negative controls
+    hold -- a power that is neither arcane nor divine (`p11064`) and an
+    arcane one above the printed cap (`p4143`, level 6) buy no waiver -- and
+    the waiver lasts one round, surviving the following round and lapsing
+    the one after."""
+    spent = getattr(c.trigger, "power", "")
+    if not spent:
+        return
+    before = {e.id for e in c.world.effects.sustaining(c.me)}
+    waived: set[int] = set()
+
+    def laid(ev: PowerResolved) -> None:
+        if ev.actor != c.me or ev.power != spent or waived:
+            return
+        waived.update(
+            e.id for e in c.world.effects.sustaining(c.me) if e.id not in before
+        )
+
+    def free_round(ev: TurnStart) -> None:
+        if ev.actor != c.me or ev.ghost or not waived:
+            return
+        for eff in c.world.effects.sustaining(c.me):
+            if eff.id in waived:
+                c.world.effects.sustain(eff)
+        # **One turn start, and the watch's own duration is not what
+        # bounds it.** `When.EONT` latches, so the watcher is still live
+        # at the start of the round *after* the following one and paid a
+        # second free sustain -- measured, two rounds survived a drained
+        # budget where the card gives one.
+        waived.clear()
+
+    c.watch(PowerResolved, laid, until=When.EONT)
+    c.watch(TurnStart, free_round, until=When.EONT)
 
 
 @power("i1188p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1234,7 +1325,18 @@ def i1071p1(c: Cast) -> None:
 def i1188p1(c: Cast) -> None:
     """An at-will attack power granted for the encounter, printed in full
     and with no ref of its own: `c.grant_row` needs a row that exists and
-    `c.give` is a one-shot, not an at-will."""
+    `c.give` is a one-shot, not an at-will.
+
+    **The second-card convention was the obvious way out and it is not
+    available here.** A `…b` ref is what this tree uses for a card printed
+    inside another with no id of its own -- and those refs are **in
+    `game.db`**, minted by the ETL: the `feat` and `power` tables both
+    carry hundreds, `f960b` among them, and `item_block` carries **none**.
+    So declaring an `i1188p1b` would be a row against a card the database
+    does not have, which is a gap in the import rather than a thing a body
+    may invent. `c.grant_attack` is not it either: it makes a creature
+    swing *now*, out of turn, and it raises outright on a `ref=` that is
+    not declared."""
 
 
 @power("i1368p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1998,7 +2100,7 @@ def i1444x1(c: Cast) -> None:
 @power("i1444p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(2, 5), target=NO_TARGET,
        keywords=[Keyword.RADIANT, Keyword.ZONE],
-       dropped=("c.consume()",))
+       dropped=("c.consume_item()",))
 def i1444p1(c: Cast) -> None:
     """The zone stands. What it pays out is "as if it had taken radiant
     damage", which is the creature's own vulnerability read back at it.
@@ -2013,8 +2115,17 @@ def i1444p1(c: Cast) -> None:
     add the vulnerability on top and pay double. "Affected as if it had
     taken radiant damage" is the amount, not the type.
 
-    `c.consume()` stays: turning the stone to dust is the consumption model
-    nothing in this file has."""
+    **Re-pointed off `c.consume()`, which was a one-row synonym.**
+    `wondrous.i3466p2` carries `c.consume_item()` for the identical clause
+    -- *"an item cannot take itself off its own wearer"* -- and three more
+    rows in `hands.py`, `arms.py` and `waist.py` carry it for the step
+    before that, which is the same hole seen from the other side: nothing
+    in the tree holds an expendable, so nothing can spend or destroy one.
+    One gap, one symbol, six rows, rather than this file minting its own
+    word for the slot. The rename history above is now two hops --
+    `c.expend()` to `c.consume()` to this -- and the second hop is the one
+    worth keeping, since `c.expend_row` spends a *use* and not the
+    thing."""
     zone = c.zone(c.area(), until=When.ENCOUNTER)
 
     def scorch(who: int) -> None:
@@ -2056,11 +2167,34 @@ def i1928p1(c: Cast) -> None:
 
 
 @power("i2562p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.raging()",))
+       reach=PERSONAL, target=SELF)
 def i2562p1(c: Cast) -> None:
-    """"You are considered to be raging" has nothing to set: rage is a
-    barbarian's own state and nothing else reads it."""
+    """"You are considered to be raging", which is a `When.STANCE` effect
+    whose label carries `RAGE`.
+
+    **The marker's premise was the wrong half of the question.** It said
+    rage "is a barbarian's own state and nothing else reads it" -- but a
+    row wanting to be *considered* raging does not need a reader, it needs
+    a writer, and `powers.barbarian.rage` is both: `enter` lays the stance
+    and `raging` answers off `Effects.stance_of` plus the word in the
+    label. So a stance laid here is what two dozen "while raging" riders
+    in that class ask about, `f593` and `f1720` among them. That file
+    records the same correction twice over rows that called the *gate*
+    missing when it had answered all along.
+
+    **Gated on not already raging**, which is the one judgement in the
+    row: a wearer in a real rage is already everything this clause makes
+    them, and replacing that rage with a blank one would take its mods and
+    its watchers away. Anything else standing *is* displaced, because
+    `c.stance` ends what it replaces -- which the card does not say and is
+    the price of modelling rage as a stance at all. `rage.py` made that
+    call ("a stance in everything but the printed keyword") and every rage
+    power in the class already pays it; a special case here would instead
+    drop the clause silently on any wearer who happens to hold one. Worth
+    knowing that the audit board's caster holds a stance, so a guard on
+    "no stance at all" would have left this clause unexercised."""
+    if not raging(c.world, c.me):
+        c.stance(on=c.me, label=f"{c.ref} {RAGE}")
     _soulfang(c)
 
 
@@ -2237,7 +2371,18 @@ def i3293p1(c: Cast) -> None:
 def i3337p1(c: Cast) -> None:
     """Two damage types, so two burns: ongoing damage of one type does not
     stack but different types do, which is what the card wants. Barring
-    *temporary* hit points is the clause with nothing to set."""
+    *temporary* hit points is the clause with nothing to set.
+
+    **Checked rather than assumed, because the marker names a parameter on
+    a verb that exists.** `c.no_healing` works by cancelling `Healed`,
+    which is a `Decision`; `TempHP` is a plain `Event` and
+    `resolve.temp_hp` emits it *after* writing `health.temp`, so there is
+    no moment to refuse and nothing a row can do from the outside. A
+    watcher putting the pool back by hand is the shape this project calls
+    hand-writing state the engine derives -- and it would fight the
+    non-stacking rule, which is the same function's whole job. So the gap
+    is one layer down: `TempHP` wants to be a `Decision`, as `Healed` and
+    `SurgeSpent` both are. `m5496a0` waits on the same symbol."""
     if not c.strike():
         return
     victim = c.target

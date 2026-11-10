@@ -16,17 +16,24 @@ which is still `c.as_basic(ref)`.
 **The racial riders.** Eleven rows keyed to a race. Where the racial
 power arrives as a ref -- `p2483`, `p2484`, `p1448`, `p1831` -- it is
 ordinary; where the page names it in prose it is not ours to find, and
-`c.racial_row()` with `c.expend_row()` is the pair of gaps. Two of
-these rows were marked for a name the spec now carries, so trust the
-spec over the note beside the row: `f2409` waited on a breath the ETL
-had already resolved to `p1448`.
+`c.racial_row()` is the gap. Two of these rows were marked for a name
+the spec now carries, so trust the spec over the note beside the row:
+`f2409` waited on a breath the ETL had already resolved to `p1448`.
+
+**`c.expend_row()` is no longer half of that pair**, which this
+paragraph used to say: it exists, and `f2472` is re-aimed off it. What
+is left in that row is the row to charge, not the charging.
 
 **The mark.** Three rows change the number a marked creature pays for
-leaving you out of its attack. `resolve._mark_penalty` returns a
-hard-coded -2 and nothing reaches it, so the two that merely deepen the
-penalty are written as a second, stacking modifier and name
-`c.mark_penalty()` for the part that stacking cannot say; the one that
-also wants a count taken afresh at each swing is refused outright.
+leaving you out of its attack, and **the symbol this paragraph named is
+spent.** It said `resolve._mark_penalty` returns a hard-coded -2 that
+nothing reaches, so the deepening rows were a second stacking modifier
+waiting on `c.mark_penalty()`. `_mark_penalty` reads the number off each
+marker through `query.granted_amount` now, so `f2411` and `f2456` say
+what the mark is worth with `c.change_amount` and name nothing. `f2440`
+is the one still refused, for the half that never moved: its number is
+counted afresh at each swing and a granted amount is decided when it is
+laid.
 """
 
 from __future__ import annotations
@@ -63,7 +70,11 @@ from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import Moved, PowerUsed
 from combat_engine.engine.grid import distance, neighbours
-from combat_engine.engine.query import enemies, has_combat_advantage
+from combat_engine.engine.query import (
+    enemies,
+    has_combat_advantage,
+    moved_this_action,
+)
 from combat_engine.engine.resolve import MARK_PENALTY as MARK_KEY
 
 from .styles import among, longer_shift_on_a_martial_hit
@@ -348,13 +359,25 @@ def f2363(c: Cast) -> None:
 
 
 @power("f2364", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(against=)",))
+       reach=PERSONAL, target=SELF, dropped=("resolve.ctx.conditions",))
 def f2364(c: Cast) -> None:
     """The substitution plays. The defence bonus does not: it is
     "against any attack that **would** immobilize, restrain or slow
     you", and the attack context carries the power's ref but nothing
     about what its body is going to apply -- a defence cannot be gated
-    on an effect that has not happened."""
+    on an effect that has not happened.
+
+    **Re-pointed, and this was never a parameter.** `c.bonus(against=)`
+    read as "let the bonus take a predicate about the attack", and
+    `c.bonus` has taken `when=` on the attack context all along -- so the
+    argument was the easy half and the hard half is that the context holds
+    nothing to test. `f2365` in `feats/warlord_c.py` is the *same printed
+    clause* -- the same two-handed grip, the same three conditions, the
+    greater feat of the same pair one class over -- and it already names
+    the gap where it lives: the saving-throw context carries `conditions`
+    and the attack context does not. One gap, one symbol, and the two rows
+    now go green or red together. `c.bonus(against=)` would also have gone
+    ARRIVED the day somebody added a keyword that could not satisfy it."""
     if _grip(c, "axe", "hammer", "pick", hands=2):
         c.as_basic("p622", "p608", window="challenge")
 
@@ -708,6 +731,15 @@ def f2478(c: Cast) -> None:
     nothing lands, so there is no consequence to read the permission
     from; no header field declares that a row's attack can grab, which
     is the symbol.
+
+    **`c.flat`, not `c.damage(0, ...)`, and that was a live overpayment.**
+    `c.damage` adds `_enhancement()` to its flat argument, which is right
+    for a card's own damage line and wrong for a named number: measured on
+    an `audit.board` caster with a +3 weapon and a Dexterity modifier of 3,
+    a missed grab paid **6**. The printed clause is "damage equal to your
+    Dexterity modifier", so it is 3 at any enhancement -- and `c.flat` is
+    the verb for a figure the page names. A miss that is not a grab still
+    pays nothing, which is the control.
     """
     me = c.me
 
@@ -717,7 +749,7 @@ def f2478(c: Cast) -> None:
             and getattr(ev, "as_", "") == "grab"
             and ev.target in enemies(c.world, me)
         ):
-            c.damage(0, c.dex_mod, on=ev.target)
+            c.flat(c.dex_mod, on=ev.target)
 
     c.watch(Miss, on_miss, on=me, until=When.ENCOUNTER)
 
@@ -786,29 +818,68 @@ def f2440(c: Cast) -> None:
 
     The rest is writable and waiting on only that: `_mark_penalty` passes
     `{"attacker": <the creature swinging>}` now, which is the key a gate
-    needs for "an **adjacent** enemy that is marked by you"."""
+    needs for "an **adjacent** enemy that is marked by you".
+
+    **And there is a route that needs no new parameter, left untaken
+    twice over.** `query.granted_amount` returns `max(laid)` over every
+    entry whose gate passes, and its default is *a fallback, not a
+    floor* -- so a run of entries at 3, 4, 5 ... each gated on "the
+    attacker is adjacent to me **and** at least that many enemies are
+    adjacent to me" comes out as the printed `max(2, N)` exactly, with the
+    un-gated default 2 covering N of 0, 1 and 2.
+
+    It is not taken because of what it costs and who owns it:
+
+    * it is one effect per rung on the fighter for the whole encounter,
+      six where the card means one number -- so the effect list, the
+      wire and every audit verdict read as six modifiers rather than a
+      penalty that was looked up;
+    * it is a table in a body, and the rung set is bounded only by the
+      8 squares around a Medium creature, which is a fact about the grid
+      and not about this card;
+    * **`scripts/drivers.py` pins this marker.** `aid_grants` asserts
+      `REGISTRY["f2440"].unfinished == ("c.change_amount(compute=)",)`
+      outright, so clearing it here reds an instrument, and `scripts/`
+      belongs to no component and is not an authoring agent's to edit.
+
+    So the symbol stands and the ladder is recorded rather than written:
+    whoever takes the drivers side gets to decide between a `compute=`
+    and six rungs with the measurement in front of them."""
 
 
 @power("f2412", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("events.OpportunityWindow.step",))
+       reach=PERSONAL, target=SELF)
 def f2412(c: Cast) -> None:
-    """"Does not provoke from enemies **you have marked**" is written; "the
-    **first square**" is not.
+    """"Does not provoke from enemies **you have marked**", and only on "the
+    **first square**" of the move. Both halves are askable.
 
     The marked half is a question about `ctx["actor"]`, the creature that would
-    swing, and the mark is a relation this `Cast` can read. The square is not on
-    the context at all -- `movement.step` knows which step it is on and the
-    window does not carry it (#301) -- so what is laid is wider than the card
-    for an enemy that is marked and narrower for one that is not.
+    swing, and the mark is a relation this `Cast` can read -- `c.marked`
+    defaults `by=` to the caster, which is the printed "you have marked".
 
-    **Wider is the wrong direction** and it is declared rather than hidden: a
-    marked enemy gets no opening for the whole move instead of only the first
-    square. The alternative was waiving nothing, which is a feat that does not
-    work at all; this one plays and over-pays against marked enemies only."""
+    **The square is `query.moved_this_action`, which already counts it.** The
+    old note here said the step "is not on the context at all" and asked for a
+    field on the window; neither was needed. `movement.walk` zeroes
+    `Movement.went` at the top of every move action and increments it *after*
+    `step` returns, and `step` opens the opportunity window while the mover is
+    still standing in the square it is leaving -- so `went == 0` inside the
+    veto is exactly "this is the first square of the movement". The counter was
+    built for the printed Stealth rule (#784) and `turns` also clears it at the
+    top of a turn, so a creature that has not moved reads 0 rather than last
+    turn's number.
+
+    Measured on an `audit.board` walk: leaving the marked enemy's reach on the
+    first square reads `went=0` and is waived; staying beside it and leaving on
+    the second reads `went=1` and is not. Two unmarked enemies on the same walk
+    are never waived.
+
+    Only the three provoking kinds reach this -- `movement._SAFE` exempts
+    shifts, teleports and every forced move -- and walks, charges and runs all
+    go through `movement.walk`, so the counter they read is their own."""
     c.no_provoke(
         on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: str(ctx.get("why", "")) == "moved away"
+        and moved_this_action(c.world, c.me) == 0
         and c.marked(on=ctx.get("actor")),
     )
 
@@ -1004,7 +1075,20 @@ def f2448(c: Cast) -> None:
     hit buys **no damage and no rider**, and the row would have reported
     finished while paying nothing. What is wanted is to *replay* what each
     new number lands, which is a re-resolution and belongs in `resolve`.
-    #775."""
+    #775.
+
+    **Re-checked against the three rows now sharing the symbol.** `i1676p1`
+    wants the narrowest version -- the miss half of a resolved use
+    *un-applied* -- and this row wants the widest: new numbers for every
+    attack roll and whatever those land. They are the same facility at two
+    settings, reaching back into a use that has finished resolving, so one
+    symbol is right and splitting it would give four rows two markers that
+    could never go green independently.
+
+    Nothing else is owed. "Reliable" is `Keyword.RELIABLE`, which
+    `dsl.use` already reads to refund a missed power, and "missed every
+    target" is `PowerResolved`'s roll list -- so the trigger is writable
+    the day the replay exists."""
 
 
 @power("f2456", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1027,13 +1111,35 @@ def f2456(c: Cast) -> None:
 
 
 @power("f2472", level=1, cls="", usage=ENCOUNTER, action=ActionType.MINOR,
-       reach=Ranged(10), target=ONE_CREATURE, todo=("c.racial_row()",))
+       reach=Ranged(10), target=ONE_CREATURE, no_provoke=True,
+       dropped=("c.racial_row()",))
 def f2472(c: Cast) -> None:
     """A minor action rather than a trait, which is what the card prints.
     The mark and the range are ordinary, and `c.expend_row` would charge
     the price -- re-aimed off that half. What is left is the row to
     charge: the cantrip is granted by `rt:r20-t2` and the
-    grant names it in prose, so there is no ref to expend."""
+    grant names it in prose, so there is no ref to expend.
+
+    **Written rather than refused, and the price is the reason.** The grant
+    reads "once per encounter, ... as a minor action", and this header is
+    already a once-per-encounter minor -- so the header *is* the cost, and
+    the only thing `c.racial_row()` would add is the bookkeeping that ties
+    the two uses together. There is nothing for that bookkeeping to stop:
+    `rt:r20-t2` is `_inert` in `features/racial.py` precisely because the
+    cantrip it grants has no combat row, so no other use can spend the
+    charge this row is supposed to be spending. The clause stays named
+    because the tie is genuinely absent; the row plays correctly without
+    it, which is `dropped=` and not `todo=`.
+
+    **"This use does not provoke opportunity attacks" is `no_provoke=True`,
+    a header field.** `dsl.provokes_for` reads it ahead of `reach_of`, so a
+    `Ranged(10)` minor opens no window at all -- which is the printed line
+    and is also what the cantrip would have done.
+
+    Marked until the end of your next turn, which is `When.EONT`, and
+    `ONE_CREATURE` is already `Target("enemy", 1)` -- the card's "one
+    enemy" needs no narrowing."""
+    c.mark(until=When.EONT)
 
 
 @power("f2475", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1082,6 +1188,22 @@ def f2791(c: Cast) -> None:
     records which rows move their user, so this arms on every fighter
     attack power. It is wider than printed, and only while the turn
     lasts.
+
+    **The general absence was re-measured rather than believed.** `Power`
+    carries 44 declared fields and not one of them says a row moves its
+    user -- `reach`, `target` and `keywords` are the three a reader might
+    hope for and all three are about where the attack goes -- and
+    `query.py` has no reader for it either. The only thing in the tree
+    that answers a question like this is `chargen`'s source-level
+    `_does_more_than_damage`, which splits on the substring `"c."` and
+    misclassifies 460 of 23,068 bodies (#1093), so it is not a thing to
+    build a printed clause on.
+
+    The over-reach is two-fold and both halves are the same symbol's: the
+    waiver covers rows that move nobody, and it covers movement later in
+    the turn that is not the power's. Narrowing the second alone would
+    leave the row no closer to the card and would need an effect ended off
+    `PowerResolved`, so it is left whole.
     """
     c.ignores_difficult(on=c.me, until=When.EOT)
 
@@ -1173,6 +1295,28 @@ def f2802(c: Cast) -> None:
     announces -- so a power that hits two creatures runs this twice
     where the card says "one target you hit". The dropped clause is the
     other benefit: turning a push the power grants into a slide.
+
+    **The symbol is the wrong shape and no verb is wanted.** `c.pre_empt`
+    is already "when you use <row>, you can X instead of Y", takes `what`
+    as `"push"`, and is reachable from here -- so `c.forgo_push()` names a
+    door that is open. What is missing is the other end of the deal, which
+    `c.pre_empt`'s own docstring states: *"the row has to read it with
+    `instead_of`"*. Both associated powers call `c.push` outright --
+    `powers/fighter/level_3_b.py` for `p10492` and
+    `powers/fighter/level_7_b.py` for `p2466` -- so there is nothing to
+    pre-empt. That is `p1489`'s fault exactly, the worked example in
+    `content/CLAUDE.md`: a row hard-coding a clause blocks a feat on a
+    verb that already exists.
+
+    So this is two edits in two other files and not an engine gap, and the
+    marker is left pointing at the verb only because the symbol vocabulary
+    has no spelling for "a sibling row does not offer its push". Whoever
+    takes those two files adds the `c.instead_of("push", ...)` read there
+    and the clause lands here as a `c.pre_empt` per ref.
+
+    The second half of the printed sentence -- "1 additional square if the
+    power already allows you to slide" -- is moot for both heroic refs:
+    neither slides. It is live only for the three above-heroic rows.
     """
     if not _named(c, "w3609", "w3668"):
         return
