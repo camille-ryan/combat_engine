@@ -2045,6 +2045,7 @@ class Cast:
         from_: int | None = None,
         until: When = When.ENCOUNTER,
         check: bool = False,
+        skill: str = "stealth",
     ) -> Effect | None:
         """Go unseen, and stay that way until something gives you away.
 
@@ -2094,13 +2095,20 @@ class Cast:
         fail at its own printed trait. #784.
         """
         if check:
-            return self._stealth_hide(from_=from_, until=until)
+            return self._stealth_hide(from_=from_, until=until, skill=skill)
         return self.invisible(to=from_, until=until)
 
     def _stealth_hide(
-        self, *, from_: int | None, until: When
+        self, *, from_: int | None, until: When, skill: str = "stealth"
     ) -> Effect | None:
         """The hide that is a roll: Stealth against what the watchers notice.
+
+        `skill` is what the roll is made with, and it is a parameter because
+        a card may substitute one: *"you make a Streetwise check in place of
+        a Stealth check to become hidden"*. Everything else about the hide
+        is unchanged by that -- the passive-Perception DC, the movement
+        penalty and its waiver key all describe the *circumstance*, not the
+        roll.
 
         Opposed by **passive** Perception, which is the printed arrangement
         -- nobody rolls to spot you unless they spend an action on it -- and
@@ -2145,7 +2153,15 @@ class Cast:
         # "no penalty", not "+0 and then some", and the rogue's feature
         # carries one +5 for both of its clauses.
         charged = min(0, penalty + waived)
-        rolled = self.check("stealth", dc, bonus=charged)
+        # **The skill is a parameter and the penalty key is not.** A card
+        # saying "make a Streetwise check in place of a Stealth check"
+        # replaces the *roll*, not the circumstance -- a creature that ran
+        # is still easier to spot whichever skill it rolls -- so
+        # `"stealth:moved"` above stays spelled that way and keeps meaning
+        # "the waiver for moving while hiding". Reading the waiver off the
+        # substituted skill would have made `f3447`'s +5 silently absent
+        # for exactly the rows that substitute.
+        rolled = self.check(skill, dc, bonus=charged)
         if not rolled:
             self.world.bus.emit(
                 Note(text=f"{self.me} failed to go unseen")
@@ -4223,6 +4239,7 @@ class Cast:
     def flat(self, amount: int, *, dtype: DamageType = DamageType.UNTYPED,
              dtypes: Sequence[DamageType] = (),
              unpreventable: bool = False,
+             from_attack: bool = True,
              on: int | None = None) -> int:
         """Damage that is not rolled. `dtypes` is one blow of several types.
 
@@ -4274,6 +4291,23 @@ class Cast:
         return deal_damage(
             self.world, self.me, who, amount, dtype, self.ref,
             dtypes=dtypes, unpreventable=unpreventable,
+            # **Exposed rather than invented.** `resolve.deal_damage` has
+            # taken this since #731 and `c.flat` simply never forwarded it,
+            # so every unrolled packet claimed to come from an attack.
+            # `resolve.py:1286` is what that costs: `if from_attack and
+            # deals_half(world, source)` -- so a weakened creature's own
+            # non-attack damage was halved by its own weakness.
+            #
+            # `x5_53` is the measured case. The diseased character is the
+            # *source* of its own stage-3 poison and the same stage weakens
+            # it, so a printed 10 came out as 5 and the row was withdrawn
+            # rather than landed wrong.
+            #
+            # Default `True`, so nothing already written moves: the four
+            # existing callers that want the other answer (`c.absorb`,
+            # `falling`, `zones`, `suffocation`) reach `deal_damage`
+            # directly and are untouched.
+            from_attack=from_attack,
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
         )
@@ -10237,6 +10271,46 @@ class Cast:
         known.per_day[ref] = known.per_day.get(ref, 0) + 1
         return True
 
+    def restore_per_day(self, ref: str) -> bool:
+        """Hand one use of a daily allowance back. False when none was spent.
+
+        `c.spend_per_day`'s mirror, and the store is the same plain dict --
+        `Powers.per_day`, a count of uses **taken**, which is why this
+        decrements rather than increments. `c.per_day_left` is the reader
+        and is unchanged.
+
+        **Floored at zero and reported**, for the same reason `spend_per_day`
+        returns a bool rather than being a bare decrement: a row that hands
+        back a use nobody spent has invented a resource, and the caller has
+        to be able to tell. Two rows printing *"replenish one of the
+        infusions expended"* need the "expended" part to mean something.
+
+        **Not `c.restore_charge` and not `c.restore_use`.** Those are the
+        other two stores and neither is this counter: `restore_charge` is a
+        per-*encounter* resource keyed `<ref>:<what>`, and `restore_use` is
+        a row's own use in `Powers.used`. A daily allowance outlives both --
+        `story._wear` mirrors `Powers.per_day` in and out of
+        `story.Sheet.per_day` -- so handing a use back here survives the
+        fight, which is what a card replenishing at a short rest means.
+
+        **No `on=`, and that is deliberate rather than an omission.**
+        `Cast._who(None)` returns `self.target`, so an `on=` defaulting
+        through it would have read the *victim's* allowance -- which is
+        `content/CLAUDE.md`'s "commonest single mistake here", and it is
+        how the first draft of this method silently did nothing. Its two
+        siblings `c.spend_per_day` and `c.per_day_left` both read
+        `self.me` with no such parameter, and an allowance belongs to
+        whoever holds the row. The card's *"you or an ally can spend a
+        healing surge"* is about who pays, not whose allowance refills.
+        """
+        from .components import Powers
+
+        known = self.world.get(self.me, Powers)
+        if known is None or known.per_day.get(ref, 0) <= 0:
+            return False
+        known.per_day[ref] = known.per_day[ref] - 1
+        return True
+
     def charge_left(self, key: str, limit: int = 1) -> int:
         """How much of a per-encounter charge is left, for this creature.
 
@@ -12678,7 +12752,8 @@ class Cast:
         who = self._who(on)
         return False if who is None else shaped(self.world, who)
 
-    def kill(self, *, on: int | None = None, critical: bool = False) -> bool:
+    def kill(self, *, on: int | None = None, critical: bool = False,
+             dead: bool = False) -> bool:
         """Reduce a creature to 0 hit points outright. Returns whether it moved.
 
         "A critical hit automatically reduces the creature to 0 hit points" is
@@ -12708,7 +12783,21 @@ class Cast:
         health = self.world.get(who, Health)
         if health is None or health.hp <= 0:
             return False
-        health.hp = 0
+        # **`dead=` goes through the same door rather than around it.**
+        # `_check_down` dies when `hp <= health.dying_at`, which is 0 for a
+        # monster and *negative* for a character -- so the default `hp = 0`
+        # correctly lays the dying conditions on a character and correctly
+        # kills a monster. A card printing "it dies" wants the second
+        # answer for both.
+        #
+        # Setting hit points to `dying_at` says that in the component's own
+        # terms, so `resolve._die` is reached by the one path that already
+        # leads there and `Dropped(dead=...)` -- which is computed as
+        # `health.hp <= health.dying_at` -- comes out right for free. A new
+        # branch in `_check_down` would have had to get that second fact
+        # right separately, and `_die` is module-private precisely so there
+        # is one way in.
+        health.hp = health.dying_at if dead else 0
         _check_down(self.world, who, health, source=self.me, crit=critical,
                     power=self.ref)
         return True
@@ -16930,6 +17019,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         ranged: bool = False,
         ref: str = "",
         vs_kind: str = "",
+        when: Callable[[dict], bool] | None = None,
     ) -> Effect | None:
         """This creature's weapon attacks deal that type from now on.
 
@@ -17085,9 +17175,19 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             if not eff.label.startswith("deals:"):
                 continue
             parts = [*eff.label.split("|"), "", "", "", "", ""][1:6]
+            # **A gated hold neither supersedes nor is superseded**, because
+            # the narrowing in the label is no longer the whole of what
+            # distinguishes two holds. "Fire against anything" and "fire
+            # against whatever is vulnerable to it" share every label field
+            # and are different sentences; ending one for the other would
+            # silently drop a printed clause. Only two holds that are both
+            # unconditional still collapse, which is the case the paragraph
+            # above is about.
+            if getattr(eff, "deals_when", None) is not None or when is not None:
+                continue
             if "|".join(parts) == narrowing:
                 self.world.effects.end(eff, "deals another type now")
-        return self.world.effects.apply(
+        laid = self.world.effects.apply(
             who, self.me, until,
             label=(f"deals:{types[0].value}|{narrowing}"
                    f"|{','.join(t.value for t in types[1:])}"
@@ -17095,6 +17195,22 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             # A structured key, not a ref: `by` carries the row. #580
             by=self.ref,
         )
+        # **`when=` rides the effect object, not the label**, and that is
+        # forced rather than chosen. Every other narrowing here is a *field
+        # in a pipe-delimited string* -- six of them, positionally padded --
+        # because the label is text the page reads and `audit.py` matches on
+        # `startswith("deals:")`. A predicate cannot be serialised into
+        # that, which is why `c.deals(per_target=)`'s own triage concluded
+        # "a callable cannot ride on it".
+        #
+        # It can ride the object, which is the same answer `events.py`
+        # reaches for a rider it must keep off the wire: *"an attribute, not
+        # a field. See `Bloodied.weapon`"*. The label is unchanged, so
+        # nothing that reads it sees a new field, and `_retyped` asks for
+        # the attribute with a default.
+        if laid is not None and when is not None:
+            laid.deals_when = when      # ty: ignore[unresolved-attribute]
+        return laid
 
     def _typed(self, dtype: DamageType) -> tuple[DamageType, ...]:
         """Every type this blow really is. One of them, usually.
@@ -17204,6 +17320,27 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 and keywords is not None
                 and Keyword(through) not in keywords
             ):
+                continue
+            # **The one narrowing that is not in the label.** Asked last,
+            # so it costs nothing on the overwhelming majority of holds
+            # that carry no predicate, and so a gate cannot accidentally
+            # admit a blow the label already excluded.
+            #
+            # The context is built from `self` because there is none to be
+            # had: `_typed` is reached from `c.damage` and takes only the
+            # type, so there is no attack context here the way `c.bonus`
+            # has one. What `self` can honestly answer is who is swinging,
+            # at whom, through which row, and whether it is ranged -- which
+            # is what the cards on this axis ask about. A predicate wanting
+            # more than that is a predicate this cannot serve, and it will
+            # read a missing key rather than be silently true.
+            gate = getattr(eff, "deals_when", None)
+            if gate is not None and not gate({
+                "attacker": self.me,
+                "target": self.target,
+                "power": self.ref,
+                "ranged": self.ranged,
+            }):
                 continue
             # **A set, comma-joined, and any of them matches.** One card
             # prints "the next necrotic or poison power", and with a single

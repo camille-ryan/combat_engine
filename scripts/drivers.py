@@ -69366,6 +69366,423 @@ def prone_defences(out: Result) -> None:
         "grants_ca is still True; the melee restriction is filed separately",
     )
 
+
+def deals_when(out: Result) -> None:
+    """A retype can ask about the creature being hit, not just the swinger.
+
+    `c.deals` keeps every narrowing it has in a **pipe-delimited label** --
+    six positional fields, padded -- because the label is text the page
+    reads and `audit.py` matches `startswith("deals:")`. A question cannot
+    be serialised into that, which is why `c.deals(per_target=)`'s own
+    triage concluded "a callable cannot ride on it" and why `i1231x1` sat
+    marked with a docstring saying no gate could fix it.
+
+    `when=` rides the **effect object** instead -- the same answer
+    `events.py` reaches for a rider it must keep off the wire ("an
+    attribute, not a field. See `Bloodied.weapon`") -- and `_retyped` asks
+    it as the blow is coloured, with the victim in the context.
+
+    **The negative controls carry this rule.** A positive alone would pass
+    on an implementation that ignored the predicate and recoloured
+    everything, which is the shape a gated modifier usually ships in.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences
+    from combat_engine.engine.types import DamageType
+
+    world, me, _ = _board()
+    from combat_engine.engine.query import enemies
+
+    foes = enemies(world, me)
+    soft = foes[0]
+    plain = foes[1] if len(foes) > 1 else foes[0]
+    out.that(
+        soft != plain,
+        "the board offers two distinct enemies, so the gate has something"
+        " to discriminate between -- one foe would prove nothing",
+        f"{soft} and {plain}",
+    )
+
+    held = world.need(soft, Defences)
+    held.vulnerable = {**dict(held.vulnerable or {}), DamageType.NECROTIC: 5}
+    bare = world.need(plain, Defences)
+    bare.vulnerable = {k: v for k, v in (bare.vulnerable or {}).items()
+                       if k not in (DamageType.FIRE, DamageType.NECROTIC)}
+
+    def typed(target: int) -> list[str]:
+        c = Cast(world=world, me=me, ref="drivers")
+        c.target = target
+        return sorted(t.value for t in c._typed(DamageType.UNTYPED))
+
+    before = typed(soft)
+    lay = Cast(world=world, me=me, ref="drivers")
+    lay.deals(
+        dtypes=(DamageType.FIRE, DamageType.NECROTIC), on=me,
+        when=lambda ctx: bool(
+            lay.vulnerabilities(on=ctx.get("target")).get(DamageType.FIRE)
+            or lay.vulnerabilities(on=ctx.get("target")).get(DamageType.NECROTIC)
+        ) if isinstance(ctx.get("target"), int) else False,
+    )
+
+    out.that(
+        typed(soft) == ["fire", "necrotic"],
+        "the blow comes out **both** printed types against a creature"
+        " already vulnerable to one of them -- `dtypes=` is the"
+        " several-at-once form, and reading it as a choice would pay the"
+        " lower of two vulnerabilities on a creature holding both",
+        f"{before} -> {typed(soft)}",
+    )
+    out.that(
+        typed(plain) == ["untyped"],
+        "and is **unchanged** against a creature vulnerable to neither --"
+        " the control that fails on any implementation ignoring the"
+        " predicate, which is how a gated retype usually ships",
+        f"{typed(plain)}",
+    )
+
+    bare.vulnerable = {**dict(bare.vulnerable or {}), DamageType.FIRE: 5}
+    out.that(
+        typed(plain) == ["fire", "necrotic"],
+        "and the **same standing hold** answers differently once that"
+        " creature becomes vulnerable mid-fight, so the gate is asked per"
+        " blow rather than frozen when it was laid",
+        f"{typed(plain)}",
+    )
+
+    out.that(
+        any(e.label.startswith("deals:") for e in world.effects.of(me)),
+        "the hold is still a labelled effect, so nothing that reads the"
+        " label sees a new field -- the predicate rides the object",
+        ", ".join(e.label for e in world.effects.of(me)
+                  if e.label.startswith("deals:")),
+    )
+
+    second = Cast(world=world, me=me, ref="drivers2")
+    second.deals(DamageType.COLD, on=me)
+    holds = [e.label for e in world.effects.of(me)
+             if e.label.startswith("deals:")]
+    out.that(
+        len(holds) == 2,
+        "a gated hold and an ungated one of the same narrowing **coexist**:"
+        " 'fire against anything' and 'fire against the vulnerable' share"
+        " every label field and are different sentences, so superseding one"
+        " for the other would silently drop a printed clause",
+        f"{len(holds)} holds: {holds}",
+    )
+
+
+def flat_from_attack(out: Result) -> None:
+    """A creature's own non-attack damage is not halved by its own weakness.
+
+    `resolve.deal_damage` has taken `from_attack` since #731 and reads it at
+    `resolve.py:1286` -- `if from_attack and deals_half(world, source)` --
+    but `c.flat` never forwarded it, so every unrolled packet a row dealt
+    claimed to come from an attack.
+
+    `x5_53` is the measured cost: the diseased character is the **source**
+    of its own stage-3 poison and the same stage weakens it, so a printed
+    10 came out as 5. The row was written, driven, withdrawn and marked
+    rather than landed wrong -- its docstring records that -- and this is
+    the parameter it named.
+
+    **The default must not move**, which is the first control: four callers
+    already want `from_attack=False` and reach `deal_damage` directly, and
+    every row calling `c.flat` today means an attack.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.types import Condition, DamageType
+
+    world, me, _ = _board()
+
+    def paid(amount: int, **kw: object) -> int:
+        health = world.need(me, Health)
+        was = health.hp
+        Cast(world=world, me=me, ref="drivers").flat(
+            amount, dtype=DamageType.POISON, on=me, **kw)  # type: ignore[arg-type]
+        took = was - world.need(me, Health).hp
+        world.need(me, Health).hp = was
+        return took
+
+    clean = paid(10)
+    out.that(
+        clean == 10,
+        "an unweakened creature takes the printed ten either way, which is"
+        " the baseline the next two assertions are measured against",
+        f"{clean}",
+    )
+
+    Cast(world=world, me=me, ref="drivers").condition(Condition.WEAKENED, on=me)
+    halved = paid(10)
+    out.that(
+        halved == 5,
+        "and **the default still halves it**, so nothing already written"
+        " moves -- every row calling `c.flat` today is dealing an attack's"
+        " damage and must keep the answer it had",
+        f"{halved} of 10",
+    )
+    whole = paid(10, from_attack=False)
+    out.that(
+        whole == 10,
+        "while `from_attack=False` pays the printed ten to a weakened"
+        " creature -- the disease is paying out, not the character"
+        " attacking, and a creature's own weakness cannot halve its own"
+        " affliction",
+        f"{whole} of 10",
+    )
+    out.that(
+        halved != whole,
+        "the two answers differ on the same board and the same amount,"
+        " which is what makes this a parameter rather than a rename --"
+        " a control that could not tell them apart would pass on a flag"
+        " that was never read",
+        f"default {halved}, from_attack=False {whole}",
+    )
+
+
+def restore_per_day(out: Result) -> None:
+    """A daily allowance can be handed back, and only what was spent.
+
+    `Powers.per_day` had a writer (`c.spend_per_day`) and a reader
+    (`c.per_day_left`) and nothing to give a use back. Two cards print
+    *"replenish one of the infusions expended"*, and "expended" is the word
+    that makes the floor load-bearing: a row handing back a use nobody
+    spent has invented a resource.
+
+    **`c.restore_charge` and `c.restore_use` are not this counter**, which
+    is the near-miss worth stating. The first is a per-*encounter* resource
+    keyed `<ref>:<what>`; the second is a row's own use in `Powers.used`,
+    which both rests clear. A daily allowance outlives a fight --
+    `story._wear` mirrors it in and out of `story.Sheet.per_day` -- so a
+    card replenishing at a short rest needs the store that survives one.
+
+    **No `on=` on the verb, and the first draft proved why.** `Cast._who`
+    returns `self.target` for `on=None`, so a defaulted parameter read the
+    *victim's* allowance and the method silently did nothing: two spends,
+    then a restore that returned False. Both siblings read `self.me` with
+    no such parameter.
+    """
+    from combat_engine.engine.cast import Cast
+
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers")
+    ref, limit = "cf:artificer-f2", 2
+
+    out.that(
+        c.restore_per_day(ref) is False,
+        "handing back a use before any was spent is **refused** -- the"
+        " floor is what makes the printed word 'expended' mean something,"
+        " and a bare decrement would have minted a use here",
+        f"left {c.per_day_left(ref, limit)} of {limit}",
+    )
+    c.spend_per_day(ref, limit)
+    c.spend_per_day(ref, limit)
+    out.that(
+        c.per_day_left(ref, limit) == 0 and c.spend_per_day(ref, limit) is False,
+        "two spends exhaust an allowance of two, and a third is refused --"
+        " the setup the restore is measured against",
+        "0 left, third spend refused",
+    )
+    out.that(
+        c.restore_per_day(ref) is True and c.per_day_left(ref, limit) == 1,
+        "one restore gives exactly one back",
+        f"left {c.per_day_left(ref, limit)}",
+    )
+    out.that(
+        c.spend_per_day(ref, limit) is True,
+        "and the given-back use is **spendable**, which a reader-only fix"
+        " would not have been -- the count is the thing both verbs share",
+        "spent it again",
+    )
+    c.restore_per_day(ref)
+    c.restore_per_day(ref)
+    c.restore_per_day(ref)
+    out.that(
+        c.per_day_left(ref, limit) == limit
+        and c.restore_per_day(ref) is False,
+        "and over-restoring cannot exceed the printed allowance: three"
+        " restores against one spend leave two, not five",
+        f"left {c.per_day_left(ref, limit)} of {limit}",
+    )
+
+    # **The assertion a plant forced into existence.** Breaking the verb to
+    # read `self._who(None)` -- the bug the first draft actually had -- left
+    # every assertion above **green**, because a fresh `Cast` has
+    # `target = None` and the board poses nobody. So the rule could not tell
+    # "reads the holder" from "reads the victim", which is the whole
+    # distinction the method's docstring is about. `scripts/CLAUDE.md`: a
+    # plant that fails to go red is a finding either way, and here the
+    # finding was about the check.
+    #
+    # Posed the other way round on purpose: the *victim* is the one with a
+    # spent allowance, and the caster has none. A verb reading the target
+    # would hand a use back and answer True.
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.query import enemies
+
+    victim = enemies(world, me)[0]
+    hoard = world.get(victim, Powers) or world.add(victim, Powers())
+    hoard.per_day["cf:artificer-f2"] = 2
+    spent = Cast(world=world, me=me, ref="drivers")
+    spent.target = victim
+    # **Bounded, and a plant is why.** This was `while
+    # spent.restore_per_day(ref): pass`, and planting the floor away made
+    # the verb answer True for ever -- so the rule hung instead of going
+    # red, which is a worse failure than the one it was testing for. An
+    # unbounded loop in a check is a check that cannot report.
+    for _ in range(limit + 2):
+        if not spent.restore_per_day(ref):
+            break
+    out.that(
+        spent.restore_per_day(ref) is False
+        and world.get(victim, Powers).per_day["cf:artificer-f2"] == 2,
+        "with a **target** holding two spent uses and the caster holding"
+        " none, the restore is refused and the target's count is untouched"
+        " -- `Cast._who(None)` is `self.target`, so a defaulted `on=` here"
+        " would refill the victim's allowance, which is this tree's"
+        " commonest single mistake",
+        f"caster refused, victim still at"
+        f" {world.get(victim, Powers).per_day['cf:artificer-f2']}",
+    )
+
+
+def hide_skill(out: Result) -> None:
+    """A card may substitute the skill a hide is rolled with, and nothing else.
+
+    `_stealth_hide` rolled `c.check("stealth", ...)` outright, so *"you make
+    a Streetwise check in place of a Stealth check to become hidden"* --
+    `p9341`'s entire printed benefit -- was unsayable.
+
+    **The negative control is about what must NOT move.** The movement
+    penalty's waiver is read off the key `"stealth:moved"`, and reading it
+    off the substituted skill instead would make `f3447`'s +5 silently
+    absent for exactly the rows that substitute. A card replaces the roll,
+    not the circumstance: a creature that ran is easier to spot whichever
+    skill it uses.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import SkillCheck
+
+    world, me, _ = _board()
+    rolled: list[str] = []
+    world.bus.on(SkillCheck, lambda ev: rolled.append(
+        str(getattr(ev, "skill", ""))))
+
+    rolled.clear()
+    Cast(world=world, me=me, ref="drivers").hide(check=True)
+    out.that(
+        "stealth" in rolled,
+        "the default still rolls Stealth, so no row already written moves",
+        f"rolled {rolled}",
+    )
+
+    rolled.clear()
+    Cast(world=world, me=me, ref="drivers").hide(check=True, skill="streetwise")
+    out.that(
+        "streetwise" in rolled,
+        "and `skill=` rolls the named skill instead -- the substitution the"
+        " card prints",
+        f"rolled {rolled}",
+    )
+    out.that(
+        "stealth" not in rolled,
+        "**in place of**, not as well: a second Stealth check would be two"
+        " rolls where the card prints one, and would hand the creature the"
+        " better of them",
+        f"rolled {rolled}",
+    )
+
+
+def kill_outright(out: Result) -> None:
+    """"It dies" means dead, not dying, even for a character.
+
+    `c.kill` sets hit points to 0 and routes through
+    `resolve._check_down`, which dies only when `hp <= health.dying_at` --
+    0 for a monster and **minus half its maximum** for a character. So the
+    default correctly drops a character to death saves, and a card printing
+    *"if this damage reduces the target to 0 hit points, it dies"* (`x5_22`)
+    had no way to say the other thing. `resolve._die` is module-private on
+    purpose, so the fix is a door rather than a second caller.
+
+    `dead=True` sets hit points to `dying_at` instead of 0, which says it in
+    the component's own terms: the one existing path to `_die` is reached,
+    and `Dropped(dead=...)` -- computed as `hp <= dying_at` -- comes out
+    right without being set twice.
+
+    **The control needs a character, and that is the whole difficulty.**
+    `audit.board`'s allies carry `dies_at_zero=True`, so `dying_at` is 0 and
+    both branches die identically -- a probe on the posed board cannot tell
+    the two implementations apart and proves nothing. The shape has to be
+    posed.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import Died, Dropped
+    from combat_engine.engine.query import alive, allies
+    from combat_engine.engine.types import Condition
+
+    def fell(dead: bool) -> tuple[int, bool, bool, list[str]]:
+        world, me, _ = _board()
+        victim = next(a for a in allies(world, me) if a != me)
+        health = world.need(victim, Health)
+        health.dies_at_zero = False
+        saw: list[str] = []
+        world.bus.on(Died, lambda ev: saw.append("Died"))
+        world.bus.on(Dropped, lambda ev: saw.append(f"dead={ev.dead}"))
+        Cast(world=world, me=me, ref="drivers").kill(on=victim, dead=dead)
+        dying = Condition.DYING in {x for e in world.effects.of(victim)
+                                    for x in (e.conditions or ())}
+        return (world.need(victim, Health).hp, alive(world, victim), dying, saw)
+
+    world, me, _ = _board()
+    victim = next(a for a in allies(world, me) if a != me)
+    health = world.need(victim, Health)
+    health.dies_at_zero = False
+    out.that(
+        health.dying_at < 0,
+        "the victim is posed as a character -- `dying_at` below zero -- which"
+        " the board does not give by default, and without it both branches"
+        " die identically and the control cannot tell them apart",
+        f"dying_at {health.dying_at}",
+    )
+
+    hp, living, dying, saw = fell(dead=False)
+    out.that(
+        living and dying and "Died" not in saw,
+        "the **default** still drops a character to death saves rather than"
+        " killing: dying, still alive, no `Died` -- so no row already"
+        " written moves",
+        f"hp {hp}, alive, dying, {saw}",
+    )
+    out.that(
+        "dead=False" in saw,
+        "and its `Dropped` says `dead=False`, which is the field every row"
+        " reading that event narrows on",
+        f"{saw}",
+    )
+
+    hp2, living2, dying2, saw2 = fell(dead=True)
+    out.that(
+        not living2 and not dying2 and "Died" in saw2,
+        "`dead=True` kills outright -- not alive, no dying condition, `Died`"
+        " emitted -- which is what the printed sentence says",
+        f"hp {hp2}, {saw2}",
+    )
+    out.that(
+        "dead=True" in saw2,
+        "and `Dropped(dead=True)` falls out of setting hit points to"
+        " `dying_at` rather than being set a second time: the event computes"
+        " it as `hp <= dying_at`, so the two facts cannot disagree",
+        f"{saw2}",
+    )
+    out.that(
+        (living, dying) != (living2, dying2),
+        "the two branches differ on the same board, which is the assertion"
+        " a `dies_at_zero=True` victim would have passed vacuously",
+        f"default (alive={living}, dying={dying}) against"
+        f" dead=True (alive={living2}, dying={dying2})",
+    )
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -70400,6 +70817,26 @@ DRIVERS = {
         "one extra square on every shift, and not on a teleport",
     ),
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
+    "kill_outright": (
+        kill_outright,
+        "\"it dies\" kills a character rather than dropping it",
+    ),
+    "hide_skill": (
+        hide_skill,
+        "a card may substitute the skill a hide is rolled with (#613)",
+    ),
+    "restore_per_day": (
+        restore_per_day,
+        "a daily allowance can be handed back, floored at what was spent",
+    ),
+    "flat_from_attack": (
+        flat_from_attack,
+        "a weakened creature's own non-attack damage is not halved",
+    ),
+    "deals_when": (
+        deals_when,
+        "a retype gated on the creature being hit (#613)",
+    ),
     "prone_defences": (
         prone_defences,
         "a prone creature's +2 against nonadjacent ranged attacks (#1198)",
