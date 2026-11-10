@@ -913,11 +913,25 @@ def i1321x1(c: Cast) -> None:
     `query.light_level` walks **every** entity carrying a `light_radius` --
     not only combatants -- so `c.light(10, on=<that id>)` lights the board
     from the thing rather than from the wearer. What is missing is the
-    moment: nothing lets go of a worn item, so the row would have to assert
-    at arming that the lantern is already hanging, which is not what the
-    card says and takes the light off the carried half that works. The
-    leash ("not more than 10 squares from the commanding creature") has no
-    home either. Hence the marker is the put-down and not the object."""
+    moment of letting go, so the row would have to assert at arming that
+    the lantern is already hanging, which is not what the card says and
+    takes the light off the carried half that works. The leash ("not more
+    than 10 squares from the commanding creature") has no home either.
+    Hence the marker is the put-down and not the object.
+
+    **The reason is narrower than it read, and the correction is worth
+    having.** This said "nothing lets go of a worn item", which is the
+    general-absence shape that is usually wrong and is wrong here:
+    `equipment.unequip` takes an item off and unwinds everything it laid,
+    by label, and has been there as long as `equip`. What it has is **no
+    caller anywhere in the tree and no `Cast` door** -- one grep, two hits,
+    and the other is a docstring in `items/neck.py` -- and what it does not
+    have is any notion of the thing still working where it was put, since
+    it exists to end exactly that. So the work is a door plus a state the
+    engine cannot currently hold, not a mechanism from nothing, and
+    `Gear.left_hanging` is that state: `worn` means held-and-working and
+    `stowed` is weapon refs on a belt, so neither can say a lantern is on
+    neither list and lit."""
     c.illuminate((Light.BRIGHT, 10), (Light.DIM, 5), None,
                  on=c.me, until=When.ENCOUNTER)
 
@@ -2326,7 +2340,29 @@ def i1142p1(c: Cast) -> None:
 def i1249p1(c: Cast) -> None:
     """The push is the whole of what lands. "Each square closer costs an
     extra square" is a cost on one direction of movement and nothing
-    charges for direction; sustaining it goes with it."""
+    charges for direction; sustaining it goes with it.
+
+    **The symbol reads as a general absence and that reading is false.**
+    `c.difficult_for(on=target)` is exactly "this creature pays an extra
+    square", board-wide, through `Movement.harder_everywhere`, and
+    `i520x1`'s note settles that one extra square to enter *is* what
+    difficult terrain costs -- so the amount is exact and the verb is
+    there. Only the word "closer" is missing, and laying it anyway would
+    charge this target for backing away, which is strictly stronger than
+    print on a clause whose whole point is to slow an approach.
+
+    **The information exists and the door does not**, which is the narrower
+    statement worth recording: `movement.reachable`'s search holds the
+    square left and the square entered in the same frame and prices the
+    step `2 if nxt in rough else 1`, where `rough` is `world.difficult`'s
+    **set of squares** for a creature and a kind of going. A set cannot
+    carry a direction, so the two are indistinguishable by the time the
+    charge is made.
+
+    Not re-pointed, deliberately. `i1822x1` prints this sentence from the
+    other side, carries the full argument, and waits on the same symbol --
+    renaming it here alone would split one gap into two synonyms, which is
+    the thing a marker is not allowed to do."""
     if c.strike():
         c.push(2)
 
@@ -2749,7 +2785,6 @@ def i475x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.race_named()",),
 )
 def i780x1(c: Cast) -> None:
     """A **standing** modifier gated on `reroll_by`, not a triggered one,
@@ -2763,16 +2798,28 @@ def i780x1(c: Cast) -> None:
     The ally clause is asked inside the gate rather than at arming, because
     the card asks it at the moment of the reroll and allies move.
 
-    Still dropped: of the two allies the line names, one is a race **by
-    ref**, which `c.race_of` answers, and one is a race by its printed
-    *word*. Nothing bridges a word to a ref -- the `race` table carries no
-    word column, unlike `weapon.slug` -- so the second finds only a monster
-    carrying it on its type line, never a character of that race."""
+    **Both allies the line names are refs now, and no bridge was ever
+    needed.** The marker said "nothing bridges a word to a ref", which is
+    true of the engine and was never the hold: the row does not need a
+    *runtime* lookup, it needs the ref, and the second race is `r16`.
+    `etl.sanitise.named_races` is why only one of the two arrived as a ref
+    -- a race's word is swapped only in the three positions that admit
+    nothing but a name, and "a <race> ally" is none of them, so the half
+    whose printed word is not in a dictionary was swapped by the general
+    scrubber and the half that is kept its word. `f640`'s glossary is where
+    the ref came from, which is what the glossary is for. #1236.
+
+    Asked as one `c.race_of` against both, which is the only question a
+    character can answer: `c.is_kind("<a race word>")` is False for every
+    PC in the game (#411), so the word form was reaching a monster of that
+    race and nothing else. **Deliberately narrowed and not marked** -- an
+    ally of that race means a party member here, and a monster of it
+    standing on the party's side is not a board any fight builds."""
 
     def rerolling(ctx: dict[str, Any]) -> bool:
         if ctx.get("reroll_by") != "p1450":
             return False
-        return any(c.is_kind("drow", on=a) or c.race_of(on=a) == "r3"
+        return any(c.race_of(on=a) in ("r3", "r16")
                    for a in c.within(10, side="ally"))
 
     c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, when=rerolling)
@@ -3114,6 +3161,22 @@ def i3441x1(c: Cast) -> None:
     offered and the row would audit green and never work. So the
     permission is laid as written and reads one word wider than the page.
 
+    **"Nothing can narrow it" overstates the work, and the correction
+    narrows the symbol rather than moving it.** The kind is in scope two
+    frames above the refusal: `movement.step` takes a `kind` and is handed
+    `"shift"` by the shift walker, and `movement.reachable` takes one and
+    threads it to `world.difficult` -- so the pricing of a step already
+    knows what sort of going it is, and only `_clear`, called between
+    them, does not. `Movement.ignores_when` is the precedent, a waiver
+    keyed by the kind a move is made with, which is this exact shape for
+    the opposite sign. So `c.may_enter(kind=)` is a thread plus a key in
+    the context `may_enter` gates on, not a mechanism from nothing.
+
+    The one-at-a-time clause is not an omission here. `i3438x1`, the first
+    of the four blocks printing it, rules it "a carrying rule rather than a
+    combat one", and the other two sit unmarked on that ruling. The
+    sentence those four specs print it in is also #1235.
+
     The acid half is narrowed properly, because `Moved` carries `kind_`
     where `EnterSquare` does not: one `Moved` per step of the walked path,
     so an intermediate square of a multi-square shift is a moment this can
@@ -3396,7 +3459,19 @@ def i1145p1(c: Cast) -> None:
 
     Dropped: an unattended object or a standing magical effect as the
     target, with its Reflex of 10 + level. Neither is a thing a power can
-    be aimed at here -- only creatures and squares are."""
+    be aimed at here -- only creatures and squares are.
+
+    **Two refusals, not one, and that is why this stays dropped rather than
+    becoming writable the day a `Defences` lands on a `Scenery`.** The
+    marker names the defence half: `query.defence` opens
+    `world.need(eid, Defenses)` and scenery carries no such component. The
+    other half is the target pool -- `Scenery` has **no `Side`, ever**, by
+    its own docstring, so it is outside `query.creatures` and a
+    `target=ONE_CREATURE` row cannot be aimed at one whatever defences it
+    grows. A sibling row on this symbol was deliberately left unwritten for
+    the same reason: no buildable fight puts a `Scenery` where a row needs
+    it, so writing the clause would un-refuse a row to buy something that
+    cannot fire."""
     if not c.strike():
         return
     foe = c.target
