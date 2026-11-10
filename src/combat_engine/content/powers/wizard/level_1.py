@@ -257,7 +257,7 @@ def p464(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
-    dropped=("c.object_target()",),
+    dropped=("Scenery.defences",),
 )
 def p465(c: Cast) -> None:
     """The second block is `p465b`. Only on a hit, and only at enemies --
@@ -272,9 +272,12 @@ def p465(c: Cast) -> None:
     nothing for `+X vs REF` to roll against and nothing for 2d8 force to
     come off.
 
-    `c.object_target()` is the symbol, shared with `i1145p1`, whose own note
-    states the same two halves -- an unattended object as the target, "with
-    its Reflex of 10 + level". Found by `scripts/targets.py`, which had
+    `Scenery.defences` is the symbol, shared with `i1145p1`, whose own
+    note states the same two halves -- an unattended object as the target,
+    "with its Reflex of 10 + level". **Aiming at it is no longer part of
+    the gap**: `Target(objects=True)` unions the scenery into the pool and
+    `p11358`/`p11273` are already paid by it, a slide needing no
+    defences. #1216. Found by `scripts/targets.py`, which had
     nothing to say about the premise and everything to say about the
     declaration. #855.
     """

@@ -21,6 +21,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Ranged,
+    Target,
     Trigger,
     When,
     power,
@@ -37,9 +38,9 @@ PSIONIC = [Keyword.PSIONIC]
     usage=DAILY,
     action=STANDARD,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=Target("ally", 1, objects=True, loose=True),
     keywords=PSIONIC,
-    dropped=("c.object_target()",),
+    dropped=("Target.any_of(side=)", "Scenery.weight"),
 )
 def p11273(c: Cast) -> None:
     """Held aloft: the immobilisation is refreshed each time the hold is
@@ -47,14 +48,20 @@ def p11273(c: Cast) -> None:
     free-action and minor-action ways of letting go are dropped -- ending an
     effect early is not in `Cast`.
 
-    **"One ally, helpless enemy, or object", declared as the ally half.**
-    A `Target` carries one `side` and `candidates` builds the pool from it
-    before any filter runs, so the other two cannot be alternatives today.
-    The helpless-enemy half is reachable -- `"any"` plus a conditions filter
-    -- and the object half is not, for the reason `c.object_target()` names,
-    so that is the symbol this waits on rather than a second one for the
-    pool. Marked rather than left admitting it in prose, which is what it
-    did: `scripts/targets.py` is what surfaced the declaration. #855.
+    **"One ally, helpless enemy, or object": two of the three are aimed
+    at now.** `objects=True` unions the scenery into the ally pool and
+    `loose=True` is the printed *"isn't carried by another creature"*, so
+    the object half is written -- the body slides `c.target` without
+    caring what it is. #1216.
+
+    **Dropped, and now two narrower things rather than one wide one.** The
+    helpless-enemy half is a third pool, and `candidates` builds from one
+    `side` before any filter runs: `Target.any_of` tests clauses per
+    alternative and its own note declines to put a *side* inside that
+    predicate, so `Target.any_of(side=)` is the gap and `m4766a3` already
+    names it. And *"400 pounds or less"* has nothing to compare against --
+    `Scenery` carries no weight, which `p11358` waits on for the same
+    sentence in different words.
     """
     victim = c.target
     if victim is None:

@@ -3321,7 +3321,7 @@ def i857x1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(DEX, vs=REF),
-    dropped=("c.object_target()",),
+    dropped=("Scenery.defences",),
 )
 def i1145p1(c: Cast) -> None:
     """An item's rows *are* enumerable from a body, so "its powers cannot

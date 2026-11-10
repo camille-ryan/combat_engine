@@ -29,6 +29,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Target,
     Trigger,
     TurnStart,
     When,
@@ -175,22 +176,27 @@ def p9748(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(20),
-    target=ONE_ALLY,
+    target=Target("ally", 1, objects=True),
     keywords=[*PRIMAL, Keyword.SPIRIT],
-    dropped=("c.object_target()",),
+    dropped=("Scenery.weight",),
 )
 def p11358(c: Cast) -> None:
-    """The printed target is an ally *or a liftable object* standing by the
-    spirit, and the ally is all that is written. The adjacency is a
-    targeting restriction the header cannot state.
+    """*"One ally ... or one object you can lift adjacent to your spirit
+    companion."* Both halves are aimed at now.
 
-    **Marked rather than argued.** "Objects are not creatures here" was
-    this note's whole account of the second half, which is true and is not
-    a reason the clause can never be written: `c.object_target()` is the
-    gap, `i1145p1` and three others wait on it, and a slide needs no
-    defences -- so of the rows on that symbol this is among the easiest to
-    pay once an object can be aimed at. Surfaced by
-    `scripts/targets.py`. #855.
+    `objects=True` unions the scenery into the ally pool, which is the
+    whole of what this needed: the body slides `c.target` without caring
+    what it is, and `c.slide` moves a `Scenery` by its `Position` like
+    anything else -- measured, a statue goes from (8,8) to (6,6). A slide
+    needs no defences, which is why this row and `p11273` are the two of
+    the six that the targeting half finishes and the four attack rows are
+    not. #1216.
+
+    **Dropped: "you can lift".** There is no weight on an object --
+    `Scenery` carries `kind`, `fastened` and `by`, and nothing else -- so
+    the clause has nothing to compare against. `max_size` is **not** it:
+    the card says liftable, not Medium, and a printed size is a different
+    restriction that would read as though this one were honoured.
     """
     mate = c.target
     if mate is None or not beside_spirit(c, mate):

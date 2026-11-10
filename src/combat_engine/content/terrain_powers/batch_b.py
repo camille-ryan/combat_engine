@@ -43,8 +43,9 @@ What is new here, and the four markers, row by row:
 * **`x2_117`** prints a choice of two areas, which is `Range.alt` -- the
   field whose own docstring names the one other row printing *"close blast
   3 **or** area burst 3"*. Two clauses dropped: the gating swing is against
-  an object the board cannot hold (`c.object_target()`), and the area is
-  centred on that object rather than on the user (`c.area_origin()`).
+  an object with no defences to swing against (`Scenery.defences`), and
+  the area is centred on that object rather than on the user
+  (`c.area_origin()`). Aiming at the object is written -- #1216.
 * **`x2_118`** prints `Check: Strength check (DC 20)`, which is an
   **ability** check and not a skill one -- `Check.skill` is validated
   against `engine.skills.SKILLS` and refuses it at declaration. The gate is
@@ -179,7 +180,7 @@ def x2_116(c: Cast) -> None:
        target=EACH_OTHER,
        attack=Attack(printed=13, vs=Defense.FORT),
        damage=Damage("1d10", 3),
-       dropped=("c.object_target()", "c.area_origin()"))
+       dropped=("Scenery.defences", "c.area_origin()"))
 def x2_117(c: Cast) -> None:
     """Break it and the fragments fly: a blast or a burst, the user's pick,
     and the ground it covers stays rough for the rest of the fight.
@@ -193,9 +194,11 @@ def x2_117(c: Cast) -> None:
 
     **Two clauses dropped, and they are two different gaps.**
 
-    `c.object_target()` is the printed `Check:`, which is not a skill check
-    at all: it is a melee basic attack against the feature itself, at a
-    stated AC of 5. `p465`'s note has the measured reason that cannot be
+    `Scenery.defences` is the printed `Check:`, which is not a skill
+    check at all: it is a melee basic attack against the feature itself, at
+    a stated **AC of 5** -- a number the card gives, so nothing has to be
+    derived; what is missing is anywhere to put it. `p465`'s note has the
+    measured reason that cannot be
     written -- a scenery object carries no `Defences` and no `Health`, so
     there is nothing for an attack roll to beat. Dropping it makes the row
     **stronger than print**, which is worth saying plainly; it is a very

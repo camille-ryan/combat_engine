@@ -11311,6 +11311,118 @@ def every_triggered_action_can_be_offered(out: Result) -> None:
              f" same one. Unsubscribed: {sorted(unsubscribed)[:6]}")
 
 
+def creature_or_object(out: Result) -> None:
+    """A target line that admits a creature **or** an object. Six rows print it.
+
+    **The whole content of this field is the indestructible object**, and a
+    control that misses that cannot tell it from doing nothing. A
+    *destructible* object carries `Health` and a `Position`, so
+    `query.creatures` already holds it and the `"any"` pool already offered
+    it -- the first version of this rule gave its crate 20 hit points and
+    passed identically with the field reverted. `Scenery`'s own docstring
+    calls the indestructible one the common case: *"a statue nobody can
+    break"*, `hp=0`, no `Health`, invisible to every creature pool there is.
+
+    So every arm below uses **both** -- a 0hp statue and a 20hp crate -- and
+    the statue is the one that discriminates.
+
+    `objects=` is a pool widening and not a filter, which is why
+    `_stands_right` is untouched: `Target.any_of`'s own note declines this
+    job precisely because it would put a pool test inside a predicate that
+    has never had one.
+    """
+    from dataclasses import replace
+
+    import audit
+    from combat_engine.content.terrain import put
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY, Target, candidates
+    from combat_engine.engine.query import squares
+    from combat_engine.engine.types import Size
+
+    def board() -> tuple[object, int, int, int, int]:
+        world, me, _ = audit.board("p465", 1)
+        here = sorted(squares(world, me))[0]
+        statue = put(world, (here[0] + 2, here[1]), kind="object", hp=0,
+                     size=Size.MEDIUM)
+        crate = put(world, (here[0] + 3, here[1]), kind="object", hp=20,
+                    size=Size.MEDIUM)
+        held = put(world, (here[0] + 4, here[1]), kind="object", hp=0,
+                   size=Size.MEDIUM, fastened=True)
+        return world, me, statue, crate, held
+
+    world, me, statue, crate, held = board()
+    out.that(world.get(statue, Health) is None,
+             "the statue has no `Health`, so it is invisible to every"
+             " creature pool -- this is the case the field exists for")
+    out.that(world.get(crate, Health) is not None,
+             "and the crate has some, so it is in `query.creatures`"
+             " already -- the case that would pass either way")
+
+    row = REGISTRY["p465"]
+
+    def pool(**kw: object) -> list[int]:
+        return candidates(world, me, replace(row, target=Target(**kw)))
+
+    plain = pool(side="any", count=1)
+    out.that(crate in plain,
+             "a destructible object is in the plain `any` pool with no new"
+             " field at all, because it has hit points and a square")
+    out.that(statue not in plain,
+             "**and an indestructible one is not**, which is the gap. A"
+             " rule whose object has hit points proves nothing here")
+
+    both = pool(side="any", count=1, objects=True)
+    out.that(statue in both and crate in both,
+             "`objects=True` admits both kinds")
+    out.that(len(both) == len(set(both)),
+             f"and lists each once -- the two pools overlap on the crate,"
+             f" so a plain concatenation would have offered it twice."
+             f" {len(both)} entries, {len(set(both))} distinct")
+    out.that(set(plain) < set(both),
+             "and it only ever widens: every creature the plain pool"
+             " offered is still offered")
+
+    # -- `loose` narrows the object half and leaves creatures alone --------
+    unattended = pool(side="any", count=1, objects=True, loose=True)
+    out.that(held not in unattended,
+             "`loose=True` drops a fastened object -- `p13128`'s"
+             " \"unattended\"")
+    out.that(statue in unattended,
+             "and keeps an unattended one")
+    creature_count = len([c for c in plain])
+    out.that(len([c for c in unattended if c in plain]) == creature_count,
+             "and every creature the plain pool offered survives it, so one"
+             " field narrows the object half without touching the other --"
+             " which is what lets a single `loose=` serve a card reading"
+             " \"creature or unattended object\"")
+
+    # -- object-only lines keep their own spelling -------------------------
+    only = pool(side="object", count=1)
+    out.that(statue in only and crate in only,
+             "`side=\"object\"` still means a line that admits only an"
+             " object, which `x2_117` prints")
+    # **Against actual creatures, not against the `any` pool.** The first
+    # version compared the two pools and failed correctly: the destructible
+    # crate is in both, because it is an object that the creature pool also
+    # holds. "Offers no creature" has to ask what a creature *is*.
+    from combat_engine.engine.components import Scenery
+    beings = [c for c in plain if world.get(c, Scenery) is None]
+    out.that(beings, "the board has creatures to be wrongly offered")
+    out.that(not any(b in only for b in beings),
+             f"and `side=\"object\"` offers none of the {len(beings)} of"
+             f" them, so the two spellings are not variants of one thing")
+
+    # -- the label, because a player reads it -----------------------------
+    out.that(str(Target("any", 1, objects=True)) == "One creature or object",
+             f"the printed line says so: {str(Target('any', 1, objects=True))!r}")
+    out.that(str(Target("any", 99, everyone=True, objects=True))
+             == "Each creature or object in the area",
+             "including in the area form")
+    out.that(str(Target("any", 1)) == "One creature",
+             "and a row without the field is unchanged")
+
+
 def rerolled(out: Result) -> None:
     """Nothing announced that a roll was a reroll, and 18 rows ride on one.
 
@@ -71995,6 +72107,9 @@ DRIVERS = {
     "every_triggered_action_can_be_offered": (
         every_triggered_action_can_be_offered,
         "a printed Trigger is reachable whatever action the card costs"),
+    "creature_or_object": (creature_or_object,
+                           "a target line that admits a creature or an"
+                           " object, including one nothing can break"),
     "rerolled": (rerolled,
                  "a roll announced as a second one, and gateable as one"),
     "boost_roll": (boost_roll,

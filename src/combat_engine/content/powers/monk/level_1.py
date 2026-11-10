@@ -257,17 +257,21 @@ def p13126(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
-    dropped=("c.object_target()",),
+    dropped=("Scenery.defences",),
 )
 def p13128(c: Cast) -> None:
     """Only the creature half of "one creature or unattended object".
 
-    This said unattended objects "are not on the board", and that is
-    **false**: `_SIDES` has an `"object"` side, `candidates` fills it from
-    `query.scenery`, and the audit board places one. The clause is still
-    unwritable for a narrower reason -- a scenery object carries no
-    `Defences`, so `+X vs FORT` has nothing to roll against -- and that is
-    `c.object_target()`, the symbol `i1145p1` already waits on. #855.
+    **Aiming at the object is written now and is not the gap.**
+    `Target(objects=True, loose=True)` is *"one creature or unattended
+    object"* -- the pool unions the scenery in, and `loose=` is the printed
+    word. #1216.
+
+    What is left is narrower and is why the clause still cannot be
+    written: a scenery object carries no `Defences`, so `+X vs FORT` has
+    nothing to roll against -- `query.defence` raises `KeyError` on it,
+    measured. That is `Scenery.defences`, which `p465`, `i1145p1` and
+    `x2_117` wait on for the same reason. #855.
     """
     if c.strike():
         c.damage("2d8", c.dex_mod)

@@ -540,6 +540,33 @@ class Target:
     #: because they are two restrictions on one pool and not two pools.
     max_size: Size | None = None
     loose: bool = False
+    #: **"One creature **or** object"** -- the pool is the `side`'s
+    #: creatures *plus* the scenery, which six rows print and none could
+    #: say. `p465` ("one creature or object"), `p13128` ("one creature or
+    #: unattended object"), `p11273`, `p11358`, `i1145p1` and `x2_117`.
+    #:
+    #: **A pool widening, not a filter, which is why it is not `any_of`.**
+    #: That field's own note explains the difference and declines this very
+    #: job: *"`side` is not part of an alternative ... Widening the outer
+    #: side to `"any"` and testing the side per alternative would work and
+    #: has not been built, because one row is not the evidence for putting
+    #: a pool test inside a predicate that has never had one."* This keeps
+    #: the pool test in the pool: `candidates` unions the two lists and
+    #: `_stands_right` is untouched, so the predicate still has no notion
+    #: of a side.
+    #:
+    #: **Therefore it is deliberately NOT in the relational guard list
+    #: below.** That list decides whether `_stands_right` runs at all, and
+    #: this field is not tested there -- naming it would run the predicate
+    #: for rows that need none. The guard's own warning is about fields
+    #: added *to the predicate*; this one never reaches it.
+    #:
+    #: Composes with the two clauses above rather than replacing them:
+    #: `loose=True` reads as "unattended" and already passes creatures
+    #: untouched, and `max_size` applies to whichever half is handed in.
+    #: `side="object"` stays the spelling for a line that admits **only**
+    #: an object, which `x2_117` and the one row already using it print.
+    objects: bool = False
     #: A printed target line narrowed by how the creature stands **to the
     #: caster**: "one creature grabbed by it", "the creature marked by you".
     #: Measured outward from the caster -- `holds(relation, actor, target)` --
@@ -814,6 +841,15 @@ class Target:
             "enemy": "creature", "ally": "ally", "any": "creature",
             "other": "creature", "object": "object",
         }[self.side]
+        # **`objects=` has to reach the label, because the label is what a
+        # player is shown.** The pool is widened in `candidates` and a line
+        # still reading "One creature" would offer a crate the print does
+        # not mention -- the same drift `"team"` had in this dict, where the
+        # pool knew a side the printed line did not. "Unattended" is left
+        # out deliberately: `loose=` narrows only the scenery half, so
+        # spelling it here would describe the creature half wrongly.
+        if self.objects:
+            who = f"{who} or object"
         if self.everyone:
             return f"Each {who} in the area"
         return f"One {who}" if self.count == 1 else f"Up to {self.count} {who}s"
@@ -3322,6 +3358,36 @@ def candidates(
         # allowed. The second is the half that was missing.
         "object": scenery(world, "object", loose=aim.loose),
     }[aim.side]
+    if aim.objects and aim.side != "object":
+        # **"One creature or object": the two pools, unioned here.** In the
+        # pool and not in `_stands_right`, for the reason `any_of`'s note
+        # gives -- the predicate has never had a notion of a side and this
+        # does not give it one. `loose=` is passed the same way the
+        # `"object"` entry above passes it, so "unattended" narrows the
+        # scenery half; it already passes creatures untouched in the
+        # predicate, which is what lets one field serve both halves.
+        #: **Deduplicated, and that is not tidiness.** A *destructible*
+        #: object carries `Health` and a `Position`, so `query.creatures`
+        #: already holds it and the `"any"` pool already offered it -- only
+        #: an indestructible one is missing, which is `Scenery`'s own
+        #: documented common case ("a statue nobody can break"). Measured:
+        #: with `side="any"` a 20hp crate is in the pool and a 0hp statue
+        #: is not. So the union overlaps, and left as a plain concatenation
+        #: an `everyone=True` row would land on the same crate twice.
+        #:
+        #: **`loose=` here is for symmetry with the `"object"` entry above,
+        #: not because it is observable through `candidates`.** That entry's
+        #: note says the pool decides *which scenery exists* and the
+        #: predicate decides whether one handed in is allowed -- and
+        #: `aim.loose` is in the relational guard below, so `_stands_right`
+        #: runs and rejects a fastened object either way. Dropping it here
+        #: reds nothing, which was planted and confirmed. It stays because
+        #: building a pool you immediately filter is the shape the sibling
+        #: line already rejected, and because the explicit-target arm reads
+        #: the pool rather than the menu.
+        already = set(pool)
+        pool = [*pool, *(e for e in scenery(world, "object", loose=aim.loose)
+                         if e not in already)]
     # **`holding` and `max_size` used to be filtered here and nowhere else**,
     # which made them the exact disagreement `_stands_right` exists to
     # prevent: 24 rows refused an oversized creature on the menu and struck
