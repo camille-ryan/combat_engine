@@ -83,6 +83,7 @@ from combat_engine.engine import (
     Window,
     power,
 )
+from combat_engine.engine.actions import FEINT_PURPOSE
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import (
     ActionPointSpent,
@@ -572,8 +573,33 @@ def f2338(c: Cast) -> None:
     can never be false and is not copied here.
 
     Dropped: shooting a crossbow at a row whose Requirement prints a
-    light blade. `Power.requires` is asked by `dsl.usable` and nothing
-    standing on the creature relaxes it.
+    light blade.
+
+    **The marker stands and the reason it used to give was false.** It
+    read "`Power.requires` is asked by `dsl.usable` and nothing standing
+    on the creature relaxes it", and something does: `c.counts_as` writes
+    a `(holding, satisfies)` waiver onto `Gear` and `Cast.wielding` reads
+    it, which is the printed sentence of sixteen other feats and of
+    `_counts_as` further down this file. Two things keep it from being
+    this row's answer, and they are what `c.ignore_requirement(ref)`
+    names:
+
+    * **The card narrows to named rows and the waiver cannot.**
+      `c.counts_as` takes no `when=` and no ref, so one call here would
+      let a crossbow satisfy *every* light-blade Requirement a rogue
+      holds. The card gives it for the two on the Associated Powers line,
+      and a waiver wider than the card is the shape #735 is about.
+    * **Neither row asks through `Cast.wielding` anyway.** `p4488` and
+      `p1387` both carry `requires=_light_blade`, a hand-rolled predicate
+      defined once in each of `powers/rogue/level_3.py` and `level_7.py`
+      and reading `gear.main.is_light_blade` directly, where
+      `Gear.counts_as` is consulted in exactly one place and this is not
+      it.
+      So the waiver is not merely too wide for this card, it is invisible
+      to the two rows it is printed for -- which is the "read hand-rolled
+      in N files" fault rather than a missing writer.
+
+    f2931 and f2933 wait on the same symbol.
     """
     me = c.me
     far = _shot_range(c, "bow", "crossbow")
@@ -1069,9 +1095,34 @@ _counts_as(
 # -- the rest of the gaps, each named exactly -------------------------------
 
 
+def _shooter_in_the_second_hand(c: Cast, ref: str) -> bool:
+    """Is that shooter in the hand the main weapon is not in?
+
+    **`Gear.off` cannot answer and the grip can.** The slot is `melee[1]`
+    and `Gear.melee` drops anything with a range, so a shooter is never in
+    it -- but "in your off hand" is a statement about *hands*, and a
+    creature holding this weapon as well as a one-handed melee weapon has
+    one in each. `general_g.f933` and `general_s._ranged_while_armed` ask
+    the same question of the same weapon the same way, which is what makes
+    this the established spelling here rather than a new one.
+
+    The one-handed test is what the siblings leave out and it is the half
+    that makes this exact: both hands are on a two-handed weapon, so there
+    is no off hand for anything to be in. `Gear.wield` stows the rest when
+    a two-hander is taken up, so in play the arrangement cannot arise --
+    but a board assembled by hand can hold both, and this row would
+    otherwise fire on it.
+    """
+    gear = c.world.get(c.me, Gear)
+    if gear is None:
+        return False
+    return (any(w.ref == ref for w in gear.held)
+            and any(not w.two_handed for w in gear.melee))
+
+
 @power("f826", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Gear.off(ranged=)",))
+       dropped=("Gear.off(ranged=)",))
 def f826(c: Cast) -> None:
     """A hand crossbow held in the off hand and reloaded one-handed.
 
@@ -1082,20 +1133,64 @@ def f826(c: Cast) -> None:
     was: the one-handed reload this card mentions costs nothing by the
     printed rule, which is why the rule bothers to say it.
 
-    What remains is the half that is real.
+    **The free shot is written, and `todo=` was overstating the hold.**
+    That marker said the shot had "two unaskable halves: which weapon is in
+    the off hand, and whether it is loaded", and neither survives being
+    looked at:
 
-    **Re-pointed, not closed.** `Weapon.off_hand_anyway` was the wrong
-    symbol and is retired everywhere else: no two-weapon reader consults a
-    property at all -- `Gear.off` is `melee[1]`, `Gear.two_weapon` counts
-    melee weapons -- so writing the word onto this card's weapon would buy
-    nothing. What the card needs is for the slot itself to hold a shooter.
-    This weapon is ranged, `Gear.melee` excludes it, and so it can never be
-    `Gear.off` however its properties read. That is a `Gear` change, and
-    `Gear.off(ranged=)` names it.
+    * *Loaded* is not a question for this weapon at all.
+      `ammunition.spend_load` records only a weapon `query.needs_loading`
+      is true of -- the three printing `load minor` -- so `w3627` never
+      enters `Gear.unloaded` and is loaded in every fight by the printed
+      rule. A test for it could not come back False, so there is none:
+      the argument is here instead.
+    * *Which hand* is answered by `_shooter_in_the_second_hand` above, off
+      the grip rather than off the slot, which is how three sibling rows
+      already ask it.
 
-    Loading is the second gap and is untouched, so the free shot on a
-    critical has two unaskable halves: which weapon is in the off hand, and
-    whether it is loaded."""
+    So what is left for the marker is the **first printed clause**, and it
+    is a real `Gear` change rather than a reading of one: treating this
+    weapon as an off-hand weapon is what would put it in `Gear.off` and
+    make `Gear.two_weapon` true of a character carrying it, which is what
+    every other two-weapon row in the tree reads. `Gear.off(ranged=)` still
+    names exactly that, so the symbol is unchanged and the row is `dropped=`
+    rather than refused.
+
+    `c.basic(ranged=True)` picks the shot up off `Powers.ranged`, and
+    `Power.can_branch` asks for `gear.ranged` -- the **first** held weapon
+    that can be fired, so "with that weapon" is exact only while this is
+    the one shooter in hand. A second one in the other hand and the swing
+    would be made with whichever `Gear.ranged` answers; that is the same
+    narrowing `c.basic` imposes on every row granting a ranged basic
+    attack, and naming the weapon is `f977`'s `c.basic(with_=)`.
+    `c.within(10, ...)` is
+    the printed range of the ranged basic attack, so a creature further off
+    is not a legal target and offering it would be a menu entry nobody can
+    take. The same shape, and the same reasoning, as `f977`'s traded throw
+    inside `p992`.
+
+    Inert on a dealt board until `chargen` carries `w3627`, which is the
+    module docstring's rule for the weapons the catalogue has not got: the
+    gate asks the ref, which is exact, rather than a group that would pay
+    the clause out on a weapon the card never named."""
+    def crit(ev: Any) -> None:
+        if getattr(ev, "attacker", None) != c.me:
+            return
+        if not getattr(ev, "critical", False):
+            return
+        if not _shooter_in_the_second_hand(c, "w3627"):
+            return
+        far = c.within(10, side="enemy")
+        if not far:
+            return
+        if not c.may("fire the off-hand weapon as a free action"):
+            return
+        who = c.choose(far, f"{c.ref}: who to shoot")
+        if who is not None:
+            c.basic(ranged=True, on=who)
+
+    c.watch(Hit, crit, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} on a critical")
 
 
 @power("f2073", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1285,12 +1380,88 @@ def f2468(c: Cast) -> None:
     c.watch(SkillCheck, twice, on=c.me, until=When.EOT, label=c.ref)
 
 
+def _made_to_feint(ctx: dict[str, Any]) -> bool:
+    """Is the check being totalled one made to feint?
+
+    `skills.modifier` puts `purpose` into the context it hands
+    `Mods.total` -- line 149, `#1111` -- and the comment there says what
+    the key is for: a *standing* bonus narrowed to what a check is for,
+    where before only a row watching a resolved check could ask.
+    Measured, on `audit.board("f2890", 1)`: the Bluff modifier reads 0
+    plain, 0 for another purpose, and 2 for the feint.
+
+    **Named rather than written inline, and that is worth a line here.**
+    `lint._unknown_context_keys` reads `ctx.get` literals *inside* the
+    `c.bonus(...)` call and checks them against keys it derives from the
+    engine; its sweep walks `ast.Assign` only, and `skills.modifier`'s
+    context is an **annotated** assignment, so every key unique to that
+    dict is invisible to it and `purpose` is the only one. The inline
+    spelling therefore reports a structural fault on a gate that works.
+    The gate is not the thing to drop -- without it the +2 applies to
+    every Bluff check in the game -- and the one-line fix belongs in
+    `scripts/lint.py`, which an authoring agent may not touch. Said here
+    so the next reader finds the instrument rather than the row.
+    """
+    return ctx.get("purpose") == FEINT_PURPOSE
+
+
 @power("f2890", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.feint()",))
+       reach=PERSONAL, target=SELF)
 def f2890(c: Cast) -> None:
-    """Feinting with Bluff, and a bigger payout against whoever fell for
-    it. Both printed clauses hang on the feint and there is none in the
-    action menu -- neither a check to put the +2 on nor a success to
-    trigger the rest. The payout half alone would be writable now:
-    `c.bonus("cf:rogue-scoundrel-f4 damage", 0, dice="1d6")` is the
-    extra die, since `extra_damage` reads that key beside its own."""
+    """Feinting with Bluff, and a bigger payout against whoever fell for it.
+
+    **Written, and the marker was stale.** It read `c.feint()` on the note
+    that "there is none in the action menu -- neither a check to put the +2
+    on nor a success to trigger the rest". `actions._feinting` offers one
+    now: a standard action against an adjacent enemy, once per encounter,
+    Bluff against that enemy's **passive** Insight. `general_d.f946` is the
+    sibling already written off the same event, and `_my_feint_landed`
+    there is the predicate this row's own gate repeats.
+
+    The +2 is a **standing** bonus rather than a watcher, because it is read
+    while the check is being totalled rather than afterwards:
+    `skills.modifier` puts `purpose` into the context it hands `Mods.total`,
+    so `FEINT_PURPOSE` is the printed "made to feint". Without that key the
+    bonus would apply to every Bluff check in the game, which is the shape
+    that comment in `skills.py` was written about. Untyped, because the card
+    prints no type word in front of "bonus".
+
+    **The payout is `c.change_dice` and not `c.bonus(f"{_SNEAK} damage", 0,
+    dice="1d6")`**, which is what this note used to propose and which would
+    have been wider than the card. `strikers.pay_extra` asks
+    `c.dice_for(label, dice, {"target": on})` for its dice and
+    `c.total(f"{label} damage")` for its modifier -- and the **second call
+    passes no context at all**, so a `when=` gate on the modifier half is
+    silently false and an ungated one would pay against every creature. The
+    dice half is the only one the victim can be named in, and the card names
+    one ("to that enemy").
+
+    `"3d6"` written out, exactly as `_price` above writes `"1d6"`: the
+    feature rolls 2d6 at every level this build imports, so one die more is
+    3d6 outright. Another of the rows #281 has to revisit at 11th, where the
+    feature's own count goes up.
+
+    A trait carrying a watch rather than a declared trigger, because the row
+    holds a standing modifier as well -- declared `on=` and the +2 would
+    never be laid. `When.EONT` is the printed "until the end of your next
+    turn"."""
+    c.bonus("skill:bluff", 2, on=c.me, until=When.ENCOUNTER,
+            when=_made_to_feint)
+
+    def fooled(ev: Any) -> None:
+        if (
+            getattr(ev, "actor", None) != c.me
+            or getattr(ev, "skill", "") != "bluff"
+            or not getattr(ev, "success", False)
+            or getattr(ev, "purpose", "") != FEINT_PURPOSE
+        ):
+            return
+        victim = getattr(ev, "target", None)
+        if victim is None:
+            return
+        c.change_dice(
+            _SNEAK, "3d6", on=c.me, until=When.EONT,
+            when=lambda ctx: ctx.get("target") == victim,
+        )
+
+    c.watch(SkillCheck, fooled, until=When.ENCOUNTER, on=c.me, label=c.ref)
