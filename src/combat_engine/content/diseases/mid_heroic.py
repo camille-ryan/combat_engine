@@ -42,6 +42,7 @@ from combat_engine.engine import (
 from combat_engine.engine.events import (
     Bloodied,
     DamageApplied,
+    DamageType,
     Healed,
     Hit,
     TurnStart,
@@ -291,8 +292,7 @@ def x5_81(c: Cast) -> None:
 
 
 @power("x5_53", cls="disease", level=7, usage=AT_WILL, action=ActionType.NONE,
-       target=NO_TARGET, reach=Melee(0),
-       dropped=("c.flat(from_attack=)",))
+       target=NO_TARGET, reach=Melee(0))
 def x5_53(c: Cast) -> None:
     """The penalty and the weakening play at every stage; stage 3's extra
     poison damage is the marker, and it is a measured number rather than a
@@ -312,10 +312,18 @@ def x5_53(c: Cast) -> None:
     stage that prints this clause is the one stage that can never pay it in
     full, on every board, with nothing saying so.
 
-    A wrong number is worse than an absent one, so the clause is dropped
-    and the parameter that would restore it is named. Nothing on `Cast`
-    carries it: `from_attack=False` is reachable only from `c.absorb`,
-    `falling`, `zones` and `suffocation`, none of which a row can call.
+    **Restored, with the parameter.** `c.flat(from_attack=)` exists now:
+    `resolve.deal_damage` has taken the flag since #731 and `c.flat` simply
+    never forwarded it. Passing `from_attack=False` says what is true --
+    this packet is the disease paying out, not the character attacking --
+    so `resolve.py:1286`'s `if from_attack and deals_half(...)` no longer
+    halves it. Measured on a board: 10 unweakened, **5** weakened with the
+    old default, 10 weakened with the flag.
+
+    The gate stays `c.by_attack(ev=ev)` because the *incoming* blow must be
+    an attack -- which is what the card narrows on -- while the *outgoing*
+    10 is not one. The two directions were conflated by having a single
+    default, and that is the whole of why the clause read wrong.
     """
     me = c.me
     stage = c.stage
@@ -326,6 +334,18 @@ def x5_53(c: Cast) -> None:
         _weakened_while_bloodied(c)
         return
     c.weakened(on=me, until=When.ENCOUNTER)
+
+    def bleeds(ev: DamageApplied) -> None:
+        """Ten more, whenever an attack is what hurt them.
+
+        `ev.amount` is not consulted: the card prints a flat ten rather
+        than a share, so a blow for 1 and a blow for 40 both add the same.
+        """
+        if getattr(ev, "target", None) != me or not c.by_attack(ev=ev):
+            return
+        c.flat(10, dtype=DamageType.POISON, on=me, from_attack=False)
+
+    c.watch(DamageApplied, bleeds, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("x5_34", cls="disease", level=8, usage=AT_WILL, action=ActionType.NONE,

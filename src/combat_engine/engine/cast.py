@@ -4223,6 +4223,7 @@ class Cast:
     def flat(self, amount: int, *, dtype: DamageType = DamageType.UNTYPED,
              dtypes: Sequence[DamageType] = (),
              unpreventable: bool = False,
+             from_attack: bool = True,
              on: int | None = None) -> int:
         """Damage that is not rolled. `dtypes` is one blow of several types.
 
@@ -4274,6 +4275,23 @@ class Cast:
         return deal_damage(
             self.world, self.me, who, amount, dtype, self.ref,
             dtypes=dtypes, unpreventable=unpreventable,
+            # **Exposed rather than invented.** `resolve.deal_damage` has
+            # taken this since #731 and `c.flat` simply never forwarded it,
+            # so every unrolled packet claimed to come from an attack.
+            # `resolve.py:1286` is what that costs: `if from_attack and
+            # deals_half(world, source)` -- so a weakened creature's own
+            # non-attack damage was halved by its own weakness.
+            #
+            # `x5_53` is the measured case. The diseased character is the
+            # *source* of its own stage-3 poison and the same stage weakens
+            # it, so a printed 10 came out as 5 and the row was withdrawn
+            # rather than landed wrong.
+            #
+            # Default `True`, so nothing already written moves: the four
+            # existing callers that want the other answer (`c.absorb`,
+            # `falling`, `zones`, `suffocation`) reach `deal_damage`
+            # directly and are untouched.
+            from_attack=from_attack,
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
         )

@@ -69470,6 +69470,75 @@ def deals_when(out: Result) -> None:
         f"{len(holds)} holds: {holds}",
     )
 
+
+def flat_from_attack(out: Result) -> None:
+    """A creature's own non-attack damage is not halved by its own weakness.
+
+    `resolve.deal_damage` has taken `from_attack` since #731 and reads it at
+    `resolve.py:1286` -- `if from_attack and deals_half(world, source)` --
+    but `c.flat` never forwarded it, so every unrolled packet a row dealt
+    claimed to come from an attack.
+
+    `x5_53` is the measured cost: the diseased character is the **source**
+    of its own stage-3 poison and the same stage weakens it, so a printed
+    10 came out as 5. The row was written, driven, withdrawn and marked
+    rather than landed wrong -- its docstring records that -- and this is
+    the parameter it named.
+
+    **The default must not move**, which is the first control: four callers
+    already want `from_attack=False` and reach `deal_damage` directly, and
+    every row calling `c.flat` today means an attack.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.types import Condition, DamageType
+
+    world, me, _ = _board()
+
+    def paid(amount: int, **kw: object) -> int:
+        health = world.need(me, Health)
+        was = health.hp
+        Cast(world=world, me=me, ref="drivers").flat(
+            amount, dtype=DamageType.POISON, on=me, **kw)  # type: ignore[arg-type]
+        took = was - world.need(me, Health).hp
+        world.need(me, Health).hp = was
+        return took
+
+    clean = paid(10)
+    out.that(
+        clean == 10,
+        "an unweakened creature takes the printed ten either way, which is"
+        " the baseline the next two assertions are measured against",
+        f"{clean}",
+    )
+
+    Cast(world=world, me=me, ref="drivers").condition(Condition.WEAKENED, on=me)
+    halved = paid(10)
+    out.that(
+        halved == 5,
+        "and **the default still halves it**, so nothing already written"
+        " moves -- every row calling `c.flat` today is dealing an attack's"
+        " damage and must keep the answer it had",
+        f"{halved} of 10",
+    )
+    whole = paid(10, from_attack=False)
+    out.that(
+        whole == 10,
+        "while `from_attack=False` pays the printed ten to a weakened"
+        " creature -- the disease is paying out, not the character"
+        " attacking, and a creature's own weakness cannot halve its own"
+        " affliction",
+        f"{whole} of 10",
+    )
+    out.that(
+        halved != whole,
+        "the two answers differ on the same board and the same amount,"
+        " which is what makes this a parameter rather than a rename --"
+        " a control that could not tell them apart would pass on a flag"
+        " that was never read",
+        f"default {halved}, from_attack=False {whole}",
+    )
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -70504,6 +70573,10 @@ DRIVERS = {
         "one extra square on every shift, and not on a teleport",
     ),
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
+    "flat_from_attack": (
+        flat_from_attack,
+        "a weakened creature's own non-attack damage is not halved",
+    ),
     "deals_when": (
         deals_when,
         "a retype gated on the creature being hit (#613)",
