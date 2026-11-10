@@ -16,9 +16,17 @@ Six judgements run through the file.
 * **A coating is tied to the weapon it is on.** "Apply this to your weapon
   or one piece of ammunition, then make a secondary attack against the
   next creature you hit with it" is `c.apply_poison`, which coats one of
-  the things in hand and checks the blow against it. Ammunition is not
-  modelled and does not have to be: the card offers two answers and the
-  row takes the weapon.
+  the things in hand and checks the blow against it. The card offers two
+  answers and the row takes the weapon, which is one of the printed
+  readings rather than an approximation of both.
+
+  **This used to add "ammunition is not modelled", and that is no longer
+  true.** `Gear.quiver` holds `Ammo` pieces, `chargen._stock_quiver`
+  deals them, and `engine/ammunition.fired_with` says which shot came
+  from which piece. What a piece still cannot do is **carry a weapon
+  property**: `Ammo` has no `properties` field and `c.weapon_of` reads
+  the launcher. So the weapon branch stays the written one for a
+  different reason than the file used to give -- see `i469p1`.
 * **Poison in a meal has no combat consequence at all.** "The first
   creature to consume the food or drink within the next hour" is not a
   thing a fight contains, and the payout is measured in hours or in
@@ -96,9 +104,11 @@ from combat_engine.engine import (
     ZoneExited,
     get,
     power,
+    query,
     spread,
 )
 from combat_engine.engine.components import Budget
+from combat_engine.engine.zones import Zone
 
 ITEM = "item"
 
@@ -509,15 +519,87 @@ def i1113p1(c: Cast) -> None:
        reach=AreaBurst(1, 10), target=NO_TARGET,
        dropped=("c.suppress_aura()",))
 def i1299p1(c: Cast) -> None:
-    """Four printed clauses. The save against a burn and the destruction
-    of a fire zone are both sayable -- `c.save(against=)` picks the burn
-    out of whatever else is on a creature, and `c.dispel` unwinds a zone.
-    Deactivating a *fire aura* is the one that is not: an aura cannot be
-    switched off and put back."""
+    """Four printed clauses. Three are written and the fourth keeps its
+    marker, with the reason re-measured.
+
+    **The zone clause was three times stronger than the card and all three
+    were silent.** `c.conjurations()` is every zone, aura and conjuration
+    **on the whole board** -- `within=0` is "anywhere", which is the
+    default -- so the loop here rolled one attack per standing effect in
+    the fight and destroyed every one it beat. The card says "any fire
+    zone **in the area**". So:
+
+    * **In the area.** `Zone.squares` intersected with `c.area()`. There is
+      no reader for another row's zone geometry, so this goes through
+      `c.world.get(thing, Zone)`, which is how the wizard and fighter zone
+      rows already reach a zone they are holding.
+    * **Fire.** Nothing on `Zone` says what element it is, so this asks the
+      row that laid it: `Zone.label` defaults to the maker's own ref, which
+      `get` resolves to a header carrying `Keyword.FIRE`. `hindering_type`
+      is the second door, for a zone that burns without the keyword. A
+      zone whose label is not a ref falls through and is left alone, which
+      is the safe direction: this row destroys things.
+    * **Not an aura.** An aura *is* a `Zone` -- `Zone.aura` is its radius
+      and `Zones.refresh` re-cuts the squares as the owner walks -- so the
+      old loop was paying the aura clause as well, by permanently
+      destroying what the card only switches off. Auras are skipped here
+      and belong to the marker below.
+
+    **"Natural fires in the area are extinguished" is written**, and the
+    old note did not mention it. A fire the room came with is `Scenery`,
+    `c.scenery("fire")` is the pool and `c.douse` is the verb -- "the other
+    half of `c.grow`: a fire that is put out is gone", which is exactly
+    "extinguished" and in the right direction. No attack and no roll: the
+    card does not ask for one on this line.
+
+    **`c.suppress_aura()` stands, and here is what was checked.** The
+    clause is "the target's fire aura is deactivated and can't be
+    reactivated until the end of the target's next turn" -- a suspension
+    with a lock, on **somebody else's** aura:
+
+    * `c.resize_aura` and `c.my_aura` both resolve through
+      `self.my_aura(label)`, which is the **caster's own** aura. Neither
+      can name a target's.
+    * `c.dispel` is the opposite direction: it destroys the zone and
+      unwinds every hold its maker laid, and nothing puts it back. A
+      monster aura is armed once by `Encounter.start`, so destroying it is
+      permanent -- strictly stronger than a card that gives it back next
+      turn.
+    * `c.aura` only makes a new one, at a radius this row does not know.
+
+    So the gap is a real one and it is a suspend-and-relock, not a
+    teardown.
+
+    **And the row now reads SILENT on the audit board, which is the
+    instrument and not the row.** Proven: on `audit.board` seed 1 the
+    body douses the fire standing at the burst's edge and announces
+    `i1299p1: 13 is put out`. `c.douse` emits only a `Note`, and `Note` is
+    deliberately outside `DID_SOMETHING` -- it carries no `by`, and over a
+    300-row sample 13 rows were credited by one alone and 11 of those did
+    nothing. The green this row used to show came from the over-reach
+    above: the board's two zones are labelled `audit:setup zone` and
+    `audit:setup foe zone`, neither is fire, neither is an aura and
+    **neither is inside the burst**, so every attack and dispel it was
+    credited for was work the card does not license. `c.douse` wanting a
+    second, attributable event is the same shape as the fix `c.restore_use`
+    and `c.expend_row` got, and it is engine work, not a row's."""
     area = c.area()
     for who in c.in_squares(area):
         c.save(on=who, bonus=2, against="fire")
+    for fire in c.scenery("fire"):
+        sq = _square_of(c, fire)
+        if sq is not None and sq in area:
+            c.douse(on=fire)
     for thing in c.conjurations():
+        zone = c.world.get(thing, Zone)
+        if zone is None or zone.aura is not None:
+            continue
+        if not zone.squares & area:
+            continue
+        made = get(zone.label)
+        burns = zone.hindering_type == DamageType.FIRE.value
+        if not burns and (made is None or Keyword.FIRE not in made.keywords):
+            continue
         owner = c.made_by(thing)
         if owner is None or owner == c.me:
             continue
@@ -1224,7 +1306,16 @@ def i3320p1(c: Cast) -> None:
     What is missing is the payload: the card has the wielder put a second
     alchemical item down with the crystal and nothing records which, so
     there is no ref for `c.use_power` to set off. That is the gap i3324p1
-    names and the same one."""
+    names and the same one.
+
+    **Confirmed and parked, not re-pointed.** Re-measured: 118 rows are
+    consumables and 75 are alchemical items, **none** of them carries an
+    `enh_to`, and `chargen.treasure` draws only on `ac`,
+    `attack_damage` and `defences`. So nobody is ever dealt one, by
+    construction rather than by oversight, and the symbol is a decision
+    rather than a verb. `#1233` is where the ruling is asked for;
+    `c.consume_item()` is its sibling group. The three markers in this
+    file stay spelled identically so the group reads as one."""
     sq = _free_near(c) or _square_of(c, c.me)
     if sq is None:
         return
@@ -1296,22 +1387,65 @@ def i446p1(c: Cast) -> None:
 
 
 @power("i469p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, todo=("chargen.ammunition()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.gains_property(ammunition=)",))
 def i469p1(c: Cast) -> None:
-    """**Re-pointed.** The weapon half is writable with
-    `c.gains_property`. The card's choice is not: "your weapon **or one
-    group of ammunition** (30 arrows, 10 crossbow bolts, 20 sling
-    bullets, or 5 shuriken)" needs ammunition to be a countable thing a
-    character owns in groups, and nothing holds one -- arrows are not
-    `Gear.weapons` entries. Writing the weapon branch alone would be a
-    row that silently picked for the player.
+    """**Written, and the old marker's premise was false in both halves.**
 
-    Silver is a material a base weapon does not record and nothing
-    reads, so "attacks as a silvered weapon" has nothing to set.
+    It said `todo=("chargen.ammunition()",)` -- refused in play, because
+    "nothing holds a group of ammunition" and because silver "is a
+    material a base weapon does not record and nothing reads". Measured:
 
-    Re-aimed from `Weapon.silvered`, which was this row alone: eight rows
-    across the weapon and feat trees want the same thing and all of them
-    call it `c.silvered()`."""
+    * **A dealt character is handed ammunition.** `Gear.quiver` holds
+      `Ammo(ref, kind, plus, count)` and `chargen._stock_quiver` fills it
+      with mundane pieces for every launcher the character owns, so a
+      dealt character with a crossbow walks onto the board with bolts in
+      hand. `engine/ammunition.fired_with` then says which shot came from
+      which piece. So the symbol this row waited on names a dealer that
+      already deals.
+    * **Silver is a weapon property and has been since `c.gains_property`
+      landed.** Three rows in the item tree print the same sentence and
+      write it the same way, and fifteen monster traits read it back
+      through `regeneration(unless_struck_by=)`. The second paragraph of
+      the old note had already been overtaken; the first had never been
+      measured.
+
+    **`held=True`'s other door is what this row needs rather than
+    `c.my_weapon`.** This is an oil, not a weapon block, so `_my_item` is
+    an alchemical item and `c.my_weapon()` returns None -- which is the
+    trap `c.gains_property`'s own docstring names. The pick goes through
+    `c.choose` over what is in hand, because the card says "your weapon",
+    one of them, and a character can be holding two.
+
+    **The card offers two answers and the row takes the weapon**, which is
+    this file's own stated judgement and `c.apply_poison`'s, written into
+    both docstrings rather than invented here: a printed "A or B" answered
+    with A is one of the printed readings, where answering it with a
+    blanket is an approximation of neither.
+
+    So the marker is `dropped=`, and the gap moves one layer: **a piece of
+    ammunition cannot carry a weapon property.** `Ammo` has four fields --
+    `ref`, `kind`, `plus`, `count` -- and no `properties`, and the readers
+    are the wrong side of it too: `c.weapon_prop` goes through
+    `c.weapon_of`, which returns the launcher's `Weapon`, never the piece
+    that was loosed. All five of `c.gains_property`'s selectors name
+    weapons (`group`, `ref`, `every`, `held`, `mine`), so a sixth naming
+    the quiver is the shape of the fix and `c.gains_property(ammunition=)`
+    is the symbol.
+
+    No clock, for the reason the three siblings lay it with none: the
+    write goes onto the per-character `Gear.weapons` copy and the world is
+    fresh each encounter, so "until the end of the encounter" needs no
+    rung to expire on.
+
+    Not modelled and not marked: "can be applied to nonmagical weapons and
+    to magic weapons of 14th level or lower" is a restriction on *applying
+    the oil*, which happens before a fight. `Weapon` carries no level, and
+    a creature fights with what it already has, so the sentence has no
+    reading on a board."""
+    picked = c.choose(c.held(on=c.me), f"{c.ref}: which weapon to coat")
+    if picked is not None:
+        c.gains_property("silvered", ref=picked.ref, on=c.me)
 
 
 # -- level 6 ----------------------------------------------------------------
@@ -1400,7 +1534,30 @@ def i2382p1(c: Cast) -> None:
     """Aimed at the escape attempt rather than at Acrobatics generally,
     which is what the card narrows it to. Still a bonus rather than the
     printed override -- "use this modifier instead of your normal check
-    modifiers" -- because nothing replaces a total."""
+    modifiers" -- and the marker stands.
+
+    **Left, with the three near-misses named.** "Nothing replaces a total"
+    was asserted and not shown, and three verbs are close enough to be
+    worth ruling out in writing:
+
+    * `c.replace_roll` replaces the **die face** -- "use this d20 roll as
+      your result" -- and leaves every modifier in place. The opposite
+      half of this clause.
+    * `c.boost_check` and `c.bonus` both **add**. The printed word is
+      *instead*, so the Acrobatics modifier and anything else on the
+      `"escape"` key have to stop counting, and adding 14 to them is a
+      different number on every character.
+    * `c.substitute_check` swaps **which skill** is rolled, not what the
+      modifiers come to.
+
+    `escape.attempt` is where it would land: it calls `skills.check` with
+    `bonus + _mods(world, eid, "escape", ctx)` on top of the skill's own
+    modifier, so an override has to suppress the lot rather than out-shout
+    it. `c.bonus(instead=)` is the symbol -- one modifier on a key that
+    cancels the others -- and that is also the only door, because the
+    printed sentence covers both of the card's two DCs, a restraint's and
+    a grabber's Reflex, and `escape.attempt` is the one path that rolls
+    either."""
     c.bonus("escape", 14, until=When.ENCOUNTER)
 
 
@@ -1413,17 +1570,61 @@ def i2568p1(c: Cast) -> None:
 
 @power("i3318p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(1, 10), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.forces(target=)",))
+       dropped=("c.forces(destination=)", "movement.hindering_save"))
 def i3318p1(c: Cast) -> None:
-    """The zone answers whoever walks in. Lengthening forced movement
-    *into* the zone is the clause with no hold: `c.forces` lengthens what
-    a creature does, not what is done to it."""
+    """The zone answers whoever walks in. Two things were wrong with how
+    it did it, and the marker named a parameter that already exists.
+
+    **The -2 is out of the body.** The card gives it to "saving throws
+    **to avoid entering hindering terrain**", one narrow printed throw,
+    and the old line laid `c.penalty("save", 2)` with no gate and
+    `until=When.ENCOUNTER` -- every saving throw that creature makes for
+    the rest of the fight, carried out of the zone with it. Worse, it was
+    laid one statement **before** this row's own prone throw, and
+    `c.save(bare=True)` reads the `"save"` modifiers through `c.total`, so
+    the penalty applied to the card's own save and the zone knocked down
+    creatures the card lets up. Measured over 400 boards: the row's own
+    throw failed **219 times with the line and 185 without**, 54.8%
+    against 46.2%, which is the two faces of a d20 the `>= 10` in
+    `c.save`'s bare branch gives away. And a probe reading the `"save"`
+    key off a creature that had walked in and out read **-2** with the
+    line and **0** without, so it was leaving the zone with it.
+
+    There is no such throw in this engine to penalise. `query.hindering_at`
+    answers whether a square is hindering and that is the whole of what
+    exists: nothing rolls a save when forced movement would put a creature
+    into it, which is why `p11268` and `p11582` both carry a marker for
+    the destination half of the same core rule. So the clause is named
+    rather than approximated.
+
+    **`c.forces(target=)` is refuted, and re-pointed at the destination.**
+    `movement._settle` has keyed the shove's context on `target` since
+    `#748` -- `how`, `power`, `target`, `source` -- so "when you push an
+    undead creature" is already sayable and `c.forces(when=)` reads it.
+    What the context does not carry is **where the shove ends**, and that
+    is this clause: "when forced movement moves a creature *into the
+    zone*, that forced movement increases by 1 square". A `"forcing"`
+    modifier is no use either, because it is laid on whoever does the
+    shoving and a zone does not know in advance who that will be.
+    `c.extend_move(destination=)` is the same want about a creature's own
+    move, on two feats.
+
+    **"A creature on the ground" is checked now.** `query.on_the_ground`
+    is the reader five target lines ask for -- height and movement mode
+    together, so a hoverer at height 0 is not touching the floor -- and
+    without it this zone tripped fliers. **Height is the half that bites
+    here, not the mode**: `Movement.using` is already back to `""` by the
+    time `ZoneEntered` is announced, so `airborne` can never be true at
+    this event and only the altitude distinguishes the two. Proven on 40
+    boards each: a creature at height 0 walking in has the row roll it a
+    saving throw **40 times**, one at height 3 **0 times**, counted off
+    `SavingThrow.granted_via` so the falls a drop causes cannot be
+    mistaken for the row's."""
     zone = c.zone(c.area(), until=When.ENCOUNTER)
 
     def entered(ev: ZoneEntered) -> None:
-        if ev.zone != zone:
+        if ev.zone != zone or not query.on_the_ground(c.world, ev.actor):
             return
-        c.penalty("save", 2, on=ev.actor, until=When.ENCOUNTER)
         if not c.save(on=ev.actor, bare=True):
             c.prone(on=ev.actor)
 
@@ -1550,7 +1751,12 @@ def i3324x1(c: Cast) -> None:
     hand or in an adjacent square"*, and nothing enumerates the items a
     character carries. `Gear.worn` is a set of **slot names**, so the
     candidate set for the link is empty on every board. Re-marked at the
-    real blocker rather than left on a symbol that now exists."""
+    real blocker rather than left on a symbol that now exists.
+
+    Confirmed and left: no consumable or alchemical item carries an
+    `enh_to`, and `chargen.treasure` draws on `ac`, `attack_damage` and
+    `defences` only, so the dealer cannot reach one. `#1233` holds the
+    ruling this waits on -- see `i3320p1` for the measurement."""
 
 
 @power("i3324p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -1563,7 +1769,11 @@ def i3324p1(c: Cast) -> None:
     has a place to be recorded and a way to be read back. This row waits on
     its other half, `i3324x1`, which cannot do the linking: nothing
     enumerates a character's carried items, so there is never a second item
-    to link to. Re-marked off the symbol that now exists."""
+    to link to. Re-marked off the symbol that now exists.
+
+    Confirmed and left, with its other half. The wait is a ruling, not a
+    verb: nobody is dealt a consumable by construction, and `#1233` is
+    where that decision sits -- see `i3320p1` for the measurement."""
 
 
 @power("i3481p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
