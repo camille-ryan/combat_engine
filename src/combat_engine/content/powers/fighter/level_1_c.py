@@ -436,7 +436,19 @@ def p2102(c: Cast) -> None:
     if not c.strike():
         return
     c.dazed(until=When.EONT)
-    c.damage(0, heavy_rider(c))
+    # **No heavy weapon, no damage at all.** The Hit line prints only the
+    # condition; the damage is the `Weapon:` clause, conditional on an axe,
+    # a hammer or a mace. `heavy_rider` answers 0 for anything else -- and
+    # `c.damage(0, 0)` still adds `_enhancement()`, so the row dealt 1 at
+    # heroic and would deal 6 at epic where the card prints nothing. #1225.
+    #
+    # Guarded rather than switched to `c.flat`: the heavy branch reads
+    # *"the attack deals damage equal to your Constitution modifier"*, and
+    # "the attack deals" is a damage line, so the enhancement belongs
+    # there. Only the zero case was unarguable.
+    heavy = heavy_rider(c)
+    if heavy:
+        c.damage(0, heavy)
 
 
 @power(
