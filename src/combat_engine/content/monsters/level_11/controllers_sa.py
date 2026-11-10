@@ -699,18 +699,42 @@ def m1565a0(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=REF, printed=13),
     damage=Damage("1d8", 4),
-    dropped=("c.conceal(against=)",),
+
 )
 def m1565a1(c: Cast) -> None:
-    """"Save ends both" is one effect carrying the burn.
+    """*"Ongoing 5 damage and all creatures have concealment against the
+    target (save ends both)."*
 
-    "All creatures have concealment against the target" is the other half and
-    is the opposite direction from `c.conceal`: it makes the target's own
-    attacks the hard ones to land, and no verb says that.
+    **Both halves written, on `m1505a1`'s model** -- a level-5 row in the
+    same family that is unmarked and prints the identical sentence. The
+    marker here said "no verb says that" while the answer was already in
+    the tree.
+
+    The direction is the whole of it: *"all creatures have concealment
+    against the target"* makes the **target's own** swings the hard ones,
+    which is the opposite of `c.conceal` -- that grants concealment *to* a
+    creature and is read off whoever is being attacked. The engine holds no
+    concealment state and needs none: all concealment does is take two off
+    whoever is looking, so an ungated attack penalty on the target says it
+    exactly. `level_12.lurkers_sa._total_concealment_from` states the same
+    model for the -5 version.
+
+    What a penalty is not is concealment, so this adds to real cover where
+    the printed rule would take the larger of the two.
+
+    *"(Save ends both)"* is **one** saving throw, so the penalty hangs on
+    the encounter clock and the burn's hold takes it off when it goes --
+    laid save-ends itself it would give the creature two chances to shake
+    off half of one sentence. #1220.
     """
-    if c.strike():
-        c.hit()
-        c.condition(until=When.SAVE_ENDS, ongoing=(5, DamageType.UNTYPED))
+    if not c.strike():
+        return
+    c.hit()
+    victim = c.target
+    burn = c.condition(until=When.SAVE_ENDS, ongoing=(5, DamageType.UNTYPED))
+    blind = c.penalty("attack", 2, on=victim, until=When.ENCOUNTER)
+    if burn is not None and blind is not None:
+        burn.on_end.append(lambda: c.world.effects.end(blind, "saved"))
 
 
 @power(
@@ -2370,22 +2394,35 @@ def m4460a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.POISON],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("1d6", 2, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.conceal(against=)",),
+
 )
 def m4460a2(c: Cast) -> None:
-    """"Recharges when bloodied" is a sentence on top of the die the database
+    """*"Ongoing 10 poison damage, and all creatures have concealment
+    against the target (save ends both)."*
+
+    "Recharges when bloodied" is a sentence on top of the die the database
     files, and the two only ever agree to make the row available sooner.
 
-    "All creatures have concealment against the target" is the clause with no
-    verb: `c.conceal` gives concealment *to* a creature and nothing makes a
-    creature's own attacks treat everybody as concealed.
+    **The concealment half is written, on `m1505a1`'s model** -- an ungated
+    attack penalty on the target, because the printed sentence makes the
+    *target's* own attacks the hard ones rather than granting anybody
+    concealment. `m1565a1` above has the full reading. The marker said
+    nothing makes a creature's own attacks treat everybody as concealed; a
+    penalty does exactly that. #1220.
+
+    One saving throw for both clauses, so the penalty rides the encounter
+    clock and the burn's hold ends it.
     """
     me = c.me
     _recharge_on(c, Bloodied, lambda ev: ev.actor == me)
     if not c.strike():
         return
     c.hit()
-    c.ongoing(10, DamageType.POISON)
+    victim = c.target
+    burn = c.ongoing(10, DamageType.POISON)
+    blind = c.penalty("attack", 2, on=victim, until=When.ENCOUNTER)
+    if burn is not None and blind is not None:
+        burn.on_end.append(lambda: c.world.effects.end(blind, "saved"))
 
 
 _M4460_STRUCK = "it is hit by an attack"
