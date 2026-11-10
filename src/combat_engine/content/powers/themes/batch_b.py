@@ -113,12 +113,6 @@ ABILITY = ("c.ability_for(ref)",)
 #: Where `_enhanced` remembers its answer for the rest of one use.
 _ENHANCED = "_x7_670_enhanced"
 
-#: "a -N penalty to opportunity action **and immediate action** attack
-#: rolls". The attack context carries `opportunity`, so the first half is a
-#: gate; nothing on it says an attack was an interrupt or a reaction, so the
-#: second half has no key to read.
-IMMEDIATE = ("resolve.attack(immediate=)",)
-
 MARTIAL = [Keyword.MARTIAL]
 ARCANE = [Keyword.ARCANE]
 SHADOW = [Keyword.SHADOW]
@@ -225,9 +219,54 @@ def _unless_adjacent(
     return gate
 
 
-def _vs_opportunity(ctx: dict[str, Any]) -> bool:
-    """"Against opportunity attacks": the attack context carries the flag."""
-    return bool(ctx.get("opportunity"))
+#: The action kinds that make an attack an opportunity or an immediate one.
+_ANSWERING = (
+    ActionType.OPPORTUNITY,
+    ActionType.IMMEDIATE_INTERRUPT,
+    ActionType.IMMEDIATE_REACTION,
+)
+
+
+def _answering(ref: str) -> bool:
+    """Is the row named by this ref printed as an opportunity or an
+    immediate action?"""
+    row = get(ref) if ref else None
+    return row is not None and row.action in _ANSWERING
+
+
+def _vs_opportunity_or_immediate(ctx: dict[str, Any]) -> bool:
+    """"A penalty to opportunity action and immediate action attack rolls."
+
+    **The immediate half needed no new key, and the old marker denied
+    that.** It read: *"nothing on the context says an attack was an
+    interrupt or a reaction, so the second half has no key to read"* --
+    true of the keys the context mints itself, and beside the point. The
+    context carries `power`, the header of that row carries the `action=`
+    it is printed as, and nothing swings a row as an immediate interrupt
+    or an immediate reaction except a row printed as one:
+    `Encounter.can_spend` charges the immediate budget off exactly
+    `p.action`, and `triggers._answers` is the only door. So the declared
+    action **is** the answer, and
+    `monsters/level_09/soldiers_sa._opp_or_immediate_melee` had been
+    reading it for this same printed sentence.
+
+    `opportunity` stays a context flag and is asked first, because that
+    one genuinely cannot be derived from the header: an opportunity attack
+    is routinely an ordinary standard-action basic attack swung through a
+    provocation window, so the row's own `action=` says nothing about it.
+    The two halves are asked two ways for that reason and not by accident.
+
+    `granted_via` as well as `power`, which closes the one case reading
+    the header alone would miss: a basic attack **handed over** by a row
+    that is itself an immediate action. The swing's own ref is the basic
+    attack, whose `action=` is standard, and the context says which row
+    lent it.
+    """
+    if ctx.get("opportunity"):
+        return True
+    return _answering(str(ctx.get("power", ""))) or _answering(
+        str(ctx.get("granted_via", ""))
+    )
 
 
 def _tagged(ref: str, kw: Keyword) -> bool:
@@ -383,7 +422,7 @@ def p11749(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    dropped=("c.gains_advantage(weapon=)",),
+    dropped=("resolve.ctx(weapon=)",),
 )
 def p11750(c: Cast) -> None:
     """An invisible weapon has no combat consequence of its own, so the row
@@ -393,7 +432,19 @@ def p11750(c: Cast) -> None:
     Dropped: the card says a weapon *affected by this power*, and the gate
     is handed `attacker`, `target` and `power` and no weapon, so the grant
     is spent on the first weapon attack of any kind. The two readings part
-    company only for a character holding two weapons."""
+    company only for a character holding two weapons.
+
+    **Re-pointed off `c.gains_advantage(weapon=)`, which named the wrong
+    half.** A parameter on the verb would have nothing to compare against:
+    `resolve.attack` already takes a `weapon=`, stamps it on
+    `AttackResult.weapon` and puts it on all four attack events -- and the
+    **attack context** a `when=` gate is handed is built without it. 23
+    keys and no weapon, measured off the dict `resolve.attack` builds,
+    which is also the set `lint.py` derives its legal keys from. So the
+    key is the gap, the verb is not, and the spelling is the one
+    `resolve.ctx(origin=)` on `p16653` and `resolve.ctx(from_attack=)` on
+    `m115743a0` already use for this exact shape. No other row carried the
+    old symbol."""
     _one_shot_advantage(c, c.me, Keyword.WEAPON, When.ENCOUNTER)
 
 
@@ -596,12 +647,47 @@ def p11766(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.MARTIAL, Keyword.STANCE],
-    todo=("c.area_origin()",),
+    todo=("c.cast_from(melee=)",),
 )
 def p11769(c: Cast) -> None:
     """The stance's whole content is moving the square a weapon attack is
-    measured from. `c.strike(from_=)` says it for one swing and nothing
-    holds it for a duration."""
+    measured from: an adjacent enemy's square, for as long as the stance
+    stands.
+
+    **Re-pointed off `c.area_origin()`, which is other rows' gap and not
+    this one.** That symbol means "move where a declared *area* is
+    centred", and the two rows carrying it -- `i1531p1` and `x2_117` --
+    both say so in their own words. This row declares no area: it moves
+    the square a melee or ranged weapon line is *measured* from, which is
+    a different reader. `items/implement_a.py` already spells out why
+    these do not share a symbol -- a verb that moved an area's centre
+    would leave this row exactly as refused while reporting it ready.
+
+    **And "nothing holds it for a duration" was wrong.** `c.cast_from`
+    holds exactly that, by borrowing another creature's square through
+    `Relation.CASTS_FROM`, which is right here because the square the card
+    names is the one an enemy is standing in. What refuses this row is one
+    line in `dsl.measured_from`: the borrowed square is honoured only for
+    `ranged`, `area_burst` and `wall` lines, and this theme's weapon
+    attacks are `MeleeOrRanged(..., by_weapon=True)`, whose `kind` is
+    `melee`. So the melee line never borrows.
+
+    It is a parameter on the verb rather than a widening of the reader
+    because the restriction is *correct* for the rows already calling it:
+    both of their printed lines say "your **ranged and area** attacks", so
+    opening melee lines to every caller would make those rows stronger
+    than print.
+
+    Left `todo=` rather than written half-way, for two measured reasons.
+    The melee half **is** the card -- borrowing the square of the enemy
+    you are standing next to buys a melee attacker one square of reach
+    past it, and buys a ranged weapon attack almost nothing -- so the
+    ranged half alone is not the power. And `c.cast_from` carries no
+    adjacency proviso: it lapses only when the lender leaves the board or
+    goes out of line of effect, where this card requires the enemy to be
+    *adjacent*, so laying it for a stance would keep the borrowed square
+    after the enemy walked away. That proviso is the row's to write, on
+    the day the melee half exists."""
     ...
 
 
@@ -677,7 +763,7 @@ def p12339(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.RADIANT],
     attack=Attack(Pick.PRIMARY, vs=FORT),
-    dropped=IMMEDIATE,
+    dropped=("c.no_reactions()",),
 )
 def p12340(c: Cast) -> None:
     """A shift either side of the blast, then slowed and clumsy out of turn.
@@ -687,12 +773,24 @@ def p12340(c: Cast) -> None:
     half that survives, and `c.first` keeps it to one shift for the whole
     blast rather than one per enemy caught.
 
-    **The Special is deliberately not offered here**, alone in this theme.
-    It reads "the target cannot make opportunity attacks or immediate action
-    attacks *instead of* taking a penalty to attack rolls", so taking it
-    trades the penalty below for a clause the engine cannot say -- the minor
-    would be spent to make the row do less. Both halves want the same missing
-    thing, which is why one symbol covers the row.
+    **The printed penalty is whole now** -- both the opportunity half and
+    the immediate half. See `_vs_opportunity_or_immediate` for why the
+    second one needed nothing built, and for what the old marker on this
+    row got wrong.
+
+    **The Special is still not offered here, and the marker is a different
+    gap from the one it replaces.** It reads "the target cannot make
+    opportunity attacks or immediate action attacks *instead of* taking a
+    penalty to attack rolls", so taking it trades the penalty above for a
+    refusal. Half of that refusal is sayable -- an `OpportunityWindow`
+    watch cancelling the windows whose `actor` is the target, which is
+    what `m5741a1` writes out for the same printed clause -- and the
+    immediate half is not: `Encounter.can_spend` asks
+    `query.can_react`, which reads *conditions* and nothing else, so no
+    effect a row lays can deny an immediate action. Dazed is the only
+    thing in the engine that does, and it also costs an action and grants
+    combat advantage, which this card does not. So the minor stays
+    unoffered rather than being spent to make the row do less.
     """
     if c.first:
         c.shift(3)
@@ -700,7 +798,7 @@ def p12340(c: Cast) -> None:
         return
     c.damage("1d8", c.attack_mod, dtype=DamageType.RADIANT)
     c.slowed(until=When.EONT)
-    c.penalty("attack", 4, until=When.EONT, when=_vs_opportunity)
+    c.penalty("attack", 4, until=When.EONT, when=_vs_opportunity_or_immediate)
 
 
 @power(
@@ -713,7 +811,6 @@ def p12340(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(Pick.PRIMARY, vs=WILL),
-    dropped=IMMEDIATE,
     narrative=("skill:arcana",),
 )
 def p12341(c: Cast) -> None:
@@ -733,6 +830,12 @@ def p12341(c: Cast) -> None:
     The Miss clause's other half is a -2 to any check made to work out what
     you did. That is an arcana check about a circumstance, and nothing on a
     board rolls one, so the penalty has nowhere to go and nothing is missing.
+
+    **The marker is gone and the row is whole.** It named
+    `resolve.attack(immediate=)`, for the "and immediate action attack
+    rolls" half of the penalty; that half is read off the attacking row's
+    declared `action=` instead, which is how every other row in the tree
+    printing this sentence reads it. See `_vs_opportunity_or_immediate`.
     """
     better = _enhanced(c)
     if not c.strike():
@@ -751,7 +854,9 @@ def p12341(c: Cast) -> None:
             else None
         ),
     )
-    pen = c.penalty("attack", 2, until=When.ENCOUNTER, when=_vs_opportunity)
+    pen = c.penalty(
+        "attack", 2, until=When.ENCOUNTER, when=_vs_opportunity_or_immediate
+    )
     if hold is not None and pen is not None:
         hold.on_end.append(lambda: c.end_effect(pen))
 
@@ -902,7 +1007,17 @@ def p12345(c: Cast) -> None:
     """Seeing and hearing from another creature's square is not narrative
     -- line of sight is what an attack is measured with -- and nothing
     moves where a creature's senses sit. `c.sight_range` changes how far,
-    not from where."""
+    not from where.
+
+    **`c.cast_from` is the near-miss and is checked rather than assumed.**
+    It borrows another creature's square through `Relation.CASTS_FROM`,
+    which is read in `dsl.measured_from` -- so the borrowed square decides
+    the line *and the range* of a ranged or area attack. This card moves
+    the senses and says nothing about where an attack comes from, so
+    laying that verb would measure this character's ranged attacks from a
+    creature ten squares away: stronger than print, in the direction the
+    card is careful about. Refused in play rather than written with the
+    wrong verb."""
     ...
 
 
@@ -1130,26 +1245,43 @@ def p14212(c: Cast) -> None:
         both(about_me, by_keyword(Keyword.TELEPORTATION)),
         "you use a teleportation power",
     ),
-    dropped=("c.hide(ally_cover=)",),
+    dropped=("c.hide(cover=)", "c.hide(ally_cover=)"),
 )
 def p14213(c: Cast) -> None:
     """The three states and their "until you attack" end are exact.
 
-    **The partial-cover half needs nothing, and that is the correction.**
-    `actions._hiding` offers the hide to anybody with
-    `cover_between(...) or concealment_of(...)` -- any cover and any
-    concealment, partial included, with no superior-cover test anywhere --
-    so the relaxation this card prints is already the engine's baseline and
-    there was never a `partial_cover=` to wait for. "To remain hidden" is
-    free for the same kind of reason: `c.hide` runs until the creature
-    attacks and re-measures no cover in between.
+    **The note that said the any-cover half "needs nothing" was reading a
+    version of `actions._hiding` that no longer exists, and the symbol it
+    dropped has been put back.** It claimed the hide is offered to anybody
+    with "any cover and any concealment, partial included, with no
+    superior-cover test anywhere". `_hiding` has required
+    `cover_between(...) is Cover.SUPERIOR or concealment_of(...) is
+    Cover.SUPERIOR` since `#997`, and its own docstring quotes the printed
+    rule it is enforcing -- *"you can make a Stealth check against an
+    enemy only if you have superior cover or total concealment"*. So *"you
+    can make Stealth checks to become hidden if you have **any** cover or
+    concealment"* is a real relaxation of a real threshold, and it is the
+    **same** gap `cf:rogue-scoundrel-f1s2` carries, which is why this row
+    now shares that card's symbol rather than minting a synonym.
 
-    **Still dropped, and narrowed to the one clause that is real:** using
-    cover your *allies* are giving you. `cover_between` counts creature
-    bodies only on a ranged attack (`if ranged:`) and `_hiding` asks it
-    without that flag, so an ally standing in the way is no cover for
-    hiding. Switching that on is a change to what the engine measures, not
-    something a row can lay.
+    A stale docstring and not a stale marker: the row was marked, both
+    cards had found the gap, and this one talked itself out of half of it.
+
+    **"To remain hidden" does need nothing**, and that half of the old
+    note survives: `c.hide` runs until the creature attacks and
+    re-measures no cover in between.
+
+    **The ally half is a second symbol, and the direction matters.**
+    `cover_between` counts creature bodies only on a ranged attack and
+    only the target's own allies -- its docstring says so -- and `_hiding`
+    asks it with `ranged` left False, so an ally standing in the way is no
+    cover for hiding. This card wants that to **count** (*"you can use
+    cover granted by your allies both to become hidden and to remain
+    hidden"*); `cf:rogue-scoundrel-f1s2` prints the opposite and wants it
+    **excluded**. One parameter carrying both is fine -- they are two
+    values of it -- but it is not the same gap as the threshold, so it is
+    not the same symbol: lowering the threshold would report this row
+    ready with the ally clause still unsayable.
 
     **Re-pointed off `c.stay_hidden()` before this.** That symbol was doing
     duty for three different needs and one of them -- re-hiding after a
@@ -1198,7 +1330,7 @@ def p14214(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW, Keyword.TELEPORTATION],
-    dropped=("actions.teleport_at_will()",),
+    dropped=("c.teleport_as()",),
 )
 def p14216(c: Cast) -> None:
     """The opening teleport, with the printed requirement on it.
@@ -1207,12 +1339,32 @@ def p14216(c: Cast) -> None:
     is wrong**: `query.light_level` reads `Grid.light` and any darkening
     zone. `c.teleport(into=)` carries it. #685.
 
-    The standing once-a-round 3-square teleport is the marker that stays --
-    it is an action `actions.legal` does not know, and `c.grant_action`
-    changes a cost rather than adding a kind (it now raises on an unknown
-    word, #762). When that lands it will want the same
-    requirement, which is the half of this clause the restriction is
-    "on both" of."""
+    The standing once-a-round 3-square teleport is the clause that stays
+    dropped. It is an action `actions.legal` does not know, and
+    `c.grant_action` changes the *cost* of an ordinary thing rather than
+    adding a kind -- `actions.GRANTABLE` is the authority and its twelve
+    words are `shift`, `stand`, `mount`, `escape` and the like, with no
+    teleport among them, and the verb raises on a word with no reader
+    (#762). When it lands it will want the same dim-light restriction,
+    which is the half of this clause the printed "each time you teleport
+    using this power" is "on both" of.
+
+    **Re-pointed off `actions.teleport_at_will()`, because that symbol
+    could never go green.** `blocked._surface` walks the public names of
+    every engine module, and the thing that would satisfy the old marker
+    is a private lister beside `actions._hiding` -- so on the day the
+    clause became writable nothing would have said so, which is the one
+    job `todo.py` has. `c.teleport_as()` is the name a row would call, in
+    the shape `c.shift_as` already has for the one granted word nearest
+    this, and it resolves as missing today. No other row carried the old
+    symbol.
+
+    **Not written as a second card.** A `p14216b` would be a move-action
+    at-will with a once-per-round latch and would play -- but the `b`
+    suffix is for a *printed* second card and the ETL mints those refs
+    itself: `p2623b`, `p10493b` and `p11603b` are all in `game.db` and
+    `p14216b` is not. Declaring one here would be inventing a row the
+    compendium does not print."""
     c.teleport(
         6, who=c.me,
         into=lambda sq: light_level(c.world, sq) is not Light.BRIGHT,
@@ -2490,7 +2642,21 @@ def p16653(c: Cast) -> None:
 def p16557(c: Cast) -> None:
     """One skill for the whole party, so the choice is made once on the
     first target and laid on all of them. The ship's speed is the dropped
-    half; nothing carries a vehicle."""
+    half; nothing carries a vehicle.
+
+    **Checked against `c.in_vehicle()`, which four other rows carry, and
+    kept separate.** That symbol is a *predicate* -- `f979`'s three
+    clauses all open "if you are in a moving vehicle", and
+    `monsters/level_13/brutes_sa` wants to know who is riding inside a
+    creature. This clause needs a vehicle that **has a speed a row can
+    change**, and an 8-hour clock to hold the change on, neither of which
+    a predicate provides. Pointing this row at `c.in_vehicle()` would
+    report it ready the day the gate lands with the whole of its clause
+    still unwritable, which is the one-symbol-two-needs fault.
+
+    It is not `narrative=` either, for a mechanical reason rather than a
+    judgement: that field is a closed vocabulary of `skill:<name>`
+    (`dsl._NARRATIVE`), and no skill is being narrowed here."""
     if not c.first:
         return
     skill = c.choose(sorted(SKILLS), "which skill") or "athletics"
