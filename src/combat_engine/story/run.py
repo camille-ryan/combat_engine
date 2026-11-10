@@ -3369,6 +3369,18 @@ def step(
     if not campaign.party.sheets:
         made.next_id = None
     campaign.scene = made.next_id
+    # **Say why it ended, not just that it did.** `finished` is `not scene`,
+    # so a module played out and a party wiped out were the same answer --
+    # which is the half of `#1230` the crash fix left open, and what
+    # Camille's ruling asks be left open *to*: "campaign over should be the
+    # default. Let's leave open the option to have other consequences
+    # though." A consequence needs to know which happened, and asking a
+    # party with no sheets left is too late.
+    #
+    # Set only on the transition, so a campaign already over is not
+    # relabelled by a later call, and a running one keeps the empty string.
+    if not campaign.scene and not campaign.ended:
+        campaign.ended = "wiped" if not campaign.party.sheets else "module"
     if record:
         record_scene(campaign, made)
     campaign.note(

@@ -110,6 +110,29 @@ class Campaign:
     seed: int = 0
     #: The scene about to be played. Empty means the module is finished.
     scene: str = ""
+    #: **Why** it finished, when it has. Empty while it is still running.
+    #:
+    #: `finished` is `not scene`, and that one boolean could not tell a
+    #: module played to its end from a party wiped out halfway -- both
+    #: simply stop having a next scene. So a save, a results screen or a
+    #: later consequence could not ask which happened. `#1230`.
+    #:
+    #: Camille's ruling there, 2026-11-10, verbatim:
+    #:
+    #:   > *"campaign over should be the default. Let's leave open the
+    #:   > option to have other consequences though when I do more work on
+    #:   > the story engine."*
+    #:
+    #: So the default is unchanged -- a wipe still stops the campaign -- and
+    #: this is the hook the second sentence asks for: a retreat, a capture
+    #: or a restart reads this and decides, instead of having to re-derive
+    #: "did everybody die" from a party that no longer has sheets.
+    #:
+    #: A string rather than an enum deliberately: the vocabulary is not
+    #: settled, and the two words it holds today (`"module"` and `"wiped"`)
+    #: are the two states that exist. An enum would invite a third before
+    #: anybody has decided what it means.
+    ended: str = ""
     visited: list[str] = field(default_factory=list)
     party: Party = field(default_factory=Party)
     #: Campaign resources a module names -- a reputation score, a door left
@@ -323,6 +346,9 @@ def to_dict(campaign: Campaign) -> dict:
         "module": campaign.module,
         "seed": campaign.seed,
         "scene": campaign.scene,
+        # Why it ended, beside the fact that it did. Written here *and* read
+        # back below, per the warning this function already carries.
+        "ended": campaign.ended,
         "visited": list(campaign.visited),
         "flags": dict(campaign.flags),
         "log": list(campaign.log),
@@ -363,6 +389,10 @@ def from_dict(raw: dict) -> Campaign:
         module=str(raw.get("module", "")),
         seed=int(raw.get("seed", 0)),
         scene=str(raw.get("scene", "")),
+        # The other direction of `to_dict`'s `ended`. Defaults empty, so a
+        # save written before this field existed loads as "still running",
+        # which is the only honest answer for one that never recorded why.
+        ended=str(raw.get("ended", "")),
         visited=[str(s) for s in raw.get("visited", ())],
         flags={str(k): int(v) for k, v in (raw.get("flags") or {}).items()},
         log=[str(line) for line in raw.get("log", ())],
