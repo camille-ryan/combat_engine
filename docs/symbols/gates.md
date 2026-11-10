@@ -22,6 +22,11 @@ applied (#591). `symbols.py` refuses a key that is not listed here.
 - `ctx['as_']` -- the action it is being taken as.
 - `ctx['attacker']` -- who is swinging. `target` is who it lands on.
 - `ctx['branch']` -- which half of a melee-or-ranged row is in use.
+- `ctx['by']` -- the **ref that opened the opportunity window**, on the ctx `c.no_provoke(when=)` is handed -- not on an attack ctx. `""` when a *move* opened it, the same convention `provoked_by` uses and what lets a row tell the two apart.
+
+The same datum as `provoked_by` below, reached the same way and deliberately **not** the same key: these are two different contexts. `provoked_by` is on the ctx `resolve.attack` builds for the swing coming *through* the window; this is on the ctx the veto is asked *before* the window stands. Written by `Cast.no_provoke`'s veto off `getattr(ev, "by", "")`, which `dsl.use` sets as a plain attribute after construction -- `OpportunityWindow` has no such field, the way `Hit` has no `among` field.
+
+Added for `arms.i468x1`, *"you do not provoke opportunity attacks for making ranged or area attacks with alchemical items"*: the ctx carried `why`, which is the same fact as prose (`"i1564p1 is a ranged power"`), and reading a ref back out of a sentence is the fragile shape this file exists to prevent. #1233.
 - `ctx['charge']` -- is this use a charge.
 - `ctx['conditions']` -- the conditions in play for this read.
 - `ctx['crit']` -- was it a critical hit.

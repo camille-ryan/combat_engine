@@ -680,6 +680,27 @@ CTX_KEYS: dict[str, str] = {
     "reach": "the shape of the attack -- `Range.kind` verbatim.",
     "reroll_by": "the ref of whatever asked for the reroll.",
     "skill": "the skill being checked, lowercased.",
+    "by": (
+        "the **ref that opened the opportunity window**, on the ctx "
+        "`c.no_provoke(when=)` is handed -- not on an attack ctx. `\"\"` "
+        "when a *move* opened it, the same convention `provoked_by` uses "
+        "and what lets a row tell the two apart.\n\n"
+        "The same datum as `provoked_by` below, reached the same way and "
+        "deliberately **not** the same key: these are two different "
+        "contexts. `provoked_by` is on the ctx `resolve.attack` builds for "
+        "the swing coming *through* the window; this is on the ctx the "
+        "veto is asked *before* the window stands. Written by "
+        "`Cast.no_provoke`'s veto off `getattr(ev, \"by\", \"\")`, which "
+        "`dsl.use` sets as a plain attribute after construction -- "
+        "`OpportunityWindow` has no such field, the way `Hit` has no "
+        "`among` field.\n\n"
+        "Added for `arms.i468x1`, *\"you do not provoke opportunity "
+        "attacks for making ranged or area attacks with alchemical "
+        "items\"*: the ctx carried `why`, which is the same fact as prose "
+        "(`\"i1564p1 is a ranged power\"`), and reading a ref back out of "
+        "a sentence is the fragile shape this file exists to prevent. "
+        "#1233."
+    ),
     "provoked_by": (
         "the **ref that opened the opportunity window** this swing is "
         "coming through, and `\"\"` when a *move* opened it, because a move "
@@ -822,6 +843,15 @@ READERS: dict[str, list[str]] = {
     # this file -- so it goes beside the other target numbers rather than
     # earning a section of one.
     "attacking and defending": [
+        # **Not beside `feat_categories`, despite being its sibling in
+        # code.** That one is in "who, and whose side" because it answers
+        # what the *character* is; this answers what the *power* is, and
+        # both of its readers are attack-side clauses -- "+2 to attack
+        # rolls with alchemical items", "you do not provoke for making
+        # ranged attacks with one". This page is organised by where an
+        # author would look, and somebody writing either of those looks
+        # here. #1233.
+        "block_categories",
         "attack_penalty", "can_flank", "deals_damage", "deals_half", "defence", "difficulty",
         "flanked_by", "flankers", "grants_ca", "has_combat_advantage",
         "shield_bonus", "takes_half",

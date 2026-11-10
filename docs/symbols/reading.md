@@ -150,6 +150,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 - `query.attack_penalty(world: 'World', eid: 'int') -> 'int'`
   - What the attacker's own conditions cost it, before modifiers.
+- `query.block_categories() -> 'dict[str, str]'`
+  - Every item block's printed category, by **block** ref.
 - `query.can_flank(world: 'World', eid: 'int') -> 'bool'`
   - May this companion stand in the far square and count?
 - `query.deals_damage(ref: 'str') -> 'bool'`
