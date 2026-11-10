@@ -720,7 +720,22 @@ def i3411x1(c: Cast) -> None:
     """The bonding, the scrying and the temporary hit points at the end of
     a rest all happen out of the fight; the wound that will not close is
     the one clause with a body. Who may use the weapon's powers is the
-    bonded wielder, and nothing records a bond."""
+    bonded wielder, and nothing records a bond.
+
+    **What `c.bonded()` needs, stated here once for both rows that carry
+    it.** A bond is formed during an extended rest, is held by one creature
+    at a time per weapon, and gates the item's *powers* -- so it is a
+    persisted fact about a character and an item, not a board effect:
+    `story/save.py`'s sheet is where it would live and `usable` is what
+    would read it. `i3412x1` is the second row and says the same thing;
+    `chargen` deals the item to a character and records nothing linking the
+    two beyond possession.
+
+    Worth knowing when that is built: `i2359x1` waits on
+    `c.bonded_to(penalty=)` for a different printed clause -- the penalty
+    for swinging a weapon you are *not* bonded to -- over the same absence.
+    Three rows, two symbols, because the two cards want opposite sides of
+    it; whoever lands the record should close both groups."""
 
     def hurt(ev: DamageApplied) -> None:
         if ev.source == c.me and ev.target != c.me:
@@ -1479,7 +1494,7 @@ def i1761x1(c: Cast) -> None:
     target=SELF,
     trigger="you make a damage roll and dislike the result",
     on=Trigger(DamageRolled, by_me, "you roll damage"),
-    dropped=("events.DamageRolled.crit_rider_dice",),
+    dropped=("c.reroll_crit_die()",),
 )
 def i1761p1(c: Cast) -> None:
     """Rerolls the weapon dice of a roll already made, and keeps the second.
@@ -1509,13 +1524,33 @@ def i1761p1(c: Cast) -> None:
     reach the page and move all 290 of its lines across seven fixtures,
     and that is exactly why `#703` made `roll` an attribute.
 
-    **What is still short, and the marker now names it.** The card also
-    rerolls the critical dice. On a critical `_roll_damage_dice` returns
-    `None` -- every face is maximised, so no die was rolled and there is no
-    second result -- and the critical rider's own "+1d6 per plus" is rolled
-    inside the modifier pass, never reaching the event. `c.reroll_faces`
-    returns 0 and changes nothing there, by its own docstring. That half is
-    unreachable and is a narrower residue than the old marker claimed.
+    **What is still short.** The card also rerolls the critical dice. On a
+    critical `_roll_damage_dice` returns `None` -- every face is maximised,
+    so no die was rolled and there is no second result -- and the critical
+    rider's own "+1d6 per plus" is rolled inside the modifier pass, never
+    reaching the event. `c.reroll_faces` returns 0 and changes nothing
+    there, by its own docstring.
+
+    **Re-pointed off `events.DamageRolled.crit_rider_dice`, which was the
+    wrong surface twice over and could never have gone green.** A field is
+    the one thing that emit site refuses -- the paragraph above quotes its
+    note, so this row was naming the thing that refuses it -- and under
+    `blocked._one` the symbol is a class attribute, which a plain attribute
+    is not, so only a field could have flipped it.
+
+    And there is nothing to put on the event anyway. `i2299x1` measured
+    this for the same clause: the rider is a `Mod` on `crit_damage`,
+    `equipment._crit_rider`'s `roll()` closure sums per plus and hands back
+    an `int`, and `Mod.amount()` is `value + roll()` -- so the faces are
+    destroyed inside the closure, before `resolve.deal_damage` adds the
+    number and long before anything is announced. `Mods.split` returns
+    `dict[types, int]` for the same reason.
+
+    So this joins `i2299x1` on `c.reroll_crit_die()` rather than minting a
+    second symbol for one gap: two rows, one printed sentence, one place
+    the dice go missing. That row's own note has the rest of the
+    measurement, including why a `when=` gate on the crit would be
+    unreachable by construction.
 
     `pick=EVERY_DIE` is "as many as you like", and `_rolled_pick`'s floor
     means a die already at its break-even is left alone rather than thrown
@@ -1617,6 +1652,19 @@ def i2459p1(c: Cast) -> None:
     from *outside* it -- `c.form` is laid by the creature changing shape and
     there is no verb for a third party stripping it -- so this is `dropped=`
     rather than `todo=`, because the row now does something in play.
+
+    **The near miss, read so the next pass does not have to.**
+    `c.end_effect` does take `on=` and does pick out of another creature's
+    standing effects, so the shape of the call exists; what it cannot do is
+    find *the form* among them. Its three narrowings are `save_ends`,
+    `carrying=` a condition, and `against=` a fragment of the label -- and
+    `c.form` labels the hold `label or self.ref`, the ref of whichever row
+    changed shape, so there is no fragment this card could pass. The one
+    thing that is askable is the shape **word**: `c.form(name=)` writes it
+    into `Shapes.live` and `query.in_form` reads it back, but a word is not
+    a hold, and `in_form` answers True for a creature that has recorded
+    nothing at all -- deliberately, by its own note -- so it cannot even
+    say whether there is a form to end. Hence a verb and not a parameter.
 
     The two halves are not redundant. Barring the keyword stops it shifting
     *again*; it does not undo the shape it is already wearing."""
@@ -2541,20 +2589,35 @@ def i1536p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.double_damage()", "Scenery.defences"),
+    todo=("Scenery.defences",),
 )
 def i1737x1(c: Cast) -> None:
-    """Doubling a roll is not a modifier: `c.bonus` adds a number and
-    `c.maximise` takes the top of the dice, and neither is twice.
+    """One gap, not two. Aiming at an object is written --
+    `Target(objects=True)` unions `query.scenery` into the pool and the
+    audit board places a loose one -- but a `Scenery` carries no defences,
+    so there is nothing for an attack against it to roll against:
+    `query.defence` opens `world.need(eid, Defenses)`. `p465`, `p13128`,
+    `i1145p1` and `x2_117` wait on exactly that.
 
-    **The second symbol is the half that would stop the first from
-    paying.** Aiming at an object is written -- `Target(objects=True)`
-    unions `query.scenery` into the pool and the audit board places a
-    loose one -- but a `Scenery` carries no `Defences`, so there is
-    nothing for an attack against it to roll against; `p465`, `p13128`,
-    `i1145p1` and `x2_117` wait on exactly that. A doubling verb alone
-    would leave this clause unable to pay in any fight, so both are
-    named."""
+    **Re-pointed: `c.double_damage()` was a verb nobody needs.** The old
+    note read "doubling a roll is not a modifier: `c.bonus` adds a number
+    and `c.maximise` takes the top of the dice, and neither is twice",
+    which is true of those two verbs and false as a conclusion -- it never
+    looked at the event. `m307a0` doubles damage today, in the tree, and
+    its own docstring is the measurement: *"doubling is `DamageRolled` in
+    the interrupt window: the event carries the number, `deal_damage`
+    reads it back, and nothing else in the engine multiplies"*. It is
+    `ev.amount *= 2` in a `Window.BEFORE` watch, and `resolve.deal_damage`
+    reads `rolled.amount` straight back off the emit and `_rescale`s the
+    typed parts to it. 366 content sites move `ev.amount` and about twenty
+    raise it.
+
+    So the shape of the body is settled and is deliberately not written:
+    the watch would need the blow's target to be a `Scenery`, which no
+    damage roll in any buildable fight has, so writing it would un-refuse
+    the row -- a draw change and a replay re-record -- to buy a clause that
+    cannot fire. `todo=` rather than `dropped=` for the same reason:
+    nothing of this card works yet, and the one symbol says why."""
 
 
 @power(
@@ -2586,7 +2649,14 @@ def i1737p1(c: Cast) -> None:
 )
 def i2195p1(c: Cast) -> None:
     """Alignment is not on a creature anywhere, so the longer daze the card
-    gives against an evil target cannot be told from the shorter one."""
+    gives against an evil target cannot be told from the shorter one.
+
+    Re-measured rather than inherited: `engine/` mentions the word in no
+    file, and the **only** `align%` column in `game.db` is
+    `deity.alignment` -- a fact about a deity, with no component holding it
+    and no reader asking for it. `i3142x1` and `f1351` and `i3282p1` carry
+    the same symbol for the same reason, so it stays spelled the same
+    way."""
     c.dazed(until=When.EONT)
 
 
@@ -2646,28 +2716,50 @@ def i2405p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you make a ranged basic attack using this weapon",
-    todo=("c.as_basic(at_will=)",),
+    todo=("basic.SWING_CLAUSE",),
 )
 def i2730p1(c: Cast) -> None:
     """Swaps a basic attack that is already happening for a different row
-    of the wielder's. Re-aimed: `c.use_power` fires the at-will and
-    `c.borrowed_rows` is the choice among them, so neither of those is
-    the hold. What is missing is the word **instead** -- the basic
-    attack has already been declared when this free action is taken,
-    and only an interrupt can call it off. Twenty rows want the same
-    verb.
+    of the wielder's. `c.use_power` fires the at-will and `c.borrowed_rows`
+    is the choice among them, so neither of those is the hold. What is
+    missing is the word **instead**.
 
-    **`c.as_basic` is not it, and the two differ in the moment rather
-    than in the mechanism.** That verb files a standing offer read where
-    a swing is *handed out*, which is why `f987` can use it: a feat is a
-    trait and has nowhere else to put the offer. This row prints a Free
-    Action with a Trigger, and `actions._powers` refuses to offer any row
-    carrying a printed trigger -- so reaching the offer would mean
-    re-filing the card as a trait, and the offer `as_basic` lays is spent
-    by nothing, where the card prints one use per encounter. Nothing
-    announces that a swing was taken in place of the granted basic
-    (`ctx["basic"]` leaves the `instead` list out deliberately, #522), so
-    there is no moment to charge the use at either."""
+    **`c.as_basic` is not it, which the old note already said -- so the
+    old marker named the verb its own docstring had ruled out.** That verb
+    files a standing offer read where a swing is *handed out*, which is why
+    `f987` can use it: a feat is a trait and has nowhere else to put the
+    offer. This row prints a Free Action with a Trigger, and
+    `actions._powers` refuses to offer any row carrying a printed trigger,
+    so the body that would lay the offer never runs. `c.as_basic(at_will=)`
+    arriving would have turned this green and left the row exactly as
+    unwritable.
+
+    **The interrupt road is shut by the printed rule, not by a gap.**
+    `AttackDeclared` is a `Decision` and `resolve.attack` honours
+    `declared.cancelled`, so the moment exists -- but `c.cancel` refuses
+    unless the row's own card prints an immediate interrupt, and its note
+    has the census: every row in the tree refusing an attack event is an
+    interrupt, 13 of 13. This card prints a **free action**. So a symbol
+    aimed at an interrupt facility would be waiting on something the engine
+    deliberately withholds from this row.
+
+    **That leaves clause substitution, and the gap is one constant.**
+    `c.pre_empt(weapon=<ref>, ...)` is already keyed on the weapon in hand
+    rather than on a row -- literally "using this weapon", `_clause_keys`
+    adds one key per held weapon -- and the clause it registers becomes its
+    own action-menu entry, so the choice among at-wills is a menu entry and
+    not a mid-body prompt. What the basic attacks do not offer is the swing
+    itself: `engine/basic.py`'s `_ranged_basic` wraps only its damage,
+    `c.instead_of("damage", ...)`, inside an `if c.strike()`. `"swing"` is
+    already a clause name in the tree -- `features/racial.py` reads
+    `c.instead_of("swing", lambda: c.basic(...))` -- so the fix is the key
+    the basics read, and the once-per-encounter limit comes free with it:
+    the clause closure can end its own registration as it is taken.
+
+    One symbol, because the limit is not a second gap. Nothing announces
+    that a swing was taken in place of a granted basic (`ctx["basic"]`
+    leaves the `instead` list out deliberately, #522), which is why
+    charging the use from outside is not an option."""
 
 
 @power(
@@ -2944,7 +3036,8 @@ def i3142p1(c: Cast) -> None:
 def i3412x1(c: Cast) -> None:
     """The bonding, the scrying and the temporary hit points at the end of
     a rest are all outside a fight, and nothing records a bond -- so the
-    gate on who may use the weapon's powers is dropped."""
+    gate on who may use the weapon's powers is dropped. One gap, two rows:
+    `i3411x1` carries the same symbol and holds what it needs."""
     c.resist(3 + 2 * c.enhancement, DamageType.PSYCHIC, on=c.me)
 
 
@@ -3192,7 +3285,31 @@ def i553x1(c: Cast) -> None:
 )
 def i553p1(c: Cast) -> None:
     """Becomes a different base weapon, taking its dice, its reach and its
-    group. The base item is a column and no body swaps it."""
+    group. The base item is a column and no body swaps it.
+
+    **Confirmed against the verb rather than guessed, and the parameter is
+    the smaller half of what `base=` has to mean.** `c.as_weapon` exists
+    and is close: it builds a `Weapon` and appends it to `Gear.weapons` so
+    `c.w()`, `c.wielding` and `Gear.main` all find it. Two things stop it
+    saying this card.
+
+    The numbers. It takes `damage=`, `group=`, `properties=` and `hands=`
+    as literals, which is right for the four rows it was written for --
+    shields and rods, which have no row in the `weapon` table at all -- and
+    is exactly what this file's header forbids: the five shapes this card
+    names are printed base items, so their dice and group are data to be
+    read, never hand-written here.
+
+    And the hand. `as_weapon` deliberately does not arm what it builds --
+    `gear.stowed.add(arm.ref)`, so `actions._wielding` offers the draw --
+    because a shield used as a pick is a *second* weapon. A shape change is
+    not: it replaces the profile of the thing already in the hand, and
+    laying a second weapon beside it would leave the wielder choosing
+    between two forms of one item.
+
+    `c.counts_as` is the other near miss and is a different sentence: it
+    lets a power written for one group accept another, and changes no
+    dice."""
 
 
 @power(
