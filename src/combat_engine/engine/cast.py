@@ -249,11 +249,37 @@ _SPENT_ON_ATTACK = frozenset({
 #: `calm` is statable too, though it is also the fallback, so that a scene
 #: can say the water is calm rather than leave it to be inferred — the
 #: same reason `bright` is in the set beside the light sources.
+#: **The five place words are a fourth band, and the care that went into
+#: keeping the light words apart is why none of them is merged.** Seven
+#: rows carried `story.terrain_words` and the pipeline was never the gap --
+#: `story.run.ground` writes `world.terrain` and `c.terrain` reads it. The
+#: gap was that the words those cards print could not be spelled, and
+#: `c.terrain` raises on an unknown one, so the rows were unwritable rather
+#: than silently false. Read off the cards:
+#:
+#:     outdoors             f2718    "if you are outdoors"
+#:     underground          p11544, p11545
+#:     urban                p11597, p9342   "an urban environment"
+#:     natural environment  p9329    "in a natural environment"
+#:     natural world        m5906a0  "while in the natural world"
+#:
+#: **Three distinctions, not one, and merging any pair would be the drift
+#: this set exists to catch.** A city street is `outdoors` and is not a
+#: `natural environment`; the Feywild is `outdoors` and is not the
+#: `natural world`. So indoors-or-out, wild-or-built, and which plane are
+#: three questions, exactly as the three printed light levels are not the
+#: three light sources.
+#:
+#: `underground` is not merged into "not outdoors" either, for the same
+#: reason `bright` is stated rather than inferred: a cellar and a cave are
+#: both indoors and only one is what `p11544` means.
 TERRAIN_WORDS = frozenset({
     "aquatic", "ice", "snow", "forest",
     "calm", "rough", "stormy",
     "bright", "dim light", "darkness",
     "sunlight", "moonlight", "starlight",
+    "outdoors", "underground", "urban",
+    "natural environment", "natural world",
 })
 
 #: Every word that declares a light level. A board naming none of these is
@@ -5593,37 +5619,23 @@ class Cast:
         `World.terrain` stays empty, and it stays empty today (#539). So the
         two bugs would land together and the second would survive the first
         being fixed.
+
+        **One implementation, in `query.terrain`.** The reading moved there
+        because a printed **Requirement** is a `requires=(world, eid)` gate
+        with no `Cast` to ask -- `p9342`'s *"you must be in an urban
+        environment"* -- and two copies of a vocabulary check is how a
+        vocabulary drifts, which is the whole reason this set is closed.
+        The validation, the case folding and the bright-light default all
+        live there now.
         """
-        if word.lower() not in TERRAIN_WORDS:
-            raise ValueError(
-                f"{self.ref}: c.terrain({word!r}) is not a terrain word. "
-                f"Known: {', '.join(sorted(TERRAIN_WORDS))}."
-            )
-        here = getattr(self.world, "terrain", frozenset())
-        # **A board that declares no light level is in bright light.**
-        # Camille's ruling on `#539`, asked directly and quoted:
-        #
-        #   > *"Default should be bright light without sun/star/moon."*
-        #
-        # Read here rather than written into `World.terrain`, which is the
-        # narrower of the two and is why: stuffing `bright` into the set
-        # would make `terrain` non-empty on **every** board, and anything
-        # that iterates it -- a note, a report, a future reader -- would
-        # start describing a light level nobody declared. Answering the
-        # question is what the ruling asks for; inventing a declaration is
-        # not.
-        #
-        # **Only when no light word is declared at all.** A board that says
-        # `darkness` or `dim light` is not also bright, and the three are
-        # deliberately unmerged in `TERRAIN_WORDS` for that reason.
-        #
-        # And *without* sun, star or moon, which is the ruling's own second
-        # half: those stay False, so the 36 `sunlight` gates in content are
-        # unaffected. Measured, this moves exactly **one** row -- the single
-        # `c.terrain("bright")` gate in the tree.
-        if word.lower() == "bright" and not (here & _LIGHT_WORDS):
-            return True
-        return word.lower() in here
+        from .query import terrain as _terrain
+
+        try:
+            return _terrain(self.world, word)
+        except ValueError as exc:
+            # The ref is what makes the refusal actionable, and only the
+            # method knows it.
+            raise ValueError(f"{self.ref}: c.terrain({word!r}) -- {exc}") from exc
 
     def milestone(self) -> int:
         """How many milestones the party has reached today. `c.milestone()`.

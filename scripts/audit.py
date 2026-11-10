@@ -6168,10 +6168,18 @@ def _wants_terrain(ref: str) -> tuple[str, ...]:
 
     **The board is dry, bare and unlit, and nothing ever changed that.**
     `world.terrain` is an empty `set()` on every board `board()` builds, so
-    of the thirteen words in `cast.TERRAIN_WORDS` exactly one -- `bright` --
-    ever answers True, and only because `#539` made it the default when no
-    light word is present. The other twelve are False for every row in the
-    corpus, so a clause gated on one has never once been reached.
+    of the **eighteen** words in `cast.TERRAIN_WORDS` exactly one --
+    `bright` -- ever answers True, and only because `#539` made it the
+    default when no light word is present. The other seventeen are False
+    for every row in the corpus, so a clause gated on one has never once
+    been reached.
+
+    Thirteen when this was written; the five place words -- `outdoors`,
+    `underground`, `urban`, `natural environment`, `natural world` -- were
+    added for seven rows that could not spell what their cards print.
+    Counting them here rather than restating a number that rots: this
+    matches against the live set, so a word added tomorrow is dressed
+    without touching this function.
 
     Measured: **64 rows** name `c.terrain(`. Most of them fire, because a
     row usually has a second clause that does not need the weather -- which
@@ -7353,7 +7361,7 @@ def _attempts(out: Result):  # noqa: ANN202
                         return
                     yield seed, face, posed, "", False, True, ""
     # **Eighth: the weather.** `world.terrain` is an empty `set()` on every
-    # board this file builds, so twelve of `cast.TERRAIN_WORDS`' thirteen
+    # board this file builds, so all but one of `cast.TERRAIN_WORDS`
     # words answer False for the whole corpus and the thirteenth only
     # answers True because `#539` made `bright` the default. A clause gated
     # on one has never been reached.

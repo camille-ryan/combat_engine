@@ -2736,6 +2736,51 @@ def shield_bonus(world: World, eid: int) -> int:
     return _SHIELD_AC.get(held, 0)
 
 
+def terrain(world: World, word: str) -> bool:
+    """Does the board declare that word? The reading behind `c.terrain`.
+
+    Here rather than only on `Cast` because a printed **Requirement** is a
+    `requires=(world, eid)` gate and has no `Cast` to ask -- `p9342`'s
+    *"you must be in an urban environment"* is the case. `Cast.terrain`
+    delegates, so the vocabulary check and the light default cannot drift
+    between the two readers.
+
+    **An unknown word raises**, which is `Cast.terrain`'s own discipline
+    and the reason it exists: `#539` found seven gates spelled for words no
+    board could carry -- `water` beside `aquatic`, `icy` beside `ice` --
+    and every one read exactly like a gate asking the right thing, because
+    `World.terrain` was empty and all of them were False.
+
+    **A board declaring no light level is in bright light**, which is
+    Camille's ruling on `#539` and is answered here rather than written
+    into `World.terrain`: stuffing `bright` into the set would make it
+    non-empty on every board and anything iterating it would describe a
+    light level nobody declared.
+
+    Not used by `query.speed`'s aquatic test, deliberately -- that one is
+    inline because it is the most-called read in the engine and must stay a
+    single set membership test. One call site staying inline for a measured
+    reason is not the drift this function prevents.
+    """
+    from .cast import _LIGHT_WORDS, TERRAIN_WORDS
+
+    # **Folded before the check, not after, because `Cast.terrain` tests
+    # `word.lower() not in TERRAIN_WORDS`.** Validating the word as given
+    # would have made this reader raise on `"URBAN"` where the method
+    # accepts it -- so the delegation below would have been nearly
+    # behaviour-preserving, which is the kind of nearly that ships.
+    asked = word.lower()
+    if asked not in TERRAIN_WORDS:
+        raise ValueError(
+            f"{word!r} is not a terrain word. The printed vocabulary is"
+            f" {sorted(TERRAIN_WORDS)}"
+        )
+    here = getattr(world, "terrain", frozenset())
+    if asked == "bright" and not (set(here) & set(_LIGHT_WORDS)):
+        return True
+    return asked in here
+
+
 def can_hear(world: World, listener: int, speaker: int) -> bool:
     """Can `listener` hear `speaker`? Three cards print it that way.
 
