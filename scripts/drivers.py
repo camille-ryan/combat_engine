@@ -40964,9 +40964,30 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # about the row, which is gaming the identity check rather than fixing
     # anything. The proxy is right about most of the 121 and cannot be
     # right about all of them.
+    # **And by one more, from a class that did not exist until now.** The
+    # vampire's twelve heroic powers were printed and undeclared; `p13851`
+    # is a melee at-will whose Hit line gives *temporary hit points equal
+    # to 2 + your Charisma modifier*, so `doctrine.heals` counts it:
+    # holdable 596 -> 597, reaching no friend 139 -> 140, undeclared
+    # 121 -> 122.
+    #
+    # **Read against the card, and it is the same false positive `p4541`
+    # is.** `p13851` prints *"Target: One creature"* -- an enemy, since it
+    # is a melee attack rolling Dexterity vs Fortitude -- and the temporary
+    # hit points land on **you**. So `cannot_reach_an_ally` is the right
+    # bucket, and the row names the `ONE_CREATURE` singleton **by design**
+    # rather than by omission. The pin moves; the row does not. Declaring a
+    # fresh `Target("enemy", 1)` would move the identity test and change
+    # nothing about the row, which is the gaming this comment already
+    # refused once.
+    #
+    # So the proxy is now right about 120 of 122, with the two exceptions
+    # named here. That ratio is the thing to watch: the day it stops being
+    # "most", the identity test has stopped being a proxy for a missing
+    # header and wants replacing rather than re-pinning.
     reach = SC._heal_reach()
     out.that(reach["reaches_an_ally"] == 122
-             and reach["holdable"] == 596,
+             and reach["holdable"] == 597,
              "122 of the 596 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
              " refusal counter is about, and it has moved three times:"
@@ -40974,16 +40995,16 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
              " their printed cards, and six at once with `#1163`'s wave",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
     out.that(reach["self_only"] == 335
-             and reach["cannot_reach_an_ally"] == 139
+             and reach["cannot_reach_an_ally"] == 140
              and reach["reaches_an_ally"] + reach["self_only"]
              + reach["cannot_reach_an_ally"] == reach["holdable"],
-             "and the three buckets partition it -- 335 self-only, 139"
+             "and the three buckets partition it -- 335 self-only, 140"
              " that reach no friend, 122 that do. They have to add up or"
              " the census is reading something twice",
              f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
              f" + {reach['reaches_an_ally']}")
-    out.that(reach["undeclared"] == 121,
-             "**121 of those 139 declare no target line at all** and"
+    out.that(reach["undeclared"] == 122,
+             "**122 of those 140 declare no target line at all** and"
              " inherit `dsl.ONE_CREATURE`, so they read `enemy` by"
              " default rather than by design. Told apart by identity"
              " against the singleton, which is the only way to see it --"
