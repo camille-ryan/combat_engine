@@ -342,12 +342,38 @@ def m5403a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("", 6, kind=MINION),
-    dropped=("Usage.RECHARGE(when=)",),
+    dropped=("etl.monster.weapon()",),
 )
 def m5403a1(c: Cast) -> None:
-    """"Recharges when it spends a minor action to reload" is the same minor this
-    row already costs, so spending the action *is* the reload and the printed
-    sentence adds nothing the header does not already say."""
+    """*"Recharge when it spends a minor action to reload."*
+
+    **Re-pointed, and the old reading was wrong in both directions.** It
+    said the printed sentence "adds nothing the header does not already
+    say", because the attack costs the same minor the reload would. That is
+    not what a recharge clause does: the row is spent after one use and the
+    reload is what makes it available again, so without the clause this
+    minion fires once and never again.
+
+    `Usage.RECHARGE(when=)` was also the wrong symbol -- it reads as a
+    missing facility and `@power(recharge_when=Trigger(...))` has existed
+    all along, with around forty call sites. So that symbol could never go
+    green and this row could never read ready.
+
+    **What actually blocks it: a monster holds no weapon.** The reload
+    action is `actions._loading`, which walks `Gear.unloaded` and offers a
+    load only for a weapon in hand with `load minor` -- and `loader` spawns
+    every stat block with a bare `Gear()`. Measured on five boards: the two
+    creatures carrying `Gear.weapons` are the dealt party; all 35 monsters
+    carry none. So `WeaponLoaded` can never fire for a monster, and
+    `recharge_when=Trigger(WeaponLoaded, about_me)` would be a gate that
+    reads correctly and never fires -- which is the one thing a trigger
+    must not be.
+
+    That gap is `etl.monster.weapon()`, judged real and already carried by
+    four other rows: the `monster` table has 33 columns and no equipment
+    one, so there is nothing for `loader` to populate `Gear` from. This is
+    the fifth row on it. #1220.
+    """
     if c.strike():
         c.hit()
 

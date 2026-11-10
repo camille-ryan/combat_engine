@@ -725,7 +725,7 @@ def m1565a1(c: Cast) -> None:
     *"(Save ends both)"* is **one** saving throw, so the penalty hangs on
     the encounter clock and the burn's hold takes it off when it goes --
     laid save-ends itself it would give the creature two chances to shake
-    off half of one sentence. #1220.
+    off half of one sentence. #1221.
     """
     if not c.strike():
         return
@@ -2408,7 +2408,7 @@ def m4460a2(c: Cast) -> None:
     *target's* own attacks the hard ones rather than granting anybody
     concealment. `m1565a1` above has the full reading. The marker said
     nothing makes a creature's own attacks treat everybody as concealed; a
-    penalty does exactly that. #1220.
+    penalty does exactly that. #1221.
 
     One saving throw for both clauses, so the penalty rides the encounter
     clock and the burn's hold ends it.

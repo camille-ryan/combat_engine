@@ -5521,7 +5521,7 @@ def i709p1(c: Cast) -> None:
     is on the log the row pays nothing: ongoing damage ticks a creature
     past the line with no attack at all -- which `Bloodied.source`'s own
     docstring names -- and that is not "an attack that is not a critical
-    hit", it is no attack. #1220.
+    hit", it is no attack. #1221.
     """
     ev = c.trigger
     victim = getattr(ev, "actor", None)
