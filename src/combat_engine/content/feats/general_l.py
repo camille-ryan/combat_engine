@@ -577,7 +577,7 @@ def f2628(c: Cast) -> None:
     this character's *next* turn without a free turn first.
 
     Gated on the holder and on the ref, and nothing narrower is needed: a
-    `[Multiclass Battlemind]` feat is taken by a character who does not
+    multiclass feat for another class is taken by a character who does not
     have the row, and `uses=1` means there is one use of it to re-clock."""
     me = c.me
     c.grant_row("p10438", on=me, until=When.ENCOUNTER, uses=1)

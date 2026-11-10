@@ -3340,6 +3340,34 @@ def step(
     timed = _due(campaign, module, made)
     if timed:
         made.next_id = timed
+    # **A wiped party ends the campaign, and it did not.** `finished` is
+    # `not campaign.scene`, and a *lost* fight still has exits -- so the
+    # runner walked on to the next scene with nobody left, and the next
+    # scene being a roleplay crashed outright: `_roleplay` lays a social
+    # table through `table.lay`, which spawns one entity per sheet, so an
+    # empty party gave `Encounter.start` an empty turn order and
+    # `self.order[0]` raised `IndexError`.
+    #
+    # Measured rather than reasoned: seed 3 of `drivers.fight_aftermath`
+    # at party level 4 comes out of its hard fight `outcome='lost'` with
+    # `sheets=0`, and the loop's own `if campaign.finished: break` did not
+    # fire. The drivers suite **aborted** there, so this one crash was
+    # hiding whatever else that suite would have reported.
+    #
+    # After the timed override, deliberately: a party that no longer
+    # exists cannot keep an appointment either.
+    #
+    # The condition is "no sheets left" rather than "every sheet at 0",
+    # because `harvest` drops a dead character outright -- which is also
+    # exactly the state that breaks `lay`. A partial loss leaves fewer
+    # sheets and plays on, which is unchanged.
+    #
+    # What a wipe should *mean* beyond stopping is a design question and
+    # is not decided here -- retreat, a rescue, a restart are all
+    # possible. Ending is the honest floor and strictly better than
+    # raising.
+    if not campaign.party.sheets:
+        made.next_id = None
     campaign.scene = made.next_id
     if record:
         record_scene(campaign, made)

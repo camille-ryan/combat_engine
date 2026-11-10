@@ -23390,9 +23390,28 @@ def a_retype_can_name_one_row_and_one_victim(out: Result) -> None:
     # (`through=`, `from_` taking a sequence), so `from_many=` is spent. What
     # is left is the printed **may** -- a choice per instance, which a
     # standing label read inside `_typed` has no moment to ask.
+    # **And the two left now want the SAME thing, which is why this moved.**
+    # `f2179` was pinned here on `c.deals(like=)`. It was re-pointed onto
+    # `c.deals(may=)` in `777740f2` after its card was read against the
+    # verb: `c.deals` has 14 keywords and none of them is a `may=` or an
+    # `optional=`, and what both rows print is a **choice per instance** --
+    # the same gap, which a standing label read inside `_typed` has no
+    # moment to ask.
+    #
+    # That is not the collapse this assertion guards against, and the
+    # distinction is the whole of it. The fault was one symbol over four
+    # rows wanting four *different* things, so no third of it could land
+    # correctly. Two rows measured to want the *same* thing sharing one
+    # symbol is the rule working -- `content/CLAUDE.md` asks for exactly
+    # that, and the alternative is a synonym that holds a two-row group
+    # apart.
+    #
+    # So what is still asserted is the useful half: each row waits on the
+    # symbol somebody *measured* it onto, and a future re-merge of two
+    # unlike needs still reds this.
     left = {
         "cf:warlock-f1s1": ("c.deals(may=)",),
-        "f2179": ("c.deals(like=)",),
+        "f2179": ("c.deals(may=)",),
     }
     out.that(not REGISTRY["f1488"].unfinished,
              "f1488 carries no marker: the two-type retype, the fire keyword"
@@ -30426,6 +30445,20 @@ def drawing_stowing_and_a_running_jump(out: Result) -> None:
     # either way, and then each direction is posed on purpose.
     for ref in ("i1556p1", "i1052p1"):
         world, me, _ = audit_board(ref, 1)
+        # **"Nothing stowed" is posed, not assumed, and it used to be
+        # assumed.** The arm below poses its own precondition by stowing
+        # something; this one relied on the dealt board happening to have
+        # an empty `stowed`, which is incidental state. It stopped being
+        # true for `i1052p1` the moment a content change moved the chargen
+        # draw: measured, that board now comes out holding `w3612` with
+        # **three** weapons stowed (`w3621`, `w3628`, `w3650`), so drawing
+        # is possible and the row correctly drew `w3628` -- the row
+        # working, reported as a failure. `i1556p1`'s board still dealt an
+        # empty `stowed`, so one of the two passed and the pair looked
+        # inconsistent rather than under-specified.
+        gear_before = world.get(me, Gear)
+        if gear_before is not None:
+            gear_before.stowed.clear()
         got: list[WeaponHeld] = []
         world.bus.on(WeaponHeld, got.append)
         world.decider = None
@@ -41001,20 +41034,44 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # named here. That ratio is the thing to watch: the day it stops being
     # "most", the identity test has stopped being a proxy for a missing
     # header and wants replacing rather than re-pinning.
+    # **And by two more, which is content growth and not a reading
+    # change.** `f1848` gained `c.temp_hp(gain, on=c.me)` in `bc173aff`
+    # and `i2273p1` gained `c.heal(5, on=who)` with `c.surge(on=who)` in
+    # `89958896` -- both authoring waves writing a clause a card prints,
+    # so `doctrine.heals` counts them where it did not before. Both are
+    # `side='self'`, so both land in `self_only`:
+    #
+    #     holdable   597 -> 599        self_only   335 -> 337
+    #
+    # **What did NOT move is the point.** `reaches_an_ally` is 122 either
+    # side, `cannot_reach_an_ally` is 140, `undeclared` is 122, and the
+    # partition still adds up. This counter exists to watch how many
+    # healing rows can answer a dying ally, and that number is untouched
+    # -- what grew is the denominator. Re-pinning a denominator whose
+    # growth is two named rows is not the same act as moving the number
+    # under test, and the two rows were found by diffing for added
+    # `c.heal`/`c.surge`/`c.temp_hp` lines since the last baseline rather
+    # than by trusting the counter that reported the drift.
+    #
+    # The prose below said "596" while the pin said 597, which was already
+    # a step behind the vampire bump above it. Both say 599 now, because a
+    # message quoting a number the assertion does not use is how the next
+    # reader gets the wrong figure.
     reach = SC._heal_reach()
     out.that(reach["reaches_an_ally"] == 122
-             and reach["holdable"] == 597,
-             "122 of the 596 character-holdable healing rows can reach an"
+             and reach["holdable"] == 599,
+             "122 of the 599 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
-             " refusal counter is about, and it has moved three times:"
+             " refusal counter is about, and it has moved four times:"
              " `i545p2` (#1139) and `p3847` (#1153) by one each against"
-             " their printed cards, and six at once with `#1163`'s wave",
+             " their printed cards, six at once with `#1163`'s wave, and"
+             " `f1848` with `i2273p1` when two waves wrote them a heal",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
-    out.that(reach["self_only"] == 335
+    out.that(reach["self_only"] == 337
              and reach["cannot_reach_an_ally"] == 140
              and reach["reaches_an_ally"] + reach["self_only"]
              + reach["cannot_reach_an_ally"] == reach["holdable"],
-             "and the three buckets partition it -- 335 self-only, 140"
+             "and the three buckets partition it -- 337 self-only, 140"
              " that reach no friend, 122 that do. They have to add up or"
              " the census is reading something twice",
              f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
@@ -56693,10 +56750,32 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     # and compare. That needs no seed to mean anything.
     seen: set[str] = set()
     wrong: list[str] = []
+    #: Seeds whose party is still standing after the fight, in order.
+    #:
+    #: **The half of this rule that needs a *next* scene cannot use a seed
+    #: that wipes**, and it used the literal `3`, which now does. A hard
+    #: fight at party level 4 is lost on 8 of these 24 seeds and **every
+    #: loss is a total wipe** (3, 8, 12, 13, 18, 21, 23, 24), so the pinned
+    #: seed had a one-in-three chance of being invalid from the day it was
+    #: written and became invalid when a draw change moved the party.
+    #:
+    #: Derived rather than re-pinned: a literal would buy the same breakage
+    #: again at the next draw change, and the loop below already plays
+    #: every seed, so this costs nothing. The rule's own comment is careful
+    #: that no seed is pinned to a *phrase*; this is the same argument one
+    #: step further, for the scene after it.
+    #:
+    #: Not a loosening. The assertions downstream are about an aftermath
+    #: phrase being carried into the next scene, and a wiped party has no
+    #: next scene -- so this picks a seed that meets the assertion's own
+    #: precondition rather than weakening what is asserted.
+    survived: list[int] = []
     for seed in range(1, 25):
         campaign, made = play(seed)
         fight = made[0]
         sheets = campaign.party.sheets
+        if sheets:
+            survived.append(seed)
         bloodied = sum(
             1 for s in sheets
             if s.hp is not None and s.max_hp and 0 < s.hp <= s.max_hp // 2)
@@ -56725,8 +56804,19 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
         f"{sorted(seen)}",
     )
 
+    out.that(
+        bool(survived),
+        "and at least one of the 24 leaves a party standing, which the "
+        "assertions below need -- a wiped party has no next scene to "
+        "carry anything into",
+        f"{len(survived)} of 24 survived",
+    )
+    #: The seed every assertion below plays, chosen because its party
+    #: lives. See `survived`.
+    alive = survived[0] if survived else 3
+
     # -- it is printed ------------------------------------------------------
-    campaign, made = play(3)
+    campaign, made = play(alive)
     fight = made[0]
     phrase = fight.aftermath
     rounds_line = [str(x) for x in fight.lines if " rounds" in str(x)]
@@ -56744,7 +56834,7 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     )
 
     # -- the next conversation opens with it -------------------------------
-    campaign, made = play(3, steps=2)
+    campaign, made = play(alive, steps=2)
     carried_phrase = made[0].aftermath
     talk = made[1]
     opening = (talk.played.beats[0].situation
@@ -56780,7 +56870,7 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
         f"{len(later)} later beats, "
         f"{sum('hard-won' in b.situation for b in later)} mention it",
     )
-    campaign, made = play(3, steps=3)
+    campaign, made = play(alive, steps=3)
     spent_phrase = made[0].aftermath
     out.that(
         campaign.aftermath == "" and made[2].played is not None
@@ -56795,7 +56885,7 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     # -- spent even by a scene with nothing to play ------------------------
     BARE = {"id": "talk", "kind": "roleplay", "name": "T",
             "brief": "Nothing here.", "exits": ["after"]}
-    campaign, made = play(3, scenes=[HARD, BARE, AFTER], steps=2)
+    campaign, made = play(alive, scenes=[HARD, BARE, AFTER], steps=2)
     out.that(
         made[1].played is None and campaign.aftermath == "",
         "a scene with nothing to play spends it too -- held past that "
@@ -56814,7 +56904,7 @@ def a_fight_says_how_it_went_and_the_next_scene_carries_it(out: Result) -> None:
     )
 
     # -- and it survives a save --------------------------------------------
-    campaign, made = play(3, steps=1)
+    campaign, made = play(alive, steps=1)
     back = save_mod.from_dict(save_mod.to_dict(campaign))
     out.that(
         campaign.aftermath in bt.FIGHTS
