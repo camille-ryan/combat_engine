@@ -442,12 +442,43 @@ def i2989p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.off_hand()",),
+    dropped=("chargen.spawn(onto=)",),
 )
 def i3037x1(c: Cast) -> None:
-    """Which hand a weapon is in cannot be asked -- `Gear` records what is
-    held and not where -- so the bonus is laid for any wielder. The attack
-    context carries `opportunity`, which is the half that is exact."""
+    """**Which hand a weapon is in CAN be asked, and the old marker said it
+    could not.** `Gear.off` is a live property -- the second melee weapon,
+    with a shield counting as occupying that hand -- and
+    `cf:fighter-weaponmaster-f3s2` reads `gear.off is None` as its printed
+    Requirement, so "records what is held and not where" was false.
+
+    `c.off_hand()` was also doing duty for a second and different need. The
+    two `cf:fighter-weaponmaster-f3` rows that carry it want the hand that
+    *swung*, off a damage context that has no such key; this row wants
+    which hand the item's own weapon is in, which `c.my_weapon()` and
+    `Gear.off` answer between them.
+
+    **The gate is still not written, because it could never be true.**
+    `equipment._base_for` lays a weapon item on `gear.main or
+    gear.implement` unless the caller passes `onto=`, and **nothing
+    anywhere passes it**: `chargen.spawn` is the only path that deals a
+    kit and it calls `equip(world, eid, magic)` bare. So `c.my_weapon()`
+    is the main-hand weapon in every fight that can be built today, and a
+    gate comparing it against `gear.off` would be False forever -- which
+    is worse than the over-application below, because it reads as a
+    working restriction. Measured on the audit board at five seeds: the
+    wielder holds one weapon and `gear.off` is None at every one. Driven
+    both ways on a dealt character holding two: without `onto=` the item
+    is on `gear.main` and the gate is False, with it named the gate is
+    True -- so the symbol names the thing that would pay the clause.
+
+    Necessary and not sufficient for one kit, which is worth knowing
+    before building it: `_base_for` matches `onto` against `Weapon.ref`,
+    and the commonest two-weapon hand this tree deals is **two of the same
+    ref**, where that lookup takes the first and so always the main hand.
+
+    So the bonus is laid for any wielder, which is this file's standing
+    reading of "using this weapon". The attack context carries
+    `opportunity`, which is the half that is exact."""
     c.bonus(
         AC, c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER,
         when=_opportunity,
@@ -461,12 +492,25 @@ def i3037x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.underwater_penalty()",),
+    todo=("c.terrain(penalty=)", "story.terrain_words"),
 )
 def i3050x1(c: Cast) -> None:
-    """Waives a penalty for fighting underwater. `c.terrain("aquatic")`
-    says where the fight is and nothing anywhere charges for it, so there
-    is nothing yet to waive."""
+    """Waives the attack penalty for fighting underwater, and both halves
+    of that are missing a layer below this row.
+
+    **Re-pointed: `c.underwater_penalty()` was a synonym nobody else used.**
+    `f2903b` prints the same clause and already names the gap
+    `c.terrain(penalty=)` -- `c.terrain` answers only *whether* the fight is
+    aquatic, and nothing in `engine/` charges anything for it, so a waiver
+    would have nothing to take off. One symbol for the two rows printing
+    the sentence, rather than one each.
+
+    `story.terrain_words` is the other half and nine rows wait on it. A
+    module's scene may declare its terrain and `story/run.py` records that
+    `terrain.dress` has no way to be told what sort of place a fight is
+    in, so `World.terrain` is empty in every fight and every
+    `c.terrain(...)` gate is False. Either symbol alone leaves this row
+    unwritable, which is why both are named."""
 
 
 @power(
@@ -1326,12 +1370,29 @@ def i1676x1(c: Cast) -> None:
     target=SELF,
     trigger="you miss every target with an attack using this crossbow",
     on=Trigger(PowerResolved, _all_missed, "you missed with every shot"),
-    dropped=("c.no_miss_effect()",),
+    dropped=("resolve.replay()",),
 )
 def i1676p1(c: Cast) -> None:
-    """`c.restore_use` is the "you don't expend the use" half. Suppressing
-    what the missed power does on a miss is the other, and nothing reaches
-    back into a use that has finished resolving."""
+    """`c.restore_use` is the "you don't expend the use" half.
+
+    **Re-pointed: the old symbol named a verb this row could not have
+    called.** `c.no_miss_effect()` reads as a `Cast` door, and by the time
+    this free action is taken -- `PowerResolved`, which is where "missed
+    **every** target" is first knowable -- the missed power's Miss lines
+    have already been applied. A verb arriving under that name would have
+    turned the marker green and left the row exactly as unwritable, which
+    is the one thing a marker must not do.
+
+    What is missing is the ability to reach back into a use that has
+    finished resolving, and that is `resolve.replay()` -- the symbol
+    `i1675p1`, `p10354` and `f2448` already carry, all three for a trigger
+    on `PowerResolved` whose effect has to change what the resolution
+    landed. This row wants the narrowest thing of the four: not a re-roll,
+    but the miss half of a resolved use *un-applied*.
+
+    `c.no_miss_damage` is the near miss and is the other side of the card:
+    it is laid on a victim before the blow, where this is the attacker
+    afterwards."""
     ref = getattr(c.trigger, "power", "")
     if ref:
         c.restore_use(ref, on=c.me)
@@ -1828,10 +1889,33 @@ def i2964p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.sleeping()",),
+    dropped=("conditions.skill_penalty()",),
 )
 def i3091x1(c: Cast) -> None:
-    """Nobody sleeps in a fight and nothing records that they might."""
+    """The +2 is a real modifier with a reader and is exact.
+
+    **Re-pointed, and the old premise was false in both halves.** It read
+    "nobody sleeps in a fight and nothing records that they might".
+    `Condition.UNCONSCIOUS` is live, carries a `conditions.Rules` entry of
+    its own, and 14 content rows carry `Keyword.SLEEP` -- so a fight does
+    put creatures into the nearest recorded state and `c.sleeping()` asked
+    for a reader that is already there under another name.
+
+    What is missing is the **penalty**, not the state: `Rules` carries
+    `attack`, `defences` and `ranged_defences` and nothing that touches a
+    skill, so no condition in the table charges anything to a
+    `skill:perception` check and there is nothing for this clause to
+    waive. Named as a function rather than as `Rules.skills`, because a
+    dict field on a frozen dataclass takes a `default_factory` and so
+    leaves no class attribute for `blocked.py` to find -- the trap
+    `Defences.immune` is sitting in two files over.
+
+    Once a condition can charge a skill, the waiver needs no second verb:
+    the penalty would be a term in `skills.modifier`'s sum, which an item
+    bonus cancels arithmetically. Whether the printed "while sleeping"
+    attaches to `UNCONSCIOUS` is the judgement left for whoever builds
+    it -- the card says asleep and the engine's state is a creature that
+    cannot act."""
     c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER)
 
 
@@ -2437,11 +2521,20 @@ def i1536p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.double_damage()",),
+    todo=("c.double_damage()", "Scenery.defences"),
 )
 def i1737x1(c: Cast) -> None:
     """Doubling a roll is not a modifier: `c.bonus` adds a number and
-    `c.maximise` takes the top of the dice, and neither is twice."""
+    `c.maximise` takes the top of the dice, and neither is twice.
+
+    **The second symbol is the half that would stop the first from
+    paying.** Aiming at an object is written -- `Target(objects=True)`
+    unions `query.scenery` into the pool and the audit board places a
+    loose one -- but a `Scenery` carries no `Defences`, so there is
+    nothing for an attack against it to roll against; `p465`, `p13128`,
+    `i1145p1` and `x2_117` wait on exactly that. A doubling verb alone
+    would leave this clause unable to pay in any fight, so both are
+    named."""
 
 
 @power(
