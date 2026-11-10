@@ -409,13 +409,27 @@ def p12235(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*MARTIAL_WEAPON, Keyword.STANCE],
     attack=Attack(Pick.PRIMARY, vs=AC),
-    dropped=("c.move_before_targeting()",),
+    dropped=("Power.effect_before",),
 )
 def p12236(c: Cast) -> None:
     """The printed "before the attack, you move your speed" cannot be said:
     a burst picks its targets before the body runs, so a move taken here
     would attack whoever was adjacent before it. The punishment for
-    opportunity attacks made during that move goes with it."""
+    opportunity attacks made during that move goes with it.
+
+    **Re-pointed off `c.move_before_targeting()`, which no verb can ever
+    satisfy.** `dsl.use` builds the `Cast` *after* `_auto_targets` has
+    settled the list, and for an offered action the targets are settled
+    earlier still -- `actions.options` prices every offer with its resolved
+    targets. So the body is the one place that cannot move first, and a
+    marker naming a body verb waits for ever.
+
+    The gap is a header one, the shape `Power.check` is in: a printed line
+    the engine runs once, above the per-target loop. It has to sit earlier
+    than that field, though -- `use` rolls the check *after* the target
+    list is chosen, which is right for a gate and useless for a move that
+    decides who is in the burst.
+    """
     if c.strike():
         c.damage(c.w(2), c.attack_mod)
     if not c.first:
@@ -650,7 +664,24 @@ def p13437(c: Cast) -> None:
     """The printed size line is relative to the caster and `Target.max_size`
     is an absolute size, so the restriction is dropped. The positional
     exchange is armed rather than offered: it is an interrupt on an attack
-    aimed at me while the hold stands."""
+    aimed at me while the hold stands.
+
+    **The marker is confirmed and is the cheapest shape there is**:
+    `max_size` is a real field, enforced where it has to be -- `candidates`
+    and `_stands_right` both read it -- so what is missing is a keyword on
+    it and not a mechanism. The restriction does *not* belong in the body:
+    `Target.ident`'s own note settles that, because a body check runs
+    after the targeter has chosen, so the row is offered creatures the card
+    never allowed and spends its count on them.
+
+    One thing for whoever owns `themes/batch_c.py`: `p16573` prints the
+    same relative line -- "of your size or smaller" -- and waits on
+    `Target.filter()`, the three-row group for an arbitrary target-line
+    predicate. Two symbols for one gap, and the other two rows in that
+    group want restrictions that have nothing to do with size. They want
+    collapsing onto this one; not done here, because that file is not
+    this one.
+    """
     landed = c.strike()
     c.damage(c.w(), c.attack_mod)
     if not landed:
@@ -738,6 +769,21 @@ def p14124(c: Cast) -> None:
     charges a minor for doing it, which no header field can say: `reach`
     has an `alt`, and `attack_alt`, `damage_alt` and `requires_alt` all
     exist, and there is no second action cost.
+
+    **Confirmed, and the symbol is a group rather than this row's
+    invention.** `m1171a1` prints "standard or opportunity action" and
+    waits on the same field; `x2_142` named its own `Power.check_alt`
+    after it. `Power.action` is a single `ActionType` and nothing in the
+    header forbids a second, so this is a field that is missing and not a
+    field that was refused.
+
+    One note for whoever lands it. The other three `_alt` fields are read
+    off `branch`, which is which half of a `MeleeOrRanged` line is being
+    swung, and neither this card nor `m1171a1` is a two-range row -- so
+    the second cost is a second *way to use the card*, and the body has to
+    be able to ask which was paid. Here that decides the scope too: a free
+    action sustains the minor-cost holds below, and the minor-action half
+    sustains the move-cost ones.
     """
     held = [
         eff
@@ -768,7 +814,7 @@ def p14124(c: Cast) -> None:
     on=Trigger(
         AttackDeclared, by_me, "you use a ranged or area arcane attack power"
     ),
-    todo=("events.PowerAimed",),
+    todo=("actions.before_targeting()",),
 )
 def p14125(c: Cast) -> None:
     """Targeting is already done by the time this could fire, which is the
@@ -789,8 +835,31 @@ def p14125(c: Cast) -> None:
     `AttackDeclared`, which the engine emits per target already chosen, and
     `PowerUsed` is no earlier -- its own note in `items/implement_b` says
     "the targets are chosen by then". So a modifier laid here widens the
-    *next* use of that power and not the one that fired this. Nothing
-    announces a power after its range is known and before it is aimed."""
+    *next* use of that power and not the one that fired this.
+
+    **Re-pointed off `events.PowerAimed`, because no event can be the
+    answer.** That symbol asked for an announcement "after the range is
+    known and before the power is aimed", and there is nowhere in `use` to
+    put one: `_auto_targets` runs before `cast.used()` emits `PowerUsed`,
+    and for an action the player picks, the targets were settled before
+    `use` was entered at all -- `actions.options` enumerates every offer
+    with its resolved targets. An event minted anywhere inside `use` is
+    therefore already too late by construction, which is the one thing a
+    marker must not name.
+
+    What is missing is an **action window** between choosing a power and
+    choosing its targets. The card's free action is spent at exactly that
+    moment, and the tree has no such moment for anything.
+
+    For whoever rules on it: everything else this row needs is live, so a
+    *pre-armed* reading is writable today -- ask which arcane ranged or
+    area attack power is meant, read its range with `c.reach(ref)`, and
+    lay a gated `c.bonus("range", ...)` for the turn, which is the shape
+    `p5267` already has. Not taken here. It drops the printed Trigger for
+    a standing modifier, which this component keeps apart on purpose, and
+    it would clear a `todo=` -- so the row becomes drawable and the party
+    fixtures move. That is a ruling and a baseline write, neither of which
+    belongs in an authoring pass."""
 
 
 @power(
@@ -1193,8 +1262,27 @@ def p16001(c: Cast) -> None:
     `_saving_against`; the context carries them and the old note here was
     reading the event rather than the modifier's context.
 
-    Nothing hides a creature's bloodied state, which is the clause that
-    stays dropped."""
+    **The dropped clause stays, and the reason it used to give was the
+    wrong one.** "Nothing hides a creature's bloodied state" reads as a
+    general absence, and the opposite direction is built and working:
+    `c.considered_bloodied` lays a hold that `query.bloodied` reads, so
+    being bloodied is already a *question* rather than only arithmetic on
+    `Health`. This clause is that mechanism run backwards, which is one
+    hold and not a mechanism.
+
+    What is genuinely in the way is one thing, and it is what the symbol
+    stands for: the printed line is "**enemy** attacks never treat you as
+    bloodied", so it is asker-relative, and `query.bloodied(world, eid)`
+    takes no asker. A hold read there would hide the state from the
+    character's own "while bloodied" clauses and from an ally looking for
+    somebody to heal, which is wider than the card and in the direction
+    that costs the party. `query.kind_waived` is the shape that asks
+    whether *this* asker gets the altered answer.
+
+    The reader half is **not** in the way, and `c.considered_bloodied`'s
+    own caveat about it is now stale: the 62 hand-rolled reads it names
+    were consolidated (`items/weapon_b` records it), and `content/` is
+    down to a single direct `Health.bloodied`."""
     c.second_wind(on=c.me, cost=ActionType.FREE)
     c.bonus(
         "save", 5, kind="power", on=c.me, until=When.ENCOUNTER,
@@ -1401,7 +1489,7 @@ def p16073(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.ELEMENTAL],
-    dropped=("c.douse(zone=)",),
+    dropped=("c.no_douse(zone=)",),
 )
 def p16076(c: Cast) -> None:
     """An aura that makes enemies burn more easily and save worse against
@@ -1426,8 +1514,22 @@ def p16076(c: Cast) -> None:
     a fire-and-radiant burn is both and `ctx["dtype"] is FIRE` would miss
     it.
 
-    Still dropped: holding a fire open against being put out. `c.douse`
-    takes a thing on the board, and nothing refuses it."""
+    Still dropped: holding a fire open against being put out.
+
+    **Re-pointed off `c.douse(zone=)`, which named the wrong half of the
+    sentence.** `c.douse` is the verb that *puts a fire out* -- it checks
+    for `Scenery` and despawns it -- so a `zone=` on it would mean "put
+    out everything in an area", which is the opposite of what this card
+    says. Four rows already call it one fire at a time and none of them
+    wants widening.
+
+    What the clause asks for is a **refusal**, and the refusal has nowhere
+    to hook: `c.douse` emits a `Note` and despawns, so there is no
+    `Decision` to cancel -- which is exactly how `c.no_healing` does the
+    identical job against `Healed`. Hence `c.no_douse(zone=)`, and the
+    `zone=` is load-bearing rather than tidy: the aura is the thing the
+    permission is scoped to, and a hold laid per fire found at use time
+    would miss every fire lit afterwards."""
     zone = c.aura(2, until=When.ENCOUNTER)
     c.grants_in(zone, "save", -2, side="enemy", kind="power",
                 when=lambda ctx: bool(ctx.get("ongoing"))
@@ -1775,7 +1877,27 @@ def p16564(c: Cast) -> None:
 )
 def p16565(c: Cast) -> None:
     """Three of the four clauses have verbs; holding a monster's recharge
-    roll shut has none."""
+    roll shut has none.
+
+    **Confirmed, and not for the reason "it has none" suggests.** Recharge
+    is live end to end -- `Usage.RECHARGE` on the rows, `recharge_when` for
+    the printed condition, `Powers.recharging` for what came back up -- so
+    this is not a mechanism nobody built.
+
+    It is that there is no moment to refuse. `c.no_healing` does the
+    identical job by watching `Healed`, which is a `Decision`, and
+    cancelling it; `PowerRecharged` is a plain notification and it is
+    emitted *after* `Powers.restore` has already handed the row back. So
+    the work behind this symbol is to make a recharge a proposal, and
+    `PowerRecharged`'s own docstring says why that has to land on both
+    paths at once -- `actions.recharge` rolls the die, `triggers` answers
+    the printed condition, and a refusal on one of them is a row that is
+    right in half the game.
+
+    Watching `PowerRecharged` and spending the use again would read as the
+    same thing and is deliberately not written: the restore has happened
+    by then, so every card that pays out "when an enemy recharges a power"
+    would collect."""
     foe = c.trigger.attacker
     c.penalty("attack", 2, on=foe, until=When.EOTNT)
     c.grants_advantage(on=foe, to="team", until=When.EOTNT)
@@ -1803,7 +1925,20 @@ def p16565(c: Cast) -> None:
 def p16626(c: Cast) -> None:
     """The Special is `c.as_basic`, which is what "in place of a melee basic
     attack" means everywhere else. The grab's payout is armed, but nothing
-    gives a grab a sustain cost of its own."""
+    gives a grab a sustain cost of its own.
+
+    **Confirmed as a parameter, which is why the spelling matters.** The
+    sustain machinery is whole: `actions._sustaining` offers the action,
+    `When.SUSTAIN` is a rung the tree uses everywhere, and `c.on_sustain`
+    is the payout hook this row already calls. What stops it is one line
+    in `Effects.sustaining`, which lists only effects whose
+    `sustain_cost is not None` -- and `c.grab` takes `on`, `by` and `dc`
+    and sets no cost, so the hold below is never offered and the armed
+    payout cannot be reached. `c.effect(sustain=)` is where a cost goes
+    for every other sustained row; `c.grab` is the one that cannot say it.
+
+    A **standard**, not a minor, when it lands: this card is one of the
+    few that price the sustain that high."""
     if c.attack(_best(c) + 2, REF):
         c.damage("2d8", _best_mod(c))
         c.pull(1)
