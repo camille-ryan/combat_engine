@@ -1716,12 +1716,54 @@ class CheckDeclared(Event):
     A row that answers this pays at resolution rather than here: the parity
     is not known yet. `skills.modifier` puts the die face in its context
     under `natural`, so the bonus is laid now and gated on the face.
+
+    **`skill` is read back by the emitter, so a listener may change it.**
+    That is how *"you would make a Bluff check; you make an Arcana check in
+    place of it"* is said -- `c.substitute_check` writes the field and
+    `skills.check` rolls whatever it finds here, so the modifier and the
+    training follow the substitution. `dc` and `target` are **not** read
+    back: they are the caller's statement of what is being attempted.
     """
 
     actor: int
     skill: str
     dc: int
     target: int | None = None
+
+
+@dataclass
+class CheckSubstituted(Event):
+    """One skill was rolled in place of another, before the d20.
+
+    *"You make a History check in place of the knowledge check."* Six cards
+    print this and it is not a reroll and not a bonus: the attempt stands,
+    answered by a different skill's modifier.
+
+    **It exists because the swap is otherwise unobservable.** The only
+    trace a substitution leaves on the bus is that the following
+    `SkillCheck` names a different skill -- which is indistinguishable
+    from the caller having asked for that skill in the first place. So a
+    correct row reported SILENT, which is the same hole #1168 closed for
+    `c.boost_check`, and the same reason `Boosted` exists rather than the
+    bonus being left to speak for itself.
+
+    **Not `Boosted` with a `roll_kind`, deliberately.** A rider on "a
+    check you boosted" must not fire on a check you *replaced* -- one adds
+    to the creature's own skill and the other abandons it -- and after the
+    fact the only way to tell them apart is to have said which it was.
+    `_boosted`'s own docstring makes this argument for the three rolls it
+    unifies; this is the case on the other side of that line.
+
+    `was` is the skill the card stood in for, which is what a rider keyed
+    to the original attempt reads. `actor` is the creature making the
+    check, and `by` the row that substituted -- the payer, as everywhere.
+    """
+
+    actor: int
+    skill: str
+    was: str
+    by: str
+
 
 
 @dataclass

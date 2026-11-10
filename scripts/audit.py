@@ -1365,8 +1365,23 @@ DID_SOMETHING = {
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
-    "TargetAdded", "MarkHeld", "DiceRewritten",
+    "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
 }  # fmt: skip
+# `CheckSubstituted` is the twelfth and is admitted on `DiceRewritten`'s
+# argument. A row printed *"you make a History check in place of the
+# knowledge check"* changes `CheckDeclared.skill` **in place**, so the only
+# trace it leaves is that the following `SkillCheck` names a different
+# skill -- which is indistinguishable from the caller having asked for that
+# skill to begin with. `p11552` and `p9298` fired 48 out of 8 and reported
+# silent.
+#
+# What keeps it an admission and not a loosening: the event is emitted only
+# when a skill actually **changed**. The verb returns False without
+# announcing when the trigger is not a declared check, when the card's
+# `instead_of` list does not cover the check being made, and when the
+# substitute is the skill already being rolled -- so this admits "rolled a
+# different skill" rather than "was asked to and did nothing". Same line as
+# the eleventh. #1210.
 # `DiceRewritten` is the eleventh and is admitted for the reason the two
 # before it were: `c.set_damage_faces` edits `ev.amount` **in place**, so a
 # row whose entire Effect is that call changed a blow and left no moment in
@@ -5821,7 +5836,9 @@ def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: A
     from combat_engine.engine import Movement
     from combat_engine.engine.events import CheckDeclared, SkillCheck
     from combat_engine.engine.skills import SKILLS
+    from combat_engine.engine.skills import ability_check as roll_ability
     from combat_engine.engine.skills import check as roll
+    from combat_engine.engine.types import Ability
 
     declared = get(ref)
     # **`CheckDeclared` as well as `SkillCheck`, and the gate did not know
@@ -5849,6 +5866,19 @@ def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: A
             for dc in (1, 99):
                 for skill in sorted(SKILLS):
                     roll(world, roller, skill, dc)
+                    if _fired(world, ref, cursor):
+                        return True
+                # **A raw ability check as well, which this pass did not
+                # roll.** `skills.ability_check` announces under the key
+                # `ability:<name>` -- deliberately, so no skill key can
+                # collide with it -- and nothing else in the harness rolls
+                # one, so a row triggered on `my_check("ability:int")`
+                # reported UNUSED while 68 skill checks went past it.
+                # `p9349` is that row. Same staleness as the `CheckDeclared`
+                # comment above and for the same reason: the harness knows
+                # one of the two things that announce a check. #1210.
+                for ability in Ability:
+                    roll_ability(world, roller, ability, dc)
                     if _fired(world, ref, cursor):
                         return True
     finally:

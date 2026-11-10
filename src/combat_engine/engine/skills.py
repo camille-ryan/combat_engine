@@ -207,7 +207,12 @@ def ability_check(
     # Announced here too, under the same `ability:<name>` key: a row that
     # wants "any check you are about to make" must hear this one, and
     # `f2804`'s own predicate is what narrows to a skill. #693.
-    world.bus.emit(CheckDeclared(actor=eid, skill=key, dc=dc))
+    declared = world.bus.emit(CheckDeclared(actor=eid, skill=key, dc=dc))
+    # Read back, for `check()`'s reason. Here it can change the *kind* of
+    # check: a row standing History in for an Intelligence check turns the
+    # raw ability roll into a skill roll, and `finish` below branches on
+    # that rather than adding an ability modifier to a skill.
+    key = declared.skill
     natural = world.rng.d20().total
     announced = SkillCheck(
         actor=eid,
@@ -220,6 +225,16 @@ def ability_check(
     )
 
     def finish(ev: SkillCheck) -> None:
+        if not ev.skill.startswith("ability:"):
+            # **A skill was stood in for the ability check**, so this is a
+            # skill check now and `fixed` is the wrong base -- it is this
+            # ability's modifier, and the substitute skill has its own
+            # (plus any training). `c.substitute_check` is the only route
+            # here. Half level is inside `modifier`, so it is not lost.
+            ev.bonus += modifier(world, eid, ev.skill, None, ev.natural)
+            ev.total = ev.natural + ev.bonus
+            ev.success = ev.dc <= 0 or ev.total >= ev.dc
+            return
         extra = 0
         mods = world.get(eid, Mods)
         if mods is not None:
@@ -310,7 +325,23 @@ def check(
     # **Before the die, which is the whole point of the event.** A row that
     # has to call odd or even cannot be offered the choice by `SkillCheck`:
     # that one carries `natural` already. #693.
-    world.bus.emit(CheckDeclared(actor=eid, skill=skill, dc=dc, target=target))
+    declared = world.bus.emit(
+        CheckDeclared(actor=eid, skill=skill, dc=dc, target=target))
+    # **Read back, because a row is invited to change it.** `Bus`'s own
+    # docstring requires this -- *"fields a listener is invited to change:
+    # read them back off the event rather than from the local you passed
+    # in"* -- and this emitter discarded the answer, so `CheckDeclared` was
+    # announced and nothing a listener did to it meant anything. That is
+    # what made "you would make an Acrobatics check; make a Streetwise
+    # check in place of it" unsayable: three rows said so in their
+    # docstrings (*"`CheckDeclared` is a plain `Event` with nothing to
+    # answer"*) and were describing this line.
+    #
+    # Only `skill` is read back, deliberately. `dc` and `target` are the
+    # caller's statement of what is being attempted and no card changes
+    # them from this window; widening that is a separate question and the
+    # ones that move a DC do it through `Mods`.
+    skill = declared.skill.lower()
     natural = world.rng.d20().total
     announced = SkillCheck(
         actor=eid,

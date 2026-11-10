@@ -198,17 +198,28 @@ def p11537(c: Cast) -> None:
         my_check("bluff", "diplomacy", "intimidate"),
         "you make a bluff, a diplomacy, or an intimidate check and dislike the result",
     ),
-    dropped=("c.substitute_check()",),
+    dropped=("c.reroll_check(skill=)",),
 )
 def p11538(c: Cast) -> None:
-    """Answering a bluff check is an ordinary reroll and plays. Answering the
+    """*"You make a Bluff check and use either result."*
+
+    Answering a bluff check is an ordinary reroll and plays. Answering the
     other two is not: the card rolls a *bluff* check in place of the one
     that was made, and `c.reroll_check` rerolls the same skill. The
     difference is not a bonus either -- `c.reroll_check(bonus=)` lands on
     `ev.bonus`, so a modifier delta would still apply when `keep="best"`
     kept the original roll.
 
-    `p16435` waits on the same symbol and says the same thing.
+    **Not `c.substitute_check`, which now exists and does not serve this.**
+    That verb answers `CheckDeclared`, before the d20 -- and this card
+    triggers on *"you make a check and dislike the result"*, which is after
+    it. Rolling a different skill once the first result is known, and
+    keeping either, is the reroll family's job with a skill argument. The
+    marker is re-pointed so this row does not report ready on #1209's
+    landing: one symbol serving two needs is what made twelve rows look
+    done when a third of one landed.
+
+    `p16435` waits on the same thing and is the `keep="new"` half of it.
     """
     if getattr(c.trigger, "skill", "") == "bluff":
         c.reroll_check(keep="best")

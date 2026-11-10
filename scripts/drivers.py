@@ -10819,6 +10819,161 @@ def conceal_in(out: Result) -> None:
              " same fault as the per-creature version")
 
 
+def substitute_check(out: Result) -> None:
+    """One skill rolled in place of another, with the modifier following it.
+
+    Six cards print *"you make an X check in place of the Y check"*, and
+    before #1209 none could: `skills.check` announced `CheckDeclared` and
+    discarded the answer, so the field a row is invited to change was read
+    from a local instead.
+
+    **The load-bearing assertion is the bonus, not the label.** Swapping the
+    skill is visible either way -- the reported `skill` changes -- and that
+    is exactly what made five existing rows look implemented while being
+    wrong: they swap in `Window.AFTER`, where `finish` has already totalled
+    the bonus from the old skill, so the check is relabelled and the number
+    is the one the card says not to use (#1211). So every arm here checks
+    the *number* against an independently-measured `skills.modifier`, and a
+    rule that only checked the name would pass for either implementation --
+    the control that cannot tell two implementations apart.
+    """
+    import audit
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import (
+        CheckDeclared,
+        CheckSubstituted,
+        Event,
+        SkillCheck,
+        Window,
+    )
+    from combat_engine.engine.skills import SKILLS, CheckResult, ability_check, modifier
+    from combat_engine.engine.skills import check as roll
+    from combat_engine.engine.types import Ability
+
+    # Real types, not `-> tuple`: an erased annotation would let the
+    # bonus assertions below compare against anything at all.
+    def play(
+        sub: str | None, *, guard: str = "", skill: str = "acrobatics",
+        ability: Ability | None = None, event: type[Event] = CheckDeclared,
+        window: Window = Window.AFTER, ref: str = "driver",
+    ) -> tuple[CheckResult, bool | None, list[CheckSubstituted], World, int]:
+        world, me, _ = audit.board("p11552", 1)
+        got: dict[str, bool] = {}
+
+        def swap(ev: Event) -> None:
+            if sub is None:
+                return
+            c = Cast(world=world, me=me, ref=ref)
+            c.trigger = ev
+            got["ok"] = c.substitute_check(sub, instead_of=guard)
+
+        world.bus.on(event, swap, window=window)
+        cur = len(world.bus.log)
+        res = (ability_check(world, me, ability, 15) if ability is not None
+               else roll(world, me, skill, 15))
+        said = [e for e in world.bus.log[cur:]
+                if isinstance(e, CheckSubstituted)]
+        return res, got.get("ok"), said, world, me
+
+    # -- the modifiers this rule reasons about, measured not assumed -------
+    _, _, _, w0, m0 = play(None)
+    acro = modifier(w0, m0, "acrobatics")
+    street = modifier(w0, m0, "streetwise")
+    out.that(acro != street,
+             f"the two skills this rule compares have different modifiers"
+             f" ({acro} vs {street}) -- if they were equal every assertion"
+             f" below would pass for a verb that changed nothing")
+
+    # -- 1. the control: no substitution ----------------------------------
+    base, _, said, _, _ = play(None)
+    out.that(base.skill == "acrobatics" and base.bonus == acro,
+             f"an unanswered check rolls what the caller asked for,"
+             f" {base.skill!r} at {base.bonus}")
+    out.that(said == [], "and announces no substitution")
+
+    # -- 2. the substitution, and the BONUS follows ------------------------
+    sub, ok, said, _, _ = play("streetwise")
+    out.that(ok is True, "the verb reports that it substituted")
+    out.that(sub.skill == "streetwise", "the check is rolled as the new skill")
+    out.that(sub.bonus == street,
+             f"**and carries the new skill's modifier, {street}** -- not"
+             f" {acro}, which is what swapping on `SkillCheck` in"
+             f" `Window.AFTER` leaves behind")
+    out.that(len(said) == 1 and said[0].was == "acrobatics"
+             and said[0].skill == "streetwise" and said[0].by == "driver",
+             "and says so once, naming the skill stood aside and the payer")
+    out.that(sub.natural == sub.total - sub.bonus,
+             "the d20 is untouched: the substitution replaces which skill"
+             " answers, not the luck")
+
+    # -- 3. the guard refuses a check the card does not name ---------------
+    held, okh, saidh, _, _ = play("streetwise", guard="athletics,perception")
+    out.that(okh is False, "a card naming which checks it replaces refuses"
+                           " one it does not name")
+    out.that(held.skill == "acrobatics" and held.bonus == acro,
+             "and leaves the check entirely alone, number included")
+    out.that(saidh == [], "and announces nothing, so the ledger cannot"
+                          " credit a refusal as work")
+
+    # -- 4. the guard admits one it does name ------------------------------
+    let, okl, _, _, _ = play("streetwise", guard="acrobatics,athletics")
+    out.that(okl is True and let.skill == "streetwise"
+             and let.bonus == street,
+             "a named check is substituted, modifier and all")
+
+    # -- 5. an ability check stops being one -------------------------------
+    _, _, _, w1, m1 = play(None)
+    hist = modifier(w1, m1, "history")
+    ab, oka, _, _, _ = play("history", ability=Ability.INT)
+    out.that(oka is True and ab.skill == "history",
+             "a raw ability check can be answered by a skill")
+    out.that(ab.bonus == hist,
+             f"and totals the skill's modifier ({hist}), not the ability's"
+             f" -- `ability_check`'s resolve branches on the `ability:`"
+             f" prefix, and without that branch it would add an"
+             f" Intelligence modifier to a History check")
+    abg, okg, _, _, _ = play("history", ability=Ability.INT,
+                             guard="ability:int")
+    out.that(okg is True and abg.bonus == hist,
+             "and the `ability:<name>` key is what narrows a card to a raw"
+             " ability check")
+
+    # -- 6. it refuses outside a declared check ----------------------------
+    late, okn, saidn, _, _ = play("streetwise", event=SkillCheck)
+    out.that(okn is False,
+             "the verb refuses a `SkillCheck`, which is the event five rows"
+             " wrongly answer -- by then the die is thrown and, in the"
+             " window a FREE row gets, the bonus is already settled")
+    out.that(late.skill == "acrobatics" and late.bonus == acro,
+             "so nothing is relabelled and no wrong number is reported."
+             " **This is the arm that separates the fix from the bug**: a"
+             " verb that answered `SkillCheck` would report"
+             f" skill='streetwise' with a bonus of {acro}")
+    out.that(saidn == [], "and announces nothing")
+
+    # -- 7. a no-op substitution is not work -------------------------------
+    same, oks, saids, _, _ = play("acrobatics")
+    out.that(oks is False and saids == [],
+             "substituting a skill for itself announces nothing, which is"
+             " what keeps the ledger admission honest -- it credits"
+             " 'rolled a different skill', never 'was asked to'")
+    out.that(same.bonus == acro, "and the check is unchanged")
+
+    # -- 8. a misspelled skill raises rather than doing nothing ------------
+    raised = False
+    try:
+        play("knitting")
+    except ValueError:
+        raised = True
+    out.that(raised,
+             "an unknown skill raises: substituting nothing would read"
+             " exactly like a row that worked, which is this component's"
+             " signature failure")
+    out.that("knitting" not in SKILLS and "streetwise" in SKILLS,
+             "and the check is against the live skill list, so the arm"
+             " above cannot pass by the list being empty")
+
+
 def rerolled(out: Result) -> None:
     """Nothing announced that a roll was a reroll, and 18 rows ride on one.
 
@@ -71494,6 +71649,9 @@ DRIVERS = {
                     "a named row moves you further, from outside it"),
     "conceal_in": (conceal_in,
                    "a zone that conceals whoever stands in it"),
+    "substitute_check": (substitute_check,
+                         "one skill rolled in place of another, before the"
+                         " die, with the modifier following it"),
     "rerolled": (rerolled,
                  "a roll announced as a second one, and gateable as one"),
     "boost_roll": (boost_roll,

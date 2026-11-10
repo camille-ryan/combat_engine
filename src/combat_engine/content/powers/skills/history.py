@@ -122,14 +122,16 @@ def _enemy_closed_in(world: World, me: int, ev: Event) -> bool:
         my_check(*_OTHERS),
         "you would make a knowledge check with another skill",
     ),
-    todo=("c.substitute_check()",),
+
 )
 def p11552(c: Cast) -> None:
-    """The trigger is sayable and the Effect is not. Standing one skill's
-    check in for another's is the whole card: the reroll family all roll the
-    same skill again, and `c.replace_roll` takes a face rather than a
-    different skill's modifiers. `p9298` and `p9349` wait on the same verb,
-    and so does `p16435`."""
+    """*"You make a History check in place of the knowledge check."*
+
+    The trigger already narrows to the other four knowledge skills, so the
+    guard would be a second copy of `_OTHERS` and is left off -- the card
+    narrows by its trigger, which is what `instead_of=""` means.
+    """
+    c.substitute_check("history")
 
 
 @power(
@@ -191,14 +193,17 @@ def p12169(c: Cast) -> None:
         my_check("ability:int"),
         "you would make an ability check",
     ),
-    todo=("c.substitute_check()",),
 )
 def p9349(c: Cast) -> None:
-    """`skills.ability_check` announces a raw ability check under the key
-    `ability:<name>`, deliberately so a row wanting "any check" can hear it,
-    so the trigger is exact. The Effect is `p11552`'s gap -- a skill rolled
-    in place of something else -- and this is the ability-check side of it
-    rather than a second gap."""
+    """*"You make a History check in place of the Intelligence check."*
+
+    An ability check is announced under the `ability:<name>` key, so the
+    guard names that rather than a skill. The substitution turns the raw
+    ability roll into a skill roll and `skills.ability_check` totals
+    History's modifier for it -- Intelligence's would have been the wrong
+    number, and is what made this unsayable rather than merely unwritten.
+    """
+    c.substitute_check("history", instead_of="ability:int")
 
 
 @power(

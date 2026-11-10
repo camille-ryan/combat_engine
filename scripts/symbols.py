@@ -456,7 +456,8 @@ CATEGORIES: dict[str, dict] = {
             ]),
             ("rolling and the trigger", [
                 "ability_check", "check", "opportunity", "ranged", "roll",
-                "struck_by", "struck_by_property", "struck_with", "trigger",
+                "struck_by", "struck_by_property", "struck_with",
+                "substitute_check", "trigger",
             ]),
         ],
     },
@@ -779,14 +780,25 @@ READERS: dict[str, list[str]] = {
         "turn_takers",
     ],
     "where, and how far": [
+        # `terrain` is not a distance, and it is here because it is the one
+        # question about *where the fight is* rather than where anybody
+        # stands in it -- "is this fight underwater". A section of its own
+        # would hold one entry. #1209.
         "adjacent", "charging", "distance_between", "hindering_at",
         "kept_away_from", "leash_of", "line_of_effect",
         "moved_this_action", "moving_as", "on_the_ground", "prefers_range",
         "ran_this_action", "range_profile",
-        "sealed", "speed", "squares", "telepathy_of",
+        "sealed", "speed", "squares", "telepathy_of", "terrain",
     ],
+    # **"seeing" is the common case, not the whole section.** `can_hear` is
+    # here because it is the same question asked of a different sense, and
+    # the alternative was a one-entry section; the two are not symmetric,
+    # though, and that is deliberate rather than an oversight -- hearing is
+    # not blocked by cover or concealment, so it reads DEAFENED and `sealed`
+    # and nothing else. #1209.
     "seeing and being seen": [
-        "blinded", "concealment_of", "cover_between", "cover_granters",
+        "blinded", "can_hear", "concealment_of", "cover_between",
+        "cover_granters",
         "concealment_waived", "cover_waived", "has_sense", "hidden_from",
         "light_concealment",
         "light_level", "revealed", "sees_in", "sees_invisible",

@@ -102,11 +102,15 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.telepathy_of(world: 'World', eid: 'int') -> 'int'`
   - How far this creature's telepathy reaches, in squares. 0 for none.
+- `query.terrain(world: 'World', word: 'str') -> 'bool'`
+  - Does the board declare that word? The reading behind `c.terrain`.
 
 ## seeing and being seen
 
 - `query.blinded(world: 'World', eid: 'int') -> 'bool'`
   - Can this creature see at all?
+- `query.can_hear(world: 'World', listener: 'int', speaker: 'int') -> 'bool'`
+  - Can `listener` hear `speaker`? Three cards print it that way.
 - `query.concealment_of(world: 'World', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'Cover'`
   - How hard this creature is to see, as an attack penalty.
 - `query.concealment_waived(world: 'World', attacker: 'int', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`

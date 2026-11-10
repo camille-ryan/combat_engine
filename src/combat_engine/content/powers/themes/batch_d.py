@@ -1798,11 +1798,23 @@ def p16434(c: Cast) -> None:
         "you fail an Acrobatics, Athletics, Endurance, or Perception check "
         "while underground"
     ),
-    todo=("c.substitute_check()",),
+    todo=("c.reroll_check(skill=)",),
 )
 def p16435(c: Cast) -> None:
-    """Not a reroll: a different skill is rolled and its result stands in
-    for the failed one. `c.reroll_check` re-rolls the same skill."""
+    """*"You make a Dungeoneering check and use its result instead."*
+
+    A different skill is rolled and its result stands in for the failed
+    one. `c.reroll_check` re-rolls the same skill, so the gap is a skill
+    argument to it -- `keep="new"` here, against `p11538`'s "either
+    result", which is the same verb at `keep="best"`.
+
+    **Not `c.substitute_check`.** That verb landed in #1209 and answers
+    `CheckDeclared`, before the die; this card triggers on *"you fail a
+    check"*, which is after it. The marker is re-pointed rather than left
+    naming a symbol that now exists, which would report this row ready.
+    The underground half is a second gap and `c.terrain` has no word for
+    it either -- see `p11597`.
+    """
 
 
 @power(

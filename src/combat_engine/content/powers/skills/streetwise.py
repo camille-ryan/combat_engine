@@ -200,23 +200,24 @@ def p9341(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.substitute_check()", "story.terrain_words"),
+    todo=("story.terrain_words",),
 )
 def p11597(c: Cast) -> None:
-    """Two gaps, and neither is the skill being unrolled.
+    """One gap now, and it is the place rather than the substitution.
 
-    All three of the named skills are rolled in this tree, so "no fight
-    checks these" would be false -- the row is held by the **substitution**,
-    which nothing can express: `skills.check` is given its skill by the
-    caller and `CheckDeclared` is a plain `Event` with nothing to answer.
-    And the clause is narrowed to an urban environment, which `c.terrain`
-    has no word for and no board declares.
+    The substitution half is written: `c.substitute_check` answers
+    `CheckDeclared` and `skills.check` reads the skill back off it, so
+    streetwise' modifier is what gets rolled. #1209.
 
-    The substitution symbol is `c.substitute_check()`, which four other
-    rows in this wave already wait on, rather than a second name for the
-    same gap -- a symbol serving one need under two spellings makes
-    `blocked.py --group` report two families and makes neither go green
-    when the verb lands."""
+    What is left is the printed narrowing to an urban environment, which
+    `c.terrain` has no word for and no board declares -- so the gate would
+    be a word nothing sets, which is indistinguishable from a correct gate
+    for as long as `World.terrain` stays empty (#539). The substitution is
+    written out below the marker rather than left unsaid, so what lands
+    when the word exists is one line and not a re-reading of the card.
+    """
+    # c.substitute_check("streetwise",
+    #                    instead_of="acrobatics,athletics,perception")
 
 
 @power(

@@ -163,15 +163,18 @@ def p16489(c: Cast) -> None:
         my_check("bluff", "diplomacy", "intimidate"),
         "you would make a social check",
     ),
-    todo=("c.substitute_check()",),
+
 )
 def p9298(c: Cast) -> None:
-    """The trigger is declarable -- `CheckDeclared` is announced before the
-    d20 and carries the skill -- and the Effect is not. Rolling one skill
-    *in place of* another is the whole card and no verb says it: the reroll
-    family all roll the same skill again, and `c.replace_roll` takes a face
-    rather than a different skill's modifiers. `p16435` waits on the same
-    thing."""
+    """*"You make an Arcana check in place of the Bluff, Diplomacy, or
+    Intimidate check."*
+
+    The guard repeats the three the card names. It is redundant against
+    this row's own trigger and kept anyway: it is the clause that makes the
+    row refuse if the trigger is ever widened, which is the mistake a
+    printed list of three is most likely to attract.
+    """
+    c.substitute_check("arcana", instead_of="bluff,diplomacy,intimidate")
 
 
 @power(

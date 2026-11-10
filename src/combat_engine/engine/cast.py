@@ -15768,6 +15768,82 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         return _passive(self.world, self.me if of is None else of, skill)
 
+    def substitute_check(self, skill: str, *, instead_of: str = "") -> bool:
+        """Roll the check that was just declared as a different skill.
+
+        *"You would make a Bluff, a Diplomacy, or an Intimidate check;
+        you make an Arcana check in place of it"* -- the attempt is the
+        same attempt, answered by a different skill's modifier.
+
+        **It answers `CheckDeclared`, not `SkillCheck`, and the difference
+        is the whole verb.** `CheckDeclared` is announced *before* the d20;
+        `skills.check` then reads the skill back off it and rolls that one,
+        so the modifier, the training and every `skill:<name>` mod follow
+        the substitution because all of them are keyed on the skill being
+        rolled. Answering `SkillCheck` instead cannot work for the rows
+        that print *"you would make"*: by then the die is thrown and, in
+        the `Window.AFTER` that `FREE` and `NONE` rows get, `finish` has
+        already totalled the bonus from the **old** skill -- which
+        relabels the check and leaves the number wrong. Measured: an
+        acrobatics check swapped to streetwise in that window reports
+        `skill='streetwise'` with acrobatics' `+2` instead of streetwise's
+        `-2`. Five rows in the tree do exactly that today; see the issue
+        this verb was filed under.
+
+        **The d20 is not affected either way**, because it has not been
+        rolled yet. A card that says to roll *again* after seeing a result
+        -- *"you make a check and dislike the result"* -- is a different
+        mechanic and wants a reroll that changes skill; `p11538` and
+        `p16435` are those, and this verb does not pretend to them.
+
+        An Intelligence check substituted to History stops being an
+        ability check: `skills.ability_check`'s resolve branches on the
+        `ability:` prefix and totals the skill's modifier instead, so
+        `p9349` gets History's number and not Intelligence's.
+
+        `instead_of` is an optional guard -- a comma-separated list of the
+        checks the card names, refusing to fire on another. Pass the
+        `ability:<name>` key to narrow to a raw ability check. Empty means
+        the card narrows by its trigger alone.
+
+        Returns False when there is no declared check to change, which is
+        every use outside a `CheckDeclared` trigger -- `c.boost_check`'s
+        contract, for the same reason.
+        """
+        from .events import CheckDeclared, CheckSubstituted
+        from .skills import SKILLS
+
+        ev = self.trigger
+        if not isinstance(ev, CheckDeclared):
+            return False
+        asked = skill.strip().lower()
+        # **Refused rather than ignored.** A misspelled skill would
+        # substitute nothing and read exactly like a row that worked, which
+        # is this component's signature failure.
+        if asked not in SKILLS:
+            raise ValueError(
+                f"{self.ref}: c.substitute_check({skill!r}) is not a skill."
+                f" Known: {', '.join(sorted(SKILLS))}."
+            )
+        if instead_of:
+            allowed = {w.strip().lower() for w in instead_of.split(",") if w.strip()}
+            if ev.skill.lower() not in allowed:
+                return False
+        was = ev.skill
+        if was.lower() == asked:
+            return False
+        ev.skill = asked
+        # **Announced, because the swap is otherwise invisible.** The only
+        # other trace is that the next `SkillCheck` names a different
+        # skill, which reads exactly like the caller having asked for that
+        # one -- so without this a correct row reports SILENT. `Note` will
+        # not do it: it carries no `by`, so `audit`'s DID_SOMETHING refuses
+        # it and the row stays silent. Same hole, same fix as #1168.
+        self.world.bus.emit(CheckSubstituted(
+            actor=int(getattr(ev, "actor", self.me)),
+            skill=asked, was=was, by=self.ref))
+        return True
+
     def boost_check(self, bonus: int) -> bool:
         """Add to the triggering skill check, after the die is already down.
 
