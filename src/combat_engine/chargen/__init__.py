@@ -3627,12 +3627,25 @@ def _stock_consumables(gear: Gear | None, level: int, rng: Random) -> None:
     is spent rather than taken off. That is the second of `#877`'s two
     questions, which was mine rather than Camille's.
 
+    **Both one-use categories, which took a second ruling.** The first said
+    "potions" and this drew `Consumable` alone, 118 items. Measured against
+    the ten rows the change was for, **seven of them are explicitly about
+    *alchemical* items** -- "an alchemical item in hand", "+2 to attack
+    rolls with alchemical items" -- so the narrow reading unblocked three at
+    most. Camille, asked again with that count, 2026-11-10:
+
+      > *"ah, random from any consumable"*
+
+    So the pool is `Consumable` **and** `Alchemical Item`: 193 items, still
+    two of them per character, so nobody is stronger than the first ruling
+    intended.
+
     **Level or lower, off `item_step`.** An item's level lives there and not
     on `item`, so the join is the same one `treasure` makes. Measured over
-    the corpus: 7 consumables are available at level 1, 18 by level 3, 47 by
-    level 5 and all 118 by level 10 -- so the pool is never empty, and
-    every one of the 118 has at least one declared block, meaning a dealt
-    potion is never an inert object.
+    the corpus: 18 of the 193 are available at level 1, 103 by level 5, all
+    193 by level 10 -- so the pool is never empty, and **every one of the
+    193 has at least one declared block**, meaning a dealt item is never an
+    inert object.
 
     **Sampled without replacement when the pool allows it.** Two of the same
     potion is a legitimate hand and `random.sample` would refuse a pool of
@@ -3651,7 +3664,8 @@ def _stock_consumables(gear: Gear | None, level: int, rng: Random) -> None:
         row["ref"]
         for row in game().execute(
             "SELECT DISTINCT i.ref FROM item i JOIN item_step s ON s.ref = i.ref "
-            "WHERE i.category = 'Consumable' AND s.level <= ? ORDER BY i.ref",
+            "WHERE i.category IN ('Consumable', 'Alchemical Item') "
+            "AND s.level <= ? ORDER BY i.ref",
             (level,),
         )
     ]
