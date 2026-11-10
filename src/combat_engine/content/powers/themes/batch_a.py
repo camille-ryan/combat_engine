@@ -152,12 +152,27 @@ def p12400(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=PSIONIC,
-    todo=("c.can_hear()",),
+    todo=("c.hear_from(square)",),
 )
 def p12401(c: Cast) -> None:
-    """Hearing from a square you do not occupy. Sound is not a thing the
-    engine has at all -- `c.can_hear()` is the symbol one feat already waits
-    on -- so there is nothing here to write half of."""
+    """Hearing from a square you do not occupy.
+
+    **Re-aimed off `c.can_hear()`, which has landed and is not this.** That
+    verb asks *whether a creature can hear another* -- the "one ally who can
+    hear you" phrase three other rows print -- and `query.can_hear` answers
+    it off `Condition.DEAFENED` and `query.sealed`. This card asks something
+    else: it moves **where the listening happens** to a square the creature
+    does not occupy.
+
+    One symbol was standing for two needs, which is what
+    `content/CLAUDE.md` forbids -- and it bit in the usual direction: when
+    `c.can_hear` landed, `todo.py` reported this row ready, because a marker
+    cannot go red correctly for two different gaps.
+
+    What this one wants is an origin for a sense, which the engine has a
+    precedent for and not a facility: `Cast.cast_from` lends a *power's*
+    origin and `dsl.measured_from` reads it, so the shape is known. Nothing
+    relocates a sense."""
 
 
 @power(

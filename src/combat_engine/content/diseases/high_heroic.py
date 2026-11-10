@@ -137,8 +137,7 @@ def x5_93(c: Cast) -> None:
 
 
 @power("x5_22", cls="disease", level=10, usage=AT_WILL,
-       action=ActionType.NONE, target=NO_TARGET, reach=Melee(0),
-       dropped=("c.kill(dead=)",))
+       action=ActionType.NONE, target=NO_TARGET, reach=Melee(0),)
 def x5_22(c: Cast) -> None:
     """Two occasions per stage, and the second one is the same on both:
     being healed. Stage 2 adds becoming bloodied, stage 3 widens that to any
@@ -154,12 +153,41 @@ def x5_22(c: Cast) -> None:
     "Each time" is the trigger and not a licence to stack: the printed rule
     is one burn of a type at a time, which `_burns` keeps to.
 
-    "If this damage reduces the target to 0 hit points, it dies" is dropped.
-    `c.kill` is a reduction to 0, which for a character is dying with death
-    saves still to make; nothing says a creature at 0 is dead outright
-    instead.
+    **"If this damage reduces the target to 0 hit points, it dies" is
+    written now.** `c.kill` alone is a reduction to 0, which for a character
+    is dying with death saves still to make -- `resolve._check_down` dies
+    only when `hp <= health.dying_at`, and that is negative for a character.
+    `c.kill(dead=True)` sets hit points to `dying_at` instead, so the one
+    existing path to `resolve._die` is taken.
+
+    **Gated on the burn being what did it**, which is the whole of "this
+    damage": a sword finishing somebody who merely *has* the disease leaves
+    them dying as usual.
+
+    The discriminator is `DamageApplied.detail` -- *"what dealt it, a power
+    ref where one did"* -- and **not** `ev.power`, which does not exist on
+    this event. A first draft read `ev.power` through `getattr` with a
+    default, so the gate was permanently true and the clause could never
+    have fired: `engine/CLAUDE.md`'s "read the event before reading a field
+    off it, a `getattr` with a default hides the mistake", exactly.
     """
+    me = c.me
     lost_surges(c, 1)
+
+    def dies_from_the_burn(ev: DamageApplied) -> None:
+        """The burn, and only the burn, kills outright."""
+        if ev.target != me or ev.detail != c.ref:
+            return
+        if DamageType.NECROTIC not in (getattr(ev, "dtypes", None) or
+                                       (getattr(ev, "dtype", None),)):
+            return
+        from combat_engine.engine.components import Health
+
+        health = c.world.get(me, Health)
+        if health is not None and health.hp <= 0:
+            c.kill(on=me, dead=True)
+
+    c.watch(DamageApplied, dies_from_the_burn, until=When.ENCOUNTER, on=me)
 
     if c.stage == 2:
         def bloodied_burns(ev: Bloodied) -> None:

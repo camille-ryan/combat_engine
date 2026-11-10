@@ -430,7 +430,7 @@ def artificer_transfer(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE_HEAL,
-    todo=("c.restore_per_day(ref)", "chargen.deal_build_option()"),
+    todo=("chargen.deal_build_option()",),
 )
 def artificer_infusions(c: Cast) -> None:
     """The budget the class's three infusion cards draw on, and the swap

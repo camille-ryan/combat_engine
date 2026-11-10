@@ -23040,9 +23040,23 @@ def a_reroll_floor_can_be_narrowed_by_the_victim(out: Result) -> None:
              "f1969 no longer waits on a parameter that has landed -- the"
              " control against the symbol collapsing back onto `tries=`",
              f"{waiting}")
-    out.that(waiting == ("cast.reroll_pick_honours_when",),
-             "and names the behaviour that is absent rather than the two"
-             " parameters that are present, which `todo.py` would reject",
+    # **And now it waits on nothing, which is the third state this
+    # assertion has had.** It asserted `c.reroll_ones(tries=)`, then
+    # `cast.reroll_pick_honours_when` after #703 closed the first -- and
+    # #818 closed the second by passing `ctx=seen` to all three
+    # `reroll_damage_pick#n` count keys, so `c.reroll_ones(below=, pick=,
+    # when=)` composes and the clause is written.
+    #
+    # Kept rather than deleted, and still two-sided: the intent was always
+    # "the symbol must not quietly collapse onto one that landed", and an
+    # empty tuple is the strongest form of that. A row that regrows a
+    # marker here has either lost its clause or re-pointed at something
+    # that already exists, and both want a human.
+    out.that(waiting == (),
+             "and now waits on nothing at all: #818 made"
+             " `cast.reroll_pick_honours_when` true, the clause is written,"
+             " and the marker came off -- so this is the assertion that"
+             " notices if a marker ever comes back",
              f"{REGISTRY['f1969'].unfinished}")
 
 def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:
@@ -31223,22 +31237,55 @@ def a_damage_die_is_pinned(out: Result) -> None:
              f"both {both:.2f}, reroll alone {looped:.2f},"
              f" floor alone {floored:.2f}")
 
-    # -- f2162's own body, and its keyword gate ---------------------------
-    def row_mean(ref: str, tries: int = 800) -> float:
+    # -- f2162's own body, its keyword gate, and its oath gate ------------
+    #
+    # **This rule used to pin a bug and the card is what settled it.** It
+    # posed no oath and asserted the floor applied anyway -- so it passed
+    # while `f2162` floored the dice of *every* weapon attack. The card:
+    #
+    #   "When you attack a target of your p3069 with a weapon attack,
+    #    treat all rolls of a 1 or 2 on the damage dice as though the
+    #    result were a 3 on the die."
+    #
+    # "A target of your p3069" is the avenger's oath, so the old behaviour
+    # was strictly stronger than print and this assertion was what held it
+    # there. `scripts/CLAUDE.md`: when a check goes red, say whether the
+    # code or the check's definition is wrong. It was the definition.
+    #
+    # Posed both ways now, which is the control it never had: an oath makes
+    # the floor apply, and its absence makes it not.
+    from combat_engine.engine.durations import When as _When
+
+    def row_mean(ref: str, tries: int = 800, *, oath: bool = True) -> float:
         world, me, _ = audit_board(NEUTRAL, 1)
         world.rng.loaded = None
+        victim = enemies(world, me)[0]
+        if oath:
+            # The hold `oath.sworn` reads: labelled, and sourced from the
+            # avenger. `c.suffering` substring-matches the same label.
+            world.effects.apply(
+                victim, me, _When.ENCOUNTER, label="oath of enmity",
+            )
         c = Cast(world=world, me=me, ref="f2162")
-        c.target = me
+        c.target = victim
         REGISTRY["f2162"].body(c)
         roller = Cast(world=world, me=me, ref=ref)
-        roller.target = me
+        roller.target = victim
         return sum(roller._roll_damage("3d6") for _ in range(tries)) / tries
 
     on_weapon = row_mean(NEUTRAL)
     on_arcane = row_mean("p10069")
+    unsworn = row_mean(NEUTRAL, oath=False)
     out.that(on_weapon - plain > 1.0,
-             "f2162's own body floors the dice of a **weapon** attack",
+             "f2162's own body floors the dice of a **weapon** attack"
+             " against a creature under its oath",
              f"{plain:.2f} -> {on_weapon:.2f}")
+    out.that(abs(unsworn - plain) < 0.6,
+             "and leaves a creature **not** under the oath alone -- the"
+             " printed narrowing is 'a target of your p3069', and this is"
+             " the control whose absence let the row floor every weapon"
+             " attack in the game",
+             f"unsworn {unsworn:.2f} against a plain {plain:.2f}")
     out.that(abs(on_arcane - plain) < 0.6,
              "and leaves a power without the keyword alone, which is the"
              " `keyword=` half of the printed sentence",
@@ -69781,6 +69828,41 @@ def kill_outright(out: Result) -> None:
         " a `dies_at_zero=True` victim would have passed vacuously",
         f"default (alive={living}, dying={dying}) against"
         f" dead=True (alive={living2}, dying={dying2})",
+    )
+
+    # **The state the verb's one caller is actually in, and it was refused.**
+    # `c.kill`'s guard was `hp <= 0 -> return False`, which is right for an
+    # ordinary kill -- a second blow must not re-kill -- and wrong for
+    # `dead=True`: *"if this damage reduces the target to 0 hit points, it
+    # dies"* is a sentence about a creature that has **just** reached 0. So
+    # the parameter refused exactly the case it was built for, and `x5_22`
+    # could not fire the clause. Found by probing the row, not by this rule,
+    # which is why the assertion exists now.
+    world, me, _ = _board()
+    downed = next(a for a in allies(world, me) if a != me)
+    low = world.need(downed, Health)
+    low.dies_at_zero = False
+    low.hp = 0
+    saw: list[str] = []
+    world.bus.on(Died, lambda ev: saw.append("Died"))
+    ok = Cast(world=world, me=me, ref="drivers").kill(on=downed, dead=True)
+    out.that(
+        ok and "Died" in saw,
+        "a creature **already at 0** -- dying, not dead -- can still be"
+        " killed outright, which is the only state the printed sentence"
+        " ever describes",
+        f"returned {ok}, {saw}",
+    )
+    corpse = next(a for a in allies(world, me) if a != me)
+    world.need(corpse, Health).hp = world.need(corpse, Health).dying_at
+    saw.clear()
+    again = Cast(world=world, me=me, ref="drivers").kill(on=corpse, dead=True)
+    out.that(
+        not again and "Died" not in saw,
+        "and a creature **already dead** is refused, which is what the"
+        " guard was protecting -- finishing a corpse would be a second"
+        " `Died` for one creature",
+        f"returned {again}, {saw}",
     )
 
 DRIVERS = {

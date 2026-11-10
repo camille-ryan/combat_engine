@@ -12799,7 +12799,23 @@ class Cast:
         if who is None:
             return False
         health = self.world.get(who, Health)
-        if health is None or health.hp <= 0:
+        if health is None:
+            return False
+        # **`hp <= 0` refuses an ordinary kill and must not refuse
+        # `dead=True`.** The guard is there so a second blow cannot
+        # re-kill, and for the default that is right: a creature already at
+        # 0 is dying or dead and `c.kill` has nothing to do.
+        #
+        # `dead=True` is the opposite case -- *"if this damage reduces the
+        # target to 0 hit points, **it dies**"* is a sentence about a
+        # creature that has **just** reached 0, so the verb was refusing
+        # exactly the state its one caller needs. Found by probing `x5_22`,
+        # which could not fire the clause this parameter was built for.
+        #
+        # Still refused once genuinely dead, which is what the guard was
+        # protecting: `hp <= dying_at` is death, and finishing a corpse is
+        # a second `Died` for one creature.
+        if health.hp <= (health.dying_at if dead else 0):
             return False
         # **`dead=` goes through the same door rather than around it.**
         # `_check_down` dies when `hp <= health.dying_at`, which is 0 for a
