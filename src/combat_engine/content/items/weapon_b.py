@@ -5495,17 +5495,57 @@ def i3488p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you bloody an enemy with an attack that is not a critical hit",
     on=Trigger(Bloodied, _my_bloodying, "you bloody an enemy"),
-    todo=("c.crit_damage()",),
+
 )
 def i709p1(c: Cast) -> None:
-    """The trigger reads now that `Bloodied` names its striker. The Effect
-    does not: "extra damage equal to your bonus critical damage" is the
-    `crit_damage` mods `resolve.deal_damage` sums inside its own crit
-    branch, and nothing outside that branch can ask for the total. Hand-
-    writing the rider is refused -- it is a column.
+    """*"You bloody an enemy with an attack that is not a critical hit:
+    you deal extra damage equal to your bonus critical damage."*
 
-    "That is not a critical hit" is the same absence read the other way:
-    `Bloodied` carries no attack, so the crit cannot be excluded either."""
+    **Both of the old note's premises were wrong, and each in a way worth
+    naming.**
+
+    It said the `crit_damage` mods are summed inside `resolve.deal_damage`'s
+    own crit branch and *"nothing outside that branch can ask for the
+    total"*. `c.total` is the general reader for any modifier key, and
+    `crit_damage` is an ordinary one -- measured on a board, it answers 13
+    and takes a laid +5 to 18. So the Effect is one call.
+
+    It also said `Bloodied` carries no attack, so a critical hit could not
+    be excluded. `Bloodied` does carry `source` and `power` and not
+    `critical` -- but `Hit` carries `critical`, and the blow that bloodied
+    this creature is the nearest preceding `Hit` on the bus from the same
+    striker at the same target. Reading the log backwards is the idiom four
+    other rows use for exactly this kind of lookback.
+
+    **Found at the `Hit`, not assumed from its absence.** If no such `Hit`
+    is on the log the row pays nothing: ongoing damage ticks a creature
+    past the line with no attack at all -- which `Bloodied.source`'s own
+    docstring names -- and that is not "an attack that is not a critical
+    hit", it is no attack. #1220.
+    """
+    ev = c.trigger
+    victim = getattr(ev, "actor", None)
+    if victim is None:
+        return
+    blow = None
+    for past in reversed(c.world.bus.log):
+        if past.seq >= getattr(ev, "seq", 0):
+            continue
+        if (isinstance(past, Hit) and past.attacker == c.me
+                and past.target == victim):
+            blow = past
+            break
+    if blow is None or blow.critical:
+        return
+    extra = c.total("crit_damage", on=c.me)
+    if extra > 0:
+        # **`c.flat`, not `c.damage`.** The card says extra damage *equal
+        # to* a number it names, and `c.damage` with a flat argument still
+        # collects this creature's damage modifiers on top -- measured,
+        # `c.damage(7)` landed 9 on the board. `from_attack` stays True:
+        # it is part of the blow that bloodied the target, so resistance
+        # and the weapon's keywords apply as they did to the hit.
+        c.flat(extra, on=victim)
 
 
 @power(
