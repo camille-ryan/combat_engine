@@ -12752,7 +12752,8 @@ class Cast:
         who = self._who(on)
         return False if who is None else shaped(self.world, who)
 
-    def kill(self, *, on: int | None = None, critical: bool = False) -> bool:
+    def kill(self, *, on: int | None = None, critical: bool = False,
+             dead: bool = False) -> bool:
         """Reduce a creature to 0 hit points outright. Returns whether it moved.
 
         "A critical hit automatically reduces the creature to 0 hit points" is
@@ -12782,7 +12783,21 @@ class Cast:
         health = self.world.get(who, Health)
         if health is None or health.hp <= 0:
             return False
-        health.hp = 0
+        # **`dead=` goes through the same door rather than around it.**
+        # `_check_down` dies when `hp <= health.dying_at`, which is 0 for a
+        # monster and *negative* for a character -- so the default `hp = 0`
+        # correctly lays the dying conditions on a character and correctly
+        # kills a monster. A card printing "it dies" wants the second
+        # answer for both.
+        #
+        # Setting hit points to `dying_at` says that in the component's own
+        # terms, so `resolve._die` is reached by the one path that already
+        # leads there and `Dropped(dead=...)` -- which is computed as
+        # `health.hp <= health.dying_at` -- comes out right for free. A new
+        # branch in `_check_down` would have had to get that second fact
+        # right separately, and `_die` is module-private precisely so there
+        # is one way in.
+        health.hp = health.dying_at if dead else 0
         _check_down(self.world, who, health, source=self.me, crit=critical,
                     power=self.ref)
         return True

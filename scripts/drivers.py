@@ -69692,6 +69692,97 @@ def hide_skill(out: Result) -> None:
         f"rolled {rolled}",
     )
 
+
+def kill_outright(out: Result) -> None:
+    """"It dies" means dead, not dying, even for a character.
+
+    `c.kill` sets hit points to 0 and routes through
+    `resolve._check_down`, which dies only when `hp <= health.dying_at` --
+    0 for a monster and **minus half its maximum** for a character. So the
+    default correctly drops a character to death saves, and a card printing
+    *"if this damage reduces the target to 0 hit points, it dies"* (`x5_22`)
+    had no way to say the other thing. `resolve._die` is module-private on
+    purpose, so the fix is a door rather than a second caller.
+
+    `dead=True` sets hit points to `dying_at` instead of 0, which says it in
+    the component's own terms: the one existing path to `_die` is reached,
+    and `Dropped(dead=...)` -- computed as `hp <= dying_at` -- comes out
+    right without being set twice.
+
+    **The control needs a character, and that is the whole difficulty.**
+    `audit.board`'s allies carry `dies_at_zero=True`, so `dying_at` is 0 and
+    both branches die identically -- a probe on the posed board cannot tell
+    the two implementations apart and proves nothing. The shape has to be
+    posed.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import Died, Dropped
+    from combat_engine.engine.query import alive, allies
+    from combat_engine.engine.types import Condition
+
+    def fell(dead: bool) -> tuple[int, bool, bool, list[str]]:
+        world, me, _ = _board()
+        victim = next(a for a in allies(world, me) if a != me)
+        health = world.need(victim, Health)
+        health.dies_at_zero = False
+        saw: list[str] = []
+        world.bus.on(Died, lambda ev: saw.append("Died"))
+        world.bus.on(Dropped, lambda ev: saw.append(f"dead={ev.dead}"))
+        Cast(world=world, me=me, ref="drivers").kill(on=victim, dead=dead)
+        dying = Condition.DYING in {x for e in world.effects.of(victim)
+                                    for x in (e.conditions or ())}
+        return (world.need(victim, Health).hp, alive(world, victim), dying, saw)
+
+    world, me, _ = _board()
+    victim = next(a for a in allies(world, me) if a != me)
+    health = world.need(victim, Health)
+    health.dies_at_zero = False
+    out.that(
+        health.dying_at < 0,
+        "the victim is posed as a character -- `dying_at` below zero -- which"
+        " the board does not give by default, and without it both branches"
+        " die identically and the control cannot tell them apart",
+        f"dying_at {health.dying_at}",
+    )
+
+    hp, living, dying, saw = fell(dead=False)
+    out.that(
+        living and dying and "Died" not in saw,
+        "the **default** still drops a character to death saves rather than"
+        " killing: dying, still alive, no `Died` -- so no row already"
+        " written moves",
+        f"hp {hp}, alive, dying, {saw}",
+    )
+    out.that(
+        "dead=False" in saw,
+        "and its `Dropped` says `dead=False`, which is the field every row"
+        " reading that event narrows on",
+        f"{saw}",
+    )
+
+    hp2, living2, dying2, saw2 = fell(dead=True)
+    out.that(
+        not living2 and not dying2 and "Died" in saw2,
+        "`dead=True` kills outright -- not alive, no dying condition, `Died`"
+        " emitted -- which is what the printed sentence says",
+        f"hp {hp2}, {saw2}",
+    )
+    out.that(
+        "dead=True" in saw2,
+        "and `Dropped(dead=True)` falls out of setting hit points to"
+        " `dying_at` rather than being set a second time: the event computes"
+        " it as `hp <= dying_at`, so the two facts cannot disagree",
+        f"{saw2}",
+    )
+    out.that(
+        (living, dying) != (living2, dying2),
+        "the two branches differ on the same board, which is the assertion"
+        " a `dies_at_zero=True` victim would have passed vacuously",
+        f"default (alive={living}, dying={dying}) against"
+        f" dead=True (alive={living2}, dying={dying2})",
+    )
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -70726,6 +70817,10 @@ DRIVERS = {
         "one extra square on every shift, and not on a teleport",
     ),
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
+    "kill_outright": (
+        kill_outright,
+        "\"it dies\" kills a character rather than dropping it",
+    ),
     "hide_skill": (
         hide_skill,
         "a card may substitute the skill a hide is rolled with (#613)",
