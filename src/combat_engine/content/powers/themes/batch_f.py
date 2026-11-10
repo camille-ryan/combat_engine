@@ -1359,7 +1359,26 @@ def _low_roll(world: Any, me: int, ev: Any) -> bool:
 def p16005(c: Cast) -> None:
     """Both halves of the trigger are declared -- `Bloodied` and `Dropped`
     each carry `source`. Forcing a beaten enemy to surrender is a second
-    thing entirely: nothing takes a creature out of a fight that way."""
+    thing entirely: nothing takes a creature out of a fight that way.
+
+    **The check half is already sayable and is deliberately not written.**
+    `c.check("skill:intimidate", dc, against=foe)` is the roll, and the DC
+    is the moderate band `combat_engine.dc` reads for the target's level --
+    so a body could roll it today and then have nothing to do with the
+    answer. A row that rolls for no consequence is worse than a dropped
+    clause, because the roll shows up in the log as the clause working.
+
+    **What `c.surrender()` has to decide is in the compendium, which is why
+    the symbol is actionable rather than a placeholder.** `game.db`'s
+    `skill_use` row for this skill prints the three halves a verb would
+    need and prints **no DC at all** (`dc` is `NULL`): a bloodied creature
+    is forced to surrender or cowed into some other action; it is explicitly
+    not mind control, so it will not take an action that harms it
+    immediately; and on a failure the same creature cannot be tried again
+    for the rest of the encounter. Nothing in that is a condition the engine
+    holds -- it is a standing refusal to attack, which is a `policy`
+    question as much as an engine one. Read it before building the verb; the
+    row above is the whole of what print settles."""
     held = [
         c.penalty("attack", 2, on=foe, until=When.ENCOUNTER, when=_aimed_at_me(c))
         for foe in c.enemies()
@@ -1548,14 +1567,42 @@ def _melee_weapon(ctx: dict[str, Any]) -> bool:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.feature_ref()",),
+    todo=("etl.theme_feature",),
     keywords=[Keyword.ELEMENTAL],
 )
 def p16083(c: Cast) -> None:
-    """The whole effect is "resistance equal to what your level 5 feature
-    grants", and the card never prints the number. Nothing reads another
-    row's amount, so there is no figure to resist with and the bloodied
-    clause has nothing to add 2 to."""
+    """The whole effect is resistance to all damage equal to the amount the
+    `x7_947` level 5 feature grants, and the card never prints the number.
+
+    **Re-pointed off `spec.feature_ref()`, whose premise is false.** That
+    symbol says the brief handed over a printed name where a ref belongs,
+    and this brief prints no name at all -- the clause reads
+    `x7_947 level 5 feature`, with the theme already resolved to its alias
+    ref. Nothing was being withheld, so there was nothing for `spec.py` to
+    fix, and the row sat in a one-row spelling of the `spec.ref` family it
+    does not belong to.
+
+    **The gap is one directory further out: a theme's features are not
+    imported.** Measured in `game.db` -- a theme appears in exactly one
+    place, the `class` column of 510 power rows, and no table holds a theme
+    feature at all. `etl/build.py`'s theme pass reads only the id and the
+    name out of the source's theme table and the features sit unread in the
+    same table's text column, which 104 of its 116 rows carry. So there is
+    no ref to point at and no amount to read. That is the shape
+    `etl.paragon_path` already names next door: `game.db` carries no paragon
+    path either, and `f2263` drops the half of its clause that would have
+    had to recognise one.
+
+    `todo=` rather than `dropped=`, because the resistance *is* the effect:
+    the bloodied clause only adds 2 to it, so with the number gone nothing
+    plays.
+
+    **A second gap sits behind the first and is named here rather than
+    marked**, since a marker names one thing. Even with the feature
+    imported, nothing reads *how much* another row grants -- the reading
+    `c.damage_of(ref)`'s three rows want for damage, wanted for resistance.
+    The import has to land first; there is nothing for a reader to read
+    until it does."""
 
 
 @power(
