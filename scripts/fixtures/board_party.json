@@ -602,8 +602,8 @@
      "diplomacy",
      "heal",
      "insight",
-     "intimidate",
-     "religion"
+     "religion",
+     "thievery"
     ],
     "worships": "x1_48"
    },
@@ -775,7 +775,7 @@
      "diplomacy",
      "heal",
      "history",
-     "nature",
+     "perception",
      "religion"
     ],
     "worships": "x1_99"
