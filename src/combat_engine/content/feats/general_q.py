@@ -33,9 +33,15 @@ printed "not until an extended rest", which is a rule about rests.
 **Theme powers, and what naming the ref bought.** Eighteen rows here ride
 on nine theme powers that no build imported, and each was marked with the
 import gap *and* the ref it would watch. The nine are declared rows now,
-so the marker went red and all eighteen are written against them. Sixteen
-are finished; the two that fire on dismissing a conjuration are re-aimed,
-because the row they ride on never dismisses one and nothing announces it.
+so the marker went red and all eighteen are written against them.
+
+**All eighteen are finished, including the two that fire on dismissing a
+conjuration.** Those two were re-aimed at a hook on the ground that
+"nothing announces a conjuration being dismissed", and both halves of that
+were wrong: `p11804` dismisses its spirit today, and a deliberate end of a
+holder effect is announced as `EffectExpired(why="ended deliberately")`,
+which `p10250` has been reading for exactly this. `_on_dismissing` carries
+the argument and the ordering.
 
 They are traits carrying `c.watch` rather than rows with `on=Trigger`, the
 same shape as the ten associated-power riders above: a declared trigger
@@ -48,6 +54,7 @@ nobody's business here.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.features.builds import (
@@ -63,6 +70,7 @@ from combat_engine.engine import (
     AT_WILL,
     CHA,
     DAILY,
+    DEFENCES,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
@@ -105,7 +113,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
-from combat_engine.engine.components import Health, PowerPoints
+from combat_engine.engine.components import Conjuration, Health, PowerPoints
 from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import (
@@ -118,6 +126,7 @@ from combat_engine.engine.events import (
     DamageApplied,
     DamageRolled,
     EffectApplied,
+    EffectExpired,
     Hit,
     Miss,
     MoveEnd,
@@ -678,17 +687,104 @@ def f3188(c: Cast) -> None:
     _on_hit_with(c, _F3188, step)
 
 
+def _conjured_by(c: Cast, ref: str) -> int | None:
+    """This character's own conjuration from `ref`, if one is standing.
+
+    `c.conjure` files `Conjuration(ref=label or the row's ref, by=caster)`,
+    so a second row can find the thing without being handed its id --
+    which is what a rider on somebody else's conjuration needs and what
+    `c.conjurations` cannot say, since that returns everybody's and keys
+    on distance rather than on which card made them.
+    """
+    for eid in list(c.world.having(Conjuration)):
+        conj = c.world.get(eid, Conjuration)
+        if conj is not None and conj.ref == ref and conj.by == c.me:
+            return eid
+    return None
+
+
+def _on_dismissing(c: Cast, ref: str, fn: Callable[[int], None]) -> None:
+    """"When you dismiss the <thing> conjured by your `ref`." `fn` is
+    handed the conjuration, which is still on the board when it runs.
+
+    **The marker these two rows carried said no event announces a
+    conjuration being dismissed, and that was wrong twice.**
+
+    `ref`'s dismissal is `c.endable(hold, STANDARD, then=dismiss)` -- a
+    deliberate drop of a holder effect -- and `Effects.end` emits
+    `EffectExpired(actor=owner, what=str(eff), why=...)` for every
+    non-instant effect. `actions.perform` ends the hold with the literal
+    `"ended deliberately"`, which is the one ending that word is used for,
+    and `p10250` already reads exactly this to pay for stepping out of a
+    stance. So the announcement was there the whole time.
+
+    The second half of the old claim -- that the row "never dismisses its
+    spirit, because the dismissal is the standard-action attack it drops"
+    -- is stale: `p11804` calls `c.dispel(spirit)` in its payout today.
+
+    **It fires before the conjuration goes, and that is the only moment
+    this clause can be paid.** `perform` ends the hold *first* and runs
+    the payout afterwards, with a comment saying why, so the spirit is
+    still standing in its square when this handler runs -- which is what
+    "each enemy within 2 squares of the dismissed spirit" has to measure
+    from. Hanging the clause on the conjuration's own ending instead would
+    read an empty square: `Effects.end` runs `on_end` -- and `_banish`
+    with it -- *before* the `EffectExpired` emit.
+
+    The label is read out of `str(eff)`, which is `e{id}[label, when]` and
+    is documented as such on `items/armour.py`'s `i460x1`. Every other
+    reader of this event holds the `Effect` object and compares the whole
+    tag; a rider on another row's hold cannot, so it compares the label
+    alone -- `ref`, because `c.effect(c.ref, ...)` is what `p11804` lays.
+    `actor == c.me` already rules out the conjuration's own hold and its
+    aura, both of which wear the same label and sit on the spirit.
+    """
+    def ended(ev: EffectExpired) -> None:
+        if ev.actor != c.me or ev.why != "ended deliberately":
+            return
+        if ev.what.partition("[")[2].partition(",")[0] != ref:
+            return
+        thing = _conjured_by(c, ref)
+        if thing is not None:
+            fn(thing)
+
+    c.watch(EffectExpired, ended, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} dismissal")
+
+
 @power("f3189", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_dismiss(ref, fn)",))
+       reach=PERSONAL, target=SELF)
 def f3189(c: Cast) -> None:
-    """**Re-aimed off `etl.build.CLASSES`, and off the ref.** p11804 is a
-    declared row now and the ref was not the wait that mattered: its printed
-    dismissal is one standard action that banishes the spirit *and* attacks
-    from its square, and the attack line is the half p11804 drops -- so
-    nothing in the tree ever dismisses the spirit, and no event announces a
-    conjuration being dismissed. The payout of a deliberate end is
-    `c.endable(then=)`, which a row writes into its own body; a second row
-    cannot add a clause to it. That hook is the whole of the gap."""
+    """Written. `_on_dismissing` above carries the argument for the hook
+    the marker here said did not exist; what is left is the geometry.
+
+    **One ally for the whole clause, not one per enemy.** The printed
+    sentence is "each enemy ... is marked by one ally you can see and who
+    is within 5 squares of the spirit", and the generous reading -- a
+    separate ally per enemy -- hands out three marks from three different
+    defenders off one dismissal. The choice is therefore made once, above
+    the loop.
+
+    `c.mark(by=)` is the verb and it is the bard's conceit written down:
+    laying somebody else's mark is exactly what it exists for. The two
+    circles are centred on the **spirit** and not on the caster, so `of=`
+    moves them; `side="ally"` excludes the caster by construction, which
+    is what "an ally" means.
+
+    `When.EONT` clocks on the **source** -- `durations._TARGET_CLOCKED`
+    holds `EOTNT` and not `EONT` -- so a mark laid here ends at the end of
+    this character's next turn, which is what the card prints.
+    """
+
+    def marks(spirit: int) -> None:
+        crowd = [w for w in c.within(5, of=spirit, side="ally") if c.can_see(w)]
+        who = c.choose(crowd, "which ally the enemies are marked by") if crowd else None
+        if who is None:
+            return
+        for foe in c.within(2, of=spirit, side="enemy"):
+            c.mark(on=foe, by=who, until=When.EONT)
+
+    _on_dismissing(c, "p11804", marks)
 
 
 @power("f3190", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -890,12 +986,25 @@ def f3199(c: Cast) -> None:
 
 
 @power("f3200", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_dismiss(ref, fn)",))
+       reach=PERSONAL, target=SELF)
 def f3200(c: Cast) -> None:
-    """**Re-aimed off `etl.build.CLASSES`, and off the ref.** Same wait as
-    f3189: p11804 is declared and never dismisses its spirit, because the
-    dismissal is the standard-action attack it drops -- and nothing
-    announces a conjuration being dismissed for another row to answer."""
+    """Written, on the same hook as `f3189` -- see `_on_dismissing` for why
+    the wait both rows carried was not a wait.
+
+    **Untyped, and that is the difference from the row it rides on.**
+    `p11804` prints "a +1 **power** bonus to all defenses" and lays one
+    with `kind="power"`; this card prints "a +2 bonus to all defenses"
+    with no word in front of it, so it must not go through the same
+    bucket -- typed the two would refuse to stack and the feat would be
+    worth +1 instead of +2 while standing in the aura it was bought for.
+    """
+
+    def wards(spirit: int) -> None:
+        for friend in c.within(2, of=spirit, side="ally"):
+            for defence in DEFENCES:
+                c.bonus(defence, 2, on=friend, until=When.EONT)
+
+    _on_dismissing(c, "p11804", wards)
 
 
 @power("f3201", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -996,22 +1105,63 @@ _swap("f3208", "f3208b", Swap(9, Usage.DAILY))
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
        attack=Attack(STR, vs=AC), requires=_wielding("gouge"),
        requires_text="wielding the weapon this chain names",
-       dropped=("c.grab(unbreakable=)",))
+       dropped=("c.after_forced(fn)",))
 def f3208b(c: Cast) -> None:
     """"Cannot stand up" is `c.prone(held=...)`: the condition is pinned
     rather than reapplied, which is the difference between a creature
     that keeps failing to rise and one that never gets the chance.
 
-    What is dropped is the grab's unusual durability -- it survives the
-    forced movement that normally breaks it and ends only when you swing
-    at somebody else -- and the shift that rides on moving the target.
-    `c.grab` has one behaviour and no way to ask for another."""
+    **"When you attack any creature other than the target, the grab ends"
+    is written now, and leaving it out was the row being stronger than its
+    card.** It is the only printed limit on a hold that otherwise runs the
+    whole encounter, and nothing in this engine imposes it: `escape.py` is
+    the single place that clears `Relation.GRABBED_BY`, and it clears it
+    for an escape attempt and nothing else. So the clause had to be the
+    row's own, and `Effects.end` on the hold is how -- the relation is
+    installed state, so ending the effect lifts the grab and the condition
+    together. The watcher is armed on the encounter rather than on the
+    hold, for the reason `p10250` and `i460x1` both record: an effect's own
+    subscriptions are torn down before it can hear anything about itself.
+
+    `AttackDeclared` is one event per target, so a burst that catches the
+    grabbed creature *and* somebody else ends the hold, which is what the
+    card says. The declaration that laid this grab fires before the watch
+    exists, and the AFTER window of that same declaration names the victim,
+    so neither can let go of a hold it just made.
+
+    **Re-pointed off `c.grab(unbreakable=)`, which would have moved no
+    behaviour.** That symbol was for "the grab does not end as a result of
+    the forced movement", and the sentence is already true here: nothing in
+    `movement.py` touches a grab, so a shove has never broken one. A marker
+    whose arrival changes nothing cannot report this row ready or unready,
+    and it was doing duty for a second clause as well.
+
+    What is actually dropped is the shift: "when you push, pull, or slide
+    the target while it is grabbed by you, you can shift your speed to a
+    square adjacent to the target". Whose shove it is *is* answerable --
+    `ForcedMove` carries `source`, which is what `f2972` records about the
+    same event -- but `movement.shove` emits that announcement **before**
+    the first step and emits nothing afterwards, where every other move in
+    the file ends on a `MoveEnd`. So there is no moment at which the
+    target's final square is known, and "a square adjacent to the target"
+    cannot be aimed. Paying it off the per-step `Moved` instead would shift
+    once per square of a push 3."""
+    victim = c.target
     if c.strike():
         c.damage(c.w(3), c.str_mod)
     else:
         c.half_damage(c.w(3), c.str_mod)
     c.prone(held=When.ENCOUNTER)
-    c.grab()
+    hold = c.grab()
+    if hold is None or victim is None:
+        return
+
+    def elsewhere(ev: AttackDeclared) -> None:
+        if ev.attacker == c.me and ev.target != victim:
+            c.world.effects.end(hold, f"{c.ref}: swung at somebody else")
+
+    c.watch(AttackDeclared, elsewhere, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} let go")
 
 
 @power("f3209", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1030,7 +1180,44 @@ def f3209(c: Cast) -> None:
     grants none, and `features/primal_divine.py` skips it deliberately as a
     restatement of `cf:druid-f1`. Nothing ties a set of attack rows to it,
     so there is no set to resolve and the mark has nothing to hang on.
-    Referred up rather than guessed at."""
+    Referred up rather than guessed at.
+
+    **Read out of the compendium since**, which settles that this is not a
+    naming near-miss: the `class_feature` row for `cf:druid-f1s0` is the
+    ability substitution for AC and nothing else, and its three siblings
+    are a speed bonus, a damage reduction and an attack bonus. None of the
+    four grants a power. So the set this card names is empty in the
+    source, not merely unresolvable here.
+
+    **The marker is therefore a placeholder and `todo.py` cannot help.**
+    `dsl.powers_of(cls)` is what this row *used* to wait on and it is not
+    the gap -- `_wild_talents` above filters `dsl.REGISTRY` by `cls`
+    already, and arriving under a better name would still leave the set
+    empty -- while a symbol naming the real absence ("the attack rows of a
+    class feature") could only ever resolve to nothing for this ref, which
+    is the one shape a marker must not have. There is no symbol to wait
+    for, which is `defect=`'s description, and that marker is not an
+    authoring agent's to set: it needs the page read. Left as it stands and
+    referred up a second time rather than swapped for a synonym.
+
+    **Re-pointed to `spec.ref` by the main session, which read the page.**
+    The spec says *"when you hit an enemy with one of your
+    `cf:druid-f1s0` attacks"*, and that feature is an ability
+    substitution for AC -- it grants no attacks at all, and nor do its
+    three siblings (a speed bonus, a damage reduction, an attack bonus).
+    So the set the spec names is empty and `dsl.powers_of(cls)` could
+    never answer it.
+
+    The compendium says something else. The raw card names a **build**,
+    not a feature -- the extraction replaced a printed build name with the
+    ref of one of that build's features, which is the `spec.ref` pattern
+    eleven other rows already carry. So the data is there and the
+    extraction mangled it; this is not a `defect=`, which is for a page
+    that does not say what the row needs.
+
+    What lands when the ref is right: the build's own attack rows, which
+    `get(ref).cls` already answers for every other row of this shape.
+    """
 
 
 _F3210 = ("p2105", "p10733", "p10889", "p919")
@@ -1838,7 +2025,7 @@ _F3249 = ("p2104", "p4369", "p620")
 
 
 @power("f3249", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.grant_action(toward=)",))
+       reach=PERSONAL, target=SELF, dropped=("actions.granted_target",))
 def f3249(c: Cast) -> None:
     """**The spec carries the Associated Powers line now**, same as
     `f3218` and `f3230`, so the shift has something to ride on.
@@ -1853,7 +2040,21 @@ def f3249(c: Cast) -> None:
     shift is taken later, by whoever the minor action was granted to, and
     `c.grant_action` carries a cost and a count and nothing about where
     the step may end -- so "to a square adjacent to the enemy" has no
-    channel to travel down, whatever `c.shift` learns to take."""
+    channel to travel down, whatever `c.shift` learns to take.
+
+    **Re-pointed off `c.grant_action(toward=)`, which is a parameter that
+    cannot exist.** The gap is structural rather than a missing keyword:
+    the grant is laid as an ordinary modifier under the key
+    `"<what> as <cost>"` and `query.granted_actions` hands back
+    `{(what, cost): how_far}`, so the carrier has exactly three slots and
+    none of them is a place. Spelling a creature or a direction into the
+    key is also the one thing that breaks `drivers.granted_words`, which
+    greps `actions.py` for the `what == "<word>"` comparison that proves
+    every member of `GRANTABLE` has a reader.
+
+    `actions.granted_target` is the symbol the three rows with the same
+    shape already carry -- `f1255b`, `i3569p1`, `p1471` -- and this is a
+    fourth. #1219."""
     c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER,
             kind="feat")
 
@@ -1936,15 +2137,33 @@ def f3276(c: Cast) -> None:
 
 @power("f3292", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.recast(usage=)", "Target.square"))
+       todo=("Target.square",))
 def f3292(c: Cast) -> None:
-    """Turns an encounter cantrip into an at-will -- `c.recast` changes
-    what a row costs, not how often it may be used -- and then hangs
-    combat advantage off an enemy standing beside the *object or square*
-    the cantrip was aimed at. `Target` has sides for creatures and for an
-    object and none for a square, so there is no aim point to stand beside:
-    `Target.square` is the gap, and p1217 declares `NO_TARGET` because of
-    it."""
+    """Hangs combat advantage off an enemy standing beside the *object or
+    square* the cantrip was aimed at. `Target` has sides for creatures and
+    for an object and none for a square, so there is no aim point to stand
+    beside: `Target.square` is the gap, and p1217 declares `NO_TARGET`
+    because of it.
+
+    **`c.recast(usage=)` is off this marker, because the first clause has
+    nothing to loosen.** It read "while you have at least 1 power point
+    you can use p1217 as an at-will power", and the symbol was filed on
+    the assumption that p1217 is an encounter row. It is not: `p1217` is
+    declared `usage=AT_WILL` in the wizard cantrips, so the clause is
+    already true of the only copy in the tree and a usage override would
+    move nothing. The once-an-encounter copy the card is really about is
+    `rt:r20-t2`, which is `_inert` and declares no row at all. Two symbols
+    on one row could not go red or green correctly for either half, and
+    the one that could never go green was this one.
+
+    **A square alone will not finish it, and the reason is worth leaving
+    written down.** `p1217` carries `out_of_combat=True`, and
+    `actions.legal` skips such a row outright, so nothing in a fight ever
+    announces a use of it for this clause to answer -- the same trap
+    `f2468` in `rogue_b.py` sits in with a declared trigger on the same
+    ref. Whoever lands `Target.square` has to re-declare `p1217` with the
+    square it aims at, which is what takes the flag off; the flag is a
+    consequence of there being nothing to aim at, not a second gap."""
 
 
 @power("f3295", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2289,6 +2508,16 @@ def f3389(c: Cast) -> None:
     until an extended rest, and `PowerPoints.refresh` restores the whole
     pool every encounter -- a rule about rests, which is nothing this row
     can call and nothing one encounter can show.
+
+    **And the rest itself is not the missing half, which is why the marker
+    names a field.** `turns.extended_rest` exists: it clears every spent
+    power, refills hit points, surges and action points. What it does not
+    touch is `PowerPoints` at all -- the pool is refreshed per *encounter*
+    and by nothing else -- so there is nowhere to record that this one
+    granted point is spent until the longer rest, and nothing for
+    `refresh` to honour if a row wrote it. That field is the gap, and it
+    is on the component rather than on `Cast` because the rule is about
+    what survives a refresh and not about anything a body does.
 
     **Re-pointed off `c.regain_points()`, which arrived and is not this.**
     That verb caps at the pool's maximum, by design: a regain refills what

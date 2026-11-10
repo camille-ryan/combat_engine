@@ -91,6 +91,7 @@ from combat_engine.engine import (
     DamageApplied,
     DamageType,
     Dropped,
+    EffectApplied,
     Event,
     Healed,
     Hit,
@@ -101,6 +102,7 @@ from combat_engine.engine import (
     Miss,
     Moved,
     Position,
+    Power,
     Powers,
     PowerUsed,
     Ranged,
@@ -177,6 +179,36 @@ def _reach_of(ref: str | None) -> str:
 def _keywords_of(ref: str | None) -> frozenset[Keyword]:
     p = get(ref or "")
     return frozenset(p.keywords) if p is not None else frozenset()
+
+
+def _laid_by(eff: Any) -> Power | None:
+    """Which row laid this hold, for a hold that may be a **zone**.
+
+    `Effect.by` is the ref for every site that labels with its own ref, and
+    `durations.keywords_of` reads exactly that -- #580. It does not answer
+    for a zone: `engine/zones.py` labels the keeper `f"zone {ref}"`, `by`
+    is defaulted to the label's **first** word, and so `by` is the literal
+    `"zone"` and resolves to nothing. Measured on `p13993`, a wizard zone:
+    `by` comes back `"zone"` and `keywords_of` the empty set, so a rider
+    narrowed on a keyword sees no zone in the tree at all.
+
+    `c.dispel` reads the same two shapes off the label -- `eff.label in
+    (name, f"zone {name}")` -- so this is a format the engine already
+    depends on rather than one guessed here.
+
+    So: `by` when it resolves, else the first word of the label that does.
+    A hold labelled by content resolves on neither -- `c.ongoing` writes
+    `"ongoing 5"` and `c.deals` writes `"deals:fire:weapon"` -- and answers
+    `None`, which is the honest answer rather than a wrong row.
+    """
+    row = get(getattr(eff, "by", "") or "")
+    if row is not None:
+        return row
+    for word in str(getattr(eff, "label", "") or "").split():
+        row = get(word)
+        if row is not None:
+            return row
+    return None
 
 
 def _of_type(dtype: DamageType):  # noqa: ANN202
@@ -256,9 +288,43 @@ def _i_bloodied_one(world: World, me: int, ev: Event) -> bool:
     )
 
 
-def _enemy_saving(world: World, me: int, ev: Event) -> bool:
+def _enemy_burning_save(world: World, me: int, ev: Event) -> bool:
+    """"An enemy within 5 squares of you saves against ongoing damage."
+
+    Three narrowings, and the middle one is the clause `i1952p1` carried a
+    marker for:
+
+    * **"saves"**, not "makes a saving throw". A throw that already failed
+      has nothing for "instead fails the saving throw" to do, and the row is
+      a daily -- offered on a failed throw it would be spent for nothing.
+    * **"against ongoing damage"** is readable off the **live effect**. The
+      event's `against` is `str(effect)`, which opens with `e<id>`, so it
+      pins one effect and nothing has to be parsed out of the display text;
+      `durations.save` emits this **before** it calls `end(eff, "saved")`,
+      so the hold being saved against is still in `effects.live` while a
+      listener runs. That is the same reading `f2294` makes, and it is what
+      retired the `SavingThrow.source` marker on its sibling.
+      `Effect.ongoing` is the field, so no keyword or label guess is
+      involved.
+    * **"within 5 squares"**, here rather than in the body, for the same
+      reason as the first: the offer is what spends the daily.
+
+    Walked over `effects.live` rather than `effects.of(ev.actor)`, which is
+    `f2294`'s reasoning too -- `Effect.saver` lets a creature other than the
+    owner roll the throw, and the event names the roller.
+    """
     who = getattr(ev, "actor", None)
-    return who is not None and who != me and not _my_side(world, me, who)
+    if who is None or who == me or _my_side(world, me, who):
+        return False
+    if not getattr(ev, "saved", False):
+        return False
+    if query.distance_between(world, me, who) > 5:
+        return False
+    against = getattr(ev, "against", "")
+    return any(
+        eff.ongoing is not None and str(eff) == against
+        for eff in world.effects.live.values()
+    )
 
 
 def _vs_will(world: World, me: int, ev: Event) -> bool:
@@ -864,8 +930,34 @@ def i2298x1(c: Cast) -> None:
 )
 def i2299x1(c: Cast) -> None:
     """The critical rider is a column applied by `engine/equipment.py`, and
-    `c.reroll_damage` keeps the higher of two rolls rather than the second
-    of them -- the opposite of what is printed."""
+    the marker is kept -- but the near miss it named is the wrong one and
+    the right verb already exists.
+
+    **`c.reroll_ones(below=ANY_FACE, pick=1)` is this printed sentence
+    exactly.** Its own docstring says so: `below=ANY_FACE` is "the card
+    that prints no threshold at all -- reroll as many of the damage dice
+    as you like, but you must use the second result", and `pick=1` is "one
+    die, one reroll, and the new face stands even if it is another 1". So
+    `c.reroll_damage` keeping the higher of two whole rolls was never the
+    nearest thing in the tree, and nothing has to be built to keep a
+    second result.
+
+    **What is missing is the dice.** The rider is a `Mod` on
+    `crit_damage`, and `equipment._crit_rider`'s `roll()` closure sums
+    `world.rng.roll(dice).total` per plus and hands back an `int`. The
+    faces never leave the closure, `resolve.deal_damage` adds the number
+    in its crit branch, and every reroll hold in this engine is read in
+    `Cast._roll_damage_dice` -- which the rider does not go through. There
+    is no second result to keep because there is no first one left.
+
+    **And a `when=` gate on the crit would be a gate that can never
+    fire.** `_roll_damage_dice` opens with `_take_maximum()`, which a
+    critical hit satisfies -- a crit maximises the power's own faces -- and
+    returns before any reroll hold is read. So a hold narrowed to
+    `ctx["crit"]` is unreachable by construction on the one roll it is
+    about. The high-crit `[W]` dice *do* go through `_roll_damage`, but
+    `Cast._high_crit_dice` returns 0 without the weapon keyword and this
+    is an implement, so that is not this column either."""
 
 
 @power(
@@ -1508,15 +1600,88 @@ def i2819x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_any_sustain()", "c.tome_powers()"),
+    dropped=("c.tome_powers()",),
 )
 def i2900x1(c: Cast) -> None:
-    """`c.on_sustain` answers the sustaining of an effect *this row* made,
-    and this pays out when some other row is sustained. The second half --
-    a tome holding two chosen daily powers -- has no store, and
-    `c.borrow_row` is not one: it samples the set when a row is used and
-    records no pick. `i2900p1` is written off that sampling; this clause is
+    """The mend is written now, and `c.on_any_sustain()` was a general
+    absence that is not there.
+
+    That marker read "`c.on_sustain` answers the sustaining of an effect
+    *this row* made, and this pays out when some other row is sustained",
+    which is true about the verb and wrong about the reach. `c.on_sustain`
+    takes **any** `Effect`, not one this row laid, so the only thing
+    missing was a way to find somebody else's -- and `durations.apply`
+    announces every effect it installs, `self.live[eff.id] = eff` happening
+    **before** the emit, so a watcher is handed a hold that is already in
+    the store. `EffectApplied` carries `source`, `target`, `duration` and
+    `label` and no id, so the hold is pinned by those four and the newest
+    id among them; there is no second effect with the same owner, maker,
+    label and duration in the same instant.
+
+    **"A wizard fire power" is read off `Effect.by`, not off the label.**
+    `by` is the ref of the row that laid the hold -- defaulted from the
+    label, so it is right for all 333 call sites and still right for the
+    six in `cast.py` that label by content, which is the whole of #580.
+    Reading `ev.label` and resolving *that* as a ref is the bug that issue
+    fixed, so it is read from the effect rather than from the event.
+
+    **"That can be sustained" is `When.SUSTAIN` and nothing else.** An
+    effect carrying `When.SUSTAIN` with no `sustain_cost` is one nothing
+    can keep going -- `durations._warn_sustainless` says so out loud -- and
+    it lapses after a round, so it never reaches the callback either way.
+    No test for the cost here: that would be asking the row to re-derive a
+    refusal the clock already makes.
+
+    **"Through this tome" is unaskable and is deliberately not gated**, which
+    is this file's first premise rather than a shortcut taken here: neither
+    context carries the item, so every such rider is written always-on, and
+    it over-applies only for a wizard carrying a second, non-magical
+    implement.
+
+    **A green audit here is earned by the arming and not by the mend**, so
+    do not read one as evidence. The board credits this row off
+    `EffectApplied(label='i2900x1 trigger')` -- the watch itself -- which
+    is in `DID_SOMETHING`, and the board's caster never uses a sustainable
+    wizard fire power. The clause was proven by hand instead: `p1435`
+    sustained while bloodied heals 1 (the `+1` tome's enhancement) credited
+    to this ref, the same hold at full hit points heals nothing, and
+    `p13993` -- wizard, sustained, *shadow* -- heals nothing while
+    `_laid_by` still resolves it, so the refusal is the keyword and not a
+    failed lookup.
+
+    Still dropped: the tome holding two chosen daily powers. `c.borrow_row`
+    is not that store -- it samples the set when a row is used and records
+    no pick -- and `i2900p1` is written off that sampling. This clause is
     the pick surviving acquisition, which is `chargen`'s to hold."""
+
+    def armed(ev: EffectApplied) -> None:
+        if ev.source != c.me or ev.duration != When.SUSTAIN.value:
+            return
+        mine = [
+            eff
+            for eff in c.world.effects.live.values()
+            if not eff.ended
+            and eff.when is When.SUSTAIN
+            and eff.source == c.me
+            and eff.owner == ev.target
+            and eff.label == ev.label
+        ]
+        if not mine:
+            return
+        held = max(mine, key=lambda eff: eff.id)
+        row = _laid_by(held)
+        if row is None or row.cls != "wizard":
+            return
+        if Keyword.FIRE not in _keywords_of(row.ref):
+            return
+
+        def mend() -> None:
+            if c.bloodied(on=c.me):
+                c.heal(c.enhancement, on=c.me)
+
+        c.on_sustain(held, mend)
+
+    c.watch(EffectApplied, armed, until=When.ENCOUNTER)
 
 
 @power(
@@ -2633,8 +2798,31 @@ def i1832x1(c: Cast) -> None:
     """The ref is given now; the origin square is not, and the earlier
     note on this row was wrong. `c.origin` is *this* row's own aim, and a
     watcher on another row's `Hit` is handed `attacker`, `target`,
-    `power`, `critical` and `branch` -- the square the burst was centred
-    on is nowhere on the event."""
+    `power`, `critical`, `branch` and `among` -- the square the burst was
+    centred on is nowhere on the event.
+
+    **This row READS an origin, which is why the marker stays `Hit.origin`
+    and is not re-pointed.** `c.origin_of()` was one symbol over two
+    opposite needs and was split for it: `i2927x1` and `i3085p2` both want
+    to **move** a power's origin, which is a writer, as do the three rows
+    on `c.area_origin()` and `f1709b` on `c.use_power(origin=)`. A verb
+    that sets an origin would leave this row exactly as refused while
+    reporting it ready.
+    Checked rather than assumed -- `Cast.origin` is a field on the live
+    `Cast` and nothing copies it onto the world or onto any announcement,
+    so no listener can reach another use's aim.
+
+    **The event is the gap, not the verb, and the event decides the
+    symbol.** The clause is a damage rider on a hit, so it is the
+    `extra_damage` shape: a `Hit` watcher gated on `ev.power == "p1166"`
+    and the target standing in the origin square. `m5440a4` and `m5441a6`
+    want the same field off the same event and already share this symbol.
+    The read-side siblings that are *not* this one are not interchangeable
+    with it: `PowerResolved.origin` (`f2152b`) needs it on the resolution
+    announcement, which fires once for the whole use rather than per
+    target, and `resolve.ctx(origin=)` (`p16653`) needs it in the modifier
+    context. Three events, three symbols, which is the one-gap-one-symbol
+    rule rather than three names for one thing."""
 
 
 @power(
@@ -2741,7 +2929,28 @@ def i1927p1(c: Cast) -> None:
 )
 def i1949p1(c: Cast) -> None:
     """Halving the measured distance to one creature is not a modifier
-    anything reads: `query.distance` is geometry."""
+    anything reads -- and the old note's reason for that was wrong, which
+    is worth correcting because it reads as "nothing modifies range".
+
+    *"`query.distance` is geometry"* is true and is not the question. The
+    distance that matters is the one `dsl._within_reach` measures, which
+    is what the action menu reads and the only place a range is enforced,
+    and that **does** consult a modifier: `_reach_of` asks `_stretched`
+    with a context of `{"power", "range_kind"}`. So "your range increases
+    by N" has a carrier today.
+
+    **What that context has no room for is the creature.** `_within_reach`
+    resolves one number for the power and then loops over `origins()`
+    comparing it to each candidate, so a hold cannot say "and to *this*
+    enemy it is further". Laying the stretch unnarrowed is the shape to
+    refuse rather than to ship: the printed line names one target chosen
+    at use, and an unnarrowed hold doubles the orb's reach to everybody
+    for the rest of the encounter -- strictly stronger than print, on a
+    row whose only clause this is.
+
+    `c.range_to()` is therefore kept and is not the same gap as
+    `c.power_range()`: that one lengthens a power's printed range for
+    every target, which `_stretched` is already most of the way to."""
 
 
 @power(
@@ -2774,18 +2983,28 @@ def i1949p2(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_CREATURE,
     trigger="an enemy within 5 squares of you saves against ongoing damage",
-    on=Trigger(SavingThrow, _enemy_saving, "an enemy makes a saving throw"),
-    dropped=("SavingThrow.ongoing",),
+    on=Trigger(
+        SavingThrow,
+        _enemy_burning_save,
+        "an enemy within 5 saves against ongoing damage",
+    ),
 )
 def i1952p1(c: Cast) -> None:
-    """`SavingThrow.against` is a free-text label, so "against ongoing
-    damage" cannot be told from any other save and the row answers the
-    first one an enemy in range makes."""
-    ev = c.trigger
-    who = getattr(ev, "actor", None)
-    if who is None or c.distance(who) > 5:
-        return
-    c.unsave(ev)
+    """The whole printed trigger is in `_enemy_burning_save` now, and the
+    marker it replaced was a general absence that was not there.
+
+    `SavingThrow.ongoing` claimed the event cannot say what the throw was
+    against, so the row answered the first save any enemy in range made --
+    a daily spent on an immobilise, and the printed clause never honoured.
+    The event does not carry the field and does not need to: `against` is
+    `str(effect)`, the effect is still live when the event is announced,
+    and `Effect.ongoing` answers. The predicate's docstring has the three
+    reads and why each sits there rather than here.
+
+    Nothing is re-checked in the body. A declared trigger that has already
+    said yes has said yes about this event, and re-asking the distance here
+    is how the old shape came to spend the daily before testing anything."""
+    c.unsave()
 
 
 @power(
@@ -3652,12 +3871,35 @@ def i2626x1(c: Cast) -> None:
     todo=("c.on_sustain(group=)",),
 )
 def i2627x1(c: Cast) -> None:
-    """Re-aimed: `c.use_power` runs the named row from inside this one,
-    so conjuring several hands is writable. Folding their sustains into
-    one minor action is not -- `c.on_sustain` holds one effect at a
-    time -- and that clause is the whole reason the property is worth
-    having, so the row stays refused rather than shipping the half that
-    makes the wizard pay a minor per hand."""
+    """**The marker is left in place and it is the wrong shape. Both halves
+    of the note that stood here were false**, so what is recorded now is
+    where the hold actually is rather than a symbol to wait for.
+
+    *"Folding their sustains into one minor action is not writable"* --
+    **the engine already does it, and has since #819.**
+    `durations._on_turn_end` carries a `paid` ledger for the sweep, keyed
+    `(eff.source, eff.by or eff.label)`, and `_sustain_by_default` charges
+    the budget once per key: *"one sustain action per power, not per thing
+    it put on the board. The printed rule is one sustain for the power."*
+    So several holds laid by one row are already kept for a single minor,
+    and `c.on_sustain(group=)` asks for a facility that exists one layer
+    down from the verb it names. It is a general absence, and this file's
+    own traps list says that is the shape most often wrong.
+
+    *"`c.use_power` runs the named row, so conjuring several hands is
+    writable"* -- **there is nothing to conjure.** `p1227` is declared
+    `out_of_combat=True` and its whole body is a `c.note`: it puts no
+    conjuration on the board and lays no `When.SUSTAIN` hold, so running
+    it N times emits N notes. A row written off that would multiply
+    nothing and fold nothing, and would audit green on the note.
+
+    So the real hold is a **content** decision one file away -- whether
+    `p1227` has combat meaning at all -- and not an engine symbol. It is
+    left marked rather than re-pointed because no symbol can say it:
+    `p1227` is declared and finished, so `blocked._one` resolves it as
+    **arrived** and `todo.py` would go red on a row nothing had written.
+    Said here, where the next reader of this row looks, rather than parked
+    in a symbol that cannot carry it."""
 
 
 @power(

@@ -116,10 +116,17 @@ The rest of the policy:
   Every clause of that was wrong**, and it is the sharpest case in this file
   of the mistake the file is about:
 
-  * `resources/` holds **six** PDFs and one of them is `Dungeon Masters
+  * `resources/` holds **18** PDFs and one of them is `Dungeon Masters
     Guide 2.pdf`. The session that wrote the claim opened the *first*
     Dungeon Master's Guide, correctly found no minion damage table in it,
     and concluded the source was absent. `ls resources/` was never run.
+
+    **This bullet said "six" until 2026-11-10, which is the joke the
+    paragraph is about told on itself.** The count was right when written
+    and the directory grew; a reader checking whether a source was present
+    would have been working from a number a third of the truth. Counted
+    with `ls resources/*.pdf | wc -l`, which is the one-command check this
+    very bullet recommends. Do not quote a count from here -- run it.
   * `#972` does not quote DMG2 at all. It quotes the first DMG, which was
     never in doubt.
   * Both quotes check out **exactly** — 20 of 20 cells on one, the entire

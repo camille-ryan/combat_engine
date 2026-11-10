@@ -467,18 +467,43 @@ def i3005x1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
-    dropped=("c.stabilise()",),
+    target=Target("any", 1, conditions=frozenset({Condition.DYING})),
 )
 def i3094p1(c: Cast) -> None:
-    """The ongoing half is `c.end_effect`, which takes a live hold off
-    early: the burns are found by the type they tick in, since `Effect`
-    carries `ongoing` as an amount and a type and the card names the
-    untyped ones only. Stopping death saves is still unsayable -- nothing
-    holds a dying creature short of healing it."""
+    """Both halves play now, and the marked one was refused on a stale
+    premise: "stopping death saves is unsayable -- nothing holds a dying
+    creature short of healing it". `Condition.STABLE` is exactly that hold.
+    `turns._death_saves` returns on it before rolling and is the only
+    reader, so the creature is still dying, still unconscious and still at
+    a negative total -- which is the state the card describes rather than
+    an approximation of it.
+
+    **"Until it takes damage" needs nothing here.** `resolve._check_down`
+    runs after every damage application, and for a creature still at 0 or
+    fewer hit points it ends any hold carrying `STABLE` itself. A
+    `DamageApplied` watch beside that would end the same hold twice and
+    would have to re-derive which blows count.
+
+    `until=When.ENCOUNTER` is what the Heal check's own stabilise lays
+    (`actions.execute`), and `story` harvests the condition onto the sheet,
+    so this ends the same way that one does.
+
+    **The target line was the other fault.** `ONE_CREATURE` is the *enemy*
+    pool, so a row whose whole purpose is a dying companion could only be
+    aimed across the board. "One dying creature" is a `Target.conditions`
+    line -- the engine filters the pool, so the body has nobody to redirect
+    -- and `any` is the printed word: a dying enemy is a legal target of
+    this, however rarely anybody wants one. `p9318` is the same line for
+    the same reason.
+
+    The ongoing half is `c.end_effect`, which takes a live hold off early:
+    the burns are found by the type they tick in, since `Effect` carries
+    `ongoing` as an amount and a type and the card names the untyped ones
+    only."""
     who = c.target
     if who is None:
         return
+    c.condition(Condition.STABLE, on=who, until=When.ENCOUNTER)
     for eff in list(c.world.effects.of(who)):
         burn = getattr(eff, "ongoing", None)
         if burn and burn[1] is DamageType.UNTYPED:
@@ -879,8 +904,20 @@ def i1321x1(c: Cast) -> None:
 
     **The floating lantern** is an object left on the board that keeps
     lighting and can be commanded to move: a conjuration in everything but
-    name, and `Gear` has no notion of an item put down and still
-    working."""
+    name, and `Gear` has no notion of an item put down and still working.
+
+    The object half needs nothing new, which is worth saying so the next
+    reader does not go looking for it. `c.conjure(speed=10,
+    until=When.ENCOUNTER)` returns an entity with a `Position` and a
+    `Movement`, its creator may move it that far with a move action, and
+    `query.light_level` walks **every** entity carrying a `light_radius` --
+    not only combatants -- so `c.light(10, on=<that id>)` lights the board
+    from the thing rather than from the wearer. What is missing is the
+    moment: nothing lets go of a worn item, so the row would have to assert
+    at arming that the lantern is already hanging, which is not what the
+    card says and takes the light off the carried half that works. The
+    leash ("not more than 10 squares from the commanding creature") has no
+    home either. Hence the marker is the put-down and not the object."""
     c.illuminate((Light.BRIGHT, 10), (Light.DIM, 5), None,
                  on=c.me, until=When.ENCOUNTER)
 

@@ -107,6 +107,7 @@ from combat_engine.engine import (
     Melee,
     Miss,
     Moved,
+    PowerResolved,
     PowerUsed,
     Ranged,
     Relation,
@@ -209,6 +210,56 @@ def _just_bloodied(c: Cast, ev: Any) -> bool:
     return ev.hp <= half < ev.hp + ev.amount
 
 
+def _maximum_damage(ev: Any) -> bool:
+    """Did this blow come out at the ceiling of its own dice?
+
+    **The old marker said nothing could ask, having looked at the wrong
+    event.** `DamageApplied` does carry the total only -- that part was
+    right -- but `DamageRolled` carries the live `rng.Roll` as a plain
+    attribute, which is `#703`: `roll.expr` is the expression and
+    `roll.dice` is the faces that came up. `i1761p1` and `i3191x1` already
+    read that object.
+
+    Two ways a blow reaches the ceiling and they look different here.
+
+    A **critical** maximises every face before anything is rolled, so
+    `cast._roll_damage_dice` hands back no `Roll` at all -- its own
+    docstring says a crit means no die was rolled and no second result
+    exists -- and `cast._max_of`'s says every face at its highest is "what
+    a critical hit deals". So the crit is the printed case rather than an
+    approximation of it, and the tell is `ev.ctx["crit"]`, the context the
+    emit site hangs on the event beside the roll.
+
+    An **ordinary roll** that happens to come up all top faces is the
+    other, and is the test on `roll.dice`.
+
+    `roll.bonus` and the enhancement are deliberately not looked at: they
+    are flat terms and cannot roll high. That is `i1761p1`'s measurement of
+    this same object -- `expr='1d12' dice=[11] bonus=0` -- and it is also
+    why the total cannot be used for the comparison, since the total
+    carries modifiers the dice know nothing about.
+
+    A line with no dice behind it answers False: a flat payout, an ongoing
+    tick and a minion's damage are never "maximum damage", and `roll.dice`
+    is empty for all three.
+
+    The expression is split here rather than through `cast._faces_of`,
+    which is private to that module. `powers/seeker.extra_dice` and
+    `implement_b._one_more_die` split one the same way.
+    """
+    ctx = getattr(ev, "ctx", None) or {}
+    if ctx.get("crit"):
+        return True
+    roll = getattr(ev, "roll", None)
+    if roll is None or not roll.dice:
+        return False
+    _, _, rest = str(roll.expr).partition("d")
+    face, sign, _tail = rest.partition("+")
+    if not sign:
+        face, _sign, _tail = rest.partition("-")
+    return face.isdigit() and all(d == int(face) for d in roll.dice)
+
+
 def _my_summons(c: Cast) -> list[int]:
     """The creatures this one summoned. *"A creature you summoned."*
 
@@ -247,6 +298,42 @@ def _my_other_power(ref: str):  # noqa: ANN202
 def _enemy_saving(world: World, me: int, ev: Any) -> bool:
     who = getattr(ev, "actor", None)
     return who is not None and who != me and not _my_side(world, me, who)
+
+
+def _saves_against_mine(world: World, me: int, ev: Any) -> bool:
+    """*"A creature makes a save against one of your powers."*
+
+    **The marker was `SavingThrow.source` and the event neither carries one
+    nor needs one.** `durations.save` emits this throw **before** it calls
+    `end(eff, "saved")` -- the comment at that site says the outcome is
+    announced first so a listener can change it -- and a declared trigger
+    is offered from a bus subscriber, so the hold being shaken off is still
+    in `effects.live` while this predicate runs. `Effect.source` is the
+    creature that laid it, which is the question.
+
+    Matched by `str(eff) == ev.against` rather than by parsing the display
+    string: `Effect.__str__` opens with `e<id>`, so the comparison pins the
+    one effect and nothing has to be read out of the text.
+
+    Walked over `effects.live` and **not** `effects.of(saver)`, because
+    `Effect.saver` lets a different creature roll the throw -- the hold
+    would then sit on somebody this event does not name. Same reading as
+    `f2294`, which was written off this marker first.
+
+    What it cannot say is *power*: `Effect.source` is a creature, so a hold
+    laid by an item property or by a feat through `c.credit` answers True
+    as well. That is wider than the print by the handful of effects a
+    character lays that are not a power's doing, and very much narrower
+    than the no-gate it replaces.
+    """
+    who = getattr(ev, "actor", None)
+    if who is None or who == me:
+        return False
+    against = getattr(ev, "against", "")
+    return any(
+        eff.source == me and str(eff) == against
+        for eff in world.effects.live.values()
+    )
 
 
 def _ally_hit_within(n: int):  # noqa: ANN202
@@ -394,12 +481,51 @@ def _boon_drop(leg: str):  # noqa: ANN202
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.augment_area()",),
+    dropped=("c.lengthen_wall()",),
 )
 def i526x1(c: Cast) -> None:
-    """`c.widen_areas` lengthens a blast or a burst; a zone's footprint and
-    a wall's length are fixed where they are laid and nothing reaches them
-    afterwards."""
+    """**The zone half is written and the old note had the mechanism
+    backwards.** It said a zone's footprint is "fixed where it is laid and
+    nothing reaches it afterwards", which is true and is not how this card
+    works: a zone is not laid and then edited, it is **computed at cast
+    time** from the area the power is measured over. 177 sites in the tree
+    write `c.zone(c.area(), ...)`, and `c.area` goes through
+    `dsl.area_of` -> `reach_of` -> `_stretched`, which reads
+    `Mods.total("blast_size", ctx)`. So a `blast_size` modifier standing
+    when the row is used makes the zone it lays bigger, by construction, in
+    the same breath as the attack it covers -- which is what "add squares
+    to the area" means.
+
+    `Keyword.ZONE` is how "a zone" is said, and it is printed: 395 rows
+    carry it. 338 of them are a close burst, a close blast or an area
+    burst, which are exactly the three kinds `_stretched` grows.
+
+    **`c.bonus` and not `c.widen_areas`, for the gate.** The verb is the
+    same modifier one argument shorter and takes no `when=`, so it would
+    have grown *every* burst the carrier throws -- strictly more than a
+    card that says "a zone or a wall". `_stretched`'s own context carries
+    `power`, which its docstring offers for exactly this ("the range of
+    your **arcane** powers" is a gate rather than a blanket stretch).
+
+    **The wall half is what is left, and it is a different quantity rather
+    than the same one missing a case.** `dsl`'s own note on
+    `AREA_OR_CLOSE` says so: the `blast_size` set is
+    `("close_burst", "close_blast", "area_burst")` deliberately, because
+    "a wall's size is its length rather than a radius", and `_stretched`
+    returns 0 for `kind == "wall"`. So the marker names a term of its own
+    instead of a parameter on the burst verb. Two rows in the tree are
+    wall-kind zones.
+
+    `_keywords_of` reads the header rather than `dsl.keywords_of`, as the
+    rest of this file's gates do. Nothing grants `ZONE` to a row that was
+    not printed with it, so the two answers cannot differ here."""
+    c.bonus(
+        "blast_size",
+        c.enhancement,
+        on=c.me,
+        until=When.ENCOUNTER,
+        when=lambda ctx: Keyword.ZONE in _keywords_of(ctx.get("power")),
+    )
 
 
 @power(
@@ -661,13 +787,34 @@ def i1852p1(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     trigger="a creature makes a save against one of your powers",
-    on=Trigger(SavingThrow, _enemy_saving, "an enemy makes a saving throw"),
-    dropped=("SavingThrow.source",),
+    on=Trigger(
+        SavingThrow,
+        both(_enemy_saving, _saves_against_mine),
+        "an enemy saves against one of your powers",
+    ),
 )
 def i1956p1(c: Cast) -> None:
-    """`SavingThrow` names the roller and not whose effect is being shaken
-    off, so "against one of **your** powers" is not narrowed. "Must take
-    the new result" is `keep="new"`."""
+    """**"Against one of your powers" is narrowed now.** The old note said
+    `SavingThrow` names the roller and not whose effect is being shaken
+    off, which is true of the event and was the wrong place to look: the
+    effect itself is still live while the trigger is being offered, and it
+    carries the source. `_saves_against_mine` is the whole argument and the
+    reading `f2294` reached first.
+
+    Before this the row fired on **every** enemy saving throw on the board,
+    so a daily was being offered against a hold somebody else had laid --
+    which is the shape the print exists to exclude.
+
+    "Must take the new result" is `keep="new"`, not `"worst"`: the card
+    takes the second roll whether it is better or worse.
+
+    `_enemy_saving` is left in front of it, and it is a narrowing the card
+    does not print -- the printed subject is "a creature". It costs nothing
+    and is kept deliberately: a hold this character laid sits on an enemy
+    in every case on the board, and the one offer it declines is a reroll
+    of an **ally's** save against the caster's own stray burst, where
+    "must take the new result" is a gamble taken against the party. Not a
+    marker, because no engine facility is missing for it."""
     c.reroll_save(keep="new")
 
 
@@ -679,19 +826,90 @@ def i1956p1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.worsen_save()",),
+    trigger="an attack with this orb succeeds against the target's Will defence",
+    on=Trigger(
+        Hit,
+        lambda w, me, ev: ev.attacker == me and _hit_defence(ev) is WILL,
+        "you hit a creature's Will defence",
+    ),
 )
 def i1968p1(c: Cast) -> None:
-    """Re-aimed to one gap. `Hit.vs` is not missing after all: the defence
-    an attack was aimed at is header data on the row that swung, which
-    `_hit_defence` reads, so "succeeds against Will" is sayable.
+    """**Written. `c.worsen_save()` was the wrong shape twice over.**
 
-    What is left is the whole Effect -- nothing makes a saving throw roll
-    twice and keep the lower. `c.reroll_save(keep="worst")` is the same
-    arithmetic but only inside a row the dispatcher offered for that one
-    throw, and this stands over every save against the effects of one
-    attack. A save penalty is a different number and would not be this
-    line."""
+    The trigger half was already conceded: `Hit` carries no defence and
+    does not need to, because the defence an attack was aimed at is header
+    data on the row that swung. `_hit_defence` reads it, exactly as
+    `i1941p1` beside this does.
+
+    The payout half is `c.reroll_save(keep="worst", ev=)`, and the old note
+    rejected it on a premise that is false: it said the verb only works
+    "inside a row the dispatcher offered for that one throw". `ev=` is
+    there for precisely the other case -- its docstring says so, *"a banked
+    reroll is a `c.watch`, and its handler closes over the row's `Cast`
+    rather than the roll"* -- and `durations.save` reads `rolled.saved`
+    back off the event after the emit, so a listener mutating it during the
+    emit is the supported route. "Roll twice and take the lower" is
+    `keep="worst"` by construction: the verb rolls once more and keeps
+    `min(again, ev.natural)`.
+
+    A save penalty was rejected for the reason the old note gives and it
+    still holds -- two rolls and a flat subtraction are different numbers.
+
+    **"An effect from that attack" is the part that needed thinking about,
+    and it is a diff rather than a label.** A label leads with the laying
+    row's ref for most verbs and with the printed amount for `c.ongoing`,
+    so matching on the ref would have silently excluded exactly the burn
+    this kind of card most often lays. Instead: the live effect ids are
+    snapshotted here -- this body runs inside the `Hit` emit, so the
+    attacking row has not laid anything yet -- and the diff is taken when
+    `PowerResolved` says that same use has **finished**. What that catches
+    is every hold the use laid, whatever it is labelled, and nothing laid
+    by a later attack of the caster's. `PowerUsed` would have been the
+    wrong event for the reason its own docstring gives: it says a use has
+    started.
+
+    `rolls_the_save == foe` rather than `owner == foe`, because
+    `Effect.saver` lets another creature roll and the printed sentence is
+    about the throw.
+
+    The throw itself is pinned by `str(eff) == ev.against`, not parsed out
+    of it: `Effect.__str__` opens with `e<id>`.
+
+    "With this orb" is the half this file cannot gate, by the module
+    docstring's first judgement."""
+    foe = _struck(c)
+    if foe is None:
+        return
+    me = c.me
+    ref = getattr(c.trigger, "power", "") or ""
+    standing = set(c.world.effects.live)
+    from_attack: set[int] = set()
+    closed: list[bool] = []
+
+    def settled(ev: PowerResolved) -> None:
+        if closed or ev.actor != me or ev.power != ref:
+            return
+        closed.append(True)
+        from_attack.update(
+            eff.id
+            for eff in c.world.effects.live.values()
+            if eff.id not in standing
+            and eff.source == me
+            and eff.rolls_the_save == foe
+        )
+
+    def twice(ev: SavingThrow) -> None:
+        if ev.actor != foe or not from_attack:
+            return
+        hold = next(
+            (e for e in c.world.effects.live.values() if str(e) == ev.against),
+            None,
+        )
+        if hold is not None and hold.id in from_attack:
+            c.reroll_save(keep="worst", ev=ev)
+
+    c.watch(PowerResolved, settled, until=When.ENCOUNTER)
+    c.watch(SavingThrow, twice, until=When.ENCOUNTER)
 
 
 # -- level 7 ----------------------------------------------------------------
@@ -718,7 +936,20 @@ def i1098x1(c: Cast) -> None:
     over: it appends a **creature** to a use running *below an immediate
     interrupt*, where this is a standing property whose extra target is a
     conjuration or a zone. `running_below` refuses it outright from a
-    trait, and the target line being widened is not a creature line."""
+    trait, and the target line being widened is not a creature line.
+
+    **And there is no target line to widen, which is narrower still.**
+    `p2273` is declared `target=NO_TARGET`: it gathers the zones and
+    conjurations in reach itself and offers **one** of them through
+    `c.choose`, for the reason its own docstring gives -- a zone is not a
+    creature, so it cannot be a printed target. So neither `c.add_target`
+    nor an `Effect.retarget` replacement could ever reach this clause.
+    Where it has to land is inside `p2273`'s own body, which is the shape
+    `#550` settled for a feat naming one power -- and that is another
+    file, plus a reader for "the caster is holding this item" that the
+    `c.feat` gate has no equivalent of here. The marker stays on the
+    facility rather than being re-pointed at a file this row cannot
+    edit."""
     c.bonus(
         "attack", 2, on=c.me, until=When.ENCOUNTER, kind="item",
         when=lambda ctx: ctx.get("power") == "p2273",
@@ -942,17 +1173,47 @@ def i2292p1(c: Cast) -> None:
     keywords=[Keyword.FEAR],
     trigger="you attack with an implement power using this implement",
     on=Trigger(PowerUsed, _my_other_power("i2306p1"), "you use a power"),
-    dropped=("c.add_keyword()",),
 )
 def i2306p1(c: Cast) -> None:
     """`PowerUsed` names its subject `actor`, so this is `about_me` and not
     `by_me` -- and the row must leave itself out, or answering its own free
     action recurs forever. Targets are chosen before the body runs, so
-    `ev.targets` is
-    the one thing on that event worth trusting -- and "hit or miss" wants
-    exactly that list. Nothing adds a keyword to an attack already
-    declared, so the fear half of the line is dropped."""
-    for foe in getattr(c.trigger, "targets", []):
+    `ev.targets` is the one thing on that event worth trusting -- and "hit
+    or miss" wants exactly that list.
+
+    **The keyword half is written, and `c.add_keyword()` was an absence
+    that is not there.** `c.counts_as_keyword` writes
+    `Powers.granted_keywords`, which `dsl.keywords_of` unions into the
+    header tuple -- and that function is the single door all 22 keyword
+    reads in the engine go through, by its own docstring, so a keyword
+    granted here is seen by a trigger, a modifier gate, a resistance and
+    the card alike. It exists for the twelve feats printing "your <row>
+    gains the reliable keyword", and "the attack gains the fear keyword" is
+    the same sentence aimed at one use.
+
+    **"The attack", not "the power", is why it is handed back.** The verb's
+    shortest duration is `When.ENCOUNTER`, and leaving it there would give
+    the fear keyword to every later use of that row as well -- strictly
+    more than the card. So the grant is ended on `PowerResolved` for that
+    same use, which is the event that says a use has *finished*; the window
+    the keyword is live for is exactly the resolution of the attack this
+    daily was spent on. `PowerUsed` fires before the body, so the grant is
+    standing before the first roll.
+
+    None back from the verb means the row already carries fear, so there is
+    nothing to grant and nothing to take away."""
+    ev = c.trigger
+    ref = getattr(ev, "power", "") or ""
+    held = c.counts_as_keyword(ref, Keyword.FEAR) if ref else None
+    if held is not None:
+
+        def give_back(done: PowerResolved) -> None:
+            if done.actor != c.me or done.power != ref or held.ended:
+                return
+            c.world.effects.end(held, "the use it was granted for is over")
+
+        c.watch(PowerResolved, give_back, until=When.ENCOUNTER)
+    for foe in getattr(ev, "targets", []):
         c.grants_advantage(on=foe, until=When.EONT)
 
 
@@ -1916,12 +2177,55 @@ def i1531p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.rolled_maximum()",),
 )
 def i1577x1(c: Cast) -> None:
-    """"Whenever you deal maximum damage" needs the dice that were rolled
-    compared against their ceiling, and `DamageApplied` carries the total
-    only."""
+    """**Written. The marker asserted an absence and was looking at the
+    wrong event.** It said "`DamageApplied` carries the total only", which
+    is true and is not where the dice are: `DamageRolled` carries the live
+    `rng.Roll` beside its total as a plain attribute, so the faces that
+    came up and the expression they came from are both in hand.
+    `_maximum_damage` above is the whole argument, including the critical,
+    which reaches the ceiling without rolling anything.
+
+    "With an implement power" is the keyword, which is printed, so this is
+    one of the real gates the module docstring's second judgement allows --
+    `by_keyword` reads it off the row that dealt the blow, which is
+    `DamageRolled.detail`.
+
+    "To an enemy" is asked of the creature being hit rather than assumed:
+    a burst of the caster's own can catch an ally, and marking an ally is
+    not a smaller version of this card, it is a different one.
+
+    Watched on `DamageRolled` and not on `DamageApplied`, for two reasons
+    rather than convenience. The faces only exist on the first. And a
+    blow turned aside never reaches this handler at all: `DamageRolled` is
+    a `Decision`, `c.watch` subscribes in `Window.AFTER`, and `Bus.emit`
+    skips that window outright once an event is cancelled -- so the mark
+    cannot be laid for damage that did not happen. What it does not wait
+    for is resistance eating the number, which is right: the card is about
+    the roll.
+
+    "Until the end of your next turn" is `c.mark`'s own default and is
+    passed anyway, since the default is the thing a reader would have to go
+    and check. No `lapses=`: this card prints no engage clause.
+
+    "Using this holy symbol" is the half this file cannot gate, by the
+    module docstring's first judgement."""
+    me = c.me
+
+    def topped(ev: DamageRolled) -> None:
+        if ev.source != me:
+            return
+        foe = getattr(ev, "target", None)
+        if foe is None or _my_side(c.world, me, foe):
+            return
+        if Keyword.IMPLEMENT not in _keywords_of(getattr(ev, "detail", "")):
+            return
+        if not _maximum_damage(ev):
+            return
+        c.mark(on=foe, until=When.EONT)
+
+    c.watch(DamageRolled, topped, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

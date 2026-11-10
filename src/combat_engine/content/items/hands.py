@@ -5,7 +5,8 @@ columns in `game.db`; no hands item carries an enhancement bonus, so every
 number below is the heroic one the card prints and a `Level 16:` line is
 paragon and out of scope.
 
-Four judgements run through the file.
+Five judgements run through the file, and the count said four while five
+were listed -- the same drift the bullets themselves keep catching.
 
 * **The damage context is not as thin as this file used to say.** It
   carries `target`, `power`, `opportunity`, `charge`, `dtype`, `dtypes`,
@@ -35,9 +36,15 @@ Four judgements run through the file.
   climb**" is the same flat modifier plus
   `narrative=("skill:athletics",)`. Not a `dropped=`: nothing on a board
   climbs, so the narrowing is not a gap waiting on a verb.
-* **Stowing, drawing and applying a consumable are not modelled.** An
-  alchemical item, a dose of poison and an item kept inside a glove have
-  no engine object, so those rows carry markers rather than inventing one.
+* **Stowing, drawing and applying a consumable are not modelled.** Four
+  rows here turn on one -- `i465p1`, `i476x1`, `i2061p2` and the two
+  Properties beside them -- and the reason is narrower than this bullet
+  used to say. It said an alchemical item and a dose of poison "have no
+  engine object". They have refs: 75 alchemical items declared in
+  `items/alchemical.py`, 19 poisons imported into `game.db`. What no
+  character has is one **in hand** -- `chargen.loadout` deals no
+  expendables at all -- so the markers name the carrying and the spending
+  (`c.consume_item()`, `c.stored_dose()`) rather than the thing.
 * **A race is asked for by one of its trait refs.** Nothing carries a
   creature's race, but a racial trait is an ordinary row in `Powers.known`
   and `c.feat(ref, on=)` reads that, so "your r3 allies" is exact where
@@ -93,6 +100,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     SecondWind,
+    SkillCheck,
     TempHP,
     TotalDefence,
     Trigger,
@@ -251,6 +259,28 @@ def _bloodied_by_a_foe(world: World, me: int, ev: Any) -> bool:
     )
 
 
+def _steadied_somebody(world: World, me: int, ev: Any) -> bool:
+    """Did this creature just succeed on a Heal check to steady somebody?
+
+    **Every Heal check this engine rolls is that one**, measured: the two
+    callers are `actions`' standard action and `story/run.py`'s after-fight
+    pass, both against the same printed DC. So the skill and the verdict
+    are nearly the whole question -- and `dc > 0` is the narrowing that
+    keeps it honest the day a second sort of Heal check lands, since
+    `skills.check` treats a DC of nought as "a check with no number to
+    beat" that always succeeds.
+
+    `success` is readable here only because a `FREE` action's trigger is
+    asked in `Window.AFTER`; see the row's own docstring.
+    """
+    return (
+        getattr(ev, "actor", None) == me
+        and getattr(ev, "skill", "") == "heal"
+        and getattr(ev, "dc", 0) > 0
+        and bool(getattr(ev, "success", False))
+    )
+
+
 def _grabbing(world: World, eid: int) -> list[int]:
     """What this creature is holding in a grab, for a `requires=` gate --
     which is handed `(world, eid)` and has no `Cast` to ask."""
@@ -319,8 +349,7 @@ def i824x1(c: Cast) -> None:
 
 
 @power("i3098x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.save_vs_forced()",))
+       reach=PERSONAL, target=SELF)
 def i3098x1(c: Cast) -> None:
     """`grab_defence` is read off the *grabber* when somebody rolls to get
     out, which is what "your defences when preventing an escape from your
@@ -330,11 +359,33 @@ def i3098x1(c: Cast) -> None:
     It labels it: `c.grab_attempt` passes `as_="grab"` and the attack
     context carries `as_`, so the bonus lands on the grab swing alone.
 
-    Catching yourself on the way down is still a saving throw nothing
-    rolls."""
+    **The third clause is written, and the marker's premise was false.**
+    It said catching yourself on the way down is "a saving throw nothing
+    rolls" -- `falling.catches_itself` rolls exactly that one, from
+    `movement.forced`, and it totals the modifiers through
+    `_mods(world, eid, "save", ...)` like any other throw. So an ordinary
+    `c.bonus("save", ...)` is read by it; nothing new was needed.
+
+    **The gate is `when_ == "edge"`, which is the one key that separates
+    this throw from every other.** `falling.catches_itself`'s own
+    docstring says that field exists for the printed distinction -- the
+    throw is taken the moment the creature reaches the edge rather than at
+    the end of its turn -- so a card narrowing to it has a key to read and
+    a card about end-of-turn throws is not paid out here. Gating on
+    `label == "falling"` instead would have been the same set today and
+    the wrong question: that is what the throw is *about*, and an
+    end-of-turn save against a fall would carry it too.
+
+    **Scoped to forced movement, which is the card's own scope**, and not
+    this row's doing: the engine offers the throw only when a power or a
+    bull rush pushes you over, never when you walk off a ledge of your own
+    accord. So the bonus is unreachable on a board with no drop and no
+    shove, which is most of them -- rare, not dead."""
     c.bonus("grab_defence", 1, on=c.me, until=When.ENCOUNTER, kind="item")
     c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
             when=lambda ctx: ctx.get("as_") == "grab")
+    c.bonus("save", 1, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: ctx.get("when_") == "edge")
 
 
 # -- level 3 ----------------------------------------------------------------
@@ -360,7 +411,19 @@ def i1436p1(c: Cast) -> None:
     entirely and shaves resist 15 down to 5, where the card leaves resist
     15 alone. Nothing at heroic tier has more than 10, so the rows differ
     only where the item never plays -- but they do differ, so the
-    threshold is named rather than quietly called the same thing."""
+    threshold is named rather than quietly called the same thing.
+
+    **A `when=` gate is not the way round it, and that is worth writing
+    down because it looks like one.** `c.resistances(on=foe)` exists, so a
+    gate could read the number and ask whether it is ten or lower -- but
+    the gate is handed the **blow's** context, and `resolve` reads the
+    ignore once *per typed part* with `part_types` as an argument rather
+    than as a key in that context. So a gate could only ever ask about
+    `ctx["dtype"]`, which is right for a single-part blow and wrong for
+    any blow carrying a typed rider: a sword plus a fire rider would have
+    one part's resistance decide both. The threshold belongs where the
+    part types are already in hand, which is `amount`'s own level and the
+    parameter the marker names."""
     c.ignore_resistance(10, on=c.me, until=When.ENCOUNTER)
 
 
@@ -469,7 +532,14 @@ def i2061p2(c: Cast) -> None:
     a rider the row supplies -- and this row supplies none. What it
     applies is whatever dose i2061p1 loaded, and a dose of poison is not
     a thing the engine counts: the consumable that would be spent has no
-    identity a second row can reach for."""
+    identity a second row can reach for.
+
+    **Half of that has moved and the marker still stands.** The poison
+    table is imported -- 19 rows in `game.db`, each with a ref -- so the
+    doses are nameable now. Measured: **0** of them are declared, so there
+    is no body for `c.apply_poison`'s rider to borrow, and nothing records
+    which of the 19 is in the gloves. Both halves of that are what
+    `c.stored_dose()` names, and `f1307` waits on the same thing."""
 
 
 @power("i2673x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -936,10 +1006,35 @@ def i3223p1(c: Cast) -> None:
 
 
 @power("i476x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.alchemical()",))
+       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
 def i476x1(c: Cast) -> None:
-    """An alchemical item is not a thing the engine carries, so there is
-    no attack of that shape to add to."""
+    """A bonus to attack rolls made with an alchemical item.
+
+    **Re-pointed off `c.alchemical()`, whose premise was false.** It said
+    an alchemical item "is not a thing the engine carries, so there is no
+    attack of that shape to add to". `game.db` carries **75** of them in a
+    category of their own, `content/items/alchemical.py` declares the
+    blocks, and every attack in that file is an ordinary
+    `Attack(printed=)` -- so the attacks exist and are rolled.
+
+    What is missing is one step earlier and is shared: nobody is ever
+    *given* one. `chargen.loadout` names neither "consumable" nor
+    "alchemical", so a dealt character carries weapons, armour and a
+    shield and no expendables -- `items/alchemical.i3320p1` measured that
+    and records it. `c.consume_item()` is the symbol `arms.i468x1` and
+    `waist.i467p1` already carry for exactly this, and `i468x1` is the
+    same clause as this one: *"consumable items are not carried, used or
+    attacked with, so neither the attack bonus nor the waived opening has
+    anything to attach to"*. One gap, one symbol, four rows -- rather than
+    a synonym of my own for this slot.
+
+    The second thing it would need, said here so the next reader does not
+    have to find it twice: even with a consumable in hand, nothing tells a
+    `when=` gate that the power in the context belongs to an alchemical
+    item. `item.category` is a column in `game.db`, `dsl.get` returns the
+    declared row and not the item, and no reader in `query.py` bridges the
+    two. That is inside `c.consume_item()`'s scope rather than beside it,
+    because a carried consumable is what would have to carry its category."""
 
 
 @power("i806x1", level=6, cls=ITEM, action=ActionType.NONE,
@@ -1141,10 +1236,63 @@ def i1706x1(c: Cast) -> None:
 
 
 @power("i2273p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=NO_TARGET, todo=("c.stabilise()",))
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you succeed on a Heal check to steady a dying creature",
+       on=Trigger(SkillCheck, _steadied_somebody,
+                  "you succeed on a Heal check to steady a dying creature"))
 def i2273p1(c: Cast) -> None:
-    """Stabilising a dying creature is not something the engine does, so
-    the check that triggers this never happens."""
+    """**The marker was false and the whole row is writable.** It said
+    stabilising a dying creature "is not something the engine does, so the
+    check that triggers this never happens": `actions._stabilising` offers
+    it as a standard action to anybody adjacent to a dying ally, rolls
+    `skills.check(world, actor, "heal", STABILISE_DC)` and lays the
+    `STABLE` condition on a success. `story/run.py` rolls the same check
+    after a fight. Both landed in `#1074`/`#1023`, after this note.
+
+    **The trigger is the check, and `Window.AFTER` is what makes
+    `ev.success` readable.** `SkillCheck` is announced *before* its
+    modifiers are totalled -- the total and the verdict are filled in by
+    the resolve callback -- so a predicate reading `success` in the
+    interrupt window would be False every time. A `FREE` action's trigger
+    is asked in `Window.AFTER`, which `Bus.emit` runs after the callback,
+    so the verdict is final by then.
+
+    **Who was steadied is not on the event, and is found rather than
+    guessed.** Neither caller passes `target=` or `purpose=`, so
+    `SkillCheck.target` is `None`; what is certain is the state at this
+    moment. The check's own emit happens *before* `actions` lays the
+    `STABLE` condition, so the creature is still dying and not yet steady
+    -- and the action is only offered for an adjacent ally, so the pool is
+    the adjacent, dying, unsteadied allies. More than one of those is a
+    genuine ambiguity and `c.choose` is handed it rather than the first
+    being taken silently.
+
+    **No gate on having a surge**, and that is a reading rather than an
+    oversight. `c.surge` pays nothing when there is none -- `spend_surge`
+    returns False before any hit points are handed over -- and this card
+    charges nothing for the attempt, so the printed "can spend a healing
+    surge" is simply offered. `items/waist.i1083p1` does gate, because
+    there the surge is what the item's fuel buys and a character out of
+    surges would burn a stone for no hit points.
+
+    5 hit points is the heroic printed figure; the `Level 17:` and
+    `Level 27:` lines are paragon and out of scope. `c.heal` is the right
+    verb for a creature below zero without help: `resolve.heal` starts the
+    count at zero rather than at the deficit and revives on the way."""
+    down = [
+        who for who in c.allies()
+        if c.adjacent(who)
+        and c.is_(Condition.DYING, on=who)
+        and not c.is_(Condition.STABLE, on=who)
+    ]
+    if not down:
+        return
+    who = down[0] if len(down) == 1 else c.choose(
+        down, f"{c.ref}: who it steadies")
+    if who is None:
+        return
+    c.heal(5, on=who)
+    c.surge(on=who)
 
 
 # -- level 8 ----------------------------------------------------------------
@@ -1192,10 +1340,46 @@ def i1431x1(c: Cast) -> None:
 @power("i1431p1", level=8, cls=ITEM, usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.ACID, Keyword.COLD, Keyword.FIRE],
-       todo=("c.item_charges()",))
+       todo=("compendium.item_charges",))
 def i1431p1(c: Cast) -> None:
-    """Every number in the row is priced in charges and an item keeps no
-    charge pool."""
+    """Extra damage priced in charges: one buys 1d6, two buy 2d6, five buy
+    3d6.
+
+    **Re-pointed off `c.item_charges()`, whose premise was false.** It
+    said "an item keeps no charge pool", and an item keeps one by naming
+    itself: `Powers.per_day` is reached by `c.per_day_left` and
+    `c.spend_per_day` under **any** key at all, and two rows in this tree
+    are the worked precedent -- `items/armour.i2017p1` and
+    `items/waist.i1083p1`, both re-pointed off this identical claim. The
+    convention they set is to key on the **item** (`"i1431"`) rather than
+    on the block, because the charges belong to the gloves and not to
+    either card.
+
+    The clock would be right too. `story._rest` clears `Sheet.per_day`
+    only on the extended fork, which is the cadence a charged item
+    recharges on; the per-*encounter* store next door is the wrong one,
+    since `turns.short_rest` empties `Powers.charges` whole and would hand
+    the charges back after a breather.
+
+    **What is actually missing is a printed number.** The card prices its
+    three steps in charges and says nowhere how many the gloves hold, nor
+    what refills them, and neither does the item's own line -- the whole
+    of `item.spec` for `i1431` is its one-word Requirement, and the
+    Property beside this is about retyping the curse. `i2017x1` is the
+    contrast and the reason this reads as a gap rather than a convention:
+    its Property prints the pool and the recharge in one sentence, and the
+    import carried both. So there is no number here to read, and inventing
+    a pool would be deriving the one figure the row turns on. See
+    *"never derive a number the page prints"*.
+
+    Referred up rather than flagged: whether this is a `defect=` is not an
+    authoring agent's call, and it is not a free one either -- a defect
+    drops the **whole** `i1431` entry, including `i1431x1`, which is
+    written and plays. The narrow question for whoever can open the
+    compendium is whether the entry prints a charge count anywhere, or
+    whether it leans on a general rule about charged items printed in the
+    book `item.books` names for this row -- which is not among the 18 PDFs
+    in `resources/`, so it cannot be checked from here."""
 
 
 @power("i1440p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1281,9 +1465,20 @@ def i465x1(c: Cast) -> None:
 
 
 @power("i465p1", level=8, cls=ITEM, usage=AT_WILL, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.alchemical()",))
+       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
 def i465p1(c: Cast) -> None:
-    """Spending an alchemical item on a weapon, with no such item."""
+    """Spending the stowed alchemical item on the weapon in hand.
+
+    **Re-pointed off `c.alchemical()` for the reason `i476x1` carries**:
+    alchemical items are declared, 75 of them, so the thing is not absent
+    -- what is absent is anybody holding one to spend. `waist.i467p1` is
+    the sibling card almost word for word, *"the stowed alchemical item is
+    the whole benefit and there is no consumable to spend"*, and it is
+    already on `c.consume_item()`.
+
+    The Property beside this (`i465x1`) is the stowing and is correctly
+    inert out of combat: `Gear.worn` holds slot names rather than refs, so
+    there is nothing for it to put in the slot either."""
 
 
 # -- level 9 ----------------------------------------------------------------
@@ -1441,7 +1636,25 @@ def i3221p1(c: Cast) -> None:
        todo=("c.floating_object()",))
 def i3221p2(c: Cast) -> None:
     """Swapping places with the floating gauntlet needs the gauntlet to be
-    somewhere, and there is no object on the board to swap with."""
+    somewhere.
+
+    **"There is no object on the board" was too strong**, and the precise
+    version is worth having: `components.Scenery` is exactly a thing on
+    the map with a `Position` and no `Side`, so adjacency, line of effect
+    and a teleport could all measure to it. Its only writer is
+    `content.terrain.put`, which dresses a room before the fight -- **a
+    row cannot put one down**, and that absence is shared:
+    `c.place_scenery()` is the symbol `m4620a2`, `m5333a0` and `m6606a1`
+    carry for it.
+
+    Left on `c.floating_object()` rather than folded into that group,
+    because this row needs a second thing those three do not: the
+    gauntlet is placed by `i3221p1`, which is `out_of_combat=True` and
+    would have to become a real combat action first. Re-pointing would
+    make `todo.py` report this ready the day scenery can be placed, with
+    half the work still to do -- the "twelve rows reported ready when a
+    third of it landed" failure. The Requirement is the tell: this row is
+    about a state the row beside it has no way to create."""
 
 
 # -- level 10 ---------------------------------------------------------------
@@ -1623,11 +1836,52 @@ def i3460p1(c: Cast) -> None:
 
 
 @power("i520x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.movement_tax()",))
+       reach=PERSONAL, target=SELF)
 def i520x1(c: Cast) -> None:
-    """Difficult terrain is a property of a square, not of who is next to
-    it, so "1 extra square to enter a square adjacent to you" has no
-    shape the grid can hold."""
+    """One extra square to enter a square beside the wearer.
+
+    **The marker's premise was exactly backwards.** It said difficult
+    terrain "is a property of a square, not of who is next to it, so the
+    clause has no shape the grid can hold" -- and an **aura** is a set of
+    squares described relative to a creature, which is the shape. One
+    extra square to enter is what difficult terrain costs, `Zones.refresh`
+    re-centres an aura's squares as the wearer moves, and `c.aura` has
+    taken `difficult=` since the parameter was threaded through.
+
+    **The pair, not `difficult=True` alone.** `Zone.difficult` is terrain:
+    it roughs the ground for everybody standing in it, so the bare flag
+    would charge the wearer and the party for walking beside their own
+    gloves. Labelling the going with this row's own ref and waiving that
+    one label for the team is `cast.DIFFICULT_LABELS`' documented idiom
+    -- twelve rows already say "difficult for everyone except us" this way
+    -- and `_REF_LABEL` is why a ref is accepted where a word like "mud"
+    would be. Scoped to the label rather than blanket, because
+    `c.ignores_difficult_in(zone, side="team")` hands whoever stands
+    inside a waiver against *all* rough ground, which would let an ally
+    standing beside the wearer walk through real mud for nothing.
+
+    **An aura 1 is "adjacent to you"**, and it follows: a snapshot of the
+    eight squares would be right until the wearer moved. `f1341` works
+    the same clause for a single named enemy and takes
+    `c.difficult_for(zone=)` instead, because that card must leave the
+    *other* enemies in its own aura on ordinary ground. This one says "an
+    enemy", so the side-wide waiver is exact rather than wider than print.
+
+    "An enemy that is pulled, pushed, or slid moves through those squares
+    as normal" costs nothing to say: forced movement pays no terrain cost
+    in this engine at all -- `movement.PRICED_KINDS` is walk, shift,
+    charge and run -- which is why `c.ignores_difficult(when=)` refuses to
+    scope a waiver to a slide: there is nothing there to waive.
+
+    The one imprecision, said rather than hidden: the waiver is handed to
+    the team as it stands when the trait arms, so an ally conjured or
+    summoned later pays the extra square beside its own wearer. The
+    alternative pays a wider waiver to everybody who steps in, and of the
+    two this errs the way `m5808a0`'s rule asks -- weaker than the card
+    rather than stronger."""
+    c.aura(1, label=c.ref, on=c.me, until=When.ENCOUNTER, difficult=c.ref)
+    for mate in (c.me, *c.allies()):
+        c.ignores_difficult(c.ref, on=mate, until=When.ENCOUNTER)
 
 
 @power("i520p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

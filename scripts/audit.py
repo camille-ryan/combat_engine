@@ -4221,6 +4221,12 @@ def _provoke_passes(world, caster: int, ref: str, cursor: int,  # noqa: ANN001
     if _rolls_checks(world, caster, ref, cursor):
         return True
 
+    # After the checks, because a stabilisation is usually a check *on* a
+    # dying creature -- so the dying ally has to be standing (or lying)
+    # before the check pass can mean anything for it. #1226.
+    if _lays_an_ally_dying(world, caster, ref, cursor):
+        return True
+
     if _rolls_saves(world, caster, ref, cursor):
         return True
 
@@ -5818,6 +5824,123 @@ def _rolls_saves(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: AN
         else:
             world.rng.loaded = was
     return False
+
+
+#: Set while `_lays_an_ally_dying` has an ally on the floor, because that
+#: pass re-runs `_provoke_passes` and would otherwise reach itself forever.
+_ALLY_IS_DYING = False
+
+
+def _lays_an_ally_dying(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Put an ally on the floor, for a row whose printed trigger is one.
+
+    **Nobody on this board ever goes to dying**, and the excuse list has
+    said so in prose since `m5825a4` -- *"finishes a dying humanoid; nobody
+    here is dying"*. So every row printing "an adjacent dying ally", "a
+    dying creature" or a stabilisation reported SILENT or UNUSED while
+    being perfectly correct. `i2273p1` is the one that surfaced it: its
+    probe heals a dying ally for the printed 5 plus a surge, and on this
+    board it returns at its own guard.
+
+    Gated on the row **mentioning** it, for `_rolls_checks`' reason: this
+    costs a `Health` write and a re-provocation, and running it for every
+    triggered row in the tree would be most of the audit's time. The gate
+    is a source read rather than an event-class test, because a dying
+    creature is a **state** and the rows that want it ask in a dozen
+    different ways -- `c.dying`, `c.stabilise`, a `Health.hp` comparison --
+    so there is no one event to key on. A text gate goes stale the day
+    somebody spells it differently, which is the honest cost and is cheaper
+    than the alternative of posing it always.
+
+    Restored in a `finally`, so a row that raises cannot leave the next one
+    looking at a corpse -- the hazard `_provoke`'s own wrapper records.
+
+    **Re-entrant, and guarded for it.** This pass re-runs
+    `_provoke_passes`, which reaches this pass again -- so without the
+    flag it recurses until Python stops it, and the first version did. The
+    guard is a module-level bool rather than a parameter for
+    `_SPEND_FOR_REAL`'s reason: the passes beneath do not choose, the row
+    does, once.
+    """
+    import inspect
+
+    from combat_engine.engine.components import Health
+
+    global _ALLY_IS_DYING
+    if _ALLY_IS_DYING:
+        return False
+    declared = get(ref)
+    if declared is None:
+        return False
+    try:
+        body = inspect.getsource(declared.body)
+    except (OSError, TypeError):
+        return False
+    if not any(w in body for w in ("dying", "stabilis", "dying_at")):
+        return False
+
+    mates = _allies_of(world, caster)
+    if not mates:
+        return False
+    floored = mates[0]
+    health = world.get(floored, Health)
+    if health is None:
+        return False
+    was_hp, was_fails = health.hp, health.failures
+    # **Adjacent, through the grid.** Most of these cards print "an
+    # ADJACENT dying ally", so flooring whoever happens to stand furthest
+    # away leaves the body returning at its own guard -- which is exactly
+    # what `i2273p1` did: its predicate answered True on the aimed check
+    # and the body then found nobody beside the caster. Moved with
+    # `grid.place`, not by writing `Position.square`, because a direct
+    # write leaves `Grid.occupants` stale and the board reads empty.
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.query import squares as squares_of
+    spot = world.get(floored, Position)
+    here = sorted(squares_of(world, caster))
+    was_square = spot.square if spot is not None else None
+    if spot is not None and here:
+        beside = (here[0][0] + 1, here[0][1])
+        if world.grid.place(floored, frozenset({beside})):
+            spot.square = beside
+    # **Below zero, not at it.** `dying_at` is 0 for most creatures and a
+    # negative number for a character with a bloodied value, and
+    # `query.alive` reads `hp > dying_at` -- so parking it exactly on the
+    # line would leave the creature dead rather than dying, which is a
+    # different state and the wrong one for every card of this shape.
+    # **Through `resolve._check_down`, not by writing `hp` alone.** The
+    # rows that want this read `Condition.DYING`, which is a condition the
+    # engine applies on the way down -- hand-setting the number leaves a
+    # creature on negative hit points that nothing considers dying, and
+    # `i2273p1`'s body returned at exactly that guard while its trigger
+    # predicate answered True. Same lesson as moving a creature through the
+    # grid rather than through `Position.square`: do not hand-write state
+    # the engine derives.
+    from combat_engine.engine.resolve import _check_down
+    health.hp = health.dying_at + 1 if health.dying_at < 0 else 0
+    _check_down(world, floored, health)
+    _ALLY_IS_DYING = True
+    try:
+        # **A heal check AT the dying ally, which `_rolls_checks` cannot
+        # make.** That pass rolls all 17 skills at two DCs and passes no
+        # `target=`, so `SkillCheck.target` is None on every one of them --
+        # and a row whose printed trigger is *"a Heal check to steady a
+        # dying creature"* reads the target to find out who was steadied.
+        # `i2273p1` is that row: it matched nothing until the check was
+        # aimed. Both DCs, because the printed clause is about succeeding
+        # and a failure is the control.
+        from combat_engine.engine.skills import check as roll_check
+        for dc in (1, 99):
+            roll_check(world, caster, "heal", dc, target=floored)
+            if _fired(world, ref, cursor):
+                return True
+        return _provoke_passes(world, caster, ref, cursor)
+    finally:
+        _ALLY_IS_DYING = False
+        health.hp, health.failures = was_hp, was_fails
+        if spot is not None and was_square is not None:
+            world.grid.place(floored, frozenset({was_square}))
+            spot.square = was_square
 
 
 def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001

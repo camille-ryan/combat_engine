@@ -17,23 +17,35 @@ Three judgements run through the file.
   against damage from swarms" and "resistance against attacks by your oath
   target" cannot be gated and are marked, not approximated.
 * **The saving-throw context is `actor`, `effect`, `label`, `conditions`,
-  `ongoing`, `dtype` and `keywords`.** That is enough for "against ongoing
-  necrotic damage" (the effect carries its burn), for "against effects that
-  daze, dominate or stun" (it carries its conditions) and now for "against
-  fear effects" too: `durations.keywords_of` reads the keywords back off
-  the label, which is the ref of the row that laid the hold.
+  `ongoing`, `dtype`, `keywords`, `when_` and `granted_via`.** That is
+  enough for "against ongoing necrotic damage" (the effect carries its
+  burn), for "against effects that daze, dominate or stun" (it carries its
+  conditions) and for "against fear effects" too: `durations.keywords_of`
+  reads the keywords back off the label, which is the ref of the row that
+  laid the hold.
 
-One verb the slot keeps asking for and that does not exist: `c.escape()`.
-An escape attempt is not modelled at all -- no action, no check -- and
-six blocks print a bonus to one. "The ongoing damage ends", which used
-to be marked beside it, is `_burn_on` plus `c.end_effect`: the burn lives
-on the hold, so having the hold is having the number and the way to end
-it.
+  The last two were added by #671 and #672 and this list did not mention
+  them, which is why `i2494x1` sat refused in play. **`when_` says which
+  throw this is** -- `"end"` for the ordinary one, `"early"` for one moved
+  or granted, and `"edge"` for `falling.catches_itself`, the save against
+  being forced over a drop. A clause naming one kind of throw is a gate on
+  that word and nothing narrower is needed.
 
-Death saves are rolled in `turns._death_saves` with `bonus=0`, so a
-standing `c.bonus("save", ...)` never reaches them; the three blocks that
-print one ride the `SavingThrow` read-back instead. The same read-back is
-how the two blocks that bargain over a *later* throw are written -- the
+Two absences this file asserted and no longer has. **`c.escape(on=,
+bonus=)` exists**, `escape.attempt` makes a real check, and it sums an
+`"escape"` modifier key off the struggling creature -- five blocks below lay
+one and `i1111p1` calls the verb, so "an escape attempt is not modelled at
+all, no action, no check" was being contradicted by the rows under it.
+"The ongoing damage ends", which used to be marked beside it, is `_burn_on`
+plus `c.end_effect`: the burn lives on the hold, so having the hold is
+having the number and the way to end it.
+
+**And a death save reads `c.bonus("save", ...)` now.** This said it was
+rolled with `bonus=0`, which was true and was fixed: `turns._death_saves`
+sums the modifier with `label="death"` in its context, so a standing bonus
+reaches it and is gated on that word rather than helping every throw. The
+three blocks that print one still ride the `SavingThrow` read-back, which
+is how the two blocks that bargain over a *later* throw are written -- the
 throw is announced before it is acted on, so its answer can be changed.
 """
 
@@ -2439,7 +2451,17 @@ def i2413x1(c: Cast) -> None:
     question and nothing else, so a creature with it already needs line of
     sight exactly as this card demands. There is no model of detection
     without sight for the row to narrow, so writing anything here would
-    either do nothing or invent a rule the engine does not have."""
+    either do nothing or invent a rule the engine does not have.
+
+    **Re-measured, because the obvious write is a per-enemy one.**
+    `c.has_sense("tremorsense", on=foe)` asks the question and works, so a
+    body could skip a hide for each such enemy -- and it would skip
+    nothing. Going unseen is `c.hide` -> `c.invisible` -> `query.hidden_from`,
+    and the only thing that sees through it is the separate `see_invisible`
+    key (`c.see_invisible`, `c.truesight`). Tremorsense is read in exactly
+    two places, `query.sees_in` and `query.has_sense`, and neither is on
+    that path -- so a creature with tremorsense cannot find a hidden wearer
+    today, with or without this armour."""
 
 
 @power("i2413p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -3386,11 +3408,45 @@ def i2440p1(c: Cast) -> None:
     c.insubstantial(on=c.me, until=When.EONT)
 
 
+def _at_the_edge(ctx: dict[str, Any]) -> bool:
+    """The one throw in the game made to avoid forced movement.
+
+    `falling.catches_itself` is PHB p284's "catching yourself" -- a save
+    taken the instant a push, pull or slide would carry the creature over a
+    drop -- and `when_="edge"` is on it for exactly this reason (#671): it
+    is not the ordinary end-of-turn throw and must not be mistaken for one.
+    `movement._over_an_edge` is its only caller, so the gate is true for
+    forced movement and for nothing else; `Effects.save` and `Cast.save`
+    write `"end"` and `"early"` and never this word."""
+    return ctx.get("when_") == "edge"
+
+
 @power("i2494x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.save_vs_forced()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("falling.catches_itself(prone=)",))
 def i2494x1(c: Cast) -> None:
-    """Forced movement is shortened by `c.resist_forced` and never saved
-    against, so there is no throw to add to."""
+    """The bonus half plays, and the premise it was refused on was wrong.
+    This said "forced movement is ... never saved against, so there is no
+    throw to add to"; `falling.catches_itself` is that throw, it has been
+    there since #949, and it sums a `"save"` modifier out of `Mods` with
+    `label="falling"` and `when_="edge"` in its context. So an item bonus
+    to it is an ordinary standing modifier with a gate, which is why the
+    row went from refused in play to playing.
+
+    `_at_the_edge` rather than the label, because `when_` is the field that
+    exists to tell this throw from the end-of-turn one and the label is a
+    word about the hazard.
+
+    Dropped: "on a save, you don't fall prone". The printed rule leaves a
+    creature that catches itself prone in the last square it occupied, and
+    this engine lays nothing -- `catches_itself` returning True stops the
+    step and no fall is announced, so there is no prone for the card to
+    waive and play is already what the card describes. The marker names the
+    engine half rather than a waiver, so the day the prone lands this row
+    goes red and gets its opt-out; naming a waiver that nothing could waive
+    would be a marker for a mechanism nobody should build."""
+    c.bonus("save", c.enhancement, on=c.me, until=When.ENCOUNTER,
+            kind="item", when=_at_the_edge)
 
 
 @power("i2541x1", level=7, cls=ITEM, action=ActionType.NONE,
