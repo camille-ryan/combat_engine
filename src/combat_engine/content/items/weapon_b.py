@@ -6395,7 +6395,7 @@ def i2358p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonded_to(penalty=)",),
+    dropped=("Gear.owned",),
 )
 def i2359x1(c: Cast) -> None:
     """The square lands; the bonded-weapon penalty does not.
@@ -6415,7 +6415,24 @@ def i2359x1(c: Cast) -> None:
     holding the item, which nothing asks, and `cf:swordmage-f0`'s bond is
     not recorded anywhere a penalty could read. That clause is a benefit
     withheld from an enemy rather than one this row's holder loses, so the
-    row plays correctly short of it; `ranger_b.f2361`'s reading."""
+    row plays correctly short of it; `ranger_b.f2361`'s reading.
+
+    **Re-pointed to `Gear.owned`, which is the thing that is missing.**
+    The note above already named it -- the bond is not recorded -- and
+    `cf:swordmage-f0` carries `Gear.owned` for exactly that, so this row
+    joins its group rather than keeping a private spelling that also
+    bundled the penalty half. Once the record exists the penalty is
+    ordinary `c.penalty` gated on whether the wielder is the owner; there
+    was never a second gap to name.
+
+    **And it is deliberately NOT `c.bonded()`**, which two rows in
+    `weapon_c.py` carry. Those print a different bond: one made during an
+    extended rest, specific to the item, with one bonded wielder at a time
+    and the item's powers locked to that wielder. This row's bond is the
+    **swordmage class feature's**, which the card names by ref. Same word,
+    two mechanisms -- so two symbols is right here, and collapsing them
+    would be the mistake rather than the fix. Checked by reading all three
+    cards, because `blocked.py --group` shows only the spellings."""
     c.extend_every("teleport", 1)
 
 
