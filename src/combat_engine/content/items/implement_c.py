@@ -555,6 +555,16 @@ def i526p1(c: Cast) -> None:
     second gap on it. The difference from the existing call is exactly the
     pinned square: `move_zone` translates and keeps the shape, where this
     changes the shape and keeps a square. #614.
+
+    **Confirmed, and it is the cheap bucket.** `c.move_zone(zone, squares_,
+    *, to=)` exists, so this is one parameter on a live verb rather than a
+    facility nobody has started. Two things it owes beyond the pinned
+    square, both measured here: `Zone` carries no kind at all, so "a wall
+    effect" has to be identified through `zone.label` -- which leads with
+    the laying row's ref, whose `reach.kind` is `"wall"` -- and the
+    reshaped squares still have to form a legal wall of the same length.
+    Hand-rolling that here the way `p5052` writes zone squares would be a
+    geometry search with no owner; the verb is the owner.
     """
 
 
@@ -585,19 +595,37 @@ def i704x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.uses_this_turn(ref=)",),
+    todo=("c.restore_use(once_per_round=)",),
 )
 def i724x1(c: Cast) -> None:
-    """**Re-aimed: `c.flurry_of_blows()` arrived and was not the hold.** It
-    names the row, which this card needed and now has; what it cannot say is
-    how many times that row has been used *this turn*.
+    """**Re-pointed, and the old note's premise was wrong.** It said this
+    needs "the once-per-turn limit to exist before anything can add to it".
+    It exists: all five of the rows `c.flurry_of_blows()` picks between are
+    declared `once_per_round=True`, and `dsl.usable` refuses them with
+    "already used this round" off `Powers.last_round`. The ref, the limit
+    and the place the limit is recorded are all in hand.
 
-    `Powers.times` counts uses for the whole encounter and `last_round` records
-    a single round number, so neither answers it -- and a flurry is an at-will,
-    so there is no spent use to hand back either. "An additional time during
-    your turn" needs the once-per-turn limit to exist before anything can add to
-    it, and the distinctness clause on top of that: the two uses "must be
-    triggered by two different attacks that you make with this ki focus"."""
+    **What refuses is `c.restore_use`, and a sibling is already broken on
+    it.** Those rows are at-wills, so `dsl.use` records a use with
+    `Powers.note_round` and never touches `used` -- and `restore_use`
+    answers False whenever `powers.times(ref) == 0`, which is always.
+    Measured on a monk board: `note_round` set, `usable` refuses,
+    `c.restore_use` returns False, the round mark is untouched and `usable`
+    still refuses. `Powers.restore` would have popped it; nothing reaches
+    `Powers.restore`.
+
+    So `f3697` -- a second use of that row in a turn an action point bought
+    -- is inert today, carries no marker, and waits on this same parameter.
+    One keyword on `c.restore_use` pays both rows, which is why the symbol
+    is named there rather than as a verb of this row's own.
+
+    The rest of the card needs nothing further. "An additional time during
+    your turn" is one hand-back a turn, which `c.latch(per_turn=True)`
+    holds; the two uses are triggered by two different `Hit` events by
+    construction, which is the printed distinctness clause; and
+    `c.struck_with` is the read for "with this ki focus" -- its own
+    docstring names a ki focus as the case it is right for, where
+    `c.weapon_of` is not."""
 
 
 @power(
@@ -1033,19 +1061,38 @@ def i1843p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.gains_property(implement=)",),
+    todo=("c.struck_by_property(implement=)",),
 )
 def i1884x1(c: Cast) -> None:
-    """**Re-pointed.** The silver itself is writable -- `c.gains_property`
-    does it, and an implement really is a `Gear.weapons` entry with group
-    "implement", so there is somewhere to put it. What this card scopes it
-    to is not: "for the purpose of implement **and** weapon attack powers
-    made using it" is a property that answers for two different attack
-    paths off one object, and the implement path does not read
-    `Weapon.properties` at all. The blanket rows need none of that.
+    """**Re-pointed, and the old note's closing claim was false.** It said
+    no creature in the tree resists anything by material, "so there is
+    nothing for a silvered implement to beat". Counted off `game.db`:
+    **11** stat blocks carry `regen_unless_struck_by = "silvered"`, nine of
+    them heroic, and `c.regeneration(unless_struck_by=)` is the live
+    mechanism every one of them goes through. The benefit this card buys is
+    real and it is in band.
 
-    No creature in the tree resists anything by material, so there is
-    nothing for a silvered implement to beat."""
+    The **write** is real too, and is not the gap. `c.gains_property`
+    matches `mine=True` on `Weapon.item`, which an implement block carries
+    -- measured on a level-8 caster holding this item, it finds the one
+    entry and answers 1. `i1764x1` and `f1075` write the same property as a
+    blanket and `i1880x1` writes it for one weapon.
+
+    **The reader is the gap, one layer below the verb.** The only thing
+    that asks after a weapon property is `c.struck_by_property`, and it
+    resolves the swing through `c.weapon_of` -> `Gear.main`, whose
+    fallbacks skip implements on purpose -- a creature holding nothing but
+    an implement is holding nothing it can swing. So the property would sit
+    on the item and nothing could ever see it. `c.struck_with` *is* the
+    read that finds an implement, and `struck_by_property`'s own docstring
+    says it deliberately does not use it, because a treated weapon is one
+    weapon and the other must not carry it. Reconciling those two readings
+    is the parameter.
+
+    Left unwritten rather than written inert, and the marker stays `todo`:
+    laying a property nothing reads would make this row fire and report
+    finished while the card does nothing in any fight, which is the worst
+    of the three outcomes."""
 
 
 @power(
@@ -1499,11 +1546,38 @@ def i2716p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.item_set()",),
+    todo=("c.modify_power()",),
 )
 def i2775x1(c: Cast) -> None:
-    """The whole benefit is conditional on the set being complete, and
-    nothing asks after a set."""
+    """**Re-pointed off `c.item_set()`, and this row never belonged to that
+    group.** The old note read the first printed sentence as "the whole
+    benefit is conditional on the set being complete". That sentence is
+    `When this item is x6_679`, and `x6_679` is a row in the `background`
+    table -- not an item set, and not a thing an item can be "in". The
+    four genuine holders of that symbol say so in plain words
+    ("items you have from this set", "one or more items from this set"),
+    which is what a real set reference looks like in a brief. So the first
+    sentence is a garbled cross-reference and is referred up rather than
+    guessed at; the other four rows keep `c.item_set()` and should not
+    follow this.
+
+    **The second sentence blocks the row under either reading of the first,
+    which is why the marker moved here rather than away.** "You can target
+    creatures of the chosen kind instead of undead creatures" changes
+    `p146`, whose body opens `if not c.is_kind("undead"): return` -- so
+    this is the #550 shape: a clause written into that row's body, in
+    another file, gated on the caster holding this item, exactly as
+    `i1461x1` below. `c.pre_empt` is not a way round it, because `what=`
+    has to be read by the row itself with `c.instead_of` and `p146` reads
+    neither.
+
+    Not approximated by laying an `origin:undead` label on the chosen
+    enemies, which `query.kinds_of` would believe: that makes them undead
+    for every other card in the fight, which is far stronger than print.
+
+    The choice itself is writable and is worth nothing alone -- `c.choose`
+    over the five kinds, the shape `i2323p1` and `i2777x1` beside this
+    already use."""
 
 
 @power(
@@ -2125,8 +2199,28 @@ def i1293x1(c: Cast) -> None:
     todo=("c.modify_power()",),
 )
 def i1461x1(c: Cast) -> None:
-    """Swapping one condition for another inside another row's zone would
-    need a hold on that row's body, and nothing edits a power."""
+    """**The symbol stays and its reason was wrong.** "Nothing edits a
+    power" states a facility gap; what is owed is an *edit*, and #550
+    settled that a clause naming one power is written into that power's
+    body rather than reached from outside it.
+
+    `p259` lays the hold this card changes inside a `MoveEnd` watch of its
+    own -- immobilized, save ends, for a creature that ends its move in the
+    zone -- and that clause alone is what the card swaps, not the hit line
+    above it, which applies the same condition and is left as printed. So
+    the work is one branch in `powers/wizard/level_5.py`, gated on the
+    caster holding this item, which `c.held(on=..., what="magic")` answers
+    through `Weapon.item`. The reader exists; the branch does not.
+
+    `c.pre_empt(ref, what, clause)` is the sanctioned route for a clause
+    reaching into a named row and still needs that file: `what=` is read by
+    the row itself with `c.instead_of`, and `p259` calls neither.
+
+    So the symbol is a stand-in for work this file cannot do -- the same
+    reading `i1098x1` above records, for the same reason, since a marker
+    cannot name a file. Said plainly so the next reader does not go and
+    build a power-editing facility, which is the thing #550 decided
+    against."""
 
 
 @power(
@@ -2163,7 +2257,21 @@ def i1461p1(c: Cast) -> None:
 def i1531p1(c: Cast) -> None:
     """The burst is printed as centred on the ally who was hit; nothing
     moves a declared area's origin, so the engine aims it and only the
-    push is measured from the ally."""
+    push is measured from the ally.
+
+    **Marker confirmed rather than re-derived.** `c.area_origin()` is the
+    *writer* half of a split `i1832x1` records: a row that **reads** another
+    use's origin keeps an event field instead, and only a row that **moves**
+    one keeps this. This row declares a real area -- `reach=AreaBurst(1, 10)`
+    -- so it is one of the two legitimate holders.
+
+    And the aim is settled before any body could speak: `dsl.use` calls
+    `_auto_targets`, which walks `aim_points` and keeps whichever origin
+    catches the most creatures, then hands the result to the `Cast`. So
+    `c.origin` is already decided by the time this row runs, which is why
+    this is a header-time gap and not a verb the body can call.
+    `dsl.use(origin=)` is the parameter that exists for a caller who knows
+    where to aim; a dispatched trigger has nobody to pass it."""
     mate = getattr(c.trigger, "target", None)
     here = _square(c, mate)
     if c.strike():
@@ -2497,23 +2605,42 @@ def i2321x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.extend_effect()",),
+    todo=("durations.When.EOTAN",),
 )
 def i2323x1(c: Cast) -> None:
-    """Re-diagnosed, and the gap is narrower and harder than the old note.
+    """**Re-pointed off `c.extend_effect()`, which named a door onto a rung
+    that does not exist.**
 
-    Finding the effects is not the problem. `c.resist` labels its hold
-    `"<ref> resist"` and a label leads with the laying row's ref, so
-    "resistance granted by your artificer powers" is readable off
-    `world.effects.of(c.me)`.
+    Finding the effects is not the problem, and neither is re-clocking one.
+    `c.resist` labels its hold `"<ref> resist"` and a label leads with the
+    laying row's ref, so "resistance granted by your artificer powers" is
+    readable off `world.effects.of(c.me)`; and `i1960p1` and `p5052` both
+    write `effect.when`, `effect.clock` and `effect.latch` from a body, so
+    a `Cast` door was never the thing missing.
 
-    The duration is. `p5052` lengthens a zone by **writing `effect.when`**,
-    and that works because it moves `When.EOT` to `When.EONT` -- a rung that
-    exists. This card asks for the end of the caster's turn on the round
-    *after* next, and `When` has no such value: the ladder is EOT, EONT,
-    SONT, EOTNT, SOTNT, and EONT is already the top of it for a
-    source-clocked hold. So what is wanted is a rung or a round counter on
-    the `Effect`, not a `Cast` door onto one."""
+    The duration is, and it is a **rung**. Both of those precedents move
+    `When.EOT` to `When.EONT`, which the ladder already has. This card asks
+    for the end of the caster's turn on the round *after* next, and `When`
+    has no such value: the ladder is EOT, EONT, SONT, EOTNT, SOTNT, and
+    EONT is already the top of it for a source-clocked hold.
+
+    Spelled `durations.When.` and not a bare `When.`, because that is the
+    only form that can ever go green: `blocked._surface` indexes the enum
+    under its module, and neither `triggers` nor `events` re-exports it, so
+    a bare `When.X` resolves against nothing for ever. #1231.
+
+    **`Effect.latch` is not the cheap way out, and the two rows this card
+    is about are what show it.** `latch` is a bool consumed by one turn
+    end, so setting it buys exactly one extra round and only on a hold that
+    did not already have it. Of the two artificer rows granting resistance
+    `until=When.EONT`, `p10195` is an immediate interrupt and so lands on
+    somebody else's turn -- `latch` False, where the bool would work --
+    and `p4145` is a standard action on the caster's own turn, where
+    `latch` is already True and setting it does nothing. Half the cases is
+    worse than none here, because nothing would report the other half.
+
+    The premise holds either way: there are two rows in the tree for this
+    to lengthen, and both are heroic."""
 
 
 @power(
