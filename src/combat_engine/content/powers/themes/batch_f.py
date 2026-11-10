@@ -60,6 +60,7 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    Effect,
     EnterSquare,
     Healed,
     Health,
@@ -149,6 +150,22 @@ def _mine(c: Cast, who: int) -> bool:
 
 def _aimed_at_me(c: Cast) -> Callable[[dict[str, Any]], bool]:
     return lambda ctx: ctx.get("target") == c.me
+
+
+def _ends_with(c: Cast, shape: Effect, *holds: Effect | None) -> None:
+    """Tie a while-in-this-shape benefit to the shape itself.
+
+    `powers/vampire/__init__.py`'s helper, here for the same reason it is
+    there: the printed clock on each clause is the shape, and the longest
+    `until=` the engine has is the encounter -- so a hold laid bare
+    survives changing back, and a creature that stepped out of a form kept
+    what the form cost it.
+    """
+    for hold in holds:
+        if hold is not None:
+            shape.on_end.append(
+                lambda h=hold: c.world.effects.end(h, "the shape ended")
+            )
 
 
 # -- x7_658 -----------------------------------------------------------------
@@ -700,8 +717,27 @@ def p16099(c: Cast) -> None:
     have been banished grants nothing, since nothing occupies their
     squares.
 
-    Swinging from a guardian's square is still a standing leave
-    `c.strike(from_=)` cannot be given, and that is the remaining symbol.
+    **The remaining clause is the marker's, and this paragraph used to name
+    a different symbol from the header.** It said the gap was
+    `c.strike(from_=)` while `dropped=` says `c.opportunity_from(square)`;
+    the header is the one that is right, because the window has to *open*
+    before there is any swing to aim. Measured in `movement.step`:
+    `watchers` is `before | _reachers`, `reach` is `_threat(world, other,
+    eid)`, and every one of those reads `squares(world, other)` -- the
+    watcher's own squares and nothing else. So a caster five squares back
+    is not in `watchers` at all, and `c.bonus("reach", n)` is the wrong
+    lever twice over (it widens from the caster's square, and
+    `movement.threat_range` asks it with an empty context, which is
+    `f2276`'s note).
+
+    **And there is nothing on the event to read instead.**
+    `OpportunityWindow` carries `actor`, `provoker`, `why`, `kind_` and
+    `mode` -- no origin square, and `why` is `"moved away"` for a walk, a
+    charge and a flight alike. `c.provoke` would open a window the caster
+    cannot answer, since the swing still leaves from where he stands: a
+    verb that nearly fits, paying the clause on the log while the attack
+    is out of reach. So the symbol names one thing -- making a creature
+    threaten, and swing, as though it occupied a square it does not.
 
     **Found while writing this and not fixed here**: each `c.conjure` gets
     its own effect carrying `sustain_cost=MINOR` (cast.py:5560), and
@@ -743,7 +779,6 @@ PRIMAL_POLYMORPH = [Keyword.PRIMAL, Keyword.POLYMORPH]
     target=SELF,
     keywords=PRIMAL_POLYMORPH,
     once_per_round=True,
-    dropped=("c.form(keeps_gear=)",),
 )
 def p14192(c: Cast) -> None:
     """Tiny, unable to attack, climbing at half speed.
@@ -755,9 +790,38 @@ def p14192(c: Cast) -> None:
     encounter clock ending the form also pays the shift -- which is a
     square at the end of a fight.
 
-    Still dropped: the equipment clause. Worn gear goes on working while
-    shields and item powers do not, and nothing suspends half of what is
-    held.
+    **Every "while in rat form" clause now ends with the form, and three
+    of them did not.** The size, the attack refusal and the Stealth bonus
+    were laid at `until=When.ENCOUNTER` and nothing tied them to the
+    shape, so a character taking the printed minor action to change back
+    stayed Tiny and unable to attack for the rest of the fight. `revert=`
+    is what makes that reachable and `p13860` is the sibling that does it
+    right; `_ends_with` is that file's helper.
+
+    **The equipment clause is written and the marker is gone, and the half
+    with combat meaning is the exception list rather than the melding.**
+    `c.form(keeps_gear=)` claimed `c.form` needed a parameter to say what
+    happens to gear. It does not, because the two things the card takes
+    away are each sayable today:
+
+    * *shields* -- the benefit of a worn shield **is** its bonus to AC and
+      Reflex, which `c.shield_bonus` reads and a pair of penalties
+      forgoes. `f949` is the printed sibling for exactly that pair, and
+      the penalties are gated on there being a shield for the reason its
+      note gives: paying nothing would make this a free line for anybody.
+    * *item powers* -- an item's own rows go into `Powers.known` while it
+      is worn (`Magic.powers`), and an item row is one whose header says
+      `cls="item"`, which is how `f1362b` already asks. `c.forbid`
+      takes a row away without spending it, so it comes back with the
+      shape. A **Property** is `action=NONE` and is not a power, so it is
+      left alone -- the card's exception names powers and this one does not
+      carry the druid card's wider "and the properties of weapons".
+
+    What is left of the sentence is inventory bookkeeping with no combat
+    consequence -- items in hand being dropped, worn gear not coming off,
+    a container's contents out of reach -- which is the reading `p5032`
+    and `f1857` already settled for the identical printed paragraph. No
+    symbol, because there is nothing for one to wait for.
     """
     me = c.me
     shape = c.form(
@@ -772,9 +836,27 @@ def p14192(c: Cast) -> None:
         c.shift(1, who=me)
 
     shape.on_end.append(step_off)
-    c.resize(Size.TINY, on=me, until=When.ENCOUNTER)
-    c.cannot_attack(on=me, until=When.ENCOUNTER)
-    c.bonus("skill:stealth", 4, on=me, until=When.ENCOUNTER)
+    _ends_with(
+        c,
+        shape,
+        c.resize(Size.TINY, on=me, until=When.ENCOUNTER),
+        c.cannot_attack(on=me, until=When.ENCOUNTER),
+        c.bonus("skill:stealth", 4, on=me, until=When.ENCOUNTER),
+    )
+    guard = c.shield_bonus()
+    if guard:
+        _ends_with(
+            c,
+            shape,
+            c.penalty(AC, guard, on=me, until=When.ENCOUNTER),
+            c.penalty(REF, guard, on=me, until=When.ENCOUNTER),
+        )
+    held = c.world.get(me, Powers)
+    for ref in sorted(held.known if held is not None else ()):
+        row = REGISTRY.get(ref)
+        if row is None or row.cls != "item" or row.action is ActionType.NONE:
+            continue
+        _ends_with(c, shape, c.forbid(ref, on=me, until=When.ENCOUNTER))
 
 
 @power(
@@ -1137,12 +1219,35 @@ def p14203(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL, Keyword.ZONE],
-    dropped=("events.TempHP.cancel",),
+    dropped=("c.no_healing(temp_hp=)",),
 )
 def p14204(c: Cast) -> None:
     """`Healed` is a `Decision` so the healing half is refused outright.
     `TempHP` is a plain notification announced after the points have landed,
-    so the other half of the same sentence cannot be refused at all."""
+    so the other half of the same sentence cannot be refused at all.
+
+    **Re-pointed off `events.TempHP.cancel`, which was a one-row spelling
+    of a gap two other rows were already waiting on.** `i3337p1` and
+    `m5496a0` print the same clause and carry `c.no_healing(temp_hp=)`,
+    and the engine change behind the two names is the same one:
+    `resolve.temp_hp` writes `health.temp` and emits *afterwards*
+    (`resolve.py:1730`), so there is no moment to refuse. The parameter
+    cannot exist until the emit becomes a `Decision`, which is why
+    pointing at the content-facing name does not report this row ready
+    early.
+
+    **Not `TempHP.swallowed`**, which `f3781` carries and which is the
+    neighbouring gap rather than this one: that row is written and unpaid
+    because the non-stacking `if amount <= health.temp: return` returns
+    without announcing, so nothing on the bus tells "no pool offered" from
+    "a pool offered and lost to a bigger one". Making the event refusable
+    and making the losing pool observable are two changes, and a row
+    waiting on one must not go green on the other. #1232 is the second of
+    the two and says so in its title; this row is not on it.
+
+    The zone-gated shape stays hand-written either way: `c.no_healing`
+    takes no `when=`, so it cannot be narrowed to whoever is standing
+    inside, and `_inside` is what the printed sentence asks."""
     zid = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER)
 
     def deny(ev: Healed) -> None:
@@ -1281,7 +1386,28 @@ def p15888(c: Cast) -> None:
     which spends one of the caster's levelled rows and hands the ally back an
     expended row of the same usage and level. Spending the ally's surges as
     though they were the caster's is a standing permission and there is no
-    verb that lends a surge pool."""
+    verb that lends a surge pool.
+
+    **Measured rather than asserted, because "nothing can do it" is the
+    marker shape that is usually wrong here.** The spend *is* visible and
+    refusable -- `SurgeSpent` is a `Decision` and `resolve.spend_surge`
+    returns `not spent.cancelled` -- so a watch could see every surge this
+    caster pays. What no verb takes is a different *pool*:
+    `resolve.spend_surge` decrements the actor's own `Health.surges` and
+    names no alternative, and `c.surge`, `c.spend_surge`,
+    `c.regain_surge`, `c.second_wind` and `diseases.lost_surges` are all
+    about the creature in `on=`.
+
+    So the emulation available today is two bookkeeping moves standing in
+    for one -- `c.spend_surge(on=mate)` plus `c.regain_surge(on=c.me)` on
+    every `SurgeSpent` -- and it is deliberately not written. It
+    hand-writes state the engine derives; it reports the ally's pool as
+    spent for nothing and the caster's as refunded, which is two `Note`s
+    saying something that did not happen; and `c.regain_surge` is a bare
+    `health.surges += count` against no ceiling, so a caster refunded
+    above `Health.max_surges` would be handed a pool the extended rest
+    never gave him. `c.surge_from(who)` is one gap and the right place for
+    it is where the pool is read."""
     mate = c.target
     if mate is None:
         return
@@ -1778,16 +1904,24 @@ def p16394(c: Cast) -> None:
 
 # -- x7_988 -----------------------------------------------------------------
 
-#: "You must have `i390` on your person." Mundane gear is not
-#: modelled, so the Requirement never refuses the row.
-#: "You must have `i390` on your person."
+#: *"You must have `i390` on your person."* Mundane gear is not modelled,
+#: so the Requirement never refuses the row. The three rows that print it
+#: share one symbol, deliberately: it is one gap, and the three say the
+#: same sentence.
+#:
 #: **Re-aimed off `c.carrying(ref)`.** That one arrived and is not this: it
 #: reads the `Item` component, which is a thing a *power* made and handed
 #: over, and a kit is ordinary equipment. `Gear` records weapons, a shield,
 #: armour, worn magic and ammunition and has no slot for the rest, so there
 #: is no ref to ask for -- and a printed Requirement is a `requires=` gate,
 #: handed `(world, eid)`, which cannot call a `Cast` method at all.
-#: *"You must have `i390` on your person."*
+#:
+#: **And not `Gear.stowed`, which is the one field whose name invites the
+#: mistake.** Checked: it is a set of *weapon* refs that are put away
+#: rather than in hand -- `Gear.held` subtracts it and `Gear.wield`
+#: discards from it -- so it records where a weapon is, not that a
+#: non-weapon is carried. `dataclasses.fields(Gear)` lists 19 fields and
+#: none of them is a list of ordinary kit.
 #:
 #: **The import landed and the marker moves back to the field.** #876 is
 #: closed: `Category = 'Equipment'` is 233 rows in the same `Item` table,
@@ -1921,6 +2055,29 @@ def p16444(c: Cast) -> None:
     c.watch(Hit, topple, until=When.ENCOUNTER)
 
 
+def _trap_went_off_near(world: Any, me: int, ev: Any) -> bool:
+    """A trap or a hazard going off within 5 squares.
+
+    **A trap announces itself by attacking.** `terrain.arm` sets `sprung`
+    and swings in the same breath, through `resolve.attack` with the trap
+    itself as the attacker -- so `AttackDeclared` is the announcement, and
+    it is a `Decision` emitted with the roll as its continuation, which is
+    the window an interrupt is for. `query.is_trap` is what tells the
+    swinger from a creature, and the tree already reads it exactly this
+    way for the printed word "hazard" as well as "trap"
+    (`skills/dungeoneering._trap_attacks_me`).
+
+    Distance to the attacker rather than to the target, because the card's
+    5 squares is measured from the thing that triggered.
+    """
+    attacker = getattr(ev, "attacker", None)
+    return (
+        attacker is not None
+        and query.is_trap(world, attacker)
+        and query.distance_between(world, me, attacker) <= 5
+    )
+
+
 @power(
     "p16445",
     level=10,
@@ -1929,13 +2086,59 @@ def p16444(c: Cast) -> None:
     action=ActionType.IMMEDIATE_INTERRUPT,
     reach=CloseBurst(5),
     target=YOU_AND_EACH_ALLY,
-    todo=("events.HazardTriggered",),
+    trigger="a hazard, object or trap within 5 squares of you triggers",
+    on=Trigger(
+        AttackDeclared, _trap_went_off_near, "a trap within 5 squares goes off",
+    ),
 )
 def p16445(c: Cast) -> None:
-    """The whole row hangs on a hazard, an object or a trap going off, and
-    nothing announces that -- `c.hazard` bites inside its own handler and
-    emits only the damage. With no event there is no trigger to declare, and
-    a row with a prose trigger can never fire."""
+    """**The marker was wrong and the row is writable.** It claimed
+    `events.HazardTriggered` -- "nothing announces a trap going off" --
+    and `p14166` is an interrupt declared on exactly this announcement and
+    has been for a while: a trap on the board goes off by *attacking*, and
+    `resolve.attack` names it as the attacker. That is the shape of
+    general absence this tree keeps refuting, and the one-command check is
+    a grep of `content/` for `is_trap`, which finds 47 call sites across 30
+    files asking about a trap's swing.
+
+    Two things the printed sentence says that the board cannot field, and
+    neither is a missing clause:
+
+    * an **object** triggering. `Scenery`'s own docstring draws the line --
+      *"not a `Trap`, which attacks"* -- so an object is a thing that gets
+      hit rather than one that swings, and there is nothing for the
+      defence gate to match. Nothing is dropped: the clause covers a case
+      the rules kernel does not have.
+    * a **hazard** triggering, separately from a trap. `c.hazard` is a
+      zone with teeth and its bite is `world.damage`, not an attack -- but
+      `Trap`'s own docstring calls the component "a hazard rather than a
+      creature", and `c.is_trap` is the reader every row printing the word
+      "hazard" already uses. One reader for both words is the tree's
+      settled reading, not an approximation made here.
+
+    The shift is the target's own, so it carries `who=`: this is the row
+    whose siblings in `content/CLAUDE.md` return False before they move
+    when `on=`/`who=` is left off a clause about somebody else.
+
+    The defence bonus is gated on the attacker in the modifier's context
+    rather than spent on the triggering attack, because the card holds it
+    for the encounter against every hazard and not just the one that set
+    it off. `f377` is the same gate, written the same way, and guards the
+    `None` case rather than letting `c.is_trap()` fall through to
+    `c.target`."""
+    who = c.target
+    if who is None:
+        return
+    half = c.speed_of(who) // 2
+    if half:
+        c.shift(half, who=who)
+    for defensive in ALL_DEFENCES:
+        c.bonus(
+            defensive, 2, on=who, until=When.ENCOUNTER, kind="power",
+            when=lambda ctx: (
+                ctx.get("attacker") is not None and c.is_trap(ctx["attacker"])
+            ),
+        )
 
 
 # -- x7_1001 ----------------------------------------------------------------
