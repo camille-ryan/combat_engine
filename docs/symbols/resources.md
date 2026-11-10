@@ -7,6 +7,8 @@ Things a creature spends, and the budget it spends them from.
 
 ## surges and hit points
 
+- `c.death_save_failure(self, *, on: 'int | None' = None) -> 'int'`
+  - Charge a failed death save as a price. Returns the new count.
 - `c.regain_surge(self, count: 'int' = 1, *, on: 'int | None' = None) -> 'int'`
   - "Each target regains a healing surge." Returns how many it now has.
 - `c.second_wind(self, *, on: 'int | None' = None, cost: 'ActionType' = <ActionType.STANDARD: 'standard'>, heal: 'bool' = True) -> 'bool'`

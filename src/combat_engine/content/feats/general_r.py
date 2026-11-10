@@ -163,57 +163,68 @@ R44 = ("p7441", "p7442", "p7443")
 #: writing it.
 UNDECLARED_CLASS_FEATURE = ("cf:vampire-f0",)
 BERSERKER_FORM = ("cf:barbarian-berserker-f0",)
-#: **Retired: `etl.build_sub_option()`. The taxonomy landed, and the seven
-#: rows that shared the symbol stopped sharing a gap.**
-#:
-#: What this note used to say was that `game.db` had no school or domain
-#: table among its 24 and that "the taxonomy is absent, so there is no ref
-#: to resolve". Both halves are false now -- #581's decision, imported as
-#: #584/#585/#586 and #589. Measured in the built database: **25** tables,
-#: and `class_feature` holds **342** refs of the form `-f<N>s<N>`, 88 of
-#: them under `cf:cleric-warpriest` and 24 under `cf:wizard-mage`.
-#: Tree-wide, 97 of the 342 are declared rows.
-#:
-#: Handing a declared feature over was already `c.grant_row` and picking
-#: one out of a printed list is `c.borrow_row(among=)`, so the borrowing
-#: was never the hold. With something to point at, each of the seven names
-#: what it is actually waiting on, because one symbol could not go green or
-#: red correctly for any of them:
-#:
-#: * `f3585` is **written**. All six `cf:wizard-mage-f0s<N>` are declared
-#:   and unmarked, so `among=` has something to hold.
-#: * `f3586`, `f3587`, `f3590` and `f3591` print "the <option> you chose
-#:   for your <earlier feat>", and nothing records which option a
-#:   `c.borrow_row` settled on. That verb's own docstring says so -- the
-#:   pick "is a build choice with nowhere to live" and goes to
-#:   `world.decide`. It *could* be read back off the row the earlier feat
-#:   granted, and that is the wrong row to write: `turns.arm_traits` walks
-#:   `Powers.all` in list order, so it would be correct only while arming
-#:   happened to reach the two feats in the order the character was dealt
-#:   them. The choice belongs where the other printed choices are recorded.
-#: * `f3589`, `f3590` and `f3591` want the nine options under each of
-#:   `cf:cleric-warpriest-f1`, `-f5` and `-f8`. All 27 are in the database
-#:   and **none** is declared, so these name the undeclared parent -- which
-#:   is `BERSERKER_FORM` above, and for the same reason.
-#: * `f3583` is the one row still partly an ETL question, and a much
-#:   narrower one than this symbol was. Its card names the options of two
-#:   builds. One build's three are in the database and undeclared
-#:   (`cf:fighter-knight-f9s0`-`s2`); the other build's three are **not in
-#:   the database at all**, because `etl.build._section_rows` drops any
-#:   feature section whose own prose matches `_POWER_LIST` -- "choose ... of
-#:   the following" -- a guard meant for a printed power list that also
-#:   catches a real feature introducing its options that way. Measured
-#:   across every class page: 94 sections dropped by that guard, **7 of
-#:   which carry sub-options**, 25 rows in all, across six builds. A
-#:   section with sub-options is never a power list.
-#:
-#: The leak argument the old note ended on is unaffected and still holds:
-#: importing the taxonomy removes the cause rather than detecting the
-#: symptom, which is what #494's budget ceiling asks for. #581.
-#:
-#: **Not #548, which is the sibling it was briefly merged with.** That one
-#: is `racial_trait`: `rt:<race>-s<N>` sub-options, 18 of which have no row.
-FEATURE_CHOICE = ("chargen.feature_choice()",)
+# **Retired, twice over: `etl.build_sub_option()` and then
+# `chargen.feature_choice()`. There is no constant here any more because no
+# row in this file waits on either.**
+#
+# The first retirement: this note used to say that `game.db` had no school or
+# domain table among its 24 and that "the taxonomy is absent, so there is no
+# ref to resolve". Both halves are false -- #581's decision, imported as
+# #584/#585/#586 and #589. Measured in the built database: **25** tables, and
+# `class_feature` holds **342** refs of the form `-f<N>s<N>`, 88 of them under
+# `cf:cleric-warpriest` and 24 under `cf:wizard-mage`. Tree-wide, 97 of the
+# 342 are declared rows.
+#
+# Handing a declared feature over was already `c.grant_row` and picking one
+# out of a printed list is `c.borrow_row(among=)`, so the borrowing was never
+# the hold. With something to point at, each of the seven rows names what it
+# is actually waiting on, because one symbol could not go green or red
+# correctly for any of them:
+#
+# * `f3585`, `f3586` and `f3587` are **written**. All six
+#   `cf:wizard-mage-f0s<N>` are declared and unmarked, so `among=` has
+#   something to hold, and `#1085` found the readback the other two wanted.
+# * The second retirement is that readback. `chargen.feature_choice()` was
+#   minted for "the <option> you chose for your <earlier feat>", on the
+#   premise that nothing records which option a `c.borrow_row` settled on --
+#   `c.borrow_row`'s own docstring said the pick "is a build choice with
+#   nowhere to live". It **is** recorded: the verb calls `c.store_row(...,
+#   by=self.ref)` on the way out and `c.stored_row(of=<the earlier feat>)`
+#   reads it back. `_chose_a_school` below is the worked shape, arming order
+#   included. So `f3586`, `f3587`, `f3590` and `f3591` no longer wait on it,
+#   and nothing else in this file does.
+#
+#   The facility `chargen.BUILD_OPTIONS` plus `c.chosen_option(ref)` is a
+#   *second* answer to the same question and is the one a campaign carried
+#   between fights would want. It is not needed here, and reaching for it
+#   would mean an entry in `src/combat_engine/chargen/`, which is another
+#   component.
+# * `f3589` is written and `dropped=`; `f3590` and `f3591` wait on the nine
+#   `cf:cleric-warpriest-f5s<N>` and `-f8s<N>`, which are in the database and
+#   undeclared. Each names its family's **first option**, not the `-f5`/`-f8`
+#   heading: a heading is in `class_feature` but carries only the group's
+#   introductory sentence, so nothing declares it and a marker naming it
+#   stays red for ever -- see `f3589`'s note, which is the worked example of
+#   a marker that could not go green. `BERSERKER_FORM` above names a real
+#   undeclared row and is a different case.
+# * `f3583` is the one row still partly an ETL question, and a much narrower
+#   one than this symbol was. Its card names the options of two builds. One
+#   build's three are in the database and undeclared
+#   (`cf:fighter-knight-f9s0`-`s2`); the other build's three are **not in the
+#   database at all**, because `etl.build._section_rows` drops any feature
+#   section whose own prose matches `_POWER_LIST` -- "choose ... of the
+#   following" -- a guard meant for a printed power list that also catches a
+#   real feature introducing its options that way. Measured across every
+#   class page: 94 sections dropped by that guard, **7 of which carry
+#   sub-options**, 25 rows in all, across six builds. A section with
+#   sub-options is never a power list.
+#
+# The leak argument the old note ended on is unaffected and still holds:
+# importing the taxonomy removes the cause rather than detecting the symptom,
+# which is what #494's budget ceiling asks for. #581.
+#
+# **Not #548, which is the sibling it was briefly merged with.** That one is
+# `racial_trait`: `rt:<race>-s<N>` sub-options, 18 of which have no row.
 #: A suit of armour or a shield, which is not the same column as the
 #: weapons and implements `chargen.proficiency` deals.
 ARMOUR = ("chargen.armor_proficiency()",)
@@ -1193,7 +1204,7 @@ def f3588(c: Cast) -> None:
 
 
 @power("f3589", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:cleric-warpriest-f1",))
+       reach=PERSONAL, target=SELF, dropped=("c.borrow_row(powers=)",))
 def f3589(c: Cast) -> None:
     """Trades `cf:cleric-templar-f1` -- a declared row -- for one of the
     nine domain features printed under `cf:cleric-warpriest-f1`.
@@ -1206,18 +1217,84 @@ def f3589(c: Cast) -> None:
     `todo=` and on what the character already holds, and a dealt cleric
     holds the templar features rather than these, so the pool is the nine.
 
+    **Measured on a dealt character, because the audit board cannot see
+    this half.** `chargen.loadout("cleric", 1, who_chassis="templar")` deals
+    the four `cf:cleric-templar-f<N>` and **none** of the nine -- the
+    chassis filter is `_chassis_map`, and `class_feature.build` says
+    `Warpriest` for all nine -- so on four seeds the borrow takes
+    `cf:cleric-warpriest-f1s0` and `c.stored_row(of="f3589")` reads it back.
+    On `audit.board` it takes **nothing**: that board deals *every* level-0
+    row of the class (`p.cls == cls and p.level == 0`, deliberately, so a
+    row can satisfy its own precondition), the cleric therefore holds all
+    nine already, and `c.borrow_row`'s `ref not in held` filter empties the
+    pool and returns `""`. So `audit.py`'s "fires and does something" for
+    this row is earned by the `c.forbid` below alone, and a reader must not
+    take it as evidence the borrow works. The dealt-character probe is what
+    says that.
+
     `uses=0` for `f3585`'s reason: these are standing traits that
     `turns.arm_traits` spends on arming, and the default cap of one use
     would forbid the benefit at the moment it arrived.
 
-    **The third printed sentence is not honoured and the marker stays for
-    it**: *if the feature grants powers, this feat does not grant them*.
-    Five of the nine -- `s1`, `s2`, `s3`, `s6`, `s7` -- hand their domain's
-    cards over with `c.grant_row` inside their own bodies, and a borrowed
-    trait is armed, so borrowing one of those five gives the powers too.
-    Nothing narrows a grant to the feature without the cards it deals, and
-    nothing reads back which rows a feature grants, so the hold is a
-    parameter on `c.borrow_row` rather than anything writable here."""
+    **Re-marked, and the marker it carried could never have gone green.** It
+    read `todo=("cf:cleric-warpriest-f1",)`, and two separate things were
+    wrong with that:
+
+    * `todo=` means nothing works and the row is refused in play. The body
+      below is written and plays -- the cost is paid and one of the nine is
+      borrowed -- so two of the card's three sentences are honoured. That is
+      `dropped=`, and while it said `todo=` the row was refused for a gap
+      that is one clause rather than the whole of it.
+
+      **The draw moves by one row and the dealt hand did not move**, which
+      is the cost a `todo=` to `dropped=` change always owes --
+      `choices._legal_feats` filters on `not REGISTRY[ref].todo`, so an
+      un-refused feat becomes drawable and `choices.py` scores
+      `carries_a_marker` at -3.0. Measured in **two processes**, because
+      `_legal_feats` is `lru_cache`d and both arms in one process read the
+      first arm's answer: a templar cleric's legal pool is **253** with
+      `todo=` and **254** with `dropped=`, and `chargen.feats_for` drafts
+      `f3589` in **0 of 25** seeded cleric draws. So nothing in the hand
+      changed in that sample; a `replay` and `api_smoke` check still belong
+      to whoever owns the gate, not here.
+    * `cf:cleric-warpriest-f1` is **the heading, not the thing this row
+      needs**. `scripts/leaks.py`'s own note on this ref says it: *"The
+      group's ref names the heading; the nine sub-options under it are the
+      rows a feat is gated on."* It does exist in `class_feature` -- so
+      "absent from the database" would be the wrong argument -- and what it
+      carries is the group's introductory sentence rather than any
+      mechanics, which is why nothing has declared it and nothing needs to.
+      Declaring it would not make this row writable; the nine options did.
+
+      So the marker was blind in the only direction that matters. Measured:
+      with all nine `-f1s<N>` declared, `todo.py` reports **0 ARRIVED** for
+      a marker naming `cf:cleric-warpriest-f1`, and pointing the same marker
+      at `cf:cleric-warpriest-f1s1` reports `ARRIVED` at once. Reporting the
+      day a wanted thing lands is the one job `todo.py` has, so this row sat
+      refused on a facility that had already arrived. Same shape as
+      `chargen.CLASSES.vampire` in `#1118`: silent in both directions, and
+      indistinguishable from a row legitimately still waiting.
+
+    **What is genuinely missing is the third printed sentence**: *if the
+    feature grants powers, this feat does not grant them*. Five of the nine
+    -- `s1`, `s2`, `s3`, `s6`, `s7` -- hand their domain's cards over with
+    `c.grant_row` inside their own bodies, and a borrowed trait is armed, so
+    borrowing one of those five gives the powers too. Checked and rejected,
+    rather than assumed:
+
+    * `c.borrow_row` takes `attacks=` and `uses=` and nothing that narrows a
+      grant to the feature without the cards it deals.
+    * `c.grant_row` emits **no event** -- it applies an `Effect` labelled
+      `"<ref> grants <ref>"` -- so this row cannot watch for what the
+      borrowed feature handed over and take it back.
+    * `vocab.py --find granted` and `--find grants row` turn up no reader
+      asking which rows a feature grants.
+    * Naming the five domains' power refs here would read them out of the
+      bodies in `features/warpriest.py` rather than off this card, and would
+      go wrong the next time one of those bodies changed what it deals.
+
+    So the hold is a parameter on `c.borrow_row`, which is what the marker
+    now names."""
     c.forbid("cf:cleric-templar-f1", on=c.me, until=When.ENCOUNTER)
     c.borrow_row(
         among=(
@@ -1238,24 +1315,59 @@ def f3589(c: Cast) -> None:
 
 @power("f3590", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("cf:cleric-warpriest-f5", *FEATURE_CHOICE))
+       todo=("cf:cleric-warpriest-f5s0",))
 def f3590(c: Cast) -> None:
     """The second step of the `f3589` chain: the `cf:cleric-warpriest-f5`
     feature of the domain `f3589` chose.
 
-    Two gaps rather than one. Its nine options are undeclared like `f1`'s,
-    and the domain `f3589` settled on is not recorded anywhere this row can
-    read -- `f3586`'s half of the chain has the second one alone, which is
-    why they are separate symbols."""
+    **One gap now, not two, and the one that went was the readback.** This
+    carried `chargen.feature_choice()` as well, on the premise that *"the
+    domain `f3589` settled on is not recorded anywhere this row can read"*.
+    That is the same premise `#1085` falsified for `f3586` and `f3587` one
+    chain over: `c.borrow_row` **stores** what it took, and
+    `c.stored_row(of=...)` is the reader. `f3589` now borrows among the nine
+    `cf:cleric-warpriest-f1s<N>`, so `c.stored_row(of="f3589")` answers, and
+    `_chose_a_school` above is the whole shape this row wants -- including
+    the arming-order half, which is the part that is easy to get wrong:
+    `turns.arm_traits` may reach this row before `f3589` has borrowed, so a
+    bare read at arming time is right for only half the orders and the
+    `RowStored` watch covers the rest.
+
+    Measured rather than reasoned: on a templar cleric dealt by
+    `chargen.loadout`, `f3589`'s `c.borrow_row` takes
+    `cf:cleric-warpriest-f1s0` and `c.stored_row(of="f3589")` hands that ref
+    back, on four seeds. Note that it answers `""` on an `audit.board`
+    cleric, and for a reason that is the board's rather than this chain's --
+    see `f3589`'s note.
+
+    **What is left is that there is nothing to grant.** `class_feature` in
+    `game.db` holds all nine `cf:cleric-warpriest-f5s0` through `-s8` and
+    none of them is declared, so the grant would hand over a ref no row
+    stands behind -- `c.grant_row` does not consult the registry, so it
+    would append a dead ref to `Powers.known` and report success. The body
+    stays unwritten until the nine exist; it is four lines once they do, by
+    prefix and index exactly as `_chose_a_school` does it.
+
+    **The symbol names the first option and not the family heading**, which
+    is the correction `f3589` above is the worked example of.
+    `cf:cleric-warpriest-f5` is in `class_feature` and carries only the
+    group's introductory sentence, so nothing will declare it and a marker
+    naming it would stay red on the day the nine options landed -- which is
+    exactly what happened to `f3589`."""
 
 
 @power("f3591", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("cf:cleric-warpriest-f8", *FEATURE_CHOICE))
+       todo=("cf:cleric-warpriest-f8s0",))
 def f3591(c: Cast) -> None:
-    """The third step of the `f3589` chain, and `f3590`'s two gaps one tier
-    up: the nine options under `cf:cleric-warpriest-f8` are undeclared, and
-    the domain is still the one `f3589` chose."""
+    """The third step of the `f3589` chain, and `f3590`'s remaining gap one
+    tier up: the nine `cf:cleric-warpriest-f8s<N>` are in the database and
+    none is declared.
+
+    The choice half is answered here too -- the domain is still the one
+    `f3589` chose, and `c.stored_row(of="f3589")` reads it back. See
+    `f3590`'s note for both halves and for why the symbol names `-f8s0`
+    rather than the `-f8` heading."""
 
 
 @power("f3592", level=1, cls="", usage=ENCOUNTER, action=NONE,

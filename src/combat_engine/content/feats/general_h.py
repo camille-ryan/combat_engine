@@ -64,6 +64,17 @@ f1334b's whole Requirement.
 `c.grants_ca_to(ally)` on f1270 (`c.grants_advantage(to=<eid>)` takes an
 ally) and `c.on_shift_away()` on f1307 (`Moved` carries `kind_`, and
 `"shift"` is one of its words).
+
+**A standing state is a window, and f1282b's marker was the claim that it
+is not.** That row read "nothing announces the moment it becomes true, so
+the card has no window to open in", which is true about the first half and
+does not follow: a `Trigger` splits into an event class that says *when to
+look* and a predicate that says *what to look for*, so a state is sayable
+the moment anything that can change it is announced -- which is what
+`m5854a4` and `m983a3` have done with `query.flanked_by` since they were
+written. And `on=` takes a **sequence**, so a printed Trigger naming two
+things gets two windows rather than a choice between them. f1282b declares
+three and shares one predicate across them.
 """
 
 from __future__ import annotations
@@ -96,6 +107,7 @@ from combat_engine.engine import (
     Cast,
     Condition,
     ConditionApplied,
+    ConditionEnded,
     DamageType,
     Effect,
     Fell,
@@ -114,6 +126,7 @@ from combat_engine.engine import (
     Trigger,
     Usage,
     When,
+    World,
     about_me,
     get,
     power,
@@ -124,6 +137,9 @@ from combat_engine.engine.query import (
     allies,
     bloodied,
     distance_between,
+    enemies,
+    flanked_by,
+    has_combat_advantage,
     since_turn_began,
 )
 
@@ -992,13 +1008,108 @@ def f1281b(c: Cast) -> None:
 _swap("f1282", "f1282b")
 
 
+_F1282B = "you are flanked, or your prey gains combat advantage against you"
+
+
+def _f1282b_triggered(world: World, me: int) -> list[int]:
+    """Which enemies have just set this card off, by the two printed routes.
+
+    Clause one is geometry: *"you are flanked"*, which is every enemy
+    `query.flanked_by` names -- plural on purpose, since a flank takes two
+    and the Effect pays against *"those who triggered this power"* rather
+    than against one creature.
+
+    Clause two is narrower than clause one and not a subset of it: the prey
+    gaining combat advantage **by any route**, which is
+    `query.has_combat_advantage` and nothing else. Asked only of the quarry,
+    because the card asks only about the quarry -- an ordinary enemy that
+    has combat advantage some other way has not triggered anything, and
+    reading the wider question for everybody would hand the character a
+    blanket denial the card does not print.
+
+    `Relation.QUARRY_OF` rather than `c.is_quarry`, because a Trigger
+    predicate is handed `(world, me, event)` and has no `Cast` to ask --
+    f1280 lays that relation and this reads the same side of it.
+    """
+    out: list[int] = []
+    for foe in enemies(world, me):
+        if flanked_by(world, me, foe) or (
+            world.relations.holds(Relation.QUARRY_OF, me, foe)
+            and has_combat_advantage(world, foe, me)
+        ):
+            out.append(foe)
+    return out
+
+
+def _f1282b_window(world: World, me: int, _ev: Any) -> bool:
+    """The printed Trigger, asked of the board rather than of the event.
+
+    Both printed clauses are **states**, so the predicate reads the state
+    and the event only says when to look. That is why the same function
+    serves all three declared windows.
+    """
+    return bool(_f1282b_triggered(world, me))
+
+
 @power("f1282b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=NO_TARGET, todo=("c.on_flanked()",))
+       reach=PERSONAL, target=NO_TARGET, trigger=_F1282B,
+       on=(Trigger(MoveEnd, _f1282b_window, _F1282B),
+           Trigger(ConditionApplied, _f1282b_window, _F1282B),
+           Trigger(ConditionEnded, _f1282b_window, _F1282B)))
 def f1282b(c: Cast) -> None:
-    """`c.no_advantage` is the Effect and is writable. The Trigger is
-    not: being flanked is a standing geometry that `query.flanked_by`
-    answers when asked, and nothing announces the moment it becomes
-    true, so the card has no window to open in."""
+    """**Re-marked as written. The old note said the card had no window to
+    open in and that was the wrong reading of a true observation.**
+
+    What it got right: being flanked is standing geometry, and nothing
+    emits a "you are now flanked" event. What it got wrong: a `Trigger`
+    does not need one. `Trigger(event, predicate, text)` splits exactly
+    this way -- the event class says *when to look* and the predicate says
+    *what to look for* -- so a state becomes a window the moment something
+    that can change it is announced. `m5854a4` and `m983a3` have both read
+    `query.flanked_by` out of a movement event since they were written.
+
+    **And `on=` takes a sequence**, which is the other half of why this is
+    sayable: `Power.triggers` normalises one Trigger or several, so a
+    printed line naming two things is two windows rather than a choice
+    between them. All three here share one predicate, because both printed
+    clauses are states:
+
+    * `MoveEnd` -- somebody finished a move. The flank being established is
+      this, nearly always, and so is the prey stepping somewhere it gains
+      combat advantage from. Not `MoveStart` and not `Moved`: the question
+      is about the square arrived in, which is the same argument `m983a3`
+      records.
+    * `ConditionApplied` -- the prey gaining combat advantage without
+      anybody moving, which is the second clause's real content. A condition
+      landing on *me* is what does it: `query.grants_ca` answers off the
+      conditions standing on the creature, so prone, dazed or blinded hands
+      every enemy the advantage at once and the prey is among them.
+    * `ConditionEnded` -- a flanker that was furniture becoming a flanker.
+      `flanked_by` requires `can_act` of **both** squares, so a stunned
+      enemy in the far square is not a flank until the stun ends, and that
+      moment is a move nobody made.
+
+    The Effect is two sentences and both are narrow rather than blanket.
+    `c.no_advantage(when=)` is handed the attacking pair, which is the
+    printed *"to those who triggered this power"* -- the wider bare call
+    would deny combat advantage to the whole board. `c.grants_advantage`
+    defaults to `to="me"`, so the second sentence is one call once the prey
+    is known to be in that set.
+
+    `on=c.me` on both, because this row is `target=NO_TARGET` and a bare
+    call in one of those acts on nobody at all.
+    """
+    me = c.me
+    who = set(_f1282b_triggered(c.world, me))
+    if not who:
+        return
+    c.no_advantage(
+        on=me, until=When.EONT,
+        when=lambda ctx: ctx.get("attacker") in who,
+    )
+    prey = next((foe for foe in sorted(who) if c.is_quarry(on=foe)), None)
+    if prey is not None:
+        c.grants_advantage(on=prey, until=When.EONT)
 
 
 _swap("f1283", "f1283b")
@@ -2027,9 +2138,18 @@ def f1334b(c: Cast) -> None:
 @_trait("f1336", todo=("c.grant_action(familiar=)",))
 def f1336(c: Cast) -> None:
     """Moves the familiar for a minor action instead of a move action.
-    `c.move_companion` walks it and `c.grant_action` understands `shift`
-    and `stand` and silently eats anything else, so there is nothing
-    that makes moving a companion cost less."""
+    `c.move_companion` walks it, and `c.grant_action` is the verb that
+    makes an ordinary thing cost a different action -- but `actions.GRANTABLE`
+    is the authority on which things, and none of its twelve words is a
+    companion's move.
+
+    **Still engine work, and the old note here described a trap that has
+    since been closed.** It said `c.grant_action` "understands `shift` and
+    `stand` and silently eats anything else", which was #583's fault and is
+    fixed: an unrecognised word now **raises**, naming the set. So the
+    marker is not "the verb would quietly do nothing" -- it is that the word
+    and its reader in `engine/actions.py` have to land together, which is a
+    change in that file and not in a row."""
 
 
 @_trait("f1337")

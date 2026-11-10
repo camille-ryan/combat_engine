@@ -466,6 +466,12 @@ CATEGORIES: dict[str, dict] = {
         "blurb": "Things a creature spends, and the budget it spends them from.",
         "sections": [
             ("surges and hit points", [
+                # `death_save_failure` is here rather than with the
+                # conditions because it is a **price a card elects to
+                # pay** -- one printed row spends a failed death save the
+                # way others spend a surge -- and not a state anything
+                # reads about. #1222.
+                "death_save_failure",
                 "regain_surge", "second_wind", "spend_surge",
                 "surge", "surge_value",
             ]),

@@ -17,11 +17,22 @@ row arms and the number it settles is baked into the modifier. Several
 of the same rows also deal "fire and necrotic damage", which is one blow
 of two types -- `c.flat(dtypes=)` and `c.ongoing(dtypes=)` say that.
 
-**Weapon groups are a closed set**: axe, bow, crossbow, heavy blade,
-implement, light blade, mace, spear, staff, unarmed. Hammers, picks and
-polearms are printed groups this engine does not carry, so a row gated on
-one of them can only be marked. `chargen.HAMMER` and `chargen.POLEARM`
-join `chargen.WHIP` and the rest of that family.
+**Weapon groups are a carried column and this paragraph used to deny it.**
+It said hammer, pick and polearm "are printed groups this engine does not
+carry, so a row gated on one of them can only be marked". The `weapon`
+table answers 18 distinct groups, hammer (5 entries), pick (4) and polearm
+(4) among them, and `chargen.HAMMER`, `chargen.PICK`, `chargen.POLEARM` and
+`chargen.WHIP` are all dealt. `f2596`, `f2597` and `f2609` are written
+rather than marked because of it.
+
+**But group membership is not one column**, which is the trap worth
+carrying here instead. A weapon printed in two groups keeps the first in
+`Weapon.group` and the second among `Weapon.properties`: measured, **8**
+weapons are polearms and only **4** of them answer `group == "polearm"`.
+The other four -- `chargen.POLEARM` itself is one of them -- answer
+`"polearm" in properties`. So ask `c.wielding("polearm")`, which tests
+group, category and properties over every weapon held; a bare
+`group ==` comparison is a gate that is half dead and audits green.
 
 **A printed Trigger keeps a row out of the action menu** -- `_powers`
 refuses anything carrying one -- so the rows here whose printed benefit
@@ -88,15 +99,26 @@ from combat_engine.engine import (
     get,
     hits_me,
     power,
+    spread,
 )
-from combat_engine.engine.components import Health
+from combat_engine.engine.components import Health, Mods
 from combat_engine.engine.events import (
     PowerResolved,
     PowerUsed,
     RowStored,
     SecondWind,
 )
-from combat_engine.engine.query import alive, allies, distance_between, holding, team
+from combat_engine.engine.query import (
+    adjacent,
+    alive,
+    allies,
+    can_act,
+    distance_between,
+    flankers,
+    holding,
+    squares,
+    team,
+)
 
 #: The trait the five cards below are about. It hands over a 1st-level
 #: at-will borrowed from another class, and **which one is recorded**:
@@ -113,11 +135,27 @@ PROFICIENCY = ("chargen.proficiency()",)
 #: Was `("c.total_defence()",)`. The action exists and announces itself as
 #: `TotalDefence` now, so the three rows that carried this say their sentence.
 _HUNKER = "you take the total defence action"
-#: Trading one power for another out of a named pool, which is settled
-#: when the character is built and recorded nowhere. `chargen.BUILDS`
-#: was the old marker and it is the wrong one: that dict exists, and
-#: what it holds is the ability fork a class takes, not a swap.
+#: Trading one power for another out of a named pool, which is settled when
+#: the character is built. `chargen.BUILDS` was the marker before this one
+#: and was wrong: that dict exists, and what it holds is the ability fork a
+#: class takes, not a swap.
+#:
+#: **One row keeps this now, where four did.** The swap itself is built:
+#: `chargen.power_swap` removes the lowest qualifying row deterministically
+#: and, for `Swap.pool == "class"`, draws the incoming card from the class
+#: list at the same level and usage, scores it with `ratings.score`, and puts
+#: the outgoing one back when nothing is drawable. Four rows elsewhere use it
+#: today. So `pool=` names the gap only for the row whose **pool** is the
+#: thing missing; the three multiclass rows below are blocked a layer under
+#: that and carry `MULTICLASS` instead.
 SWAP = ("chargen.power_swap(pool=)",)
+#: Which class a character multiclassed into, which nothing records.
+#: `Character` has no field for it, so `power_swap`'s pool draw -- which
+#: resolves `"class"` as `getattr(row, "cls", "") == cls`, *this* character's
+#: class -- has nothing to point a second value at. The symbol is the one
+#: `feats/bard_b.f1120` already waits on rather than a synonym, because the
+#: four rows are one missing fact and `blocked.py --group` should say so.
+MULTICLASS = ("chargen.multiclass_powers()",)
 #: The other feat this card asks about, by ref. Asked once at arming:
 #: nobody takes a feat in the middle of a fight.
 PLAGUE_FEAT = "f651"
@@ -619,36 +657,118 @@ def f2859(c: Cast) -> None:
 
 
 @power("f2697", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, todo=MULTICLASS)
 def f2697(c: Cast) -> None:
     """Swaps one augmentable at-will for another class's.
 
-    Re-aimed off `chargen.BUILDS`: that dict exists and holds the
-    ability fork a class takes, which is not what this card asks for.
-    The pool a swap draws from, and which row came out of it, is
-    written down nowhere -- and the augment itself is no longer a hold,
-    since `dsl.Augment` declares one."""
+    **Re-pointed from `chargen.power_swap(pool=)`, because the swap is
+    built and the marker was naming the wrong layer.** `power_swap` does
+    the whole job for `Swap.pool == "class"` -- removes the lowest
+    qualifying row, draws the incoming card at the same level and usage,
+    scores it, and puts the outgoing one back when nothing is drawable --
+    and four rows elsewhere use it today. What it cannot do is draw from a
+    class the character is *not*: `"class"` resolves as
+    `getattr(row, "cls", "") == cls`, this character's own class, and
+    `Character` has **no** field saying which class was multiclassed into.
+    Giving `Swap.pool` a second value cannot help until something records
+    what that value would point at, so this row and `feats/bard_b.f1120`
+    are one missing fact and now share one symbol.
+
+    **And the fact alone will not finish it, which is said here so the
+    symbol landing is not read as the row landing.** Two further things
+    are missing and neither is a pool name:
+
+    *"Augmentable" is not a header question.* Measured over the declared
+    corpus: **78** at-will attack rows are augmentable and only **20** of
+    them say so in `augments=`. The other 58 say it inside the body, by
+    calling `powers/augment.augment`, because an augment that only changes
+    a die can be written there. `power_swap` filters a pool off `REGISTRY`
+    headers, so it can see 20 of 78 -- a filter that would quietly deal the
+    wrong card rather than refuse.
+
+    *The two halves of this trade are the same usage and the card's
+    siblings' are not*, which `Swap` cannot express -- see `f2698` below,
+    where the one `trade.usage` field has to be two different values.
+
+    Nothing here mis-plays. The row is refused in play and says why."""
 
 
 @power("f2698", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, todo=MULTICLASS)
 def f2698(c: Cast) -> None:
-    """Same shape as f2697, trading an encounter power instead, and
-    handing out power points for it."""
+    """Trades an encounter attack power for an augmentable at-will, and
+    hands out points by level band.
+
+    Same missing fact as `f2697` and the same re-pointed symbol: the pool
+    is a class the character is not, and nothing records which one.
+
+    **This row also shows why `Swap` could not describe the trade even
+    then**, which is worth writing down once rather than guessing at
+    three times. `power_swap` filters both halves through the *same*
+    descriptor: the outgoing pool tests
+    `trade.usage is None or row.usage is trade.usage`, and the incoming
+    offer tests the identical expression. One field, both sides. This card
+    takes an **encounter** power out and brings an **at-will** in, so there
+    is no single value of `trade.usage` that is right -- and it is the same
+    for `trade.utility` on `f2580`. So whatever closes the multiclass fact
+    also owes `Swap` a second, incoming-side filter, or this row stays
+    blocked with a fact in hand.
+
+    The points are a separate half and are not claimed either: the bands
+    are printed, so no number here is derived, but `PowerPoints` is granted
+    at build time and `power_swap` returns a list of refs with nowhere to
+    put them."""
 
 
 @power("f2732", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SWAP)
+       reach=PERSONAL, target=SELF, todo=MULTICLASS)
 def f2732(c: Cast) -> None:
-    """Same shape as f2697, in the other direction, and it costs points
-    rather than granting them."""
+    """The same trade as `f2698` in the other direction, and it spends
+    points rather than granting them.
+
+    Same missing fact, same symbol, and both of `f2697`'s extra gaps apply
+    at once: the outgoing half is "augmentable", which only 20 of 78 rows
+    declare in a header, and the incoming half is a different usage from
+    the outgoing one, which one `trade.usage` cannot say."""
 
 
 @power("f2580", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=SWAP)
 def f2580(c: Cast) -> None:
-    """Swaps the bonus at-will for a skill power. Same re-aim as f2697:
-    the swap is the gap, not the build fork."""
+    """Swaps the bonus at-will for a skill power.
+
+    **This one keeps `chargen.power_swap(pool=)`, and it is the only one of
+    the four that should.** The gap really is the pool: it is not a class
+    the character is not, it is the skill-power list, and `Swap.pool` is a
+    single string with no value for it.
+
+    **Half of the old reason has gone, which is why the docstring is
+    longer rather than shorter.** The pool used to be real and empty -- 134
+    imported rows, none declared, none drawable. All 134 are declared now
+    and the utility draw selects them against the trained set, so there is
+    something to draw. What is left is three things, and none of them is in
+    this file:
+
+    *The pool value itself*, plus the prerequisite test. The printed gate
+    is "a skill power for which you meet the prerequisites", which reads
+    the character's trained skills and its level -- neither of which a pool
+    *name* can express, so this may want a selector rather than a fourth
+    `pool` string.
+
+    *An asymmetric trade.* `power_swap` filters both halves through one
+    `trade.utility`: `(row.attack is None) is trade.utility` on the
+    outgoing pool and the identical expression on the incoming offer. This
+    card takes an **attack** power out and brings a **utility** in -- all
+    134 skill powers have `attack is None`, measured -- so no single value
+    is right, exactly as `f2698`'s usage field is not.
+
+    *Which power goes.* "Your bonus at-will attack power" is one specific
+    card, not the lowest qualifying one, and how a row got into
+    `Powers.known` is a provenance that component does not keep -- the same
+    fact `feats/bard_b.f1120` waits on.
+
+    The retraining clause is not a gap: `chargen.retrain` exists and
+    changing one feat is what it does."""
 
 
 @power("f2618", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2904,13 +3024,128 @@ def f2607(c: Cast) -> None:
 
 @power("f2609", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.flank_from(square)",))
+       dropped=("query.flanked_by(from_square=)",))
 def f2609(c: Cast) -> None:
-    """Polearm **is** a group the weapon table carries -- f2596 above
-    asks it -- so that half of the old docstring was stale. What is
-    genuinely missing is the rest: "you are considered to occupy that
-    square for flanking" wants a creature asked about from somewhere it
-    is not standing, and `query.flanked_by` reads positions only."""
+    """Flanking a target a reach weapon can touch and a body cannot.
+
+    **The old marker asked for a verb and the question was already
+    answerable.** It said flanking "wants a creature asked about from
+    somewhere it is not standing, and `query.flanked_by` reads positions
+    only" -- true of that function and not of the board: `Grid.flanks(a, b,
+    space)` takes **two squares** and has never read a creature at all.
+    `flanked_by` is the thing that fills them in from where people are
+    standing, so loaning one square needs no new engine verb, only a caller
+    that passes a different one. `powers/cleric/level_7_b._flankers_from`
+    is the existing proof -- the same question asked of a square a creature
+    has not reached yet.
+
+    So the benefit is laid as a gated `gains_ca_when`, which is the one
+    route into `query.has_combat_advantage` that is asked **per swing**:
+    the square has to be chosen against the board as it is when the blow
+    lands, and a modifier laid at arming time could not know where anybody
+    would be standing.
+
+    **Four narrowings, and each one is a thing that would otherwise be
+    wrong.**
+
+    *The swing is a melee attack.* `get(ctx["power"]).reach.kind` is the
+    header read, the way `themes/batch_g.p16058` asks the same question.
+    `power` is `""` for the sixty-odd callers asking about a pair of
+    creatures rather than a blow, and `get("")` is `None`, so those are
+    correctly False rather than accidentally true.
+
+    *The weapon is a polearm, asked as `c.wielding` and not as a group.*
+    This is the half that would have been silently dead. Polearm
+    membership is **not** one column: a weapon printed in two groups keeps
+    the first in `Weapon.group` and the second among `Weapon.properties`,
+    and of the 8 weapons that are polearms only 4 answer
+    `group == "polearm"`. `chargen.POLEARM` is one of the other four -- its
+    group is a different one entirely -- so the weapon a character is
+    actually dealt would have failed a `group ==` test and this feat would
+    have paid out for nobody. `c.wielding` tests group, category and
+    properties across every weapon held. #724 is where that split was
+    found, in the other direction.
+
+    *Which weapon swung is not read, and here it does not have to be.*
+    `f2610` below is right that `c.wielding` asks the hand rather than the
+    attack, and the usual answer is `c.weapon_of(ev)` -- but a modifier gate
+    gets a context, not an event, so that is not available. It costs
+    nothing here: all **8** polearms are two-handed, so a character holding
+    one holds nothing else to have swung with, and the board narrows it
+    again anyway -- a *melee* attack landing on a creature two squares away
+    was made with a reach weapon or it was not legal. Which is also why the
+    gate does not test reach: 7 of the 8 have it and the eighth could never
+    make the attack this card is about, so the legality check already says
+    so and a second test here would only duplicate it.
+
+    *An unflankable target is still unflankable.* `has_combat_advantage`
+    reads `gains_ca_when` **before** the `unflankable` branch, so a creature
+    whose card says enemies cannot gain combat advantage by flanking it
+    would have handed this feat the +2 anyway -- 43 content rows lay that
+    modifier, so the hole is reachable rather than theoretical. The gate
+    reads the key itself, with the same context the engine would have used.
+
+    **"Choose an unoccupied square" is read as "is there one", and that is
+    not a strengthening.** Choosing costs nothing and forecloses nothing --
+    no movement, no action, no duration -- so a player who has a qualifying
+    square always picks it, and the existential answer is what optimal play
+    produces. There is nothing to prompt for from inside a modifier gate in
+    any case.
+
+    **Still `dropped=`, for the clause the modifier route cannot reach.**
+    Combat advantage is what flanking is *for* and it is delivered, but the
+    card says you are considered to occupy the square "for the purpose of
+    determining if you flank", and two other readers ask that question
+    directly: `Target(flanked=True)`, which decides whether a row may even
+    aim at the creature, and any row printing "an enemy you flank". Both go
+    through `query.flanked_by`, which has no way to be told to substitute a
+    square -- hence the re-pointed symbol, which names the parameter rather
+    than a verb that does not need inventing.
+    """
+    me = c.me
+
+    def flanking_through_the_gap(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power", ""))
+        if row is None or row.reach.kind != "melee":
+            return False
+        if not c.wielding("polearm"):
+            return False
+        victim = ctx.get("target")
+        world = c.world
+        if victim is None or not alive(world, victim):
+            return False
+        # "A target that is not adjacent to you" is the printed gate, and it
+        # is also what makes the feat mean anything: standing next to the
+        # creature, ordinary flanking already answers.
+        if adjacent(world, me, victim):
+            return False
+        denied = world.get(victim, Mods)
+        if denied is not None and denied.items and denied.total("unflankable", ctx) > 0:
+            return False
+        space = squares(world, victim)
+        # The partner's side of the line, gathered once. `flankers` rather
+        # than `c.allies` so a companion told it may flank counts and an
+        # ordinary one does not, and `can_act` because a stunned ally in the
+        # right square is furniture -- both are `flanked_by`'s own rules and
+        # neither is optional.
+        mates = [
+            square
+            for mate in flankers(world, me)
+            if mate != victim
+            and can_act(world, mate)
+            and adjacent(world, mate, victim)
+            for square in squares(world, mate)
+        ]
+        if not mates:
+            return False
+        return any(
+            world.grid.passable(stand)
+            and world.grid.occupant(stand) is None
+            and any(world.grid.flanks(stand, b, space) for b in mates)
+            for stand in spread(squares(world, me), 1) & spread(space, 1)
+        )
+
+    c.gains_advantage(flanking_through_the_gap, until=When.ENCOUNTER, on=me)
 
 
 @power("f2610", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

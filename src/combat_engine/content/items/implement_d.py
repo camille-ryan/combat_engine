@@ -52,7 +52,6 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
-    ANY_FACE,
     AT_WILL,
     DAILY,
     ENCOUNTER,
@@ -84,16 +83,19 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     Gear,
+    Health,
     Hit,
     Initiative,
     Keyword,
     Melee,
+    Mods,
     Moved,
     Position,
     PowerUsed,
     Ranged,
     Relation,
     RelationSet,
+    SavingThrow,
     Size,
     SkillCheck,
     Trigger,
@@ -579,34 +581,92 @@ def i3172p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.death_save_failure()",),
 )
 def i3180x1(c: Cast) -> None:
     """A reroll of the whole damage roll, bought with a death saving throw
-    failure.
+    failure. **Both halves, and paying for the second one is what moved the
+    first one to another verb.**
 
-    **The reroll half is written.** `c.reroll_ones(below=ANY_FACE,
-    pick=EVERY_DIE)` is it -- five symbols were filed for this mechanism
-    across eight rows and one line was in the way, `_rolled_pick`'s
-    `floor > faces` guard copied from the looping case. #703.
-    `c.reroll_damage` was never the verb: it keeps the higher of two whole
-    rolls and this card makes you keep the new result whatever it is.
+    The marker said `c.death_save_failure()` and that the count "has no
+    counter anywhere". The counter has always been there:
+    `components.Health.failures`, incremented in `turns._death_saves`,
+    cleared by `extended_rest` and by `resolve._revive`. `f2568` already
+    reads it for the same printed phrase and its note is the precedent --
+    *"'since your last rest' is `Health.failures`"*. So the gap was never a
+    counter; it was that **a standing hold cannot tell whether the reroll
+    happened**, and the price is owed only if it did.
 
-    **The price is still missing and is the whole of what is left.** "If you
-    make the reroll, you are considered to have failed a death saving
-    throw", counted against the three since the last rest -- and nothing
-    counts those. So the row is `dropped=` on that alone, where it used to
-    be `todo=` on both and refused in play: the reroll is a real benefit and
-    withholding it because the cost is unsayable makes the item worse than
-    the card rather than merely incomplete.
+    `c.reroll_ones(below=ANY_FACE, pick=EVERY_DIE)` was the old body, and it
+    is a hold read inside `_roll_damage_dice` while the dice are in hand.
+    Nothing announces that it fired -- `_rolled_pick` emits no event, where
+    `_announce_reroll` covers only the three d20 rerolls -- so the body had
+    no moment at which to charge for it. `c.reroll_faces` is the reactive
+    sibling of the same operation and **returns how many dice it moved**,
+    which is exactly the observation the price needs: 0 dice, no failure.
+    Its own docstring names this case -- *"right for a no-action daily spent
+    because you disliked the number, which is a decision nobody can make
+    before seeing it"* -- and the card opens with "don't like the result".
+    `i1761p1` and `i1756p1` are the written precedents for reading the live
+    `Roll` off `DamageRolled`; `i3280p1` is the precedent for doing it from
+    a `c.watch` rather than a declared trigger, which is what a Property
+    has to do.
 
-    **That direction matters and it is the wrong one to err in**, so it is
-    said out loud: an item whose benefit lands and whose cost does not is
-    stronger than printed. It is kept this way because the alternative --
-    refusing the row -- was the state it was in, and `blocked.py` counted it
-    as unstarted work when seven eighths of it was writable."""
-    c.reroll_ones(below=ANY_FACE, pick=EVERY_DIE, on=c.me,
-                  until=When.ENCOUNTER)
+    `c.reroll_damage` was never the verb either: it rolls the whole
+    expression twice and keeps the higher, where this card makes you keep
+    the new result whatever it is.
+
+    **The third clause needs no code, and saying why is the point.** "If
+    this is your third failure since your last rest, the failure does not
+    cause you to die until you are dying" -- the failure is written into the
+    field directly rather than through the engine's death path, which is
+    where the exemption comes from: `turns._death_saves` is the only place
+    that reads `failures >= 3` and kills, and it runs only on a creature
+    already DYING. So three failures never kill a creature that is on its
+    feet, which is the exemption, and they do count once it is dying, which
+    is the rest of the sentence. "You cannot use this property again until
+    you have fewer than three failures" is the `>= 3` gate.
+
+    Two honest limits, both wider than print and both named rather than
+    left. **The count is per board, not per rest**: a `World` lives one
+    fight, nothing carries `failures` onto a sheet between them, and
+    `f2568`'s note records the same reading. And **"for an attack with this
+    rod" is not gated**, which is this file's standing convention -- the
+    damage context carries no item. It costs less here than it reads,
+    because a roll with no dice behind it returns 0 from `c.reroll_faces`
+    and is charged nothing, so an ongoing tick or a flat payout cannot spend
+    a failure.
+
+    `c.may` because "you can" is a printed choice and the new result may be
+    worse; `default=True` so a headless board takes it, which is what
+    `world.decide` does with no decider installed."""
+    me = c.me
+
+    def disliked(ev: DamageRolled) -> None:
+        if ev.source != me:
+            return
+        roll = getattr(ev, "roll", None)
+        if roll is None or not roll.dice:
+            return
+        # **Read the counter to gate, charge it only once the dice moved.**
+        # Three failures is this card's own "you cannot use it again", and
+        # the order matters: the price must not be paid for an offer the
+        # player declines or for a reroll that moved nothing.
+        health = c.world.get(me, Health)
+        if health is None or health.failures >= 3:
+            return
+        if not c.may("reroll the damage, and count a failed death save"):
+            return
+        if not c.reroll_faces(ev=ev, pick=EVERY_DIE):
+            return
+        # **`c.death_save_failure`, not a write to `Health.failures`.** The
+        # marker asked for a `Cast` door and it exists now: this counter is
+        # the one field a reader kills on, so a row raising it by hand
+        # would be a fourth writer of a kill condition with nothing naming
+        # the ceiling. Reading it above is fine and has precedent; writing
+        # it is what wanted the door. #1222.
+        c.death_save_failure(on=me)
+
+    c.watch(DamageRolled, disliked, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -996,16 +1056,72 @@ def i1350p2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_save()",),
 )
 def i1516x1(c: Cast) -> None:
-    """`SavingThrow` **is** announced before it is acted on, so the roll
-    itself is reachable from a `c.watch`; what is not reachable is the
-    gate, which is the whole of this property. "When you use an arcane
-    power to grant a bonus to saving throws" needs the save to say which
-    row put the bonus there, and nothing records it -- written without
-    that, every low save anybody rolled would be rerolled. `c.on_save()`
-    is the hook the nine rows in this group want, gate included."""
+    """A reroll of a low save, when one of your own arcane powers is what
+    put the bonus on it.
+
+    **The old note's two halves were right and wrong in that order.** The
+    hook half was already true and is now used: `SavingThrow` is announced
+    before it is acted on, `c.reroll_save(ev=)` writes the new result back
+    into it, and `i3280p1` and `m5878a0` both drive one from a `c.watch`
+    rather than a declared trigger -- which is what a Property has to do.
+    `keep="best"` is "use either result" exactly.
+
+    The gate half said the save cannot say which row put the bonus there.
+    **It cannot, and it does not have to.** There is no `SavingThrow.power`
+    -- the event carries `granted_via`, which is who granted the *throw*,
+    a different question. What answers this one is the modifier itself:
+    `c.bonus` defaults `Mod.label` to the laying row's ref, so a save bonus
+    on the saver names the row that laid it. Pair that with a `PowerUsed`
+    watch recording the arcane refs **this** creature used, and the printed
+    sentence is read off the two together rather than guessed. Measured
+    over the whole registry: 188 rows lay a `"save"` bonus, 6 of them carry
+    `Keyword.ARCANE`, and all 6 pass no `label=` -- so the match is the bare
+    ref. Two of the six land on an ally and four on the user, which is
+    "yourself or an ally".
+
+    Without the `PowerUsed` half the label alone would also catch an ally's
+    own arcane save bonus, since `Mod` records no owner. With it the row
+    fires only for a power this holder used, which is what the card says.
+
+    "Lower than this wand's enhancement bonus" is `ev.natural <
+    c.enhancement`, read off the item rather than written down. It is a
+    narrow window at +2 and that is the printed window; the paragon and
+    epic pluses are out of scope and raise it by themselves.
+
+    One honest limit, stated rather than left for the next reader. A save
+    modifier may carry a `when=` gate, and the save context it would be
+    asked with is built inside `Effects.roll_saves` and is not on the
+    event -- so this asks whether the modifier **exists**, not whether it
+    applied to this particular throw. One of the six, `p5858`, is gated
+    that way. Reconstructing the context from the event would be a second,
+    partial copy of the engine's own, which is the shape that drifts.
+
+    No `c.may`: `keep="best"` can only improve the throw, so there is
+    nothing a player could want to decline."""
+    me = c.me
+    arcane: set[str] = set()
+
+    def used(ev: PowerUsed) -> None:
+        if ev.actor == me and Keyword.ARCANE in _keywords_of(ev.power):
+            arcane.add(ev.power)
+
+    def granted(who: int) -> bool:
+        mods = c.world.get(who, Mods)
+        return mods is not None and any(
+            m.what == "save" and m.label in arcane for m in mods.items
+        )
+
+    def low(ev: SavingThrow) -> None:
+        if not _my_side(c.world, me, ev.actor) or ev.natural >= c.enhancement:
+            return
+        if granted(ev.actor):
+            c.reroll_save(ev=ev, keep="best")
+
+    c.watch(PowerUsed, used, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(SavingThrow, low, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} save")
 
 
 @power(
@@ -1250,11 +1366,34 @@ def i2015p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.curse_damage()",),
 )
 def i2294x1(c: Cast) -> None:
-    """`c.curse` hangs the relation; the extra dice the curse pays out are
-    rolled inside the class feature and nothing reaches into them."""
+    """Rerolls a 1 on the dice `cf:warlock-f4` pays out.
+
+    **The old note was true of the die string and false of the roll**, and
+    that is the whole correction. `strikers.extra_damage` closes over
+    `"1d6"` and asks `c.dice_for` for it, so the *expression* does live
+    inside the class feature -- but the payout itself goes through
+    `strikers.pay_extra`, which calls `c.damage` on `cf:warlock-f4`'s own
+    `Cast`. `Cast._reroll_floor` is read from there, with the dice in hand,
+    and it looks up `reroll_damage_below@<the rolling row's ref>`. So
+    `ref=` reaches it.
+
+    `c.reroll_ones`' own docstring names this exact narrowing -- *"`keyword`
+    and `ref` narrow it to what the card names -- the curse damage"* -- and
+    `f2760` is the written precedent for the identical printed sentence:
+    one line, `ref=` the curse. `f3749` is the same shape one striker over.
+
+    Default `below=2` is "all 1s" and nothing more, which is what the
+    heroic line prints. The `Level 19 or 24:` and `Level 29:` lines raise
+    the threshold and are out of the heroic band, so they are not written
+    and not marked -- this file's standing rule.
+
+    **There is no once-a-round latch owed here.** The curse pays once a
+    round, and that limit is `cf:warlock-f4`'s: `pay_extra` holds it with
+    `c.latched`. This property does not pay anything, it changes how a
+    payout is rolled, so it inherits the limit rather than needing one."""
+    c.reroll_ones(ref="cf:warlock-f4", on=c.me, until=When.ENCOUNTER)
 
 
 @power(

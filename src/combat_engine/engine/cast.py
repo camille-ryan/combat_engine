@@ -15881,6 +15881,51 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             skill=asked, was=was, by=self.ref))
         return True
 
+    def death_save_failure(self, *, on: int | None = None) -> int:
+        """Charge a failed death save as a price. Returns the new count.
+
+        *"You can reroll the damage, but you count a failed death saving
+        throw"* -- `i3180x1`, and the only printed shape that spends this
+        counter rather than rolling it.
+
+        **One door onto a counter that kills.** `Health.failures` is read
+        in exactly one place that ends a creature -- `turns._death_saves`
+        adds one and calls `_die` at three -- and it is cleared in three
+        (`turns`, `resolve`, `c.reanimate`). A content row raising it by
+        hand would be a fourth writer of a kill condition, with no guard
+        and nothing naming the ceiling, which is why the marker on
+        `i3180x1` asked for a verb rather than a field.
+
+        **The printed exemption comes for free and is worth stating.** The
+        card says the failure *"does not cause you to die"*, and nothing
+        has to implement that: `_death_saves` is the only reader that
+        kills, it runs only on a creature that is already dying, and a
+        creature on its feet never reaches it. So three charges on a
+        standing character are three charges and no death -- measured --
+        while the same three on a dying one count exactly as the rules say
+        they do.
+
+        **Refuses at three rather than going past it**, which is the "you
+        cannot use this again" half of the same sentence: a fourth charge
+        has nothing to spend. Returns the count so the caller can tell a
+        charge from a refusal, as `c.reroll_check` returns its face.
+        """
+        from .components import Health
+
+        who = self._who(on) or self.me
+        health = self.world.get(who, Health)
+        if health is None or health.failures >= 3:
+            return health.failures if health is not None else 0
+        health.failures += 1
+        # Said, because the price is otherwise invisible: nothing announces
+        # a reroll of damage dice (`_rolled_pick` emits nothing and
+        # `_announce_reroll` covers only the three d20 rerolls), so a row
+        # whose whole cost is this would read as having paid nothing.
+        self.world.bus.emit(Note(
+            text=f"{self.ref}: counts a failed death save"
+                 f" ({health.failures} of 3)"))
+        return health.failures
+
     def boost_check(self, bonus: int, *, ev: Any = None) -> bool:
         """Add to the triggering skill check, after the die is already down.
 
