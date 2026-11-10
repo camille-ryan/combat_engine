@@ -15780,15 +15780,29 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         `skills.check` then reads the skill back off it and rolls that one,
         so the modifier, the training and every `skill:<name>` mod follow
         the substitution because all of them are keyed on the skill being
-        rolled. Answering `SkillCheck` instead cannot work for the rows
-        that print *"you would make"*: by then the die is thrown and, in
-        the `Window.AFTER` that `FREE` and `NONE` rows get, `finish` has
-        already totalled the bonus from the **old** skill -- which
-        relabels the check and leaves the number wrong. Measured: an
-        acrobatics check swapped to streetwise in that window reports
-        `skill='streetwise'` with acrobatics' `+2` instead of streetwise's
-        `-2`. Five rows in the tree do exactly that today; see the issue
-        this verb was filed under.
+        rolled. 
+        **Answering `SkillCheck` works only in `Window.BEFORE`, and the
+        default is the other one.** `finish` totals the bonus inside the
+        resolve callback, which `Bus.emit` runs *between* the two windows,
+        so a swap in `Window.AFTER` -- what `WINDOW_OF` gives a `FREE` or
+        `NONE` row -- relabels the check and leaves the number settled
+        from the **old** skill. Measured: an acrobatics check swapped to
+        streetwise in that window reports `skill='streetwise'` carrying
+        acrobatics' `+2` instead of streetwise's `-2`.
+
+        Five rows do swap on `SkillCheck` -- `p11583`, `p16392`, `f3274`,
+        `f3028`, `f2228` -- and **every one passes `window=Window.BEFORE`
+        explicitly**, for exactly that reason; `p11583`'s own docstring
+        says it would otherwise *"be inert while looking written"*. So
+        they are correct and this verb is not their fix. What it offers
+        them is that the swap becomes **observable**: a hand-rolled
+        `ev.skill = x` announces nothing, which is why `p11583` -- whose
+        whole body is that one line -- is carried on the silent list.
+        #1212.
+
+        This verb answers `CheckDeclared` rather than taking a window
+        argument because that event precedes the d20 altogether, so there
+        is no window in which it is too late.
 
         **The d20 is not affected either way**, because it has not been
         rolled yet. A card that says to roll *again* after seeing a result

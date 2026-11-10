@@ -10828,14 +10828,20 @@ def substitute_check(out: Result) -> None:
     from a local instead.
 
     **The load-bearing assertion is the bonus, not the label.** Swapping the
-    skill is visible either way -- the reported `skill` changes -- and that
-    is exactly what made five existing rows look implemented while being
-    wrong: they swap in `Window.AFTER`, where `finish` has already totalled
-    the bonus from the old skill, so the check is relabelled and the number
-    is the one the card says not to use (#1211). So every arm here checks
-    the *number* against an independently-measured `skills.modifier`, and a
-    rule that only checked the name would pass for either implementation --
-    the control that cannot tell two implementations apart.
+    skill is visible whether or not the modifier follows it -- the reported
+    `skill` changes either way -- so a rule asserting only the name would
+    pass for an implementation that relabels the check and leaves the
+    number alone. That is the control that cannot tell two implementations
+    apart, and it is not hypothetical here: `finish` totals the bonus in
+    the resolve callback, which `Bus.emit` runs *between* the two windows,
+    so the same write is correct in `Window.BEFORE` and inert in
+    `Window.AFTER` -- and `Window.AFTER` is what `WINDOW_OF` hands a `FREE`
+    or `NONE` row by default. So every arm here checks the *number* against
+    an independently measured `skills.modifier`.
+
+    The six rows that swap on `SkillCheck` all pass `Window.BEFORE`
+    explicitly and are correct; #1212 is what they actually want from this
+    verb, which is that the swap be observable at all.
     """
     import audit
     from combat_engine.engine.cast import Cast
@@ -10941,14 +10947,15 @@ def substitute_check(out: Result) -> None:
     # -- 6. it refuses outside a declared check ----------------------------
     late, okn, saidn, _, _ = play("streetwise", event=SkillCheck)
     out.that(okn is False,
-             "the verb refuses a `SkillCheck`, which is the event five rows"
-             " wrongly answer -- by then the die is thrown and, in the"
-             " window a FREE row gets, the bonus is already settled")
+             "the verb refuses a `SkillCheck` -- by then the die is thrown,"
+             " and in the window a FREE row gets by default the bonus is"
+             " already settled, so answering it is correct only for a row"
+             " that overrides the window, as all six that do")
     out.that(late.skill == "acrobatics" and late.bonus == acro,
              "so nothing is relabelled and no wrong number is reported."
-             " **This is the arm that separates the fix from the bug**: a"
-             " verb that answered `SkillCheck` would report"
-             f" skill='streetwise' with a bonus of {acro}")
+             " **This is the arm that prices the window**: the same write"
+             " in the window a FREE row gets by default would report"
+             f" skill='streetwise' carrying a bonus of {acro}")
     out.that(saidn == [], "and announces nothing")
 
     # -- 7. a no-op substitution is not work -------------------------------
