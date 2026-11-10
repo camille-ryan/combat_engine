@@ -688,20 +688,66 @@ def i1764x1(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit a shapechanger with a weapon attack",
        on=Trigger(Hit, _my_hit_on_shapechanger,
-                  "you hit a creature that can change shape"),
-       dropped=("c.on_revert()",))
+                  "you hit a creature that can change shape"))
 def i1764p1(c: Cast) -> None:
-    """Shutting the shapes off is `c.forbid` on each of the target's own
-    polymorph rows: `c.forbid` takes one ref rather than a keyword, so the
-    keyword is spread over them here. Having any such row is also what the
-    trigger reads as "a shapechanger", since no type line is loaded
-    mid-fight.
+    """**Written, and the marker was looking one layer too high.** It said
+    `c.on_revert()`, and dropping a shape needs no hook at all: `c.form`
+    lays an ordinary `Effect` -- `drop_cost=revert`, `by=` the row that
+    laid it -- so putting a creature back out of a shape is
+    `c.end_effect(eff)` on that effect, which is the same door the
+    creature's own printed minor action goes through. `c.form(revert=)`
+    was the wrong thing to read: it is what *leaving* costs, not who may
+    end it, and `c.form` being caster-only says nothing about the effect
+    it hands back.
 
-    Putting a creature back into a shape it is not currently wearing has
-    no verb -- `c.form(revert=)` ends a form the *caster* took."""
-    foe = _foe(c)
-    for ref in _polymorph_rows(c.world, foe):
-        c.forbid(ref, on=foe, until=When.SAVE_ENDS)
+    `eff.by` rather than `eff.label`, because the label is the laying
+    row's ref only by convention: of the 89 `c.form` call sites in this
+    tree 47 spell it `label=c.ref` and 4 pass none, which defaults to the
+    same thing, but **38 decorate it** -- `f"{ref} pool"`, a bare shape
+    word, a module constant -- so a label test would miss two in five.
+    `by` is set in `Effects.apply` from `c.form`'s own `by=self.ref`, on
+    every one of the 89. Same read as `feats/wizard_b.py`'s, and the same
+    `getattr` for the same reason: `by` is assigned onto the `Effect`
+    rather than declared as a field.
+
+    No choice is offered: the printed Effect is not "end one of its
+    forms", so every shape standing from one of those rows goes.
+
+    **Shutting the shapes off was spread over refs and `c.forbid(keyword=)`
+    had landed.** This said "`c.forbid` takes one ref rather than a
+    keyword, so the keyword is spread over them here"; `keyword=` is in the
+    signature, and `c.forbid`'s own docstring names *this* sentence --
+    "cannot use powers that HAVE the polymorph keyword ... two items,
+    imposed on a target, save ends" (#487, #613). A ref loop is narrower
+    than the card in a way nothing would report: it bars the rows the
+    creature holds at this instant, so a shape granted or restored later in
+    the fight is reachable again while the save is still owed.
+    `forbidden_keywords` is asked at use time instead.
+
+    `_polymorph_rows` stays, for the trigger -- having any such row is what
+    this reads as "a shapechanger", since no type line is loaded mid-fight
+    -- and for finding which standing effects are shapes.
+
+    **And `_foe` was the wrong reader, which is why this row had never
+    touched anybody.** That helper walks `attacker`, `source`, `actor` and
+    takes the first that is not the caster, which is right for the twelve
+    rows here answering *"an enemy hits you"* and backwards for this one:
+    the trigger is *you* hitting, so `attacker` **is** the caster, it is
+    skipped, there is no `source` or `actor` on a `Hit`, and the fallback
+    `c.target` is None on a `target=NO_TARGET` row. Measured: `_foe(c)`
+    returned None while the victim was on the board, `use()` returned True,
+    and `c.forbid(on=None)` returns None without laying anything -- so the
+    row reported firing and did nothing at all. The victim of a hit is
+    `ev.target`, read here rather than in the shared helper, which the
+    other twelve rows depend on as it stands."""
+    ev = c.trigger
+    foe = getattr(ev, "target", None)
+    rows = _polymorph_rows(c.world, foe)
+    if foe is not None:
+        for eff in list(c.world.effects.of(foe)):
+            if not eff.ended and getattr(eff, "by", "") in rows:
+                c.end_effect(eff, why=f"{c.ref} put the shape away")
+    c.forbid(keyword=Keyword.POLYMORPH, on=foe, until=When.SAVE_ENDS)
 
 
 @power("i2477p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -841,37 +887,89 @@ def i2475p1(c: Cast) -> None:
 
 
 @power("i2478p1", level=4, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.gains_property(in_zone=)",))
+       reach=PERSONAL, target=SELF, dropped=("c.property_in()",))
 def i2478p1(c: Cast) -> None:
-    """**Re-pointed.** "You and your allies **within the light**" is a
-    grant with moving membership: a property is written once onto a
-    carried copy, and an ally who steps out of the radius must stop
-    having it. `c.gains_property` has no undo and should not grow one --
-    the zone is the right owner of a membership that changes, the way
-    `c.resist_in` owns a resistance that holds only inside one.
+    """**The wearer's half plays, and the note saying it could not was
+    wrong on both of its claims.** It said "light is not modelled and
+    neither is what a weapon is made of, so both halves of this are absent
+    rather than one". What a weapon is made of is modelled exactly as a
+    weapon property, by this very item's other block: `i1764x1` prints the
+    same sentence without the radius and writes
+    `c.gains_property("silvered", every=True)`, which 15 monster traits
+    read back through `regeneration(unless_struck_by=)`. And
+    `c.gains_property` *does* have an undo -- `c.loses_property`, the same
+    five selectors run backwards. So the wearer is written here, since the
+    wearer is at the centre of its own light and is inside it for as long
+    as it burns.
 
-    Light is not modelled and neither is what a weapon is made of, so
-    both halves of this are absent rather than one."""
+    **What is left is the membership and not the material.** "You and your
+    allies **within the light**" is a grant whose roll changes as people
+    walk: a property is written once onto each carried `Gear.weapons` copy,
+    so an ally who steps out would keep it and one who steps in would never
+    get it. A `gains_property(in_zone=)` keyword -- which this row waited on
+    -- is the wrong shape for that and the note already argued why without
+    noticing it contradicted its own marker: the zone has to own a
+    membership that changes, the way `c.resist_in` owns a resistance that
+    holds only inside one, which is a verb beside `c.resist` and not a
+    keyword on it. Hence `c.property_in()`.
+
+    "You can end this effect as a minor action" is left alone rather than
+    hung on an `Effect.drop_cost` with a `c.loses_property` on `on_end`.
+    Light is genuinely not modelled, so ending the light does nothing that
+    can be observed, and the teardown would reach across blocks -- a
+    wearer who also carries `i1764x1` would have that block's standing
+    silver stripped by this block's dismissal, since `every=True` names the
+    weapons and not who paid for the word."""
+    c.gains_property("silvered", every=True, on=c.me)
 
 
 @power("i2479p1", level=4, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="a critical hit is scored against your AC or Reflex",
        on=Trigger(Hit, _crit_on_my_ac_or_reflex,
-                  "a critical hit lands on your AC or Reflex"),
-       dropped=("c.action_point(gain=False)",))
+                  "a critical hit lands on your AC or Reflex"))
 def i2479p1(c: Cast) -> None:
-    """The encounter half is `c.expended` and `c.restore_use`. The other
-    option spends an action point *without* buying an action with it, and
-    `c.action_point` always hands the action over."""
+    """Both printed options, off `c.expended` and `c.restore_use`.
+
+    **The marker said `c.action_point(gain=False)` and the parameter was
+    already there, spelled as a value rather than a flag.**
+    `c.action_point(cost)` ends in `c.extra_action(cost)`, and
+    `extra_action` returns False without touching the budget and without
+    announcing `ActionGranted` when `Budget` has no field of that name --
+    and `Budget` carries `standard`, `move` and `minor` only. So
+    `ActionType.NONE` spends the point, counts it against the encounter's
+    one and emits `ActionPointSpent`, which is the printed cost, and buys
+    no action, which is the half the marker was asking for.
+
+    `query.by_action_point` wants `world.turn == me` as well as the
+    stamped round before it calls an attack bought with a point, and this
+    row answers a critical hit scored *against* its wearer -- so the stamp
+    falls on somebody else's turn and reads false where it is read.
+
+    A daily is offered only when there is a point to pay with:
+    `c.action_points()` is `ActionPoints.available`, the same number
+    `c.action_point` guards on, so the choice cannot be taken and then
+    refused. The row's own ref is dropped from the pool -- it is a daily
+    of exactly this level, and handing itself back is not one of the two
+    printed options.
+    """
     gone = []
     for ref in c.expended(on=c.me):
         p = get(ref)
-        if p is not None and p.usage is Usage.ENCOUNTER and p.level <= 4:
+        if p is None or ref == c.ref or p.level > 4:
+            continue
+        if p.usage is Usage.ENCOUNTER or (
+            p.usage is Usage.DAILY and c.action_points() > 0
+        ):
             gone.append(ref)
-    pick = c.choose(gone, "which encounter power comes back")
-    if pick is not None:
-        c.restore_use(pick, on=c.me)
+    pick = c.choose(gone, "which power comes back")
+    if pick is None:
+        return
+    row = get(pick)
+    costs = row is not None and row.usage is Usage.DAILY
+    if costs and not c.action_point(ActionType.NONE):
+        return
+    c.restore_use(pick, on=c.me)
 
 
 @power("i3207p1", level=4, cls=ITEM, usage=ENCOUNTER, action=MINOR,
@@ -1834,11 +1932,30 @@ def i1487p1(c: Cast) -> None:
        trigger="you or an ally in line of sight regains hit points",
        on=Trigger(Healed, _healed_in_sight,
                   "somebody on your side is healed"),
-       dropped=("c.maximise(healing=)",))
+       dropped=("Healed.dice",))
 def i1525p1(c: Cast) -> None:
-    """`Healed` is announced before the hit points go on and its `amount`
-    is read back, so the ability modifier is added there. Maximising the
-    *source* of the healing is a different operation and has no verb."""
+    """`Healed` is announced before the hit points go on and `resolve.heal`
+    reads `offered.amount` back, so the ability modifier is added there and
+    the number in the log is the number applied.
+
+    **Re-pointed, from `c.maximise(healing=)`, because the gap is a layer
+    below the verb.** `c.maximise` exists and the keyword would not help
+    it: it listens for `DamageRolled` and tops the roll up to
+    `_max_of(p.damage_of(0).dice)`, which works only because a damage
+    expression is a **header** field. Healing has no header counterpart --
+    `Cast.heal` takes an `int` the body has already rolled -- so by the
+    time `Healed` fires there is nothing left to maximise and nothing on
+    the event to compute a maximum from. A `healing=` keyword on
+    `c.maximise` would have to be built on a record that does not exist,
+    and would read as arrived the moment it landed.
+
+    So the wait is for the record: `Healed` carrying what the heal *could*
+    have rolled, beside the `amount` it did. Counted over `content/`, 27 of
+    the 501 `c.heal` call sites roll for the amount; for the other 474 --
+    surges, flat numbers, `surge_value` -- `amount` already **is** the
+    maximum possible result, so this row is short on about one heal in
+    twenty rather than on all of them, which is the other reason the clause
+    is `dropped=` and not `todo=`."""
     ev = c.trigger
     if ev is not None:
         ev.amount += max(c.wis_mod, c.cha_mod)
