@@ -1435,7 +1435,7 @@ def p15842(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CHARM],
-    dropped=("Gear.carried",),
+    dropped=("chargen.deals_equipment",),
 )
 def p15845(c: Cast) -> None:
     """Both premises of the old note are false, and the card is roll-twice,
@@ -1444,10 +1444,26 @@ def p15845(c: Cast) -> None:
     **The marker moves off the import, which landed under #876.** It read
     `etl.item.adventuring_gear`, and `Category = 'Equipment'` is now
     imported -- 233 rows, `item` 1,877 -> 2,110 -- so the instrument this
-    card requires has a ref. What is still missing is the list a row would
-    read it from, and an empty `Gear.carried` would refuse the Requirement
-    for every character and stop this row being offered at all, which is
-    worse than playing with the clause dropped. The dealing half is #877.
+    card requires has a ref.
+
+    **And the list arrived too, so the marker moved again -- to the half
+    that is actually missing.** `Gear.carried` exists now: Camille's ruling
+    on `#1233` deals two consumables to every generated character, and the
+    field those sit in is the one this row wanted to read. Three rows in
+    `themes/batch_f.py` printing "you must have `<ref>` on your person"
+    became writable with it.
+
+    This row did not, and the reason is worth being exact about: what gets
+    dealt is **consumables**, and this card wants an *instrument*. The 233
+    `Equipment` rows are imported and none of them reaches a character, so
+    a `requires=` here would still refuse every character and stop the row
+    being offered at all -- which is worse than playing with the clause
+    dropped, and was the old note's argument. The argument survives; only
+    its cause changed, from "no list" to "nothing puts an instrument in
+    the list".
+
+    So `chargen.deals_equipment`, which is the dealing half and a sibling
+    of `#1233`'s. `#877` is where the question was first asked.
 
     *Which save is a charm save* **is** askable. `durations.keywords_of`
     puts the effect's keywords in the save context and on the

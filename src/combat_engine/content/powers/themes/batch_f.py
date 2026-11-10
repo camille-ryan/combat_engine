@@ -1941,7 +1941,29 @@ def p16394(c: Cast) -> None:
 #: question about whether a dealt character carries ordinary kit. The
 #: marker names the field because that is the thing a row reads; the
 #: dealing is the half that makes it answer True.
-KIT = ("Gear.carried",)
+def _carrying(ref: str) -> Callable[[Any, int], bool]:
+    """"Requirement: you must have `<ref>` on your person".
+
+    `Gear.carried` is the refs a creature has on it but neither wields nor
+    wears, and it arrived with `#1233`'s ruling -- dealt characters now
+    carry two consumables, so there is something for a carried-item
+    requirement to be true *of*. Before that the field did not exist and
+    these three rows named it as their gap.
+
+    A `requires=` predicate rather than a body guard, which is the whole
+    point: `dsl.usable` reads it, so the row is **not offered** when the
+    item is absent. A guard inside the body would let the action be taken
+    and then do nothing, which for an immediate reaction means spending the
+    one interrupt a round allows.
+    """
+
+    def has(world: Any, eid: int) -> bool:
+        from combat_engine.engine.components import Gear
+
+        gear = world.get(eid, Gear)
+        return gear is not None and ref in gear.carried
+
+    return has
 
 
 def _enemy_closed(world: Any, me: int, ev: Any) -> bool:
@@ -1969,7 +1991,7 @@ def _within_5_of(spot: tuple[int, int]) -> set[tuple[int, int]]:
     attack=Attack(INT, vs=REF, plus=2),
     trigger="an enemy enters a square adjacent to you",
     on=Trigger(AdjacencyGained, _enemy_closed, "an enemy moves adjacent to you"),
-    dropped=KIT,
+    requires=_carrying("i390"),
 )
 def p16442(c: Cast) -> None:
     """Aimed off `AdjacencyGained.mover` rather than off `ev.targets`: an
@@ -1991,7 +2013,7 @@ def p16442(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=ARCANE,
-    dropped=KIT,
+    requires=_carrying("i390"),
 )
 def p16443(c: Cast) -> None:
     """The trap is a zone five squares across that springs on the first
@@ -2026,7 +2048,7 @@ def p16443(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=ARCANE,
-    dropped=KIT,
+    requires=_carrying("i390"),
 )
 def p16444(c: Cast) -> None:
     """One save-ends effect per creature, not two: the prone half is a watch

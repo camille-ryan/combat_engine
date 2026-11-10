@@ -3595,6 +3595,76 @@ def _stock_quiver(gear: Gear | None) -> None:
         gear.quiver.append(Ammo(ref="", kind=kind, count=MUNDANE))
 
 
+#: How many consumables a dealt character carries. Camille's ruling on
+#: `#1233`, 2026-11-10, verbatim:
+#:
+#:   > *"For characters generated automatically, for now let's just give
+#:   > them two random potions of their level or lower. For player
+#:   > generated characters don't do that. We'll actually have item
+#:   > shopping."*
+#:
+#: So this is the **automatic** path only. There is no player-driven path to
+#: exclude yet (`#793`), which is why nothing here tests for one -- the
+#: second half of the ruling constrains whoever builds that.
+DEALT_CONSUMABLES = 2
+
+
+def _stock_consumables(gear: Gear | None, level: int, rng: Random) -> None:
+    """Put two consumables of this character's level or lower on its person.
+
+    **Why this exists at all.** `treasure` deals the three enhancement
+    categories -- `attack_damage`, `ac`, `defences` -- because its job is to
+    stop a character running its own numbers cold. A consumable carries no
+    `enh_to`, so all 118 of them sat outside that pool by construction and
+    **nobody was ever dealt one**, which left `c.consume_item()`'s ten rows
+    and `chargen.deals_consumables`' rows with no character who could hold
+    what they are about. `#877` asked whether that should change and was
+    closed without an answer; `#1233` is the answer.
+
+    **Carried, not worn.** `Gear.carried` is a list of refs rather than
+    `Magic` objects in `worn`: a slot holds one thing for the whole fight
+    and a potion occupies no slot, there can be two of the same kind, and it
+    is spent rather than taken off. That is the second of `#877`'s two
+    questions, which was mine rather than Camille's.
+
+    **Level or lower, off `item_step`.** An item's level lives there and not
+    on `item`, so the join is the same one `treasure` makes. Measured over
+    the corpus: 7 consumables are available at level 1, 18 by level 3, 47 by
+    level 5 and all 118 by level 10 -- so the pool is never empty, and
+    every one of the 118 has at least one declared block, meaning a dealt
+    potion is never an inert object.
+
+    **Sampled without replacement when the pool allows it.** Two of the same
+    potion is a legitimate hand and `random.sample` would refuse a pool of
+    one, so the draw falls back to repeats only when it has to -- which at
+    level 1 it never does, since 7 > 2.
+
+    Takes `rng` rather than reaching for module state, so a dealt character
+    stays reproducible from its seed. That is the same contract
+    `_pick_item` keeps.
+    """
+    from combat_engine.db import game
+
+    if gear is None:
+        return
+    pool = [
+        row["ref"]
+        for row in game().execute(
+            "SELECT DISTINCT i.ref FROM item i JOIN item_step s ON s.ref = i.ref "
+            "WHERE i.category = 'Consumable' AND s.level <= ? ORDER BY i.ref",
+            (level,),
+        )
+    ]
+    if not pool:
+        return
+    picks = (
+        rng.sample(pool, DEALT_CONSUMABLES)
+        if len(pool) >= DEALT_CONSUMABLES
+        else [rng.choice(pool) for _ in range(DEALT_CONSUMABLES)]
+    )
+    gear.carried.extend(picks)
+
+
 def _stock_thrown(gear: Gear | None) -> None:
     """Record how many copies of each throwable weapon the character has.
 
@@ -5088,6 +5158,18 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # this is one count per weapon, which are different keys for the reason
     # `_stock_thrown` gives.
     _stock_thrown(world.get(eid, Gear))
+    # Two consumables on the person, Camille's ruling on #1233. **Its own
+    # stream**, like the race's and the feats' above, and that is not
+    # decoration: a shared stream would move every draw downstream of it,
+    # so dealing potions would silently re-roll the skills and the feats of
+    # every character in the tree and cost a replay re-record for a change
+    # that adds to the margin. A dedicated key means this adds a hand and
+    # moves nothing else.
+    _stock_consumables(
+        world.get(eid, Gear),
+        who.level,
+        Random(f"{world.rng.seed}:{who.cls}:{build.name}:consumables"),
+    )
     # A racial skill bonus is a sheet number and not a thing that happens
     # in a fight, so it is laid straight into `Mods` where the armour
     # penalty and the enhancement bonus already live -- `engine/skills.py`

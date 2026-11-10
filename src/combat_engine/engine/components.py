@@ -1860,6 +1860,35 @@ class Gear:
     #: a worn item is on the creature for the whole fight and a piece of
     #: ammunition is gone the moment it is loosed.
     quiver: list[Ammo] = field(default_factory=list)
+    #: Item refs the creature has **on its person** -- carried, not worn and
+    #: not wielded. Potions and the like.
+    #:
+    #: **A list of refs rather than `Magic` objects, and not in `worn`.**
+    #: `worn` is keyed by slot and a slot holds one thing for the whole
+    #: fight; a carried item occupies no slot, there can be several of the
+    #: same kind, and it is spent rather than taken off. That is `quiver`'s
+    #: argument one step more general, and `#877` asked which of the two
+    #: shapes this should be -- a refs list or its own component -- and a
+    #: refs list is the smaller of them while `Gear` is already where
+    #: `quiver` and `thrown_left` live.
+    #:
+    #: Refs rather than objects because nothing needs the columns yet: the
+    #: rows waiting on this ask *whether* a ref is carried -- "you must have
+    #: `i390` on your person" is the printed line on three of them -- and a
+    #: row that later needs the item's numbers can read them from the
+    #: database the way every other item row does.
+    #:
+    #: **Empty is the honest default and means "carrying nothing"**, not
+    #: "untracked" -- unlike `thrown_left` above, where absent has to mean
+    #: untracked so a monster is not refused. A monster carries no `Gear` at
+    #: all, so it never reaches this either way, and a dealt character
+    #: always has the field. Camille's ruling on `#1233`, 2026-11-10:
+    #:
+    #:   > *"For characters generated automatically, for now let's just give
+    #:   > them two random potions of their level or lower. For player
+    #:   > generated characters don't do that. We'll actually have item
+    #:   > shopping."*
+    carried: list[str] = field(default_factory=list)
     #: How many copies of a throwable weapon are left, by weapon ref.
     #:
     #: **A dict rather than a field on `Weapon`, deliberately.** `Weapon` is
