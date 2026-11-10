@@ -1,4 +1,4 @@
-"""Implement-slot magic items, heroic tier, second wave: levels 3 to 5.
+r"""Implement-slot magic items, heroic tier, second wave: levels 3 to 5.
 
 Nothing here declares an implement. The ladder, the enhancement bonus, the
 price, the critical rider and the base-item restriction are columns in
@@ -58,8 +58,19 @@ numbers that `features/strikers.py` publishes by label: the flat bonus is
 
 A row's **range** is reachable too, which three markers denied:
 `dsl.area_of` hands `dsl._stretched` a context naming the row, so a gated
-`c.bonus("range", ...)` lengthens exactly the rows a card names. An area
-burst's `within` is the one part of that still missing.
+`c.bonus("range", ...)` lengthens exactly the rows a card names.
+
+**And the sentence that used to end that paragraph was stale** -- "an area
+burst's `within` is the one part of that still missing". `#738` added
+`"within"` as a third `_stretched` kind for exactly this printed clause,
+and `i2771x1` in `implement_a.py` had been written on it both ways round
+ever since. `i2635x1` is written now and that was the last marker here
+about a distance. `_stretched` reads `"reach"` for melee, `"range"` for a
+ranged line, `"blast_size"` for a blast or burst's own radius and
+`"within"` for the distance an area line may be *placed* at: four terms,
+and a marker denying any of them is now the kind of claim to re-measure
+before believing. Same trap as the `Mods` paragraph below, in the same
+file, one term further along.
 
 **Three more went the same way, and all three were a `Mods` term nobody
 had looked for.** The pattern is worth stating once, because it caught
@@ -1558,7 +1569,7 @@ def i1594p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.within(extend=)",),
+    dropped=("warlock.amount_for()",),
 )
 def i1825x1(c: Cast) -> None:
     """The curse-damage half is written; the reach half is dropped.
@@ -1600,8 +1611,30 @@ def i1825x1(c: Cast) -> None:
     which is the half `i1986p1` had to declare a trigger for.
 
     Not written because `cf:warlock-f1c11` lives in `features/warlock.py`,
-    which this wave did not own. The marker stays naming the symbol that
-    does not exist, rather than being re-pointed at a verb that does.
+    which this wave did not own. And not half-written here: a
+    `c.change_amount` laid against a row that does not read it is a hold
+    nobody consults, which `i3525x1` below names as the one outcome worse
+    than leaving a clause unwritten.
+
+    **Re-pointed off `c.within(extend=)`, which named the answer #715
+    rejected.** That symbol asks for a radius a modifier can widen from
+    outside, and the ruling quoted above settled the other way -- the
+    laying row reads the raise -- so nobody is going to build it and the
+    group was two rows parked on an answer neither of them wants.
+    `f1303`, the other claimant, rejects it a second way and says so on
+    its own row: its card **substitutes** the pool rather than growing it,
+    so a widening parameter would give "within 2 of you *or* of the
+    target", wider than print. The two rows do share a shape, but not a
+    fix: the work is one line in `cf:warlock-f1c11` and a different line
+    in `p620`, and whichever lands first cannot clear the other row.
+
+    So this names the line that is owed: `features/warlock.py` reading
+    `c.amount_for` where it now writes a literal 3. `warlock.pay_boon()`
+    on `i698x1` is the same spelling for the same file, and
+    `p13853.dice_for()` is the same shape named by its ref -- which this
+    row cannot do, because `dsl._SYMBOL` admits `p13853.dice_for()` and
+    refuses `cf:warlock-f1c11.amount_for()` at import. `f1303` keeps the
+    old spelling until somebody owns `feats/general_h.py`.
 
     **Every `p6855` in this row became `cf:warlock-f1c11` when `#1043`
     retired the duplicate declaration.** They are one printed card and the
@@ -2999,29 +3032,53 @@ def i2620p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("dsl._stretched(within=)",),
 )
 def i2635x1(c: Cast) -> None:
-    """The ranged half is written; the area half is the dropped clause.
+    """Both printed halves, on two different `Mods` terms.
 
-    **`todo` became `dropped`, and the symbol was re-aimed.** A ranged
-    line's range really is reachable: `dsl.area_of` hands `_stretched` a
-    context of `{"power": p.ref, "kind": r.kind}` and it reads
-    `Mods.total("range", ctx)`, so a gated `c.bonus("range", ...)` is the
-    printed sentence for every ranged arcane power.
+    A ranged line's range is reachable: `dsl.area_of` hands `_stretched` a
+    context of `{"power": p.ref, "range_kind": r.kind}` and it reads
+    `Mods.total("range", ctx)` for a ranged kind, so a gated
+    `c.bonus("range", ...)` is the printed sentence for every ranged arcane
+    power.
 
-    An **area** power is the half that is still missing, and the card's own
-    worked example is exactly it -- the number that grows is the `within`
-    an area burst may be placed at. `_stretched` deliberately does not
-    touch that: for an area kind it reads `"blast_size"`, which is the
-    burst's own radius, and growing that would widen the blast instead of
-    reaching further. So the symbol is the missing parameter rather than a
-    new mechanism.
+    **The area half is written, and the marker it carried was stale.** The
+    note here read "`_stretched` deliberately does not touch that: for an
+    area kind it reads `"blast_size"`, which is the burst's own radius" --
+    true when it was written and false since #738, which added `"within"`
+    as a **third** kind for exactly this printed sentence. `_stretched`
+    reads `blast_size` for a close burst or blast and `within` for the
+    distance an area line may be *placed* at, through `within_of`, which
+    is the one door all three placement readers use -- `aim_points`
+    included, so the longer placement is offered rather than offered and
+    then refused one question later.
+
+    So `dsl._stretched(within=)` asked for a parameter that had landed
+    under another name, which no name-matching check can catch. `i2771x1`
+    in `implement_a.py` is the same printed clause with the same worked
+    example and has been written both ways round since #738; this row is
+    its arcane twin and copies its two predicates.
+
+    `("area_burst", "wall")` is what "area" means in that gate, and it is
+    the pair every `within_of` caller passes as `range_kind`. The card's
+    own example settles which number moves -- `burst 5 within 10` becomes
+    `burst 5 within 13`, so the plus goes on the placement distance and
+    leaves the radius alone -- and a close burst or close blast is not an
+    area line, so it takes nothing.
     """
+    me = c.me
+    plus = c.enhancement
+
+    def an_arcane_area(ctx: dict[str, Any]) -> bool:
+        return ctx.get("range_kind") in ("area_burst", "wall") and (
+            Keyword.ARCANE in _keywords_of(ctx)
+        )
+
     c.bonus(
-        "range", c.enhancement, on=c.me, until=When.ENCOUNTER,
+        "range", plus, on=me, until=When.ENCOUNTER,
         when=_has_keyword(Keyword.ARCANE),
     )
+    c.bonus("within", plus, on=me, until=When.ENCOUNTER, when=an_arcane_area)
 
 
 @power(
@@ -4726,7 +4783,7 @@ def i2649p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("MoveStart.squares",),
+    todo=("MoveStart.to",),
 )
 def i2654x1(c: Cast) -> None:
     """**Re-pointed: a trait can stop a shift, and the gap is one field.**
@@ -4754,8 +4811,24 @@ def i2654x1(c: Cast) -> None:
 
     One field closes it, and either spelling would: the distance, or the
     destination the move was announced for, since the distance follows from
-    that and the mover's square. `MoveStart.squares` names the first
-    because that is the quantity the card prints.
+    that and the mover's square.
+
+    **Re-pointed again, to the destination, because that spelling closes
+    two rows and the distance closes one.** `p14393` in `races/powers_b.py`
+    carries `MoveStart.to` for this same absent field -- it has to ask
+    whether a flanked enemy's move *leaves* the flank, and its note says
+    the event "carries the mover and the kind of move and not where it is
+    going". A bare count cannot answer that, while a destination answers
+    both cards, so `MoveStart.squares` was a second name for one field and
+    the narrower of the two. Nothing goes green early on the merge either:
+    the day `to` lands, both rows are writable, which is the test
+    `content/CLAUDE.md` sets for a symbol serving two rows.
+
+    And the field is there to be had rather than to be computed:
+    `movement.shift` takes `to` as a parameter and emits `MoveStart` three
+    lines later, so the destination is already settled at the moment of the
+    announcement -- `Cast.shift` has put the decider's pick through by
+    then. This row's own number is then `to` against the mover's square.
 
     `c.teleport` is then the payout and needs nothing added -- it already
     takes a count, and this card lets the carrier pick the arrival, which
