@@ -69495,11 +69495,11 @@ def flat_from_attack(out: Result) -> None:
 
     world, me, _ = _board()
 
-    def paid(amount: int, **kw: object) -> int:
+    def paid(amount: int, **kw: bool) -> int:
         health = world.need(me, Health)
         was = health.hp
         Cast(world=world, me=me, ref="drivers").flat(
-            amount, dtype=DamageType.POISON, on=me, **kw)  # type: ignore[arg-type]
+            amount, dtype=DamageType.POISON, on=me, **kw)
         took = was - world.need(me, Health).hp
         world.need(me, Health).hp = was
         return took

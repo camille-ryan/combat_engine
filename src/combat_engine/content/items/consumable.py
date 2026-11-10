@@ -95,6 +95,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Moved,
+    MoveEnd,
     PowerResolved,
     PowerUsed,
     Ranged,
@@ -2286,8 +2287,7 @@ def i844p1(c: Cast) -> None:
 
 @power("i969p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
-       trigger="you use a teleport power of 10th level or lower",
-       dropped=("c.extend_every(once=)",))
+       trigger="you use a teleport power of 10th level or lower")
 def i969p1(c: Cast) -> None:
     """Two squares on the blink, spent as a free action before it.
 
@@ -2300,15 +2300,38 @@ def i969p1(c: Cast) -> None:
     before it offers a square, so the two squares are there when the
     distance is computed. Nothing has to watch the move at all.
 
-    **`dropped=` for the one clause that is missing, and it is a cost.**
-    `c.extend_every` has no `once=`, so this pays for every teleport until
-    the end of the turn where the card pays for one. Two teleports in a turn
-    is rare and the row is right in the ordinary case, which is what
-    `dropped=` means -- but it is a *widening*, so the symbol names it
-    rather than the row claiming to be finished.
+    **The one-shot is content-side, which is how this store already does
+    it.** `c.extend_every` has no `once=` and does not need one: entries in
+    `Powers.extra_squares` *add*, and the tree's answer for "grant once" is
+    to hold the effect and let it go rather than to spend it inside the
+    reader -- `feats/styles.py` says so in as many words, *"the live effect
+    is held and re-checked rather than counted"*.
+
+    So the grant is ended on the first teleport that uses it. `MoveEnd`
+    carries `kind_` and fires **after** the move completes, which is the
+    right edge: `Cast.teleport` has already read `_extra_every` and added
+    the two squares by then, so this turn's blink keeps them and the next
+    one does not. `MoveStart` would have been wrong in the obvious way --
+    it fires before the first step, so ending there would cancel the very
+    move the reagent was spent on.
+
+    Watching `MoveEnd` rather than `Moved` for the same reason: `Moved`
+    fires per square, so a two-square teleport would end the grant halfway
+    through its own distance.
 
     **The printed level gate is not the gap and takes no marker.** "Of up to
     10th level" cannot narrow anything at heroic tier, where no power is
     higher, and the `Level 20` and `Level 30` lines are out of scope like
     every other item's."""
-    c.extend_every("teleport", 2, until=When.EONT)
+    me = c.me
+    hold = c.extend_every("teleport", 2, until=When.EONT)
+    if hold is None:
+        return
+
+    def blinked(ev: MoveEnd) -> None:
+        """Give the two squares back once one teleport has had them."""
+        if ev.actor != me or getattr(ev, "kind_", "") != "teleport":
+            return
+        c.end_effect(hold)
+
+    c.watch(MoveEnd, blinked, until=When.EONT, on=me, label=c.ref)
