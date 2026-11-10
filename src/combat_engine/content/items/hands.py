@@ -90,7 +90,6 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     Forced,
-    Healed,
     Hit,
     Keyword,
     Melee,
@@ -101,6 +100,7 @@ from combat_engine.engine import (
     Relation,
     SecondWind,
     SkillCheck,
+    SurgeSpent,
     TempHP,
     TotalDefence,
     Trigger,
@@ -404,27 +404,61 @@ def i1378x1(c: Cast) -> None:
 
 
 @power("i1436p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.ignore_resistance(below=)",))
+       reach=PERSONAL, target=SELF)
 def i1436p1(c: Cast) -> None:
     """"Any resistance of 10 or lower" is a threshold and `amount=` is a
-    cap, and the two part company above ten: this walks through resist 10
-    entirely and shaves resist 15 down to 5, where the card leaves resist
-    15 alone. Nothing at heroic tier has more than 10, so the rows differ
-    only where the item never plays -- but they do differ, so the
-    threshold is named rather than quietly called the same thing.
+    cap, and the two part company above ten: a cap walks through resist 10
+    entirely and then shaves resist 15 down to 5, where the card leaves
+    resist 15 alone. The row shipped as the cap, so it was stronger than
+    print by exactly that much -- measured, a 20-point blow against
+    resist 15 landed 15 points where the card lands 5.
 
-    **A `when=` gate is not the way round it, and that is worth writing
-    down because it looks like one.** `c.resistances(on=foe)` exists, so a
-    gate could read the number and ask whether it is ten or lower -- but
-    the gate is handed the **blow's** context, and `resolve` reads the
-    ignore once *per typed part* with `part_types` as an argument rather
-    than as a key in that context. So a gate could only ever ask about
-    `ctx["dtype"]`, which is right for a single-part blow and wrong for
-    any blow carrying a typed rider: a sword plus a fire rider would have
-    one part's resistance decide both. The threshold belongs where the
-    part types are already in hand, which is `amount`'s own level and the
-    parameter the marker names."""
-    c.ignore_resistance(10, on=c.me, until=When.ENCOUNTER)
+    **It is a question about the creature in front of you, so it is one
+    typed ignore per damage type, each gated on what that creature
+    resists.** The old note here said a gate "could only ever ask about
+    `ctx['dtype']`", and that is the one key this does not need:
+    `resolve._ignored_resist` looks a typed modifier up by its own name,
+    `ignore resist <type>`, once per typed part of the blow, so the type
+    is fixed by the **modifier** and the gate has only to read
+    `ctx["target"]`. Both halves are house style already -- `i3103p1`
+    gates on that key, and `i3103x1` writes one call per type because the
+    number differs per type.
+
+    Measured on one arming and two creatures: resist 10 is walked through
+    whole (10 of 10 points land, against 0 with no row) and resist 15
+    beside it is untouched (5 of 20, which is what no row at all gives).
+    A blanket resist 5 is pierced too -- `c.resist` with no type writes
+    every entry, so the per-type read sees it -- and an immunity is left
+    alone, which is right: this sentence is about resistance.
+
+    **`0 <` rather than a bare `<= 10`, and it is load-bearing.** A gated
+    resistance (`c.resist(when=)`) is a modifier rather than a `Defences`
+    entry, so `c.resistances` cannot see it and a creature carrying
+    resist 15 that way reads as 0 here. Requiring a resistance to be
+    *there* before claiming to walk through it keeps that case on the
+    printed answer: measured, 5 of 20 points land, exactly as with no
+    row.
+
+    Two residual inexactnesses, neither of them this row's own:
+
+    * A part of **two** types is walked through only as far as both are,
+      which is `_ignored_resist`'s stated convention and the same `min`
+      the resistance itself is read with. So resist 5 beside resist 20 on
+      one creature pierces neither, where the card would pierce the 5.
+    * A flat resistance of ten or lower **and** a gated one above it, on
+      the same creature and the same type, has both ignored -- the one
+      modifier is read in both arms of `deal_damage` and cannot tell them
+      apart. Every `c.ignore_resistance` row in the tree shares that.
+    """
+    for kind in DamageType:
+        def shallow(ctx: dict[str, Any], kind: DamageType = kind) -> bool:
+            who = ctx.get("target")
+            if who is None:
+                return False
+            return 0 < c.resistances(on=who).get(kind, 0) <= 10
+
+        c.ignore_resistance(None, kind, on=c.me, until=When.ENCOUNTER,
+                            when=shallow)
 
 
 # -- level 4 ----------------------------------------------------------------
@@ -806,10 +840,35 @@ def i839x1(c: Cast) -> None:
 
 
 @power("i839p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.extend_move(mode=)",))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.double_granted_move(mode=)",))
 def i839p1(c: Cast) -> None:
     """Climbing at full speed is a movement mode at that speed; doubling
-    climb movement somebody *else* grants has no verb."""
+    climb movement somebody *else* grants is the half that is missing.
+
+    **Re-pointed off `c.extend_move(mode=)`, which would not have been
+    enough.** That marker priced the gap as one keyword on a verb that
+    exists, and the verb is two steps away rather than one: `extend_move`
+    takes the moving row's **ref as a required positional** -- there is no
+    wildcard, and "any power" is not a key -- and `squares_for` **adds**
+    its entries, which its own docstring calls out as the one place it
+    differs from `change_dice`. A `mode=` landing on top of both of those
+    would have made `todo.py` report this row ready with the wildcard and
+    the multiplier still to do, which is the "ready when a third of it
+    landed" failure this tree keeps paying for.
+
+    And a keyword there may be the wrong house entirely. The clause reads
+    on either of two things a power grants -- a climb **speed**, which is
+    `c.mode` and is a plain `max()` into `Movement.modes` with no modifier
+    layer at all, or **squares** of climbing movement, which is
+    `squares_for`'s territory. 42 files in this tree grant a climb one way
+    or the other, so the clause has plenty to reach for; what it has
+    nowhere to say is "twice whatever that was, for this mode".
+
+    So the symbol names a facility rather than a parameter, and it took
+    the `mode=` with it because a verb that doubled every grant would be
+    stronger than the printed sentence. A singleton either way -- nothing
+    else in the tree waited on the old spelling."""
     c.mode("climb", c.speed_of(), on=c.me, until=When.ENCOUNTER)
 
 
@@ -932,26 +991,57 @@ def i2134p1(c: Cast) -> None:
 
 
 @power("i2168x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=())
+       reach=PERSONAL, target=SELF)
 def i2168x1(c: Cast) -> None:
-    """`Healed` says who healed whom and not which row did it, so "a power
-    that allows a surge" and "an encounter or daily power" go unasked and
-    every heal of mine on a construct pays out."""
+    """Two printed clauses, and the row had each of them on the other
+    one's narrowing.
 
-    def healed(ev: Healed) -> None:
-        # "An encounter or daily power", which `Healed.power` makes
-        # askable -- before this it paid out on every heal of mine.
+    **It carried `dropped=()` -- an empty marker.** Every instrument reads
+    `todo + dropped`, so an empty tuple names no gap, counts as nothing
+    owed and reports the row finished, while the header still reads to a
+    human as a row with a clause missing. Whatever it was standing in for
+    is not recoverable from it, so it is gone and the two clauses are
+    written instead.
+
+    **The surge clause is `SurgeSpent`, not `Healed`.** The card's first
+    sentence is about using a power that lets the creature *spend a
+    healing surge*, and the row asked `Healed` + `usage=(ENCOUNTER,
+    DAILY)` -- a narrowing from the card's **second** sentence, laid on
+    the first one, so an encounter heal that involved no surge paid out
+    and an at-will power granting a surge did not. `SurgeSpent` is the
+    event for it and carries all four of the things this needs: `source`
+    (the row's caster, or the creature itself for a second wind, which is
+    what keeps a construct's own breather out), `actor`, `power`, and
+    `healed` -- 0 for the 80-odd rows that spend a surge for nothing,
+    which is exactly the card's "to regain hit points". 159 content sites
+    call `c.surge(on=)`, so the clause has plenty to see.
+
+    **And the temp-hp clause asked no usage at all, which was stronger
+    than print.** "An encounter power or a daily power" was the one
+    narrowing the row *did* have and it was spent on the other sentence,
+    so every at-will grant of temporary hit points on a construct paid an
+    extra 2d6. `TempHP.power` carries the same contract as `Healed.power`
+    and `c.healed_by` reads nothing but that field, so the one reader
+    answers for this event too.
+
+    Both halves keep `!= c.me`, which the row already did and which is
+    weaker than the first sentence: that one says "a construct" and not "a
+    construct ally", so a construct wielder surging off its own power
+    would qualify. Left as it was rather than widened on my own reading --
+    it is one clause, and the second sentence does print "ally"."""
+
+    def surged(ev: SurgeSpent) -> None:
+        if (ev.source == c.me and ev.actor != c.me and ev.healed
+                and c.is_kind("construct", on=ev.actor)):
+            c.heal(c.roll("2d6"), on=ev.actor)
+
+    def temped(ev: TempHP) -> None:
         if (ev.source == c.me and ev.target != c.me
                 and c.healed_by(ev, usage=(ENCOUNTER, DAILY))
                 and c.is_kind("construct", on=ev.target)):
-            c.heal(c.roll("2d6"), on=ev.target)
-
-    def temped(ev: TempHP) -> None:
-        if ev.source == c.me and ev.target != c.me and c.is_kind(
-                "construct", on=ev.target):
             c.temp_hp(c.roll("2d6"), on=ev.target)
 
-    c.watch(Healed, healed, until=When.ENCOUNTER, on=c.me)
+    c.watch(SurgeSpent, surged, until=When.ENCOUNTER, on=c.me)
     c.watch(TempHP, temped, until=When.ENCOUNTER, on=c.me)
 
 
@@ -1379,7 +1469,18 @@ def i1431p1(c: Cast) -> None:
     compendium is whether the entry prints a charge count anywhere, or
     whether it leans on a general rule about charged items printed in the
     book `item.books` names for this row -- which is not among the 18 PDFs
-    in `resources/`, so it cannot be checked from here."""
+    in `resources/`, so it cannot be checked from here.
+
+    **The "general rule" half of that question has now been asked of what
+    is here, and the answer is no.** `ls resources/*.pdf` is 18, counted
+    rather than quoted, and the one this item names is not one of them --
+    but the two books that would carry a *general* charged-item rule are,
+    so the body word was grepped across both: 221 pages and 322 pages,
+    and `charges` appears **once**, inside a power's printed name on an
+    exploits page. So nothing in reach defines a default pool. That
+    narrows the referral to the entry itself, and it does not settle it:
+    a failed search is not an absent rule, and a reader with the right
+    book should check the entry before anybody reaches for `defect=`."""
 
 
 @power("i1440p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1548,6 +1649,25 @@ def i1438p2(c: Cast) -> None:
 def i1481p1(c: Cast) -> None:
     """A wall is raised and made difficult; the thorns are the gap.
 
+    **`solid=False`, and the row shipped without it, which was stronger
+    than print.** The card's whole sentence about the wall is that a
+    creature *may* move through it and pays a check to do so -- so a
+    creature that fails the check is the printed outcome and a creature
+    that cannot try is not. `c.wall` defaults to `solid=True` and that
+    puts the squares into `Grid.blocking`: measured, the shipped row made
+    a 7-square wall of which a foe could enter **0**, where the card lets
+    it attempt all 7. `feats/general_k` sets the same flag for the same
+    reason -- "a wall that herds rather than blocks".
+
+    `difficult=True` stays, and is **not** a printed line. It is a
+    stand-in toll: the card charges a check and a restraint for pushing
+    through, this charges two squares of movement for one, which is
+    strictly less than print and is the weakest thing a zone can do to
+    somebody crossing it. The faithful alternative is a zone that does
+    nothing at all until the marker below is paid, so this is a judgement
+    rather than a reading, and it is a one-word change if it is the wrong
+    one.
+
     **Re-pointed off `c.zone_condition()`, which now exists and is the
     wrong verb for this.** That one holds a condition for exactly as long
     as the creature stands in the squares. This card prints a *toll* on
@@ -1567,7 +1687,7 @@ def i1481p1(c: Cast) -> None:
     through a wall or zone found four, and none of the other three wants
     this. So it stays marked under #468's >=3 threshold rather than having
     a mechanism built for one row."""
-    c.wall(8, difficult=True, until=When.EONT, sustain=MINOR)
+    c.wall(8, difficult=True, solid=False, until=When.EONT, sustain=MINOR)
 
 
 @power("i1597x1", level=9, cls=ITEM, action=ActionType.NONE,
