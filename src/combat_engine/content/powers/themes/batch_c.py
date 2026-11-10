@@ -93,15 +93,11 @@ from combat_engine.engine import (
     query,
     targets_me,
 )
+from combat_engine.engine.components import Companion
+from combat_engine.engine.dsl import Range
 
 if TYPE_CHECKING:
     from combat_engine.engine.ecs import World
-
-#: "Primary ability" is a fact about the class that took the theme, and
-#: nothing names one. The largest modifier stands in.
-#: A target line with a restriction `Target` cannot hold -- "granting combat
-#: advantage to you", "of your size or smaller", "adjacent to your familiar".
-FILTER = ("Target.filter()",)
 
 ONE_ALLY = Target("ally", 1)
 ANY_CREATURE = Target("any", 1)
@@ -113,6 +109,35 @@ def _best(c: Cast) -> int:
     return max(
         c.str_mod, c.con_mod, c.dex_mod, c.int_mod, c.wis_mod, c.cha_mod
     )
+
+
+def _familiar_placed(world: World, eid: int) -> bool:
+    """Is `p16566`'s alternate origin the familiar, and is it standing?
+
+    A `requires_alt` gate, so it gets `(world, eid)` and no `Cast` and reads
+    the component rather than calling `c.familiar`.
+
+    **Not `query.familiar_of`, and that is the whole of this function.**
+    That reader prefers a companion whose `kind` is a familiar and *falls
+    back to whatever single companion the creature has*, which is right for
+    the classes it was written for and wrong for a theme: a shaman taking
+    x7_999 keeps a spirit, and `familiar_of` hands the spirit back. So does
+    `dsl.measured_from`, which takes the **first** owned companion with a
+    square and cannot be told a kind -- so a reach aimed from "the
+    familiar" would be aimed from the spirit instead, which is a square the
+    card does not offer. Caught on `audit.board`, which puts a spirit on
+    every caster.
+
+    Hence "exactly one, and it is a familiar": that is the condition under
+    which `measured_from` is guaranteed to return the body the card names.
+    Two placed companions close the branch rather than guess, which is the
+    clause `dsl.measured_from(kind=)` is marked for.
+    """
+    mine = [
+        e for e in world.having(Companion)
+        if world.get(e, Companion).owner == eid and query.squares(world, e)
+    ]
+    return len(mine) == 1 and world.get(mine[0], Companion).kind == "familiar"
 
 
 def _lonely(c: Cast) -> bool:
@@ -290,7 +315,27 @@ def p11790(c: Cast) -> None:
     """The second branch of the either/or -- "the target provokes
     opportunity attacks when shifting or making melee attacks" -- is the
     inverse of `c.no_provoke(when=)` and there is no verb for it, so only
-    the +4 branch is written and the choice is not offered."""
+    the +4 branch is written and the choice is not offered.
+
+    **`c.provoke` was checked and does not cover it.** That verb opens a
+    window for a **named** attacker (`c.provoke(attacker, on=victim)`) and
+    30-odd rows use it, `p5340` with this exact pair of occasions -- a
+    `MoveEnd` whose `kind_` is "shift" and a `Hit`/`Miss` by the creature.
+    But every one of those prints *who* gets the opening, and this card
+    prints nobody: "provokes opportunity attacks" means from whatever
+    threatens it. Reproducing that needs the threatening set, which is
+    `movement._threat` and `movement._reachers` -- both private, and
+    adjacency is not a substitute because `c.threatens(2)` exists and a
+    reach-2 watcher would be left out. `movement._SAFE` is the other half:
+    a shift is in it, so the engine opens no window for one and there is
+    nothing to widen, only something to add.
+
+    So the gap is a verb that makes a creature provoke on named occasions,
+    from everyone who threatens -- which is what the marker says.
+    `c.provokes(when=)` resolves False through `blocked._one` with
+    `c.no_provoke(when=)` True beside it. The choice is not offered because
+    the branch that would be chosen does nothing: a menu entry for it would
+    be strictly worse than the +4 the row lays now."""
     foe = c.target
     if not c.strike(plus=_best(c) - c.attack_mod):
         return
@@ -559,10 +604,34 @@ def p16572(c: Cast) -> None:
 
 @power("p16573", level=10, cls="x7_1000", usage=ENCOUNTER, action=MOVE,
        reach=Ranged(5), target=ANY_CREATURE,
-       keywords=[Keyword.ARCANE, Keyword.TELEPORTATION], dropped=FILTER)
+       keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
+       dropped=("Target.max_size_relative",))
 def p16573(c: Cast) -> None:
     """"Of your size or smaller" is relative to the caster and `max_size`
-    holds an absolute category, so the restriction is not in the header."""
+    holds an absolute category, so the restriction is not in the header.
+
+    **Re-pointed off a catch-all.** The marker was `Target.filter()`, shared
+    with two rows whose target lines have nothing to do with size -- one
+    wanted "granting combat advantage to you", which `Target.grants_ca`
+    already said, and the other a second reach origin, which `Range.alt`
+    plus `from_` already said. Both are written, so the catch-all would
+    have reported all three ready the day a size field landed and both of
+    its other needs were never gaps at all. This is the only one of the
+    three that is a `Target` gap.
+
+    `max_size` is a real field -- `Size | None`, enforced in `_stands_right`
+    and named in `candidates`' relational guard -- so what is missing is one
+    field beside it comparing against the caster's own size rather than a
+    printed band. `p13437` prints the identical relative-size line and waits
+    on the same thing.
+
+    The symbol resolves: `Target.max_size_relative` answers False through
+    `blocked._one` today and `Target.max_size` answers True, so the owner is
+    reachable and the False means the field is absent. Written as a field
+    rather than `Target.max_size(relative=)` -- which is what `p13437`
+    carries -- because `blocked._params_ok_on` refuses a keyword on a
+    non-callable and its own note says a field "can never grow" one, so that
+    spelling cannot go green on the day the gap closes."""
     foe = c.target
     c.swap(foe)
     if foe in c.enemies():
@@ -762,12 +831,24 @@ def p14220(c: Cast) -> None:
 
 
 @power("p15940", level=0, cls="x7_924", usage=ENCOUNTER, action=STANDARD,
-       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.MARTIAL],
-       attack=Attack(STR, vs=REF, plus=3), dropped=FILTER)
+       reach=Melee(1),
+       target=Target(side="enemy", count=1,
+                     label="granting you combat advantage", grants_ca=True),
+       keywords=[Keyword.MARTIAL],
+       attack=Attack(STR, vs=REF, plus=3))
 def p15940(c: Cast) -> None:
-    """"Highest ability modifier" is exact rather than a stand-in, so the
-    only marker here is the target line: `Target` has no filter for
-    "granting combat advantage to you"."""
+    """"Highest ability modifier" is exact rather than a stand-in, and the
+    target line is written now: the marker claimed `Target` has no filter
+    for "granting combat advantage to you" and `Target.grants_ca` is
+    exactly that, enforced in `_stands_right` and named in `candidates`'
+    relational guard. `f2106b` and `f2108b` already carry the identical
+    printed line the identical way, label and all, so this was a general
+    absence that was never absent.
+
+    `grants_ca` rather than a `relation`: the stored `GRANTS_CA_TO` is only
+    part of the answer, since flanking is computed and never stored, and the
+    field routes through `query.has_combat_advantage`, which folds the
+    grant, the geometry and whatever suppresses either."""
     foe = c.target
     if c.strike(plus=_best(c) - c.attack_mod):
         c.prone()
@@ -997,9 +1078,24 @@ def p16112(c: Cast) -> None:
 
     **Dropped clause:** "when one enemy in the aura grants combat advantage
     to you or an ally, that enemy grants it to you and each ally". The card
-    does not narrow a grant, it **copies** one, and what is copied is
-    whatever `has_combat_advantage` happened to answer for somebody else --
-    which nothing can ask on another creature's behalf and then re-publish."""
+    does not narrow a grant, it **copies** one.
+
+    **The stated reason was half wrong and the right half is sharper.** It
+    said nothing can "ask on another creature's behalf", and
+    `query.has_combat_advantage(world, attacker, target, power)` takes the
+    attacker explicitly -- asking for somebody else is its signature. What
+    cannot be done is the **re-publishing**. `c.grants_advantage` writes a
+    `grants_ca_to` modifier and `_has_combat_advantage` reads that same
+    bucket, so a gate asking "does this enemy already grant it to a member"
+    would be reading the copy it is deciding whether to lay; and
+    `query._IN_FLIGHT` answers False for a pair already being asked, so the
+    result would depend on which member asked first. There is no way to ask
+    the question *excluding one effect*, which is what a copy needs, so the
+    verb has to publish the grant rather than a row gating one.
+
+    `c.spread_advantage()` resolves False through `blocked._one` with
+    `c.grants_advantage()` True beside it, so the symbol is absent rather
+    than its owner unreachable."""
     ring = c.aura(5, until=When.ENCOUNTER, on=c.me)
     world, me = c.world, c.me
 
@@ -1049,7 +1145,17 @@ def p16408(c: Cast) -> None:
     so an interrupt cannot refuse it and "instead of suffering the
     triggering effect" has to be undone rather than prevented. Curing it on
     the spot is the nearest thing; a rider reading "when you become
-    stunned" would still have fired."""
+    stunned" would still have fired.
+
+    **Re-checked rather than inherited.** `ConditionApplied.__mro__` is
+    `(ConditionApplied, Event, object)` -- no `Decision` in it -- and its
+    own docstring opens "a condition went on", past tense, so the emit is
+    after the fact as well as uncancellable. `cancel` is a `Decision`
+    method and not a field, so the #1224 dataclass-field trap does not
+    apply here and `Decision.cancel` resolving True is the arrived control:
+    the owner is reachable and the False means this class has no `cancel`.
+    `m1937a3` reaches the same verdict from the other half of the same
+    sentence and waits on the same symbol, which is the group kept."""
     c.spend_surge(on=c.me)
     c.cure(Condition.STUNNED, Condition.DOMINATED, on=c.me)
     c.dazed(until=When.SAVE_ENDS, on=c.me)
@@ -1255,7 +1361,20 @@ def p16590(c: Cast) -> None:
     caster's side exempted inside it; `c.ignores_difficult` alone would
     exempt them everywhere. The free hop between two squares of the zone is
     an action `actions.legal` does not know, and a word it does not know is
-    carried, costs nothing and does nothing."""
+    carried, costs nothing and does nothing.
+
+    **`c.move_zone` is the near-miss and it does the opposite.** It is in
+    `actions.GRANTABLE` as `move_zone`, it has a reader, and a row can
+    already grant it -- but it translates **the zone**, which is the
+    monster line "as a minor action it can move the zone up to 3 squares".
+    This card moves the **creature** and leaves the zone where it is, so
+    the existing word is not a spelling of this one. `shift` is the other
+    near-miss and is a square, not "any square in the zone".
+
+    So what is missing is a word in `GRANTABLE` with its reader -- whose
+    own note is that the two "land in one file", which is `actions.py`, and
+    is why the marker names that module. It resolves False through
+    `blocked._one` with `actions.legal()` True beside it."""
     zone = c.zone(c.area(), difficult=True, until=When.EONT)
     c.ignores_difficult_in(zone, side="team")
 
@@ -1450,12 +1569,47 @@ def p14365(c: Cast) -> None:
 
 
 @power("p16566", level=2, cls="x7_999", usage=ENCOUNTER, action=MINOR,
-       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.DIVINE],
-       dropped=FILTER)
+       reach=Range("melee", 1, alt=Range("melee", 1, from_="companion")),
+       target=ONE_ALLY, keywords=[Keyword.DIVINE],
+       requires_alt=_familiar_placed)
 def p16566(c: Cast) -> None:
     """The temporary hit points arrive either way -- the card says so for
-    the no-surge branch too. "Adjacent to your familiar" is a second reach
-    the target line cannot hold."""
+    the no-surge branch too.
+
+    **The second origin is written now and the marker was wrong.** It said
+    "a second reach the target line cannot hold", which is true and names
+    the wrong half: the restriction is not on the target at all, it is a
+    second square to measure the reach *from*, and `Range` holds both --
+    `alt` is "the other half of a range line that prints two" and `from_`
+    is "whose square the range is measured from, when it is not the
+    caster's". A familiar is a `Companion`, which is what `from_` looks
+    for, so branch 1 is melee 1 taken from the familiar's square.
+
+    Driven both ways on one board, with the familiar stepped three squares
+    clear of the caster: branch 0 offered the ally standing beside the
+    caster and branch 1 offered the ally standing beside the familiar,
+    neither offering the other's. The printed single-origin row offered only
+    the first, which is the negative control.
+
+    `requires_alt` rather than nothing, for two reasons, and `can_branch`
+    reads it for branch 1 only. `dsl.measured_from` falls back to the
+    **caster** when the named body is not on the board, which would put a
+    second, identical aiming on the card for every character whose familiar
+    is not out. And it takes the *first* owned companion with a square and
+    cannot be told a kind, so a shaman taking this theme would have the
+    reach measured from its spirit -- see `_familiar_placed`, which is why
+    the gate is "exactly one placed companion, and it is a familiar".
+
+    **No marker, and the reason is measured rather than assumed.** The one
+    thing `measured_from` cannot do is pick between two bodies, and a
+    creature cannot have two: `c.call_companion` dismisses whatever is
+    standing unless the kind and ref both match, so the only way to hold a
+    second is `second=True`, which exactly one printed line allows and no
+    row in this tree passes. With one companion the gate above is the whole
+    question -- is the single standing body a familiar -- and
+    `measured_from` is then guaranteed to return it. Driven: a spirit-only
+    caster refuses branch 1 and `c.call_companion(kind="familiar")` over
+    that spirit leaves one companion, not two."""
     ally = c.target
     if not c.spend_surge(on=ally):
         c.flat(c.surge_value(of=ally), on=ally)
