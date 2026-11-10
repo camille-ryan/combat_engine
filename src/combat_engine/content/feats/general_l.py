@@ -527,18 +527,73 @@ def f2549(c: Cast) -> None:
 
 
 @power("f2628", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.extend_effect()",))
+       reach=PERSONAL, target=SELF)
 def f2628(c: Cast) -> None:
-    """A battlemind power with a lengthened mark, named by ref now.
+    """A battlemind power with a re-clocked mark, named by ref.
 
-    `uses=1` is load-bearing: the granted row is an **at-will** on its
-    own card and the feat gives it once per encounter, so handed over
-    bare it would be a minor-action mark every turn for one feat.
+    `uses=1` is load-bearing: the granted row is an **at-will** on its own
+    card and the feat gives it once per encounter, so handed over bare it
+    would be a minor-action mark every turn for one feat.
 
-    Dropped: the feat *lengthens* the mark the granted row lays, and
-    nothing stretches a duration another row wrote -- three item
-    blocks want the same verb."""
-    c.grant_row("p10438", on=c.me, until=When.ENCOUNTER, uses=1)
+    **Written, and the marker was wrong in both halves.** It read
+    *"the feat lengthens the mark the granted row lays, and nothing
+    stretches a duration another row wrote"*, under
+    `dropped=("c.extend_effect()",)`.
+
+    *The direction is the other way.* `p10438` lays
+    `c.mark(until=When.ENCOUNTER)` -- its card is "until you use this
+    power again or until the end of the encounter" -- and this feat's
+    printed clause is "the mark lasts until the end of your next turn".
+    That is a **shortening**, so a symbol named for extending could never
+    have described it, and a reader taking the note at its word would have
+    written the opposite of the card.
+
+    *And nothing was missing.* A live `Effect` is a mutable dataclass and
+    its clock is a field: `items/implement_a.i1960p1` moves `EOT` to
+    `EONT` exactly this way and `powers/druid/level_6_b.p5052` holds a
+    zone a turn longer by the same route. `items/implement_c.i2323x1` is
+    the one that is genuinely blocked and its re-diagnosis says why --
+    *"finding the effects is not the problem ... `When` has no such
+    value"*. `EONT` is a rung that exists, so this row needs no rung and
+    no door.
+
+    **`Effects.mark_by` is the find, not a relation walk of our own.** It
+    exists for this (`#834`), takes the newest mark rather than the first
+    found -- a board that arms traits has one standing before any row runs
+    -- and returns the effect, which is the thing that carries the clock.
+
+    **`PowerResolved`, not `PowerUsed`.** `dsl.use` announces the start
+    *before* running the body, so on `PowerUsed` the mark this clause is
+    about has not been laid yet. The resolved event carries the same
+    `targets`, so there is nothing to pair up.
+
+    **`latch` is copied from the rule `Effects.apply` uses rather than set
+    to True.** An `EONT` effect laid on its own clock-holder's turn has to
+    skip one boundary or the very next `TurnEnd` ends it, and `apply`
+    writes `when in (EONT, EOTNT) and world.turn == clock`. Re-clocking by
+    hand is the same question asked at a different moment, so it gets the
+    same answer rather than a guess: used on somebody else's turn -- an
+    immediate action, a readied one -- the mark should die at the end of
+    this character's *next* turn without a free turn first.
+
+    Gated on the holder and on the ref, and nothing narrower is needed: a
+    `[Multiclass Battlemind]` feat is taken by a character who does not
+    have the row, and `uses=1` means there is one use of it to re-clock."""
+    me = c.me
+    c.grant_row("p10438", on=me, until=When.ENCOUNTER, uses=1)
+
+    def re_clock(ev: PowerResolved) -> None:
+        if ev.actor != me or ev.power != "p10438":
+            return
+        for victim in ev.targets:
+            held = c.world.effects.mark_by(victim, me)
+            if held is None or held.when is When.EONT:
+                continue
+            held.when = When.EONT
+            held.clock = me
+            held.latch = c.world.turn == me
+
+    c.watch(PowerResolved, re_clock, until=When.ENCOUNTER, on=me)
 
 
 @power("f2694", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2016,17 +2071,79 @@ def f2594(c: Cast) -> None:
 
 
 @power("f2595", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("resolve.prone_penalty",))
+       reach=PERSONAL, target=SELF)
 def f2595(c: Cast) -> None:
-    """The damage half. There is no penalty for shooting a prone target
-    in this engine -- `resolve` never asks -- so ignoring one has nothing
-    to ignore, and saying so is better than a row that looks whole."""
+    """Both halves now, and the marker went stale underneath the row
+    rather than being wrong when it was written.
+
+    It said *"there is no penalty for shooting a prone target in this
+    engine -- `resolve` never asks -- so ignoring one has nothing to
+    ignore"*, and that was true of `resolve`. `#1198` put the printed
+    bullet in `conditions.RULES` instead: prone carries
+    `ranged_defences`, and `query.defence` adds it off the attack context
+    when the attack is ranged and the shooter is **not** adjacent. So the
+    penalty exists, and it is charged on the target's defences rather
+    than on anybody's attack roll.
+
+    **Waived as a bonus on my own roll, because `Mods` is per creature.**
+    `query.defence` reads the *target's* modifiers, so nothing laid on the
+    shooter can reach that number and nothing laid on the shooter's
+    enemies would stay right as the board changes. `+N` on the attack is
+    the same arithmetic against the same context -- `situational_attack`
+    sums `"attack"` with the very dict `defence` was handed -- and it is
+    the shape `c.ignores_long_range` already uses to hand the long-range 2
+    back.
+
+    **The amount is read out of the table that charges it**, not written
+    here: the card prints no number, so a literal would be this file's
+    guess at another module's constant and would go quietly wrong the day
+    `#1198`'s number moves. `min` over the four defences because the
+    engine adds the entry for whichever defence is being rolled against
+    and the context does not carry which -- all four are equal today, so
+    it is exact, and if they ever diverge this under-waives rather than
+    handing out a bonus the page does not print.
+
+    **The gate is the engine's own three tests and not a looser version.**
+    `ctx["ranged"]` is `resolve._is_ranged`, which is
+    `reach.kind == "ranged"` per character, so it is the printed "your
+    ranged attacks" and not an area power; the target has to be prone; and
+    the shooter has to be nonadjacent, because an adjacent archer is
+    charged nothing and a bonus there would be a feat this card does not
+    print.
+
+    `c.waive` is not the door. It switches off part of what a condition
+    costs **its holder**, four named fields, and `ranged_defences` is not
+    one of them -- nor would it be right here, since waiving it on the
+    prone creature would waive it against everybody on the board.
+
+    The damage half is unchanged and keeps its own reading of the range
+    line, which asks the printed card rather than the per-character
+    reshape: there is no `"ranged"` key in the damage context."""
+    from combat_engine.engine.conditions import rules
+
     me = c.me
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER,
         when=lambda ctx: _reach_kind(ctx.get("power", "")) == "ranged"
         and (t := ctx.get("target")) is not None
         and c.is_(Condition.PRONE, on=t),
+    )
+    charged = rules(Condition.PRONE).ranged_defences
+    waived = min(charged.values(), default=0)
+    if not waived:
+        return
+
+    def shooting_a_prone_target(ctx: dict[str, Any]) -> bool:
+        if not ctx.get("ranged"):
+            return False
+        victim = ctx.get("target")
+        if victim is None or not c.is_(Condition.PRONE, on=victim):
+            return False
+        return not c.adjacent(victim)
+
+    c.bonus(
+        "attack", waived, on=me, until=When.ENCOUNTER, stacks=False,
+        when=shooting_a_prone_target,
     )
 
 
@@ -2895,11 +3012,49 @@ def f2620(c: Cast) -> None:
 
 
 @power("f2604", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.shift_while_prone()",))
+       reach=PERSONAL, target=SELF, todo=("c.waive(no_shift)",))
 def f2604(c: Cast) -> None:
-    """`actions._movement` returns an empty list for a prone creature
-    before it reaches the shift branch, so every kind of movement is off
-    together and there is no door to open for one of them."""
+    """Shifting while prone.
+
+    **Re-pointed, because the old premise has gone and with it the reason
+    for a verb of its own.** It said `actions._movement` *"returns an
+    empty list for a prone creature before it reaches the shift branch,
+    so every kind of movement is off together and there is no door to
+    open for one of them"*. Half of that is now false and the other half
+    is the door: `#995` gave a prone creature the **crawl** -- half speed,
+    priced and walked as an ordinary move -- so movement is no longer off
+    as a block, and what withholds the shift specifically is
+    `Condition.PRONE` carrying `no_shift=True`, one named field of the
+    eighteen in `conditions.Rules`.
+
+    So the gap is a **waiver on that one field**, and the mechanism for
+    switching off part of what a condition costs already exists:
+    `c.waive(Condition.SQUEEZING, "attack", "halve_speed")` is the twelve
+    rows that print the squeezing version. It takes four words --
+    `attack`, `halve_speed`, `grants_ca`, `speed_cap` -- raises `KeyError`
+    on anything else, and its docstring argues that the rest *"are not
+    things a card relaxes, and accepting them would invite a row to try"*.
+    This card is the counter-example: a printed, one-sentence waiver of
+    `no_shift` and nothing else.
+
+    Named as the parameter rather than as `c.shift_while_prone()` for the
+    file's usual reason: the facility exists and the value it will not take
+    is the gap.
+
+    **Two readers would have to learn to ask, and both read the global
+    table rather than the creature's.** `query.can_shift` is
+    `rules(c).no_shift` -- `rules`, not `rules_for`, so a waiver recorded
+    in `Conditions.waived` is invisible to it -- and `actions._movement`'s
+    prone branch returns after the crawl without consulting either. That
+    is still **one** gap and not three: a waiver nothing reads is not a
+    waiver, so those two are how it would be read, the same way
+    `conditions._NEUTRAL` is how the other four words are.
+
+    Not writable from a body in the meantime, and `c.shift()` is not the
+    back door it used to be: `movement.shift` goes through `can_shift` and
+    refuses outright. The printed benefit is a **permission in the action
+    menu** in any case, so a body that moved the creature itself would
+    never offer it the choice."""
 
 
 @power("f2622", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -3231,23 +3386,56 @@ def f2629(c: Cast) -> None:
 
 
 @power("f2864", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.ALCHEMICAL",))
+       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
 def f2864(c: Cast) -> None:
     """Temporary hit points on hitting with a consumable alchemical item
-    power. Nothing marks a row as alchemical, so the trigger cannot tell
-    one from any other item power."""
+    attack power.
+
+    **Re-pointed off `Keyword.ALCHEMICAL`, which named a keyword the
+    compendium does not print and would not have unblocked the row
+    anyway.** Measured: `item_block.keywords` says "alchemical" on **0**
+    of its rows, and the fact lives in `item.category` instead, where
+    **75** entries carry a category of their own. So there was never a
+    keyword to import -- adding an enum member would have meant the ETL
+    inventing one off a column -- and `items/hands.i476x1` and
+    `general_k.f1983` had each already measured and written down this half.
+
+    What actually stops the row is one step earlier and is shared: nobody
+    is ever *given* a consumable, so no character can use one of these
+    powers in the first place. `chargen.loadout` names neither category,
+    and `c.consume_item()` is the symbol seven rows already wait on --
+    `i468x1`'s own note is the same sentence as this one. A marker on the
+    recognition would have reported this row ready while the thing it
+    triggers on remained impossible.
+
+    And the recognition is inside that symbol's scope rather than beside
+    it: a carried consumable is what would have to carry its category
+    across, which is `items/hands.i476x1`'s finding and not a second
+    gap."""
 
 
 @power("f2865", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("feat.damage_choice()", "Keyword.ALCHEMICAL"))
+       todo=("feat.damage_choice()", "c.consume_item()"))
 def f2865(c: Cast) -> None:
     """"Choose a damage type" is chosen when the *feat* is taken, not
     when the class is built, so `chargen.BUILDS` was the wrong name for
     it -- that dict exists and holds ability forks. The pair for this is
     `feat.weapon_choice()`, which f2149 already carries. `c.element`
-    answers only for a character whose class bound a type, and the
-    second clause needs the keyword f2864 wants."""
+    answers only for a character whose class bound a type.
+
+    **The second symbol is re-pointed with `f2864`'s**, off
+    `Keyword.ALCHEMICAL` and onto the gap that actually holds both: the
+    compendium prints no such keyword -- 0 of the `item_block` rows carry
+    the word, where 75 items carry the category -- and nobody is ever
+    dealt a consumable, so the sentence about alchemical item attack
+    powers has no reachable use to attach to. `f2864` has the measurement;
+    the two rows are one wait and now say so.
+
+    It is still two symbols on this row and not one, because the two
+    clauses are independent: the chosen damage type is a +1 on *any*
+    attack power with that keyword and would pay out on the day the choice
+    is recorded, whether or not a consumable is ever carried."""
 
 
 @power("f2624", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -3455,11 +3643,31 @@ def f2845(c: Cast) -> None:
 
 @power("f2858", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.on_granted_save()",))
+       dropped=("SavingThrow.granted_by",))
 def f2858(c: Cast) -> None:
-    """Your own half plays, read off the type the effect carries. "When
-    you grant an ally a saving throw" has no announcement: `c.save` rolls
-    one and says nothing about who asked for it.
+    """Your own half plays, read off the type the effect carries.
+
+    **Re-pointed, and the old premise was half right in the direction
+    that matters.** It said *"'When you grant an ally a saving throw' has
+    no announcement: `c.save` rolls one and says nothing about who asked
+    for it"*. It says which **row** now: `#672` put `granted_via` on
+    `SavingThrow` and in the modifier context `durations.save` builds, so
+    a `c.bonus("save", ..., when=)` laid on an ally can gate on the card
+    that handed the throw over. There is an announcement, and a door into
+    the roll before it is read.
+
+    What is missing is **whose** doing it was. `granted_via` is a ref, and
+    two creatures can hold the same row -- so the gate cannot tell a
+    throw this character granted from the identical throw an ally granted
+    with its own copy, and the +4 would be paid for both. `PowerUsed`
+    carries `granted_by` beside `granted_via` for exactly this reason and
+    says so in its own docstring: *"neither implies the other"*. The
+    saving throw carries only the second half.
+
+    So this names the field rather than a `c.on_granted_save()` watcher:
+    the moment is announced, the modifier context is there, and one int
+    is the whole of the gap. Laying the bonus is then ordinary -- on each
+    ally at arming, the shape the `f651` clause below already has.
 
     The `f651` half is a penalty on *enemies adjacent to you*, and the
     adjacency is asked inside the gate rather than at arming, because a
