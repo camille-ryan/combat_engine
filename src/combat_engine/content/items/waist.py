@@ -938,7 +938,7 @@ def i2393x1(c: Cast) -> None:
 
 
 @power("i2393p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
-       reach=Melee(1), target=ONE_CREATURE, todo=("c.sustain_grab()",))
+       reach=Melee(1), target=ONE_CREATURE, todo=("c.grab(sustain=)",))
 def i2393p1(c: Cast) -> None:
     """Relief from a cost the engine does not charge.
 
@@ -960,13 +960,25 @@ def i2393p1(c: Cast) -> None:
     row's one real consequence -- losing `i2393x1`'s property while the
     power is up -- would be a cost paid for a benefit nobody received.
 
-    `c.sustain_grab()` stays, because it names the thing that must land
-    first: `m6346a1` waits on it for the same absence ("keeping a grab up
-    is a minor action nothing announces"), and until a grab costs
-    something to keep, this power has nothing to take over.
-    `c.grab(sustain=)` is a second spelling of the same gap on `m2104a1`
-    and `p16626` -- "nothing gives a grab a sustain cost of its own" --
-    and the two want collapsing into one symbol by whoever writes it."""
+    **Collapsed onto `c.grab(sustain=)`, which is the four-row group.**
+    This row and `m6346a1` carried `c.sustain_grab()`; `m2104a1` and
+    `p16626` carried `c.grab(sustain=)` for the same absence, and the note
+    here asked for the two to be collapsed by whoever wrote it.
+
+    `c.grab(sustain=)` is the right half of the pair, and the claim that
+    picked the other one was measured and is false. It said
+    *"`actions.py` offers no sustain action"*: `actions._sustaining` is
+    exactly that and is in the action list, `When.SUSTAIN` is a real rung
+    that **139 content files** already use, and `c.on_sustain(effect, fn)`
+    is the per-sustain hook. So the sustain machinery is live from end to
+    end and what is missing is one keyword on the verb that lays the grab
+    -- `c.grab(on=, by=, dc=)` has no `sustain=`.
+
+    That difference is worth the paragraph because it prices the work:
+    `blocked.py` calls `c.grab(sustain=)` a **parameter** on a verb that
+    exists, which is the cheapest shape in the tree, where
+    `c.sustain_grab()` reads as a facility nobody has started and asks
+    for a mechanism that is already there."""
 
 
 @power("i2689p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,

@@ -2477,12 +2477,24 @@ def m6346a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.sustain_grab()",),
+    dropped=("c.grab(sustain=)",),
 )
 def m6346a1(c: Cast) -> None:
     """`RelationSet` is the moment a grab is taken, and the grab relation names
     the grabber in `source`. Sustaining one is the named gap -- keeping a grab up
-    is a minor action nothing announces."""
+    is a minor action nothing announces.
+
+    **Re-pointed off `c.sustain_grab()` onto the four-row group.**
+    `m2104a1` and `p16626` carried `c.grab(sustain=)` for this same
+    absence while this row and `items/waist.i2393p1` carried the other
+    spelling, so one gap sat as two two-row groups and neither could go
+    green for the other.
+
+    `c.grab(sustain=)` is the correct half: the sustain machinery is live
+    end to end -- `actions._sustaining` offers the action, `When.SUSTAIN`
+    is a rung 139 content files already use, `c.on_sustain` is the
+    per-sustain hook -- and the only thing absent is a `sustain=` keyword
+    on `c.grab`, which is a parameter rather than a facility."""
     me = c.me
 
     def seized(ev: RelationSet) -> None:

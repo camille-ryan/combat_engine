@@ -3012,7 +3012,7 @@ def f2620(c: Cast) -> None:
 
 
 @power("f2604", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.waive(no_shift)",))
+       reach=PERSONAL, target=SELF, todo=("conditions.WAIVABLE",))
 def f2604(c: Cast) -> None:
     """Shifting while prone.
 
@@ -3037,9 +3037,25 @@ def f2604(c: Cast) -> None:
     This card is the counter-example: a printed, one-sentence waiver of
     `no_shift` and nothing else.
 
-    Named as the parameter rather than as `c.shift_while_prone()` for the
-    file's usual reason: the facility exists and the value it will not take
-    is the gap.
+    **Spelled `conditions.WAIVABLE` and not `c.waive(no_shift)`, because
+    that spelling could never have gone green.** The reasoning above is
+    unchanged and right -- the facility exists and the value it will not
+    take is the gap -- but `c.waive(condition, *what: str, ...)` takes the
+    word as a **positional string**, so `blocked._one` read `no_shift` as
+    a missing *keyword* on the verb and classed it `parameter`. A keyword
+    of that name will never be added, so the row would have waited for
+    ever while the clause was writable the moment the word was accepted.
+    Caught by a parallel agent two files away, which is the only way this
+    gets found: the marker reads exactly like a correctly-parked one.
+
+    And `conditions.Rules.no_shift` is not the spelling either -- that
+    field **exists**, so naming it reports ARRIVED and reds `todo.py` on a
+    row nobody can write. What is missing is the accepted-word set being
+    public and holding this word: `conditions._NEUTRAL` is private, and
+    `blocked._surface` indexes public names only, so no marker can name
+    the thing that actually has to change. `conditions.WAIVABLE` is the
+    public set it would become, which resolves as missing today and goes
+    green when it arrives.
 
     **Two readers would have to learn to ask, and both read the global
     table rather than the creature's.** `query.can_shift` is

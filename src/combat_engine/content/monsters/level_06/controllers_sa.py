@@ -1240,12 +1240,31 @@ def m1481a1(c: Cast) -> None:
     reach=CloseBlast(3),
     target=NO_TARGET,
     keywords=[Keyword.POISON, Keyword.TELEPORTATION, Keyword.ZONE],
-    dropped=("c.teleport(within=)",),
+    dropped=("c.teleport_as()",),
 )
 def m1481a2(c: Cast) -> None:
-    """The gas is exact. "Can teleport 3 squares as a move action as long as
-    it starts and ends within the zone" is a standing option gated on
-    standing in a specific zone, and `c.teleport` takes no such gate."""
+    """The gas is exact. The teleport is a **standing move-action option**
+    granted for the encounter, which is the half that is missing.
+
+    **Re-pointed off `c.teleport(within=)`, and the reason it carried is
+    now false.** That note said `c.teleport` "takes no such gate"; it does
+    -- `into=` landed in #685 and filters destinations outright, returning
+    False when none qualifies, and `c.my_zones()` names the zone to filter
+    against. So "ends within the zone" is writable, and "starts within
+    it" is a guard on `c.here` any row can write.
+
+    What is absent is the **granted action**: `actions.GRANTABLE` holds
+    twelve words and none of them is a teleport, so there is no way to
+    offer "teleport 3 as a move action" every round for a duration. That
+    is a facility -- a word plus its reader -- and not a parameter on the
+    verb the old symbol named.
+
+    `c.teleport_as()` is that gap and three rows already carry it, one of
+    them (`p14216`) printing the same sentence shape: a repeatable
+    move-action teleport granted until the end of the encounter with a
+    constraint on the destination. Reused rather than kept as a private
+    one-row spelling, which is what `blocked.py --group` is for -- a
+    synonym here held a four-row group apart as three and one."""
     me = c.me
     area = c.area()
     squares_ = frozenset(area)
