@@ -249,10 +249,30 @@ def rogue_tactic_bludgeon(c: Cast) -> None:
 # and the two tomes.
 #
 # No Requirement is declared on any of them. Every card prints "you must
-# wield an orb" or "a staff" or "a tome", and `chargen` gives a wizard no
-# implement to hold at all -- `Gear.weapons` is empty for the class -- so a
-# `requires=` gate would refuse the row forever rather than describe it. The
-# mastery is the implement here, which is the reading the parent takes.
+# wield an orb" or "a staff" or "a tome".
+#
+# **The reason recorded here was false and the conclusion is still right
+# for two of the three.** It said `chargen` gives a wizard no implement at
+# all and that `Gear.weapons` is empty for the class. Measured:
+#
+#     chargen.CLASSES["wizard"].weapons  ->  (Weapon(ref='w:orb', ...),)
+#
+# Exactly one, and it is an orb. `equipment._base_for` sends an
+# implement-slot item to `gear.implement` and `_onto_weapon` records the
+# item's ref there, so a wizard does hold one and a row can read it.
+#
+# So a `requires=` would be **satisfiable on the orb mastery** and
+# unsatisfiable for ever on the staff and the tomes, because no wizard is
+# dealt either. That is the "never write a gate that can never be true"
+# rule biting two rows out of three rather than all three.
+#
+# Left undeclared on all three anyway, so the three read alike and so that
+# adding one is a decision with a measurement behind it rather than a
+# side effect of this correction: declaring it on the orb row alone would
+# change what the audit board poses for that row, and the mastery-is-the-
+# implement reading the parent takes covers all three today. Recorded
+# because the false premise was being quoted onward -- `items/implement_a`
+# carried the same sentence in its own header and three rows rested on it.
 
 
 @power(
