@@ -102,6 +102,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.basic import MELEE as BASIC_MELEE
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.grid import distance as square_distance
 from combat_engine.engine.grid import neighbours
@@ -1139,21 +1140,48 @@ def f1715(c: Cast) -> None:
 
 
 @power("f1721", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.rattling(when=)",))
+       reach=PERSONAL, target=SELF, dropped=("c.may(worth_it=)",))
 def f1721(c: Cast) -> None:
-    """The trade is per-attack and nothing offers it per-attack, so both
-    halves stand for the encounter and are narrowed to melee, which is
-    as close as the printed line gets.
+    """Both halves hold to the melee basic attack exactly, which is the
+    printed scope. The trade is still taken rather than offered, and
+    that is the one clause left.
 
-    Not `c.as_basic`, which this carried: that verb *installs* a stand-in
-    for the basic attack and this row asks after one. The narrowing it
-    wants is `c.rattling(when=)` -- `c.penalty` already takes a gate and
-    `c.rattling` does not, so the penalty can be held to the basic
-    attack and the keyword cannot, and gating only one half would make
-    the two disagree."""
+    **Re-pointed off `c.rattling(when=)`, which was wrong twice.** A gate
+    there would be inert whichever row used it: `c._rattle` falls back to
+    the modifier with `c.total("rattling")` and **no context**, and
+    `c.total`'s own docstring says an ungated read counts every such
+    bonus -- `ranger_b.f2335` had already measured this and says so in
+    its own note. And the narrowing wants no gate at all. A keyword is
+    header data shared by everybody holding the row, which is what
+    `c.counts_as_keyword` exists to get round: it hands *this* creature's
+    copy of one named row an extra keyword, so naming the engine's melee
+    basic attack says "your melee basic attacks" and nothing wider.
+    `c._rattle` asks `c.keywords_of` before it reaches the modifier, so
+    that is the branch this arrives on.
+
+    The penalty is held to the same ref instead of `_melee_power`. Both
+    halves used to be wider than print and wider in *different*
+    directions -- the keyword covered every melee attack and the penalty
+    every melee power -- so they disagreed with each other as well as
+    with the card.
+
+    Still dropped: the printed **choice**. `c.may` is the facility and is
+    reached inside a handler all over this tree, so the gap is not that
+    nothing can ask. It is that neither answer can be defaulted. The 12
+    `default=False` sites are all "pay a real cost", which this is, and a
+    headless `World.decide` takes the first option -- so a trade declined
+    by default makes a dealt feat **drawable and inert**, which is a
+    fault in its own right. `default=True` is the other way round: a
+    forced -2 on every melee basic attack for a benefit nothing weighs.
+    So the symbol names the parameter a paid option needs -- something
+    that *judges* the trade rather than defaulting it -- rather than a
+    new verb. `barbarian_b.f1858` is parked one step along the same
+    road."""
     me = c.me
-    c.rattling(on=me, until=When.ENCOUNTER, melee=True)
-    c.penalty("attack", 2, on=me, until=When.ENCOUNTER, when=_melee_power)
+    c.counts_as_keyword(BASIC_MELEE, Keyword.RATTLING, on=me,
+                        until=When.ENCOUNTER)
+    c.penalty("attack", 2, on=me, until=When.ENCOUNTER,
+              when=lambda ctx: ctx.get("power") == BASIC_MELEE)
 
 
 @power("f1772", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1608,7 +1636,7 @@ _granted("f1713", "f1713b", swap=Swap(16, utility=True))
 @power("f1713b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Wall(8, 20), target=NO_TARGET,
        keywords=[Keyword.ARCANE, Keyword.CONJURATION],
-       dropped=("c.penalty(through_zone=)",))
+       dropped=("c.penalty_into(zone=)",))
 def f1713b(c: Cast) -> None:
     """A wall that herds rather than blocks: `solid=False` because a
     creature may walk into it, `difficult=True` for the extra cost to
@@ -1619,18 +1647,46 @@ def f1713b(c: Cast) -> None:
     comes to. It was dropped as `c.destroy(familiar=)` -- that verb
     destroys a carried *item* -- and the row was quietly free.
 
-    Still dropped: the -2 for attacking through the wall. **The old
-    reason -- "geometry no context carries" -- was wrong**: the attack
-    context carries `attacker` and `target`, and `c.line` and
-    `Barrier.zone` are both readable, so the geometry is computable. What
-    is missing is a verb of the right *shape*. The penalty belongs to the
-    wall and lands on whoever aims **through** it, and every zone verb
-    here runs the other way: `c.grants_in` and `c.cover_in` modify the
-    occupant's own rolls, and `c.penalty` is per-creature, so writing it
-    would mean laying a modifier on each enemy standing there when the
-    wall goes up -- which `c.grants_in`'s own docstring calls a zone that
-    has stopped being a zone, and which misses every enemy that arrives
-    afterwards."""
+    Still dropped: the -2 for attacking through the wall. The geometry is
+    not the problem and the note saying it was has been corrected twice
+    now -- `resolve`'s attack context carries `attacker` and `target`,
+    and `c.line` and `Barrier.zone` are both readable, so "inside or on
+    the other side" is computable here.
+
+    **And "every zone verb runs the other way" was wrong too.** That
+    reading named `c.cover_in` beside `c.grants_in` as if both modified
+    the occupant's own rolls. `c.grants_in` does; `c.cover_in` does the
+    opposite -- it lays a `kind="cover"` modifier that
+    `query._carried_cover` reads back, and `resolve` subtracts it from
+    whoever is **shooting at** the occupant, which is the printed -2 to
+    the square. So there is a near-miss where the note claimed an
+    absence, and the honest reason for leaving it is narrower:
+
+    * cover is taken as the **max** against traced cover and
+      concealment, where a printed penalty adds -- a target already
+      behind a pillar would get nothing from the wall;
+    * `cover_waived` zeroes it, so a `c.ignore_cover` row walks past a
+      penalty this card gives it no leave to waive;
+    * it makes the occupant *have cover*, which other cards read as a
+      target condition (`query.py`'s "cover or concealment" half), so
+      granting it pays out sentences this one does not print.
+
+    `c.grants_in` with +2 to the four defences is the other near-miss
+    and fails the same way round: identical at the roll, but every other
+    reader of a defence moves with it, and it shelters the caster's own
+    enemies standing in the wall from the caster's team, which the card
+    does not say. Both cover only the squares *inside*, never the half
+    the printed sentence is distinctive for.
+
+    So the symbol is re-pointed off `c.penalty(through_zone=)`, which
+    asked for a keyword on a **per-creature** verb: `c.penalty` lands on
+    one creature, so writing it that way means a modifier on each enemy
+    standing about when the wall goes up -- what `c.grants_in`'s own
+    docstring calls a zone that has stopped being a zone, missing every
+    enemy that arrives later and outliving a wall that is destroyed
+    early, since the wall has `Health`. The shape wanted is the mirror
+    of the `_in` family: one modifier held on the zone that lands on
+    whoever **aims into or through** it."""
     if c.familiar() is not None:
         c.dismiss_companion()
     barrier = c.wall(8, difficult=True, solid=False, until=When.EONT,
