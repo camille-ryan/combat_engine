@@ -2099,11 +2099,23 @@ def i1444x1(c: Cast) -> None:
 
 @power("i1444p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(2, 5), target=NO_TARGET,
-       keywords=[Keyword.RADIANT, Keyword.ZONE],
-       dropped=("c.consume_item()",))
+       keywords=[Keyword.RADIANT, Keyword.ZONE])
 def i1444p1(c: Cast) -> None:
     """The zone stands. What it pays out is "as if it had taken radiant
     damage", which is the creature's own vulnerability read back at it.
+
+    **The marker is gone and the body did not change, which is the whole
+    of this.** `c.consume_item()` named the spending of the object, and
+    `#1233` put that in the engine rather than in a verb: `i1444` is a
+    `Consumable`, a dealt character carries two, and `dsl.use` takes the
+    entry out of `Gear.carried` when the used row's own entry is one the
+    creature holds. Measured on this row -- `carried` goes `['i1444']` to
+    `[]` and the use announces `ItemConsumed(item='i1444', by='i1444p1')`.
+
+    So the clause the marker named is paid, by the engine, for every
+    consumable at once rather than row by row. The note below about "one
+    gap, one symbol, six rows" was right about the gap and wrong about
+    where it would be closed.
 
     **The payout is written now.** The previous note said it was writable
     once `c.vulnerabilities()` landed and then left the body a bare zone, so

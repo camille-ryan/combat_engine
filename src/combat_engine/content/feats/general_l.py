@@ -47,6 +47,7 @@ from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.items.alchemical import ALCHEMICAL, of_category
 from combat_engine.engine import (
     AC,
     AREA_OR_CLOSE,
@@ -3401,11 +3402,47 @@ def f2629(c: Cast) -> None:
     )
 
 
-@power("f2864", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
+@power("f2864", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2864(c: Cast) -> None:
     """Temporary hit points on hitting with a consumable alchemical item
     attack power.
+
+    **Written.** The note below says what was missing and it was right:
+    *"nobody is ever given a consumable, so no character can use one of
+    these powers in the first place."* `#1233` deals two per character,
+    puts their blocks in `Powers.known` and spends one when it is used, so
+    the trigger this watches now happens.
+
+    The recognition half -- which the note correctly placed inside the
+    same gap rather than beside it -- is `alchemical.of_category`, over
+    `query.block_categories`. One spelling, shared with `hands.i476x1` and
+    `arms.i468x1`.
+
+    **"Once per attack" needs no code, and the latch I wrote for it was
+    dead.** The measurement that looked like it demanded one is real --
+    **21 of the 77** declared alchemical blocks are a burst or a blast, so
+    one attack genuinely raises three `Hit`s and a bare watch is called
+    three times. What makes it harmless is one layer down:
+    `resolve.temp_hp` is *"Temporary hit points do not stack -- the larger
+    pool wins"* and returns **without emitting** when `amount <=
+    health.temp`, so the second and third calls grant nothing and announce
+    nothing. Measured: three hits of one burst, `1 TempHP` either way.
+
+    Found by the plant staying green. The same finding and the same shape
+    as `warlord_b.f2851`'s note -- *"'an ally can benefit from this feat
+    only once per attack' needs no code ... which is the clause, and is
+    why that reader was built to take a maximum"*.
+
+    The latch was also keyed per *power* per turn, so it would not have
+    stopped a second alchemical item in the same turn either -- it was
+    dead rather than wrong, but it read as the clause being implemented.
+
+    **`AT_WILL` rather than `ENCOUNTER`**, which is the change to the
+    header. The card prints no once-per-fight limit and the row now has a
+    declared watch, so `turns.arm_traits` does not spend it at arming --
+    `content/CLAUDE.md` is explicit that `ENCOUNTER` on a trait that fires
+    on a trigger is a real and silent narrowing to once a fight.
 
     **Re-pointed off `Keyword.ALCHEMICAL`, which named a keyword the
     compendium does not print and would not have unblocked the row
@@ -3428,6 +3465,17 @@ def f2864(c: Cast) -> None:
     it: a carried consumable is what would have to carry its category
     across, which is `items/hands.i476x1`'s finding and not a second
     gap."""
+    me = c.me
+    worth = c.con_mod
+
+    def landed(ev: Hit) -> None:
+        if ev.attacker != me:
+            return
+        if not of_category(ALCHEMICAL)({"power": ev.power}):
+            return
+        c.temp_hp(worth, on=me)
+
+    c.watch(Hit, landed, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2865", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

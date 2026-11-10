@@ -41043,6 +41043,18 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     #
     #     holdable   597 -> 599        self_only   335 -> 337
     #
+    # **And by one more, for the same reason a third time.** `f2864` was
+    # `todo=("c.consume_item()",)` and is written now that `#1233` deals
+    # consumables -- its body is `c.temp_hp(c.con_mod, on=me)`, so
+    # `doctrine.heals` counts it where a refused row was not counted at
+    # all. `side='self'`, so it lands in `self_only`:
+    #
+    #     holdable   599 -> 600        self_only   337 -> 338
+    #
+    # `reaches_an_ally` is **122 across all three of these moves**, which
+    # is the number this counter exists for. The denominator grew by a row
+    # that can only ever help itself.
+    #
     # **What did NOT move is the point.** `reaches_an_ally` is 122 either
     # side, `cannot_reach_an_ally` is 140, `undeclared` is 122, and the
     # partition still adds up. This counter exists to watch how many
@@ -41059,19 +41071,20 @@ def wasted_healing_is_counted_off_the_log_and_not_off_a_listener(out: Result) ->
     # reader gets the wrong figure.
     reach = SC._heal_reach()
     out.that(reach["reaches_an_ally"] == 122
-             and reach["holdable"] == 599,
-             "122 of the 599 character-holdable healing rows can reach an"
+             and reach["holdable"] == 600,
+             "122 of the 600 character-holdable healing rows can reach an"
              " ally -- `ally`, `team` or `any`. This is the population the"
              " refusal counter is about, and it has moved four times:"
              " `i545p2` (#1139) and `p3847` (#1153) by one each against"
              " their printed cards, six at once with `#1163`'s wave, and"
-             " `f1848` with `i2273p1` when two waves wrote them a heal",
+             " `f1848` with `i2273p1` when two waves wrote them a heal,"
+             " and `f2864` when `#1233` unblocked it",
              f"{reach['reaches_an_ally']} of {reach['holdable']}")
-    out.that(reach["self_only"] == 337
+    out.that(reach["self_only"] == 338
              and reach["cannot_reach_an_ally"] == 140
              and reach["reaches_an_ally"] + reach["self_only"]
              + reach["cannot_reach_an_ally"] == reach["holdable"],
-             "and the three buckets partition it -- 337 self-only, 140"
+             "and the three buckets partition it -- 338 self-only, 140"
              " that reach no friend, 122 that do. They have to add up or"
              " the census is reading something twice",
              f"{reach['self_only']} + {reach['cannot_reach_an_ally']}"
@@ -53188,6 +53201,54 @@ def an_alchemical_attack_is_told_apart_from_an_ordinary_one(out: Result) -> None
              "control that tells the printed card from immunity to "
              "opportunity attacks",
              f"{ctrl}: {plain}")
+
+    # -- "once per attack" on `f2864`, and what the plant found ----------
+    # **No plant inside `f2864` reddens the first of these two, and that
+    # is recorded rather than hidden.** The clause looked like it needed a
+    # per-attack latch -- 21 of the 77 alchemical blocks are a burst or a
+    # blast, so one attack really does call the watch three times -- and a
+    # latch was written and then removed, because taking it out left this
+    # green. `resolve.temp_hp` is "temporary hit points do not stack --
+    # the larger pool wins" and returns *without emitting* when the new
+    # pool is no bigger, so the second and third calls announce nothing.
+    #
+    # It is kept because it is the printed clause and it is what would
+    # silently go wrong if that non-stacking rule were ever changed -- the
+    # same call `story/CLAUDE.md` records for `aftermath`'s `0 <` guard.
+    # The second assertion is the one with a live control.
+    from combat_engine.engine.events import Hit, TempHP
+
+    area = [
+        r for r in ranged
+        if cats.get(r, "") == ALCHEMICAL
+        and reg[r].reach.kind in ("area_burst", "close_burst", "close_blast")
+    ]
+    out.that(bool(area),
+             "some alchemical attack hits an area, so one attack really can "
+             "raise several hits and the per-attack limit has something to "
+             "bite on",
+             f"{len(area)} of {len([r for r in reg if cats.get(r,'') == ALCHEMICAL])} "
+             "alchemical blocks")
+
+    def temps(power: str, hits: int) -> list[int]:
+        w, who, _ = A.board("f2864", 1)
+        foes = [e for e in w.entities if e != who][:hits]
+        n = len(w.bus.log)
+        for f in foes:
+            w.bus.emit(Hit(attacker=who, target=f, power=power, critical=False))
+        return [e.amount for e in w.bus.log[n:] if isinstance(e, TempHP)]
+
+    if area:
+        one, three = temps(area[0], 1), temps(area[0], 3)
+        out.that(len(one) == 1 and one == three,
+                 "`f2864` pays once for a hit and **once for three hits of "
+                 "the same attack** -- the printed 'once per attack', paid "
+                 "by the non-stacking rule rather than by a latch in the row",
+                 f"{area[0]}: 1 hit -> {one}, 3 hits -> {three}")
+        out.that(not temps(ctrl, 1) and not temps(ctrl, 3),
+                 "and nothing at all for an ordinary power, which is the "
+                 "control that tells the feat from a flat temp-HP-on-hit",
+                 f"{ctrl}: {temps(ctrl, 3)}")
 
 
 def a_carried_consumable_is_offered_and_spent_by_using_it(out: Result) -> None:
