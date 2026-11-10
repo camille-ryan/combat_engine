@@ -10255,6 +10255,46 @@ class Cast:
         known.per_day[ref] = known.per_day.get(ref, 0) + 1
         return True
 
+    def restore_per_day(self, ref: str) -> bool:
+        """Hand one use of a daily allowance back. False when none was spent.
+
+        `c.spend_per_day`'s mirror, and the store is the same plain dict --
+        `Powers.per_day`, a count of uses **taken**, which is why this
+        decrements rather than increments. `c.per_day_left` is the reader
+        and is unchanged.
+
+        **Floored at zero and reported**, for the same reason `spend_per_day`
+        returns a bool rather than being a bare decrement: a row that hands
+        back a use nobody spent has invented a resource, and the caller has
+        to be able to tell. Two rows printing *"replenish one of the
+        infusions expended"* need the "expended" part to mean something.
+
+        **Not `c.restore_charge` and not `c.restore_use`.** Those are the
+        other two stores and neither is this counter: `restore_charge` is a
+        per-*encounter* resource keyed `<ref>:<what>`, and `restore_use` is
+        a row's own use in `Powers.used`. A daily allowance outlives both --
+        `story._wear` mirrors `Powers.per_day` in and out of
+        `story.Sheet.per_day` -- so handing a use back here survives the
+        fight, which is what a card replenishing at a short rest means.
+
+        **No `on=`, and that is deliberate rather than an omission.**
+        `Cast._who(None)` returns `self.target`, so an `on=` defaulting
+        through it would have read the *victim's* allowance -- which is
+        `content/CLAUDE.md`'s "commonest single mistake here", and it is
+        how the first draft of this method silently did nothing. Its two
+        siblings `c.spend_per_day` and `c.per_day_left` both read
+        `self.me` with no such parameter, and an allowance belongs to
+        whoever holds the row. The card's *"you or an ally can spend a
+        healing surge"* is about who pays, not whose allowance refills.
+        """
+        from .components import Powers
+
+        known = self.world.get(self.me, Powers)
+        if known is None or known.per_day.get(ref, 0) <= 0:
+            return False
+        known.per_day[ref] = known.per_day[ref] - 1
+        return True
+
     def charge_left(self, key: str, limit: int = 1) -> int:
         """How much of a per-encounter charge is left, for this creature.
 

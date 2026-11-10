@@ -69539,6 +69539,112 @@ def flat_from_attack(out: Result) -> None:
         f"default {halved}, from_attack=False {whole}",
     )
 
+
+def restore_per_day(out: Result) -> None:
+    """A daily allowance can be handed back, and only what was spent.
+
+    `Powers.per_day` had a writer (`c.spend_per_day`) and a reader
+    (`c.per_day_left`) and nothing to give a use back. Two cards print
+    *"replenish one of the infusions expended"*, and "expended" is the word
+    that makes the floor load-bearing: a row handing back a use nobody
+    spent has invented a resource.
+
+    **`c.restore_charge` and `c.restore_use` are not this counter**, which
+    is the near-miss worth stating. The first is a per-*encounter* resource
+    keyed `<ref>:<what>`; the second is a row's own use in `Powers.used`,
+    which both rests clear. A daily allowance outlives a fight --
+    `story._wear` mirrors it in and out of `story.Sheet.per_day` -- so a
+    card replenishing at a short rest needs the store that survives one.
+
+    **No `on=` on the verb, and the first draft proved why.** `Cast._who`
+    returns `self.target` for `on=None`, so a defaulted parameter read the
+    *victim's* allowance and the method silently did nothing: two spends,
+    then a restore that returned False. Both siblings read `self.me` with
+    no such parameter.
+    """
+    from combat_engine.engine.cast import Cast
+
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers")
+    ref, limit = "cf:artificer-f2", 2
+
+    out.that(
+        c.restore_per_day(ref) is False,
+        "handing back a use before any was spent is **refused** -- the"
+        " floor is what makes the printed word 'expended' mean something,"
+        " and a bare decrement would have minted a use here",
+        f"left {c.per_day_left(ref, limit)} of {limit}",
+    )
+    c.spend_per_day(ref, limit)
+    c.spend_per_day(ref, limit)
+    out.that(
+        c.per_day_left(ref, limit) == 0 and c.spend_per_day(ref, limit) is False,
+        "two spends exhaust an allowance of two, and a third is refused --"
+        " the setup the restore is measured against",
+        "0 left, third spend refused",
+    )
+    out.that(
+        c.restore_per_day(ref) is True and c.per_day_left(ref, limit) == 1,
+        "one restore gives exactly one back",
+        f"left {c.per_day_left(ref, limit)}",
+    )
+    out.that(
+        c.spend_per_day(ref, limit) is True,
+        "and the given-back use is **spendable**, which a reader-only fix"
+        " would not have been -- the count is the thing both verbs share",
+        "spent it again",
+    )
+    c.restore_per_day(ref)
+    c.restore_per_day(ref)
+    c.restore_per_day(ref)
+    out.that(
+        c.per_day_left(ref, limit) == limit
+        and c.restore_per_day(ref) is False,
+        "and over-restoring cannot exceed the printed allowance: three"
+        " restores against one spend leave two, not five",
+        f"left {c.per_day_left(ref, limit)} of {limit}",
+    )
+
+    # **The assertion a plant forced into existence.** Breaking the verb to
+    # read `self._who(None)` -- the bug the first draft actually had -- left
+    # every assertion above **green**, because a fresh `Cast` has
+    # `target = None` and the board poses nobody. So the rule could not tell
+    # "reads the holder" from "reads the victim", which is the whole
+    # distinction the method's docstring is about. `scripts/CLAUDE.md`: a
+    # plant that fails to go red is a finding either way, and here the
+    # finding was about the check.
+    #
+    # Posed the other way round on purpose: the *victim* is the one with a
+    # spent allowance, and the caster has none. A verb reading the target
+    # would hand a use back and answer True.
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.query import enemies
+
+    victim = enemies(world, me)[0]
+    hoard = world.get(victim, Powers) or world.add(victim, Powers())
+    hoard.per_day["cf:artificer-f2"] = 2
+    spent = Cast(world=world, me=me, ref="drivers")
+    spent.target = victim
+    # **Bounded, and a plant is why.** This was `while
+    # spent.restore_per_day(ref): pass`, and planting the floor away made
+    # the verb answer True for ever -- so the rule hung instead of going
+    # red, which is a worse failure than the one it was testing for. An
+    # unbounded loop in a check is a check that cannot report.
+    for _ in range(limit + 2):
+        if not spent.restore_per_day(ref):
+            break
+    out.that(
+        spent.restore_per_day(ref) is False
+        and world.get(victim, Powers).per_day["cf:artificer-f2"] == 2,
+        "with a **target** holding two spent uses and the caster holding"
+        " none, the restore is refused and the target's count is untouched"
+        " -- `Cast._who(None)` is `self.target`, so a defaulted `on=` here"
+        " would refill the victim's allowance, which is this tree's"
+        " commonest single mistake",
+        f"caster refused, victim still at"
+        f" {world.get(victim, Powers).per_day['cf:artificer-f2']}",
+    )
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -70573,6 +70679,10 @@ DRIVERS = {
         "one extra square on every shift, and not on a teleport",
     ),
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
+    "restore_per_day": (
+        restore_per_day,
+        "a daily allowance can be handed back, floored at what was spent",
+    ),
     "flat_from_attack": (
         flat_from_attack,
         "a weakened creature's own non-attack damage is not halved",
