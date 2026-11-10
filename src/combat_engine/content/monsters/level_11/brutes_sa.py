@@ -368,12 +368,20 @@ def m1070a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.max_height()",),
+    todo=("c.altitude_limit()",),
 )
 def m115827a0(c: Cast) -> None:
-    """A ceiling on how high it may fly while it is carrying somebody.
-    `c.height` reads the distance and `c.rise`/`c.hover` set it; nothing caps
-    it, so the whole of this trait is the thing that is missing."""
+    """A ceiling on how high it may fly while it is holding somebody.
+    `c.height` reads the distance and `c.rise`/`c.hover` set it; `c.leash`
+    bounds distance from a creature or a square and not altitude. Nothing
+    caps a height, so the whole of this trait is the thing that is missing.
+
+    **Re-pointed from `c.max_height()`, which was a synonym of its own
+    making.** m4737a3 prints the same clause -- a ceiling while carrying a
+    rider -- and has waited on `c.altitude_limit()` since the day before
+    this row was written, so the two were one gap under two names and
+    neither group could go green for the other. The older symbol wins.
+    """
 
 
 @power(
@@ -573,6 +581,15 @@ def m1438a3(c: Cast) -> None:
     only one half of the price can be taken: `c.extra_action` puts the
     standard into the budget the turn is already spending, and there is no
     way to charge another creature for it.
+
+    **Re-measured rather than assumed, because a general absence is the
+    claim most often wrong.** `Budget` is per-eid and
+    `c.extra_action(cost, on=)` is its exact mirror -- it increments and
+    announces `ActionGranted` -- while `turns.spend` is keyed on the
+    creature whose turn it is. Every verb under *actions and turns* in
+    `docs/symbols/resources.md` hands an action out; none bills one. So the
+    marker wants a `Cast` verb and an event to match the positive, and the
+    three other rows on this symbol want the same one.
     """
     c.damage("1d10", on=c.me)
     c.extra_action(ActionType.STANDARD, on=c.me)
@@ -1235,10 +1252,29 @@ def m2237a1(c: Cast) -> None:
 )
 def m2237a2(c: Cast) -> None:
     """Being inside the creature is written as what the card says it costs:
-    restrained, and ten necrotic every time the turn comes round. The rest of
-    being swallowed -- line of sight and effect only to the m2237, melee and
-    close attacks only, and five off the escape check -- is what `c.swallowed`
-    would be, and nothing expresses any of it.
+    restrained, ten necrotic every time the turn comes round, and five off
+    the check to get out.
+
+    **The escape penalty is written now and the old note gave it away with
+    the rest.** "Acrobatics and Athletics checks to escape suffer a -5
+    penalty" is not a skill penalty -- writing it as one would have docked
+    every unrelated tumble the victim ever made -- it is the `escape`
+    modifier key `escape.attempt` sums off the struggling creature, which
+    twenty-odd item and feat rows already write to. The hold the check is
+    against is m2237a1's grab, which this row requires and does not relay.
+
+    Laid for the encounter and torn down from the restrained hold's own
+    `on_end`, the shape m115827a2 uses: being out is what stops it, and the
+    card prints no save against the penalty itself.
+
+    What is still dropped is the other half, and the two near-misses are
+    worth naming so nobody reaches for them twice. "Line of sight and effect
+    only to the m2237" is not `query.sealed`, which cuts line of effect to
+    **everybody** including the swallower, where this card leaves it open to
+    the swallower alone. "Only melee or close attacks" is not
+    `c.forbid(only=)` either: `forbid` narrows by ref, keyword or usage and
+    never by reach, and the victim's reach is a property of each of its own
+    rows. That remainder is what `c.swallowed` would be.
 
     "Escape ends" has no duration either, so the hold is the save-ends one
     the engine does have.
@@ -1249,12 +1285,15 @@ def m2237a2(c: Cast) -> None:
     victim = c.choose(held, "m2237a2: which of them it swallows") if held else None
     if victim is None or not c.strike(on=victim):
         return
-    c.condition(
+    hold = c.condition(
         Condition.RESTRAINED,
         until=When.SAVE_ENDS,
         on=victim,
         ongoing=(10, DamageType.NECROTIC),
     )
+    stuck = c.penalty("escape", 5, on=victim, until=When.ENCOUNTER)
+    if hold is not None and stuck is not None:
+        hold.on_end.append(lambda: c.world.effects.end(stuck, "no longer swallowed"))
 
 
 @power(
@@ -1294,7 +1333,13 @@ def m2237a3(c: Cast) -> None:
 def m2237a4(c: Cast) -> None:
     """Four creatures spill out of it when it falls and the spec prints no id
     for any of them, so there is nothing to put on the board. Releasing what
-    it had swallowed is the same sentence and waits on the same thing."""
+    it had swallowed is the same sentence and waits on the same thing.
+
+    The engine side is already here -- `c.summon(ref, at=)` and
+    `c.summon_inline(spec, at=)` both exist -- so the gap is squarely in the
+    build: the creature is named in the Effect prose and no column carries
+    it across as a ref. Same shape as `#1220`'s missing equipment column,
+    so it should land behind the one rebuild rather than its own."""
 
 
 # ==========================================================================
@@ -1875,6 +1920,23 @@ def m4510a7(c: Cast) -> None:
     his next turn": `c.revives_unless` only declares the fact for the policy
     and `c.reanimate` raises a corpse at one hit point, which is a different
     card -- nothing lets a creature keep acting below zero.
+
+    **The two readers that look like the handle are both out of reach for a
+    monster, which is worth writing down because neither is obviously so.**
+    `turns._death_saves` is the only thing in the engine that kills a
+    creature on a clock, and it returns at once unless the creature is
+    `DYING` -- and `Condition.STABLE` returning before the roll is the
+    second half of the same gate. A monster never reaches either: `loader`
+    spawns it `dies_at_zero`, so `Health.dying_at` is 0, so `_check_down`
+    takes the `hp <= dying_at` branch and `resolve._die` runs outright. The
+    window the card prints is never entered.
+
+    And it cannot be bought by moving hit points, which is the shape the
+    nearby troll rows use. `_die` lifts the body off the grid -- m3797a1
+    records the same finding from the other side -- so a stand-in that
+    healed him to 1 would be a creature *above* 0 who dies to the next
+    point of damage, where the card says he is at 0 and cannot die at all
+    until his turn ends. The marker is the honest answer.
     """
     me = c.me
 
@@ -2931,7 +2993,12 @@ def m6086a4(c: Cast) -> None:
     """Pieces of it break off and act on their own, and the spec prints no id
     for the thing they are -- so there is nothing to put on the board. The
     d4 and the worthless experience are the same sentence and wait on the
-    same thing."""
+    same thing.
+
+    m2237a4 has the measurement: the summon verbs exist and the missing
+    piece is a build-side column linking an Effect line to a monster ref.
+    Both rows here, and the three elsewhere on this symbol, want the one
+    rebuild."""
 
 
 @power(
@@ -3071,15 +3138,24 @@ _M6407_FELLED = "the m6407 drops to 0 hit points"
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.deny_space()",),
 )
 def m6407a0(c: Cast) -> None:
-    """"An enemy cannot enter its space by any means" is the whole of the
-    trait and there is nothing to say it with. `c.shares_space` is the
-    opposite operation and has no negative form, and the exemption the card
-    is actually buying -- against teleport, against phasing, against a
-    creature two sizes smaller -- is exactly what the grid's own rule already
-    allows."""
+    """"An enemy cannot enter the m6407's space by any means" is the whole of
+    the trait, and `c.blocks_entry()` is the whole of it.
+
+    **Written now, and the old note was a general absence that had stopped
+    being true.** It said `c.shares_space` is the only operation of this
+    shape and "has no negative form", which was right on 2026-10-12 and
+    wrong eleven days later: `c.blocks_entry` landed as the exact mirror and
+    nine stat blocks already call it.
+
+    What "by any means" buys is the two waivers rather than the occupancy
+    rule, which is closed already -- phasing through the creature, and the
+    creature having been made shareable by something else. See
+    `movement.blocks_entry` for what it deliberately does not beat, and why
+    `overhead` and teleport need no handling here.
+    """
+    c.blocks_entry()
 
 
 @power(
