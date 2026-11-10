@@ -79,6 +79,8 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    Forced,
+    ForcedMove,
     Gear,
     Hit,
     Keyword,
@@ -921,12 +923,50 @@ def f3577(c: Cast) -> None:
 # -- the r33 run, whose racial powers are refs the tree does not hold -------
 
 
-@power("f3578", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_return_to_play()",))
+@power("f3578", level=1, cls="", usage=AT_WILL, action=NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you return to play after using p14073",
+       on=Trigger(PowerUsed, _used("p14073"), "you use p14073"))
 def f3578(c: Cast) -> None:
-    """"When you return to play" is a moment nothing announces: a
-    creature that leaves the board and comes back does so through
-    `World.spawn`, which emits `Summoned` only for a summon."""
+    """**Written: the moment is announced, and the marker was a general
+    absence that is false.** It read `todo=("c.on_return_to_play()",)` on
+    the ground that *"a creature that leaves the board and comes back does
+    so through `World.spawn`, which emits `Summoned` only for a summon"*.
+    That is true of a summon and irrelevant here, because this card names
+    exactly one way of leaving: `p14073`, which does not despawn anybody.
+    It lays `c.condition(Condition.REMOVED, until=When.SONT)`, so coming
+    back is that hold lapsing -- `durations.end` lifts it through `_lift`,
+    which emits `ConditionEnded`. `p14073`'s own docstring already said so
+    in words: *"Coming back into play is the `REMOVED` condition lapsing"*.
+    `_provokes_on_standing` below is the same reading of the same event for
+    standing up out of prone.
+
+    So the shape is `f3567`'s: declare on the use and arm the watcher the
+    use's own effect will trip. `PowerUsed` is announced **above** the
+    body, so the watch is standing before `p14073` removes anybody -- which
+    is the one thing that early announcement is good for.
+
+    `AT_WILL`, as `f3571`, `f3572` and `f3574` are: the card prints no
+    limit of its own, and on a triggered `action=NONE` row an `ENCOUNTER`
+    header is a narrowing the page did not print. `p14073` has one use a
+    fight, so nothing is loosened by it either.
+
+    The watch is not narrowed to `ev.why`: the hold can also be cured or
+    dispelled early, and the card asks only that the character be back.
+    `once=True` because the hold lapses once -- and because the handler
+    lays an effect, so a firing that does nothing (some other condition
+    ending) does not spend it.
+
+    Partial rather than total concealment is `c.conceal`'s default, which
+    is the -2 the page prints rather than the -5."""
+    me = c.me
+
+    def back(ev: Any) -> None:
+        if ev.target == me and ev.condition is Condition.REMOVED:
+            c.conceal(on=me, until=When.EONT)
+
+    c.watch(ConditionEnded, back, until=When.ENCOUNTER, once=True,
+            label=c.ref)
 
 
 @power("f3579", level=1, cls="", usage=AT_WILL, action=NONE,
@@ -983,7 +1023,7 @@ def f3582(c: Cast) -> None:
 
 @power("f3583", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("cf:fighter-knight-f9",))
+       todo=("cf:fighter-knight-f9s0",))
 def f3583(c: Cast) -> None:
     """One 7th-level class feature of either of two other builds, chosen
     from the six options the two of them print between them.
@@ -997,6 +1037,25 @@ def f3583(c: Cast) -> None:
     `cf:fighter-slayer-f21s0`-`s2`. So the only thing left is that neither
     parent is **declared** in this tree, which is what the remaining symbol
     names.
+
+    **Re-pointed off the heading, which is a marker that could never have
+    gone green.** It named `cf:fighter-knight-f9`, and that ref's whole
+    spec in `class_feature` is one introductory sentence -- "you gain one
+    of the benefits of your choice" -- with no mechanics in it, so nothing
+    will ever declare it and `todo.py` would have gone on reporting this
+    row as waiting on the day the three real options landed. Exactly
+    `f3589`'s fault, whose note is the worked example, and the convention
+    `f3590` and `f3591` already follow: **the symbol names the family's
+    first option, never the `-f<N>` heading.** Measured off the database
+    rather than inferred -- the heading and its three `s<N>` options are
+    all four present, and `-f9`'s spec is the sentence quoted above.
+
+    Still **one** symbol for two builds' families, deliberately: the gap is
+    "there is nothing for `among=` to hold", which is one condition and
+    goes away when either family is written -- at which point the row can
+    offer what exists. `cf:fighter-knight-f9s0` is what resolves when
+    somebody starts on it, the way `BERSERKER_FORM` names its family by
+    its first member.
 
     **The retired second symbol was `etl.build.keeps_sections_with_options`,
     and the behaviour it waited for exists.** The note here said the other
@@ -1431,17 +1490,84 @@ def f3602(c: Cast) -> None:
 
 
 @power("f3603", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.instead_of_slide()",))
+       reach=PERSONAL, target=SELF)
 def f3603(c: Cast) -> None:
     """Flail is a printed group the weapon table carries and `chargen`
     now deals, so the attack bonus plays. Heroic tier, so +1.
 
-    Dropped: "when the attack lets you slide the target, you can knock it
-    prone instead". Nothing offers a choice at the moment another row's
-    slide is about to happen, and knocking prone *as well* would be a
-    second condition the card does not give."""
-    c.bonus("attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
+    **Both halves now, and the marker it carried was the shape that is
+    most often wrong.** It read `dropped=("c.instead_of_slide()",)` and
+    argued a general absence -- *"nothing offers a choice at the moment
+    another row's slide is about to happen"*. `ForcedMove` is exactly
+    that: a `Decision`, carrying `source`, `target`, `how` and the
+    `power` doing the shoving, and `movement` reads the refusal back
+    (`if world.bus.emit(shove, settle).cancelled`). `f2796` in
+    `warden_b.py` is the worked sibling -- it refuses a named row's slide
+    at `Window.BEFORE` and pulls instead -- so the facility was in the
+    tree and in use before this marker was written. No name search could
+    have found it: the verb it wanted is not called anything like a slide.
+
+    The second clause is kept honest rather than widened, which is what
+    the old note was really protecting:
+
+    * **Instead of, not as well as.** `ev.cancel` is what makes the slide
+      not happen, so the prone replaces it. Laying prone without the
+      refusal would be the stronger row the old note warned about.
+    * **The choice is offered.** `c.may`, as `f2796` has it, so a
+      controller that would rather have the slide keeps it. `default=True`
+      -- the trade costs this character nothing, unlike `f3621`'s, which
+      spends an ally's surge and so declines by default.
+    * **"When you hit with a melee weapon attack using a flail" is a gate
+      on the blow, not on the shove.** `ForcedMove` says which power is
+      shoving and nothing about how that power rolled, and plenty of rows
+      slide off an Effect line with no hit at all. So the `Hit` is latched
+      first -- `_i_hit_in_melee_with_a_weapon` plus the same `_holding`
+      read the bonus above uses -- and a shove is only answered for the
+      `(power, target)` pair that actually landed. A slide of somebody the
+      flail did not hit goes through untouched.
+    * **The latch is spent once and cleared at `PowerResolved`.** "Instead
+      of sliding it" is one slide, and a use that is over cannot still be
+      owed a prone -- otherwise a row sliding the same victim again on a
+      later turn would collect this a second time. The store is a dict
+      closed over by the handlers, so it belongs to this arming rather
+      than to `id(c.world)`.
+
+    `Window.BEFORE` because the refusal has to be in before `settle` runs.
+    The bonus stays a standing modifier and the rider is armed with
+    `c.watch` rather than declared, since a row may not hold a printed
+    trigger and a standing modifier both."""
+    me = c.me
+    c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,
             when=lambda ctx: _holding(c, "flail"))
+
+    # The victim of the most recent qualifying blow, by the power that
+    # struck it. Read by `instead`, emptied the moment that use ends.
+    landed: dict[str, int] = {}
+
+    def hit(ev: Any) -> None:
+        if _i_hit_in_melee_with_a_weapon(c.world, me, ev) and _holding(c, "flail"):
+            landed[ev.power] = ev.target
+
+    def instead(ev: Any) -> None:
+        if ev.source != me or ev.how is not Forced.SLIDE:
+            return
+        if landed.get(ev.power) != ev.target:
+            return
+        if not c.may("knock the target prone instead of sliding it"):
+            return
+        del landed[ev.power]
+        ev.cancel("knocked prone instead")
+        c.prone(on=ev.target)
+
+    def spent(ev: Any) -> None:
+        if ev.actor == me:
+            landed.pop(ev.power, None)
+
+    c.watch(Hit, hit, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.watch(ForcedMove, instead, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=f"{c.ref} slide")
+    c.watch(PowerResolved, spent, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} done")
 
 
 def _provokes_on_standing(c: Cast, victim: int) -> None:
@@ -2228,7 +2354,25 @@ def f3635(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=("c.on_invoke_shrouds()",))
 def f3636(c: Cast) -> None:
     """`c.spend_shrouds` takes the whole count off in one step and says so
-    to nobody, so "they are not removed" has no moment to answer."""
+    to nobody, so "they are not removed" has no moment to answer.
+
+    **The obvious workaround was checked and does not hold**, which is
+    worth writing down because it looks sound for about a minute: read the
+    count on the `Hit` and lay it back afterwards with `c.shroud`, so the
+    end state is the printed one. The invoking is `p9400`'s own
+    `c.watch(Hit, invoke, ...)` -- an **AFTER**-window subscription -- and
+    `Bus._run` walks subscriptions in insertion order, so a second
+    AFTER-window watch is before or after that one according to the order
+    `turns.arm_traits` happened to arm the two rows in. Reading the count
+    first needs `Window.BEFORE` and putting it back needs to be after
+    `p9400`, and `c.watch` takes no `late=` -- that knob exists on
+    `Bus.on` and is not in the content surface. So the restore is right
+    for only one arming order and nothing says which a build got, which is
+    the same fault `_chose_a_school` above is written to avoid.
+
+    The symbol therefore stands: what is missing is an announcement at the
+    moment the count is spent, which a watcher could answer wherever it
+    sits in the order."""
 
 
 @power("f3637", level=1, cls="", usage=AT_WILL, action=NONE,
