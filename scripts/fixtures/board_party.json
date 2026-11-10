@@ -603,7 +603,7 @@
      "heal",
      "insight",
      "religion",
-     "thievery"
+     "stealth"
     ],
     "worships": "x1_48"
    },
@@ -775,7 +775,6 @@
      "diplomacy",
      "heal",
      "history",
-     "perception",
      "religion"
     ],
     "worships": "x1_99"
@@ -1286,6 +1285,7 @@
      "arcana",
      "heal",
      "insight",
+     "nature",
      "religion"
     ],
     "worships": "x1_13"
