@@ -630,16 +630,42 @@ def f2288(c: Cast) -> None:
        trigger="an enemy saves against ongoing damage",
        on=Trigger(SavingThrow, lambda w, me, ev: (
            ev.saved and ev.actor != me and "ongoing " in ev.against
-       ), "an enemy saves against ongoing damage"),
-       dropped=("SavingThrow.source",))
+       ), "an enemy saves against ongoing damage"))
 def f2294(c: Cast) -> None:
     """"Ongoing damage" is readable -- `SavingThrow.against` is
     `str(effect)`, and `Effect.__str__` spells out "ongoing N type".
-    Whose ongoing damage it was is not on the event, so this pays out on
-    any enemy's successful save rather than only on one you imposed."""
+
+    **"That you imposed" is readable too, and the marker was wrong about
+    that.** It named `SavingThrow.source`, a field the event does not carry
+    and does not need to: `Effect.source` is the creature that laid the
+    hold, and `durations.save` emits this event **before** it calls
+    `end(eff, "saved")` -- the comment at that site says so outright
+    ("the outcome is announced first so a listener can change it"). A
+    declared trigger is offered from a bus listener, so the effect being
+    saved against is still live while this body runs.
+
+    Matched by `str(eff) == ev.against` rather than by parsing the display
+    string: `Effect.__str__` opens with `e<id>`, so the comparison pins the
+    one effect and nothing has to be read out of the text. Walked over
+    `effects.live` rather than `effects.of(saver)`, because
+    `Effect.saver` lets another creature roll the throw and the hold would
+    then sit on somebody the event does not name.
+
+    The two level lines are the printed numbers, added to the modifier the
+    card names: nothing is derived, 5 and 10 are what the page says."""
+    me = c.me
     who = c.trigger.actor
-    if who in enemies(c.world, c.me):
-        c.flat(max(c.cha_mod, c.int_mod), dtype=DamageType.COLD, on=who)
+    if who not in enemies(c.world, me):
+        return
+    saved = c.trigger.against
+    mine = any(
+        eff.ongoing is not None and eff.source == me and str(eff) == saved
+        for eff in c.world.effects.live.values()
+    )
+    if not mine:
+        return
+    printed = 10 if c.level >= 21 else 5 if c.level >= 11 else 0
+    c.flat(printed + max(c.cha_mod, c.int_mod), dtype=DamageType.COLD, on=who)
 
 
 @power("f2297", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -977,9 +1003,28 @@ _granted("f2151", "f2151b", swap=Swap(6, utility=True))
 @power("f2151b", level=1, cls="", usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF, todo=("events.DieRolled",))
 def f2151b(c: Cast) -> None:
-    """Both halves want the same thing that does not exist: nothing
-    announces an individual damage die, so neither "you roll a 1 on a
-    damage die" nor "reroll any 1 or 2" has anywhere to stand."""
+    """**The marker is right and this note was half wrong, which is worth
+    correcting rather than leaving for the next reader to re-derive.**
+
+    It said both halves want the same missing thing. The *effect* half does
+    not: "reroll any result of 1 or 2 on a damage die until the die roll is
+    something other than 1 or 2" is `c.reroll_ones(below=3)` exactly -- the
+    threshold is exclusive and that verb's own docstring names 3 as "the
+    one that says a 1 or a 2", the loop rather than `pick=`, read inside
+    `_roll_damage` where the dice are in hand. `f2099`, in this file, cites
+    the same verb for the same reading.
+
+    What is missing is only the **trigger**: "you roll a 1 on any damage
+    die" is a question about one face, and `DamageRolled` carries a total
+    with no dice behind it -- `c.reroll_ones`' docstring says so in the
+    course of explaining why it is read where it is.
+
+    So the clause cannot be laid without it. The row is a daily free
+    action, so laying the reroll on use instead would hold it for every
+    damage roll left in the fight where the card buys one roll -- more than
+    the page gives, which is the direction to refuse. `Hit` with an
+    area-or-close reach is not the printed trigger either: it would spend
+    the daily on any such hit rather than on a 1 coming up."""
 
 
 _granted("f2152", "f2152b", swap=Swap(6, utility=True))
@@ -992,13 +1037,30 @@ _granted("f2152", "f2152b", swap=Swap(6, utility=True))
            ev.actor == me and _reach_kind(ev.power) in _AREA
            and any(r.hit for r in ev.rolls)
        ), "you hit with an area or close attack power"),
-       dropped=("c.origin_of()",))
+       dropped=("PowerResolved.origin",))
 def f2152b(c: Cast) -> None:
     """Everybody the attack touched is pushed. What is dropped is the
     square they are pushed *from*: the printed line measures from the
     attack's origin and nothing records where a resolved power was
     aimed, so this pushes away from the caster -- which is the same
-    square for a close burst and not for an area one."""
+    square for a close burst and not for an area one.
+
+    **Re-pointed off `c.origin_of()`, which was one symbol over two
+    opposite needs.** The other two rows carrying it -- `i2927x1` and
+    `i3085p2` -- both want to **move** a power's origin, which is a writer
+    (`c.cast_from` is the near miss they each name). This row wants to
+    **read** one, and a verb that sets an origin would leave it exactly as
+    refused as it is now while reporting it ready.
+
+    The verb half is already there: `c.push(anchor=)` takes the square to
+    push away from, so what is missing is only the square. `PowerResolved`
+    carries `actor`, `power`, `targets`, `rolls`, `trigger`, `granted_by`
+    and `granted_via` -- read, not assumed -- and `Cast.origin` holds it
+    for the use that is happening, so the field is absent from the
+    announcement rather than from the engine. That is the same shape
+    `Hit.origin` names for three other rows, and this file's own
+    `SavingThrow.source` was such a symbol until the effect turned out to
+    answer it."""
     for who in c.trigger.targets:
         c.push(5, on=who)
 
@@ -1300,14 +1362,23 @@ def f2130b(c: Cast) -> None:
 
     `SkillCheck.target` landed and is not what this waits on: nothing
     *makes* an Intimidate check, so "the creature you intimidated" has no
-    event behind it at all.
+    event behind it at all. That half of the trigger is what the marker
+    still names.
 
     The aftereffect is the same penalty again, for a turn, once the save
     lands -- `When.EOTNT`, because the card clocks it on the *target's* next
-    turn and not the caster's. The Intimidate bonus is a check, not a fight.
+    turn and not the caster's.
+
+    **The Intimidate bonus is written, and the line that stood here said it
+    was not a fight.** `engine/skills.py` totals `skill:<name>` off `Mods`
+    for every check it resolves, so a `skill:` bonus is consulted rather
+    than recorded -- `f1098` makes the same correction about the same
+    sentence and `f1099` writes this one. Untyped, because the card prints
+    no word before "bonus"; `When.ENCOUNTER` is the printed clock.
     """
     me = c.me
     victim = c.trigger.target
+    c.bonus("skill:intimidate", 2, on=me, until=When.ENCOUNTER)
     held = c.penalty("attack", c.cha_mod, on=victim, until=When.SAVE_ENDS,
                      when=lambda ctx: ctx.get("target") == me)
     c.aftereffect(held, lambda: c.penalty(
@@ -1714,7 +1785,22 @@ def f2096(c: Cast) -> None:
     """Laid at the top of each of the caster's turns while bloodied, and
     held to the end of it. "The **first** time you leave a square" is the
     dropped half: `c.no_provoke` holds for a duration and cannot be spent
-    on one step, so this covers the whole turn's movement."""
+    on one step, so this covers the whole turn's movement.
+
+    **Checked, and the marker still names the right gap.** `c.no_provoke`
+    is already built as a `c.watch(OpportunityWindow, ..., Window.BEFORE)`
+    and `c.watch` already takes `once=`, so the parameter has somewhere to
+    go -- but it is `cast.py`'s to forward, and `once=` on a watch reads the
+    log to decide whether the handler did anything, which a veto that
+    *cancels* an event may not satisfy. Not writable from here either way.
+
+    What cannot be done from content: the window opens once per watcher per
+    square (`movement.step` emits it after `LeaveSquare` and before the
+    mover arrives), so a latch in this body's own closure would spend
+    itself on the first *watcher* rather than on the first step, and a
+    multi-square footprint leaves several squares per step. A gate that
+    looks right and is off by a watcher is worse than the duration this
+    row already admits to."""
     me = c.me
 
     def each_turn(ev: Any) -> None:
@@ -1975,30 +2061,56 @@ def f2175(c: Cast) -> None:
     # "Considered an arcane attack power": a keyword this invoker's copy
     # of the row carries, which `dsl.keywords_of` merges with the header.
     c.counts_as_keyword("p1448", Keyword.ARCANE)
+
+
 @power("f2179", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.deals(like=)",))
+       reach=PERSONAL, target=SELF, dropped=("c.deals(may=)",))
 def f2179(c: Cast) -> None:
-    """Changes the damage type of one named power. `c.deals` overrides
-    what a creature's *weapon* attacks roll and has no way to name a
-    row, which would make this touch everything the character does.
-    **Re-pointed: `c.deals(ref=)` landed and is not this row's gap.** Four
-    rows carried it; `f1098` is written and the other three each wanted
-    something further, which is why one symbol over four rows could not go
-    green correctly for any of them. `ref=` picks one named row and
-    `vs_kind=` narrows by the creature hit; both are label fields read in
-    `Cast._retyped`.
+    """Changes the damage type of one named power.
 
-    What is left here is the **source of the type**: "make your `p1333` deal
-    the same damage type as your `p1448`". Not a type this row names -- a
-    type read off *another row*, which may itself have been retyped. So the
-    parameter wanted is `like=`, a second ref whose current type is copied
-    at the moment of the roll, and nothing reads one row's resolved type
-    from inside another's.
+    **Written, and re-pointed off `c.deals(like=)`, which asked for a
+    facility this card does not need.** That symbol wanted a second ref
+    whose "current type" is copied at the moment of the roll, on the
+    premise that `p1448`'s type is a fact only that row can answer. It is
+    not: the type is a **build-time** choice -- the card's own Special says
+    it "remains throughout your character's life" -- and `p1448`'s body
+    reads it as `c.element(on=c.me) or UNTYPED`. Reading the same
+    expression here is what "the same damage type as your `p1448`" says,
+    and the two cannot disagree because there is one reading rather than a
+    copy of one. `f2175`, forty lines up, reads `c.element` for the same
+    power and for the same reason.
 
-    The old note's complaint is answered, though: `c.deals` **can** name a
-    row now, so "which would make this touch everything the character does"
-    no longer holds.
+    So nothing is laid when the character has no element bound: `p1448`
+    then deals untyped and `p1333` already does, which is the printed
+    sentence satisfied rather than a clause skipped. Laying an untyped
+    override instead would be a hold `Cast._retyped` could return ahead of
+    somebody else's.
+
+    `ref=` is what makes this one row rather than the character's whole
+    output -- `_retyped`'s own note is that "a named row is its own
+    narrowing, and `through` steps aside for it", which matters here
+    because `p1333` is an implement power and the default keyword is
+    `WEAPON`. `f1098` is the written precedent for the parameter.
+
+    **What is dropped is the printed "can choose".** The card offers the
+    retype rather than imposing it, and a standing retype is a label read
+    inside `Cast._typed` with no moment to ask -- the same gap
+    `cf:warlock-f1s1` carries, which is why this takes that row's symbol
+    rather than minting a second name for one need. A type is not strictly
+    better than none (an untyped blow is resisted by nothing), so the
+    option is a real clause and not a formality.
+
+    `p1448` itself still carries `c.race_option(damage_type=)`: a race has
+    no leg to record *which* option within it was taken, so `c.element`
+    answers for a character whose **class** build bound an element. That is
+    that row's gap, not this one's, and this line follows whatever `p1448`
+    reads rather than asserting a type of its own.
     """
+    me = c.me
+    mine = c.element(on=me)
+    if mine is None:
+        return
+    c.deals(mine, ref="p1333", on=me, until=When.ENCOUNTER)
 
 
 @power("f2202", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2497,8 +2609,20 @@ def f2893(c: Cast) -> None:
     from the blanket `f1075` and `i1764x1` print. Both halves of the gate
     are dynamic too -- the grant comes and goes mid-fight.
 
-    Counts attacks as silvered against one creature. Silver is a
-    material nothing on a weapon or a blow carries."""
+    **The last line of this note used to contradict the first and is
+    gone.** It said silver "is a material nothing on a weapon or a blow
+    carries", which was true before `c.gains_property` and is why the row
+    had been marked at the compendium once: `f1075` lays `"silvered"` with
+    `every=True` today, and fifteen stat blocks read it through
+    `c.regeneration(unless_struck_by=)` -- `Cast.struck_by_property` asks
+    the attacker's weapon at the moment of the `Hit`.
+
+    So the gap is exactly the narrowing and nothing else. Writing the
+    blanket here instead would be `f1075`'s printed sentence rather than
+    this one -- silver against every creature, for the whole fight, where
+    the card gives it against one enemy and only while that enemy is
+    granting combat advantage. Wider than the page, which is the direction
+    worth refusing."""
 
 
 @power("f2894", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
