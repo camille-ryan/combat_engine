@@ -17,6 +17,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - The beast companion a ranger keeps, if it is on the board.
 - `c.can_flank(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "Your familiar can flank with you or your allies."
+- `c.can_hear(self, who: 'int') -> 'bool'`
+  - Can `who` hear me? *"One ally who can hear you"*, three cards.
 - `c.can_see(self, to: 'int | None' = None) -> 'bool'`
   - Line of effect **and** actually visible.
 - `c.carrying(self, ref: 'str' = '', *, on: 'int | None' = None) -> 'list[int]'`

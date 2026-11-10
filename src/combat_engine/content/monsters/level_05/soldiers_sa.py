@@ -3190,12 +3190,19 @@ def m6572a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.can_hear()",),
 )
 def m6605a0(c: Cast) -> None:
-    """"Can see **or hear** it" -- there is no hearing-distance verb, so the
-    gate below is sight alone, which under-grants an ally who could hear it
-    around a corner but not see it."""
+    """"Can see **or hear** it", and both halves are readable now.
+
+    The gate was sight alone, which under-granted an ally who could hear it
+    around a corner but not see it. `c.can_hear` is the other half:
+    `query.can_hear` deliberately does **not** test line of effect, because
+    sound goes round corners and `line_of_effect` is about what a power can
+    reach -- which is exactly the case this row was losing.
+
+    An **or**, as printed: either sense serves, so a deafened ally in plain
+    view still gains it and a sighted-but-sealed one does not.
+    """
     me = c.me
     c.aura(5, label=f"{c.ref} aura", until=When.ENCOUNTER, on=me)
     for mate in c.allies():
@@ -3204,7 +3211,10 @@ def m6605a0(c: Cast) -> None:
         for which in ALL_DEFENCES:
             c.bonus(
                 which, 2, on=mate, until=When.ENCOUNTER, kind="power",
-                when=lambda ctx, m=mate: distance_between(c.world, me, m) <= 5 and c.can_see(m),
+                when=lambda ctx, m=mate: (
+                    distance_between(c.world, me, m) <= 5
+                    and (c.can_see(m) or c.can_hear(m))
+                ),
             )
 
 

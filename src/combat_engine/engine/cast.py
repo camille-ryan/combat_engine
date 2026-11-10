@@ -913,6 +913,24 @@ class Cast:
         who = self._who(on)
         return who is not None and is_(self.world, who, condition)
 
+    def can_hear(self, who: int) -> bool:
+        """Can `who` hear me? *"One ally who can hear you"*, three cards.
+
+        **`who` is required and positional, with no `on=` default**, which
+        is deliberate: `Cast._who(None)` resolves to `self.target`, and
+        every one of these cards asks about an **ally** while the target is
+        an enemy. A defaulted parameter would have asked the wrong creature
+        and answered plausibly -- `content/CLAUDE.md` calls that the
+        commonest single mistake here, and `c.restore_per_day` walked into
+        it earlier today.
+
+        One line over `query.can_hear`, which holds the reasoning and is
+        where the composition lives.
+        """
+        from .query import can_hear as _can_hear
+
+        return _can_hear(self.world, who, self.me)
+
     def bloodied(self, on: int | None = None) -> bool:
         """Is this creature bloodied -- by its hit points, or by a card.
 

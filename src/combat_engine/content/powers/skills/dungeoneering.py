@@ -185,7 +185,6 @@ def p16482(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=Target(side="enemy", count=1, kinds=frozenset({"aberrant"})),
-    dropped=("c.can_hear()",),
 )
 def p9311(c: Cast) -> None:
     """A monster knowledge check really is rollable from here: `c.check`
@@ -206,7 +205,11 @@ def p9311(c: Cast) -> None:
         return
     if not c.check("dungeoneering", dc(c.level_of(foe)), against=foe):
         return
-    who = c.choose(sorted([c.me, *c.allies()]), f"{c.ref}: who takes the opening")
+    # "You or one ally who can hear you" -- the caster is always in the
+    # pool, and `c.can_hear` narrows the rest. `query.can_hear` is the
+    # reader; it landed with this row and three others.
+    pool = sorted([c.me, *(a for a in c.allies() if c.can_hear(a))])
+    who = c.choose(pool, f"{c.ref}: who takes the opening")
     if who is None:
         return
     c.bonus(

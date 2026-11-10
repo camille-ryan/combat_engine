@@ -2736,6 +2736,42 @@ def shield_bonus(world: World, eid: int) -> int:
     return _SHIELD_AC.get(held, 0)
 
 
+def can_hear(world: World, listener: int, speaker: int) -> bool:
+    """Can `listener` hear `speaker`? Three cards print it that way.
+
+    *"One ally who can hear you"* is the printed phrase, and it is a
+    question about the **listener** -- which is why the arguments are in
+    that order and why the row supplies the range from its own target line
+    rather than this guessing one.
+
+    **Composed from what exists rather than a new sense model.** There is
+    no `Senses` component; what there is:
+
+    * `Condition.DEAFENED`, which until now **nothing in the engine read**.
+      Its `Rules` entry is entirely default, so the condition was inert --
+      laid by seven content rows and consulted by none of them. This is its
+      first reader, which is the point: a condition nobody asks about is
+      `engine/CLAUDE.md`'s "silently false" shape waiting to happen.
+    * `query.sealed`, asked of **both** parties, because being sealed inside
+      something is out of reach in both directions -- a speaker nobody can
+      hear and a listener who can hear nobody are the same answer.
+
+    **Deliberately not a line-of-effect test.** Sound goes round corners,
+    and `line_of_effect` is about what a power can reach; using it here
+    would make a shout through a doorway fail. Cover and concealment are
+    likewise about seeing, not hearing.
+
+    **One row already hand-rolls this** -- `powers/warlord/level_3.py` does
+    `not c.is_(Condition.DEAFENED, on=a)` for the same printed phrase -- and
+    three more carry a marker for it. A read written out by hand in one file
+    and marked as missing in three is the shape where the *reader* is the
+    gap, not the rows.
+    """
+    if is_(world, listener, Condition.DEAFENED):
+        return False
+    return not sealed(world, listener) and not sealed(world, speaker)
+
+
 def sealed(world: World, eid: int) -> bool:
     """Is this creature inside something, out of reach in both directions?
 
