@@ -192,8 +192,20 @@ BORROWED = {
 #: case says something the first five did not: the question is not only "which
 #: sentence names the type" but "is this call a printed bonus at all".
 #:
+#: **A seventh, and it is the "is this a printed bonus at all" shape
+#: rather than the "which sentence" one.** `cf:rogue-scoundrel-f1s2` prints
+#: two clauses. The first -- *"you don't take a penalty to Stealth checks
+#: for moving more than 2 squares, and you take a -5 penalty instead of a
+#: -10 penalty for running"* -- names **no type**, and the row's `+5` on
+#: `stealth:moved` is that clause: it cancels a penalty `Cast._stealth_hide`
+#: charges, so it is an offset and not a granted bonus. The only mechanic
+#: word on the card, `concealment`, is in the *second* clause, which is
+#: about **when a Stealth check may be made** and is `dropped=`. Typing the
+#: offset `concealment` would be wrong in the way this comment's delta case
+#: already describes -- two of a kind do not stack, so it would collide
+#: with any real concealment bonus and the larger would win.
 ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3", "m2079a5", "m2354a4",
-             "i3382p1"}
+             "i3382p1", "cf:rogue-scoundrel-f1s2"}
 
 #: A type word is printed as "a **power** bonus" or "+2 **item** bonus".
 #: The same word after "the" or "equal to the" is an *amount* being

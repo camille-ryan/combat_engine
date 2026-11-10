@@ -15957,7 +15957,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         on `ev.bonus` survive the swap -- only the part that is keyed to
         *which skill* changes.
         """
-        from .events import CheckSubstituted, SkillCheck
+        from .events import SkillCheck
         from .skills import SKILLS, modifier
 
         ev = ev if ev is not None else self.trigger
@@ -15966,6 +15966,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         actor = int(getattr(ev, "actor", self.me))
         fresh = self.world.rng.d20().total
         old = ev.natural
+        was = ev.skill
         if not skill:
             ev.natural = {
                 "new": fresh, "best": max(old, fresh), "worst": min(old, fresh),
@@ -15975,8 +15976,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             # `bonus`. Without it a banked reroll changed the natural and
             # left the outcome at the first roll's. #1214.
             self.boost_check(bonus, ev=ev)
-            self._announce_reroll("check", old, ev.natural, actor=actor)
-            return fresh
+            return self._said_reroll(ev, old, fresh, was, actor)
 
         asked = skill.strip().lower()
         # Refused rather than ignored, as `c.substitute_check` -- a
@@ -15986,7 +15986,6 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 f"{self.ref}: c.reroll_check(skill={skill!r}) is not a skill."
                 f" Known: {', '.join(sorted(SKILLS))}."
             )
-        was = ev.skill
         # The delta, so the caller's bonus and any laid modifier survive.
         delta = (modifier(self.world, actor, asked, ev.target, fresh)
                  - modifier(self.world, actor, was, ev.target, old))
@@ -16000,15 +15999,32 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             # face and the moved bonus, which is why it is called even at
             # `bonus=0`. `ev=` for #1214's reason.
             self.boost_check(bonus, ev=ev)
+        return self._said_reroll(ev, old, fresh, was, actor)
+
+    def _said_reroll(
+        self, ev: Any, old: int, fresh: int, was: str, actor: int
+    ) -> int:
+        """Announce one skill-check reroll, and the swap if there was one.
+
+        **Both of `reroll_check`'s branches end here so there is exactly
+        one `_announce_reroll` call site in them**, which is not tidiness:
+        `drivers.rerolled` counts those call sites across `Cast` as its
+        proxy for "every d20 reroll path announces", and splitting this
+        verb in two moved the count without adding a path. The rule was
+        right to go red and the proxy was what broke -- so the code is
+        shaped to keep the thing being counted meaning what it says.
+
+        `CheckSubstituted` is emitted **only when the skill actually
+        changed**, which is the line `c.substitute_check` draws and for the
+        same reason: the reroll is already credited by `Rerolled`, so
+        announcing a substitution that did not happen would have the ledger
+        crediting work nobody did. Two cases say nothing -- `skill=` naming
+        the skill already being rolled (`p11538` answering a bluff check
+        with a bluff check), and `keep=` leaving the first result standing.
+        """
+        from .events import CheckSubstituted
+
         self._announce_reroll("check", old, ev.natural, actor=actor)
-        # **Said only when the skill actually changed**, which is the same
-        # line `c.substitute_check` draws and for the same reason: the
-        # reroll itself is already credited by `Rerolled`, so announcing a
-        # substitution that did not happen would have the ledger crediting
-        # work nobody did. Two cases emit nothing here -- `skill=` naming
-        # the skill already being rolled (`p11538` answering a bluff check
-        # with a bluff check, which is an ordinary reroll), and `keep=`
-        # leaving the first result standing.
         if ev.skill != was:
             self.world.bus.emit(CheckSubstituted(
                 actor=actor, skill=ev.skill, was=was, by=self.ref))
