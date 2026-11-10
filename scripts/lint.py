@@ -691,15 +691,29 @@ def _context_keys(which: str = "") -> frozenset[str]:
                         if isinstance(k, ast.Constant) and isinstance(k.value, str)
                     }
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Dict):
+            # **An annotated assignment is the same statement and was
+            # invisible.** This read `ast.Assign` alone, so
+            # `ctx: dict[str, object] = {...}` -- which is how
+            # `skills.modifier` builds its context -- contributed nothing,
+            # and `purpose` was the only key unique to it. A `when=` gate
+            # reading `ctx["purpose"]` was therefore reported as a fault on
+            # a gate that measurably works, which is the "cries wolf"
+            # failure this function's own docstring is about. `AnnAssign`
+            # carries one `target`, not `targets`, which is why a `getattr`
+            # on the plural silently skipped it rather than raising.
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
                 continue
+            if not isinstance(node.value, ast.Dict):
+                continue
+            targets = (node.targets if isinstance(node, ast.Assign)
+                       else [node.target])
             named = any(
-                getattr(t, "id", "").endswith("ctx") for t in node.targets
+                getattr(t, "id", "").endswith("ctx") for t in targets
             )
             if not named:
                 continue
             target = next(
-                (getattr(t, "id", "") for t in node.targets), ""
+                (getattr(t, "id", "") for t in targets), ""
             )
             # `dmg_ctx` is the damage one and `ctx` in `resolve` is the
             # attack one; narrowing by name is what lets a `when=` on a
