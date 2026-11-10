@@ -201,6 +201,66 @@ def _foe(c: Cast) -> int | None:
     return c.target
 
 
+def _also_at_an_ally(c: Cast, attacker: int) -> bool:
+    """Was the attack that rolled this damage aimed at an ally of mine too?
+
+    "Targets you **and at least one of your allies**" is printed on the
+    trigger of a row that answers `DamageRolled`, and that event carries
+    `source`, `target` and `amount` and nothing about the use's other
+    targets. The list is reachable all the same: `resolve.attack` hangs
+    `among` -- everybody the one power use was aimed at -- on the
+    `AttackRolled` it emits, and sets it **before** the emit, so the logged
+    event carries it. A target's roll is announced before that target's own
+    damage, so the nearest earlier roll by the same attacker at the same
+    victim is this blow's.
+
+    Reading the log back is the settled way to ask a question of an earlier
+    event here -- twenty content files do it -- and it is what makes the
+    clause writable without touching `engine/`.
+
+    **`among` is a plain attribute and not a field**, set after construction
+    beside `result`, `branch` and `opportunity` so that it stays off the
+    wire and out of a replay fixture. So `dataclasses.fields` cannot see it
+    and no `DamageRolled.among` marker could ever have gone green, however
+    the field arrived -- which is the second half of why this is written
+    rather than waited for.
+    """
+    victim = getattr(c.trigger, "target", c.me)
+    friends = set(c.allies())
+    for past in reversed(c.world.bus.log):
+        if (isinstance(past, AttackRolled)
+                and past.attacker == attacker
+                and past.target == victim):
+            return bool(set(getattr(past, "among", ())) & friends)
+    return False
+
+
+def _melee_or_ranged(world: World, ev: Event) -> bool:
+    """"A melee or a ranged attack" -- those two words and nothing wider.
+
+    Neither stock predicate says this pair. `by_melee` is "melee or close"
+    and `by_ranged` is "ranged or area", each deliberately wide because the
+    cards they were written for name both halves; together they take in a
+    close blast and an area burst, and a card naming melee and ranged
+    excludes both.
+
+    The reach is read through `dsl.reach_of` with the attacker in hand,
+    which is `triggers._reach_as_made`'s rule and the reason that helper
+    exists: a reshaping effect can turn a printed area into a close attack
+    for one creature, so the kind on the header is the wrong answer for
+    anybody holding one.
+    """
+    from combat_engine.engine.dsl import reach_of
+
+    p = get(getattr(ev, "power", "") or "")
+    who = getattr(ev, "attacker", None)
+    if p is None or who is None:
+        return False
+    return reach_of(world, who, p, getattr(ev, "branch", 0)).kind in (
+        "melee", "ranged",
+    )
+
+
 def _auto_save(c: Cast, *words: str) -> None:
     """"You automatically succeed on saving throws against X."
 
@@ -1125,36 +1185,33 @@ def i462x1(c: Cast) -> None:
 @power("i531p1", level=2, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
        reach=PERSONAL, target=NO_TARGET,
        trigger="a creature you have marked targets you and an ally",
-       on=Trigger(DamageRolled, targets_me, "a marked enemy hits you"),
-       dropped=("DamageRolled.among",))
+       on=Trigger(DamageRolled, targets_me, "a marked enemy hits you"))
 def i531p1(c: Cast) -> None:
     """The mark is asked in the body because the predicate gets no `Cast`.
 
-    **Re-pointed off `c.aegis()`, which named a verb for two gaps that are
-    neither about a verb nor about each other.** Both unsaid clauses are
-    one level down:
+    **Finished, and both halves of the printed trigger are now asked.**
+    Each was once marked as a gap and neither was one:
 
-    * *"marked with your p3323 power"* -- **written now.** A mark used to
-      be a bare `Relation.MARKED_BY` triple recording **who** marked whom
-      and never which row laid it, so this could not tell the aegis from a
-      fighter's combat challenge and paid on any mark. `Relations` keeps
-      the laying ref in its value slot and `c.marked(via=)` asks for it;
-      the write cost nothing in the end, because `durations._install_state`
-      had `eff.by` in its hand all along and no content site or tuple had
-      to move. #875.
-    * *"targets you and at least one of your allies"* -- this fires on
-      `DamageRolled`, which carries `source`, `target` and `amount` and
-      nothing about the attack's other targets. `resolve` attaches
-      `among` to `Hit` and `Miss` as a plain attribute and not to the
-      damage events, so the whole target list is unreachable from here.
-      Three marked rows want it, the other two under `Hit.origin`.
+    * *"marked with your p3323 power"*. A mark used to be a bare
+      `Relation.MARKED_BY` triple recording **who** marked whom and never
+      which row laid it, so this could not tell the aegis from a fighter's
+      combat challenge and paid on any mark. `Relations` keeps the laying
+      ref in its value slot and `c.marked(via=)` asks for it. #875.
+    * *"targets you and at least one of your allies"*. This fires on
+      `DamageRolled`, which says nothing about the use's other targets --
+      so the row carried `dropped=("DamageRolled.among",)` and was too
+      generous, paying on any blow from the marked enemy. The list is on
+      the `AttackRolled` for this same blow, which the bus has already
+      logged; `_also_at_an_ally` above has the argument and the reason the
+      marker could never have gone green.
 
-    So the row is still too generous, but in **one** direction rather than
-    two: the mark is now the right mark, and the "and at least one of your
-    allies" half is unasked. That is the shape of the error rather than an
-    inert clause."""
+    So the reduction is now owed exactly when the card says it is. The
+    `Level 12 or 17:` and `Level 22 or 27:` lines are out of scope for an
+    item block, as they are everywhere in this file."""
     foe = _foe(c)
     if foe is None or not c.marked(on=foe, via="p3323"):
+        return
+    if not _also_at_an_ally(c, foe):
         return
     c.reduce(5 + c.enhancement, c.trigger)
 
@@ -2059,10 +2116,33 @@ def i1392x1(c: Cast) -> None:
 
 
 @power("i1392p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.racial_row()",))
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.BUILD_OPTIONS.i1392p1",))
 def i1392p1(c: Cast) -> None:
-    """`c.grant_row` needs a ref, and which one this is depends on a
-    choice the item carries and nothing reads."""
+    """**Re-pointed off `c.racial_row()`, which is a different gap.**
+
+    That symbol -- three rows, `feats/fighter_c.py` defines it -- means
+    *"the page names a racial power in prose and we have no ref for it"*.
+    That is not true here: the manifestation powers of this armour's race
+    are all declared, by ref, in `races/powers_a.py` under the heading for
+    them, and `c.grant_row` takes a ref. So nothing about this row is
+    waiting on a name.
+
+    What is missing is one thing and it is readable the day it lands. The
+    choice is build-time -- made when the armour is made, not during a
+    fight -- which is exactly what `Build.choices` records as
+    `option:<ref>:<value>` and what `c.chosen_option(ref)` reads back.
+    `chargen._build_options` already fills it for an **item** power and not
+    only for a feat (`#1112` widened it for that reason); it fills it from
+    `BUILD_OPTIONS`, and this row has no entry there. An entry would be the
+    manifestation powers as refs, which is the form `f2694`'s entry already
+    takes.
+
+    Then the body is two calls: `c.grant_row` on the chosen ref, and
+    `c.restore_use` on it for the printed second sentence when the wearer's
+    own race already granted it. The entry belongs to `chargen/`, so it is
+    not this file's to add, and `todo=` rather than `dropped=` because
+    without the choice there is no ref and nothing at all to hand over."""
 
 
 @power("i1674p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
@@ -2938,8 +3018,29 @@ def i2727p1(c: Cast) -> None:
 @power("i2814x1", level=5, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.ability_bonus()",))
 def i2814x1(c: Cast) -> None:
-    """An ability modifier is read straight off `Stats` wherever a row
-    asks for it, so there is one place to add to and it is everywhere."""
+    """An ability modifier is read straight off `Stats` wherever a row asks
+    for it, and nothing in that read consults a modifier.
+
+    **Re-measured, because "one place to add to" is the wrong reading of
+    it and makes the gap sound smaller than it is.** The card excepts the
+    attack bonus -- *"to determine a value other than your attack
+    bonus"* -- so what it needs is a read that can tell the two apart, and
+    there is no such read. `Stats.mod` is the single point, and all three
+    kinds of caller go to it directly:
+
+    * the six `c.str_mod` ... `c.cha_mod` properties, which is what content
+      actually writes;
+    * `c.mod(ability)`, for the row that names the ability at runtime;
+    * `c._attack_bonus`, which is the one the card excludes.
+
+    So adding to `Stats.mod` pays the excepted case as well, and adding to
+    `Cast.mod` alone misses every `c.int_mod` in the tree -- which is most
+    of them. A verb to lay the point is the half this marker names; a read
+    carrying what it is for is the half that decides whether the verb can
+    be honoured, and neither exists.
+
+    `kind="item"` and non-stacking are not the question: an ability
+    modifier is not a `Mod` key at all."""
 
 
 def _starts_a_charge(world: World, me: int, ev: Any) -> bool:
@@ -3331,7 +3432,18 @@ def i1261p1(c: Cast) -> None:
     uses "whichever row that creature's basic attack *is*" and takes `on`,
     `who`, `ranged` and `window` but nothing saying *with what*, and `as_`
     on `c.attack` names which swing it is rather than which weapon. So the
-    burst plays and each blow is struck with whatever the wearer holds."""
+    burst plays and each blow is struck with whatever the wearer holds.
+
+    **Re-checked for a verb under another name, because that is what most
+    of these turn out to be, and there is none.** The nearest thing is
+    `hand=` on `c.attack`, which picks main or off hand out of what is
+    already held -- and `i1261x1` files the claw **stowed** on purpose, so
+    it is in neither. `c.as_weapon` has no way to put it in hand and laying
+    it there would silently disarm the wearer. Rolling the burst longhand
+    through `c.attack` would also stop it being a basic attack, which is
+    the word the card prints and what every rider keyed on one reads.
+    `i2122p1` waits on the same gap under `Cast.basic(hand=)`; `f977`
+    shares this symbol, which is the larger group of the two."""
     c.basic()
 
 
@@ -3829,20 +3941,37 @@ def i1708p1(c: Cast) -> None:
 
 @power("i1751p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(10), target=ONE_CREATURE,
-       dropped=("query.footing(world, square)",))
+       dropped=("story.terrain_words",))
 def i1751p1(c: Cast) -> None:
-    """"Standing on soil or sand" is a property of the square the target
-    is in. `query.ground` was the wrong name twice over: what exists is
+    """"Standing on soil or sand" is a condition on using the power, and
+    nothing in a fight says what the ground is. The restraint plays
+    ungated, which is one clause too generous and is the `dropped=` shape.
+
+    `query.ground` was the wrong name twice over: what exists is
     `falling.ground(world, eid)`, which settles a creature onto the floor
     of its square and answers how far it fell, and it is about a creature
-    rather than a square.
+    rather than a square. What the board carries per square is
+    `Grid.blocking`, `Grid.elevation` and `Grid.difficult` -- and
+    `difficult` is a word for rough going, so plain soil never appears in
+    it and reading it here would gate the row on a map nothing draws.
 
-    What the board carries per square is `Grid.blocking`, `Grid.elevation`
-    and `Grid.difficult` -- and `difficult` is a word for rough going
-    ("mud", "rubble"), so plain soil never appears in it and reading it
-    here would gate the row on a map nothing draws. The missing thing is
-    what a square is *made of*, asked the way `query.light_level(world,
-    square)` is asked."""
+    **Re-pointed off `query.footing(world, square)`, which minted a reader
+    nobody else wants and would still have had nothing to read.** This
+    engine already has a model of what sort of place a fight is in:
+    `World.terrain` is a set of words and `c.terrain(word)` asks it, which
+    is how the other 68 terrain gates in this tree are written. Nothing
+    anywhere adds a word to it -- `terrain.dress` lays blocking squares,
+    rough going and traps and no words at all -- so every one of those
+    gates is False in every fight. Ten rows already name that gap and
+    `f2718`'s note has the measurement.
+
+    So the day a scene can declare its ground, this row's gate is
+    `c.terrain("soil") or c.terrain("sand")` and no new reader is needed.
+    That is coarser than the printed "standing on", which is per square
+    where a terrain word is per fight -- said here because it is an
+    approximation and not the card. A per-square material model would be
+    the exact answer and nothing else in the tree asks for one, so it is
+    not what this row should hold the queue open for."""
     c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
 
 
@@ -3947,15 +4076,65 @@ def i3118x1(c: Cast) -> None:
 
 
 @power("i3118p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.CHARM],
-       dropped=("c.aura_effect()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.CHARM])
 def i3118p1(c: Cast) -> None:
-    """The aura is on the board and follows you; what it does to whoever
-    walks into it later is the missing half -- `c.grants_in` carries a
-    modifier and `c.burns` carries damage, and neither carries a bar."""
-    c.aura(2, until=When.ENCOUNTER)
-    for foe in c.within(2, side="enemy"):
-        c.cannot_attack(on=foe, against=c.me, until=When.SAVE_ENDS)
+    """**Written, and `c.aura_effect()` was the wrong thing to wait for.**
+
+    That symbol asked for an aura able to carry a *bar* the way
+    `c.grants_in` carries a modifier and `c.burns` carries damage -- an
+    effect laid on whoever walks in. The printed sentence is not laid on
+    anybody: *"whenever an enemy in the aura targets you with a melee or a
+    ranged attack, it must first succeed on a saving throw to make the
+    attack against you"* is a question asked at the moment of the
+    declaration, so the shape is a watch that asks it then. Every part was
+    already here -- `AttackDeclared` is a `Decision`, which is how
+    `c.cannot_attack` refuses a swing before anything is rolled, and
+    `c.save(bare=True)` is a throw against nothing in particular that hands
+    back whether it was made.
+
+    What the old body did instead, and why it was wrong in three
+    directions: it laid `c.cannot_attack(until=SAVE_ENDS)` on the enemies
+    standing within 2 at the moment of the minor action. So an enemy that
+    walked in afterwards was never barred, an enemy that walked out stayed
+    barred, and the one throw it did roll came at the end of that enemy's
+    own turn and freed it for the rest of the fight -- where the card makes
+    it buy every attack separately.
+
+    `c.distance` rather than the zone's occupant set, because the question
+    is asked inside the declaration window and wants the live answer.
+    `_melee_or_ranged` is the printed pair of words and nothing wider; its
+    note has the reason neither stock predicate says them.
+
+    *"Until you attack"* is the second clock, which `When` has no word for,
+    so it is a watch of its own that ends both the gate and the aura --
+    the shape `races/powers_a.py` and `items/consumable.py` already use.
+    *"Until the armor is removed"* is scenery: nothing takes a worn item
+    off mid-fight."""
+    me = c.me
+    ring = c.aura(2, until=When.ENCOUNTER)
+
+    def first_a_save(ev: AttackDeclared) -> None:
+        if ev.target != me or ev.attacker == me:
+            return
+        if ev.attacker not in c.enemies():
+            return
+        if c.distance(ev.attacker) > 2:
+            return
+        if not _melee_or_ranged(c.world, ev):
+            return
+        if not c.save(on=ev.attacker, bare=True):
+            ev.cancel(c.ref)
+
+    gate = c.watch(AttackDeclared, first_a_save, until=When.ENCOUNTER,
+                   window=Window.BEFORE)
+
+    def i_attacked(ev: AttackDeclared) -> None:
+        if ev.attacker != me:
+            return
+        c.end_effect(gate)
+        c.world.zones.end(ring, c.ref)
+
+    c.watch(AttackDeclared, i_attacked, until=When.ENCOUNTER)
 
 
 @power("i3120x1", level=9, cls=ITEM, action=ActionType.NONE,
@@ -4100,7 +4279,8 @@ def i3043p1(c: Cast) -> None:
 
 @power("i3484x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.condition(ends_with_check=)",))
+       dropped=("c.condition(ends_with_check=)",
+                "Effect.drop_cost(by=)"))
 def i3484x1(c: Cast) -> None:
     """Both senses, at a range equal to the armour's enhancement -- so the
     radius is read off the item rather than printed as a number. The
@@ -4118,8 +4298,25 @@ def i3484x1(c: Cast) -> None:
 
     Dropped: the one clause that is a gap -- the malfunction ends on a
     standard action and an Athletics check against a hard DC, made by the
-    wearer *or an adjacent ally*. An effect carries a saving throw and a
-    `drop_cost`; neither is a check somebody else may roll."""
+    wearer *or an adjacent ally*. That is **two** things missing and the
+    marker now names both, because they close separately and the row needs
+    each:
+
+    * The **check**. `c.endable` sets `Effect.drop_cost`, so "a standard
+      action to end this effect" exists and `then=` is what the drop buys
+      -- but a drop cannot be *refused*, and `then` runs after the effect
+      is already off. So setting a bare `drop_cost` here would hand the
+      wearer an automatic escape for a standard action where the card
+      charges a hard DC for it, which is stronger than print. Left
+      unwritten for that reason rather than half-written generous.
+    * **Who may roll it.** `actions._dropping` offers a droppable effect to
+      whoever it sits **on**, which is the wearer -- right for half the
+      sentence and silent about the adjacent ally. `p13861` and `m6109a3`
+      name that gap in the same words, so the symbol is already in the
+      tree.
+
+    The restraint therefore stands to the end of the encounter, which is
+    the clause being short rather than the watcher being wrong."""
     me = c.me
     reach = c.enhancement or 1
     c.blindsight(reach)
