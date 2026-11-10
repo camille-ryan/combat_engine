@@ -126,19 +126,40 @@ def cleric_word(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("c.stealth_speed()", "c.hide(cover=)"),
+    dropped=("c.hide(cover=)",),
 )
 def rogue_tactic_cunning(c: Cast) -> None:
     """Both printed halves are about when a Stealth check may be made.
 
-    The first is the movement penalty -- none for moving more than two
-    squares, half of it for running -- and `engine/skills.py` has no speed
-    term in a Stealth check to reduce. The second is permission to attempt
-    a hide on ordinary cover or concealment after moving three squares,
-    where `c.hide` takes no cover argument and grants the hidden state
-    outright. Granting it on a `MoveEnd` would hide the rogue rather than
-    let it try, which is strictly stronger than the card.
+    **The movement half is written, and `c.stealth_speed()` was
+    mis-marked.** The old note looked in `engine/skills.py` and found no
+    speed term to reduce -- correctly, because the penalty is not there. It
+    is in `Cast._stealth_hide`: `-10` for a run, `-5` for more than two
+    squares, waived by the modifier key `"stealth:moved"` and charged as
+    `min(0, penalty + waived)`.
+
+    So `+5` is the whole clause, and it is the card verbatim rather than an
+    approximation: moving gives `-5 + 5 = 0` -- *"you don't take a
+    penalty"* -- and running gives `-10 + 5 = -5` -- *"a -5 penalty instead
+    of a -10 penalty"*. One number, both sentences. `items/armour.py` says
+    the same of its own `+5` and `races/powers_a.py` is the second user, so
+    this is the established spelling rather than a new one.
+
+    **The second half stays dropped and is a real gap.** *"You can make a
+    Stealth check to become hidden if you have any concealment or any
+    cover, except for cover provided by intervening allies"* needs the
+    threshold `actions._hiding` applies to be lowered for one creature --
+    it has required `Cover.SUPERIOR` since #997 -- plus the ally exclusion.
+    `c.hide` takes no cover argument, and granting the hidden state on a
+    `MoveEnd` would hide the rogue rather than let it try, which is
+    stronger than print.
+
+    Worth knowing before that parameter is built: the two rows wanting it
+    pull **opposite** ways. `p14213` wants ally-granted cover to *count*
+    (*"you can use cover granted by your allies"*) and this card wants it
+    *excluded*. One parameter has to carry both.
     """
+    c.bonus("stealth:moved", 5, on=c.me, until=When.ENCOUNTER)
 
 
 _CLUBS = ("w3593", "w3596")
