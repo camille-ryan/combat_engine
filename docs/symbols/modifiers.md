@@ -13,7 +13,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - The modifier of whatever ability *this branch* attacks with.
 - `c.bonus(self, what: 'str | Defense', value: 'int', *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, kind: 'str' = 'untyped', when: 'Callable[[dict[str, Any]], bool] | None' = None, once: 'bool' = False, stacks: 'bool' = True, dice: 'str' = '', dtype: 'DamageType | Sequence[DamageType] | None' = None, label: 'str' = '') -> 'Effect | None'`
   - A numeric modifier with a duration.
-- `c.boost_check(self, bonus: 'int') -> 'bool'`
+- `c.boost_check(self, bonus: 'int', *, ev: 'Any' = None) -> 'bool'`
   - Add to the triggering skill check, after the die is already down.
 - `c.boost_roll(self, amount: 'int', *, kind: 'str' = '', ev: 'Any' = None) -> 'bool'`
   - Add to the triggering roll **without rolling it again**.
@@ -46,7 +46,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Use a number you already have **instead of** the one that was
 - `c.reroll_attack(self, *, keep: 'str' = 'new', bonus: 'int' = 0, ev: 'Any' = None) -> 'bool'`
   - Make an attack roll again. `keep` is new, best or worst.
-- `c.reroll_check(self, *, keep: 'str' = 'new', bonus: 'int' = 0, ev: 'Any' = None) -> 'int'`
+- `c.reroll_check(self, *, keep: 'str' = 'new', bonus: 'int' = 0, ev: 'Any' = None, skill: 'str' = '') -> 'int'`
   - Roll a skill check again. `keep` is new, best or worst.
 - `c.reroll_damage(self, *, keyword: 'Keyword | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Roll the damage twice and use the higher result."

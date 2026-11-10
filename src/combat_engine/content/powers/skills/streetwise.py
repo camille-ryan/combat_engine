@@ -6,7 +6,9 @@ make a Streetwise check in place of the X check"* -- and the engine has no
 way to put one skill in another's place: `skills.check` is handed the skill
 by its caller and `CheckDeclared` is a plain `Event`, so there is nothing to
 answer. Two of those three are narrowed to a settlement or an urban
-environment on top of that, and `World.terrain` carries no word for either.
+environment on top of that. `TERRAIN_WORDS` has both words now, so the
+gates are spellable; what is missing is that nothing declares terrain on a
+board, so each would be a permanent False (#539, #1213).
 
 What is left is real and is written: the two initiative rows move creatures
 in the order with `c.initiative`, which is the only thing that can -- a
@@ -28,12 +30,14 @@ from combat_engine.engine import (
     SELF,
     YOU_AND_EACH_ALLY,
     Cast,
+    CheckDeclared,
     CloseBurst,
     Cover,
     InitiativeRolled,
     Trigger,
     When,
     about_me,
+    my_check,
     power,
 )
 from combat_engine.engine.ecs import World
@@ -200,24 +204,37 @@ def p9341(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("story.terrain_words",),
+    trigger=(
+        "you would make an Acrobatics, an Athletics, or a Perception check "
+        "in an urban environment"
+    ),
+    on=Trigger(
+        CheckDeclared,
+        my_check("acrobatics", "athletics", "perception"),
+        "you would make one of those checks",
+    ),
+    requires_text="in an urban environment",
+    dropped=("story.terrain_words",),
 )
 def p11597(c: Cast) -> None:
-    """One gap now, and it is the place rather than the substitution.
+    """*"You make a Streetwise check in place of the Acrobatics, Athletics,
+    or Perception check."*
 
-    The substitution half is written: `c.substitute_check` answers
-    `CheckDeclared` and `skills.check` reads the skill back off it, so
-    streetwise' modifier is what gets rolled. #1209.
+    The substitution is written and plays: `c.substitute_check` answers
+    `CheckDeclared`, so streetwise' modifier is the one rolled. #1209.
 
-    What is left is the printed narrowing to an urban environment, which
-    `c.terrain` has no word for and no board declares -- so the gate would
-    be a word nothing sets, which is indistinguishable from a correct gate
-    for as long as `World.terrain` stays empty (#539). The substitution is
-    written out below the marker rather than left unsaid, so what lands
-    when the word exists is one line and not a re-reading of the card.
+    **Dropped: the urban narrowing, and `dropped=` rather than `todo=`
+    because the row plays.** This carried `todo=` with the call commented
+    out, which was wrong twice over -- `todo=` means refused in play, and
+    the body was written in a comment where no instrument could see it.
+    `c.terrain("urban")` is also spellable now, the word being in
+    `TERRAIN_WORDS`, so a gate would not crash; it would return **False in
+    every fight**, nothing declaring terrain on a board (#539). Refusing
+    the row always is worse than playing it unnarrowed. Same reading as
+    `p9342` next door. #1213.
     """
-    # c.substitute_check("streetwise",
-    #                    instead_of="acrobatics,athletics,perception")
+    c.substitute_check("streetwise",
+                       instead_of="acrobatics,athletics,perception")
 
 
 @power(
@@ -242,10 +259,13 @@ def p9342(c: Cast) -> None:
     geometry rather than a compass direction being picked here.
 
     Dropped: the urban Requirement. It is **not** written as a `requires=`
-    gate, because `c.terrain` raises on a word it does not know and the
-    vocabulary has no word for a built-up place -- so a gate here would be
-    a crash
-    rather than a refusal."""
+    gate. `c.terrain("urban")` is spellable -- the word is in
+    `TERRAIN_WORDS` -- so this would not crash, which is what the note
+    here used to say. It would return **False in every fight**: nothing
+    declares terrain on a board, `World.terrain` being empty by decision
+    with terrain living in modules and only in modules (#539). A
+    Requirement that is never met refuses the row always, and this row
+    otherwise plays. #1213."""
     c.move(c.speed_of())
     mine = squares(c.world, c.me)
     if not mine:

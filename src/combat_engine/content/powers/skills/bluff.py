@@ -198,31 +198,31 @@ def p11537(c: Cast) -> None:
         my_check("bluff", "diplomacy", "intimidate"),
         "you make a bluff, a diplomacy, or an intimidate check and dislike the result",
     ),
-    dropped=("c.reroll_check(skill=)",),
+
 )
 def p11538(c: Cast) -> None:
     """*"You make a Bluff check and use either result."*
 
-    Answering a bluff check is an ordinary reroll and plays. Answering the
-    other two is not: the card rolls a *bluff* check in place of the one
-    that was made, and `c.reroll_check` rerolls the same skill. The
-    difference is not a bonus either -- `c.reroll_check(bonus=)` lands on
-    `ev.bonus`, so a modifier delta would still apply when `keep="best"`
-    kept the original roll.
+    **One call for all three triggering skills.** The body used to narrow
+    to a bluff check and reroll only that one, because rerolling the same
+    skill is all the verb could do -- answering a diplomacy or an
+    intimidate check means rolling *bluff* in place of it, which is a
+    different skill's modifier. `skill="bluff"` says that, and when the
+    triggering check already was a bluff one it degenerates to the ordinary
+    reroll the old body did, so the narrowing is no longer needed.
 
-    **Not `c.substitute_check`, which now exists and does not serve this.**
-    That verb answers `CheckDeclared`, before the d20 -- and this card
-    triggers on *"you make a check and dislike the result"*, which is after
-    it. Rolling a different skill once the first result is known, and
-    keeping either, is the reroll family's job with a skill argument. The
-    marker is re-pointed so this row does not report ready on #1209's
-    landing: one symbol serving two needs is what made twelve rows look
-    done when a third of one landed.
+    `keep="best"` is *"use either result"*: the choice is the player's, and
+    an engine with nobody playing taking the better of the two is the same
+    convention `c.may(default=True)` uses. It compares **totals**, not
+    faces -- which matters only because the two rolls now have different
+    modifiers, and is the whole reason `skill=` could not have been a
+    one-line addition.
 
-    `p16435` waits on the same thing and is the `keep="new"` half of it.
+    **Not `c.substitute_check`.** That answers `CheckDeclared`, before the
+    d20; this card triggers on *"you make a check and dislike the
+    result"*, which is after it. The two are not variants of one verb.
     """
-    if getattr(c.trigger, "skill", "") == "bluff":
-        c.reroll_check(keep="best")
+    c.reroll_check(keep="best", skill="bluff")
 
 
 @power(

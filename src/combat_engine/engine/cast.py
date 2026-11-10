@@ -15867,7 +15867,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             skill=asked, was=was, by=self.ref))
         return True
 
-    def boost_check(self, bonus: int) -> bool:
+    def boost_check(self, bonus: int, *, ev: Any = None) -> bool:
         """Add to the triggering skill check, after the die is already down.
 
         For "Trigger: you fail a skill check" -- the failure is what is
@@ -15876,12 +15876,23 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         the event **after** the bus has finished with it, so a row answering
         in the after-window still decides what the check came to.
 
+        `ev=` names the check when it is not the trigger, as
+        `c.reroll_check` and `c.substitute_check`. **It was missing, and
+        that was a live bug rather than an omission**: `c.reroll_check`
+        re-derives `total` and `success` by calling this, so the eight rows
+        that bank a reroll as a `c.watch` -- whose handler's `trigger` is
+        what armed the watch, not the check -- got `False` from here and
+        **no re-derivation at all**. Measured: natural 13 to 7, `total`
+        left at 18, `success` left True, and a `CheckResult` reporting
+        natural 7, bonus 5 and total 18, which do not add up. The reroll
+        was cosmetic for every one of them. #1214.
+
         Returns False when there is no check to change, which is every use
         outside a `SkillCheck` trigger.
         """
         from .events import SkillCheck
 
-        ev = self.trigger
+        ev = ev if ev is not None else self.trigger
         if not isinstance(ev, SkillCheck):
             return False
         ev.bonus += bonus
@@ -15900,7 +15911,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         return self._boosted(bonus, "check", int(getattr(ev, "actor", self.me)))
 
     def reroll_check(
-        self, *, keep: str = "new", bonus: int = 0, ev: Any = None
+        self, *, keep: str = "new", bonus: int = 0, ev: Any = None,
+        skill: str = "",
     ) -> int:
         """Roll a skill check again. `keep` is new, best or worst.
 
@@ -15916,21 +15928,90 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         `c.reroll_attack`'s reason: a banked reroll is armed as a
         `c.watch`, and a watch handler closes over the row's `Cast`, whose
         `trigger` is not the roll being watched.
+
+        **`skill=` makes the second roll a different skill's check**, which
+        is a thing two cards print after a result is known: *"you fail an
+        Acrobatics, Athletics, Endurance, or Perception check; you make a
+        Dungeoneering check and use its result instead"* (`p16435`,
+        `keep="new"`) and *"you make a Bluff check and use either result"*
+        (`p11538`, `keep="best"`).
+
+        It is **not** `c.substitute_check`, and the two are not variants of
+        one verb. That one answers `CheckDeclared`, before the d20, and
+        changes which skill is about to be rolled. This one happens after a
+        result is in hand and rolls a *second*, different check whose result
+        stands in. A card's trigger says which it is: *"you would make"*
+        against *"you make / you fail"*.
+
+        **`keep` compares totals rather than naturals once `skill=` is
+        given, and that is the whole subtlety.** Without a skill change the
+        two rolls share a modifier, so comparing the faces is the same
+        comparison and cheaper. With one, a 9 on a skill at +11 beats a 14
+        on a skill at +3 -- and the card says to use either *result*, which
+        is the total. Comparing naturals here would hand the player the
+        worse of the two outcomes some fraction of the time while looking
+        exactly like a working reroll.
+
+        The modifier is moved as a **delta** rather than recomputed, so the
+        caller's own `bonus=` to `skills.check` and anything a listener laid
+        on `ev.bonus` survive the swap -- only the part that is keyed to
+        *which skill* changes.
         """
-        from .events import SkillCheck
+        from .events import CheckSubstituted, SkillCheck
+        from .skills import SKILLS, modifier
 
         ev = ev if ev is not None else self.trigger
         if not isinstance(ev, SkillCheck):
             return 0
+        actor = int(getattr(ev, "actor", self.me))
         fresh = self.world.rng.d20().total
         old = ev.natural
-        ev.natural = {"new": fresh, "best": max(old, fresh), "worst": min(old, fresh)}[
-            keep
-        ]
-        self.boost_check(bonus)
-        self._announce_reroll(
-            "check", old, ev.natural, actor=getattr(ev, "actor", self.me)
-        )
+        if not skill:
+            ev.natural = {
+                "new": fresh, "best": max(old, fresh), "worst": min(old, fresh),
+            }[keep]
+            # **`ev=` threaded, and this is what re-derives `total` and
+            # `success` from the new face** -- not only what applies
+            # `bonus`. Without it a banked reroll changed the natural and
+            # left the outcome at the first roll's. #1214.
+            self.boost_check(bonus, ev=ev)
+            self._announce_reroll("check", old, ev.natural, actor=actor)
+            return fresh
+
+        asked = skill.strip().lower()
+        # Refused rather than ignored, as `c.substitute_check` -- a
+        # misspelled skill would reroll the same one and read as correct.
+        if asked not in SKILLS:
+            raise ValueError(
+                f"{self.ref}: c.reroll_check(skill={skill!r}) is not a skill."
+                f" Known: {', '.join(sorted(SKILLS))}."
+            )
+        was = ev.skill
+        # The delta, so the caller's bonus and any laid modifier survive.
+        delta = (modifier(self.world, actor, asked, ev.target, fresh)
+                 - modifier(self.world, actor, was, ev.target, old))
+        mine = fresh + ev.bonus + delta
+        theirs = ev.total
+        take = {"new": True, "best": mine >= theirs, "worst": mine < theirs}[keep]
+        if take:
+            ev.skill, ev.natural = asked, fresh
+            ev.bonus += delta
+            # `boost_check` re-derives `total` and `success` off the new
+            # face and the moved bonus, which is why it is called even at
+            # `bonus=0`. `ev=` for #1214's reason.
+            self.boost_check(bonus, ev=ev)
+        self._announce_reroll("check", old, ev.natural, actor=actor)
+        # **Said only when the skill actually changed**, which is the same
+        # line `c.substitute_check` draws and for the same reason: the
+        # reroll itself is already credited by `Rerolled`, so announcing a
+        # substitution that did not happen would have the ledger crediting
+        # work nobody did. Two cases emit nothing here -- `skill=` naming
+        # the skill already being rolled (`p11538` answering a bluff check
+        # with a bluff check, which is an ordinary reroll), and `keep=`
+        # leaving the first result standing.
+        if ev.skill != was:
+            self.world.bus.emit(CheckSubstituted(
+                actor=actor, skill=ev.skill, was=was, by=self.ref))
         return fresh
 
     # -- action points -------------------------------------------------------

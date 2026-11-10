@@ -68,7 +68,9 @@ from combat_engine.engine import (
     by_me,
     by_melee,
     by_ranged,
+    check_failed,
     get,
+    my_check,
     power,
     query,
     targets_me,
@@ -1798,23 +1800,35 @@ def p16434(c: Cast) -> None:
         "you fail an Acrobatics, Athletics, Endurance, or Perception check "
         "while underground"
     ),
-    todo=("c.reroll_check(skill=)",),
+    on=Trigger(
+        SkillCheck,
+        both(my_check("acrobatics", "athletics", "endurance", "perception"),
+             check_failed),
+        "you fail one of those checks",
+    ),
+    requires_text="while underground",
+    dropped=("story.terrain_words",),
 )
 def p16435(c: Cast) -> None:
     """*"You make a Dungeoneering check and use its result instead."*
 
-    A different skill is rolled and its result stands in for the failed
-    one. `c.reroll_check` re-rolls the same skill, so the gap is a skill
-    argument to it -- `keep="new"` here, against `p11538`'s "either
-    result", which is the same verb at `keep="best"`.
+    `keep="new"`, because the card says *instead* and not *either* --
+    `p11538` is the same verb at `keep="best"` and the pair is why `keep`
+    had to stay a parameter rather than be decided here.
 
-    **Not `c.substitute_check`.** That verb landed in #1209 and answers
-    `CheckDeclared`, before the die; this card triggers on *"you fail a
-    check"*, which is after it. The marker is re-pointed rather than left
-    naming a symbol that now exists, which would report this row ready.
-    The underground half is a second gap and `c.terrain` has no word for
-    it either -- see `p11597`.
+    **Not `c.substitute_check`.** That answers `CheckDeclared`, before the
+    die; this triggers on *"you fail a check"*, which is after it.
+
+    **Dropped: the underground narrowing, and not for the reason the old
+    note gave.** `c.terrain("underground")` is spellable -- the word is in
+    `TERRAIN_WORDS` -- so a gate here would not crash. It would return
+    **False in every fight**, because nothing declares terrain on a board:
+    `World.terrain` is empty by decision, terrain living in modules and
+    only in modules (#539). So writing the gate would refuse this row
+    always, which is strictly worse than playing it unnarrowed. Same
+    reading as `p9342`. #1213.
     """
+    c.reroll_check(keep="new", skill="dungeoneering")
 
 
 @power(

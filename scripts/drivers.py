@@ -11006,6 +11006,261 @@ def substitute_check(out: Result) -> None:
              " above cannot pass by the list being empty")
 
 
+def reroll_as_another_skill(out: Result) -> None:
+    """A second check, rolled as a different skill, standing in for the first.
+
+    Two cards print it *after* a result is known -- `p16435`'s "you make a
+    Dungeoneering check and use its result instead" and `p11538`'s "you make
+    a Bluff check and use either result". Both are `c.reroll_check(skill=)`
+    and neither is `c.substitute_check`, which answers `CheckDeclared`
+    before the d20; a card's trigger says which it is, "you would make"
+    against "you make" or "you fail".
+
+    **What this rule exists to pin is that `keep` compares totals and not
+    naturals.** Without a skill change the two rolls share a modifier, so
+    comparing faces is the same comparison. With one it is not: a 9 on a
+    skill at +11 beats a 14 on a skill at +3, and the card says to use
+    either *result*. A `keep="best"` that compared faces would hand back the
+    worse outcome some fraction of the time and look exactly like a working
+    reroll -- the failure this component is named for.
+    """
+    import audit
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import CheckSubstituted, Rerolled, SkillCheck
+    from combat_engine.engine.skills import CheckResult, modifier
+    from combat_engine.engine.skills import check as roll
+
+    def play(
+        skill: str, keep: str, *, first: str = "acrobatics", dc: int = 0,
+    ) -> tuple[CheckResult, list[object], dict[str, int], int]:
+        """Roll `first`, reroll it as `skill`, and report what was settled.
+
+        `seen` records the first check **as it stood before the reroll**,
+        which is the only moment it can be read: the verb edits the event
+        in place, so reading `res` afterwards gives the outcome and not the
+        thing it beat. `fresh` is the verb's own return -- the second face.
+        """
+        world, me, _ = audit.board("p11538", 1)
+        caught: list[object] = []
+        seen: dict[str, int] = {}
+        # **Filtered to this driver's own ref.** The board is `p11538`'s,
+        # and that row is armed on it and answers the same check -- it
+        # emitted its own `Rerolled` and `CheckSubstituted`, so counting
+        # every event credited the row's work to the verb under test.
+        world.bus.on(Rerolled, caught.append)
+        world.bus.on(CheckSubstituted, caught.append)
+
+        def after(ev: SkillCheck) -> None:
+            if getattr(ev, "_done", False):
+                return
+            ev._done = True
+            seen["natural"] = ev.natural
+            seen["total"] = ev.total
+            c = Cast(world=world, me=me, ref="driver")
+            c.trigger = ev
+            seen["fresh"] = c.reroll_check(keep=keep, skill=skill, ev=ev)
+
+        world.bus.on(SkillCheck, after)
+        res = roll(world, me, first, dc)
+        return res, caught, seen, me
+
+    # Measured on its own board, not off `play`'s return: the two numbers
+    # are what every arm below compares against, so they must not come
+    # through the thing under test.
+    w0, m0, _ = audit.board("p11538", 1)
+    high, low = modifier(w0, m0, "bluff"), modifier(w0, m0, "streetwise")
+    # **The pair is chosen so the modifier gap can outweigh the face gap.**
+    # `audit.board` seeds deterministically: the first check rolls a 13 and
+    # the reroll a 7 on this board, every time. A pair four apart therefore
+    # never reaches the branch where the substitute wins -- measured, 0 of
+    # 30 -- so the two cases below would both be the same case. Seven apart
+    # against a six-point face deficit reaches both.
+    out.that(high - low > 6,
+             f"bluff ({high}) and streetwise ({low}) are {high - low} apart,"
+             f" which is more than the fixed 6-point face deficit between"
+             f" the first roll and the reroll on this board -- both"
+             f" branches below are reachable because of it")
+
+    # -- keep="new": the second check stands, whatever it rolled -----------
+    res, said, _, _ = play("streetwise", "new", first="bluff")
+    out.that(res.skill == "streetwise",
+             "`keep=\"new\"` leaves the second skill's check standing --"
+             " `p16435`'s \"use its result instead\" -- even though it is"
+             " the worse of the two here, which is what *instead* means")
+    out.that(res.bonus == low,
+             f"carrying that skill's modifier ({low}), moved as a delta"
+             f" so a caller's own bonus would survive it")
+    out.that(res.total == res.natural + res.bonus,
+             "and the total is re-derived rather than left from the first"
+             " roll, which is what `ev.success` is then read off")
+    mine_said = [e for e in said if getattr(e, "by", "") == "driver"]
+    out.that(any(isinstance(e, Rerolled) for e in mine_said),
+             "a d20 was announced as rolled again -- the four reroll paths"
+             " all come through `_announce_reroll` and #496 asserts it")
+    subs = [e for e in mine_said if isinstance(e, CheckSubstituted)]
+    out.that(len(subs) == 1 and subs[0].was == "bluff"
+             and subs[0].skill == "streetwise",
+             "and the swap is said, so the ledger can credit the row")
+
+    # -- keep="best" compares TOTALS, which is the whole point -------------
+    #
+    # **The assertion is an invariant, not an expected winner.** "The skill
+    # with the better modifier wins" is false and was the first draft of
+    # this rule: the *face* can carry the worse skill, so a +3 skill on an
+    # 18 beats a +7 skill on a 5, correctly. What must hold is that the
+    # kept total is the larger of the two -- and both are computed here
+    # from `skills.modifier` directly rather than from the verb's own
+    # delta arithmetic, so the rule cannot agree with the implementation
+    # by sharing its mistake.
+    #
+    # **Both branches are reached by swapping the pair, not by rolling
+    # repeatedly.** `audit.board` seeds deterministically, so 30 plays of
+    # one configuration are 30 copies of one roll -- measured: the
+    # substitute won 0 and lost 30, which is not a 30-sample result, it is
+    # one sample counted thirty times. Swapping which skill is the first
+    # check and which is the substitute flips the comparison against the
+    # same two faces, which is deterministic and is actually two cases.
+    both: dict[str, tuple[int, int, str]] = {}
+    for sub, first in (("bluff", "streetwise"), ("streetwise", "bluff")):
+        res_b, _, seen, _ = play(sub, "best", first=first)
+        mods = {"bluff": high, "streetwise": low}
+        theirs = seen["natural"] + mods[first]
+        mine = seen["fresh"] + mods[sub]
+        won = "substitute" if mine >= theirs else "original"
+        both[sub] = (mine, theirs, won)
+        out.that(res_b.total == max(mine, theirs),
+                 f"`keep=\"best\"` on {first}->{sub} keeps"
+                 f" {max(mine, theirs)}: the two results were {theirs}"
+                 f" ({first}, natural {seen['natural']}) and {mine}"
+                 f" ({sub}, natural {seen['fresh']}), and it kept"
+                 f" {res_b.total}")
+        out.that(res_b.skill == (sub if mine >= theirs else first),
+                 f"and the skill it reports is the one that won"
+                 f" ({res_b.skill!r})")
+
+    out.that({v[2] for v in both.values()} == {"substitute", "original"},
+             f"and the two configurations reach the two branches, so"
+             f" neither is a branch wearing the other's evidence:"
+             f" into bluff the {both['bluff'][2]} wins, into streetwise"
+             f" the {both['streetwise'][2]} does")
+
+    # -- keep="worst" is the mirror, and nothing prints it with a skill ----
+    res_w, _, seen_w, _ = play("bluff", "worst", first="streetwise")
+    theirs_w = seen_w["natural"] + low
+    mine_w = seen_w["fresh"] + high
+    out.that(res_w.total == min(mine_w, theirs_w),
+             f"`keep=\"worst\"` keeps the smaller total ({min(mine_w, theirs_w)}"
+             f" of {theirs_w} and {mine_w}) -- no card prints it with a"
+             f" skill change, and it is asserted so the branch cannot rot"
+             f" into agreeing with `best`")
+
+    # -- naming the skill already being rolled is an ordinary reroll ------
+    #
+    # `p11538`'s own case: it passes `skill="bluff"` for all three of its
+    # triggering checks, and when the trigger already was a bluff check the
+    # call degenerates to the reroll the old body did by hand. Nothing is
+    # stood in for, so **nothing may be announced as stood in for** -- the
+    # line that keeps the ledger admission honest, as `c.substitute_check`.
+    world_s, me_s, _ = audit.board("p11538", 1)
+    said_s: list[object] = []
+    world_s.bus.on(Rerolled, said_s.append)
+    world_s.bus.on(CheckSubstituted, said_s.append)
+
+    def same(ev: SkillCheck) -> None:
+        if getattr(ev, "_done", False):
+            return
+        ev._done = True
+        c = Cast(world=world_s, me=me_s, ref="samer")
+        c.trigger = ev
+        c.reroll_check(keep="best", skill="bluff", ev=ev)
+
+    world_s.bus.on(SkillCheck, same)
+    same_res = roll(world_s, me_s, "bluff", 15)
+    mine_s = [e for e in said_s if getattr(e, "by", "") == "samer"]
+    out.that(any(isinstance(e, Rerolled) for e in mine_s),
+             "`skill=` naming the check's own skill still rerolls it")
+    out.that(not any(isinstance(e, CheckSubstituted) for e in mine_s),
+             "and announces no substitution, because none happened --"
+             " crediting one would let the ledger count a reroll twice")
+    out.that(same_res.skill == "bluff",
+             "and the skill is unchanged, which is the whole of that case")
+
+    # -- the `ev=` path re-derives the outcome, which it did not ----------
+    #
+    # **This arm is here because a plant refused to go red.** The explicit
+    # `total`/`success` assignment inside the skill branch could be deleted
+    # with every assertion still holding, because `boost_check` recomputes
+    # both afterwards -- and that led to reading `boost_check`, which took
+    # no `ev=` and so read `self.trigger`. For the eight rows that bank a
+    # reroll as a `c.watch`, that is not the check, so it returned False
+    # and **nothing re-derived the outcome**: the natural moved and the
+    # total did not. #1214.
+    world_b, me_b, _ = audit.board("p11552", 1)
+    moved: dict[str, object] = {}
+
+    def banked(ev: SkillCheck) -> None:
+        if getattr(ev, "_done", False):
+            return
+        ev._done = True
+        c = Cast(world=world_b, me=me_b, ref="banked")
+        # **Not the check**, which is every watch handler's situation and
+        # the whole point of this arm.
+        c.trigger = None
+        moved["before"] = ev.total
+        moved["fresh"] = c.reroll_check(keep="new", ev=ev)
+
+    world_b.bus.on(SkillCheck, banked)
+    banked_res = roll(world_b, me_b, "acrobatics", 15)
+    out.that(banked_res.total == banked_res.natural + banked_res.bonus,
+             f"a banked reroll leaves a consistent result:"
+             f" natural {banked_res.natural} + bonus {banked_res.bonus}"
+             f" == total {banked_res.total}. It did not -- the natural"
+             f" moved and the total kept the first roll's, so the returned"
+             f" CheckResult did not add up")
+    out.that(banked_res.natural == moved["fresh"],
+             "and the second face is the one that stands, so the arm above"
+             " is about a reroll that actually happened")
+    out.that(banked_res.total != moved["before"],
+             f"and the outcome moved with it ({moved['before']} ->"
+             f" {banked_res.total}) -- a reroll that cannot change the"
+             f" total is cosmetic, which is what eight rows had")
+
+    # -- a misspelled skill raises -----------------------------------------
+    raised = False
+    try:
+        play("knitting", "new")
+    except ValueError:
+        raised = True
+    out.that(raised, "an unknown skill raises rather than rerolling the same"
+                     " one, which would read as correct")
+
+    # -- no skill= is the old behaviour, untouched --------------------------
+    world, me, _ = audit.board("p11538", 1)
+    seen: list[object] = []
+    world.bus.on(Rerolled, seen.append)
+    world.bus.on(CheckSubstituted, seen.append)
+
+    def plain(ev: SkillCheck) -> None:
+        if getattr(ev, "_done", False):
+            return
+        ev._done = True
+        c = Cast(world=world, me=me, ref="driver")
+        c.trigger = ev
+        c.reroll_check(keep="new", ev=ev)
+
+    world.bus.on(SkillCheck, plain)
+    plainres = roll(world, me, "bluff", 0)
+    out.that(plainres.skill == "bluff"
+             and plainres.bonus == modifier(world, me, "bluff"),
+             "without `skill=` the reroll is the same skill as before, so"
+             " the six rows already calling this verb are untouched")
+    ours = [e for e in seen if getattr(e, "by", "") == "driver"]
+    out.that(any(isinstance(e, Rerolled) for e in ours)
+             and not any(isinstance(e, CheckSubstituted) for e in ours),
+             "and it announces a reroll and NOT a substitution -- nothing"
+             " was stood in for, so crediting one would be a loosening")
+
+
 def rerolled(out: Result) -> None:
     """Nothing announced that a roll was a reroll, and 18 rows ride on one.
 
@@ -71684,6 +71939,9 @@ DRIVERS = {
     "substitute_check": (substitute_check,
                          "one skill rolled in place of another, before the"
                          " die, with the modifier following it"),
+    "reroll_as_another_skill": (reroll_as_another_skill,
+                                "a second check rolled as a different skill,"
+                                " chosen on totals and not on faces"),
     "rerolled": (rerolled,
                  "a roll announced as a second one, and gateable as one"),
     "boost_roll": (boost_roll,
