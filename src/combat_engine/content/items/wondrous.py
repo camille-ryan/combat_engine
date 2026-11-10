@@ -3166,7 +3166,7 @@ def i3441p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Defences.immune_keywords", "c.instinctive(fn=)"),
+    dropped=("durations.Effects.apply(keyword=)", "c.instinctive(fn=)"),
     requires_text="you must have used a summoning power near the tapestry",
 )
 def i3538p1(c: Cast) -> None:
@@ -3176,11 +3176,29 @@ def i3538p1(c: Cast) -> None:
     one. Resist with no type is resist all damage, which is the printed
     line. Paragon numbers are out of scope.
 
-    Re-aimed off `c.immune_keyword()`: `c.immune` takes a `Condition` and
-    charm and fear are `Keyword`s with no condition standing for either, so
-    the missing thing is immunity to a keyword recorded on `Defences` --
-    which is the gap `f2884` and `f3736` already wait on from the asking
-    side, under `Defences.immune_keywords`. One gap, one symbol.
+    **Re-pointed again, and the last aim was at a field that exists.** This
+    said the gap was "immunity to a keyword recorded on `Defences`", under
+    `Defences.immune_keywords`, and that field has been there since #560 --
+    `loader` fills it off the stat block's own column, and `query.immune_to`
+    answers a `Keyword` beside a `Condition`, so both the recording and the
+    asking halves are built. `c.immune` can even lay one: its mod reads
+    `f"immune to {cond.value}"` and `Keyword` is a `StrEnum`, which that
+    reader's own docstring says is deliberate.
+
+    What is missing is the **enforcement**, one layer down.
+    `durations.Effects.apply` refuses an arriving effect by `Condition`
+    only -- it is the one door every condition comes through, and it is
+    already handed `label`, the laying row's ref, from which the power's
+    keywords read. Nothing asks it whether the owner is immune to the
+    *keyword*, so an enemy charm power lands on this summon whatever is
+    recorded. Laying the mod here anyway would refuse nothing and report
+    the row finished, which is worse than the marker. `relations.set` is
+    the same shape for a mark.
+
+    Not shared with `f2884`, which wanted the asking side and is written
+    now, nor with `p11549`, whose printed word is a `DamageType` as well as
+    a `Keyword` and which wants a door onto `Defences.immune`. One symbol
+    was serving three different gaps. #1224.
 
     The self-command half was `c.instinctive(made)` and that is the wrong
     verb twice over. It **fires the block's own** Instinctive Effect, found

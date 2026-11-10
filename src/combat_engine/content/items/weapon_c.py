@@ -2353,7 +2353,7 @@ def i1184x1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, _by_class("sorcerer")), "you hit with a sorcerer power"
     ),
-    dropped=("Defences.immune",),
+    dropped=("c.resist(immunity=)",),
 )
 def i1184p1(c: Cast) -> None:
     """`c.resist` does remove: a **negative** amount is arithmetic rather
@@ -2364,7 +2364,27 @@ def i1184p1(c: Cast) -> None:
 
     Immunity is the dropped half. `Defences.immune` is a separate set and
     nothing takes anything out of it -- `c.ignore_resistance(immunity=)`
-    is the attacker's side of that sentence, not the target's."""
+    is the attacker's side of that sentence, not the target's.
+
+    **The premise above is right and the symbol's NAME is wrong**, which
+    `#1224` surfaced: `blocked.py` asked `hasattr` to decide whether a
+    dataclass field existed, and a field only becomes a class attribute if
+    it has a default -- so `Defences.immune` read as absent for the whole
+    life of this marker. It is not absent. What is absent is a **door onto
+    it**: no verb adds to or takes out of that set, where `c.resist` does
+    exactly that for the dict beside it, writing it and registering an
+    `undo` in `on_end`. So the accurate symbol is `c.resist(immunity=)` --
+    the mirror of `c.ignore_resistance(immunity=)` on the target's side,
+    in the function that already owns the subtractive write.
+
+    **It was pinned by an instrument and is now re-pointed.**
+    `drivers.resistance_taken_off_the_target` asserted the literal string
+    `"Defences.immune"` in `p16259.unfinished`, and `p16259` prints this
+    same sentence -- so renaming the symbol redded a rule in `scripts/`,
+    and renaming it on this row alone would have minted a synonym for half
+    of a two-row group. Referred up with the plant that proved it, and the
+    main session moved both rows and the rule together; the rule reads the
+    symbol off one constant now, so the next rename is one edit."""
     foe = getattr(c.trigger, "target", None) or c.target
     if foe is None:
         return

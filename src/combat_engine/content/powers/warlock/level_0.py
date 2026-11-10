@@ -655,7 +655,7 @@ def p16258(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON],
     attack=Attack(CHA, vs=REF),
-    dropped=("chargen.pact_blade()", "Defences.immune"),
+    dropped=("chargen.pact_blade()", "c.resist(immunity=)"),
 )
 def p16259(c: Cast) -> None:
     """"The target loses any resistance or immunity to this power's damage
@@ -685,6 +685,33 @@ def p16259(c: Cast) -> None:
     is *immune* keeps its immunity, so the row never does more than print.
     `m5808a0`'s line is the rule -- a row stronger than its printed line
     is worse than an absent one.
+
+    **The symbol's name is wrong even though its premise is right**, and
+    `#1224` is why it was never visible: `blocked.py` asked `hasattr` to
+    decide whether a dataclass field existed, and a field without a
+    default is not a class attribute -- so `Defences.immune` read as
+    missing for this marker's whole life. The field is there. What is
+    missing is a **door onto it**: no verb adds to or takes out of that
+    set, where `c.resist` writes the dict beside it and registers an
+    `undo` in `on_end`. `c.resist(immunity=)` is the accurate symbol --
+    the mirror of `c.ignore_resistance(immunity=)` on the target's side.
+
+    **The marker was pinned by an instrument and has now been freed.**
+    `drivers.resistance_taken_off_the_target` asserted the literal string
+    `"Defences.immune"` in this row's `unfinished`, so the marker could not
+    move without redding a rule in `scripts/` -- which an authoring agent
+    may not touch. It found that, proved it by planting the re-point in the
+    registry (that one assertion failed, the other eight held), and
+    referred it up rather than leaving the row to report ARRIVED for ever.
+
+    The main session re-pointed both halves together: the rule now reads
+    the symbol off one `IMMUNITY_OWED` constant, so the next rename is one
+    edit there instead of a red run somebody has to trace back to a string.
+    Planted again afterwards from this end -- dropping the symbol from this
+    marker reds that rule, 8 hold and 1 does not -- so the assertion still
+    bites and is not merely satisfied by its own constant.
+
+    `i1184p1` prints the same sentence and moved with it.
     """
     dtype = c.choose(list(ELEMENTS), "what this one is made of")
     dice = 2 + (c.level >= 13) + (c.level >= 23)

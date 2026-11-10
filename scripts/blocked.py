@@ -32,6 +32,7 @@ into a brief:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 from collections import defaultdict
@@ -1063,6 +1064,33 @@ def _one(token: str, have: dict[str, object]) -> bool:
             # function and a new keyword -- which is most of them -- reported
             # arrived on the function alone.
             return _params_ok_on(getattr(thing, attr), rest)
+        # **A marker may name a DATACLASS FIELD, which `hasattr` can only
+        # sometimes see.** `#1224`. A field becomes a class attribute only
+        # if it has a default -- of either kind, not just a
+        # `default_factory` -- so a plain required field answers False and
+        # reads *identically* to a field that does not exist:
+        #
+        #     MoveStart.actor      exists, no default   -> False
+        #     CheckDeclared.skill  exists, no default   -> False
+        #     Hit.origin           does not exist       -> False
+        #     Dropped.source       exists, has default  -> True
+        #
+        # Silent in both directions, like the mapping case below and for
+        # the same reason: the answer is "still blocked", which is what a
+        # correctly-parked row looks like. Measured over every live marker
+        # shaped `Thing.field` -- 47 symbols, 69 row-pairs -- three are
+        # wrong today (`Defences.immune`, `Defences.immune_keywords`,
+        # `OpportunityWindow.why`) and the other 44 would each go silent on
+        # the day their field landed.
+        #
+        # The type's own metadata is the authority, so ask
+        # `dataclasses.fields` rather than the instance surface. A field
+        # carries no parameters, so a marker asking for one is refused
+        # rather than granted -- the mapping case's rule, for its reason.
+        if (thing is not None and dataclasses.is_dataclass(thing)
+                and not rest.strip(" )")
+                and any(f.name == attr for f in dataclasses.fields(thing))):
+            return True
         # **A marker may name a KEY INSIDE A MAPPING, which `hasattr`
         # cannot see.** `#1118`: three rows waited on
         # `chargen.CLASSES.vampire`, `#599` put that class in scope, and the

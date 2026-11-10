@@ -1,4 +1,4 @@
-"""Barbarian feats, the second batch. 19 rows, 4 of them still waiting.
+"""Barbarian feats, the second batch. 19 rows, 3 of them still waiting.
 
 **This docstring described a state the file left, and said so in its own
 first sentence.** It opened *"`Keyword.RAGE` does not exist, so 'while
@@ -18,9 +18,11 @@ What is actually left, by marker, one row each:
   the power**. The two notes further down say this per row.
 * `chargen.IMPROVISED` -- a chair leg swung as a weapon.
 * `c.choose(before_damage=)`
-* `Defences.immune_keywords`
 
-The other fifteen play.
+The other sixteen play. `Defences.immune_keywords` used to be a fourth
+marker, on `f2884`, and the field it named had existed since #560 -- the
+*asking* side was never the gap, `query.immune_to` answers a `Keyword`
+beside a `Condition`, and three feats elsewhere already call it. #1224.
 """
 
 from __future__ import annotations
@@ -56,7 +58,7 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Health
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import PowerResolved
-from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.query import distance_between, immune_to, team
 
 
 def _used_one_of(*refs: str):  # noqa: ANN202
@@ -513,25 +515,38 @@ def f2707(c: Cast) -> None:
 
 
 @power("f2884", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("Defences.immune_keywords",))
+       reach=PERSONAL, target=SELF)
 def f2884(c: Cast) -> None:
     """An attack penalty on whoever the class feature's free swing hits.
 
     Read off `PowerResolved` rather than the `Hit`: the use is what
     carries where the swing came from.
 
-    Dropped: "a creature immune to fear is not subject to this penalty".
-    `Defences` holds immunity per damage type and nothing records
-    immunity to a *keyword*, so the narrowing has nothing to ask. Gating
-    on it anyway would be silently false one way or the other.
+    **The narrowing is written now, and the old note here was wrong about
+    which half was missing.** It said "nothing records immunity to a
+    *keyword*", and `Defences.immune_keywords` has recorded exactly that
+    since #560 -- off the stat block's own column, which `loader` had been
+    filtering down to damage types and dropping on the floor for 61
+    monsters printing this one. `query.immune_to` answers a `Keyword`
+    beside a `Condition`, so the asking side this clause needs was never
+    the gap; `f2107b`, `f3402` and `f3736` already ask it the same
+    question. #1224.
+
+    Asked per hit rather than once: the free swing can land on more than
+    one creature, and only the immune ones are spared.
     """
     def punished(ev: Any) -> None:
         if ev.actor != c.me or ev.granted_via != RAMPAGE or ev.granted_by != c.me:
             return
         for roll in ev.rolls:
-            if roll.hit:
-                c.penalty("attack", 2, on=roll.target, until=When.EONT)
+            if not roll.hit:
+                continue
+            # "A creature that is immune to fear is not subject to this
+            # penalty." The penalty is the fear effect, so a creature that
+            # cannot be frightened takes none of it.
+            if immune_to(c.world, roll.target, Keyword.FEAR):
+                continue
+            c.penalty("attack", 2, on=roll.target, until=When.EONT)
 
     c.watch(PowerResolved, punished, until=When.ENCOUNTER, on=c.me,
             label=f"{c.ref} rampage rider")

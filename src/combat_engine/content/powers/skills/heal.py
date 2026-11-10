@@ -135,21 +135,32 @@ def p9318(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=ANY_CREATURE,
-    todo=("Defences.immune_keywords",),
+    todo=("c.immune(dtype=)",),
 )
 def p11549(c: Cast) -> None:
     """The whole printed Effect is an immunity nothing can be granted.
 
-    `c.immune` lays a refusal per `Condition` and the printed word here is
-    neither a condition nor one of the damage types `Defences.immune`
-    holds -- it is a whole class of effect, the keyword kind of immunity
-    `Defences.immune_keywords` records off a stat block's own column and
-    which no verb writes for a duration. `f2884` and `i3538p1` wait on the
-    same symbol from the asking and the granting side.
+    **Re-pointed off `Defences.immune_keywords`, which names the wrong one
+    of the two fields.** The printed word is *both* a `DamageType` and a
+    `Keyword` here, and only one of the two is enforced: `Defences.immune`
+    is read in `resolve.deal_damage`, twice, so damage of a type in that
+    set does not land at all -- which is the bulk of what the printed
+    sentence is for, the blow and the ongoing tick alike.
+    `Defences.immune_keywords` is read only by `query.immune_to`, and
+    nothing asks it when a keyword-tagged effect arrives, so a mod laid
+    that way would refuse nothing while reporting the row finished.
 
-    Laying the mod anyway would be worse than leaving it: nothing in the
-    engine asks `query.immune_to` with a keyword when an effect of that
-    keyword lands, so the row would look finished and refuse nothing.
+    So the gap is a **door onto `Defences.immune`**, which is a bare
+    `set[DamageType]` with no `Cast` verb either way: `c.immune` takes
+    `Condition`s and `c.resist` writes the resistance dict next to it,
+    undo and all, so the shape is already in the tree one field over.
+    `c.ignore_resistance(immunity=)` is the attacker's side and not this.
+
+    Still `todo=` rather than `dropped=`: the immunity *is* the whole
+    Effect, so with no door the body does nothing. When one lands this
+    becomes a `dropped=` row -- the non-damage half of "immune to poison",
+    the conditions a poison power imposes, is `i3538p1`'s gap and is a
+    second and smaller one. #1224.
     """
 
 

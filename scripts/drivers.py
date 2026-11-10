@@ -9370,16 +9370,32 @@ def resistance_taken_off_the_target(out: Result) -> None:
              " resistance into a vulnerability and beat the printed card",
              f"resist {PICK.value} = {held.resist.get(PICK, 0)}")
 
+    #: The symbol the two rows carry for the clause asserted just below.
+    #: **Named once, because this assertion pinned a marker in place.** It
+    #: was the literal `"Defences.immune"`, which is a *field that exists*
+    #: -- so `blocked._one` reported it ARRIVED the moment it stopped
+    #: asking `hasattr` (#1224), and the marker had to be re-pointed to say
+    #: what is really absent: no verb adds to or removes from
+    #: `Defences.immune`, where `c.resist` does exactly that for the dict
+    #: beside it, `undo` and all. `c.ignore_resistance(immunity=)` already
+    #: exists, so this is the missing half of a mirror.
+    #:
+    #: An authoring agent found all of that, could not act on it -- this is
+    #: `scripts/`, which is not an agent's to touch -- and referred it up
+    #: naming this line. A constant so the next rename is one edit here and
+    #: not a red run somebody has to trace back to a string.
+    IMMUNITY_OWED = "c.resist(immunity=)"
+
     # The dropped half, asserted so the marker can be trusted.
     held = run(0, immune=True)[2]
     out.that(PICK in held.immune,
-             "an IMMUNE target keeps its immunity -- the half `Defences."
-             "immune` is marked for, and the assertion that makes that"
-             " marker honest rather than merely old",
+             "an IMMUNE target keeps its immunity -- the half"
+             f" `{IMMUNITY_OWED}` is marked for, and the assertion that"
+             " makes that marker honest rather than merely old",
              f"immune={sorted(t.value for t in held.immune)}")
 
     row = REGISTRY["p16259"]
-    out.that("Defences.immune" in (row.unfinished or ()),
+    out.that(IMMUNITY_OWED in (row.unfinished or ()),
              "and the row says so, rather than reporting finished",
              f"{row.unfinished}")
 
