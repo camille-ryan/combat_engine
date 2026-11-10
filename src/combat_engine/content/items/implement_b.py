@@ -19,15 +19,31 @@ Three judgements run through the whole file.
 * **The riders that hang on a named power are writable now.** The specs
   used to print the compendium name and no ref, so nine blocks carried
   `by_ref()`; the ETL fixes put the refs back, and `_on_hit_with` is the
-  shape they all wanted -- watch `Hit`, compare `ev.power`. Only `i3525x1`
-  still names its power in prose. Where the whole block is "as the
-  <class>'s <power>", `c.use_power(ref, spend=False)` is it, and
-  `c.grant_attack(c.me, ref=...)` where the row is a swing.
+  shape they all wanted -- watch `Hit`, compare `ev.power`. Where the whole
+  block is "as the <class>'s <power>", `c.use_power(ref, spend=False)` is
+  it, and `c.grant_attack(c.me, ref=...)` where the row is a swing.
 
-Recurring gaps, each marked with the symbol it wants rather than
-approximated: `c.pact_boon()`, `c.regain_points()` and
-`c.store_points()`. "Ongoing 5 fire and radiant damage" is one number of
-two types and not two numbers, and `c.ongoing(dtypes=)` is it.
+  **`by_ref()` is retired and the last two claimants went opposite ways.**
+  `i3525x1`'s ref has arrived too, so the sentence that used to end this
+  paragraph -- "only `i3525x1` still names its power in prose" -- is no
+  longer true of any block here; what holds that row up is in another
+  file's body and its marker says which. `i2801p1` is the one still short
+  of a ref, and it carries `spec.ref`, which is the name nine rows
+  elsewhere already use for that one ETL gap rather than this file's own
+  synonym for it.
+
+The one gap still recurring here is `c.store_points()` -- an item that
+holds power points, which two blocks of one orb want. "Ongoing 5 fire and
+radiant damage" is one number of two types and not two numbers, and
+`c.ongoing(dtypes=)` is it.
+
+**This sentence used to name two more and both were stale**:
+`c.regain_points()`, which exists and which `i1987p1` calls, and
+`c.pact_boon()`, which no row in this file has carried for some time.
+Two thirds of a list of "recurring gaps" pointing at things that are not
+gaps is worse than no list, so read the markers rather than this
+paragraph -- `grep -n "todo=\|dropped=" ` on this file is the census, and
+`blocked.py --group` says who else is waiting on each.
 
 **Four of those markers were stale and are gone.** The monk's attack
 flurry is `FLURRIES` -- five declared rows, one per tradition -- and
@@ -44,6 +60,30 @@ A row's **range** is reachable too, which three markers denied:
 `dsl.area_of` hands `dsl._stretched` a context naming the row, so a gated
 `c.bonus("range", ...)` lengthens exactly the rows a card names. An area
 burst's `within` is the one part of that still missing.
+
+**Three more went the same way, and all three were a `Mods` term nobody
+had looked for.** The pattern is worth stating once, because it caught
+every one of them: a printed sentence that *raises somebody else's
+number* -- "add 1 to the temporary hit points you gain", "a penalty to
+the saves that end the burn", "treat a 1 or a 2 as a 3" -- is almost
+never a watcher. It is a key read inside the function that pays, and the
+tree's habit is to add the key when the first card asks for it and leave
+the next card's marker standing:
+
+    i998x1    "nothing announces the payout"  -> resolve.temp_hp reads a
+              "temp_hp" term off the receiver, and its comment says it was
+              added for the feats printing this sentence
+    i2912x1   "EffectApplied does not say the burn was fire" -> true, and
+              Effects.save's context carries dtypes, keywords and the
+              effect, so the narrowing goes on the throw and not on the
+              announcement
+    i1076x1   "what is missing is a floor that replaces rather than
+              rerolls" -> c.floor_damage_dice, whose docstring now carries
+              the very measurement this row's note argued from
+
+So **read the function that pays before believing nothing announces the
+payment**, and prefer `c.bonus(<term>, ..., when=)` to a watch whenever
+the card's verb is "add" or "increase".
 """
 
 from __future__ import annotations
@@ -125,6 +165,7 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Powers
 from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.query import charging
+from combat_engine.engine.zones import Zone
 
 ITEM = "item"
 
@@ -813,12 +854,40 @@ def i3465p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.TELEPORTATION],
-    dropped=("c.teleport(adjacent_to=)",),
+    dropped=("terrain.dress(scenery=)",),
 )
 def i3504p1(c: Cast) -> None:
-    """The destination restriction -- next to a plant or a fey creature --
-    is dropped: `to=` names one square outright and nothing narrows the
-    decider's choice to a set. Dropping it only makes the row freer."""
+    """The destination restriction is dropped, and **for a different reason
+    than the one this note used to give**.
+
+    It said "`to=` names one square outright and nothing narrows the
+    decider's choice to a set". That is false and was the whole of the old
+    marker, `c.teleport(adjacent_to=)`: `c.teleport(into=)` is exactly a
+    filter on what counts as a destination at all -- its docstring is
+    written about three rows that print "to any square containing dim light
+    or darkness" -- and an empty result returns False, which is the printed
+    "the teleport does not happen". Both halves of the predicate read as
+    well: `c.scenery("plant")` finds a thing standing on the map by its
+    printed word, `c.is_kind` answers the two creature types, and
+    `c.size_of` answers the size clause. So the old symbol asked for a
+    second spelling of `into=`, and building it would have been a synonym.
+
+    **What is missing is the board, not the verb.** `content.terrain.dress`
+    is what furnishes a floor and it lays blocking squares and rough ground
+    only -- it constructs no `Scenery` at all -- and no heroic encounter
+    fields a creature of either type. So the restriction as printed would
+    filter every destination away in every fight this engine builds, and
+    the row would stop teleporting: a daily refused in play, which is
+    `todo=` rather than a clause missing, on a row that works today.
+
+    Dropping it only makes the row freer, which is why it is dropped and
+    not narrowed. The marker names the dresser, because the day a board can
+    hold one of these the clause is four lines here and nothing else is
+    owed.
+
+    Not written as "land next to one if the board has one, anywhere
+    otherwise": the card prints no fallback, and inventing one is the thing
+    this tree refuses even when it is kinder than print."""
     c.teleport(5)
 
 
@@ -829,16 +898,48 @@ def i3504p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()",),
+    todo=("p13853.dice_for()",),
 )
 def i3525x1(c: Cast) -> None:
     """Rolls bigger dice for a named power's damage when it was triggered by an
     attack made with this implement.
 
-    **One gap now, not two.** `c.change_dice()` was the second marker and
-    exists; it is also the right verb, and it takes the ref of the row whose
-    dice change. The spec names that row in prose, so there is nothing to pass
-    it. The whole of what is missing is the ref."""
+    **`by_ref()` is retired: the ref arrived and the gap moved one file
+    over.** The spec now prints `p13853` where it used to print that row's
+    name, so there is nothing left for the ETL to fix here and the old
+    marker -- which meant "the spec owes a ref", and which `i2801p1` now
+    carries under the tree's own name for it, `spec.ref` -- would never go
+    green again by anything anybody did to a spec.
+
+    What is in the way is `p13853`'s **body**. `c.change_dice(ref, dice)`
+    is the right verb and is reachable today, but it is a modifier that
+    only a row *reading* it can obey: its own docstring says so, and names
+    a row that hard-codes its die as "this component's commonest bug".
+    `p13853` rolls `c.flat(c.roll("1d10"), ...)` -- a literal -- so
+    `c.change_dice("p13853", "1d12")` written here would lay a hold nobody
+    consults and this row would audit green while doing nothing for the
+    whole life of the item. That is the one outcome worse than leaving it
+    unwritten.
+
+    So the finished shape is two lines in two files: `p13853` rolls
+    `c.dice_for(c.ref, "1d10")` instead of the literal, and this row lays
+    the change against that ref. `p13853` lives in `feats/general_r.py`,
+    which this wave does not own.
+
+    **The symbol is spelled `p13853.dice_for()` deliberately**, and the two
+    obvious alternatives are both worse. A bare `p13853` is a ref, and
+    `blocked._one` resolves a ref against the registry -- that row is
+    declared and finished, so the marker would report **arrived** and red
+    `todo.py` on a gap nobody had touched. `c.dice_for(p13853)` resolves to
+    the verb, which exists and wants no argument added, so it would land in
+    the "one parameter of work" bucket and send somebody to the engine
+    rather than to the row. This spelling resolves to nothing and says
+    which row owes which read, which is the whole of it.
+
+    The trigger half is not part of the gap. "When you trigger it with an
+    attack made with this implement" is the item-wide judgement in the
+    module docstring: the damage context carries no weapon, so the hold is
+    laid standing on the carrier."""
 
 
 @power(
@@ -1037,11 +1138,53 @@ def i847p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.guild_training()",),
 )
 def i998x1(c: Cast) -> None:
-    """Adds to the temporary hit points one named class feature hands out,
-    and nothing models that feature or announces its payout."""
+    """Adds one to the temporary hit points a named class feature hands out.
+
+    **The marker was wrong on both halves and is gone.** It said "nothing
+    models that feature or announces its payout", and `c.guild_training()`
+    was a facility nobody needed to build:
+
+    * The feature **is** modelled. `cf:assassin-f1` lays the pool off a
+      `Hit` on an unbloodied creature, gated on `c.build("f1s0")` -- which
+      is the very leg this card names, so the two cannot come apart. The
+      card's ref is that leg; the row that pays is the feature printed
+      under it.
+    * The payout **is** reachable, and not through an event.
+      `resolve.temp_hp` reads a `"temp_hp"` modifier off the **receiver**
+      before applying the non-stacking rule, and its own comment says it
+      was added for the feats printing this exact sentence. So "add 1 to
+      the number you gain" is an ordinary `c.bonus` on that key and not a
+      watcher at all.
+
+    Gated on the paying row, because another source handing this character
+    temporary hit points is not this item's business -- the same narrowing
+    `f755`, `f774` and `f792` lay on their own term. The context
+    `resolve.temp_hp` builds carries `power`, which is the ref of the row
+    that called `c.temp_hp`.
+
+    **Both the feature and the leg are named in the gate.** The leg is a
+    `c.build` word today and pays nothing itself, so only the first half
+    can fire; it is listed so that a leg declared later as the payer does
+    not silently take this item's bonus away with it.
+
+    Untyped, because the card prints no bonus word in front of the number
+    -- `bonuses.py`'s rule, and the reason `f755` is untyped where `f774`
+    is a feat bonus.
+
+    Rejected: watching `TempHP` and re-paying a larger pool, which is what
+    `f2936` has to do because it *doubles* its own raise against two
+    creature types and so needs the creature that was hit. This card asks
+    for a flat number, and the term is one call.
+
+    The paragon ladder is out of scope, as every `Level 13 or 18:` line in
+    this file is.
+    """
+    c.bonus(
+        "temp_hp", 1, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") in ("cf:assassin-f1", "cf:assassin-f1s0"),
+    )
 
 
 @power(
@@ -1683,14 +1826,57 @@ def i1833p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_damage_reduced()",),
 )
 def i1834x1(c: Cast) -> None:
-    """Re-aimed. `p7636` is printed and declared, so the ref is no longer
-    the hold. The trigger is that row's own clause about reducing the
-    damage its target would deal, and nothing announces a reduction --
-    `c.reduce` takes the number off and emits no event of its own, so
-    there is no moment to hang this on."""
+    """A lightning rider for the allies standing over a creature `p7636`
+    has just made weaker.
+
+    **The marker named the wrong verb, and that is why it read as
+    hopeless.** It said "nothing announces a reduction -- `c.reduce` takes
+    the number off and emits no event of its own". Both sentences are true
+    of `c.reduce` and neither is about this card: `p7636` does not reduce
+    anything with `c.reduce`. Its printed clause is a **standing damage
+    penalty** on the creature it hit, and its body lays it with
+    `c.penalty("damage", c.con_mod, until=When.EONT, once=True)`.
+
+    A penalty is an `Effect`, and `Effects.apply` announces one. So the
+    moment exists and is ordinary. `c.bonus` -- which `c.penalty` is -- lays
+    its effect under `f"{ref} {key}{shown}"`, so `"p7636 damage"` is the
+    prefix that identifies it, and `EffectApplied.source` says it was this
+    character's doing. The same reading `i2912x1` below makes of a burn.
+
+    Reading the label rather than a `by` field because `EffectApplied`
+    carries no `by`; the label begins with the laying ref, which is the
+    contract `c.dispel` also relies on.
+
+    **The allies are gated, not snapshotted.** The printed sentence holds
+    for the whole window -- "until the end of your next turn all attacks
+    made by your allies adjacent to the target" -- so an ally who steps up
+    later is one the card covers and an ally who walks away is not. A set
+    taken once, at the moment of the hit, answers neither. So the rider
+    goes on every ally with its adjacency asked when the damage is rolled.
+
+    `c.allies()` already excludes the caster, which is what "your allies"
+    means and what this card's own wording distinguishes.
+
+    `dtype=` because the rider's type differs from the attack's: the allies
+    are swinging whatever they swing, and these points are lightning, which
+    is the one case `c.bonus`'s docstring says to reach for it.
+    """
+    me = c.me
+
+    def reduced(ev: EffectApplied) -> None:
+        if ev.source != me or not ev.label.startswith("p7636 damage"):
+            return
+        victim = ev.target
+        for ally in c.allies():
+            c.bonus(
+                "damage", c.con_mod, dtype=DamageType.LIGHTNING,
+                on=ally, until=When.EONT,
+                when=lambda _ctx, a=ally, v=victim: c.adjacent_to(v, a),
+            )
+
+    c.watch(EffectApplied, reduced, until=When.ENCOUNTER)
 
 
 @power(
@@ -2274,7 +2460,7 @@ def i2312p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("events.RowExpended",),
+    todo=("events.ChargeSpent",),
 )
 def i2324x1(c: Cast) -> None:
     """**Re-aimed: the feature is modelled, the moment is not announced.**
@@ -2282,11 +2468,29 @@ def i2324x1(c: Cast) -> None:
     `c.fell_might()` was the wrong symbol -- the boon's charge exists, as
     `c.spend_charge` on the key `features.warlock.FELL`, which is what
     `i2324p1` beside this now spends. What this row needs is the
-    *announcement*: spending a charge emits a bare `Note`, which carries
-    `text` and nothing else -- no actor, no ref -- so there is no event a
-    trigger can read to know a charge went. Watching `i2324p1` instead
-    would pay the temporary hit points on a use that found nothing to
-    spend, since the row still resolves when the Requirement refuses it."""
+    *announcement*, and there is none.
+
+    **`events.RowExpended` was the second wrong symbol, on a claim that
+    was off by one function.** The note said spending a charge "emits a
+    bare `Note`, which carries `text` and nothing else". It emits
+    **nothing at all**: `c.spend_charge` increments
+    `Powers.charges[key]` and returns a bool, and it is `c.restore_charge`
+    beside it that writes the `Note`. So the gap is not an event that is
+    too thin to read, it is a spend that goes by in silence -- and the
+    symbol said `Row`, where what is spent here is a charge and not a use
+    of a row. No other row in the tree waited on the old spelling.
+
+    Reading the counter instead is not a substitute: a property has no
+    moment to read it *before* the power that spends it, and polling it on
+    `PowerUsed` would compare against whatever this row last happened to
+    see.
+
+    Watching `i2324p1` is the other wrong answer, and it stays rejected:
+    that row still resolves when `c.spend_charge` refuses it, so the
+    temporary hit points would be paid for a spend that did not happen.
+    This card is also wider than that one -- any arcane attack power the
+    boon is spent on, which includes the warlock rows that spend it
+    through `powers/warlock/shared.py`."""
 
 
 @power(
@@ -3006,7 +3210,7 @@ def i2782p1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    todo=("by_ref()",),
+    todo=("spec.ref",),
 )
 def i2801p1(c: Cast) -> None:
     """Re-aimed. The class feature is not the hold: 115 rows carry
@@ -3015,7 +3219,20 @@ def i2801p1(c: Cast) -> None:
     already used it this encounter" is sayable. What is missing is
     *which* row -- the spec names the one power in prose and prints no
     ref, and picking any channel-divinity row the bearer happens to own
-    would be a different card."""
+    would be a different card.
+
+    **The symbol is `spec.ref` now and `by_ref()` is retired.** That is
+    the name nine other rows already carry for this one gap -- "the spec
+    prints the triggering row's name where every other block prints a
+    ref", which is `i1690x1`'s wording and `i694x1`'s. `by_ref()` was a
+    synonym for it, invented in this file, and it was holding two rows
+    apart from a group that is one ETL fix: a reader asking
+    `blocked.py --group` what the spec owes saw ten rows and not twelve.
+    Its other claimant, `i3525x1`, has since had its ref printed, so
+    nothing is left on the old spelling.
+
+    The four class features the card names are all reffed in the spec
+    already; it is the power under them that is prose."""
 
 
 @power(
@@ -3240,21 +3457,60 @@ def i2898p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.worsen_save()",),
 )
 def i2912x1(c: Cast) -> None:
-    """`EffectApplied` fires for a hold carrying nothing but a burn, which
-    is the only announcement an ongoing-damage effect makes. What is
-    dropped is the narrowing: the penalty cannot be hung on the one
-    effect, so it sits on the creature's saving throws generally, and
-    `EffectApplied` does not say the burn was fire."""
+    """A penalty to the saves that would end a burn this character lit.
+
+    **The marker was right that `EffectApplied` cannot say it, and wrong
+    that nothing can.** `c.worsen_save()` is gone: the narrowing does not
+    belong on the announcement at all, it belongs on the **throw**.
+    `Effects.save` builds the modifier context the `"save"` term is read
+    with, and that context carries `effect`, `ongoing`, `dtype`, `dtypes`
+    and `keywords` -- the last being the keywords of the row that laid the
+    hold, which is what "a primal attack power" is asking about. So all
+    three printed qualifications are gates:
+
+        dtypes      every type the burn is, which is the field to ask
+                    rather than `dtype`: a fire-and-radiant burn answers
+                    False to `ctx["dtype"] is FIRE` and True here
+        keywords    read off the laying row by `durations.keywords_of`
+        effect      carries `source`, so somebody else's burn on the same
+                    creature is not this totem's doing
+
+    The watch stays, and it is not redundant with the gate: the penalty has
+    to be **laid on the creature that got the burn**, and a trait has no
+    target to lay it on at arming time. So the watch picks the creature and
+    the gate picks the throw.
+
+    Two things the gate quietly fixes rather than adds. The penalty no
+    longer applies to the creature's *other* save-ends effects -- it did,
+    which is the widening the old note admitted to -- and it no longer
+    applies to **its own** saving throw: this effect carries no burn, so
+    `dtypes` is empty for it and the gate is False. That is why
+    `until=When.SAVE_ENDS` is left as it was.
+
+    "Through this totem" is the half this file cannot gate, by the module
+    docstring's first judgement.
+    """
+    me = c.me
+
+    def ends_my_primal_burn(ctx: dict[str, Any]) -> bool:
+        eff = ctx.get("effect")
+        if eff is None or getattr(eff, "source", None) != me:
+            return False
+        if DamageType.FIRE not in (ctx.get("dtypes") or ()):
+            return False
+        return Keyword.PRIMAL in (ctx.get("keywords") or frozenset())
 
     def burning(ev: EffectApplied) -> None:
-        if ev.source != c.me or not ev.save_ends:
+        if ev.source != me or not ev.save_ends:
             return
         if not ev.label.startswith("ongoing"):
             return
-        c.penalty("save", c.enhancement, on=ev.target, until=When.SAVE_ENDS)
+        c.penalty(
+            "save", c.enhancement, on=ev.target, until=When.SAVE_ENDS,
+            when=ends_my_primal_burn,
+        )
 
     c.watch(EffectApplied, burning, until=When.ENCOUNTER)
 
@@ -3534,18 +3790,50 @@ def i3175p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit a creature with an active aura using this rod",
     on=Trigger(Hit, by_me, "you hit with this rod"),
-    dropped=("c.suppress_aura()",),
 )
 def i3178p1(c: Cast) -> None:
-    """`c.dispel` takes the aura off the board and `c.made_by` says whose
-    it was. Stopping it coming back is the dropped clause -- nothing bars
-    a creature from re-arming what it owns."""
+    """Both printed clauses now: the aura goes, and it cannot come back.
+
+    **The marker was wrong, and `c.dispel` was already reading the thing it
+    said was missing.** It claimed "nothing bars a creature from re-arming
+    what it owns", and `c.suppress_aura()` was a facility nobody needed:
+    `c.forbid(ref)` takes a row away from a creature without spending it,
+    with `until=When.SAVE_ENDS` as its own default, which is this card's
+    duration exactly.
+
+    What was really missing was the **ref**, and it is on the zone.
+    `Zone.label` is the ref of the row that made it -- `c.dispel`'s own
+    docstring says so, and finds a zone's leftover holds by that very
+    string -- so the row that would re-make the aura is nameable before it
+    is taken off the board. Read first, dispel second: the label is gone
+    with the zone.
+
+    It bites on the rows that can actually re-make one. 113 declared rows
+    create an aura as a real action rather than as a trait armed at the
+    start of a fight, and for those `dsl.usable` refuses the row for as
+    long as the hold stands. A trait-armed aura has no re-arming moment to
+    refuse, which is why the clause is a hold on the row and not a watch.
+
+    **One looseness is deliberate and is not what the marker named.** The
+    printed trigger is "the creature has an active aura", and `Zone.aura`
+    is exactly that -- the radius for an aura, `None` for an ordinary zone
+    -- so narrowing this loop to auras is one condition. It is left wide,
+    taking any zone the creature owns, because `audit.board` poses two
+    zones and neither is an aura (`aura=None` on both), so the narrowing
+    would leave the row correct and unexercisable by anything in this tree.
+    That is a call about the board rather than about the row, so it is
+    written down here rather than decided here.
+    """
     foe = _struck(c)
     if foe is None:
         return
     for thing in c.conjurations():
-        if c.made_by(thing) == foe:
-            c.dispel(thing)
+        if c.made_by(thing) != foe:
+            continue
+        zone = c.world.get(thing, Zone)
+        maker = zone.label if zone is not None else ""
+        if c.dispel(thing) and maker:
+            c.forbid(maker, on=foe, until=When.SAVE_ENDS)
 
 
 @power(
@@ -3999,23 +4287,35 @@ def i719x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.min_die()",),
 )
 def i1076x1(c: Cast) -> None:
-    """**The premise was wrong; the symbol is still right.**
+    """Every damage die under 3 is treated as showing 3.
 
-    The old note said the dice are gone by the time anything can look at
-    them. They are not: `Cast._roll_damage` has them in hand, which is
-    where `c.maximise` and `c.reroll_ones` are both read, and
-    `_rolled_above` already works per die rather than per expression.
+    **The symbol landed and the marker outlived it.** The note read "what
+    is missing is a floor that replaces rather than rerolls, which is what
+    `c.min_die()` names", and the argument it made for that -- that
+    `c.reroll_ones(below=3)` is a *different and stronger* card, 4.5
+    against 4.0 on a d6 -- is now written into `c.floor_damage_dice`'s own
+    docstring, with the same 400,000-roll measurement. That verb is the
+    floor: `_floor_face` reads the hold and `_rolled_floored` pins each low
+    face instead of rerolling it. Nothing is left to build.
 
-    But `c.reroll_ones(below=3)` is not this card. `_rolled_above`
-    **rerolls** each low die until it is not low -- its own docstring says
-    "until it shows a different number" -- where this card *sets* the die
-    to 3. On a d6 that is an average of 4.5 against a flat 3, so writing
-    the row with the existing verb would be a stronger item than the
-    printed one. What is missing is a floor that replaces rather than
-    rerolls, which is what `c.min_die()` names."""
+    `c.reroll_ones` was rejected for exactly the reason the old note gave,
+    and the two coexist deliberately -- the four holds are read with a
+    `max`, weakest last, so a character holding both gets the better card
+    rather than a blend of them.
+
+    No `keyword=` and no `ref=`. The card says "an implement attack or a
+    weapon attack", which between them is every attack that rolls damage,
+    so a narrowing here would be a narrowing the card does not print. "With
+    this ki focus" is the half this whole file cannot gate -- the damage
+    context carries no weapon -- and is armed always-on for the reason the
+    module docstring gives.
+
+    `stacks=False` is the verb's own doing and wanted here: a second
+    identical hold would change nothing a `max` reads.
+    """
+    c.floor_damage_dice(3, on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -4137,10 +4437,27 @@ def i1980p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.store_points()",),
+    todo=("c.store_points()", "c.augment_free()"),
 )
 def i1980p2(c: Cast) -> None:
-    """Spends out of the store the item cannot hold."""
+    """Spends out of the store the item cannot hold.
+
+    **Two symbols, because two separate things have to land.** The store is
+    `c.store_points()`, as on the block above. But having one would not let
+    this row be written: the printed Effect is "augment the triggering
+    power by spending 1 power point from the orb, *instead of* using your
+    own power points", and `c.spend_points` -- which takes from
+    `PowerPoints` on the creature and records the spend against the row --
+    is the only door an augment is paid through. Paying from somewhere else
+    is `i1966p1`'s gap exactly, where the somewhere else is a healing
+    surge, and it carries `c.augment_free()` for it.
+
+    Said with both rather than one because `blocked.py` counts a row in the
+    dearer of its buckets and reports READY only when **every** symbol has
+    arrived: on one symbol this row would have been called writable the day
+    a store landed, and whoever picked it up would have found the second
+    half missing. That is the `c.ability_for(ref)` failure
+    `content/CLAUDE.md` records, in miniature."""
 
 
 @power(
@@ -4409,12 +4726,40 @@ def i2649p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.shift_as_teleport()",),
+    todo=("MoveStart.squares",),
 )
 def i2654x1(c: Cast) -> None:
-    """"Instead" means the shift never happens, and only an interrupt can
-    stop a move -- a trait cannot, and a reaction on `MoveEnd` arrives
-    after the creature has already walked."""
+    """**Re-pointed: a trait can stop a shift, and the gap is one field.**
+
+    The note said "only an interrupt can stop a move -- a trait cannot".
+    That is false. `MoveStart` is a `Decision`, one of the five events that
+    carry `cancel`, and `movement.shift` reads the answer back --
+    `if world.bus.emit(MoveStart(actor=eid, kind_="shift")).cancelled:
+    return False` -- so an ordinary `c.watch(MoveStart, ...)` laid by a
+    trait refuses the shift before a square is crossed. `kind_` is already
+    the word that tells a shift from a walk, a teleport or a push, and its
+    own comment says it is there so a row stopping movement can decide for
+    itself what counts.
+
+    So `c.shift_as_teleport()` named a verb nobody needs to build: the
+    mechanism is cancel-then-teleport, and both halves exist.
+
+    **What the event does not carry is how far.** `MoveStart` holds `actor`
+    and `kind_` and nothing else, and this card pays "the number of squares
+    you would have shifted" -- so a row that cancels the shift has thrown
+    away the only number the printed sentence is about. The creature's
+    shift *allowance* is not that number either: the card means the
+    distance the shift was for, which `movement.shift` knows as its
+    destination at the moment it emits.
+
+    One field closes it, and either spelling would: the distance, or the
+    destination the move was announced for, since the distance follows from
+    that and the mover's square. `MoveStart.squares` names the first
+    because that is the quantity the card prints.
+
+    `c.teleport` is then the payout and needs nothing added -- it already
+    takes a count, and this card lets the carrier pick the arrival, which
+    is the decider's job and the default."""
 
 
 @power(
