@@ -143,7 +143,11 @@ def p11170(c: Cast) -> None:
 )
 def p11171(c: Cast) -> None:
     """Augment 1 is an Effect -- a step in after the attack, hit or miss.
-    Augment 2 buys a weapon die and drops Wisdom from the damage."""
+    Augment 2 buys a weapon die and drops Wisdom from the damage.
+
+    Both Hit lines stay `c.damage`, including the dice-free one: that is the
+    attack's own damage roll, so the weapon's enhancement applies to it just
+    as it does to the `1[W]` line beside it. #1225."""
     spent = augment(c)
     victim = c.target
     if c.strike():

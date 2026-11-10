@@ -116,7 +116,11 @@ def p13163(c: Cast) -> None:
 def p13165(c: Cast) -> None:
     """The secondary burst is wider than the header's, so the whole power
     is resolved in the first body call: the second ring is found by range
-    rather than by the declared target list."""
+    rather than by the declared target list.
+
+    The secondary Hit line is dice-free and stays `c.damage`: it is rolled
+    against its own target, so it is that attack's damage roll and the
+    implement's enhancement applies, exactly as on the primary. #1225."""
     if not c.first:
         return
     inner = [f for f in c.targets if c.can_see(f)]

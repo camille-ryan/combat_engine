@@ -172,7 +172,15 @@ def p5388(c: Cast) -> None:
 def p5389(c: Cast) -> None:
     """The heal is an Effect line, so it happens whether or not the swing
     lands. `friends` leaves the spirit out of the ally list -- an ally
-    within 5 squares of the spirit never meant the spirit."""
+    within 5 squares of the spirit never meant the spirit.
+
+    The dice-less Hit line stays on `c.damage` and not `c.flat`: it is this
+    attack's own damage roll, so the implement's enhancement belongs in it.
+    `from_=` moves only the origin square, so the attack and its enhancement
+    are the caster's implement rather than the spirit's -- which is the
+    right reading, the spirit has no gear of its own. The heal beside it is
+    a quantity the card states outright and already pays nothing extra.
+    Measured at enhancement 1: 5 dealt against 4 through `c.flat`. #1225."""
     if c.strike(from_=c.companion()):
         c.damage(0, c.wis_mod)
     mates = [a for a in friends(c) if near_spirit(c, a, 5)]

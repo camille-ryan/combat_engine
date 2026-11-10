@@ -292,7 +292,15 @@ def p10772(c: Cast) -> None:
 def p10773(c: Cast) -> None:
     """Reliable is judged on `c.result` once the body is done, so the
     primary's outcome is put back afterwards: two secondary swings going
-    wide is not the printed reason to hand the daily back."""
+    wide is not the printed reason to hand the daily back.
+
+    **Each secondary's zero-dice damage stays `c.damage`, not `c.flat`.**
+    The card gives the secondary a `Secondary Attack:` line of its own, so
+    the modifier is that attack's damage roll and the weapon's enhancement
+    belongs in it -- a magic weapon adds its plus to the damage roll of
+    every attack made with it, dice or no dice. `c.flat` is for a bare
+    quantity dealt outside a damage roll, which this is not. #1225.
+    """
     victim = c.target
     primary = c.strike()
     if primary:

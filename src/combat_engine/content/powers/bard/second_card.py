@@ -47,7 +47,11 @@ def _enemy_opens_within(squares_: int):  # noqa: ANN202
 )
 def p2977b(c: Cast) -> None:
     """The errata deletes the dice from the Hit line, so the modifier alone
-    is the damage."""
+    is the damage.
+
+    Still `c.damage` rather than `c.flat`: the errata took the dice out and
+    left the line as the attack's own damage roll, so the implement's
+    enhancement applies now as it did before. #1225."""
     if c.strike():
         c.damage(0, c.cha_mod)
         c.cannot_shift(until=When.EONT)

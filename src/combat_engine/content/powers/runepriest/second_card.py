@@ -67,7 +67,14 @@ def _the_primary_drops(ref: str):  # noqa: ANN202
 def p11394b(c: Cast) -> None:
     """The rune clause is read when the burst goes off, by which time using
     the parent has already switched the state -- which is the order the two
-    printed blocks are in."""
+    printed blocks are in.
+
+    The dice-less Hit line stays on `c.damage` and not `c.flat`: it is this
+    attack's own damage roll, so the weapon's enhancement belongs in it.
+    `from_=` moves only the origin square the card names, so the swing and
+    the enhancement are still the caster's, which is the right reading --
+    the burst is the caster's attack from somebody else's space. Measured at
+    enhancement 2: 5 as written against 3 through `c.flat`. #1225."""
     victim = _origin(c.world, c.me, "p11394")
     if victim is None:
         return

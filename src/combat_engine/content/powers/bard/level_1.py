@@ -39,7 +39,10 @@ def _my_basic_hit(world: World, me: int, ev: Event) -> bool:
 )
 def p11108(c: Cast) -> None:
     """The ally swings after the push rather than during it: the printed line
-    allows either and only one of them is a moment the engine has."""
+    allows either and only one of them is a moment the engine has.
+
+    The Hit line is dice-free and stays `c.damage`: it is the attack's own
+    damage roll, so the implement's enhancement applies to it. #1225."""
     if not c.strike():
         return
     victim = c.target

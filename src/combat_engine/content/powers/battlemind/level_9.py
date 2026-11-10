@@ -227,7 +227,11 @@ def p13057(c: Cast) -> None:
 def p13059(c: Cast) -> None:
     """The 2d6 rides on the weakness rather than on a duration of its own, so
     it goes when the target saves. It is rolled per hit, which a `c.bonus`
-    could not be."""
+    could not be.
+
+    The dice-free Hit line stays `c.damage` -- it is the attack's own damage
+    roll, so the weapon's enhancement belongs to it. The 2d6 below is a rider
+    on somebody else's attack and is `c.flat`, which is the distinction. #1225."""
     if c.strike():
         c.damage(0, c.con_mod)
         held = c.weakened(until=When.SAVE_ENDS)

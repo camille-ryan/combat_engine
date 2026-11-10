@@ -91,7 +91,14 @@ def p11289(c: Cast) -> None:
     creatures hit are collected on the cast and paid out on `c.last`. Only
     the two-target line of that table is printed in the spec, so only that
     one is written. "Fire and radiant" is one number of two types and
-    damage carries one, so it is dealt as radiant."""
+    damage carries one, so it is dealt as radiant.
+
+    The dice-less Miss line stays on `c.damage` and not `c.flat`: a Miss
+    line is still this attack's own damage, so the implement's enhancement
+    belongs in it the same way it belongs in the Hit line above -- a card
+    printing "half damage" there would halve a total carrying it. `c.flat`
+    is for a quantity the card states outright. Measured at enhancement 1:
+    4 dealt against 3 through `c.flat`. #1225."""
     struck: list[int] = getattr(c, "struck_here", [])
     c.struck_here = struck
     if c.strike():

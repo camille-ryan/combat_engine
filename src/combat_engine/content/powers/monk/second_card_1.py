@@ -228,7 +228,11 @@ def p13136b(c: Cast) -> None:
 )
 def p13141b(c: Cast) -> None:
     """The stance ending is an Effect, so it happens whether or not the blow
-    lands; it is the stance standing on the monk, whichever one that is."""
+    lands; it is the stance standing on the monk, whichever one that is.
+
+    The Hit line is dice-free and stays `c.damage`: it is the attack's own
+    damage roll and takes the implement's enhancement, as the Miss line's
+    2d8 does -- a hit must not pay less than a miss. #1225."""
     if c.strike():
         c.damage(0, c.dex_mod)
         c.stunned(until=When.SAVE_ENDS)

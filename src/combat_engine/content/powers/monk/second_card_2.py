@@ -465,6 +465,12 @@ def p11229b(c: Cast) -> None:
     requires_text="the p13173 power must be active",
 )
 def p13173b(c: Cast) -> None:
+    """The splash is `c.flat`, not `c.damage`: the card prints a bare 5 to
+    each adjacent enemy, and those enemies are never attacked -- no roll is
+    made against them -- so the implement's enhancement does not belong to
+    it. `c.damage` adds enhancement whether or not it is handed dice, which
+    paid 7 for the printed 5 at +2 and would reach 11 at epic. The two rolls
+    above it are the attack's own damage and keep it. #1225."""
     victim = c.target
     if c.strike():
         c.damage("1d8", c.dex_mod)
@@ -472,7 +478,7 @@ def p13173b(c: Cast) -> None:
         if victim is not None:
             for foe in c.within(1, of=victim, side="enemy"):
                 if foe != victim:
-                    c.damage(0, 5, dtype=DamageType.FIRE, on=foe)
+                    c.flat(5, dtype=DamageType.FIRE, on=foe)
     else:
         c.half_damage("1d8", c.dex_mod)
         c.half_damage("1d12", 0, dtype=DamageType.FIRE)

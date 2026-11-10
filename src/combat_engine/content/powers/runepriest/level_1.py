@@ -77,7 +77,13 @@ def _rune(c: Cast, which: str) -> bool:
 def p11354(c: Cast) -> None:
     """"Until you aren't adjacent to it" is dropped -- nothing ends an effect
     on a distance. The rune's "next attack" is one spend per ally rather than
-    one across all of them: a gate cannot see what another ally has spent."""
+    one across all of them: a gate cannot see what another ally has spent.
+
+    The dice-less Hit line stays on `c.damage` and not `c.flat`: it is this
+    attack's own damage roll, so the weapon's enhancement belongs in it.
+    `c.flat` is for a quantity the card states outright -- which is why the
+    rune's extra is laid as a damage bonus below rather than dealt. Measured
+    at enhancement 1: 6 as written against 5 through `c.flat`. #1225."""
     victim = c.target
     destruction = _rune(c, _DESTRUCTION)
     if c.strike():

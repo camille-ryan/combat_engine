@@ -40,7 +40,13 @@ def _finished(ref: str):  # noqa: ANN202
 def p14293b(c: Cast) -> None:
     """The primary target is read off the triggering event. Fired on its own
     there is none to leave out, which is the honest reading of a burst with
-    no primary attack in front of it."""
+    no primary attack in front of it.
+
+    The dice-less Hit line stays on `c.damage` and not `c.flat`: this is the
+    secondary attack's own damage roll on a weapon power, so the weapon's
+    enhancement belongs in it. `c.flat` is for a quantity the card states
+    outright, and the push beside it is that -- a number of squares, not
+    damage. Measured at enhancement 1. #1225."""
     foe = c.target
     if foe is None or not c.is_kind("undead", on=foe):
         return

@@ -528,7 +528,16 @@ def p15912(c: Cast) -> None:
 )
 def p15913(c: Cast) -> None:
     """The second end of the weapon is a secondary attack against the same
-    creature, rolled by hand because the header holds one attack line."""
+    creature, rolled by hand because the header holds one attack line.
+
+    **The primary's zero-dice damage stays `c.damage`, not `c.flat`.** The
+    modifier is printed on the `Hit:` line of a weapon attack, so it *is*
+    that attack's damage roll, and a magic weapon adds its plus to the
+    damage roll of every attack made with it whether or not the expression
+    carries weapon dice. `c.flat` is for a bare quantity dealt outside a
+    damage roll, as `f2478` deals on a *miss*. Both ends are swings of the
+    same weapon, so both pay it. #1225.
+    """
     if not c.strike():
         return
     c.damage(0, c.dex_mod)

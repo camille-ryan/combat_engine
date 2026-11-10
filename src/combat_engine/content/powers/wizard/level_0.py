@@ -300,7 +300,11 @@ def p14285(c: Cast) -> None:
     on=BLADESPELL,
 )
 def p14286(c: Cast) -> None:
-    c.damage(0, c.dex_mod, dtype=DamageType.FIRE)
+    """`c.flat`, not `c.damage`: the card prints a bare ability modifier as
+    an Effect, and this row carries neither the weapon nor the implement
+    keyword, so no enhancement bonus rides on it. `c.damage` would add one
+    — measured at +3 it paid 6 against the printed 3. #1225."""
+    c.flat(c.dex_mod, dtype=DamageType.FIRE)
     c.grants_advantage(until=When.EONT, to="team")
 
 
@@ -317,7 +321,9 @@ def p14286(c: Cast) -> None:
     on=BLADESPELL,
 )
 def p14287(c: Cast) -> None:
-    c.damage(0, c.dex_mod, dtype=DamageType.RADIANT)
+    """`c.flat` for the same reason as `p14286`: a bare printed modifier on
+    a row with no weapon or implement keyword takes no enhancement. #1225."""
+    c.flat(c.dex_mod, dtype=DamageType.RADIANT)
     c.penalty("attack", 2, until=When.EONT)
 
 
@@ -334,7 +340,9 @@ def p14287(c: Cast) -> None:
     on=BLADESPELL,
 )
 def p14288(c: Cast) -> None:
-    c.damage(0, c.dex_mod, dtype=DamageType.COLD)
+    """`c.flat` for the same reason as `p14286`: a bare printed modifier on
+    a row with no weapon or implement keyword takes no enhancement. #1225."""
+    c.flat(c.dex_mod, dtype=DamageType.COLD)
     c.slowed(until=When.EOTNT)
 
 
@@ -353,11 +361,14 @@ def p14288(c: Cast) -> None:
 def p14289(c: Cast) -> None:
     """The second jolt is the same number again, so it is the amount dealt
     that is remembered rather than the modifier. `MoveEnd` is the right end
-    here: the creature has to have moved for the sentence to be true."""
+    here: the creature has to have moved for the sentence to be true.
+
+    `c.flat` for the same reason as `p14286`: a bare printed modifier on a
+    row with no weapon or implement keyword takes no enhancement. #1225."""
     foe = c.target
     if foe is None:
         return
-    amount = c.damage(0, c.dex_mod, dtype=DamageType.LIGHTNING)
+    amount = c.flat(c.dex_mod, dtype=DamageType.LIGHTNING)
 
     def again(ev: MoveEnd) -> None:
         if ev.actor == foe:
@@ -379,7 +390,9 @@ def p14289(c: Cast) -> None:
     on=BLADESPELL,
 )
 def p14290(c: Cast) -> None:
-    c.damage(0, c.dex_mod, dtype=DamageType.NECROTIC)
+    """`c.flat` for the same reason as `p14286`: a bare printed modifier on
+    a row with no weapon or implement keyword takes no enhancement. #1225."""
+    c.flat(c.dex_mod, dtype=DamageType.NECROTIC)
     struck = getattr(c.trigger, "target", None)
     if struck is not None and c.size_of().squares <= c.size_of(on=struck).squares:
         c.prone()
@@ -398,5 +411,7 @@ def p14290(c: Cast) -> None:
     on=BLADESPELL,
 )
 def p14291(c: Cast) -> None:
-    c.damage(0, c.dex_mod, dtype=DamageType.FORCE)
+    """`c.flat` for the same reason as `p14286`: a bare printed modifier on
+    a row with no weapon or implement keyword takes no enhancement. #1225."""
+    c.flat(c.dex_mod, dtype=DamageType.FORCE)
     c.slide(3)

@@ -260,7 +260,16 @@ def _i_bloodied_it(world: World, me: int, ev: Event) -> bool:
     requires_text="needs a light blade",
 )
 def p10165(c: Cast) -> None:
-    """No weapon dice at all: the damage line is the modifier alone."""
+    """No weapon dice at all: the damage line is the modifier alone.
+
+    **Zero dice, and still `c.damage` rather than `c.flat`.** The modifier
+    *is* this attack's damage roll -- the card prints it on the `Hit:` line
+    of a weapon attack -- and a magic weapon adds its plus to the attack
+    roll and the damage roll of every attack made with it, so a damage
+    expression with no weapon dice is still that roll and still takes the
+    enhancement. `c.flat` is for the other shape: a bare quantity dealt
+    outside any damage roll, as `f2478` deals on a *miss*. #1225.
+    """
     if c.strike():
         c.damage(0, c.dex_mod)
         c.slide(1)
@@ -368,6 +377,13 @@ def p10733(c: Cast) -> None:
     requires_text="needs a crossbow, a light blade or a sling",
 )
 def p10734(c: Cast) -> None:
+    """Two modifiers and no weapon dice, summed into one damage roll.
+
+    **Zero dice, and still `c.damage` rather than `c.flat`**, for the reason
+    `p10165` gives at length: the sum *is* this weapon attack's own damage
+    roll, so the weapon's enhancement belongs in it. Paid once, because the
+    card prints one damage line and not two. #1225.
+    """
     if c.strike():
         c.damage(0, c.dex_mod + c.int_mod)
         c.grants_advantage()
@@ -479,6 +495,14 @@ def p10738(c: Cast) -> None:
     requires_text="needs a sling",
 )
 def p10739(c: Cast) -> None:
+    """The secondary is its own attack roll, so its damage is its own too.
+
+    **The secondary's zero-dice damage stays `c.damage`, not `c.flat`**: the
+    card gives it a `Secondary Attack:` line of its own, so the modifier is
+    that attack's damage roll and the weapon's enhancement belongs in it --
+    the same reasoning `p10165` sets out. The enhancement is paid on both
+    swings because both are attacks made with the weapon. #1225.
+    """
     victim = c.target
     if not c.strike() or victim is None:
         return
