@@ -454,7 +454,7 @@ def m4503a0(c: Cast) -> None:
     target=NO_TARGET,
     trigger="one of its own drops to 0 hit points",
     on=Trigger(Dropped, lambda world, me, ev: ev.actor != me, "one of its own falls"),
-    dropped=("spec.ref",),
+    dropped=("spec.power_ref()",),
 )
 def m4503a1(c: Cast) -> None:
     """The step toward the fallen is what plays. The other half of the printed

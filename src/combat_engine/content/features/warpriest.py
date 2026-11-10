@@ -126,7 +126,7 @@ def _on_word_target(c: Cast, fn: Callable[[Any], None]) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("spec.ref",),
+    dropped=("spec.granted_powers",),
 )
 def warpriest_domain_s0(c: Cast) -> None:
     """An extra throw against a charm, and rough ground ignored on a shift.
@@ -323,7 +323,7 @@ def warpriest_domain_s3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("spec.ref",),
+    dropped=("spec.granted_powers",),
 )
 def warpriest_domain_s4(c: Cast) -> None:
     """One ability rolled in place of another, and a save bonus for allies.
@@ -372,7 +372,7 @@ def warpriest_domain_s4(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("spec.ref",),
+    dropped=("spec.granted_powers",),
 )
 def warpriest_domain_s5(c: Cast) -> None:
     """Two resistances, and the creatures crowding whoever was healed.
@@ -503,7 +503,7 @@ def warpriest_domain_s7(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.DIVINE],
-    dropped=("c.refuses_forced_attack()", "spec.ref"),
+    dropped=("c.refuses_forced_attack()", "spec.granted_powers"),
 )
 def warpriest_domain_s8(c: Cast) -> None:
     """The refusal has no seam to sit in; the rider is `f1752`'s shape.

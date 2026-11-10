@@ -521,7 +521,7 @@ def m1402a5(c: Cast) -> None:
     keywords=[Keyword.COLD],
     attack=Attack(vs=AC, printed=6),
     damage=Damage("1d6", 4),
-    dropped=("spec.ref",),
+    dropped=("spec.power_ref()",),
 )
 def m1659a0(c: Cast) -> None:
     """The third damage die is conditional on a creature being "under the
@@ -1279,7 +1279,7 @@ def m4312a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("spec.ref",),
+    dropped=("spec.power_ref()",),
 )
 def m4312a3(c: Cast) -> None:
     """The bonus plays. The parenthetical half sets off another stat block's

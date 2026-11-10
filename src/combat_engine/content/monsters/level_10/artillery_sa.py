@@ -425,7 +425,7 @@ def m1587a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    todo=("spec.ref",),
+    todo=("spec.self_citation",),
 )
 def m1587a3(c: Cast) -> None:
     """The printed line names this row's own ref as what it conjures --

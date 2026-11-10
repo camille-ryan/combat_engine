@@ -3267,7 +3267,7 @@ def i2782p1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.ref",),
+    todo=("spec.power_ref()",),
 )
 def i2801p1(c: Cast) -> None:
     """Re-aimed. The class feature is not the hold: 115 rows carry
