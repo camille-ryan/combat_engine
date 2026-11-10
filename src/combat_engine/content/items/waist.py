@@ -405,10 +405,10 @@ def i654x1(c: Cast) -> None:
 
 @power("i3523x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.regeneration(adds_to=)",))
+       todo=("cf:vampire-f3",))
 def i3523x1(c: Cast) -> None:
-    """The regeneration this raises belongs to a class feature, and raising
-    an existing one is not sayable.
+    """The regeneration this raises belongs to a class feature, and that
+    feature is not declared.
 
     **Re-pointed twice, and the second obstacle is now the only one.** This
     waited on `c.class_feature()`, then on `chargen.CLASSES.vampire`
@@ -416,19 +416,50 @@ def i3523x1(c: Cast) -> None:
     Camille's ruling -- `chargen.CLASSES` holds 26 and `class_feature`
     carries 26 `cf:vampire-*` rows -- so that premise is gone.
 
-    What is left is the obstacle this docstring already named and kept
-    written down, which is why the re-point is one line rather than a
-    re-reading: **`c.regeneration` lays a second, separate heal rather than
-    adding to an existing feature's number.** Measured against the verb --
-    `amount`, `until`, `on`, `while_bloodied`, `unless`,
-    `unless_struck_by`, `unless_damaged_by` -- and none of them raises a
-    regeneration that is already standing. Two heals of 2 and 3 are not a
-    regeneration of 5: they tick separately and each reads its own
-    `unless`.
-    
-    No other row waits on this today (`blocked.py --group` lists none), so
-    the symbol is minted rather than reused -- which is the exception the
-    content file allows when there is nothing to join."""
+    **Re-pointed a third time, and the obstacle it had been kept on is not
+    one.** The symbol was `c.regeneration(adds_to=)`, on the ground that
+    *"`c.regeneration` lays a second, separate heal rather than adding to
+    an existing feature's number"*. That sentence is true about
+    `c.regeneration` -- its seven parameters are `amount`, `until`, `on`,
+    `while_bloodied`, `unless`, `unless_struck_by`, `unless_damaged_by`,
+    and none of them reaches a regeneration already standing -- and it is
+    **the wrong verb to be asking**. "The number another row hands out,
+    raised from outside" is `c.change_amount` with `c.amount_for` as its
+    read half, which is the tree's one answer to this whole shape: seven
+    rows raise `MANOEUVRE_AID` that way, and `f3788` in `feats/general_s.py`
+    records the same conclusion for an altitude ceiling -- *"this is the
+    `c.change_amount` / `c.amount_for` pair and not a facility gap"*.
+
+    The relative form is sayable too, which was the one thing left to
+    doubt: `c.change_amount` takes an `int`, so "increases by 1" needs the
+    printed default to add to -- and `feats/general_s.f3791` writes exactly
+    that, `EMPOWERMENTS + 1` off the constant the feature itself passes to
+    `c.per_day_left`. A feature publishing its printed number as a
+    constant is the arrangement, not a gap.
+
+    So **nothing in the engine is missing and the wait is the row**:
+    `cf:vampire-f3` is a ref in `game.db` and no content row declares it.
+    Grepped tree-wide -- the only mention of a `cf:vampire-*` ref anywhere
+    in `content/` is `feats/general_r.UNDECLARED_CLASS_FEATURE`, which is
+    that file's constant for this same absence and is the tree's own
+    convention for naming it.
+
+    **Named as this feature and not as the family.** `general_r.py` points
+    its two rows at `cf:vampire-f0` because all 26 are undeclared and "the
+    family is one gap" for them. It is not one gap for this row: there is
+    nothing here to raise until *this* feature's regeneration exists, and
+    pointing at a sibling would report the item ready the day an unrelated
+    one lands -- which is `_one`'s own doctrine ("a declared row is not a
+    written one... there is nothing to take a chunk out of until the
+    sibling is written"), read the other way round. It resolves in both
+    directions today: a `cf:`-prefixed token goes through `declared()` and
+    counts as arrived only when the row is declared **and** finished.
+
+    What the author who writes `cf:vampire-f3` owes this row is one line:
+    its regeneration amount read through `c.amount_for`, not written as a
+    literal. A `c.change_amount` against a body that hard-codes its number
+    is a modifier nothing consults, which the verb's own docstring calls
+    this component's commonest bug."""
 
 
 @power("i640x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -820,10 +851,44 @@ def i2067x1(c: Cast) -> None:
 
 
 @power("i2393x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.grab_reach()",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.grab_reach()", "c.grab_without_hand()"))
 def i2393x1(c: Cast) -> None:
-    """`c.grab` is applied, not rolled and not measured: there is no reach
-    on it to lengthen and no free hand to do without."""
+    """Reach 2 for a grab attempt, and no free hand needed to make one.
+
+    **The old note is stale and `cast.py` quotes it back.** It read
+    *"`c.grab` is applied, not rolled and not measured: there is no reach
+    on it to lengthen and no free hand to do without"*, and
+    `c.grab_attempt`'s docstring cites this row for the first clause of
+    that. It was true of `c.grab`, which is still only the applying half
+    -- "the target is grabbed" on a card. It is false of the **elective
+    manoeuvre**, which arrived with #501/#510 and is what this card is
+    about: a standard action, a Strength attack against Reflex, and a hit
+    grabs. So there is a roll, there is a measurement, and there is a free
+    hand -- all three of the things the note said were absent.
+
+    **It is measured in the offer walk, not in the verb**, which is where
+    the reach half has to be fixed. `actions._manoeuvres` offers a grab
+    only for a foe at `distance_between(world, actor, foe) > 1`, a literal
+    1 that consults nothing per-creature -- not `dsl._stretched("reach")`,
+    which is the modifier every other reach increase is read through.
+    `c._manoeuvrable` is **not** it and is the near miss worth naming: it
+    reads `_MANOEUVRE_REACH`, which despite the word is the printed *size*
+    ceiling and nothing to do with distance. `c.any_size_manoeuvre` is the
+    shape the fix wants -- a labelled hold that the one reader checks --
+    and `m5648a3` waits on the same symbol, so it is reused rather than
+    re-minted.
+
+    **The free hand is a second and different gap, so it is a second
+    symbol.** `c.grab_attempt` refuses outright on `len(gear.held) >= 2`,
+    read off `Gear` inline with no hold, no label and no waiver to lay --
+    so no row can say "you do not need a free hand". One symbol could not
+    go red or green correctly for both halves: the reach fix is in
+    `actions.py`'s walk and the hand fix is in `cast.py`'s verb, and this
+    card prints them as two sentences.
+
+    Still `todo=` and not `dropped=`: with neither half written the
+    property does nothing whatever in a fight."""
 
 
 @power("i2393p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
@@ -1123,21 +1188,106 @@ def i895x1(c: Cast) -> None:
                 when=_poison_save)
 
 
+#: The belt's pool, keyed on the **item** rather than on either block: the
+#: stones belong to the belt, `i1083x1` is the Property that declares them
+#: and `i1083p1` is the only thing that spends them. `items/armour.i2017x1`
+#: and `i2017p1` are the worked pair and the same key convention.
+_I1083_POOL = "i1083"
+#: Both printed, and the card ties them: one stone and a +1 item bonus at
+#: this tier, and the Power takes 1 off the bonus per stone expended to a
+#: minimum of 0. So at one stone the bonus is on or it is gone, and neither
+#: number is derived from the other. The `Level 20:`/`Level 30:` lines that
+#: move both are out of scope, as the module docstring says.
+_I1083_STONES = 1
+_I1083_BONUS = 1
+
+
 @power("i1083x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def i1083x1(c: Cast) -> None:
-    """The diamond is the power's fuel; the bonus is the whole property."""
-    c.bonus(FORT, 1, on=c.me, until=When.ENCOUNTER, kind="item")
+    """The stone is the power's fuel; the bonus is the whole property.
+
+    **The fuel is declared here now and the bonus is gated on it**, which
+    is the half of `i1083p1`'s printed Effect that belongs on this row:
+    "each time a stone is expended the belt's item bonus is reduced by 1
+    (to a minimum of 0)" is a standing fact about the property, not
+    something the Power does once.
+
+    A `when=` on the modifier rather than a number fixed at arming, and
+    that is load-bearing in both directions. A trait arms at the start of
+    every fight, so an amount read then would be right for the rest of
+    *this* fight and would not drop when the Power is used mid-fight; and
+    `Powers.per_day` is mirrored in from `story.Sheet.per_day` by
+    `story._wear`, so the gate is also what carries the spend into the
+    next fight and lets an extended rest give it back.
+
+    The gate reads **board state and not the context**, which is why an
+    empty `ctx` is safe here. `query.defence` passes `ctx or {}` into
+    `Mods.total` and ~60 of its callers ask about a creature rather than
+    about a swing -- so a gate wanting a *key* would be read as true by
+    all of them (`c.total`'s own note: an unasked gate widens). This one
+    asks the allowance, which every caller can answer.
+    """
+    c.bonus(FORT, _I1083_BONUS, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda _ctx: c.per_day_left(_I1083_POOL, _I1083_STONES) > 0)
 
 
 @power("i1083p1", level=10, cls=ITEM, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING],
-       dropped=("c.item_charges()", "c.decay_bonus()"))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING])
 def i1083p1(c: Cast) -> None:
-    """The surge is spent and the heal is paid. What is missing is the
-    fuel: nothing counts an item's charges, so the belt never runs out and
-    its Fortitude bonus never shrinks."""
+    """The surge, the fuel it costs, and the bonus that shrinks with it.
+
+    **Written, and both of the old markers were false.** The note read
+    *"nothing counts an item's charges, so the belt never runs out and its
+    Fortitude bonus never shrinks"*, and `c.item_charges()` /
+    `c.decay_bonus()` were minted off it. Neither gap exists:
+
+    * the pool is `Powers.per_day`, which `c.per_day_left` and
+      `c.spend_per_day` reach by **any key at all** -- so an item holds one
+      by naming itself. `items/armour.i2017p1` was re-pointed off this
+      identical premise (*"an item with a pool of its own was not a thing
+      `Magic` carries"*) and is the worked precedent;
+    * and the cadence is the printed one rather than a near miss.
+      `story._rest` clears `Sheet.per_day` **only** on the extended fork,
+      which is exactly "after an extended rest, each expended stone is
+      restored". The per-*encounter* store next door is the wrong clock:
+      `turns.short_rest` empties `Powers.charges` whole, so a short rest
+      would hand the stones back. That is the one thing worth checking
+      before reaching for `c.charge_left`, and it is why this does not;
+    * the bonus shrinking needs no verb either. It is a `when=` on
+      `i1083x1`'s own modifier reading this same allowance, so the decay is
+      the property's and the spend is the Power's -- one store, two rows,
+      nothing to keep in step by hand.
+
+    **The Requirement is asked before anything is paid.** "If there are no
+    unexpended stones on the belt, you can't use this power" is a refusal
+    and not a cost, so it is read first and the body returns.
+
+    **The stone is not cracked unless a surge was really there to spend,
+    and that is a reading rather than a printed line.** The card's only
+    Requirement is about stones; the surge half it states as Effect. But
+    the stone is the *price* of the heal and nothing upstream refuses this
+    -- `actions` gates only the second-wind action on `health.surges > 0`,
+    not a healing item Power -- so without the test a character out of
+    surges would burn the belt's whole daily fuel, and its Fortitude bonus
+    with it, for no hit points. Strictly worse than print in a corner that
+    is reachable late in any fight.
+
+    `c.surge`'s **return cannot be that test**, although it reads like it.
+    It hands back the hit points *gained*, and 0 means two opposite things
+    -- no surge to spend, and a surge spent by a creature already at its
+    maximum. Gating on it would let a healthy character pay nothing and
+    keep the bonus. So the count is read first, the way
+    `items/misc._surges` reads it, and the printed order is otherwise the
+    one written: the surge is spent, then the stone cracks.
+    """
+    if c.per_day_left(_I1083_POOL, _I1083_STONES) <= 0:
+        return
+    health = c.world.get(c.me, Health)
+    if health is None or health.surges <= 0:
+        return
     c.surge(on=c.me)
+    c.spend_per_day(_I1083_POOL, _I1083_STONES)
 
 
 @power("i1766p1", level=10, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,

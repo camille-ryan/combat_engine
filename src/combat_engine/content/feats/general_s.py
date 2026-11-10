@@ -2447,7 +2447,7 @@ def f3787(c: Cast) -> None:
 
 @power("f3788", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("content.rt_r68_t0",))
+       todo=("rt:r68-t0",))
 def f3788(c: Cast) -> None:
     """`engine/equipment.py` puts no speed penalty on heavy armour, so the
     first clause has nothing to cancel. What is left is an altitude limit
@@ -2467,7 +2467,34 @@ def f3788(c: Cast) -> None:
     needed for any of them either.
 
     One marker, one gap: the undeclared trait. #581 is the sibling where
-    the sub-option has no ref at all, which this is **not**."""
+    the sub-option has no ref at all, which this is **not**.
+
+    **Re-spelled, and the old spelling could never have gone green.** The
+    symbol was `content.rt_r68_t0`, which names the right gap in a form
+    nothing can resolve: `blocked._surface` indexes `engine/`, `chargen/`,
+    `etl/` and `spec`, there is no `content` key in it at all, and the
+    wrong-module fallback below that demands the owner be an engine module
+    -- so `_one("content.rt_r68_t0", _surface())` is a hard **False for
+    ever**, measured. That is the worse failure of the two this file warns
+    about: the marker is silent in both directions and reads exactly like a
+    row legitimately still waiting, so the day somebody writes the trait
+    nothing would say so. The same mistake `#1118` found on
+    `chargen.CLASSES.vampire`, one directory further out.
+
+    A **ref** is the form that resolves. `_one`'s first branch matches
+    `rt:`-prefixed tokens and looks them up in `declared()`, counting a
+    sibling as arrived only when it is declared *and not itself
+    unfinished* -- which is precisely this wait, because there is nothing
+    to raise a ceiling on until that row is written rather than merely
+    headed. Measured today: `rt:r68-t0` resolves False, and the already
+    declared `rt:r69-t1` resolves True through the same branch, so the
+    spelling is live in both directions.
+
+    `rt:r68-t0` and not `rt:r67-t1`: this card's printed line names one
+    trait and it is that one. `rt:r67-t1` is the other half of the data
+    finding above -- both refs are in `game.db` and neither is declared --
+    and **what wants it was not re-checked here**, so it is recorded as a
+    fact about the database rather than as a second wait on this row."""
 
 
 @power("f3789", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
