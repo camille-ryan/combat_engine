@@ -772,6 +772,11 @@ READERS: dict[str, list[str]] = {
         "living",
         "on_build",
         "printed_kinds",
+        # `is_summoned` is here with `race_of` and `feats_of` for the same
+        # reason the comment above gives: it answers *what this creature
+        # is* -- where it came from -- rather than where it stands or what
+        # it can do. #1218.
+        "is_summoned",
         "race_of", "race_sizes", "race_skills", "races_sized", "scenery",
         "stat_block", "targetable", "team",
         # Beside `combatants` and `creatures`, which are the other two cuts

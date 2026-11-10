@@ -24,9 +24,13 @@ Two traps this wave walked into, recorded so the next one does not:
 * **`by_me` reads `ev.attacker` or `ev.source` and nothing else.** On
   `PowerUsed`, `Moved`, `SurgeSpent` and `SavingThrow` -- which name their
   subject `actor` -- it is false forever. Those use `about_me`.
-* **`c.summon` sets no relation**, so "a creature you summoned" can only be
-  approximated by the servants and companions the board does record. Every
-  row that needs it carries `query.is_summoned()`.
+* **"A creature you summoned" is answerable now**, and this said it could
+  only be approximated by the servants and companions the board records.
+  `c.summon` still sets no *relation* -- what it records is a `Summon`
+  fact, on both summon paths, and `query.is_summoned(world, eid, by=)`
+  reads it. The old reading was wider than the print in a way `i3422p1`
+  names outright: it lists an allied beast and a summoned creature as two
+  different things. #1218.
 
 The recurring gaps, each named with the symbol it wants rather than
 approximated: `c.class_feature()`, `c.tome_powers()` and `c.item_set()`.
@@ -205,16 +209,21 @@ def _just_bloodied(c: Cast, ev: Any) -> bool:
     return ev.hp <= half < ev.hp + ev.amount
 
 
-def _mine(c: Cast) -> list[int]:
-    """The creatures on the board that answer to this one.
+def _my_summons(c: Cast) -> list[int]:
+    """The creatures this one summoned. *"A creature you summoned."*
 
-    `c.summon` records nothing, so this is servants and companions -- what
-    the relations actually hold. Every row using it says so with
-    `query.is_summoned()`.
+    This was `_mine` and read servants plus companions -- every relation
+    the board held -- on the stated ground that *"`c.summon` records
+    nothing"*. What it did not record was a **relation**; the fact is
+    recorded now and `query.is_summoned` reads it, on both summon paths.
+    #1218.
+
+    The old reading was wider than the print in a way `i3422p1` names
+    outright: it lists an allied beast and a summoned creature as two
+    different things, so counting a beast as a summon cannot be what any
+    of these cards means.
     """
-    pool = list(c.servants())
-    pool += [s for s in c.companions() if s not in pool]
-    return pool
+    return [e for e in query.creatures(c.world) if query.is_summoned(c.world, e, c.me)]
 
 
 def _my_side(world: World, me: int, who: int | None) -> bool:
@@ -251,10 +260,14 @@ def _ally_hit_within(n: int):  # noqa: ANN202
 
 
 def _hits_my_summon(world: World, me: int, ev: Any) -> bool:
+    """*"An enemy hits a creature you summoned."*
+
+    Was `Relation.MASTER_OF`, which is who commands whom and is a wider
+    and differently-shaped question: a beast companion answers to its
+    ranger without having been summoned. #1218.
+    """
     who = getattr(ev, "target", None)
-    if who is None:
-        return False
-    return who in world.relations.targets(Relation.MASTER_OF, me)
+    return who is not None and query.is_summoned(world, who, me)
 
 
 def _save_ends_near(world: World, me: int, ev: Any) -> bool:
@@ -1187,14 +1200,13 @@ def i2650p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.is_summoned()",),
 )
 def i2716x1(c: Cast) -> None:
     """`c.summon` sets no relation, so "a creature you summoned" is read as
     the servants and companions the board does record."""
 
     def spared(ev: Miss) -> None:
-        mine = _mine(c)
+        mine = _my_summons(c)
         if ev.target not in mine:
             return
         who = c.choose([c.me, *c.within(5, of=ev.target, side="ally")], "who is spared")
@@ -1213,7 +1225,6 @@ def i2716x1(c: Cast) -> None:
     target=NO_TARGET,
     trigger="an enemy hits a creature you summoned",
     on=Trigger(Hit, _hits_my_summon, "an enemy hits a creature you summoned"),
-    dropped=("query.is_summoned()",),
 )
 def i2716p1(c: Cast) -> None:
     """"Must use the second result" is `keep="new"`, not `"worst"`."""
@@ -2430,7 +2441,6 @@ def i2618p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an implement power using this staff",
     on=Trigger(Hit, by_me, "you hit with this staff"),
-    dropped=("query.is_summoned()",),
 )
 def i2640p1(c: Cast) -> None:
     """**The trigger is written, and `c.grant_action(trigger=)` was a false
@@ -2459,7 +2469,7 @@ def i2640p1(c: Cast) -> None:
     """
     def struck(ev: Any) -> None:
         who = getattr(ev, "target", None)
-        if who is None or who not in _mine(c):
+        if who is None or who not in _my_summons(c):
             return
         p = get(getattr(ev, "power", "") or "")
         if p is None or p.reach_of(0).kind not in ("melee", "ranged"):

@@ -9176,6 +9176,14 @@ class Cast:
         # inline paths emitted it, never this one, which is the path every
         # row naming a creature by id takes. So the commonest summon in the
         # game still announced nothing.
+        # **The fact, not only the moment.** `Summoned` is an event and a
+        # row asking "is this creature one you summoned" is asking later,
+        # when the event is gone. Both summon paths record it now;
+        # `Companion.kind == "summon"` answered only for the inline one and
+        # silently False for this one, which is the path every row uses.
+        # #1218.
+        from .components import Summon
+        self.world.add(made, Summon(by=self.me, ref=self.ref))
         self.world.bus.emit(Summoned(actor=self.me, summon=made, ref=self.ref))
         return made
 
@@ -9398,6 +9406,7 @@ class Cast:
             Position,
             Side,
             Stats,
+            Summon,
         )
         from .events import Summoned
         from .grid import Size
@@ -9433,6 +9442,11 @@ class Cast:
         self.world.add(
             made, Companion(owner=self.me, ref=spec.label or self.ref, kind="summon")
         )
+        # The same fact as the other path records, so one reader
+        # answers for both. `Companion.kind` stays what it was --
+        # it says this summon takes no turn, which is a different
+        # question from where it came from. #1218.
+        self.world.add(made, Summon(by=self.me, ref=self.ref))
         # Announced, because `World.spawn` says nothing and a row whose
         # whole Effect is "you summon X" left no trace at all -- four
         # correct rows reported SILENT for it.

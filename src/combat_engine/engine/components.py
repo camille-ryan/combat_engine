@@ -644,6 +644,39 @@ class Scenery:
 
 
 @dataclass
+class Summon:
+    """A creature a power put on the board, and whose power it was.
+
+    *"An enemy hits a creature you summoned"*, *"creatures summoned by your
+    artificer powers can shift 2 squares"* -- four item rows print this and
+    none could ask it, because **nothing recorded it**.
+
+    **Why `Companion.kind == "summon"` is not the answer.** It looks like
+    one: `Cast.summon_inline` spawns with exactly that. But the *other*
+    summon path -- `Cast.summon`, whose own comment calls it "the path every
+    row uses" -- goes through `loader.spawn` and builds no `Companion` at
+    all, deliberately: a `Companion` takes no turn, and a summoned creature
+    on that path is given one. So reading `kind` answers correctly for the
+    rarer path and silently False for the common one.
+
+    **And not a relation either.** `Relation.MASTER_OF` is what
+    `i2716p1`'s predicate reached for, and the rows' own notes say
+    *"`c.summon` records nothing"* -- what it does not record is a
+    relation, which is a narrower claim than it reads as. A relation also
+    says something else: who commands whom. Being summoned is a fact about
+    where the creature came from.
+
+    So this is the fact, on both paths, and `query.is_summoned` is the
+    reader. `by` is the summoner; `ref` is the power that did it, which
+    `i2640p1` needs -- *"summoned by your artificer powers"* is a question
+    about which row, not which creature.
+    """
+
+    by: int = 0
+    ref: str = ""
+
+
+@dataclass
 class Conjuration:
     """A thing a power put on the board that is not a creature.
 

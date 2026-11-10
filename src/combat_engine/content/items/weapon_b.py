@@ -65,6 +65,7 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     CloseBurst,
+    Companion,
     Condition,
     ConditionApplied,
     Cover,
@@ -356,12 +357,30 @@ def _ally_swings(world: World, me: int, ev: Any) -> bool:
 
 
 def _ally_flank_hit(world: World, me: int, ev: Any) -> bool:
-    """An ally I am flanking with just landed a blow."""
+    """*"You and an allied beast or summoned creature flank an enemy, and
+    the enemy is hit by the ally."*
+
+    **The ally has to be one of those two kinds**, which the board can
+    answer now. It used to arm on *any* flanking ally, with the note that
+    "which sort of ally it is -- a beast or a summoned creature -- is not a
+    question the board answers". A summon is `query.is_summoned` (#1218)
+    and a beast is `Companion.kind`, which `c.call_companion` has always
+    set.
+
+    A familiar and a spirit are deliberately **not** included: the card
+    names two kinds and those are two others. This is the card listing
+    alternatives, so the two are OR-ed -- unlike every other clause on a
+    target line, which compounds.
+    """
     who = getattr(ev, "attacker", None)
     foe = getattr(ev, "target", None)
     if who is None or foe is None or who == me or who not in query.allies(world, me):
         return False
-    return query.flanked_by(world, foe, me)
+    if not query.flanked_by(world, foe, me):
+        return False
+    beast = world.get(who, Companion)
+    return query.is_summoned(world, who, me) or (
+        beast is not None and beast.kind == "beast")
 
 
 def _hurt_bloodied_ally(world: World, me: int, ev: Any) -> bool:
@@ -1735,7 +1754,6 @@ def i3155p1(c: Cast) -> None:
     target=SELF,
     trigger="an ally flanking with you hits the enemy you are both flanking",
     on=Trigger(Hit, _ally_flank_hit, "an ally you flank with hits"),
-    dropped=("query.is_summoned()",),
 )
 def i3422p1(c: Cast) -> None:
     """Declared `SELF`: the event's attacker is the ally, so a single-target

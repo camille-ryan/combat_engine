@@ -459,6 +459,41 @@ def surge_value(world: World, eid: int) -> int:
     return max(0, base)
 
 
+def is_summoned(world: World, eid: int, by: int | None = None) -> bool:
+    """Did a power summon this creature onto the board? `by` narrows to whose.
+
+    *"An enemy hits a creature you summoned"*, *"an allied beast **or**
+    summoned creature"* -- four item rows print it and each approximated it
+    with "every companion and servant the relations hold", which is wider
+    than the print in a way one of the cards names outright: `i3422p1` lists
+    a beast and a summon as two different things, so a reading that counts
+    both cannot be what it means.
+
+    **`Companion.kind == "summon"` looked like the discriminator and is
+    not.** `Cast.summon_inline` does spawn with exactly that -- but
+    `Cast.summon`, whose own comment calls it *"the path every row uses"*,
+    goes through `loader.spawn` and builds no `Companion` at all, because a
+    `Companion` takes no turn and a summon on that path is given one. So
+    reading `kind` is correct for the rarer path and **silently False for
+    the common one**, which is the shape of this component's whole
+    failure mode. `Summon` is the fact, recorded on both paths.
+
+    `by` is the owner, for the three cards that print *"you summoned"*
+    rather than *"a summoned creature"*. `None` asks the wider question,
+    which is `i3422p1`'s.
+
+    A `Conjuration` is deliberately **not** one of these. It is a thing a
+    power put on the board that is not a creature -- a sphere of flame --
+    and these cards are about something that can be hit and can shift.
+    """
+    from .components import Summon
+
+    mine = world.get(eid, Summon)
+    if mine is None:
+        return False
+    return by is None or mine.by == by
+
+
 def targetable(world: World, eid: int) -> bool:
     """Can a power be aimed at this, and land on it?
 

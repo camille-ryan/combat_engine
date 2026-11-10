@@ -33,6 +33,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.is_minion(world: 'World', eid: 'int') -> 'bool'`
   - Is this creature a minion? Read off its stat block's own column.
+- `query.is_summoned(world: 'World', eid: 'int', by: 'int | None' = None) -> 'bool'`
+  - Did a power summon this creature onto the board? `by` narrows to whose.
 - `query.is_trap(world: 'World', eid: 'int') -> 'bool'`
   - (no docstring)
 - `query.kind_waived(world: 'World', asker: 'int', target: 'int', word: 'str', ref: 'str' = '') -> 'bool'`

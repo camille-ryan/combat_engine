@@ -11423,6 +11423,101 @@ def creature_or_object(out: Result) -> None:
              "and a row without the field is unchanged")
 
 
+def summoned_is_a_fact(out: Result) -> None:
+    """"A creature you summoned" is answerable, on **both** summon paths.
+
+    Four item rows print it and each approximated it with "every companion
+    and servant the relations hold" -- wider than the print in a way one of
+    the cards names outright: `i3422p1` lists *"an allied beast **or**
+    summoned creature"* as two different things.
+
+    **The load-bearing arm is `c.summon`, not `c.summon_inline`.**
+    `Companion.kind == "summon"` looks like the discriminator and is set by
+    the inline path, so a rule that only exercised that one would pass for
+    a reader built on `kind` -- and such a reader is **silently False** for
+    `c.summon`, whose own comment calls it "the path every row uses",
+    because it goes through `loader.spawn` and builds no `Companion` at
+    all. That is the control that tells the two implementations apart.
+    """
+    import audit
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Summon
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.query import enemies, is_summoned, squares
+
+    # -- the common path: c.summon, which builds no Companion -------------
+    world, me, _ = audit.board("i2716p1", 1)
+    c = Cast(world=world, me=me, ref="driver")
+    made = c.summon("m145")
+    out.that(made != 0, "the board can be summoned onto at all")
+    out.that(world.get(made, Companion) is None,
+             "**`c.summon` builds no `Companion`** -- deliberately, since a"
+             " companion takes no turn and this creature is given one. So a"
+             " reader keyed on `Companion.kind` answers False here, which is"
+             " what this arm exists to catch")
+    out.that(is_summoned(world, made),
+             "and it is still recognised as summoned, off the `Summon`"
+             " fact rather than off a companion's kind")
+    out.that(is_summoned(world, made, me),
+             "`by=` narrows to whose it is -- three of the four cards print"
+             " \"you summoned\" rather than \"a summoned creature\"")
+    kept = world.get(made, Summon)
+    out.that(kept is not None and kept.ref == "driver",
+             f"and the power that did it is recorded, which `i2640p1` needs"
+             f" for \"summoned by your artificer powers\": {kept}")
+
+    # -- the negatives, which are the whole reason the cards distinguish --
+    spirits = [e for e in world.having(Companion)]
+    out.that(spirits, "the board carries a companion that is not a summon")
+    for s_eid in spirits:
+        out.that(not is_summoned(world, s_eid),
+                 f"a {world.get(s_eid, Companion).kind!r} companion is not a"
+                 f" summoned creature -- `i3422p1` prints the two as"
+                 f" alternatives, so a reading that counted both could not"
+                 f" be what it means")
+    out.that(not is_summoned(world, me), "and the summoner is not its own summon")
+
+    # -- a wrong owner is refused -----------------------------------------
+    # **Two summoners, because one cannot refuse anybody.** The first
+    # version of this arm read `stranger is None or not is_summoned(...)`
+    # and passed vacuously on a board with a single summon -- planted, and
+    # it did not go red. So a second creature summons its own and each is
+    # asked about the other's owner.
+    rival = next((e for e in enemies(world, me)), None)
+    out.that(rival is not None, "the board has a second creature to summon")
+    theirs = Cast(world=world, me=rival, ref="rival").summon("m145")
+    out.that(theirs not in (0, made), "which summons a different creature")
+    out.that(is_summoned(world, theirs, rival),
+             "recognised as the rival's own")
+    out.that(not is_summoned(world, theirs, me),
+             "**and `by=` refuses it to anybody else** -- without the owner"
+             " test every row printing \"a creature you summoned\" would"
+             " fire on the enemy's summons too")
+    out.that(not is_summoned(world, made, rival),
+             "symmetrically, so the arm is not passing by one direction"
+             " happening to hold")
+
+    # -- the inline path, which `Companion.kind` DOES mark ----------------
+    # Found off the registry rather than by naming a ref: the row only has
+    # to be *some* row carrying an inline summon block, and a literal here
+    # would break the day that one is rewritten.
+    ref = next((r.ref for r in REGISTRY.values()
+                if getattr(r, "summon", None) is not None), "")
+    out.that(ref, "some declared row carries an inline summon block")
+    w2, me2, _ = audit.board(ref, 1)
+    c2 = Cast(world=w2, me=me2, ref=ref)
+    c2.origin = sorted(squares(w2, me2))[0]
+    made2 = c2.summon_inline(get(ref).summon, at=c2.origin)
+    out.that(w2.get(made2, Companion) is not None,
+             f"`c.summon_inline` does build a `Companion` ({ref}), so the"
+             f" two paths differ in shape and one reader has to cover both")
+    out.that(is_summoned(w2, made2) and is_summoned(w2, made2, me2),
+             "and it is recognised too")
+    out.that(w2.get(made2, Summon) is not None,
+             "off the same fact, so neither path depends on the other's"
+             " bookkeeping")
+
+
 def rerolled(out: Result) -> None:
     """Nothing announced that a roll was a reroll, and 18 rows ride on one.
 
@@ -72110,6 +72205,9 @@ DRIVERS = {
     "creature_or_object": (creature_or_object,
                            "a target line that admits a creature or an"
                            " object, including one nothing can break"),
+    "summoned_is_a_fact": (summoned_is_a_fact,
+                           "\"a creature you summoned\", answerable on both"
+                           " summon paths"),
     "rerolled": (rerolled,
                  "a roll announced as a second one, and gateable as one"),
     "boost_roll": (boost_roll,
