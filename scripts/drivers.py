@@ -52498,6 +52498,36 @@ def mark_knows_its_row(out: Result) -> None:
         foe = next(e for e in world.entities if e != me)
         Cast(world=world, me=me, ref=ref, target=foe).mark()
         via = world.relations.via(Relation.MARKED_BY, me, foe)
+        # **The printed trigger needs an ALLY in the attack, and this did
+        # not pose one.** `i531p1` reads *"a creature you have marked ...
+        # targets **you and at least one of your allies** with an
+        # attack"*, and the row was narrowed to that in `0a3878de` -- it
+        # used to pay on any mark, which is wider than the card. This
+        # helper marked the foe and swung at the caster alone, so after the
+        # narrowing the positive case below measured a blow the card never
+        # reduces and read `20 -> 20`.
+        #
+        # So the check's definition was the incomplete half, not the row:
+        # the assertion was written against the old behaviour and its
+        # precondition never caught up. Posed properly now, by logging the
+        # `AttackRolled` whose `among` names both victims -- which is what
+        # `armour._also_at_an_ally` reads back, and `resolve.attack` sets
+        # `among` before its emit for exactly this reason.
+        from combat_engine.engine import AC as _AC
+        from combat_engine.engine import query as _q
+        from combat_engine.engine.events import AttackRolled as _AttackRolled
+
+        ally = next(
+            (e for e in world.entities
+             if e not in (me, foe) and _q.team(world, e) is _q.team(world, me)),
+            None,
+        )
+        aimed = _AttackRolled(
+            attacker=foe, target=me, power="probe", vs=_AC,
+            natural=10, bonus=0, total=10, defence=10, advantage=False,
+        )
+        aimed.among = (me,) if ally is None else (me, ally)
+        world.bus.emit(aimed)
         ev = DamageRolled(source=foe, target=me, amount=20,
                           dtype=DamageType.UNTYPED, detail="")
         c = Cast(world=world, me=me, ref="i531p1", target=me, trigger=ev)
