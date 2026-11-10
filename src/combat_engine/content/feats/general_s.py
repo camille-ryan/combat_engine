@@ -173,21 +173,6 @@ NO_COMPANION_CARD = (
     "elemental creatures in the Companion table are familiars this chain's "
     "prerequisite forbids"
 )
-#: The animal companion a different class feature grants, whose printed
-#: line is a *combined* attack -- one the character and the creature make
-#: together.
-#:
-#: **"Nothing pairs two attacks that way" is what this used to say and it
-#: is false now.** `p13506` makes both swings inside one body -- `c.strike()`
-#: for the character and `c.basic(who=beast)` for the companion -- and both
-#: hand back a bool, so "you hit *and* your companion hit" is two locals in
-#: one scope. What `f3797` is waiting on is not a facility: it is the #550
-#: clause in `p13506`, which lives in another component file. See that row.
-#:
-#: The symbol is left alone because it is doing duty for a second and
-#: unrelated need one tier up (`m3842a3`, level 13), and re-pointing half of
-#: a flattened symbol is worth less than retiring this half outright.
-COMBINED = ("c.combined_attack()",)
 #: A printed weapon the engine has no group and no ref for.
 WEAPON_REF = ("spec.weapon_ref()",)
 #: Lengthening somebody else's printed shift.
@@ -753,15 +738,34 @@ def f3698(c: Cast) -> None:
 
 @power("f3699", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("spec.weapon_ref()",), proficiency=("w:ki-focus",))
+       todo=("cf:monk-f1",), proficiency=("w:ki-focus",))
 def f3699(c: Cast) -> None:
     """The ki focus is header data `chargen` reads at build time and the
     training is not a fight. The feature it hands over is `cf:monk-f1`,
     which is declared -- and declared `todo` itself, because the feature
-    *is* a weapon and `w:unarmed`'s off-hand property and free-hand
-    requirement are fields on a weapon row nothing declares. Granting
-    that row here would hand over a card refused in play, so the gap this
-    waits on is the one `cf:monk-f1` waits on."""
+    *is* a weapon and that row's own marker says what is missing from it:
+    the off-hand property, the free-hand requirement and the implement
+    clause are fields on a weapon row nothing declares. Granting it here
+    would hand over a card refused in play.
+
+    **Re-pointed to the sibling, and the old spelling could not say this
+    wait at all.** It carried `spec.weapon_ref()`, copied off
+    `cf:monk-f1`'s own marker -- so the two rows named one gap twice and
+    this row's actual wait, *that row being written*, was nowhere. A ref
+    is the form `blocked._one` resolves: declared **and not itself
+    unfinished**, which is exactly the condition here and is strictly
+    narrower than the symbol. Measured today: `cf:monk-f1` resolves False
+    while `p13506` and `rt:r69-t1` resolve True through the same branch,
+    so the spelling is live in both directions.
+
+    Pointing at the sibling's symbol instead would report this feat ready
+    the day the weapon fields land, which is one step early -- there is
+    nothing to grant until that row is written rather than merely
+    headed. `f2429` is the precedent and `_one`'s own docstring is the
+    argument.
+
+    The whole of what is owed is in the other file. Nothing here is a
+    facility gap: `c.grant_row` is how the hand-over would be written."""
 
 
 @power("f3700", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -863,7 +867,20 @@ def f3702(c: Cast) -> None:
     convention at `content/feats/exploits.py:1099`.
 
     "Choose one target of the power that is adjacent to you" needs no
-    choosing: all five flurries are `target=ONE_CREATURE` over `Melee(1)`."""
+    choosing: all five flurries are `target=ONE_CREATURE` over `Melee(1)`.
+
+    **The symbol cannot resolve, and that is a property of the wait rather
+    than a misspelling.** `blocked._surface` indexes `engine/`,
+    `chargen/`, `etl/` and `spec` and nothing else, so an owner of `monk`
+    -- or of `powers.monk.level_0`, or any other content path -- is a hard
+    False for ever, which is the failure `f3788`'s note calls the worse of
+    the two. There is no honest alternative spelling here: what is owed is
+    a clause hand-written into five rows that are **declared and
+    finished**, so a ref-shaped marker would resolve True and report this
+    feat ARRIVED with nothing written. So it stays, and whoever writes the
+    five bodies clears it by hand the way `#550` already requires -- this
+    row becomes `implemented_in=`, which no symbol was ever going to
+    announce."""
 
 
 # -- runepriest -------------------------------------------------------------
@@ -946,10 +963,31 @@ def f3710(c: Cast) -> None:
     first clause is about, so `c.grant_action('second wind')` is not it
     either.
 
-    What is missing is the Heal check as an action in a fight: nothing
-    offers one, so no `SkillCheck` with that skill is ever announced, and
-    the event names an `actor` and no patient -- the same absence `f1390`
-    and `i650x1` carry."""
+    **Two of the three things that note went on to say are false now, and
+    the gap is narrower than any of them.** It read "nothing offers one, so
+    no `SkillCheck` with that skill is ever announced, and the event names
+    an `actor` and no patient".
+
+    * A Heal check **is** rolled in a fight: `actions.take`'s `stabilise`
+      calls `skills.check(world, actor, "heal", STABILISE_DC)`, so the
+      event is announced with that skill.
+    * `SkillCheck` carries a patient. `skills.check` takes `target=` and
+      puts it on the event, and it also stamps a `purpose` attribute --
+      added for exactly this shape of card, "a Bluff check to gain combat
+      advantage", so "a Heal check **to grant second wind**" has somewhere
+      to be said.
+
+    What is genuinely missing is the *other* first-aid actions. The engine
+    offers one use of first aid -- stabilising a dying ally -- and this card
+    is about the two it does not: granting an adjacent ally its second wind,
+    and granting a save. Neither is an `Action` kind, so neither check is
+    ever rolled and there is no success to ride on.
+
+    The symbol is kept rather than re-spelled: `f1390` and `i650x1` wait on
+    the same absence, and `f1390`'s own note -- "nothing says a Heal check
+    is what allowed [a second wind]" -- is this gap from the other side.
+    A new action kind also owes a policy term, which is a second component
+    and not something a marker here should name."""
 
 
 @power("f3711", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1011,7 +1049,25 @@ def f3718(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=("c.surface()",))
 def f3719(c: Cast) -> None:
     """What the square is made of is not recorded anywhere: `c.terrain`
-    asks about the fight, not about the ground under one creature."""
+    asks about the fight, not about the ground under one creature. Its
+    vocabulary is closed -- `cast.TERRAIN_WORDS`, seventeen words -- and
+    names no ground at all beyond `ice`, `snow` and `forest`, so a gate
+    spelled for this card's surface would **raise** rather than read
+    false.
+
+    **The near-miss is `DIFFICULT_LABELS`, and it is a trap rather than an
+    answer.** That set does hold `earth`, `earthen construction`, `stone`
+    and `uneven stone` -- but it labels *rough going*, written only by
+    `c.zone(difficult=)`, and the five words anything writes today are
+    `forest`, `ice`, `rubble`, `water` and `web`. A plain stone floor
+    carries no label, so a read keyed on it would be False on every board
+    this engine builds and True only where some other row happened to lay
+    a difficult patch and name it: a gate that cannot be true for the case
+    the card is about, which is what `#598` measured on the 29 calls
+    naming words no square carries.
+
+    So the gap is a per-square **material**, independent of whether that
+    square is hard going."""
 
 
 @power("f3720", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1680,7 +1736,25 @@ def f3754(c: Cast) -> None:
     a modifier laid against its ref is read once per target -- so this
     lengthens the shift for all of them. Over-delivering rather than
     inert, and named as its own symbol instead of sharing `EXTEND` with
-    the two rows above, which are now finished."""
+    the two rows above, which are now finished.
+
+    **Measured, which settles why the `when=` the verb already takes is no
+    use here.** `p2479` reads its distance as `c.squares_for(c.ref, 1)`
+    and passes **no context**, so the gate an entry carries is called with
+    `{}` and cannot be told which target is being asked about. The body
+    runs once per target and `squares_for` reads the *caster's* `Powers`,
+    so an entry laid `on=` one ally would be read for nobody. That is what
+    makes this a parameter on `extend_move` rather than a predicate a row
+    could write: the verb has to spend the entry on one read, because the
+    read site is the only thing that knows a target at all.
+
+    **It is stronger than its card until that lands**, which is the
+    honest statement of the cost: the page gives +2 to one target of a
+    close burst 2 and this gives it to every ally and to the caster. Left
+    `dropped=` rather than demoted to `todo=`, because demoting it would
+    refuse a drawable feat and move every `chargen` draw -- a baseline
+    write, which is not an authoring agent's call. Whoever owns the gate
+    can make it instead."""
     c.extend_move("p2479", 2, on=c.me)
 
 
@@ -1839,10 +1913,48 @@ def f3763(c: Cast) -> None:
 
 
 @power("f3764", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.crawl()",))
+       reach=PERSONAL, target=SELF,
+       todo=("conditions.Rules.halve_crawl",))
 def f3764(c: Cast) -> None:
-    """Crawling is not an action this engine has, so there is no half
-    speed to raise to a full one."""
+    """**Re-pointed: the premise was refuted.** This said "crawling is not
+    an action this engine has, so there is no half speed to raise to a full
+    one", and `#995` gave a prone creature the crawl -- `actions._movement`
+    builds an `Action(kind="crawl")` per destination, priced as a move and
+    walked like one, and `movement`, the policy and `drivers` all carry the
+    word. So there *is* a half speed now, and it is the thing this card
+    raises.
+
+    **Where the half lives is the gap, and it is not where it looks.**
+    `query.speed` is "the one place speed resolves" by its own docstring
+    and the halving is **not** in it: `Condition.PRONE` carries
+    `grants_ca`, `attack`, `no_shift` and the ranged defences and no
+    `halve_speed`, so the `// 2` is a literal in `_movement`'s crawl branch
+    and no modifier is consulted on the way past it. A
+    `c.bonus("speed", ...)` is read by `speed` for every kind of movement
+    at once, which is not this card's sentence; `c.extend_every("crawl",
+    n)` is read by `c.shift` and `c.teleport` and never by an action the
+    menu builds, so it would be a modifier nothing consults -- this
+    component's commonest bug.
+
+    So the gap is that **one named field**, and the mechanism for switching
+    off part of what a condition costs already exists:
+    `c.waive(Condition.PRONE, "halve_crawl")` is this printed sentence
+    exactly, once the word is in `conditions._NEUTRAL` and `_movement`
+    asks `rules_for` instead of halving by hand. That is `f2604`'s
+    reasoning for the sibling clause on the same condition -- a waiver
+    nothing reads is not a waiver, so the reader is part of the one gap and
+    not a second one.
+
+    Named as the field rather than as `c.crawl_at_full_speed()` for the
+    file's usual reason, and `conditions.Rules.wake_on_damage` is the
+    precedent for the spelling: the facility is there and the knob it has
+    no entry for is what is missing. It resolves in both directions --
+    `conditions.Rules.no_shift` answers True through the same branch
+    today.
+
+    Not shared with `f2282`'s `c.crawl()` any more either, which wants the
+    crawl not to **provoke**: one symbol for two cards cannot go green
+    correctly for either."""
 
 
 def _ranged_while_armed(c: Cast, *refs: str) -> Callable[[dict[str, Any]], bool]:
@@ -1900,7 +2012,14 @@ def f3768(c: Cast) -> None:
     which is why the row reports UNUSED rather than wrong.
 
     They are a race's natural weapons, printed on its page rather than in the weapon
-    tables, and the ETL does not extract them. Heroic tier, so +2."""
+    tables, and the ETL does not extract them. Heroic tier, so +2.
+
+    **Kept, and deliberately not re-aimed at anything closer.** The shape is
+    the one several rows share -- the compendium holds it and `build.py` does
+    not read it across -- so it is ETL work, which is not an authoring
+    agent's and costs a rebuild. Those rows should land behind **one**
+    rebuild rather than each buying its own; the marker is what keeps this
+    one findable when that happens."""
     c.bonus(
         "damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: _holding_ref(c, "m5495a1", "m5732a1"),
@@ -2250,9 +2369,26 @@ def f3780(c: Cast) -> None:
 
 
 @power("f3781", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("cf:bard-f1s2",))
+       reach=PERSONAL, target=SELF, dropped=("TempHP.swallowed",))
 def f3781(c: Cast) -> None:
     """A shift for the bard and for everybody standing next to it.
+
+    **Re-pointed, and the old marker named a row that does not exist and
+    will not.** It said `cf:bard-f1s2`. Measured today: that ref is not in
+    `declared()` at all -- the sub-option is a `c.build("f1s2")` branch
+    inside `cf:bard-f1`'s body, which is why the gate below reads the
+    parent's ref -- so a ref-shaped marker on it was a hard False for ever,
+    silent in both directions and reading exactly like a row correctly
+    waiting. `#581` is the shape where a sub-option genuinely has no ref;
+    the difference here is that **this row is written and plays**, so what
+    the marker should name is the one clause that does not pay.
+
+    That clause is the paragraph below: `resolve.temp_hp` returns at
+    `amount <= health.temp` **without emitting**, so a use of the virtue
+    swallowed by a standing pool spends the round and announces nothing,
+    and no shift is granted. The fix is the event saying the use happened
+    -- a flag on `TempHP` and an unconditional emit -- which is why the
+    marker names the field rather than this file.
 
     **The gate names the holder, and "it would catch every virtue it
     writes" was the wrong half.** `features/leaders_sb.py`'s `bard_virtue`
@@ -2315,7 +2451,17 @@ def f3781(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=("c.omit_square()",))
 def f3782(c: Cast) -> None:
     """Cutting one square out of a blast or burst. An area is computed
-    from the header when the power runs and nothing narrows it."""
+    from the header when the power runs and nothing narrows it.
+
+    **The gate is not the gap, and the near-miss is worth recording so it
+    is not re-derived.** `c.reshape_area` already narrows by exactly the
+    two axes this card prints -- `keyword=Keyword.ARCANE` and
+    `kinds=("close_blast", "close_burst")` -- and `optional=True` is the
+    printed "you can". What it cannot say is the square: `into` is a
+    callable on a `Range`, `Range` is a kind and a size and has no square
+    set in it, and `dsl.area_of` computes the squares from the shape
+    afterwards. So nothing between the header and the area can lose one
+    square of it, which is this marker and the whole of it."""
 
 
 @power("f3783", level=1, cls="", usage=AT_WILL, action=FREE,
@@ -2556,16 +2702,39 @@ def f3792(c: Cast) -> None:
 
 @power("f3793", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.extra_target()",))
+       todo=("p16660.extra_target()",))
 def f3793(c: Cast) -> None:
     """The first clause has nothing to cancel. `rt:r69-t1` is
     declared and declared deliberately inert -- the checks it covers are
     not made in a fight and cost no action there -- so the -4 this feat
     lifts is never laid.
 
-    What is left is widening `p16660`'s target line, and `c.add_target`
-    adds one to the power being cast, not to a power somebody will cast
-    later."""
+    What is left is widening `p16660`'s target line.
+
+    **Re-pointed, because the old symbol asserted an absence that is not
+    there.** `c.extra_target()` reads as a verb the engine owes, and the
+    verbs exist: `c.add_target(who)` appends to the use this one is nested
+    inside and announces `TargetAdded`, and `c.drop_target` is its mirror.
+    What they cannot do is reach a use that has not started, which is the
+    half the old note had right.
+
+    So this is not a facility gap at all -- it is the `#550` clause,
+    written **into** `p16660`'s body (`races/powers_c.py`) and gated on
+    `c.feat("f3793")`: that row already asks `c.choose` per target and
+    takes `Target("ally", 1)`, so the second target is a line there and
+    this row then becomes an `implemented_in=("p16660",)` pointer and the
+    marker goes. One printed power named, so the exception for "a class of
+    powers" does not apply and a rider hung here would be the pre-`#550`
+    shape the convention exists to retire.
+
+    Spelled `p16660.extra_target()` -- the row that owes the clause and
+    the hook it has to grow -- on the `p13853.dice_for()` and
+    `p653.riposte_hook` precedent. No content-side symbol resolves through
+    `blocked._one`, which indexes `engine/`, `chargen/`, `etl/` and
+    `spec` and nothing else, so this reports blocked until somebody clears
+    it by hand; naming `p16660` bare would be worse, because a declared and
+    finished ref resolves **True** and the row would read ARRIVED while
+    nothing had been written."""
 
 
 @power("f3794", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2673,7 +2842,7 @@ def f3796(c: Cast) -> None:
 
 
 @power("f3797", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=COMBINED)
+       reach=PERSONAL, target=SELF, todo=("p13506.combined_attack()",))
 def f3797(c: Cast) -> None:
     """A combined attack -- the character and its creature swinging as one
     row -- and the right to use a second row off the back of that hit.
@@ -2695,6 +2864,19 @@ def f3797(c: Cast) -> None:
     Left marked rather than half-written because the clause belongs in a
     file this wave did not own, and a rider hung here instead would be the
     pre-#550 shape the convention exists to retire.
+
+    **The symbol is this row's own now, and the old one was flattened.**
+    It shared `c.combined_attack()` with `m3842a3` (level 13), whose want
+    *is* a facility -- one attack rolled on behalf of several creatures --
+    and the module note here argued that re-pointing half of a flattened
+    symbol was worth less than retiring this half outright. Retiring this
+    half outright is what `p13506.combined_attack()` does: one symbol
+    serving two needs can go green correctly for neither, and the two
+    needs are a monster's facility and a content clause in a named row.
+    Spelled on the `p13853.dice_for()` precedent -- the row that owes the
+    clause and the hook it has to grow. `p13506` bare would be wrong:
+    it is declared and finished, so it resolves **True** and this row
+    would read ARRIVED with nothing written.
 
     The one judgement that edit still has to make is whether the
     companion's basic counts as a weapon attack, which decides `c.w()`
