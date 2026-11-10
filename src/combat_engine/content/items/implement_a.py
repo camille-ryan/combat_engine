@@ -7,11 +7,34 @@ only the part that needs a body.
 
 Three things shape the whole file.
 
-* **"using this implement" cannot be gated.** Neither context carries the
-  item. Since the character is holding the implement for as long as the
-  property is armed, every such rider is written always-on. That
-  over-applies only for somebody carrying two implements of which one is
-  magical.
+* **"using this implement" cannot be gated *from a modifier context*.**
+  Neither context carries the item. Since the character is holding the
+  implement for as long as the property is armed, every such rider is
+  written always-on. That over-applies only for somebody carrying two
+  implements of which one is magical.
+
+  **The three words at the front of that sentence are new, and leaving
+  them off has already cost a wrong note.** It read as a blanket "cannot
+  be gated", and `i1986p1` wrote a premise off it that is false twice
+  over: that a wizard carries no implement in `Gear`, and that nothing can
+  ask whether a blow came through one. Measured on a dealt wizard --
+  `chargen.CLASSES["wizard"].weapons` arms `w:orb`, `equipment._base_for`
+  sends an `implement`-slot item to `gear.implement`, and `_onto_weapon`
+  writes the item's ref there as **`Weapon.item`**. On a spawned level-3
+  wizard that field already reads `i510` before anything is handed over.
+
+  So a row holding an **event** can gate it exactly: `c.my_weapon()` is
+  the `Weapon` this block's item sits on, matched by `Weapon.item`, and
+  `c.struck_with(ev)` is the one an attack was made with. `c.weapon_of` is
+  the one that cannot, and that is deliberate rather than an oversight --
+  it reads `Gear.main`, which skips implements so that "a wizard holding
+  nothing but an orb" does not read as armed.
+
+  What does not change is the conclusion for a **standing** rider: a
+  `when=` gate is handed a ctx with no item in it, so those stay always-on
+  and the over-application above stands. And `c.struck_with` takes the
+  *first* magic thing in hand, so it is exact for one magic implement and
+  approximate for two -- the same tolerance, named rather than assumed.
 
   What the contexts *do* carry has grown, and the list that stood here was
   a season out of date. The damage context is `target`, `power`, `dtype`,
@@ -100,7 +123,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
-    Moved,
+    MoveEnd,
     Position,
     Power,
     Powers,
@@ -348,6 +371,26 @@ def _my_area_power(world: World, me: int, ev: Event) -> bool:
 def _my_summoning(world: World, me: int, ev: Event) -> bool:
     return getattr(ev, "actor", None) == me and Keyword.SUMMONING in _keywords_of(
         getattr(ev, "power", "")
+    )
+
+
+def _a_summon_stands(c: Cast) -> bool:
+    """Is a creature this one summoned still on the board and up?
+
+    *"While the summoned creature exists."* `query.is_summoned` is the
+    reader and `Summon` is the fact, recorded on **both** summon paths --
+    `Companion.kind == "summon"` is true only of `c.summon_inline` and
+    silently False for `c.summon`, which is the path every row uses.
+    #1218.
+
+    `query.alive` as well as the component, because nothing despawns a
+    summon that drops: `query.creatures` is everything with hit points and
+    a square, so a dead hand would go on paying out for the rest of the
+    fight.
+    """
+    return any(
+        query.is_summoned(c.world, who, c.me) and query.alive(c.world, who)
+        for who in query.creatures(c.world)
     )
 
 
@@ -1300,7 +1343,34 @@ def i2609p1(c: Cast) -> None:
 def i2611p1(c: Cast) -> None:
     """The base item is a column. Nothing swaps one for another mid-fight,
     and the second critical rider printed in the header is that column's
-    other half."""
+    other half.
+
+    **Measured, because the nearest verbs look like this and are not.**
+    `item.base` for this ref is the one-element list `["staff"]`, so the
+    other form the card prints is not in the data at all: a transform would
+    have to write a base the column does not carry. The crit column is the
+    same story in one string -- the ETL takes one dice expression into
+    `Magic.crit` and `equipment._crit_rider` multiplies it by the plus, so
+    the "when used as a melee weapon" half has nowhere to go even before
+    anything swaps.
+
+    **And the three writers that exist are all additive, where this card is
+    exclusive.** `c.as_implement` sets a flag and its own note says why --
+    "also serving as an implement, **while staying the weapon it is**".
+    `c.weapon_group` re-files what a weapon is and *keeps the old group as
+    a property*, because "every printed line here adds an identity rather
+    than trading one". `c.as_weapon()`, the gap this file's header names,
+    is the standing "a rod that is also a mace" line and is additive for
+    the same reason. This is a minor action putting the item in one form
+    **or** the other, and a verb that said "counts as both" would make it
+    strictly better than print -- the dagger's crit die on every implement
+    attack.
+
+    The object itself is reachable, which is worth saying so the next
+    reader does not re-derive it: `c.my_weapon()` hands back the `Weapon`
+    this block's item sits on, matched by `Weapon.item`. What is missing is
+    a writer for what that object *is*, exclusively, and the second base to
+    write."""
 
 
 @power(
@@ -2547,7 +2617,31 @@ def i1822x1(c: Cast) -> None:
     never the hold. "Each square moved toward you costs 1 extra" is
     difficult terrain that follows one creature and only in one
     direction; `c.zone` is laid on squares and `c.slowed` caps a whole
-    move instead."""
+    move instead.
+
+    **Three quarters of this clause is already writable, and the missing
+    quarter is the word "toward".** Searched for the mechanic rather than
+    the name, which is what this file's traps list asks for, and the
+    sibling is there: `c.aura(1, difficult=c.ref)` is "one extra square to
+    enter a square beside me" and `c.difficult_for(zone=)` is the same
+    clause for one named creature. `i520x1` and `f1341` are the two worked
+    examples, and `i520x1`'s own note settles the arithmetic -- "one extra
+    square to enter is what difficult terrain costs" -- so the *amount* is
+    exact rather than approximate.
+
+    What none of them can say is the direction, and the pricing is where
+    that is decided: `movement.walk` charges
+    `spent += 2 if sq in world.difficult(eid, kind) else 1`, and
+    `world.difficult` hands back a **set of squares** for a creature and a
+    kind of going. The step being paid for is not asked where it came from,
+    so a tax on approaching cannot be told from a tax on retreating. Laid
+    anyway it would charge this creature for backing away, which is
+    strictly stronger than print on the row's only clause -- so `todo=`
+    rather than `dropped=`.
+
+    `i1249p1` prints the same sentence from the other side ("each square
+    closer costs an extra square") and shares this symbol for that
+    reason."""
 
 
 @power(
@@ -3069,11 +3163,29 @@ def i1962p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.dispel_defence()",),
+    todo=("c.dispel(vs=)",),
 )
 def i1964x1(c: Cast) -> None:
-    """`c.dispel` destroys a zone outright and rolls nothing against a
-    defence, so there is no check for the bonus to apply to."""
+    """**Re-pointed from `c.dispel_defence()`, which priced this as a
+    facility nobody had started when the verb is already here and is
+    missing one argument.** `blocked.py` draws exactly that line -- #677 --
+    and reports `c.dispel(vs=)` as *one parameter* of work; the old symbol
+    resolved on neither half, so the cheapest gap in this file was filed
+    beside the dearest ones.
+
+    The finding itself is unchanged and is now measured. `Cast.dispel` is
+    `dispel(self, thing: int) -> bool`: it takes the entity, ends the holds
+    that entity's label stamped, tears down the zone or despawns the
+    conjuration, and returns whether there was anything there. No roll, no
+    defence, no attacker. All 37 call sites in `content/` pass one entity
+    and nothing else, and not one rolls -- `i3178p1` is the only row that
+    dispels somebody *else's*, and it hangs off a hit it had already made.
+
+    So there is no check for the Will bonus to be added to, and a
+    `c.bonus(WILL, c.enhancement, when=...)` narrowed to a dispel would be
+    a gate that can never be true, which this file's rules forbid outright.
+    Written as always-on it would be a standing +1 to Will, which is a
+    different item."""
 
 
 @power(
@@ -3323,10 +3435,39 @@ def i1986p1(c: Cast) -> None:
     docstring names as the commonest bug in this pair.
 
     Still dropped: "on a creature hit by an attack made through this
-    implement". A wizard carries no implement in `Gear` at all -- the
-    class chassis gives it none -- so there is nothing to ask whether the
-    blow came through, and `c.weapon_of` has no `cf:` equivalent for a
-    class feature's implement."""
+    implement". **Both halves of the reason this used to give are false,
+    and the measurement is in `i2611p1`'s note and the file header.** It
+    said a wizard carries no implement in `Gear` at all: the chassis arms
+    `w:orb`, and handing the character this item writes its ref onto that
+    object as `Weapon.item`. And it said nothing can ask whether the blow
+    came through: `c.my_weapon()` is the reader for *this* block's object,
+    `c.struck_with(ev)` is the reader for the one an attack was made with,
+    and comparing them is the whole question. `c.weapon_of` is the only
+    one of the three that cannot help, because `Gear.main` skips
+    implements deliberately -- which is where the old note's `cf:` reading
+    came from.
+
+    **What actually holds it is the ordering, and it is two-sided.** The
+    printed line is a *trigger* condition -- the feature used **on a
+    creature** hit through this implement -- and `cf:wizard-arcanist-f0`
+    chooses that creature with `c.choose` **inside its own body**, after
+    the `PowerUsed` this row answers. So the victim is undecided when the
+    trigger fires. Narrowing the raise instead does not work either: the
+    feature reads it as `c.amount_for(IMPOSITION_RAISE, 0)` with no
+    context, so `query.granted_amount` calls a `when=` gate with `{}` and
+    any predicate about a creature is a gate that can never be true. The
+    one announcement that does name the victim is the `EffectApplied` for
+    the penalty, by which point its number has been computed.
+
+    So this is a **content** gap one file away -- `features/controllers.py`
+    passing a context at its read site -- and not an engine symbol, which
+    is `i2627x1`'s shape exactly. The marker is kept for want of a
+    truthful symbol and must not be read as one parameter of work on
+    `c.weapon_of`: `cf:wizard-arcanist-f0` is declared and finished, so
+    naming it would read ARRIVED, and `cf:wizard-arcanist-f0c1` is
+    undeclared on purpose -- `arcanist.py` says the parent implements that
+    mastery by build -- so naming it would park this row behind a row
+    nobody intends to write."""
     c.change_amount(IMPOSITION_RAISE, 2, on=c.me, until=When.ENCOUNTER)
 
 
@@ -4353,16 +4494,37 @@ def i2897p1(c: Cast) -> None:
     turns; "that you can use only to command the creature" cannot be said,
     so it is an unrestricted move action.
 
-    Re-aimed, because `Condition.SHAPED` is not the narrowing: that bars
-    **every** standard action and is a shape the creature is in, where this
-    clause bars nothing at all -- it restricts what one granted action may
-    be *spent* on, and `Budget` holds counts with no record of what bought
-    them. The granted-word carrier is no use either: `actions._commands` is
-    the only reader of a granted `"command"` and it deliberately skips a
-    summon, whose doors are `Cast.command` and `_instinctives`."""
+    **"While the summoned creature exists" is now asked, and it was not.**
+    The watch ran to the end of the encounter with no test at all, so a
+    wizard whose hand was cut down on the round it arrived went on drawing
+    a free move action every turn of the fight -- the daily paid in full
+    for a creature that no longer existed. Measured before the fix: one
+    `ActionGranted` on a board with no summon on it whatsoever.
+    `_a_summon_stands` is the test, and its note says why the component and
+    not `Companion.kind`.
+
+    `dsl.use` emits `PowerUsed` and then runs the body, so this free action
+    resolves **before** the summoning power has put anything on the board.
+    That is why the test sits in the handler rather than beside the arming:
+    asked once here it would be False every time.
+
+    The marker is kept and is a parameter rather than a facility.
+    `c.extra_action(cost, on=)` drops one action into the budget the turn is
+    already spending and `Budget` holds counts with no record of what bought
+    them, so there is nowhere for "only to command" to live.
+    Checked rather than assumed: `c.grant_action(what, cost)` does take a
+    `what`, and is the opposite sentence -- it reprices an *ordinary* thing
+    ("allies can stand up as a minor action") and grants no extra action at
+    all. Its one word that would fit is `command`, and `actions._commands`
+    is the only reader of that word and deliberately skips a creature whose
+    ref carries a `summon=` block, whose doors are `Cast.command` and
+    `_instinctives`. `Condition.SHAPED` was the earlier near miss and is
+    not it either: that bars **every** standard action and is a shape the
+    creature is in, where this clause bars nothing and only narrows what
+    one granted action may be spent on."""
 
     def each_round(ev: TurnStart) -> None:
-        if ev.actor == c.me:
+        if ev.actor == c.me and _a_summon_stands(c):
             c.extra_action(MOVE, on=c.me)
 
     c.watch(TurnStart, each_round, until=When.ENCOUNTER)
@@ -4378,23 +4540,71 @@ def i2897p1(c: Cast) -> None:
     dropped=("c.tome_powers()",),
 )
 def i2899x1(c: Cast) -> None:
-    """The rider is written for any slowed creature carrying an effect of
-    mine, since "a cold power through this tome" is not in the movement
-    event. The second paragraph -- two chosen daily powers the tome holds
-    -- has no store.
+    """Narrowed twice. **The reading that stood here paid out four times
+    over, and both faults were in the same two lines.**
 
-    `c.borrow_row` is **not** that store, though it is what `i2899p1` was
-    written with: it samples the set at the moment of use and records
-    nothing, and its own note says a campaign carrying between fights would
-    want `chargen` to hold the pick. This clause is the pick surviving
-    acquisition, so the marker stays."""
+    *"A cold power through this tome is not in the movement event"* -- true
+    about the event, and the keyword does not have to be in it. The slow is
+    a live hold on the creature at the moment it moves, and `Effect.by` is
+    the ref of the row that laid it: exactly how `i2900x1` reads "a wizard
+    fire power", through the `_laid_by` reader the two tomes share, and the
+    label format `c.dispel` already depends on. So `who in c.suffering()`
+    -- *anybody* carrying *any* hold of mine -- was never the nearest
+    readable thing. Measured on one board: the old body paid for a slow
+    laid by `p1166` (wizard, fire) and by `p7639` (cold, not a wizard) as
+    readily as for `p1167`, so three of its four payouts were ones the card
+    does not print.
 
-    def bleed(ev: Moved) -> None:
+    **And `Moved` is one square, not one move.** `movement.step` emits it
+    inside the walk loop -- "One step, with both ends of it" is its own
+    docstring -- so "takes damage if it moves while slowed" was charged per
+    square entered. `MoveEnd` is the per-move event, and it buys the other
+    half of the sentence for nothing: `push`, `pull` and `slide` never emit
+    one, so forced movement is excluded by construction rather than by a
+    `kind_` list. A slowed creature cannot go far, but 2 squares was twice
+    the printed damage and a teleport-and-walk turn was three times it.
+
+    `c.is_` is asked as well as the hold, and is not the same question: a
+    **suspended** condition is off `Conditions` while its effect still
+    stands and still lists it, and "while slowed" is about the creature
+    rather than about the paperwork.
+
+    **Narrower than print in one named way, deliberately.** The card says
+    the power's *target* is slowed, not that the power slowed it, so a cold
+    power landing on a creature an ally had already slowed pays nothing
+    here. Which creatures a use targeted is not recorded past the attack,
+    and the only alternative is the old reading, which errs the other way.
+    Weaker than the card rather than stronger, which is the direction this
+    tree asks for.
+
+    "Through this tome" is unaskable and is not gated -- this file's first
+    premise, not a shortcut taken here.
+
+    Still dropped: the tome holding two chosen daily powers. `c.borrow_row`
+    is **not** that store, though it is what `i2899p1` was written with: it
+    samples the set at the moment of use and records nothing, and its own
+    note says a campaign carrying between fights would want `chargen` to
+    hold the pick. This clause is the pick surviving acquisition, so the
+    marker stays."""
+
+    def bleed(ev: MoveEnd) -> None:
         who = ev.actor
-        if c.is_(Condition.SLOWED, on=who) and who in c.suffering():
+        if not c.is_(Condition.SLOWED, on=who):
+            return
+        for eff in c.world.effects.of(who):
+            if eff.ended or eff.source != c.me:
+                continue
+            if Condition.SLOWED not in eff.conditions:
+                continue
+            row = _laid_by(eff)
+            if row is None or row.cls != "wizard":
+                continue
+            if Keyword.COLD not in _keywords_of(row.ref):
+                continue
             c.flat(c.con_mod, on=who)
+            return
 
-    c.watch(Moved, bleed, until=When.ENCOUNTER)
+    c.watch(MoveEnd, bleed, until=When.ENCOUNTER)
 
 
 @power(
