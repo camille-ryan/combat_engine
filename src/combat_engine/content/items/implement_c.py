@@ -1557,9 +1557,31 @@ def i2775x1(c: Cast) -> None:
     four genuine holders of that symbol say so in plain words
     ("items you have from this set", "one or more items from this set"),
     which is what a real set reference looks like in a brief. So the first
-    sentence is a garbled cross-reference and is referred up rather than
-    guessed at; the other four rows keep `c.item_set()` and should not
-    follow this.
+    sentence is a garbled cross-reference; the other four rows keep
+    `c.item_set()` and should not follow this.
+
+    **Referred up and answered.** The main session read the page, which an
+    authoring agent cannot. The printed property is a **build-time choice
+    among five creature kinds** -- "when this item is <made>, choose one of
+    five, and your turn-undead power can target that kind instead of
+    undead" -- so the first sentence names no set and no background. The
+    ETL had matched an ordinary past participle in the text against a
+    `kind='Birth'` background whose printed name is that same word, and
+    swapped in its ref.
+
+    `#1234` has the census: **53 specs** across two such refs, every name
+    gate reading them as correct because a substituted ref is still a
+    valid ref. So this is `#1152`'s fault recurring in a second table
+    rather than a one-row oddity.
+
+    What that changes here: the first sentence is `chargen.BUILD_OPTIONS`
+    work -- the shape `items/armour.i1392p1` was re-pointed to today --
+    and **not** a gate on anything readable in a fight. Had it been
+    written from the brief as it stands, it would have been a condition on
+    a background, which is False in every fight.
+
+    The marker does not move on the strength of that, because the second
+    sentence below blocks the row either way.
 
     **The second sentence blocks the row under either reading of the first,
     which is why the marker moved here rather than away.** "You can target
