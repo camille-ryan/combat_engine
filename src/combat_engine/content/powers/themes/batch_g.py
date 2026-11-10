@@ -2009,16 +2009,31 @@ def _melee_or_ranged(ref: str) -> bool:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.FEAR, Keyword.STANCE],
-    dropped=("OpportunityWindow.why",),
 )
 def p16679(c: Cast) -> None:
     """"Melee or ranged attack" excludes a burst, and the `Hit` names the row
     that threw it, so the reach is read back off the registry rather than
     guessed.
 
-    The defence bonus can only ask whether the blow was an opportunity
-    attack; the attack context does not carry *why* the window opened, so
-    "that you provoke by moving" is the dropped narrowing.
+    **"That you provoke by moving" is written now, and `OpportunityWindow.why`
+    was never the handle it needed.** That field exists and always has -- it is
+    declared with no default, so `hasattr` could not see it and the marker read
+    as blocked for ever -- but it is not in the attack context at all, and it
+    could not answer the question anyway: it reads `"moved away"` for a walk, a
+    charge and a flight alike.
+
+    `ctx["provoked_kind"]` is the one that answers. It is `movement.step`'s own
+    `kind`, which defaults to `"walk"` and is therefore never empty for a move,
+    and `resolve.attack` leaves it empty when a row rather than a move opened
+    the window. So non-empty *is* "provoked by moving", and the openings a
+    ranged power or a `c.provoke` gives are excluded by construction. Forced
+    movement and a shift cannot reach it either: `movement._SAFE` holds
+    `push`, `pull`, `slide`, `shift`, `teleport`, `place` and `swap`, and a
+    step of those kinds opens no window to begin with.
+
+    Until this landed the bonus paid out against **every** opportunity attack,
+    which is strictly more than the card gives. Same gate as `general_h`'s
+    `p971`/`p1505` rider, for the same printed sentence. #880.
     """
     c.stance(on=c.me, label=c.ref)
 
@@ -2036,7 +2051,8 @@ def p16679(c: Cast) -> None:
             kind="power",
             on=c.me,
             until=When.STANCE,
-            when=lambda ctx: ctx.get("opportunity", False),
+            when=lambda ctx: bool(ctx.get("opportunity"))
+            and bool(ctx.get("provoked_kind")),
         )
 
 

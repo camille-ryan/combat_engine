@@ -838,7 +838,9 @@ def f305(c: Cast) -> None:
        trigger="you roll a natural 20 on a saving throw",
        on=Trigger(SavingThrow, _my_natural_20_save,
                   "you roll a natural 20 on a saving throw"),
-       dropped=("Effect.subs",))
+       dropped=("c.transfer(re_aim=)",),
+       wants="re-aim a transferred hold's relations and bus subscriptions at "
+             "the new subject instead of refusing the whole hold")
 def f305b(c: Cast) -> None:
     """Hand the effect just saved against to an enemy.
 
@@ -852,8 +854,36 @@ def f305b(c: Cast) -> None:
     and does nothing.
 
     `c.transfer` refuses a hold carrying a relation or a subscription and
-    returns None rather than moving half of it; a mark or a watch-backed
-    effect therefore stays where it is. That is the one dropped clause.
+    returns None rather than moving half of it, so a hold of that shape
+    stays where it is. That is the one dropped clause.
+
+    **The marker said `Effect.subs` and that was never a gap.** The field
+    has existed for as long as `c.transfer` has, and `c.transfer` is one of
+    its readers -- the refusal above *is* `if ... or effect.subs`. It read
+    as blocked only because a dataclass field with a `default_factory` is
+    not reachable the way the instrument was asking, so the symbol could
+    never go green and the row would have waited for ever.
+
+    **The gap is the verb, and it is not a field read.** A `Sub` carries
+    `fn`, a closure already bound to the old subject, and a relation triple
+    does not say which of its two ends is the subject -- `MARKED_BY` and
+    `GRABBED_BY` carry it third, `GRANTS_CA_TO` first -- so neither can be
+    re-pointed by copying a value across. `c.transfer` already re-aims
+    `mods` because a `Mod` is stored beside the eid it applies to; these two
+    need the laying row's help, which is why the ask is a keyword on the
+    verb rather than anything on the `Effect`.
+
+    **The live half is relations, not subscriptions**, which is worth
+    knowing before the keyword is designed: this row's trigger only ever
+    sees `When.SAVE_ENDS` holds, and the save-ends hold that routinely
+    carries a relation is `c.dominate`'s. The subscription sites are
+    one-shot modifiers that are spent on use, so almost none of them
+    outlive a save.
+
+    `p16613` meets the same refusal and is finished, because it chooses
+    from a pool and can simply leave such holds out of the offer. There is
+    no pool here -- the trigger names the one hold -- so leaving it out is
+    the clause going missing rather than a narrower menu.
     """
     foe = c.target
     if foe is None:
