@@ -2045,6 +2045,7 @@ class Cast:
         from_: int | None = None,
         until: When = When.ENCOUNTER,
         check: bool = False,
+        skill: str = "stealth",
     ) -> Effect | None:
         """Go unseen, and stay that way until something gives you away.
 
@@ -2094,13 +2095,20 @@ class Cast:
         fail at its own printed trait. #784.
         """
         if check:
-            return self._stealth_hide(from_=from_, until=until)
+            return self._stealth_hide(from_=from_, until=until, skill=skill)
         return self.invisible(to=from_, until=until)
 
     def _stealth_hide(
-        self, *, from_: int | None, until: When
+        self, *, from_: int | None, until: When, skill: str = "stealth"
     ) -> Effect | None:
         """The hide that is a roll: Stealth against what the watchers notice.
+
+        `skill` is what the roll is made with, and it is a parameter because
+        a card may substitute one: *"you make a Streetwise check in place of
+        a Stealth check to become hidden"*. Everything else about the hide
+        is unchanged by that -- the passive-Perception DC, the movement
+        penalty and its waiver key all describe the *circumstance*, not the
+        roll.
 
         Opposed by **passive** Perception, which is the printed arrangement
         -- nobody rolls to spot you unless they spend an action on it -- and
@@ -2145,7 +2153,15 @@ class Cast:
         # "no penalty", not "+0 and then some", and the rogue's feature
         # carries one +5 for both of its clauses.
         charged = min(0, penalty + waived)
-        rolled = self.check("stealth", dc, bonus=charged)
+        # **The skill is a parameter and the penalty key is not.** A card
+        # saying "make a Streetwise check in place of a Stealth check"
+        # replaces the *roll*, not the circumstance -- a creature that ran
+        # is still easier to spot whichever skill it rolls -- so
+        # `"stealth:moved"` above stays spelled that way and keeps meaning
+        # "the waiver for moving while hiding". Reading the waiver off the
+        # substituted skill would have made `f3447`'s +5 silently absent
+        # for exactly the rows that substitute.
+        rolled = self.check(skill, dc, bonus=charged)
         if not rolled:
             self.world.bus.emit(
                 Note(text=f"{self.me} failed to go unseen")

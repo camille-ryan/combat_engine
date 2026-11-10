@@ -163,7 +163,6 @@ def p16508(c: Cast) -> None:
     trigger="you end a move action and have cover against at least one"
     " creature",
     on=Trigger(MoveEnd, _move_ended_with_cover, "you end a move action"),
-    dropped=("c.hide(skill=)",),
 )
 def p9341(c: Cast) -> None:
     """One roll, against the hardest pair of eyes, extended to the printed
@@ -175,14 +174,18 @@ def p9341(c: Cast) -> None:
     with `c.invisible` off that one success. Calling it per creature would
     be a check each, and the card prints one.
 
-    Dropped: the skill. `_stealth_hide` rolls `c.check("stealth", ...)`
-    outright, so there is no way to put Streetwise in its place, which is
-    the card's whole benefit."""
+    **The skill is a parameter now.** `_stealth_hide` rolled
+    `c.check("stealth", ...)` outright, so the card's whole benefit -- the
+    substitution -- was unsayable and the row was marked for it.
+    `c.hide(skill=)` threads it to the roll and changes nothing else: the
+    passive-Perception DC, the movement penalty and its `"stealth:moved"`
+    waiver key all describe the circumstance rather than the roll, so a
+    creature that ran is still easier to spot whichever skill it uses."""
     covered = _covered_against(c.world, c.me)
     if not covered:
         return
     hardest = max(covered, key=lambda f: c.passive("perception", of=f))
-    if c.hide(from_=hardest, check=True) is None:
+    if c.hide(from_=hardest, check=True, skill="streetwise") is None:
         return
     for foe in covered:
         if foe != hardest:

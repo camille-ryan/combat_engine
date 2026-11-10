@@ -69645,6 +69645,53 @@ def restore_per_day(out: Result) -> None:
         f" {world.get(victim, Powers).per_day['cf:artificer-f2']}",
     )
 
+
+def hide_skill(out: Result) -> None:
+    """A card may substitute the skill a hide is rolled with, and nothing else.
+
+    `_stealth_hide` rolled `c.check("stealth", ...)` outright, so *"you make
+    a Streetwise check in place of a Stealth check to become hidden"* --
+    `p9341`'s entire printed benefit -- was unsayable.
+
+    **The negative control is about what must NOT move.** The movement
+    penalty's waiver is read off the key `"stealth:moved"`, and reading it
+    off the substituted skill instead would make `f3447`'s +5 silently
+    absent for exactly the rows that substitute. A card replaces the roll,
+    not the circumstance: a creature that ran is easier to spot whichever
+    skill it uses.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import SkillCheck
+
+    world, me, _ = _board()
+    rolled: list[str] = []
+    world.bus.on(SkillCheck, lambda ev: rolled.append(
+        str(getattr(ev, "skill", ""))))
+
+    rolled.clear()
+    Cast(world=world, me=me, ref="drivers").hide(check=True)
+    out.that(
+        "stealth" in rolled,
+        "the default still rolls Stealth, so no row already written moves",
+        f"rolled {rolled}",
+    )
+
+    rolled.clear()
+    Cast(world=world, me=me, ref="drivers").hide(check=True, skill="streetwise")
+    out.that(
+        "streetwise" in rolled,
+        "and `skill=` rolls the named skill instead -- the substitution the"
+        " card prints",
+        f"rolled {rolled}",
+    )
+    out.that(
+        "stealth" not in rolled,
+        "**in place of**, not as well: a second Stealth check would be two"
+        " rolls where the card prints one, and would hand the creature the"
+        " better of them",
+        f"rolled {rolled}",
+    )
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -70679,6 +70726,10 @@ DRIVERS = {
         "one extra square on every shift, and not on a teleport",
     ),
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
+    "hide_skill": (
+        hide_skill,
+        "a card may substitute the skill a hide is rolled with (#613)",
+    ),
     "restore_per_day": (
         restore_per_day,
         "a daily allowance can be handed back, floored at what was spent",
