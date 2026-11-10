@@ -99,7 +99,7 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - Take an item's enhancement bonus down, to a minimum of 0.
 - `c.destroy(self, *, on: 'int | None' = None, weapon: 'Weapon | None' = None) -> 'bool'`
   - Destroy an item a creature is carrying. It does not come back.
-- `c.kill(self, *, on: 'int | None' = None, critical: 'bool' = False) -> 'bool'`
+- `c.kill(self, *, on: 'int | None' = None, critical: 'bool' = False, dead: 'bool' = False) -> 'bool'`
   - Reduce a creature to 0 hit points outright. Returns whether it moved.
 - `c.reanimate(self, *, on: 'int | None' = None, team: 'Team | None' = None, hp: 'int' = 1, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'bool'`
   - Put a dead creature back on the board, on somebody's side.

@@ -53,6 +53,8 @@ Things a creature spends, and the budget it spends them from.
   - Give back the use of one expended power. DMG2's mid-fight refresh.
 - `c.restore_charge(self, key: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Hand a spent charge back. False if none had been spent.
+- `c.restore_per_day(self, ref: 'str') -> 'bool'`
+  - Hand one use of a daily allowance back. False when none was spent.
 - `c.restore_use(self, ref: 'str', *, on: 'int | None' = None) -> 'bool'`
   - "You regain the use of your second wind."
 - `c.spend_charge(self, key: 'str', limit: 'int' = 1, *, on: 'int | None' = None) -> 'bool'`

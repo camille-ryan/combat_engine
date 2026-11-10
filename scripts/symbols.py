@@ -486,6 +486,12 @@ CATEGORIES: dict[str, dict] = {
                 # handed the ref and gives back every use, this one is
                 # handed a usage and picks. #978.
                 "regain_power", "restore_charge",
+                # Beside `spend_per_day`, which it mirrors over the same
+                # `Powers.per_day` dict, rather than beside the two
+                # `restore_*` above it -- those are a per-encounter charge
+                # and a row's own use, and a reader looking for the daily
+                # counter needs the pair together.
+                "restore_per_day",
                 "restore_use", "spend_charge", "spend_per_day",
             ]),
             # `c.once_per_board` is here beside `payment_window` because it
