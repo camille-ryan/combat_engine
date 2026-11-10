@@ -658,7 +658,7 @@ def p13436(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=MARTIAL_WEAPON,
     attack=Attack(Pick.PRIMARY, vs=FORT),
-    dropped=("Target.max_size(relative=)",),
+    dropped=("Target.max_size_relative",),
 )
 def p13437(c: Cast) -> None:
     """The printed size line is relative to the caster and `Target.max_size`
@@ -666,10 +666,27 @@ def p13437(c: Cast) -> None:
     exchange is armed rather than offered: it is an interrupt on an attack
     aimed at me while the hold stands.
 
-    **The marker is confirmed and is the cheapest shape there is**:
-    `max_size` is a real field, enforced where it has to be -- `candidates`
-    and `_stands_right` both read it -- so what is missing is a keyword on
-    it and not a mechanism. The restriction does *not* belong in the body:
+    **The gap is confirmed and the spelling was wrong, which is the more
+    useful finding.** `max_size` is a real field, enforced where it has to
+    be -- `candidates` and `_stands_right` both read it -- so what is
+    missing is a narrowing on it and not a mechanism.
+
+    But it was written `Target.max_size(relative=)`, and **that could
+    never have gone green.** `blocked._params_ok_on` refuses a keyword on
+    a thing with no signature, and its own comment gives the reason: *"a
+    want that asks for a keyword, which a field can never grow"*. A field
+    has no signature, so the want is False for ever -- the row would have
+    waited indefinitely while reading like a correctly-parked one. That is
+    `#1231`'s family again, met from a new direction: not a private name
+    or a content-path owner this time, but a **keyword asked of a field**.
+
+    `Target.max_size_relative` is the spelling, and it discriminates:
+    it reads missing while `Target.max_size` reads **arrived** beside it.
+    Found by the agent working `themes/batch_c.py`, which refused to join
+    `p16573` to the unreachable spelling and said so -- so the two rows
+    share one resolvable symbol now instead of one dead one.
+
+    The restriction does *not* belong in the body:
     `Target.ident`'s own note settles that, because a body check runs
     after the targeter has chosen, so the row is offered creatures the card
     never allowed and spends its count on them.
