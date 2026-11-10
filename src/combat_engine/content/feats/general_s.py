@@ -660,9 +660,34 @@ def f3696b(c: Cast) -> None:
 
 
 @power("f3697", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF)
+       reach=PERSONAL, target=SELF,
+       todo=("c.restore_use(once_per_round=)",))
 def f3697(c: Cast) -> None:
     """A second use of the monk's flurry in a turn the action point bought.
+
+    **Marked, because the whole feat is a no-op and it carried no marker at
+    all.** `c.restore_use` cannot hand back a `once_per_round` row: it
+    guards on `times(ref) == 0`, and an at-will never increments `used`, so
+    the budget it would give back was never spent. The refusal lives in
+    `dsl.usable` off `Powers.last_round`, which `restore_use` does not
+    touch. Probed end to end on a once-per-round at-will:
+
+        times(ref)                           0
+        usable, after the round is noted     (False, 'already used this round')
+        c.restore_use(ref)                   False
+        usable, after restore_use            (False, 'already used this round')
+
+    So both printed conditions are read correctly, the watch arms, and
+    then nothing happens -- which is the "drawable and inert" fault rather
+    than a clause missing, and why this is `todo=` rather than `dropped=`:
+    the restore **is** the whole effect.
+
+    317 rows in the tree are at-will *and* once-per-round, so the keyword
+    is not a one-row convenience. `items/implement_c.i724x1` wants the
+    same thing for the same reason and carries the same symbol, found by
+    the agent reading that file -- this row was its side finding, and it
+    is the kind only a neighbour notices, because an unmarked inert feat
+    looks finished from every angle `todo.py` and `audit.py` can see.
 
     **The flurry has a ref now.** `c.flurry_of_blows()` names whichever of the five
     the tradition granted (#277), so "your flurry of blows power" is a row this can
