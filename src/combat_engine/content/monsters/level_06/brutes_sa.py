@@ -1890,7 +1890,11 @@ def m4741a1(c: Cast) -> None:
     requires=lambda world, eid: _grabbing_count(world, eid) > 0,
     requires_text="the m4741 must have a creature grabbed",
     attack=Attack(vs=FORT, printed=7),
-    dropped=("c.engulf()",),
+    dropped=(
+        "c.heals_on_kill()",
+        "escape.attempt(dc=)",
+        "c.absorb_corpse()",
+    ),
 )
 def m4741a2(c: Cast) -> None:
     """The absorb half -- pulled into its space, ongoing damage while held,
@@ -1901,11 +1905,39 @@ def m4741a2(c: Cast) -> None:
     `on_end` so an expelled creature has its own powers back the moment it
     is out rather than at the end of the encounter.
 
-    Still out: the sealed-off line of sight and the corpse alternative. See
-    the report -- `c.bonus("sealed", ...)` is read in **both** directions by
+    **The marker was one symbol standing for a nine-clause card, and is now
+    three.** `#1205` counted them: of nine printed clauses, five play, one
+    has nothing to write, and **three were unwritten and named by
+    nothing** -- not the marker, not this docstring. Camille, asked how to
+    handle a clause the book gave no id to, 2026-11-10:
+
+      > *"go with your solution"*
+
+    `c.engulf()` is gone because it was the wrong shape twice over: triage
+    had it **mis-marked** -- every facility it names exists -- so the
+    moment anybody acted on that verdict `todo.py` would have called this
+    row **ready** with three clauses unwritten behind it. A marker naming
+    an existing facility cannot go red for the clauses it is silently also
+    standing for.
+
+    What the three name:
+
+    * `c.heals_on_kill()` -- the engulfer regains hit points when an
+      absorbed creature drops to 0. A `Dropped` watch plus a heal, and
+      small.
+    * `escape.attempt(dc=)` -- an absorbed creature escapes on a flat-DC
+      skill check, where `escape.attempt` prices its own. Shared with
+      `x2_145`, so this row joins an existing group rather than minting a
+      synonym.
+    * `c.absorb_corpse()` -- the corpse alternative, which is structural:
+      a dead creature is lifted off the grid, so there is no space to move
+      into.
+
+    Clause 4 stays refused with its reason rather than counted as
+    unfinished: `c.bonus("sealed", ...)` is read in **both** directions by
     `query.line_of_effect`, where the card leaves the m4741 itself
-    reachable, and taking that reading would make the clause above inert as
-    well as the creature weaker than print."""
+    reachable, so taking that reading would make the at-will clause above
+    inert and the creature weaker than print."""
     held = c.grabbing()[:2]
     if not held:
         return
