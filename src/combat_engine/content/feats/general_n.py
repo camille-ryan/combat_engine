@@ -462,9 +462,38 @@ def f2131(c: Cast) -> None:
        dropped=("c.retarget_side()",))
 def f2176(c: Cast) -> None:
     """The ally bonus plays. Narrowing the racial power to enemies only
-    does not: whom a row targets is header data chosen before the body,
-    and nothing rewrites one mid-use. That the allies are in the area is
-    what makes them targets at all, so `ev.targets` finds them."""
+    does not. That the allies are in the area is what makes them targets
+    at all, so `ev.targets` finds them.
+
+    **"Nothing rewrites a target line" was too strong and the gap is one
+    function narrower than that.** A per-creature door exists:
+    `c.reshape_area(retarget=)` stores a replacement `Target` on
+    `Effect.retarget`, and `dsl.target_of` applies it behind the same
+    `reshape_when` gate the area rewrite uses. What it cannot reach is the
+    **side**. `dsl.target_of` is read in `_auto_targets` and nowhere else
+    -- its own docstring says so, and gives the reason: the one rewrite
+    shipping on it only *widens* (`count`, `everyone`), so a reader still
+    on the printed line offers fewer targets than the card and never more.
+    A narrowing is the other direction, and `dsl.candidates` -- which both
+    the offer path and `_auto_targets`' own pool come from -- reads
+    `p.target_of(augment)` for `aim.side`. So the pool is built from the
+    print whatever the hold says.
+
+    That docstring names "pointing the offer path at this as well" as the
+    fair next step and that it is "not needed by either row" it then had.
+    This is a row that needs it.
+
+    **The same gap is marked twice in the tree and this is the spelling to
+    keep.** `f1500` prints this sentence about the same racial power and
+    carries `c.retarget(power=)`; `blocked.py --group` therefore shows two
+    one-row symbols where there is one gap. The other spelling is the one
+    to move, because `c.retarget()` is already reserved for a different
+    mechanism -- `c.retarget_defence`'s own docstring records that four
+    rows mark it for moving a declared attack onto another *creature*, and
+    that naming the defence version `retarget` made all four report ready.
+    A `power=` parameter on that verb would be one symbol over two
+    opposite needs, which is the fault this file's `f2152b` note is about.
+    Not fixed here: `f1500` is another file's row."""
     me = c.me
     friends = set(allies(c.world, me))
     for who in c.trigger.targets:
@@ -512,23 +541,50 @@ def f2201(c: Cast) -> None:
 
 
 @power("f2242", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.shift_as(when=)",))
+       reach=PERSONAL, target=SELF)
 def f2242(c: Cast) -> None:
-    """`c.shift_as` grants an action outright and has nowhere to hang a
-    gate, so the question is asked once a turn instead: standing next to
-    somebody your p1831 is holding at the top of your turn buys the
-    better shift for that turn alone. Granting it for the fight, which
-    is what this row used to do, is the printed line without its
-    condition."""
+    """Written, and the marker it carried is spent.
+
+    **The gate had somewhere to go after all, and it is the reader rather
+    than the verb.** `c.shift_as(MOVE, 2)` is `c.grant_action("shift",
+    MOVE, squares_=2)`, which is one `c.bonus` under the key
+    `"shift as move"`, and the reader is `query.granted_actions` -- which
+    totals that key through `Mods.total(m.what, {})`. An empty ctx is not
+    an absent gate: `Mod.applies` calls the predicate with it, so a
+    `when=` that reads the **board** rather than the ctx is consulted
+    every time the action menu is built. Measured on a board, with the
+    predicate the only thing changing:
+
+        gate False -> {}
+        gate True  -> {('shift', 'move'): 2}
+
+    That is the printed sentence exactly -- *"if you are adjacent to a
+    target affected by your p1831"* is a standing condition, asked at the
+    moment the menu is built and not at some earlier moment. Both of the
+    older readings were wrong in a direction: granting it for the fight
+    pays while nobody is held, and the `TurnStart` watch this replaces
+    paid for the whole turn on an adjacency that was true at the top of it
+    and refused one earned by the turn's own first step.
+
+    **The carrier is written out rather than reached through
+    `c.shift_as`**, which takes no gate, and the key is built off
+    `MOVE.value` so it tracks the enum the engine partitions on.
+    `actions.GRANTABLE` holds `"shift"`, which is the half
+    `c.grant_action` raises over; laying the word by hand is the same
+    thing four other content files already do with `"blast_size"` and
+    `"forced"`. A gate belongs on the `Mod` and not on the `Effect`, so
+    there is no door here that does not go through `c.bonus`.
+
+    `c.suffering("p1831")` is "a target affected by **your** p1831" --
+    `by` defaults to the caster -- and the adjacency is measured from the
+    character, which is what `c.adjacent(to=)` asks."""
     me = c.me
 
-    def each_turn(ev: Any) -> None:
-        if ev.actor != me or ev.ghost:
-            return
-        if any(c.adjacent(to=who) for who in c.suffering("p1831")):
-            c.shift_as(MOVE, 2, on=me, until=When.EOT)
+    def beside_one(ctx: dict[str, Any]) -> bool:
+        return any(c.adjacent(to=who) for who in c.suffering("p1831"))
 
-    c.watch(TurnStart, each_turn, on=me, until=When.ENCOUNTER)
+    c.bonus(f"shift as {MOVE.value}", 2, on=me, until=When.ENCOUNTER,
+            kind=c.ref, when=beside_one)
 
 
 _granted("f2243", "f2243b")
@@ -1060,7 +1116,21 @@ def f2152b(c: Cast) -> None:
     announcement rather than from the engine. That is the same shape
     `Hit.origin` names for three other rows, and this file's own
     `SavingThrow.source` was such a symbol until the effect turned out to
-    answer it."""
+    answer it.
+
+    **The card's second sentence is dropped too, and it is the same gap
+    rather than a second one.** *"This forced move ends when a creature is
+    no longer within the triggering attack's blast or burst"* caps the
+    push at the edge of the area, so out of a burst 1 the printed push is
+    one or two squares and not five. The cap is derivable the moment the
+    origin is -- the area is the origin plus the row's own reach, and
+    `c.push` already takes `to=` as well as `anchor=` -- so one field
+    closes both halves and the marker stays one gap.
+
+    Worth saying plainly because of the direction: a flat five squares
+    measured from the caster is **stronger than the page** twice over, in
+    the distance and in the anchor. It is what plays until the square
+    arrives, and it is not what the card says."""
     for who in c.trigger.targets:
         c.push(5, on=who)
 
@@ -1780,34 +1850,60 @@ def f2258(c: Cast) -> None:
 
 
 @power("f2096", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.no_provoke(once=)",))
+       reach=PERSONAL, target=SELF)
 def f2096(c: Cast) -> None:
-    """Laid at the top of each of the caster's turns while bloodied, and
-    held to the end of it. "The **first** time you leave a square" is the
-    dropped half: `c.no_provoke` holds for a duration and cannot be spent
-    on one step, so this covers the whole turn's movement.
+    """Written, and the marker it carried is spent. All three printed
+    narrowings are gates on the *window* rather than on the duration.
 
-    **Checked, and the marker still names the right gap.** `c.no_provoke`
-    is already built as a `c.watch(OpportunityWindow, ..., Window.BEFORE)`
-    and `c.watch` already takes `once=`, so the parameter has somewhere to
-    go -- but it is `cast.py`'s to forward, and `once=` on a watch reads the
-    log to decide whether the handler did anything, which a veto that
-    *cancels* an event may not satisfy. Not writable from here either way.
+    **The latch goes on the step, not on the window, and that is the whole
+    of what the old note said could not be done.** It was right that a
+    latch spent inside the veto is off by a watcher -- `movement.step`
+    opens one window per threatening creature per step, so the first of
+    two neighbours would eat the pass and the second would still swing.
+    But the step announces its own end: the order is every `LeaveSquare`,
+    then the windows, then the `EnterSquare`s, then one `Moved`. So a
+    latch taken on `Moved` is taken exactly once per step, after that
+    step's windows have all been read, and the gate is simply "not spent
+    yet".
 
-    What cannot be done from content: the window opens once per watcher per
-    square (`movement.step` emits it after `LeaveSquare` and before the
-    mover arrives), so a latch in this body's own closure would spend
-    itself on the first *watcher* rather than on the first step, and a
-    multi-square footprint leaves several squares per step. A gate that
-    looks right and is off by a watcher is worse than the duration this
-    row already admits to."""
+    That also disposes of the multi-square footprint the old note worried
+    about: a Large creature leaves several squares in one step and so
+    announces several `LeaveSquare`s, and exactly one `Moved`.
+
+    `c.latch(per_turn=True)` rather than a closure dict, for the reason
+    the component file gives -- the window is `(round, initiative slot)`,
+    so it resets itself every turn and a forced move on somebody else's
+    turn spends that turn's pass and not this one's. A closure would have
+    needed its own reset and its own notion of whose turn it was.
+
+    **Two narrowings the duration reading could not state at all**, both
+    now on the gate: *"while you're bloodied"* is asked when the opening
+    happens rather than at the top of the turn, so a character bloodied
+    mid-turn is covered and one healed out of it is not; and *"from that
+    movement"* is `ctx["why"] == "moved away"`, where a bare
+    `c.no_provoke` also forgave the openings a ranged power gives away
+    next to an enemy. Both were strictly wider than the page.
+
+    The pass is spent by the first step whether or not it was bloodied at
+    the time, which is the printed sentence read literally -- "the first
+    time you leave a square" names the step, and the bloodied clause says
+    when the benefit applies rather than which step is the first."""
     me = c.me
+    spent = f"{c.ref} first step"
 
-    def each_turn(ev: Any) -> None:
-        if ev.actor == me and not ev.ghost and c.bloodied(on=me):
-            c.no_provoke(on=me, until=When.EOT)
+    def step_done(ev: Any) -> None:
+        if ev.actor == me:
+            c.latch(spent, per_turn=True)
 
-    c.watch(TurnStart, each_turn, on=me, until=When.ENCOUNTER)
+    c.watch(Moved, step_done, on=me, until=When.ENCOUNTER)
+    c.no_provoke(
+        on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("why") == "moved away"
+            and c.bloodied(on=me)
+            and not c.latched(spent, per_turn=True)
+        ),
+    )
 
 
 @power("f2097", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
