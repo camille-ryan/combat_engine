@@ -628,7 +628,7 @@ _swap("f1255", "f1255b")
        attack=Attack(Ability.DEX, vs=REF),
        requires=_wielding("spiked chain"),
        requires_text="must be wielding a spiked chain",
-       dropped=("c.grant_action(slide=)",))
+       dropped=("actions.granted_target",))
 def f1255b(c: Cast) -> None:
     """The grab lands on a hit and on a miss; only the damage differs.
     The sustained half is a named hold beside the grab rather than the

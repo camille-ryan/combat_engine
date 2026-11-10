@@ -312,7 +312,7 @@ def p1460(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.CHARM],
     attack=Attack(CHA, vs=WILL),
-    dropped=("c.grant_action(slide=)",),
+    dropped=("actions.granted_target",),
 )
 def p1471(c: Cast) -> None:
     """The Effect line is half written and half marked.

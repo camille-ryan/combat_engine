@@ -1743,7 +1743,7 @@ def _egg_rider(c: Cast, kinds: tuple[DamageType, ...], who: int) -> None:
 
 @power("i3569p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(5, 10), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.grant_action(slide=)",))
+       dropped=("actions.granted_target",))
 def i3569p1(c: Cast) -> None:
     """Seven eggs on one card, asked of the decider the way `_element`
     asks for a damage type -- the choice *is* the variety.
