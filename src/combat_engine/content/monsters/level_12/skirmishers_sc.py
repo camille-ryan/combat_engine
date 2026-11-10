@@ -1419,7 +1419,6 @@ def m2322a3(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
     trigger=_M2322_SPLIT,
     on=Trigger(Bloodied, about_me, _M2322_SPLIT),
-    dropped=(),
 )
 def m2322a4(c: Cast) -> None:
     """What it sheds is flavour; what the row does is swap half its action
