@@ -17,12 +17,24 @@ phrasing is #340's residual. Resolved by keying the localisation index on
 more features and only the class tells them apart.
 
 **The exotic-weapon chains follow `assassin/level_0.py`, not
-`exotic.py`.** Spiked chain, blowgun and garrote are not in the weapon
-table, so a `requires=` gate on one is false forever and the card is
-never offered. The printed Requirement is carried as `requires_text`
-with no gate, which is what the assassin's garrote and blowgun at-wills
-already do -- the rows then play, and the missing weapon is one
-chargen gap rather than nine dead rows.
+`exotic.py`** -- and **the reason this paragraph gave is false, which the
+file it cites has already said about itself.** It read that this file's
+three exotic weapons "are not in the weapon table, so a `requires=` gate
+on one is false forever and the card is never offered", so the printed
+Requirement was to be carried as `requires_text` with no gate. All three
+are in the table: `w3623` superior, flail group, 2d4, reach 2; `w3662`
+superior, its own group, 1d4, load minor; `w3663` superior, its own group,
+1d4, high crit. All three are priced. `assassin/level_0.py` carried the
+identical claim about six weapons and corrected it under `#236` -- "the
+weapons are in the table now, and this said they were not" -- because a
+row showing a Requirement it does not apply is offered to anybody at all.
+
+So the rows here are gated, and the code was already right: `_wielding`
+below resolves the name through `query.holding`, which matches
+`Weapon.slug`, and f1253b, f1254b and f1255b each carry the gate beside
+the words. What is really missing is a **second entry in `Gear.melee`
+for one object** -- two copies of one weapon for f1237, two unequal ends
+for f1252 -- and those are the only exotic-weapon holds left here.
 
 **"Each turn you maintain the grab" is a sustained effect**, not the
 grab. `c.effect(until=When.SUSTAIN, sustain=...)` plus `c.on_sustain`
@@ -534,11 +546,27 @@ def f1346(c: Cast) -> None:
     c.initiative(2 + (c.wis_mod - c.dex_mod), on=me)
 
 
-@_trait("f1256", todo=("c.opportunity_instead()",))
+@_trait("f1256", todo=("c.opportunity_instead()", "c.consume_item()"))
 def f1256(c: Cast) -> None:
     """Use an alchemical item in place of the melee basic an opportunity
     attack would be. Nothing substitutes for the swing an opportunity
-    window is spent on, and alchemical items are not modelled."""
+    window is spent on.
+
+    `c.opportunity_instead()` is unchanged and is **not** re-pointed here:
+    it is one gap across three rows -- this one, `general_d.f942` and
+    `general_l.f2607` -- so it moves for all three or for none.
+
+    **The second half of the old note was false and is now a symbol.** It
+    said "alchemical items are not modelled". They are: `game.db` carries
+    **75** of them in a category of their own, and `items/alchemical.py`
+    writes the bodies with ordinary `Attack(printed=)` lines. What does
+    not happen is anybody being *given* one -- `chargen.loadout` names
+    neither "consumable" nor "alchemical", so a dealt character carries
+    weapons, armour and a shield and no expendables. That is the gap
+    `c.consume_item()` already names for nine rows, so it is reused rather
+    than spelled again here, and it is a real second hold: with the
+    substitution verb and no dose in hand this row's "if you have an
+    alchemical item in hand" is false in every fight."""
 
 
 #: The three holds f1259 answers, in the words the card prints.
@@ -566,32 +594,55 @@ def f1259(c: Cast) -> None:
     c.use_power("p1449")
 
 
-@_trait("f1270", todo=("actions.bluff()",))
+@_trait("f1270", dropped=("actions.feint(for_ally=)",
+                          "actions.bluff_to_hide()"))
 def f1270(c: Cast) -> None:
-    """Hands the combat advantage a Bluff check would win to an ally
-    instead of taking it.
+    """The skill bonus is written; handing the benefit to an ally is not.
 
-    **Re-aimed off `c.grants_ca_to(ally)`**, which names a thing that
-    exists: `c.grants_advantage(on=foe, to=<eid>)` takes an ally's eid
-    and f2092 already wins the advantage with
-    `c.check("bluff", c.passive("insight", of=foe))`. So the contest is
-    sayable and so is giving the result away.
+    **`todo` became `dropped` and the old symbol was the claim that the
+    action does not exist.** It did not when this was written -- the note
+    here read "bluffing for combat advantage is a standard action
+    `engine/actions.py` does not offer" -- and `actions._feinting` has
+    offered it since: a standard action, one entry per adjacent enemy,
+    once per encounter on `Powers.charges`, the check against the
+    target's **passive** Insight. `f946` is the sibling written off it,
+    and its own note says this row "names the same absence from the other
+    side"; that absence is closed, so `actions.bluff()` would never have
+    gone green and nothing would have said why.
 
-    What is missing is the action itself. Bluffing for combat advantage
-    is a standard action `engine/actions.py` does not offer -- f2092 only
-    gets to make the check because its own card hands it one off a
-    trigger -- so this trait has no action to intercept, and "instead of
-    for yourself" is the beneficiary of an action, which is the hold
-    twenty-odd other rows name.
+    The +2 is an ordinary `skill:bluff` modifier, so it is read by the
+    feint, by the hide check's opposition and by anything else that rolls
+    the skill. `kind="feat"` is the word the card prints.
+
+    **What is left is the beneficiary, and that is two different gaps.**
+    The feint lays its advantage with `on=actor` inside `actions.execute`
+    and nothing reaches in, so "instead of for yourself" has no channel --
+    which is `actions.feint(for_ally=)`. And the card's second use,
+    bluffing to create a diversion and hide, is not an action at all:
+    `actions._hiding` is a minor action gated on superior cover or total
+    concealment and opposed by passive Perception, with no Bluff route in
+    or out of it. Two symbols because either could land without the other.
+
+    Neither of them is the ally pool. "An ally who has this feat and is
+    within 5 squares" is `c.feat(c.ref, on=friend)` and
+    `distance_between`, which `_fellowship` above already counts that way,
+    and the engine takes an ally's eid for the result --
+    `c.grants_advantage(on=foe, to=<eid>)`. The old note was right about
+    that half and it is still the half that is not missing.
+
+    The silent signalling clause is left in words: it has no combat
+    meaning, and `narrative=` would claim the whole row plays.
     """
+    c.bonus("skill:bluff", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
 # -- the exotic weapon chains -----------------------------------------------
 #
-# Spiked chain, blowgun and garrote are not in the weapon table, so the
-# printed Requirement is carried as `requires_text` and not as a gate --
-# `assassin/level_0.py` settled that, and a gate would make every card
-# here unofferable rather than merely unequipped.
+# All three weapons are in the table -- `w3623`, `w3662`, `w3663`, each
+# superior and priced -- so the printed Requirement is carried as a
+# `requires=` gate **and** as `requires_text`, which is what
+# `assassin/level_0.py` settled under #236. This comment used to say the
+# opposite; see the module docstring for the measurement.
 
 
 @_trait("f1252", todo=("Weapon.double",),
@@ -600,7 +651,35 @@ def f1252(c: Cast) -> None:
     """The proficiency lands: the weapon table carries this one and
     `chargen` deals it. What is left is the four sentences that make it a
     *double* weapon -- two ends, two groups, two properties -- and a
-    `Weapon` has one of each."""
+    `Weapon` has one of each.
+
+    **Left on `Weapon.double`, which is misnamed and is shared.** `f951`
+    carries the same symbol for the same sentence, so it moves for both
+    rows or for neither, and this file cannot move `general_d.py`. Said
+    here so the next owner does not have to re-measure it:
+
+    * `Weapon.hands` **already carries the word** -- `_HAND_COUNTS` is
+      `("two-handed", "one-handed", "double")` and `__post_init__` mirrors
+      it into `properties`, so 22 table rows read as double today and
+      `c.wielding("double")` answers them. The gap is not a field that
+      cannot say it.
+    * The table even holds each double's off-hand end, as a row of its
+      own with `priced=0`. What nothing does is **deal that end into
+      `Gear.held`**: `general_l.f2794` measured exactly this and declares
+      only the primary end for that reason.
+    * So the owed work is in `Gear`/`chargen`, not on `Weapon`, and the
+      printed consequences all follow from it -- a group per end, `stout`
+      on the primary, `off-hand` on the secondary.
+
+    And **not half-written from here.** `c.gains_property("double",
+    ref="w3623")` would make `holding(..., "double")` true, which is the
+    one live reader's first arm -- but it goes through `replace`, so
+    `__post_init__` runs with `hands` still `"two-handed"` and the weapon
+    ends up carrying two hand-count words at once. A contradictory weapon
+    is worse than an unwritten clause, and it would still have one end.
+
+    "Each end deals 2d4" needs nothing: that is `w3623`'s printed damage
+    already."""
 
 
 _swap("f1253", "f1253b")
@@ -652,9 +731,31 @@ def f1255b(c: Cast) -> None:
     payout -- the same shape `p13793` uses.
 
     Dropped: sliding the grabbed creature as a minor action.
-    `c.grant_action` understands `shift` and `stand` and silently eats
-    anything else, so writing it there would look finished and do
-    nothing.
+
+    **Still `actions.granted_target`, which is one gap across four rows**
+    -- this one, `f3249`, `i3569p1` and `p1471`. `p1471` prints the same
+    sentence word for word, so the symbol stays where the group is; it is
+    not this file's to move.
+
+    **But the reason written under it was stale twice over and both
+    halves pointed the wrong way.** It said `c.grant_action` "understands
+    `shift` and `stand` and silently eats anything else, so writing it
+    there would look finished and do nothing". It **raises** now, naming
+    `GRANTABLE` -- that was #583 and it is fixed -- so the risk is not a
+    quiet no-op. And `GRANTABLE` holds twelve words, one of which is
+    `pull_grabbed`: a granted action that moves **somebody else**, offered
+    one entry per (victim, destination) with the victim read off
+    `Relation.GRABBED_BY` and the squares off `movement.forced_squares`.
+
+    So this is not structurally impossible, and `f3249`'s note is the one
+    that says where the line actually is: the carrier is a modifier keyed
+    `"<what> as <cost>"` and `query.granted_actions` hands back
+    `{(what, cost): how_far}`, three slots and none of them a place. A
+    word whose victim is *derivable* needs none of them -- which is how
+    `pull_grabbed` works and what this clause would want, a slide rather
+    than a pull, since a pull must end nearer the grabber and the card
+    names no direction. Word and reader land together in `actions.py`,
+    and `drivers.granted_words` is what proves the pair.
     """
     victim = c.target
     if victim is None:
@@ -997,7 +1098,31 @@ def f1281b(c: Cast) -> None:
 
     Dropped: "+1 die of damage if it is a nonweapon attack". That die is
     the chosen row's own, and a row's damage expression cannot be read
-    from outside it -- the same hold `f2408` names."""
+    from outside it.
+
+    **This is the one place `c.damage_of(ref)` is argued, for all three
+    rows that carry it** -- f1281b, f1283b and f1287b. The markers are
+    deliberately identical so the group goes green together, and the
+    measurement is this, re-counted today over the set these rows actually
+    choose from (`c.borrowed_rows`: a class row, at-will, standard action,
+    carrying an attack):
+
+        362 rows qualify.   0 of them carry header damage.
+
+    Header damage is the **monster** convention. A class power rolls its
+    dice in its own body -- `c.damage("1d8")` -- so
+    `REGISTRY[chosen].damage_of(0)` is `None` for every row that could be
+    picked, and the before-the-roll route is closed. So is the one during
+    it: `DamageRolled` carries `amount`, `dtype`, `detail` and `dtypes`
+    and **no dice expression**, so nothing can read the face at any
+    moment. That is the whole of the hold, and it is one gap rather than
+    three.
+
+    `f2408` used to be cited here as the same hold and is not any more:
+    `c.as_though_hit_by` was written for it, and that verb runs the named
+    row's body with its attack forced to land -- the *whole* of its
+    damage, once. "N extra dice of it" is a different question and this
+    one is still open."""
     chosen = _at_will_attack(c)
     if not chosen:
         return
@@ -1192,8 +1317,20 @@ _swap("f1287", "f1287b")
 def f1287b(c: Cast) -> None:
     """Same shape as f1281b, against a creature that cannot sense you --
     which is `c.is_hidden(from_=...)`, the engine's only reading of "does
-    not know where you are". The rider is two dice rather than one [W],
-    because the card prints dice here and not weapons."""
+    not know where you are".
+
+    **The die below is a stand-in and the page does not print it.** This
+    card has no weapon branch at all -- it says "2 extra dice of damage"
+    and nothing else -- so, unlike f1281b and f1283b, there is no `[W]`
+    half that can be written correctly and a hold on the other. Two dice
+    *of what* is the chosen row's own damage expression, which is the
+    `c.damage_of(ref)` hold this row shares with those two, so `2d6` has
+    no printed authority: it is the commonest die in the tree used to keep
+    a daily from paying nothing. Said out loud because the old note read
+    "the rider is two dice rather than one [W], because the card prints
+    dice here and not weapons", which sounds like the number came off the
+    page. It did not, and whoever lands `c.damage_of` should replace it
+    rather than check it."""
     if not c.is_hidden(from_=c.target):
         return
     chosen = _at_will_attack(c)
@@ -1487,9 +1624,32 @@ def f1237(c: Cast) -> None:
     at once, and `p971`'s rewrites the movement its own row prints.
     `p4541`'s is **no longer one of the holds**: the swing that row
     hands over carries `granted_via` now, so "the attack granted by this
-    power" is readable. All four clauses are still about a weapon the
-    table does not carry, which `exotic.py` states at length and
-    deliberately does not mark."""
+    power" is readable.
+
+    **The symbol stands and the sentence under it was wrong.** It ended
+    "all four clauses are still about a weapon the table does not carry":
+    the table carries `w3623` and the three sibling rows below gate on it
+    -- see the section comment. What remains is narrower and `c.split_
+    weapon()` names it exactly. One weapon counting as both hands means
+    `Gear.melee` holding two entries for one object, and `Gear.off` and
+    `Gear.two_weapon` are both `melee[1]`-shaped reads off that list, so
+    neither can be made true by one `w3623` in one pair of hands.
+
+    **Checked before touching it, and the check is why it was not
+    touched.** `i2011p1` carries the same symbol for the same sentence --
+    "one weapon becomes two, one per hand ... nothing divides an item" --
+    so this is one gap across two rows and not a singleton. It is also
+    *not* `f951`/`f1252`'s `Weapon.double`, which is close enough to be
+    worth telling apart: that one wants a weapon with two **ends**, each
+    with its own die, group and properties, where this wants two copies of
+    one weapon, one per hand. Both need a second entry in `Gear.melee`;
+    they do not want the same thing in it.
+
+    The other three clauses are writable and none of them is writable
+    *here*: per #550 each belongs in the body of the row it names --
+    `p971`, `p2104`, `p87`, `p4541` -- gated on `c.feat`, and this wave
+    owns none of those files. So the row stays a pointer with nothing
+    armed, which is `todo=` and not `dropped=`."""
 
 
 @_trait("f1296", todo=("query.cover_gained_in_move()", "c.forgo_attack()"))
@@ -1525,6 +1685,17 @@ def f1296(c: Cast) -> None:
     reads the target's passive Perception, and a free action is the usual
     `ActionType.FREE`. Per #550 the clause belongs **in `p971`** gated on
     `c.feat`, not in this body.
+
+    **Both symbols re-checked and both stand.** The reading is graded, not
+    a flag -- `resolve.attack` takes `int(cover_between(...))` and
+    subtracts it, so ordinary and superior are different numbers -- which
+    is why "gain cover" is a *comparison of two readings* and not a
+    boolean flip, and why no existing reader answers it. The one place
+    cover is all-or-none is the **waiver**, `from_cover <=
+    cover_waived(...)`, which is a different question from this card's.
+    `c.forgo_attack()` is still the second of a two-attack row being
+    withdrawn after the first has missed, and nothing cancels a swing a
+    row is already in the middle of taking.
     """
 
 
@@ -1724,7 +1895,7 @@ def f1302(c: Cast) -> None:
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", dropped=("c.within(extend=)",))
+@_trait("f1303", dropped=("p620.ally_pool()",))
 def f1303(c: Cast) -> None:
     """All four refs resolve. p2099 goes in the place of the melee basic a
     charge swings; p971 rewrites the movement its row prints and p620 the
@@ -1759,11 +1930,24 @@ def f1303(c: Cast) -> None:
     allow to shift can be within 2 squares of you, instead of adjacent to
     you or the target" rewrites the pool `warlord/level_1._beside` builds
     out of two literal `c.within(1, ...)` calls inside `p620`'s own body,
-    and no modifier reaches a literal -- `i1825x1` is the same gap on the
-    same symbol. Note for whoever lands it: this card **substitutes** the
-    pool rather than growing it, so a parameter that only widens a radius
-    would give "within 2 of you *or* of the target", which is wider than
-    printed.
+    and no modifier reaches a literal.
+
+    **Re-pointed off `c.within(extend=)`, which named the answer `#715`
+    rejected.** That symbol asks for a radius a modifier can widen from
+    outside; the ruling went the other way -- the laying row reads the
+    raise, which is what `c.change_amount` / `c.amount_for` is for -- so
+    nobody is going to build it. `i1825x1` was the other claimant and was
+    re-pointed first, onto the line owed in *its* named row; its note says
+    this one "keeps the old spelling until somebody owns
+    `feats/general_h.py`", and this is that.
+
+    This card rejects the old symbol a second way, which is why the two
+    rows shared a shape and not a fix: it **substitutes** the pool rather
+    than growing it, so a parameter that only widens a radius would give
+    "within 2 of you *or* of the target", wider than printed. So the owed
+    line is one line in `p620` -- its Special reading an override instead
+    of building the pool out of two literals -- and that is what the
+    symbol names, by the ref, the way `p13853.dice_for()` does.
 
     No gate on possessing p2099: `dsl.basic_options` refuses a row the
     character does not have, which is the same question asked later and
@@ -1891,6 +2075,22 @@ def f1307(c: Cast) -> None:
     declaration of it. Asked at the shift and not at the hit: both halves
     of the printed sentence are about that moment, so a dose that lands
     in between still counts.
+
+    **Unchanged, and re-checked because the table arrived.** `game.db`
+    carries a `poison` table now -- 19 rows, `x4_1` upward, each with its
+    own printed attack line -- so "a poison you possess" has refs behind
+    it for the first time. It is still the same hold: **nothing is
+    declared and nothing carries one.** Zero `x4_` rows exist in
+    `content`, and no `Gear` field holds a dose (`weapons`, `stowed`,
+    `worn`, `quiver`, `thrown_left` -- there is no consumable among them),
+    so there is nothing to apply and no secondary attack to raise. The
+    coating machinery is the half that is ready: `c.apply_poison` ties a
+    payout to the weapon it was smeared on and checks the blow against it.
+
+    A poison ref cannot be the symbol either -- `dsl._SYMBOL` admits
+    an `x5_` disease ref and nothing for `x4_`, which is why this names
+    the verb and leaves the dose abstract, the same answer the 47
+    `c.contract(ref)` rows reached before the disease table landed.
     """
     me = c.me
 
@@ -1941,6 +2141,14 @@ def f1308(c: Cast) -> None:
     hand the character two swings where the card prints one. The widening
     belongs in p653, which is `f985`'s gap from the other side: that row
     wants the same closure to let a feat decline the counter.
+
+    **Kept as its own symbol rather than folded into theirs**, re-checked:
+    `f985` and `f988` both carry `c.decline_trigger(ref=)` and both want
+    to *refuse* the interrupt p653 arms -- one for a defence bonus, one
+    for a racial power as a reaction. This row wants to **widen what
+    provokes** it. Same closure, opposite edits, so they are two gaps in
+    one body and a shared symbol would go green for one of them and be
+    wrong for the other.
     """
     me = c.me
     c.as_basic("p2620", window="challenge")
@@ -2135,21 +2343,32 @@ def f1334b(c: Cast) -> None:
     )
 
 
-@_trait("f1336", todo=("c.grant_action(familiar=)",))
+@_trait("f1336", todo=("actions.move_companion()",))
 def f1336(c: Cast) -> None:
     """Moves the familiar for a minor action instead of a move action.
-    `c.move_companion` walks it, and `c.grant_action` is the verb that
-    makes an ordinary thing cost a different action -- but `actions.GRANTABLE`
-    is the authority on which things, and none of its twelve words is a
-    companion's move.
 
-    **Still engine work, and the old note here described a trap that has
-    since been closed.** It said `c.grant_action` "understands `shift` and
-    `stand` and silently eats anything else", which was #583's fault and is
-    fixed: an unrecognised word now **raises**, naming the set. So the
-    marker is not "the verb would quietly do nothing" -- it is that the word
-    and its reader in `engine/actions.py` have to land together, which is a
-    change in that file and not in a row."""
+    **Re-pointed off `c.grant_action(familiar=)`, which named a keyword
+    one layer above the gap.** `c.grant_action` changes what an *existing*
+    menu line costs -- it lays a bonus under `"<what> as <cost>"` and
+    `actions.GRANTABLE` is the authority on the words with readers -- so a
+    keyword on it presupposes a line to re-price, and there is none:
+    nothing in `engine/actions.py` offers moving a companion at all. The
+    familiar walks only when a row calls `c.move_companion`, which is a
+    body and not an action. `f2726`'s grant is the worked case of the
+    difference -- a `mount` grant was close to a no-op because the action
+    was already offered by default, and here the opposite is true.
+
+    So the owed thing is the offer: a companion's move in the menu, its
+    word in `GRANTABLE` and its reader beside it, landing together the way
+    `pull_grabbed` did. Then "with a minor action instead of a move
+    action" is one `c.grant_action` call from this body, and "once per
+    turn" is the count that verb already carries.
+
+    The old note's other half is still right and worth keeping: it used to
+    say `c.grant_action` "understands `shift` and `stand` and silently
+    eats anything else", which was #583's fault and is fixed -- an
+    unrecognised word now **raises**, naming the set. So nothing here
+    could have been half-written into a word nobody reads."""
 
 
 @_trait("f1337")
