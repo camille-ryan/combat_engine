@@ -86,6 +86,43 @@ def main() -> int:
 #: day somebody names one, with no edit here.
 SOURCE_GAP = "compendium."
 
+#: Symbols naming a clause that has been **decided against**, not left
+#: undone. A row whose every want is one of these is as finished as it will
+#: ever be, exactly as a `compendium.` row is -- the difference is that the
+#: page prints the clause and we are choosing not to build it.
+#:
+#: **`content/CLAUDE.md` instructed this bucket's return, and its condition
+#: has now been met.** On `declined=` it says:
+#:
+#:   > So it is **not** the marker for "one clause of a working row is
+#:   > declined". That case was designed for, built in `blocked.py`, and
+#:   > removed when the call turned out to be item-level -- if it comes
+#:   > back, the row keeps `dropped=` and the bucket comes back with it.
+#:
+#: It came back. Camille, asked on `#1039` whether special ground belongs in
+#: arcade fights or only in story modules, 2026-11-10:
+#:
+#:   > *"story only is fine."*
+#:
+#: That is clause-level and it reaches **13 rows that play**, so `declined=`
+#: would be wrong on every one of them -- it refuses the whole row, and
+#: these rows have 12 to 35 statements of working body each. They keep
+#: `dropped=`, as the file says, and stop being counted as work owed.
+#:
+#: A set rather than a prefix, unlike `SOURCE_GAP` above: these are ordinary
+#: symbol names with nothing in common to match on, and a prefix would need
+#: inventing one. The cost is that a new declined symbol wants an edit here,
+#: which is the right amount of friction for a scope decision.
+DECLINED = frozenset({
+    # Special ground is story-only. `story.terrain_words` is the board-level
+    # vocabulary and `c.terrain(...)` is how a row would read it; a gate on
+    # either is False in every arcade fight by decision now, not by omission.
+    "story.terrain_words",
+    "c.terrain(penalty=)",
+    "c.terrain(square=)",
+    "terrain.dress(scenery=)",
+})
+
 
 def _head_of(token: str) -> tuple[str, str]:
     """A want split into the thing named and the arguments asked for."""
@@ -190,7 +227,7 @@ def _report(
     have: dict[str, object],
     only_ready: bool,
 ) -> int:
-    ready = partial = waiting = sourced = capped = 0
+    ready = partial = waiting = sourced = capped = declined = 0
     lines: list[str] = []
     #: Blocked rows by the shape of what they want. See `_shape_of`.
     shape: dict[str, list[str]] = defaultdict(list)
@@ -206,6 +243,17 @@ def _report(
             left = [w for w in todo if w not in arrived]
             lines.append(f"  partial {ref:<10} {', '.join(arrived)} exists; "
                          f"still waiting on {', '.join(left)}")
+        elif all(w in DECLINED for w in todo):
+            # **Decided against is not undone.** Same argument as the
+            # compendium bucket below -- no symbol will arrive, so the row is
+            # as finished as it will ever be -- and a different cause: the
+            # page prints the clause and we are not building it. Counting
+            # these with unstarted work made the backlog describe a decision
+            # as a debt. See `DECLINED`.
+            declined += 1
+            if not only_ready:
+                lines.append(f"  declined {ref:<10} {', '.join(todo)} "
+                             f"— decided against; nothing to build")
         elif all(w.startswith(SOURCE_GAP) for w in todo):
             # **Waiting on the compendium is not waiting on work.** 22 rows
             # name `compendium.attack_defence`: the page prints no defence on
@@ -302,7 +350,8 @@ def _report(
                   f"it; nothing to build")
 
     print(f"\n  tree: {ready} ready, {partial} partial, "
-          f"{waiting} still blocked, {sourced} waiting on the compendium")
+          f"{waiting} still blocked, {sourced} waiting on the compendium, "
+          f"{declined} decided against")
     if waiting:
         # **The headline that matters.** "1,153 still blocked" reads as a
         # four-figure backlog; a quarter of it is one keyword each. #677.
