@@ -121,6 +121,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.types import Light
+from combat_engine.engine.zones import Zone
 
 ITEM = "item"
 
@@ -211,6 +212,26 @@ def _swung_by(who: int):  # noqa: ANN202
 
 
 # -- predicates -------------------------------------------------------------
+
+
+def _auras_owned_by(world: World, who: int) -> list[tuple[int, Zone]]:
+    """That creature's live **auras**, id and zone -- not what it conjured.
+
+    `Zone.aura` is the radius and a plain zone's is 0, which is the only
+    thing telling an aura from a patch of ground the same creature laid;
+    `c.made_by` answers the owner half alone, and a body asking only that
+    reaches both. `c.my_aura` draws the same distinction for the caster's
+    own and says so in its own note.
+    """
+    return [(zid, z) for zid, z in world.zones.all() if z.aura and z.owner == who]
+
+
+def _hit_a_creature_with_an_aura(world: World, me: int, ev: Any) -> bool:
+    """My blow landed on something that has an aura standing right now."""
+    if not by_me(world, me, ev):
+        return False
+    foe = getattr(ev, "target", None)
+    return foe is not None and bool(_auras_owned_by(world, foe))
 
 
 def _provoked_by_a_ranged_power(ev: Any, cls: str = "") -> bool:
@@ -1019,7 +1040,7 @@ def i1630p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.ref",),
+    todo=("spec.power_ref()",),
 )
 def i1690x1(c: Cast) -> None:
     """Rides on one named class row, and the spec prints that row's **name**
@@ -1868,22 +1889,52 @@ def i3558p1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
-    dropped=("chargen.feature_choice()",),
+    dropped=("durations.Effect.via",),
 )
 def i457p1(c: Cast) -> None:
-    """Re-pointed, because the gap it named was not the one holding it.
+    """Re-pointed a second time, because the premise behind
+    `chargen.feature_choice()` is measurably false and that symbol has
+    been retired underneath this row.
 
-    "A mark carries no flavour of which row laid it" was true and is fixed:
-    `Relations` records the laying ref and `c.marked(via=)` asks for it
-    (#875). That is not enough for this card, which says *"treat each mark
-    as if you applied it with your **chosen** aegis"* -- and the three
-    aegises are sub-options of `cf:swordmage-f1` (`s0`, `s1`, `s2`, naming
-    `p3322`, `p5736` and `p3323`), so laying the mark as the right one
-    needs to know which the swordmage picked. Nothing records a
-    class-feature sub-choice, which is the symbol this now waits on along
-    with four other rows.
+    The note here said *"nothing records a class-feature sub-choice"*.
+    **It is recorded, and one line reads it.** The three aegises are the
+    sub-options of `cf:swordmage-f1`, each header-gated on a named build
+    leg, and `features.builds.SWORDMAGE_F1_OPTIONS` maps the three refs to
+    the three legs; `cf:swordmage-f1`'s own body already reads the pick
+    with `c.build(leg)` to forbid the two that were not taken. Measured on
+    three dealt swordmages, one per leg:
 
-    `c.aegis()` was a verb name for neither half, which is why it went.
+        build='assault'      -> c.build('assault') True, others False
+        build='ensnarement'  -> c.build('ensnarement') True, others False
+        build='shielding'    -> c.build('shielding') True, others False
+
+    Exactly one leg true each time, so `next(ref for ref, leg in
+    SWORDMAGE_F1_OPTIONS.items() if c.build(leg))` is the chosen aegis.
+    `feats.general_r` retired the symbol for the same reason on `#1085` --
+    *"a per-character sub-choice store that did not need to exist"* -- and
+    this row was the last claimant left on it.
+
+    **What actually holds the row is one field, and the engine already
+    says so.** `Cast.marked`'s own docstring: *"whoever un-blocks `i457p1`
+    wants a `via` of its own on `Effect`, not this shortcut"*. Today
+    `durations._install_state` fills a mark's `via` from `eff.by`, so the
+    laying row and the row the mark counts as are the same string and
+    cannot be told apart. Hijacking `by` is the shortcut that note
+    refuses, and it refuses it for a measured reason: `durations.keywords_of`
+    reads `by` for the effect's keywords, so the mark would start answering
+    the aegis's keyword gates as well.
+
+    Named `durations.Effect.via` rather than `Effect.via` on purpose --
+    `blocked._surface` indexes engine classes under their module, so the
+    bare spelling is a symbol that could never resolve in either
+    direction.
+
+    The work that comes with the field is content, not another facility,
+    so it is not a second symbol: the three aegis bodies each close over
+    one `victim` and release the previous mark, so a second aegis target
+    is unreachable until they read the mark instead -- `c.marked(via=)` is
+    already the reader for that.
+
     The mark itself lands, so this stays `dropped=` rather than `todo=`."""
     c.mark(until=When.SAVE_ENDS)
 
@@ -2002,19 +2053,44 @@ def i529x1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     trigger="you hit an enemy that has an aura with this weapon",
-    on=Trigger(Hit, by_me, "you hit an enemy with this weapon"),
-    dropped=("c.no_aura()",),
+    on=Trigger(
+        Hit, _hit_a_creature_with_an_aura, "you hit an enemy that has an aura"
+    ),
 )
 def i567p1(c: Cast) -> None:
-    """An aura is a thing on the board with an owner, so ending it is
-    `c.dispel`. Stopping the enemy putting it back up is not: nothing
-    forbids a trait, only a row."""
+    """Both halves land, and **the body used to reach further than the
+    card**, which is the fault that was hiding under the marker.
+
+    The old reading was "an aura is a thing on the board with an owner, so
+    ending it is `c.dispel`" -- true of the verb and one question short:
+    owner alone also matches every zone and conjuration that creature laid,
+    so a daily printed against an aura was ending a wall or a patch of
+    ground. `_auras_owned_by` asks `Zone.aura` as well, which is the
+    distinction `c.my_aura` already draws for the caster's own.
+
+    **The marker's premise was that nothing forbids a trait, only a row,
+    and the premise does not hold.** `c.forbid(ref=)` adds to
+    `Powers.forbidden` and `usable` reads it for *any* row the creature
+    has, trait or power; the only thing missing was the ref, and an aura
+    carries it -- `c.aura` labels with `label or self.ref`, which is the
+    same convention `query.lingers` reads. `c.knows` confirms the foe
+    really holds that row before the hold is laid, so a zone labelled by
+    hand rather than by a ref cannot produce a refusal aimed at nothing.
+
+    The printed Trigger names the aura too, so it is in the predicate
+    rather than the body: a daily free action offered on every hit is a
+    daily the AI spends on nothing. That is why this row reads NEVER on
+    the audit board -- no creature there has an aura to kill -- where
+    before it fired by dispelling the harness's own foe zone.
+    """
     foe = c.target
     if foe is None:
         return
-    for z in c.conjurations():
-        if c.made_by(z) == foe:
-            c.dispel(z)
+    for zid, zone in _auras_owned_by(c.world, foe):
+        laid = zone.label.split()[0] if zone.label else ""
+        c.dispel(zid)
+        if laid and c.knows(laid) == foe:
+            c.forbid(ref=laid, on=foe, until=When.SAVE_ENDS)
 
 
 @power(
@@ -2070,11 +2146,34 @@ def i828p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_damage_die()",),
+    todo=("rng.Roll.faces",),
 )
 def i834x1(c: Cast) -> None:
-    """Turns on what the individual damage dice came up as. `DamageRolled`
-    carries the total and nothing carries the faces."""
+    """Pays out when one of the weapon's dice comes up at its highest face.
+
+    **Re-pointed, because the premise behind `c.on_damage_die()` expired.**
+    This said *"`DamageRolled` carries the total and nothing carries the
+    faces"*, and that stopped being true at #703: the event carries its
+    live `Roll`, which is what `c.reroll_faces` and `c.set_damage_faces`
+    both read off it, and `roll.dice` is the individual faces. The
+    `set_damage_faces` docstring records the identical correction being
+    made to `p10044`'s marker -- *"this row was marked unwritable and the
+    marker's premise expired"* -- so this is the same stale claim one file
+    over. A watch on `DamageRolled` reaching `ev.roll.dice` is available
+    today and `c.flat(2 * c.enhancement)` is the payout.
+
+    What is genuinely absent is **how many sides the die had**. "The
+    maximum result" is `max(roll.dice) == faces`, and `faces` exists only
+    as `cast._faces_of`, which is private -- `blocked._one` reads the
+    public surface, so a marker naming it could never go green, and
+    `docs/symbols/` lists no reader for it. Parsing `Roll.expr` here
+    instead is the one read hand-rolled in N files that `rng.normalise`'s
+    own note was written to stop, and it would be the first copy.
+
+    Deliberately not `c.on_damage_die()`: a verb name promises a facility,
+    and only one field is missing from a `Roll` that already carries
+    everything else this card asks about.
+    """
 
 
 @power(
@@ -2659,12 +2758,31 @@ def i2409x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you score a critical hit against a target",
     on=Trigger(Hit, _crit_by_me, "you score a critical hit"),
-    dropped=("c.forgo_crit()",),
 )
 def i2409p1(c: Cast) -> None:
-    """The trade is one-sided here: the crit rider is applied by the
-    critical itself and nothing declines it, so the wielder keeps the
-    damage and gets the hold as well."""
+    """Both halves of the trade now. **The marker said "nothing declines a
+    critical" and `c.crit_becomes` is exactly that door** -- #861 built it
+    for `feats.general.f281b`, whose whole printed effect is the same
+    demotion, and this row was left paying the hold *and* keeping the
+    critical. Strictly stronger than print, which is the fault worth
+    naming: the card trades the one for the other.
+
+    **The window is the half that had to be checked rather than assumed.**
+    `c.crit_becomes` writes `AttackResult.critical`, and that is only worth
+    anything while the dice are still unrolled. `resolve.attack` announces
+    `Hit` after `settle` and *before* the body's damage line, and
+    `triggers.WINDOW_OF` puts a `FREE` action in `Window.AFTER` of its
+    event -- which is still inside the emit, so the demotion lands before
+    anything reads `c.crit`. Measured on one forced natural 20, the row
+    held against the row forbidden: **13 damage against 39**, with
+    `CritChanged(by='i2409p1', critical=False)` in the log only on the
+    first and the hold landing only on the first.
+
+    Demoted, not merely stripped of the item rider: `f281b`'s note is that
+    clearing the flag is "ordinary dice, and none of the riders a critical
+    pays", and the printed sentence gives up the whole of a critical's
+    extra damage rather than one source of it."""
+    c.crit_becomes(False)
     c.condition(Condition.DOMINATED, until=When.EONT)
 
 
@@ -4561,16 +4679,52 @@ def i3085p1(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    dropped=("c.origin_of()",),
+    todo=("c.origin_of()",),
 )
 def i3085p2(c: Cast) -> None:
-    """`c.cast_from` lends the origin of a **ranged or area** line, which is
-    read in `dsl.measured_from`. The card moves a *close* power's origin,
-    and to a square beside the enemy rather than the enemy's own -- so the
-    borrow lands in the right place and covers the wrong family."""
-    foe = c.target
-    if foe is not None:
-        c.cast_from(foe, on=c.me, until=When.ENCOUNTER)
+    """Moves the origin square of the **next** close attack power of one
+    printed class, used through this item, to a square beside a chosen
+    enemy.
+
+    **The body was removed, because it paid a benefit the card does not
+    print and none of the benefit the card does.** It called
+    `c.cast_from(foe, until=When.ENCOUNTER)`, and the old note beside it
+    said "the borrow lands in the right place and covers the wrong
+    family". Only the second half was true, and the first half is three
+    things:
+
+    * `dsl.measured_from` reads a lent square **only** for
+      `ranged`, `area_burst` and `wall`, and says so in its own comment.
+      A close power never consults it, so the printed clause did nothing.
+    * The lender is a **creature**, so the square was the enemy's own and
+      not one beside it -- which is where the card puts it, and the one
+      square a creature cannot stand in.
+    * It stood for the **whole encounter** over **every** ranged and area
+      power the holder has, where the card gives one use of one close
+      power. So a holder's ranged attacks all originated at a distant
+      enemy for the rest of the fight: strictly stronger than print, and
+      the stronger half was the only half that worked.
+
+    `todo=` rather than `dropped=` for that reason, and **the symbol is
+    deliberately unchanged**: the row has one printed clause and nothing
+    of it can be delivered, so there is no clause left to play. The marker
+    stays `c.origin_of()` because `items.implement_a.i1832x1`'s note holds
+    the argument for it -- that symbol was split off `Hit.origin` to be
+    the *writer* side, shared with `i2927x1`, and the two should go green
+    together. Re-pointing it at `c.cast_from(close=, square=)` would
+    describe this row's two missing arguments exactly and leave `i2927x1`
+    alone on a symbol nothing else asks for.
+
+    What such a writer owes, so it is written down once: the lent origin
+    has to reach the **close** family, and it has to be a **square**
+    rather than a creature. `c.cast_from(ref=)` (`f2025`, `i2339p1`) and
+    `c.cast_from(melee=)` (`p11769`) are the per-argument markers on the
+    same verb and are worth reading beside this.
+
+    No chargen cost to the change: `choices.py` reads `carries_a_marker`
+    and `refused_in_play` off feats and powers, and an item block is scored
+    by neither, so the draw does not move.
+    """
 
 
 @power(
@@ -4767,7 +4921,7 @@ def i456p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("spec.ref",),
+    todo=("spec.power_ref()",),
 )
 def i694x1(c: Cast) -> None:
     """Same gap as i1690x1: the spec prints the triggering row's name rather
@@ -4892,8 +5046,37 @@ def i848p1(c: Cast) -> None:
     todo=("c.reshape_weapon()",),
 )
 def i1153p1(c: Cast) -> None:
-    """Becomes a different weapon, with different dice and a different
-    group. `Weapon` is a column set no body rewrites."""
+    """Becomes a different weapon of the wielder's choosing, until the
+    encounter ends or a minor action ends it.
+
+    **The marker stands and its stated reason was false.** This said
+    *"`Weapon` is a column set no body rewrites"*. There are four
+    per-character writers and `c.weapon_group`'s own docstring counts them
+    -- `c.weapon_dice`, `c.gains_property`, `c.weapon_range` and itself --
+    and `feats.general_h.f1277` rewrites three fields of one weapon in
+    three lines. So the fields are writable; a general-absence claim about
+    them is the shape this tree keeps getting wrong.
+
+    Two things are missing instead, and neither is a field:
+
+    * **A whole-weapon swap.** The four writers each set one column, and
+      becoming a different weapon moves the dice, the group, the category,
+      the proficiency, the reach and the properties together -- with the
+      old values kept, because this one ends and hands the weapon back,
+      where every existing writer is one-way. `c.weapon_group` deliberately
+      *adds* a group rather than replacing it ("every printed line here
+      adds an identity rather than trading one"), which is the opposite of
+      what this card does.
+    * **The choice.** The card offers any weapon in three printed
+      categories and names none, so the row cannot say what it becomes;
+      nothing offers a weapon as an option to a power the way
+      `chargen` offers one at build time.
+
+    `c.reshape_weapon()` is the first of those, which is the half a verb
+    could be. Writing the swap one column at a time against a hand-picked
+    weapon would be a row inventing its own choice, and a row is not
+    allowed to pick for the player.
+    """
 
 
 @power(

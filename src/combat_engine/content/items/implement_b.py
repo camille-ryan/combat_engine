@@ -3278,15 +3278,26 @@ def i2801p1(c: Cast) -> None:
     ref, and picking any channel-divinity row the bearer happens to own
     would be a different card.
 
-    **The symbol is `spec.ref` now and `by_ref()` is retired.** That is
-    the name nine other rows already carry for this one gap -- "the spec
-    prints the triggering row's name where every other block prints a
-    ref", which is `i1690x1`'s wording and `i694x1`'s. `by_ref()` was a
-    synonym for it, invented in this file, and it was holding two rows
-    apart from a group that is one ETL fix: a reader asking
-    `blocked.py --group` what the spec owes saw ten rows and not twelve.
-    Its other claimant, `i3525x1`, has since had its ref printed, so
-    nothing is left on the old spelling.
+    **The symbol is `spec.power_ref()` now.** This said `spec.ref`, and
+    the argument it made for that -- one name for the one gap, rather
+    than a synonym invented in this file holding two rows apart from a
+    group that is a single ETL fix -- is why it moved again rather than
+    in spite of it. `spec.ref` turned out to be **three** gaps wearing one
+    name (`#1229`): four class features whose spec ends "you also gain the
+    following powers" and lists none, one row citing its own ref, and this
+    family -- a printed power name sitting in prose where every other
+    block prints a ref. Landing any one of them reported all eleven ready.
+
+    `spec.power_ref()` is the name `f3401` already carried for exactly
+    this sentence, so this is still the "reuse the symbol, never mint a
+    synonym" rule and not a reversal of it. `by_ref()`, retired earlier,
+    was the synonym; `i3525x1` has since had its ref printed, so nothing
+    is left on it.
+
+    `i1690x1` and `i694x1` are on `spec.power_ref()` too -- they were
+    briefly left behind on `spec.ref` when the split landed, because an
+    authoring agent held `weapon_b.py` at the time, which is the split
+    this paragraph warns against happening for half a day.
 
     The four class features the card names are all reffed in the spec
     already; it is the power under them that is prose."""
