@@ -835,12 +835,29 @@ def i1066p1(c: Cast) -> None:
       creature cannot move at all. The printed movement is a fly speed with
       hover, which is `speed=0, modes={"fly": 6}` by `Summon`'s own
       convention, and the budget every move is measured against is
-      `query.speed`, which returns `Movement.speed`: nothing reads a mode's
-      number as a distance. So the middle branch can never succeed and the
-      list collapses onto the last one -- the demon would attack a bloodied
+      `query.speed`, which returns `Movement.speed`.
+
+      **"Nothing reads a mode's number as a distance" was too strong and
+      is corrected here.** `c.move(at=<mode>)` reads exactly that --
+      `cast.py:5129` takes `mv.modes.get(at, 0)`, subtracts the ground
+      speed and lends the difference for the length of the move -- and
+      `c.mode`'s own docstring records "speed 0, fly 6" as a shape three
+      blocks print and treats 0 as present-and-useless deliberately. So
+      the engine does model this and the creature is not immobile in
+      principle.
+
+      What is true is narrower: **the default mover passes no mode.**
+      Nothing in `actions` or the summon's own mover calls `c.move(at=)`,
+      so the budget a summon is offered is `Movement.speed`, which is 0
+      here. A row could reach the fly speed by naming it; the instinctive
+      list cannot, because it does not ask.
+
+      So the middle branch still cannot succeed and the list still
+      collapses onto the last one -- the demon would attack a bloodied
       **ally** on every turn no bloodied enemy stood beside it, which is
-      strictly worse than leaving the clause out. Three blocks in the tree
-      print "speed 0, fly N" and share this.
+      strictly worse than leaving the clause out. The conclusion holds;
+      the reason given for it did not, and a false reason in a docstring
+      is what sends the next reader to fix the wrong layer.
 
     Not markered, because the tree does not marker it and `p11840` and
     `p11841` say it in prose instead: **nothing offers a standard action to
