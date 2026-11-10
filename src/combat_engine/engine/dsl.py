@@ -4269,6 +4269,45 @@ def use(
         # this use from the last one -- and `augmented`, being the
         # encounter's running total, cannot.
         pool.last[ref] = augment
+    # **A one-use item is spent by using it.** Paid here beside the augment
+    # spend above and for the same stated reason: once per *use*, where a
+    # body runs once per target and would pay once per target with it.
+    #
+    # Conditional on the used row's **entry** being a ref the creature
+    # carries, which is what keeps this out of `UseSpent`'s prohibition --
+    # that docstring forbids an event on the ordinary spend because it
+    # "would announce every power use in the game and credit every row for
+    # merely being used". This reaches only a row that *is* a carried
+    # item's own block, and the item leaving the inventory is a state
+    # change nothing else records.
+    #
+    # `entry_of` is the tree's own block-to-entry map, the same one
+    # `entry_defect` uses, so `i472p1` finds `i472` without inventing a
+    # convention here.
+    #
+    # **A Property is not a drink, and leaving that out ate the object.**
+    # `turns.arm_traits` arms every `action=NONE` row at the start of the
+    # fight with `use(..., spend=True)`, so the first draft consumed a
+    # carried item whose block is an always-on Property before anybody had
+    # touched it -- `i3468` left `carried` during arming, announced as
+    # `ItemConsumed(by='i3468x1')`. Found by `replay.py`, on
+    # `level-10-full`, and reproduced in nine lines.
+    #
+    # `action is NONE` is the exact test rather than a broader one: it is
+    # the only shape `arm_traits` passes `spend=True` for, since it skips a
+    # row with a declared trigger on its own argument. A *triggered*
+    # consumable block still spends, which is right -- the potion that
+    # works when you are hit is used up by working.
+    if spend and p.action is not ActionType.NONE:
+        from .components import Gear
+        from .events import ItemConsumed
+
+        gear = world.get(actor, Gear)
+        if gear is not None and gear.carried:
+            item = entry_of(ref)
+            if item in gear.carried:
+                gear.carried.remove(item)
+                world.bus.emit(ItemConsumed(who=actor, item=item, by=ref))
     # `reentrant` is "the attacker repeats the attack": the row has to run a
     # second time inside itself, which is the one case the guard below is
     # wrong about. It is never the default -- the guard exists because two

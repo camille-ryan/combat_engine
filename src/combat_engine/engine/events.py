@@ -1474,6 +1474,41 @@ class UseSpent(Event):
 
 
 @dataclass
+class ItemConsumed(Event):
+    """A one-use item on the creature's person was spent.
+
+    A potion or an alchemical item is **gone** once used, and nothing said
+    so. `Gear.carried` holds the refs and `dsl.use` takes one out, which is
+    a change to the creature's state that no other event covers:
+    `UseSpent` is about a *power's* budget and this is about the object
+    leaving the inventory.
+
+    Announced for the same reason `UseRestored` and `UseSpent` are, and
+    `UseRestored`'s docstring is the argument -- a row whose whole printed
+    Effect is the price was silent by construction until the price had an
+    event with a `by` on it. So this is in `audit.DID_SOMETHING`.
+
+    **Not emitted from the ordinary spend in `dsl.use`.** `UseSpent`'s
+    docstring sets that rule: an event on every power use "would announce
+    every power use in the game and credit every row for merely being
+    used". This fires only when the used row's *entry* is a ref sitting in
+    `Gear.carried`, which is a narrow and real state change rather than a
+    restatement that a power ran.
+
+    `who` is the creature that spent it, `item` the entry ref that left the
+    inventory -- the item, not the block that was used -- and `by` the row
+    whose use spent it, which is one of that item's own blocks.
+
+    Camille's ruling on `#1233`, 2026-11-10, is why there is anything to
+    spend: *"random from any consumable"*, two per generated character.
+    """
+
+    who: int
+    item: str
+    by: str
+
+
+@dataclass
 class MarkHeld(Event):
     """A standing mark was held against the rule that would have dropped it.
 

@@ -1366,7 +1366,18 @@ DID_SOMETHING = {
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
     "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
+    "ItemConsumed",
 }  # fmt: skip
+# `ItemConsumed` is the thirteenth and is admitted on `UseSpent`'s argument,
+# which is the one two above it: a **price** is a real effect when it is
+# attributable, and this carries `by` naming the row whose use paid it. A
+# potion leaving `Gear.carried` is a change to the creature that no other
+# event covers -- `UseSpent` is a power's budget and this is the object.
+#
+# It cannot inflate anything, which is the question to ask of any addition
+# here. `dsl.use` emits it only when the used row's own entry is a ref the
+# creature carries, so the only rows it can reach are the blocks of a
+# carried item, and for those the spend genuinely happened. #1233.
 # `CheckSubstituted` is the twelfth and is admitted on `DiceRewritten`'s
 # argument. A row printed *"you make a History check in place of the
 # knowledge check"* changes `CheckDeclared.skill` **in place**, so the only

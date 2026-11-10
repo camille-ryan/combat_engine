@@ -3609,7 +3609,9 @@ def _stock_quiver(gear: Gear | None) -> None:
 DEALT_CONSUMABLES = 2
 
 
-def _stock_consumables(gear: Gear | None, level: int, rng: Random) -> None:
+def _stock_consumables(
+    gear: Gear | None, powers: Powers | None, level: int, rng: Random
+) -> None:
     """Put two consumables of this character's level or lower on its person.
 
     **Why this exists at all.** `treasure` deals the three enhancement
@@ -3647,10 +3649,34 @@ def _stock_consumables(gear: Gear | None, level: int, rng: Random) -> None:
     193 has at least one declared block**, meaning a dealt item is never an
     inert object.
 
-    **Sampled without replacement when the pool allows it.** Two of the same
-    potion is a legitimate hand and `random.sample` would refuse a pool of
-    one, so the draw falls back to repeats only when it has to -- which at
-    level 1 it never does, since 7 > 2.
+    **Sampled without replacement, and never two of a kind.** This first
+    fell back to `rng.choice` repeats on a pool smaller than two, reasoning
+    that two of the same potion is a legitimate hand. **It is not a hand
+    this engine can play**: a block's budget is its printed `usage=`, so
+    `i3309p1` is `daily` and `usable` returns `(False, 'expended')` after
+    the first drink -- the second copy sits in `carried` undrinkable. The
+    object ought to be the budget for a consumable rather than the power
+    line, and that is a ruling and a wider change, so `#1238` holds it.
+
+    Measured, the branch was also dead: the pool is **18 at level 1**, 26 at
+    2, 49 at 3, all 193 by level 10 -- never below two. So it was dead code
+    whose only possible output was a broken hand, which is worse than no
+    fallback. `min(DEALT_CONSUMABLES, len(pool))` deals fewer instead, and
+    no path can now mint a copy that cannot be drunk.
+
+    **And its blocks go into `Powers.known`, which is what makes it an item
+    rather than a souvenir.** Carrying a potion that cannot be drunk was the
+    first half of this ruling and it moved no row: the ten rows are about
+    *using* an alchemical item, so the facility they name is a usable one.
+    `equipment.equip` does the same three lines for a worn item and
+    `_blocks_of` is the same declared-only filter `treasure` uses -- a
+    `Powers.known` holding an undeclared ref is a card the engine cannot
+    resolve.
+
+    **Not through `equip`,** deliberately. That lays enhancement, defence
+    mods and a crit rider off the item's columns and files it in a `worn`
+    slot, all four of which are wrong for a thing on your belt. The powers
+    loop is the only part of it a carried item wants.
 
     Takes `rng` rather than reaching for module state, so a dealt character
     stays reproducible from its seed. That is the same contract
@@ -3671,12 +3697,13 @@ def _stock_consumables(gear: Gear | None, level: int, rng: Random) -> None:
     ]
     if not pool:
         return
-    picks = (
-        rng.sample(pool, DEALT_CONSUMABLES)
-        if len(pool) >= DEALT_CONSUMABLES
-        else [rng.choice(pool) for _ in range(DEALT_CONSUMABLES)]
-    )
+    picks = rng.sample(pool, min(DEALT_CONSUMABLES, len(pool)))
     gear.carried.extend(picks)
+    if powers is not None:
+        for item in picks:
+            for block in _blocks_of(item):
+                if block not in powers.known:
+                    powers.known.append(block)
 
 
 def _stock_thrown(gear: Gear | None) -> None:
@@ -5181,6 +5208,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # moves nothing else.
     _stock_consumables(
         world.get(eid, Gear),
+        world.get(eid, Powers),
         who.level,
         Random(f"{world.rng.seed}:{who.cls}:{build.name}:consumables"),
     )

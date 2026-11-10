@@ -53067,6 +53067,260 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def a_carried_consumable_is_offered_and_spent_by_using_it(out: Result) -> None:
+    """A dealt potion is drinkable, and drinking it uses it up. #1233.
+
+    Camille's ruling, 2026-11-10, asked twice. The first answer was
+    "potions"; shown that seven of the ten rows waiting are about
+    *alchemical* items, she widened it:
+
+      > *"ah, random from any consumable"*
+
+    **The carrying half alone moved no row**, which is why this rule exists
+    at the caller and not at `Gear.carried`. `_stock_consumables` put refs
+    on the character and nothing could drink them: the ten rows are about
+    *using* an alchemical item, so the facility they name is a usable one,
+    and a list of refs no menu offers is a souvenir. So the chain asserted
+    here is **dealt -> offered -> used -> spent -> announced**, and the two
+    middle links are the ones that were missing.
+
+    **Through `actions.legal`, not through `usable`.** The reader would stay
+    green if no menu consulted it, which is this component's documented
+    failure mode and the same argument
+    `a_thrown_weapon_runs_out_after_five_throws` makes for going through
+    `can_branch`. `legal` is what a player and the AI policy are both
+    handed.
+
+    **The negative control is an item block of an item the character does
+    not carry**, deliberately, rather than an ordinary power. `dsl.use`
+    spends on membership of `Gear.carried`, so a control that is merely
+    "not an item" would pass under a bug that spent every item block --
+    which is the bug `UseSpent`'s docstring warns about, an event on the
+    ordinary spend crediting every row for being used.
+
+    **No two of a kind, and that is an assertion rather than an
+    observation.** A block's budget is its printed `usage=`, so a second
+    copy of a `daily` potion is undrinkable -- `usable` returns
+    `(False, 'expended')`. The deal samples without replacement so it
+    cannot happen; `#1238` holds the ruling on whether the object ought to
+    be the budget.
+    """
+    from combat_engine import chargen
+    from combat_engine.content import declared
+    from combat_engine.db import game
+    from combat_engine.engine import Bus, Grid, World, actions
+    from combat_engine.engine.components import Gear, Powers
+    from combat_engine.engine.dsl import entry_of, use
+    from combat_engine.engine.events import ItemConsumed
+    from combat_engine.engine.rng import Rng
+    from combat_engine.engine.turns import Encounter, arm_traits
+    from combat_engine.engine.types import ActionType
+
+    def built(cls: str, seed: int):  # noqa: ANN202
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = True
+        try:
+            world = World(Grid(24, 16), Rng(seed), Bus())
+            me = chargen.spawn(world, chargen.Character(
+                cls=cls, level=1, build="", feats=[], powers=[]), (5, 5))
+            foe = chargen.spawn(world, chargen.Character(
+                cls=cls, level=1, build="", feats=[], powers=[]), (6, 5))
+            return world, me, foe
+        finally:
+            chargen.SCORED_CHOICES = was
+
+    # -- dealt -----------------------------------------------------------
+    classes = sorted(chargen.CLASSES)
+    hands = []
+    for cls in classes[:4]:
+        for seed in (1, 2, 3):
+            world, me, foe = built(cls, seed)
+            gear = world.need(me, Gear)
+            hands.append((cls, seed, list(gear.carried)))
+    out.that(all(h for _, _, h in hands),
+             "every dealt character is carrying consumables, where before "
+             "this ruling all 193 of them sat outside the deal and nobody "
+             "was ever dealt one",
+             f"{len(hands)} hands, sizes "
+             f"{sorted({len(h) for _, _, h in hands})}")
+    out.that(all(len(h) == chargen.DEALT_CONSUMABLES for _, _, h in hands),
+             f"and exactly {chargen.DEALT_CONSUMABLES} of them, which is the "
+             "supplied number",
+             f"{[(c, s, len(h)) for c, s, h in hands][:4]}")
+    out.that(all(len(set(h)) == len(h) for _, _, h in hands),
+             "and never two of a kind -- a block's budget is its printed "
+             "usage, so a second copy of a daily potion is undrinkable "
+             "(#1238)",
+             f"{[(c, s, h) for c, s, h in hands if len(set(h)) != len(h)]}")
+
+    # -- the blocks are granted ------------------------------------------
+    cls, seed, _ = hands[0]
+    world, me, foe = built(cls, seed)
+    powers = world.need(me, Powers)
+    carried = list(world.need(me, Gear).carried)
+    blocks = [b for b in powers.known if entry_of(b) in carried]
+    out.that(bool(blocks),
+             "a carried item's own declared rows are in `Powers.known`, "
+             "which is the three lines `equipment.equip` does for a worn "
+             "item and nothing did for a carried one",
+             f"{cls}/{seed}: carried={carried} blocks={blocks}")
+
+    # -- offered, in the real menu ---------------------------------------
+    # **Found rather than named**, the discipline `thrown_spares` uses, and
+    # here it is load-bearing rather than tidy: measured over the pool,
+    # **145 of 193** consumables have a block that is a choosable action
+    # and the other 48 do not -- 9 are `action=NONE` Properties, 18 print a
+    # Trigger, 33 are `out_of_combat`. The first hand this rule drew held
+    # two of the exceptions, so a rule naming a hand would have failed on a
+    # correct engine. The three exclusions are asserted below rather than
+    # worked around.
+    found = None
+    for cls, seed, _hand in hands:
+        world, me, foe = built(cls, seed)
+        gear, powers = world.need(me, Gear), world.need(me, Powers)
+        held = list(gear.carried)
+        mine = [b for b in powers.known if entry_of(b) in held]
+        encounter = Encounter(world)
+        encounter._begin(me)
+        offered = {a.ref for a in actions.legal(world, encounter, me)
+                   if getattr(a, "ref", "")}
+        hit = [b for b in mine if b in offered]
+        if hit:
+            found = (cls, seed, world, me, foe, gear, powers, held, hit)
+            break
+    out.that(found is not None,
+             "and a carried item's block reaches `actions.legal` -- the menu "
+             "a player and the AI policy are both handed, not a reader "
+             "nothing consults",
+             f"searched {len(hands)} hands; "
+             + (f"spending from {found[0]}/{found[1]}: "
+                f"carried={found[7]} offered={found[8]}"
+                if found is not None else "none offered one"))
+    if found is None:
+        return
+    cls, seed, world, me, foe, gear, powers, carried, reachable = found
+
+    # -- the three exclusions, which are the other half of "offered" ------
+    # A Property is not a thing you *do*, so `_powers` skipping it is right
+    # -- and a rule that only checked the positive direction would stay
+    # green if this grant started offering potions as standard actions.
+    #
+    # **Over the whole pool, not over the hand this rule drew.** The hand
+    # does hold two excluded blocks today, so a check scoped to it passes
+    # for the right reason -- but only by luck of the draw, and the day a
+    # hand holds none it would pass **vacuously** while reporting `ok`.
+    # That is the `browser.py` fault in `scripts/CLAUDE.md`, a check that
+    # disappears behind a plausible headline, so the population is named
+    # and asserted non-empty.
+    reg = declared()
+    pool_blocks = [
+        r["ref"] for r in game().execute(
+            "SELECT b.ref FROM item_block b JOIN item i ON i.ref = b.item_ref "
+            "WHERE i.category IN ('Consumable', 'Alchemical Item') "
+            "ORDER BY b.ref"
+        )
+    ]
+    stay_out = [
+        b for b in pool_blocks
+        if b in reg
+        and (reg[b].action is ActionType.NONE or reg[b].trigger
+             or reg[b].triggers or reg[b].out_of_combat)
+    ]
+    out.that(bool(stay_out),
+             "some consumable block is a Property, carries a printed Trigger "
+             "or is out-of-combat, so there is an exclusion to check",
+             f"{len(stay_out)} of {len(pool_blocks)} blocks in the pool")
+    if stay_out:
+        held = world.need(me, Powers)
+        for b in stay_out:
+            if b not in held.known:
+                held.known.append(b)
+        encounter2 = Encounter(world)
+        encounter2._begin(me)
+        menu = {a.ref for a in actions.legal(world, encounter2, me)
+                if getattr(a, "ref", "")}
+        leaked = [b for b in stay_out if b in menu]
+        out.that(not leaked,
+                 "and not one of them is offered as an action even when the "
+                 "character holds every one -- granting the card is not the "
+                 "same as offering it, which is what keeps a Property off "
+                 "the menu",
+                 f"{len(stay_out)} granted, {len(leaked)} offered: {leaked}")
+
+    # -- arming must not drink it ----------------------------------------
+    # **The bug this rule did not catch and `replay.py` did**, so it is
+    # asserted here rather than left to the net. `turns.arm_traits` arms
+    # every `action=NONE` row with `use(..., spend=True)`, so the first
+    # draft of the spend consumed a carried item whose block is an
+    # always-on Property *during arming* -- the object gone before anybody
+    # touched it, announced as `ItemConsumed` by a row nobody chose.
+    #
+    # Posed rather than drawn: the hand above need not hold a Property, and
+    # a precondition that depends on the draw is the vacuous-pass shape
+    # this rule already avoids once above.
+    propped = next(
+        (b for b in stay_out if reg[b].action is ActionType.NONE), ""
+    )
+    out.that(bool(propped),
+             "some consumable block is an always-on Property, so arming can "
+             "be posed against one",
+             f"{propped or 'none in the pool'}")
+    if propped:
+        world_a, me_a, _ = built(cls, seed)
+        gear_a = world_a.need(me_a, Gear)
+        powers_a = world_a.need(me_a, Powers)
+        gear_a.carried[:] = [entry_of(propped)]
+        if propped not in powers_a.known:
+            powers_a.known.append(propped)
+        was_a = len(world_a.bus.log)
+        arm_traits(world_a, me_a)
+        ate = [e for e in world_a.bus.log[was_a:]
+               if isinstance(e, ItemConsumed)]
+        out.that(gear_a.carried == [entry_of(propped)] and not ate,
+                 "and arming it does not drink it -- a Property is not a "
+                 "use, and `arm_traits` spends on every one of them, so the "
+                 "object must survive a fight starting",
+                 f"{propped}: carried={list(gear_a.carried)}, "
+                 f"{len(ate)} ItemConsumed")
+
+    # -- used, spent, announced ------------------------------------------
+    ref = reachable[0]
+    item = entry_of(ref)
+    was = len(world.bus.log)
+    use(world, me, ref, targets=[foe], spend=True)
+    said = [e for e in world.bus.log[was:] if isinstance(e, ItemConsumed)]
+    out.that(item not in gear.carried,
+             "using it takes the object off the person, which is what a "
+             "one-use item printing no such line still means",
+             f"{item}: {carried} -> {list(gear.carried)}")
+    out.that(len(said) == 1 and said[0].item == item and said[0].by == ref,
+             "and announces it once, naming the item that left and the row "
+             "whose use paid -- `by`, so a row whose whole printed Effect is "
+             "the price is not silent by construction",
+             f"{[(e.item, e.by) for e in said]}")
+
+    # -- the negative control: an item block of an item NOT carried -------
+    other = next(
+        (b for b in powers.known
+         if b.startswith("i") and entry_of(b) not in carried and b in reg),
+        "",
+    )
+    out.that(bool(other),
+             "the character also knows an item block of an item it does not "
+             "carry, so the control is an item rather than merely a power",
+             f"{other or 'none found'}")
+    if other:
+        held, was = list(gear.carried), len(world.bus.log)
+        use(world, me, other, targets=[foe], spend=True)
+        stray = [e for e in world.bus.log[was:] if isinstance(e, ItemConsumed)]
+        out.that(list(gear.carried) == held and not stray,
+                 "and using it spends nothing and announces nothing -- the "
+                 "spend is keyed on carrying the thing, so this cannot "
+                 "become an event on every power use in the game",
+                 f"{other}: carried {held} -> {list(gear.carried)}, "
+                 f"{len(stray)} ItemConsumed")
+
+
 def an_object_bound_to_its_creature_takes_the_blow_for_it(out: Result) -> None:
     """A creature bound to an object: hit either, the creature bleeds. #846.
 
@@ -71246,6 +71500,10 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "carried_consumable": (
+        a_carried_consumable_is_offered_and_spent_by_using_it,
+        "a carried consumable is offered and spent by using it (#1233)",
     ),
     "bound_object": (
         an_object_bound_to_its_creature_takes_the_blow_for_it,
