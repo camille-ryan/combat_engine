@@ -2,7 +2,7 @@
  "parties": [
   {
    "ally": {
-    "_known_after_arming": 26,
+    "_known_after_arming": 30,
     "background": "x6_320",
     "cls": "cleric",
     "feats": [],
@@ -86,7 +86,7 @@
     "worships": "x1_21"
    },
    "second": {
-    "_known_after_arming": 33,
+    "_known_after_arming": 36,
     "background": "x6_300",
     "cls": "fighter",
     "feats": [],
@@ -167,7 +167,7 @@
   },
   {
    "ally": {
-    "_known_after_arming": 29,
+    "_known_after_arming": 32,
     "background": "x6_461",
     "cls": "cleric",
     "feats": [],
@@ -260,7 +260,7 @@
     "worships": "x1_18"
    },
    "second": {
-    "_known_after_arming": 32,
+    "_known_after_arming": 34,
     "background": "x6_362",
     "cls": "fighter",
     "feats": [],
@@ -343,7 +343,7 @@
   },
   {
    "ally": {
-    "_known_after_arming": 29,
+    "_known_after_arming": 32,
     "background": "x6_194",
     "cls": "cleric",
     "feats": [],
@@ -432,7 +432,7 @@
     "worships": "x1_86"
    },
    "second": {
-    "_known_after_arming": 33,
+    "_known_after_arming": 36,
     "background": "x6_151",
     "cls": "fighter",
     "feats": [],
@@ -513,7 +513,7 @@
   },
   {
    "ally": {
-    "_known_after_arming": 33,
+    "_known_after_arming": 35,
     "background": "x6_311",
     "cls": "cleric",
     "feats": [],
@@ -608,7 +608,7 @@
     "worships": "x1_48"
    },
    "second": {
-    "_known_after_arming": 31,
+    "_known_after_arming": 33,
     "background": "x6_89",
     "cls": "fighter",
     "feats": [],
@@ -688,7 +688,7 @@
   },
   {
    "ally": {
-    "_known_after_arming": 29,
+    "_known_after_arming": 32,
     "background": "x6_493",
     "cls": "cleric",
     "feats": [],
@@ -780,7 +780,7 @@
     "worships": "x1_99"
    },
    "second": {
-    "_known_after_arming": 32,
+    "_known_after_arming": 35,
     "background": "x6_87",
     "cls": "fighter",
     "feats": [],
@@ -862,7 +862,7 @@
   },
   {
    "ally": {
-    "_known_after_arming": 30,
+    "_known_after_arming": 33,
     "background": "x6_143",
     "cls": "cleric",
     "feats": [],
@@ -953,7 +953,7 @@
     "worships": "x1_139"
    },
    "second": {
-    "_known_after_arming": 31,
+    "_known_after_arming": 34,
     "background": "x6_93",
     "cls": "fighter",
     "feats": [],
@@ -1031,7 +1031,7 @@
   },
   {
    "ally": {
-    "_known_after_arming": 29,
+    "_known_after_arming": 31,
     "background": "x6_91",
     "cls": "cleric",
     "feats": [],
@@ -1116,7 +1116,7 @@
     "worships": "x1_56"
    },
    "second": {
-    "_known_after_arming": 33,
+    "_known_after_arming": 35,
     "background": "x6_99",
     "cls": "fighter",
     "feats": [],
@@ -1203,7 +1203,7 @@
   },
   {
    "ally": {
-    "_known_after_arming": 30,
+    "_known_after_arming": 33,
     "background": "x6_420",
     "cls": "cleric",
     "feats": [],
@@ -1291,7 +1291,7 @@
     "worships": "x1_13"
    },
    "second": {
-    "_known_after_arming": 34,
+    "_known_after_arming": 37,
     "background": "x6_80",
     "cls": "fighter",
     "feats": [],
