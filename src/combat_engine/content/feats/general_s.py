@@ -442,14 +442,20 @@ def f3685(c: Cast) -> None:
 
 
 @power("f3686", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.can_hear()",),
+       reach=PERSONAL, target=SELF,
        trigger="you use your second wind on your turn",
        on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3686(c: Cast) -> None:
-    """Hearing is not modelled, so the ally is chosen from all of them."""
+    """The ally has to be able to hear the shout, which `c.can_hear` answers.
+
+    Written from all allies before, on the note that hearing was not
+    modelled. It is now: `query.can_hear` composes `Condition.DEAFENED` --
+    which seven content rows lay and nothing read until now -- with
+    `query.sealed` asked of both parties.
+    """
     if c.turn_of() != c.me:
         return
-    mate = c.choose(c.allies())
+    mate = c.choose([a for a in c.allies() if c.can_hear(a)])
     if mate is not None:
         c.shift(3, who=mate)
 
