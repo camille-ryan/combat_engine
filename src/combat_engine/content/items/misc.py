@@ -38,9 +38,13 @@ Six judgements run through the file.
   builds the modifier context out of the hold's own label, keywords,
   `conditions` and `ongoing`, so "against fear or charm effects" is
   `_save_keywords` and "against the slowed, immobilized and restrained
-  conditions" is `_save_conditions`. The *event* still carries none of
-  it, which is why a row answering a save rather than modifying one --
-  "roll twice and use either result" -- still names `SavingThrow.ongoing`.
+  conditions" is `_save_conditions`. The *event* carries `keywords`,
+  `when_` and `granted_via` and **not** the burn, which is why a row
+  answering a save rather than modifying one cannot narrow. The answer
+  itself is not missing: `c.reroll_save(keep="best")` is "roll twice and
+  use either result", so what `i3455x1` waits on is `SavingThrow.dtypes`
+  -- empty exactly when the effect deals no ongoing damage, so one field
+  settles both "ongoing" and "fire or radiant".
 * **`Bloodied` carries `actor` and `source`**, so "an enemy bloodies you,
   but does not reduce you to 0" is exact: `_bloodied_by_a_foe` asks the
   first half, and `resolve.deal_damage` emits the event only while
@@ -264,8 +268,18 @@ def _crit_ctx(ctx: dict[str, Any]) -> bool:
     return bool(ctx.get("crit"))
 
 
-def _ranged_ctx(ctx: dict[str, Any]) -> bool:
-    return bool(ctx.get("ranged"))
+def _ranged_weapon_ctx(ctx: dict[str, Any]) -> bool:
+    """"Ranged weapon attacks" -- two keys, and only one of them was read.
+
+    `ctx["ranged"]` is the shape and says nothing about what the attack was
+    made with, so on its own it pays out against an implement attack and a
+    monster's breath as well: 2,819 rows are ranged and **650** of them
+    carry `Keyword.WEAPON`. The keyword comes off the power, the way
+    `_keyword_gate` and nine rows elsewhere in the tree read it, and the
+    gate is live rather than dead -- 512 of the 1,642 ranged monster rows
+    carry it.
+    """
+    return bool(ctx.get("ranged")) and _keyword_gate(Keyword.WEAPON)(ctx)
 
 
 def _save_keywords(*words: Keyword) -> Callable[[dict[str, Any]], bool]:
@@ -784,31 +798,54 @@ def i1066x1(c: Cast) -> None:
 
 @power("i1066p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(10), target=NO_TARGET, keywords=[Keyword.SUMMONING],
-       dropped=("c.best_ability()",))
+       dropped=("Damage.pick", "query.speed(mode=)"))
 def i1066p1(c: Cast) -> None:
     """The block is printed in the power's own text and the spec carries
     all of it, so a missing block was the wrong hold: the defence
-    offsets, the size and the hover are written, and `dsl.Summon` could
-    take the attack line too.
+    offsets, the size and the hover are written.
 
-    "Your highest ability" is now half answered and half not, and the
-    marker is the half that is not. The **attack** line is sayable:
-    `Attack(Pick.HIGHEST, plus=4, vs=AC)` resolves per caster in
-    `Attack.ability_for`, and `c.command` rolls it through `bonus_for`. The
-    **damage** line is not. `Damage.bonus` is a flat number or an ability
-    named as a string, and `Cast._bonus_of` resolves it with
-    `Ability(bonus.lower())` -- which raises on anything else and is caught,
-    returning **0 silently**. So "1d8 + your highest ability modifier"
-    written there is the weapon dice and nothing, which is the failure this
-    project exists to refuse.
+    **Re-pointed off `c.best_ability()`, which this engine does not lack.**
+    "Your highest ability" has two readers already and neither is a gap:
+    `Pick.HIGHEST` says it in a header and `Attack.ability_for` resolves it
+    per caster, and `c.ability_for()` says it in a body -- its documented
+    fallback for a row with no attack line *is* the best modifier on the
+    sheet. `p16535b` is the worked example and retired the same symbol for
+    the same sentence: `c.damage("1d10", c.mod(c.ability_for()))`.
 
-    Two further holds found while running this down, both reportable rather
-    than writable here: `c.summon_inline` **discards** `spec.attack` and
-    `spec.damage` -- it reads only hp, speed, defences, size and modes --
-    while `c.command` reads the attack line off the *header's* `summon=`
-    field. So an inline block's attack line has nowhere to live, and the
-    header is where the ability modifier cannot be computed. Without the
-    attack line the Instinctive Effect has nothing to fire, so both wait."""
+    **And "an inline block's attack line has nowhere to live" was false.**
+    The header's `summon=` field is where it lives: `c.summon_inline` reads
+    only hp, speed, defences, size and modes, and `c.command` reads the
+    attack line off `get(c.ref).summon`. `p11840` declares the whole block
+    in the header and spends it from the body, which is the convention.
+
+    So what is left is two narrower things, and both are named above.
+
+    * **`Damage.pick`.** The attack line goes in a header unchanged; the
+      damage line cannot. `Damage.bonus` is `str | int` and
+      `Cast._bonus_of` resolves it as `Ability(bonus.lower())`, catching
+      the `ValueError` and returning **0 silently** -- so "1d8 + your
+      highest ability modifier" written there is the dice and nothing.
+      `Attack.ability` already takes a `Pick`; this is the same field on
+      the damage side, so `c.command`'s `_bonus_of` has a rule to resolve
+      rather than a word to look up.
+    * **`query.speed(mode=)`.** The Instinctive Effect is the *shape*
+      `summons.hunt` already has -- a bloodied enemy beside it, otherwise
+      close on the nearest, otherwise a bloodied ally within reach or
+      charge distance -- and it must not be written yet, because this
+      creature cannot move at all. The printed movement is a fly speed with
+      hover, which is `speed=0, modes={"fly": 6}` by `Summon`'s own
+      convention, and the budget every move is measured against is
+      `query.speed`, which returns `Movement.speed`: nothing reads a mode's
+      number as a distance. So the middle branch can never succeed and the
+      list collapses onto the last one -- the demon would attack a bloodied
+      **ally** on every turn no bloodied enemy stood beside it, which is
+      strictly worse than leaving the clause out. Three blocks in the tree
+      print "speed 0, fly N" and share this.
+
+    Not markered, because the tree does not marker it and `p11840` and
+    `p11841` say it in prose instead: **nothing offers a standard action to
+    command a standing summon**, so `c.command` has no door but the
+    Instinctive Effect. 36 inline blocks share that."""
     c.summon_inline(
         Summon(per_defence={"ac": 2, "fort": 2}, speed=0, modes={"fly": 6}),
     )
@@ -927,9 +964,33 @@ def i1697p1(c: Cast) -> None:
 @power("i1700x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.ability_check(purpose=)",))
 def i1700x1(c: Cast) -> None:
-    """The Athletics half is unconditional and written; "Strength checks
-    made to break objects" is a bare ability check against an object, and
-    there is neither."""
+    """The Athletics half is unconditional and written.
+
+    **"Strength checks made to break objects" is two absences, and the
+    marker names the smaller one.** Measured, because the parameter half
+    looked as though it might already exist:
+
+    * `c.ability_check` **does** exist and rolls a raw Strength check --
+      `skills.ability_check`, announced as `SkillCheck` under the key
+      `ability:str` so no skill rider fires on it.
+    * `purpose` exists on the **skill** path only. `SkillCheck.purpose` is
+      a plain attribute, `skills.check` takes `purpose=`, and
+      `skills.modifier`'s context carries it (`#1111`). `skills
+      .ability_check` takes no such argument and its context is
+      `{actor, skill, ability, natural}`, so a bonus narrowed to one kind
+      of ability check cannot be gated. That is the symbol, and it is
+      genuinely absent.
+    * **But landing it alone would move this row nowhere**, which is the
+      part worth writing down. Nothing in this engine rolls a check to
+      break anything. The only two purposes that exist are
+      `actions.SPOT_PURPOSE` and `actions.FEINT_PURPOSE`, both in-combat
+      named actions, and a `Scenery` is broken by being *attacked* -- it
+      carries `Health` and `query.combatants` subtracts it. There is no
+      action, so there is no check for a purpose to label.
+
+    So this is not `narrative=` either, which would be the honest shape:
+    that field is a closed `skill:<name>` vocabulary and a raw Strength
+    check is not one of the seventeen skills."""
     _skills(c, 2, "athletics")
 
 
@@ -1324,7 +1385,9 @@ def i3378p1(c: Cast) -> None:
     reaction, so the half would hang off `c.watch(Miss, ...)`, where
     `c.trigger` is None and `c.redirect` has nothing to move either way.)
 
-    The free-hand requirement is read off what is in hand."""
+    The free-hand requirement is read off what is in hand, and the bonus is
+    gated on a ranged **weapon** attack -- see `_ranged_weapon_ctx`, which
+    is narrower than the `ctx["ranged"]` this used to read."""
     # **`on=c.me`, because `c.held` follows `c.target`.** The card says *"if
     # **you** keep one hand free"*, so the hands are the wielder's. Bare, it
     # read the target's -- `None` here -- so `c.held()` answered `[]`,
@@ -1334,7 +1397,7 @@ def i3378p1(c: Cast) -> None:
     if len(c.held(on=c.me)) < 2:
         for d in (AC, FORT, REF, WILL):
             c.bonus(d, 4, on=c.me, until=When.EONT, kind="power",
-                    when=_ranged_ctx)
+                    when=_ranged_weapon_ctx)
     c.move(c.speed_of())
 
 
@@ -2175,7 +2238,15 @@ def i2980p1(c: Cast) -> None:
 
     The attack bonus itself is fine: it is the item's level plus 5, which is
     `_item_level(c)` through `c.attack(bonus, vs)` -- not `printed=`, which
-    `world.scaling.trim` would re-level against the *holder*."""
+    `world.scaling.trim` would re-level against the *holder*.
+
+    **So the marker is knowingly wrong and is left alone deliberately.** The
+    paragraph above says the hold is not `c.grant_inline`, and it is not:
+    the live blocker is a **ref spelling** for Camille to settle, which is
+    not a symbol and will never arrive as one, and the cadence is a latch
+    rather than a header field. Re-pointing it here would split the symbol
+    off `i1188p1`, which wears it for the same clause -- so the two move
+    together, or the question goes on an issue. Not an authoring call."""
     c.zone(c.area(), until=When.ENCOUNTER, difficult=True)
 
 
@@ -3341,8 +3412,21 @@ def i3067p1(c: Cast) -> None:
 @power("i3110x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.water()",))
 def i3110x1(c: Cast) -> None:
-    """Difficult terrain is exact; there is no liquid surface to walk on,
-    so that clause has nothing to apply to."""
+    """Difficult terrain is exact.
+
+    **The second clause has nothing to apply to, and the measurement is
+    sharper than "there is no liquid surface".** The only water a board can
+    hold is `content.terrain._ROUGH`'s `"shallow water"`, which is a
+    *label on a difficult square* -- `Grid.difficult` carries it and
+    `c.ignores_difficult(kind)` reads it -- so every wet square this engine
+    can build is already covered by the line above. What is missing is an
+    impassable liquid surface to cross, which is a terrain **kind** and not
+    a `Cast` verb.
+
+    The marker is therefore pointed at the wrong layer, and it is **not
+    re-pointed here**: `i1322x1` and `i3199p2` wear the same symbol for the
+    same clause, and splitting one of the three off makes the group stop
+    meaning anything. Re-point all three together or not at all."""
     beast = _the_mount(c)
     if beast is not None:
         c.ignores_difficult(on=beast, until=When.ENCOUNTER)
@@ -3385,14 +3469,44 @@ def i3400p1(c: Cast) -> None:
 
 @power("i3455x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("SavingThrow.ongoing",))
+       dropped=("SavingThrow.dtypes",))
 def i3455x1(c: Cast) -> None:
-    """Neither half can be said. The vision half is re-aimed at the same
-    missing light model `i1704x1` wants, since low-light vision is only a
-    benefit where a square can be dim. The save half stands: `Effects.save`
-    puts `ongoing` and `dtypes` in the *modifier* context, and a `+2` is
-    all a modifier can be -- "roll twice and use either result" has to be
-    answered on the event, which carries neither."""
+    """**The vision half is written, and "neither half can be said" was
+    wrong about it.** This row was refused in play on the ground that
+    low-light vision wants a light model `i1704x1` is also waiting for. The
+    model landed: `query.light_level` reads a `dim_radius` modifier and the
+    obscuring zones, `query.concealment_from` turns a dim square into
+    `Cover.PARTIAL`, and `query.sees_in` waives exactly that for a creature
+    with the `low_light` key. So `c.low_light` is the printed sentence, it
+    is read, and 14 rows across the tree already write it. #686 records the
+    same mistake -- five rows left `out_of_combat` on "light is not
+    modelled" after the model existed -- which is what this note had
+    repeated.
+
+    **The save half is a narrowing, not a missing verb, and the marker
+    named the wrong field.** `c.reroll_save(keep="best")` *is* "roll twice
+    and use either result" -- it rerolls the triggering throw, takes the
+    better natural and writes `saved` back, which is the half the old note
+    said had to be "answered on the event". What cannot be said is *which*
+    throws this applies to: "an ongoing damage effect that deals fire
+    damage or radiant damage".
+
+    **Re-pointed from `SavingThrow.ongoing` to `SavingThrow.dtypes`**,
+    because the one field settles the whole clause and the other settles
+    half of it. `durations.save` builds the modifier context with
+    `"dtypes": eff.ongoing_types or ((eff.ongoing[1],) if eff.ongoing else
+    ())` -- empty exactly when the effect deals no ongoing damage -- so a
+    non-empty tuple is the `ongoing` flag and its members are the fire-or-
+    radiant test. The event carries `keywords`, `when_` and `granted_via`
+    and not this, and `keywords` is the laying row's, not the burn's, so it
+    answers a different question. The shape is already house style:
+    `DamageRolled.dtypes` is the same sorted serialisable tuple, and
+    `SavingThrow.keywords` was added the same way for `#1120`.
+
+    Without the narrowing the row would reroll **every** failed save,
+    which is far stronger than the card, so the clause waits rather than
+    being approximated."""
+    c.low_light(until=When.ENCOUNTER)
 
 
 @power("i3455p1", level=9, cls=ITEM, usage=DAILY, action=FREE,
@@ -3495,8 +3609,23 @@ def i1675p1(c: Cast) -> None:
     and no rider. `p10354` carries the same marker for the same reason and
     is the row to fix this alongside.
 
-    So it stays on `Miss` and rerolls the one it is about, which is a
-    narrower rule than the card's and the only one available.
+    So it stays on `Miss` and rerolls the one it is about.
+
+    **That used to say "a narrower rule than the card's", and the trigger
+    half is the opposite.** `Miss` carries `attacker`, `target` and `power`
+    and nothing else -- no `among`, which `Hit` has as a plain attribute --
+    so "miss **all** targets" cannot be asked at the moment of a miss, and
+    this fires on the *first* arcane miss even when another target in the
+    same burst was hit. That is a free daily reroll the card does not give.
+    The effect half is narrower and the trigger half is wider; only the
+    second is a fault.
+
+    The one sound narrowing available without the engine is to refuse a
+    power that can target more than one creature -- `get(ev.power).target`
+    answers that off the header -- since for a single-target power one miss
+    *is* missing every target. Not done here: `f2448`, `i1676p1` and
+    `p10354` all carry this marker and this trigger shape, and narrowing one
+    of the four alone makes the group disagree about what the rule is.
 
     **Re-pointed: this was never a parameter.** `c.reroll_attack(rolls=)`
     read as "let it take a set of rolls", and taking the set is the easy
