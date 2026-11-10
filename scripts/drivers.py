@@ -10966,7 +10966,32 @@ def substitute_check(out: Result) -> None:
              " 'rolled a different skill', never 'was asked to'")
     out.that(same.bonus == acro, "and the check is unchanged")
 
-    # -- 8. a misspelled skill raises rather than doing nothing ------------
+    # -- 8. `ev=` names the check a watch handler caught -------------------
+    # Three rows arm this as a `c.watch`, whose handler closes over a `Cast`
+    # whose `trigger` is what *armed* the watch rather than the check. So
+    # the parameter is load-bearing for `f3274`, `f3028` and `f2228`, and
+    # without it each of them would read `self.trigger` and silently refuse.
+    world, me, _ = audit.board("p11552", 1)
+    caught: list[CheckSubstituted] = []
+    world.bus.on(CheckSubstituted, caught.append)
+
+    def by_hand(ev: Event) -> None:
+        c = Cast(world=world, me=me, ref="watcher")
+        # `trigger` deliberately left as something that is NOT the check,
+        # which is the situation every watch handler is in.
+        c.trigger = None
+        c.substitute_check("streetwise", ev=ev)
+
+    world.bus.on(CheckDeclared, by_hand)
+    handed = roll(world, me, "acrobatics", 15)
+    out.that(handed.skill == "streetwise"
+             and handed.bonus == modifier(world, me, "streetwise"),
+             "`ev=` substitutes when `self.trigger` is not the check, which"
+             " is what a `c.watch` handler always sees")
+    out.that(len(caught) == 1 and caught[0].by == "watcher",
+             "and announces it under the watching row's ref")
+
+    # -- 9. a misspelled skill raises rather than doing nothing ------------
     raised = False
     try:
         play("knitting")

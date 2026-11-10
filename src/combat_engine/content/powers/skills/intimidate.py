@@ -6,8 +6,10 @@ three of the six are free actions off a melee hit and two of those are
 that buys safety for the length of a walk.
 
 Nothing here rolls an intimidate check. The one card that mentions the
-skill moves a *diplomacy* check onto it, which is `SkillCheck.skill` being
-rewritten before `skills.check` totals the modifiers.
+skill stands an intimidate check in for a diplomacy one, which is
+`c.substitute_check` answering `CheckDeclared` -- the moment before the
+d20, so the modifier follows the swap without the row having to reason
+about which window it is offered in.
 
 `cls` is the skill and not a class, which is the module's own convention;
 see `__init__.py`.
@@ -33,7 +35,6 @@ from combat_engine.engine import (
     Target,
     Trigger,
     When,
-    Window,
     both,
     by_me,
     by_melee,
@@ -41,7 +42,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.durations import Effect
-from combat_engine.engine.events import Hit, Miss, SkillCheck
+from combat_engine.engine.events import CheckDeclared, Hit, Miss
 
 _HIT_IN_MELEE = "you hit an enemy with a melee attack"
 _DIPLOMATIC = "you would make a diplomacy check"
@@ -161,22 +162,29 @@ def p11582(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger=_DIPLOMATIC,
-    on=Trigger(SkillCheck, my_check("diplomacy"), _DIPLOMATIC,
-               window=Window.BEFORE),
+    on=Trigger(CheckDeclared, my_check("diplomacy"), _DIPLOMATIC),
 )
 def p11583(c: Cast) -> None:
-    """`skills.check` reads `ev.skill` inside its resolve callback, which
-    runs after the interrupt window, so moving the check is a write to that
-    field and the intimidate modifier is the one totalled.
+    """*"You make an Intimidate check in place of the Diplomacy check."*
 
-    `window=Window.BEFORE` because `WINDOW_OF` puts a free action in the
-    after window, where the number is already settled and this would be
-    inert while looking written.
+    **`CheckDeclared`, and so no `window=` any more.** The old shape wrote
+    `ev.skill` on a `SkillCheck` and had to declare `Window.BEFORE`,
+    because `WINDOW_OF` offers a free action in the *after* window where
+    `finish` has already totalled the bonus -- correct, and one word away
+    from being inert while looking written. `CheckDeclared` precedes the
+    d20 altogether, so there is no window in which it is too late and
+    nothing for a later editor to get wrong.
+
+    It also means the swap is **said**. The whole of this row is the
+    substitution, and writing a field announces nothing, so it was carried
+    on the silent list -- not for being wrong but for being unobservable.
+    `c.substitute_check` emits `CheckSubstituted`. #1209, #1212.
+
+    No `instead_of`: the trigger already narrows to the one check the card
+    names, and a second copy of that list is a second thing to keep in
+    step with it.
     """
-    ev = c.trigger
-    if ev is None:
-        return
-    ev.skill = "intimidate"
+    c.substitute_check("intimidate")
 
 
 @power(

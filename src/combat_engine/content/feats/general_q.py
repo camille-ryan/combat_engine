@@ -82,6 +82,7 @@ from combat_engine.engine import (
     ActionType,
     Attack,
     Cast,
+    CheckDeclared,
     CloseBurst,
     Condition,
     DamageType,
@@ -1873,28 +1874,35 @@ def f3274(c: Cast) -> None:
     """One more healing surge, and one skill standing in for another.
 
     **Both halves written, and the second is simpler than the arithmetic
-    it was marked for.** `skills.check` totals the modifier *inside* its
-    resolve callback and reads the skill off the event, so rewriting
-    `ev.skill` in the interrupt window **is** making the other check:
-    ability, half level, every standing modifier and the armour penalty all
-    follow the new name. Laying the difference of the two modifiers as a
-    bonus -- which is what `c.lend_skills` would have been -- would have had
-    to subtract one skill's own modifiers and add the other's by hand.
+    it was marked for.** The substitution is one call: ability, half level,
+    every standing modifier and the armour penalty all follow the new skill
+    because all of them are keyed on the skill being rolled. Laying the
+    difference of the two modifiers as a bonus -- which is what
+    `c.lend_skills` would have been -- would have had to subtract one
+    skill's own modifiers and add the other's by hand.
+
+    **`CheckDeclared`, so no `window=` and no silent field write.** The old
+    shape watched `SkillCheck` and declared `Window.BEFORE`, because the
+    modifier total is settled in the resolve callback that runs between the
+    two windows. That was right and fragile; `CheckDeclared` precedes the
+    d20, so the ordering question does not arise. `ev=` is how a watch
+    handler names the check, since `c.trigger` here is what armed the
+    watch and not what it caught -- `c.reroll_check`'s spelling. #1212.
 
     "While you are not bloodied" is asked at the roll and not at arm time,
     because it changes mid-fight; the surge half is `_one_more_surge`, as
     `f3228`."""
     _one_more_surge(c)
 
-    def instead(ev: SkillCheck) -> None:
+    def instead(ev: CheckDeclared) -> None:
         if ev.actor != c.me or ev.skill != "endurance":
             return
         if c.bloodied(c.me) or not c.may("use arcana instead", who=c.me):
             return
-        ev.skill = "arcana"
+        c.substitute_check("arcana", ev=ev)
 
-    c.watch(SkillCheck, instead, on=c.me, until=When.ENCOUNTER,
-            window=Window.BEFORE, label=f"{c.ref} arcana")
+    c.watch(CheckDeclared, instead, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} arcana")
 
 
 @power("f3276", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

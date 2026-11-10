@@ -15768,7 +15768,9 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         return _passive(self.world, self.me if of is None else of, skill)
 
-    def substitute_check(self, skill: str, *, instead_of: str = "") -> bool:
+    def substitute_check(
+        self, skill: str, *, instead_of: str = "", ev: Any = None
+    ) -> bool:
         """Roll the check that was just declared as a different skill.
 
         *"You would make a Bluff, a Diplomacy, or an Intimidate check;
@@ -15820,6 +15822,13 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         `ability:<name>` key to narrow to a raw ability check. Empty means
         the card narrows by its trigger alone.
 
+        `ev=` names the check when it is not the trigger, for
+        `c.reroll_check`'s reason and in its spelling: a standing
+        substitution is armed as a `c.watch`, and a watch handler closes
+        over the row's `Cast`, whose `trigger` is the event that *armed*
+        it rather than the check being answered. `f3274`, `f3028` and
+        `f2228` are all that shape.
+
         Returns False when there is no declared check to change, which is
         every use outside a `CheckDeclared` trigger -- `c.boost_check`'s
         contract, for the same reason.
@@ -15827,7 +15836,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         from .events import CheckDeclared, CheckSubstituted
         from .skills import SKILLS
 
-        ev = self.trigger
+        ev = ev if ev is not None else self.trigger
         if not isinstance(ev, CheckDeclared):
             return False
         asked = skill.strip().lower()

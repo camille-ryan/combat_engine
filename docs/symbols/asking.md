@@ -276,7 +276,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Did the attack behind this event use a weapon with that property?
 - `c.struck_with(self, ev: 'Any' = None) -> 'Weapon | None'`
   - The weapon or implement the triggering attack was made with.
-- `c.substitute_check(self, skill: 'str', *, instead_of: 'str' = '') -> 'bool'`
+- `c.substitute_check(self, skill: 'str', *, instead_of: 'str' = '', ev: 'Any' = None) -> 'bool'`
   - Roll the check that was just declared as a different skill.
 - `c.trigger: Any`
   - the event being answered, on an interrupt or reaction.

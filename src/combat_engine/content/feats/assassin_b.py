@@ -48,6 +48,7 @@ from combat_engine.engine import (
     ActionType,
     AreaBurst,
     Cast,
+    CheckDeclared,
     Condition,
     DamageType,
     Dropped,
@@ -572,15 +573,14 @@ def f2228(c: Cast) -> None:
     same shape `assassin_c`'s f2824 uses against this power, and
     `SkillCheck` carries `success` finished.
 
-    **The substitution is written now, and the old note's premise was
-    false.** `skills.check` announces `SkillCheck` *before* its modifiers
-    are totalled and its `finish` callback reads `ev.skill` back off the
-    event, so writing the other skill onto it in the interrupt window is
-    the substitution itself rather than a bonus standing in for one.
-    `f3028` does exactly this against this same power; it needs
-    `PowerUsed`/`PowerResolved` bookkeeping because it is a standing trait,
-    and this row does not -- it is armed by `p7546`'s own use, one line
-    above the body that rolls.
+    **The substitution is `c.substitute_check`, on `CheckDeclared`.** That
+    event precedes the d20, so the modifier follows the swap without this
+    row having to reason about which window it is heard in -- the old shape
+    wrote `ev.skill` on a `SkillCheck` with an explicit `Window.BEFORE`,
+    which was correct and announced nothing. `f3028` does the same against
+    this same power; it needs `PowerUsed`/`PowerResolved` bookkeeping
+    because it is a standing trait, and this row does not -- it is armed by
+    `p7546`'s own use, one line above the body that rolls. #1212.
 
     "You **can** use" is a real choice, so it is offered rather than taken.
 
@@ -598,11 +598,14 @@ def f2228(c: Cast) -> None:
     #: this rather than a literal, because the substitution has moved it.
     rolled_as = ["bluff"]
 
-    def instead(ev: SkillCheck) -> None:
+    def instead(ev: CheckDeclared) -> None:
         if done or ev.actor != me or ev.skill != "bluff":
             return
-        if c.may(f"roll stealth in place of bluff for {c.ref}"):
-            ev.skill = "stealth"
+        # `c.may` first and short-circuiting: the offer is the printed
+        # choice ("you **can** use") and must not be made twice, so the
+        # substitution is attempted only once it has been accepted.
+        if (c.may(f"roll stealth in place of bluff for {c.ref}")
+                and c.substitute_check("stealth", ev=ev)):
             rolled_as[0] = "stealth"
 
     def on_check(ev: SkillCheck) -> None:
@@ -614,10 +617,15 @@ def f2228(c: Cast) -> None:
         for foe in foes:
             c.no_provoke(from_=foe, on=me, until=When.EONT)
 
-    # BEFORE, and `Bus._run` runs that whole window first, so the rewrite
-    # lands before `finish` totals the modifiers and before the payout
-    # below reads the skill back.
-    c.watch(SkillCheck, instead, until=When.EOT, on=me, window=Window.BEFORE)
+    # **Two events, deliberately.** The substitution answers
+    # `CheckDeclared`, which is a whole emit earlier than the check, so
+    # `rolled_as` is settled long before the payout runs -- and the payout
+    # has to stay on `SkillCheck` because it reads `success`, which only
+    # exists once the check is resolved. The old shape put both on
+    # `SkillCheck` and leaned on `Bus._run` finishing the BEFORE window
+    # ahead of the resolve callback; that held, and this does not need it
+    # to.
+    c.watch(CheckDeclared, instead, until=When.EOT, on=me)
     c.watch(SkillCheck, on_check, until=When.EOT, on=me)
 
 

@@ -49,6 +49,7 @@ from combat_engine.engine import (
     ActionType,
     AttackRolled,
     Cast,
+    CheckDeclared,
     Condition,
     DamageApplied,
     DamageType,
@@ -62,7 +63,6 @@ from combat_engine.engine import (
     PowerUsed,
     SavingThrow,
     Size,
-    SkillCheck,
     Summoned,
     TempHP,
     Trigger,
@@ -776,12 +776,18 @@ def f3028(c: Cast) -> None:
     Advantage is read off the blow rather than asked again, because a
     one-shot grant has been spent by then.
 
-    The Arcana-for-Bluff half was dropped as unsayable and is not:
-    `SkillCheck` is announced **before** its modifiers are totalled and
-    the callback reads `ev.skill` back off the event, so writing the
-    other skill onto it is the substitution itself rather than a bonus
-    standing in for one. It is narrowed to a check made inside p7546 by
-    holding that power's two ends, the way f1404 holds a heal's.
+    The arcana-for-bluff half is `c.substitute_check`, answering
+    `CheckDeclared` -- the moment before the d20, so the modifier follows
+    the swap without this row having to reason about which window it is
+    heard in. It was a hand-rolled `ev.skill = "arcana"` on a `SkillCheck`
+    with an explicit `Window.BEFORE`: correct, and announcing nothing, so
+    the substitution half was never creditable. #1212.
+
+    It is narrowed to a check made inside p7546 by holding that power's two
+    ends, the way f1404 holds a heal's. `CheckDeclared` fires inside the
+    same span as the `SkillCheck` did -- `PowerUsed` before the body that
+    rolls, `PowerResolved` after it -- so the latch is unaffected by the
+    move.
     """
     me = c.me
     inside: list[str] = []
@@ -804,15 +810,15 @@ def f3028(c: Cast) -> None:
         if ev.actor == me and ev.power in inside:
             inside.remove(ev.power)
 
-    def instead(ev: SkillCheck) -> None:
+    def instead(ev: CheckDeclared) -> None:
         if inside and ev.actor == me and ev.skill == "bluff":
-            ev.skill = "arcana"
+            c.substitute_check("arcana", ev=ev)
 
     c.watch(Hit, hit, until=When.ENCOUNTER, on=me, label=c.ref)
     c.watch(PowerUsed, opened, until=When.ENCOUNTER, on=me, label=c.ref)
     c.watch(PowerResolved, closed, until=When.ENCOUNTER, on=me, label=c.ref)
-    c.watch(SkillCheck, instead, until=When.ENCOUNTER, on=me, label=c.ref,
-            window=Window.BEFORE)
+    c.watch(CheckDeclared, instead, until=When.ENCOUNTER, on=me,
+            label=c.ref)
 
 
 @power("f3035", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -51,6 +51,7 @@ from combat_engine.engine import (
     AttackRolled,
     Bloodied,
     Cast,
+    CheckDeclared,
     CloseBlast,
     CloseBurst,
     Condition,
@@ -1646,33 +1647,38 @@ def p16391(c: Cast) -> None:
     keywords=[*ARCANE, Keyword.ELEMENTAL],
     trigger="you would make a Diplomacy or an Intimidate check",
     on=Trigger(
-        SkillCheck, my_check("diplomacy", "intimidate"), "one of those checks",
-        window=Window.BEFORE,
+        CheckDeclared, my_check("diplomacy", "intimidate"),
+        "one of those checks",
     ),
     narrative=("skill:diplomacy",),
 )
 def p16392(c: Cast) -> None:
-    """"You instead make an Arcana check" is the roll being moved, and
-    `skills.check` already allows it: it totals the modifiers in its resolve
-    callback and reads `ev.skill` *there*, so rewriting the field before the
-    callback runs makes the Arcana modifier the one applied. The trigger
-    therefore declares `window=Window.BEFORE` -- a free action is otherwise
-    offered in the AFTER window, where the number is already settled and the
-    row would have been inert.
+    """*"You instead make an Arcana check with a +2 power bonus."*
+
+    **`CheckDeclared`, so the `window=` override is gone.** The old shape
+    wrote `ev.skill` on a `SkillCheck` and had to declare `Window.BEFORE`,
+    because a free action is otherwise offered in the AFTER window where
+    `finish` has already totalled the number -- correct, and one word from
+    inert. `CheckDeclared` precedes the d20, so there is no window in which
+    it is too late, and the swap is announced rather than being a silent
+    field write.
+
+    The bonus is laid **before** the substitution, and that ordering is the
+    one load-bearing thing left here: `c.bonus` keys on `skill:arcana`, and
+    the modifier total is read at resolve, so either order works today --
+    but laying it first means the bonus is already standing when the check
+    that reads it is built, which is the order the card reads in.
 
     The +2 stays a laid bonus rather than an addition to `ev.bonus`, because
     the card prints a *power* bonus and only a modifier carries a kind;
-    `once=True` keeps it from paying out on a second Arcana check this turn.
+    `once=True` keeps it from paying out on a second arcana check this turn.
 
     `narrative=`: counting as sharing a language with the subject of the
     check is the other clause, and no board ever asks what language two
     creatures have in common, so there is no diplomacy circumstance for the
     waiver to narrow."""
-    ev = c.trigger
-    if ev is None:
-        return
     c.bonus("skill:arcana", 2, on=c.me, until=When.EOT, kind="power", once=True)
-    ev.skill = "arcana"
+    c.substitute_check("arcana")
 
 
 @power(
