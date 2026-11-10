@@ -92,6 +92,34 @@ def _head_of(token: str) -> tuple[str, str]:
     return head.strip(), rest
 
 
+REF_TOKEN = r"[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+"
+
+
+def _ref_arrived(token: str) -> bool | None:
+    """Has a want that names **another row** arrived? `None` if it is not one.
+
+    The single copy of a test that used to be written twice, differently,
+    which is what made `f2429` the one row `_shape_of` called ready while
+    `_one` called blocked. `_one` had the right version and the argument for
+    it in its own docstring -- declared **and not itself unfinished** --
+    while `_named_thing_exists` asked the bare `token in declared()` that
+    docstring exists to reject.
+
+    **A ref takes no arguments, so the parameter/facility split below does
+    not apply to one.** That is why both callers can share this: there is no
+    such thing as a ref whose head arrived and whose keyword did not, so the
+    two halves had nothing to disagree about and were disagreeing anyway.
+    """
+    import re as _re
+
+    if not _re.fullmatch(REF_TOKEN, token):
+        return None
+    from combat_engine.content import declared
+
+    got = declared().get(token)
+    return got is not None and not got.unfinished
+
+
 def _named_thing_exists(token: str, have: dict[str, object]) -> bool:
     """Does **something of that name** exist, ignoring the arguments?
 
@@ -101,12 +129,9 @@ def _named_thing_exists(token: str, have: dict[str, object]) -> bool:
     whose head does not exist is a facility nobody has started. Reported as
     one four-figure total, the first was buried in the second.
     """
-    import re as _re
-
-    if _re.fullmatch(r"[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+", token):
-        from combat_engine.content import declared
-
-        return token in declared()
+    ref = _ref_arrived(token)
+    if ref is not None:
+        return ref
     head, _ = _head_of(token)
     if head in have:
         return True
@@ -1022,14 +1047,9 @@ def _one(token: str, have: dict[str, object]) -> bool:
     that is finished still counts, which is the case the docstring above is
     about.
     """
-    import re as _re
-
-    if _re.fullmatch(r"[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+", token):
-        from combat_engine.content import declared
-
-        rows = declared()
-        got = rows.get(token)
-        return got is not None and not got.unfinished
+    ref = _ref_arrived(token)
+    if ref is not None:
+        return ref
     head, _, rest = token.partition("(")
     head = head.strip()
     if head in have:
