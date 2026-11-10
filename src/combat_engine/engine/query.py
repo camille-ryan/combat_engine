@@ -1134,6 +1134,50 @@ def _type_word(raw: str) -> str:
 
 
 @lru_cache(maxsize=1)
+def block_categories() -> dict[str, str]:
+    """Every item block's printed category, by **block** ref.
+
+    `feat_categories`' sibling and written to its shape for the same
+    reasons. Keyed by the block (`i476x1`) rather than the item (`i476`),
+    because what a row is handed is the ref of the power being used --
+    `ctx["power"]` in an attack context, `ev.power` on a `Hit` -- and
+    making every caller map block to entry first is the lookup this table
+    exists to save.
+
+    **Four cards want it and they want it in three different wordings**:
+    *"attack rolls with alchemical items"* (`i476x1`), *"consumable
+    alchemical item powers"* (`i468x1`), and two feats about using one. So
+    this returns the category string and lets the row compare, rather than
+    offering an `is_alchemical` that would have to guess which of the two
+    categories each card means. `Consumable` and `Alchemical Item` are
+    separate values in the column and the cards do distinguish them.
+
+    Without it each of those rows would have hand-rolled the same join and
+    the tree would hold four spellings of one question -- the synonym fault
+    `content/CLAUDE.md` is about, which cost twelve rows a false ready
+    once.
+
+    Cached for `feat_categories`' reason: one query, and the database does
+    not change inside a run.
+    """
+    from combat_engine.db import game
+
+    try:
+        return {
+            ref: (category or "")
+            for ref, category in game().execute(
+                "SELECT b.ref, i.category FROM item_block b "
+                "JOIN item i ON i.ref = b.item_ref"
+            )
+        }
+    except Exception:
+        # Same bargain as `feat_categories`: a tree with no built database
+        # still has to answer, and a row raising because `game.db` is
+        # absent is a worse fault than an empty table.
+        return {}
+
+
+@lru_cache(maxsize=1)
 def feat_categories() -> dict[str, str]:
     """Every feat's printed category, by ref, from the database.
 

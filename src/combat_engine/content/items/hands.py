@@ -56,6 +56,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.items.alchemical import ALCHEMICAL, of_category
 from combat_engine.content.powers.barbarian.rage import in_rage
 from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
@@ -1096,9 +1097,26 @@ def i3223p1(c: Cast) -> None:
 
 
 @power("i476x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
+       reach=PERSONAL, target=SELF)
 def i476x1(c: Cast) -> None:
     """A bonus to attack rolls made with an alchemical item.
+
+    **Written.** Both halves of what the note below says were missing have
+    landed, and the note is kept because it is the record of what the gap
+    actually was.
+
+    The carrying half is `#1233`: a dealt character now has two
+    consumables on its person, their blocks are in `Powers.known`, and
+    using one spends it. The reading half is the one this row's own note
+    identified -- *"nothing tells a `when=` gate that the power in the
+    context belongs to an alchemical item"* -- and it is
+    `query.block_categories()`, reached through `alchemical.of_category`
+    so that this row, `arms.i468x1` and the two feats ask it in one
+    spelling rather than four.
+
+    `kind="item"` because the card prints *item bonus*, so a second item
+    bonus to the same roll does not add. Until the end of the encounter,
+    which is how a Property armed by `turns.arm_traits` lasts a fight.
 
     **Re-pointed off `c.alchemical()`, whose premise was false.** It said
     an alchemical item "is not a thing the engine carries, so there is no
@@ -1125,6 +1143,8 @@ def i476x1(c: Cast) -> None:
     declared row and not the item, and no reader in `query.py` bridges the
     two. That is inside `c.consume_item()`'s scope rather than beside it,
     because a carried consumable is what would have to carry its category."""
+    c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=of_category(ALCHEMICAL))
 
 
 @power("i806x1", level=6, cls=ITEM, action=ActionType.NONE,

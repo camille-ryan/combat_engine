@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.items.alchemical import ALCHEMICAL, of_category
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -95,6 +96,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Gear as _Gear
 from combat_engine.engine.components import Powers as _Powers
+from combat_engine.engine.dsl import PROVOKING_KINDS
 
 ITEM = "item"
 
@@ -1100,11 +1102,71 @@ def i2492p1(c: Cast) -> None:
     _protect(c, REF, 4)
 
 
+def _alchemical_opening(ctx: dict[str, Any]) -> bool:
+    """A window this creature opened by attacking with an alchemical item.
+
+    `i468x1`'s second sentence. `ctx["by"]` is the row that opened the
+    window, added for this row, and it is **empty when a move opened it** --
+    which is what tells the printed case from walking away.
+
+    The card waives the opening only for an attack **with an alchemical
+    item**, so a plain ranged power still turns your back. That is why this
+    reads the category rather than waiving every ranged opening.
+
+    **The shape is read off the row, not off `ctx["mode"]`, and the first
+    draft had that wrong in two ways at once.** `dsl.use` sets `by` on the
+    window and never sets `mode`, so a `mode` gate is `""` for every
+    power-opened window and the clause would have been silently inert in
+    play -- it passed a hand-posed probe that set the key itself, which is
+    the shape `engine/CLAUDE.md` warns about. And the words were wrong
+    besides: the vocabulary is `PROVOKING_KINDS`, which is `ranged`,
+    `area_burst` and `wall`, so a test for `"area"` would never have
+    matched either.
+
+    Reading `PROVOKING_KINDS` is also the faithful reading of "ranged or
+    area attacks": it is the same set `Power.provokes_on` uses to decide
+    the window opens at all, so this cannot drift from what provokes.
+    """
+    ref = ctx.get("by") or ""
+    row = get(ref)
+    return (
+        row is not None
+        and row.reach.kind in PROVOKING_KINDS
+        and of_category(ALCHEMICAL)({"power": ref})
+    )
+
+
 @power("i468x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
+       reach=PERSONAL, target=SELF)
 def i468x1(c: Cast) -> None:
-    """Consumable items are not carried, used or attacked with, so neither
-    the attack bonus nor the waived opening has anything to attach to."""
+    """A bonus to alchemical attacks, and no opening for making them.
+
+    **Written.** The note this replaces said *"consumable items are not
+    carried, used or attacked with, so neither the attack bonus nor the
+    waived opening has anything to attach to"*, and all three clauses of
+    that are now false: `#1233` deals two consumables, puts their blocks
+    in `Powers.known` and spends one when it is used.
+
+    Two printed sentences, so two clauses:
+
+    * the bonus is `kind="item"` because the card says *item bonus*, gated
+      through `alchemical.of_category` -- the one spelling `hands.i476x1`
+      and the two feats also use, rather than a fourth hand-rolled join;
+    * the waived opening is `c.no_provoke(on=c.me)`, which is an interrupt
+      on the window rather than a flag movement would have to consult, so
+      it applies wherever the window opens.
+
+    **`ctx["by"]` was added for this row** and is the row that opened the
+    window. The ctx carried `why` -- the same fact as prose -- and reading
+    a ref back out of a sentence is the fragile shape this tree keeps
+    paying for, so the datum is passed rather than parsed.
+
+    The item's printed Requirement is a racial trait, which is a column
+    enforced by `chargen.meets` and not this row's business.
+    """
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=of_category(ALCHEMICAL))
+    c.no_provoke(on=c.me, until=When.ENCOUNTER, when=_alchemical_opening)
 
 
 @power("i606p1", level=5, cls=ITEM, usage=DAILY, action=FREE,

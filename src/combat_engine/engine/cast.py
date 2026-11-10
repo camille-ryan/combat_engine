@@ -8026,7 +8026,23 @@ class Cast:
                  # meant -- which cost a wrong bug report and three hours
                  # (#547, #639). The event field stays `kind_`, because a
                  # field named `kind` shadows `Event.kind`.
-                 "move_kind": ev.kind_, "mode": ev.mode}
+                 "move_kind": ev.kind_, "mode": ev.mode,
+                 # **The row that opened the window, when a row did.** `why`
+                 # already says so in prose -- "i1564p1 is a ranged power" --
+                 # and a gate that had to read the ref back out of that
+                 # string would be the fragile thing this file keeps warning
+                 # about. `dsl.use` sets `by` as a plain attribute after
+                 # construction, the way `resolve.py` already reads it into
+                 # `provoked_by`, so this is the same datum reached the same
+                 # way rather than a new one.
+                 #
+                 # Empty when a *move* opened the window, which is the same
+                 # convention `provoked_by` uses and is what lets a row tell
+                 # the two apart. `arms.i468x1` is the first caller: "you
+                 # do not provoke for making ranged or area attacks with
+                 # alchemical items" needs the category of the row, and the
+                 # row is the one thing the ctx did not carry.
+                 "by": getattr(ev, "by", "")}
             ):
                 return
             ev.cancel("the power says it does not provoke")

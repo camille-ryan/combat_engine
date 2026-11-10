@@ -235,6 +235,37 @@ class Sheet:
     #: the party, which is why it lives with the wear rather than with the
     #: request.
     carried: dict[str, int] = field(default_factory=dict)
+    #: One-use items `chargen` **dealt** this character, `ref -> count`.
+    #: Camille's ruling on `#1233`: two per generated character, random
+    #: from any consumable.
+    #:
+    #: **Its own field and not `carried` above, and that separation was
+    #: learnt the hard way.** `carried`'s note says it is "not what
+    #: `chargen` deals", and filing the deal there looked like the tidy
+    #: answer -- one notion of "a thing the party holds", and it would have
+    #: closed that field's own open gap in passing. It broke **three**
+    #: rules that read `carried` as *only* what happened to the party:
+    #: `drivers.scene_grant`'s "a scene that grants nothing leaves every
+    #: sheet carrying nothing" is the clearest, and it is right. A dealt
+    #: potion is part of the request; a found one is part of the history.
+    #:
+    #: **Pinned for `#1101`'s reason, one field further on.** `spawn` deals
+    #: these off `world.rng.seed` -- the fight's seed -- so a party walked
+    #: into every encounter with different potions. Worse than for worn
+    #: items, because a consumable is *spent*: the fight-seeded deal also
+    #: handed a drunk one back, so the party had infinite potions.
+    #: `Party.of` deals them once and `harvest` writes back what survived.
+    #:
+    #: A count rather than a list, matching `carried`, because that is what
+    #: a visible inventory wants. `Sheet.character` expands it to one entry
+    #: per copy, which is what `Gear.carried` holds.
+    #:
+    #: What this does **not** fix: `carried`'s own gap, that a potion a
+    #: module hands the party still cannot be drunk (`#935`). The two piles
+    #: want merging and that is a separate question -- `harvest` writes
+    #: this one back off the board, and it could not tell which pile a
+    #: survivor came from if both were fielded.
+    consumables: dict[str, int] = field(default_factory=dict)
     #: Alternative rewards, `ref -> the level it was gained at`. **Not in
     #: `carried`, and that separation is the whole point of the field.**
     #: `carried` means the party is holding a thing; the page's rewards are
@@ -393,6 +424,22 @@ class Sheet:
                          "base": tuple(item.get("base") or ())})
                 for item in self.kit
             ),
+            # **Expanded from the count dict, so two of a kind is two
+            # entries.** `Gear.carried` is a list because a party can hold
+            # two of one potion and spend them one at a time; `carried`
+            # here is a count because that is what a visible inventory
+            # wants. Sorted so a reload fields them in the same order as
+            # the save -- `dict` order survives a JSON round trip but a
+            # party assembled two different ways should still match.
+            #
+            # No rebuilding to do, unlike `gear` above: a consumable is a
+            # ref and nothing else, which is why `Character.carried` holds
+            # refs where `Character.gear` holds whole `Magic` records.
+            carried=tuple(
+                ref
+                for ref, count in sorted(self.consumables.items())
+                for _ in range(max(0, count))
+            ),
         )
 
 
@@ -433,6 +480,7 @@ class Party:
             _trained_skills,
             build_of,
             deal_background,
+            deal_consumables,
             deal_race,
             dealt_hand,
             feats_for,
@@ -494,10 +542,29 @@ class Party:
             # `background_skill` bonuses -- athletics, heal, arcana. Its own
             # stream, keyed the way the others are. #1156.
             history = deal_background(Random(f"{seed}:{key}:background"))
+            # **And the consumables, for the reason the kit is dealt here,
+            # one step further.** `spawn` deals two off the *fight's* seed,
+            # so a party walked into every encounter with different potions
+            # -- and unlike a worn item a consumable is *spent*, so the
+            # fight-seeded deal also handed a drunk one back. Measured:
+            # `drivers.party_kit`'s four-fights-in-a-day assertion went red
+            # on exactly this, which is the same assertion `#1101` was
+            # written for.
+            #
+            # Into `carried`, which is the field for a thing the party is
+            # holding, and whose own note records the other half of this
+            # gap: *"a visible count that cannot be drunk is honest"*. A
+            # module's gift and a dealt potion are the same kind of object
+            # and now behave alike.
+            #
+            # Its own stream, keyed the way the others are.
+            potions: dict[str, int] = {}
+            for ref in deal_consumables(level, Random(f"{seed}:{key}:consumables")):
+                potions[ref] = potions.get(ref, 0) + 1
             sheets.append(Sheet(
                 cls=key, level=level, build=build.name, race=race,
                 powers=kept, feats=taken, kit=kit, skills=trained,
-                background=history,
+                background=history, consumables=potions,
             ))
         return cls(sheets=sheets)
 
@@ -822,6 +889,7 @@ def harvest(world: World, party: Party) -> None:
     from combat_engine.engine.components import (
         ActionPoints,
         Afflictions,
+        Gear,
         Health,
         Ident,
         Powers,
@@ -850,6 +918,28 @@ def harvest(world: World, party: Party) -> None:
         and ident.ref.startswith("c:")
     ]
     for sheet, eid in zip(party.sheets, on_board, strict=False):
+        # **What is left on the person, so a drunk potion stays drunk.**
+        # The half a pin alone does not give: `Party.of` deals the
+        # consumables once and `Sheet.character` hands them back, but
+        # without this they come back *whole* after every fight and the
+        # party has infinite potions. `dsl.use` takes a spent one out of
+        # `Gear.carried`, so what the list holds at the end of the fight is
+        # exactly what survived.
+        #
+        # Written unconditionally, including to `{}` when the last one was
+        # drunk -- "nothing left" is a state and not a missing reading,
+        # and a truthiness guard here would make the final potion
+        # immortal.
+        #
+        # Unlike `kit`, which is never consumed and so needs no write-back
+        # at all. That asymmetry is the whole reason a consumable could not
+        # simply be filed under `kit`.
+        gear = world.get(eid, Gear)
+        if gear is not None:
+            left: dict[str, int] = {}
+            for ref in gear.carried:
+                left[ref] = left.get(ref, 0) + 1
+            sheet.consumables = left
         health = world.get(eid, Health)
         if health is not None:
             sheet.hp = health.hp

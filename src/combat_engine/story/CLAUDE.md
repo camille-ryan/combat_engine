@@ -2228,6 +2228,27 @@ snapshots, and the gate is only reachable when the party wins leg 1.
   |---|---|---|
   | #935 | one field on `Sheet` | a granted item lives with the *wear*, and `Sheet` is the only record that survives a scene |
   | #994 | one keyword on `field_encounter` | placement happens inside it; the arithmetic lives in `formation.py` and the default reproduces today exactly |
+  | #1233 | one field on `Sheet`, one deal in `Party.of`, one write-back in `harvest` | a dealt consumable is **spent**, so a pin alone is not enough -- `kit` needs no write-back because a worn item is never consumed, and that asymmetry is the whole reason it could not be filed under `kit` |
+
+  **`#1233`'s field is `consumables` and not `carried`, and that was learnt
+  by getting it wrong.** `carried` reads as the right home -- one notion of
+  "a thing the party holds", and filing the deal there would have closed
+  that field's own `#935` gap in passing. It reddened **three** rules that
+  read `carried` as *only* what happened to the party, `scene_grant`'s "a
+  scene that grants nothing leaves every sheet carrying nothing" most
+  clearly, and they are right: `carried` is deliberately inert in a fight,
+  which is the stated reason `#969` owed no `winrate` run. A dealt potion
+  is part of the request and is fielded; a found one is part of the history
+  and is not. Merging the two piles is a real question and is open --
+  `harvest` could not tell which pile a survivor came from if both were
+  fielded.
+
+  **And a new dealt field must be taught to BOTH dealers.** `maker.dealt`
+  is the second one and `drivers.chargen_defaults` asserts they produce the
+  identical `Sheet`. `#1233` pinned `Party.of` alone and took five
+  assertions red naming the field -- the **fifth** time that rule has caught
+  this exact shape, after the kit (`#1101`), the skills, the background
+  (`#1156`) and now this. The list in `maker.dealt` is the place to look.
 
   Both are additive with defaults that move nothing, which is the shape to
   keep. Measure the premise before the next one: the

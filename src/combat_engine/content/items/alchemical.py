@@ -174,6 +174,43 @@ def _keyword_gate(*words: Keyword) -> Callable[[dict[str, Any]], bool]:
     return gate
 
 
+ALCHEMICAL = "Alchemical Item"
+CONSUMABLE = "Consumable"
+
+
+def of_category(*wanted: str) -> Callable[[dict[str, Any]], bool]:
+    """Gate a modifier on the **category** of the attack coming in.
+
+    `_keyword_gate`'s sibling, one level out: that one asks what the
+    incoming row is *keyworded*, this asks what kind of thing it came off.
+    Four cards outside this file want it and none could ask --
+    `hands.i476x1` is *"attack rolls with alchemical items"*,
+    `arms.i468x1` is *"consumable alchemical item powers"*, and two feats
+    turn on using one.
+
+    `i476x1`'s own note recorded the gap and is worth quoting because it is
+    exactly what was missing: *"nothing tells a `when=` gate that the power
+    in the context belongs to an alchemical item. `item.category` is a
+    column in `game.db`, `dsl.get` returns the declared row and not the
+    item, and no reader in `query.py` bridges the two."* `block_categories`
+    is that bridge now, keyed by block ref because `ctx["power"]` is a
+    block.
+
+    **Public, and it lives here**, because this is the file that owns the
+    category -- the alternative was four rows in four files hand-rolling
+    the same join, which is the synonym fault `content/CLAUDE.md` is
+    about.
+
+    Takes several categories because the cards distinguish `Consumable`
+    from `Alchemical Item` and two of them mean either.
+    """
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return query.block_categories().get(ctx.get("power") or "", "") in wanted
+
+    return gate
+
+
 def _free_near(c: Cast, of: int | None = None) -> Square | None:
     """An unoccupied square beside somebody, for "an adjacent square"."""
     pos = c.world.get(c.me if of is None else of, Position)

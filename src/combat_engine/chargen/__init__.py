@@ -2398,6 +2398,25 @@ class Character:
     #: power. That is the version of this fix that looks right and removes
     #: the thing it was built for. #1101.
     gear: tuple[Magic, ...] = ()
+    #: One-use items on this character's person, by ref -- the entry, not
+    #: the block. Empty deals two, which is Camille's ruling on `#1233`.
+    #:
+    #: **Refs and not `Magic`, which is the opposite of `gear` above and
+    #: for the reason that docstring gives.** `treasure` settles four
+    #: things per worn item and `magic_for` re-derives only three, so a
+    #: refs-only pin silently loses an item's powers. A consumable has
+    #: none of those four: no slot, no enhancement, no critical dice, and
+    #: its power rows come from `item_block` by ref. There is nothing a
+    #: `Magic` record would carry that the ref does not, so a ref is the
+    #: whole of it.
+    #:
+    #: **A pin and not only a request**, which is what `#1101` is about
+    #: one field over. Dealt per fight off `world.rng.seed` a party walks
+    #: into every encounter with different potions -- and worse than for
+    #: worn items, because a drunk one would come back. `story.Party.of`
+    #: deals them once onto `Sheet.carried` and `harvest` writes back what
+    #: survived, so a spent potion stays spent for the rest of the day.
+    carried: tuple[str, ...] = ()
     #: What this character is trained in. Empty deals it, which is what
     #: every character got before this and still gets. #793.
     #:
@@ -3610,7 +3629,11 @@ DEALT_CONSUMABLES = 2
 
 
 def _stock_consumables(
-    gear: Gear | None, powers: Powers | None, level: int, rng: Random
+    gear: Gear | None,
+    powers: Powers | None,
+    level: int,
+    rng: Random,
+    pinned: tuple[str, ...] = (),
 ) -> None:
     """Put two consumables of this character's level or lower on its person.
 
@@ -3686,6 +3709,35 @@ def _stock_consumables(
 
     if gear is None:
         return
+    # **A pin is a record, so it is put back rather than re-dealt.** The
+    # `#1101` argument, one field over: a party dealt fresh potions each
+    # fight walks into every encounter with different ones, and a drunk
+    # one comes back. An empty pin means nobody is tracking this character
+    # across a day, which is every single-encounter caller.
+    if pinned:
+        gear.carried.extend(pinned)
+        _offer_carried(gear, powers, pinned)
+        return
+    picks = deal_consumables(level, rng)
+    gear.carried.extend(picks)
+    _offer_carried(gear, powers, picks)
+
+
+def deal_consumables(level: int, rng: Random) -> tuple[str, ...]:
+    """Two one-use items of this level or lower, by entry ref.
+
+    **Public and separate from `_stock_consumables`, because there are two
+    callers and one pool.** This one puts them straight onto a board;
+    `story.Party.of` pins them on a `Sheet` instead, so a party holds the
+    same potions all day and a drunk one stays drunk. Both need the same
+    query and the same ruling, and a second copy of the SQL is the drift
+    fault this tree keeps paying for.
+
+    The pool, the sampling and the levels are documented on
+    `_stock_consumables`, which is where the ruling is quoted.
+    """
+    from combat_engine.db import game
+
     pool = [
         row["ref"]
         for row in game().execute(
@@ -3696,14 +3748,39 @@ def _stock_consumables(
         )
     ]
     if not pool:
+        return ()
+    return tuple(rng.sample(pool, min(DEALT_CONSUMABLES, len(pool))))
+
+
+def _offer_carried(
+    gear: Gear, powers: Powers | None, items: Sequence[str]
+) -> None:
+    """Put each carried item's own rows into `Powers.known`.
+
+    The three lines `equipment.equip` does for a worn item, and what makes
+    a carried one an item rather than a souvenir: the ten rows `#1233`
+    unblocks are about *using* an alchemical item, so a list of refs no
+    menu offers moves none of them.
+
+    Its own function because both arms of `_stock_consumables` need it --
+    the dealt one and the pinned one -- and a second copy is the drift
+    fault this tree keeps paying for.
+
+    **Not through `equip`,** deliberately: that lays enhancement, defence
+    mods and a crit rider off the item's columns and files it in a `worn`
+    slot, all four wrong for something on your belt. The powers loop is
+    the only part of it a carried item wants.
+
+    `_blocks_of` is the declared-only filter `treasure` uses -- a
+    `Powers.known` holding an undeclared ref is a card the engine cannot
+    resolve.
+    """
+    if powers is None:
         return
-    picks = rng.sample(pool, min(DEALT_CONSUMABLES, len(pool)))
-    gear.carried.extend(picks)
-    if powers is not None:
-        for item in picks:
-            for block in _blocks_of(item):
-                if block not in powers.known:
-                    powers.known.append(block)
+    for item in items:
+        for block in _blocks_of(item):
+            if block not in powers.known:
+                powers.known.append(block)
 
 
 def _stock_thrown(gear: Gear | None) -> None:
@@ -5206,11 +5283,19 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # every character in the tree and cost a replay re-record for a change
     # that adds to the margin. A dedicated key means this adds a hand and
     # moves nothing else.
+    #
+    # **`who.carried` wins when it is given**, which is `#1101`'s rule one
+    # field over: a pinned list is a record of what the party is holding
+    # and must not be re-dealt, or a party walks into every encounter with
+    # different potions and a drunk one comes back. `story.Party.of` is
+    # what pins it. Dealt here only when nothing pinned it, which is every
+    # single-encounter caller -- the audit board, `fight.py`, `winrate`.
     _stock_consumables(
         world.get(eid, Gear),
         world.get(eid, Powers),
         who.level,
         Random(f"{world.rng.seed}:{who.cls}:{build.name}:consumables"),
+        pinned=who.carried,
     )
     # A racial skill bonus is a sheet number and not a thing that happens
     # in a fight, so it is laid straight into `Mods` where the armour

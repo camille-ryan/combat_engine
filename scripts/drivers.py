@@ -53067,6 +53067,129 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def an_alchemical_attack_is_told_apart_from_an_ordinary_one(out: Result) -> None:
+    """Two facilities the alchemical cards needed, and their controls. #1233.
+
+    `hands.i476x1` is *"a +2 item bonus to attack rolls with alchemical
+    items"* and `arms.i468x1` adds *"you do not provoke opportunity
+    attacks for making ranged or area attacks with alchemical items"*.
+    Both turn on a question nothing could ask, and `i476x1`'s own note had
+    recorded it exactly: *"nothing tells a `when=` gate that the power in
+    the context belongs to an alchemical item ... no reader in `query.py`
+    bridges the two."*
+
+    So two things landed:
+
+    * **`query.block_categories()`** -- every item block's printed
+      category, by block ref, `feat_categories`' sibling. Keyed by block
+      because `ctx["power"]` is a block, which is the lookup it exists to
+      save.
+    * **`ctx["by"]` on an opportunity window** -- the row that opened it.
+      The ctx already carried `why`, the same fact as prose, and reading a
+      ref back out of a sentence is the fragile shape this tree keeps
+      paying for.
+
+    **Both halves carry a negative control, because both are gates and a
+    gate that waives everything is the failure worth catching.** An
+    ordinary ranged power must still turn your back, and an ordinary power
+    must get no attack bonus -- a row that cancelled every window would
+    pass a positive-only check while making the character immune to
+    opportunity attacks.
+
+    **Asserted through `dsl.use`, not by posing a window.** The first draft
+    of `i468x1` gated on `ctx["mode"]`, which `dsl.use` never sets, so the
+    clause was inert in play -- and it *passed* a hand-posed probe that set
+    the key itself. That is the exact failure `engine/CLAUDE.md` calls
+    silently false, and going through the caller is what caught it.
+    """
+    import audit as A
+    from combat_engine.content import declared
+    from combat_engine.content.items.alchemical import ALCHEMICAL
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.components import Mods, Position, Powers
+    from combat_engine.engine.events import OpportunityWindow
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.query import squares as occupies
+
+    reg = declared()
+    cats = query.block_categories()
+    out.that(bool(cats),
+             "`query.block_categories` answers at all, which it must do "
+             "from a built database",
+             f"{len(cats)} block(s) categorised")
+    out.that(cats.get("i3309p1") == ALCHEMICAL and cats.get("i476x1") != ALCHEMICAL,
+             "and it answers about the block rather than about the item -- "
+             "a glove that buffs alchemical items is not itself one, which "
+             "is the distinction the gate turns on",
+             f"i3309p1={cats.get('i3309p1')!r} i476x1={cats.get('i476x1')!r}")
+
+    # -- the attack bonus, with its control ------------------------------
+    world, me, _ = A.board("i476x1", 1)
+    mods = world.need(me, Mods)
+
+    def bonus(ref: str) -> int:
+        return mods.total("attack", {"attacker": me, "target": 2, "power": ref})
+
+    out.that(bonus("i3309p1") == 2,
+             "`i476x1` pays its printed +2 on an attack with an alchemical "
+             "item",
+             f"{bonus('i3309p1'):+d}")
+    out.that(bonus("p1") == 0,
+             "and nothing at all on an ordinary power -- a bonus that "
+             "applied to everything would be the card misread as a flat +2",
+             f"{bonus('p1'):+d}")
+
+    # -- the waived opening, with its control ----------------------------
+    ranged = [
+        r for r, p in sorted(reg.items())
+        if p.reach.kind in dsl.PROVOKING_KINDS and not p.unfinished
+    ]
+    alch = next((r for r in ranged if cats.get(r, "") == ALCHEMICAL), "")
+    ctrl = next((r for r in ranged if cats.get(r, "") != ALCHEMICAL), "")
+    out.that(bool(alch) and bool(ctrl),
+             "some declared row is a ranged or area attack with an "
+             "alchemical item, and some other is not, so the gate has both "
+             "a subject and a control",
+             f"alchemical={alch or 'none'} control={ctrl or 'none'}")
+    if not (alch and ctrl):
+        return
+
+    def windows(ref: str) -> list[bool]:
+        w, who, _ = A.board("i468x1", 1)
+        reach = dsl.spread(occupies(w, who), 1)
+        adj = [f for f in enemies(w, who)
+               if (w.get(f, Position) or Position()).squares & reach]
+        if not adj:
+            return []
+        known = w.need(who, Powers)
+        if ref not in known.known:
+            known.known.append(ref)
+        n = len(w.bus.log)
+        dsl.use(w, who, ref, targets=[adj[0]], spend=False)
+        return [e.cancelled for e in w.bus.log[n:]
+                if isinstance(e, OpportunityWindow)]
+
+    opened = windows(alch)
+    out.that(bool(opened),
+             "using a ranged attack beside an enemy opens a window at all, "
+             "so there is an opening to waive",
+             f"{len(opened)} window(s) on {alch}")
+    if not opened:
+        return
+    out.that(all(opened),
+             "and `i468x1` cancels every one of them when the attack is "
+             "with an alchemical item -- through `dsl.use`, which is what "
+             "sets `by`, rather than a hand-posed window that would set it "
+             "itself",
+             f"{alch}: {opened}")
+    plain = windows(ctrl)
+    out.that(bool(plain) and not any(plain),
+             "while an ordinary ranged power still turns your back -- the "
+             "control that tells the printed card from immunity to "
+             "opportunity attacks",
+             f"{ctrl}: {plain}")
+
+
 def a_carried_consumable_is_offered_and_spent_by_using_it(out: Result) -> None:
     """A dealt potion is drinkable, and drinking it uses it up. #1233.
 
@@ -71500,6 +71623,10 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "alchemical_gate": (
+        an_alchemical_attack_is_told_apart_from_an_ordinary_one,
+        "an alchemical attack is told apart from an ordinary one (#1233)",
     ),
     "carried_consumable": (
         a_carried_consumable_is_offered_and_spent_by_using_it,

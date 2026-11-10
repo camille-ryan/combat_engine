@@ -246,10 +246,21 @@ def interview(
     # named above caught this the moment `Party.of` started dealing one and
     # this dealer did not -- five assertions red, naming the field. #1156.
     history = chargen.deal_background(Random(f"{seed}:{cls}:background"))
+    # **And the consumables, which is the fifth thing in this list and the
+    # fifth time the rule above has caught the same shape.** `#1233` pinned
+    # them in `Party.of` and left this dealer dealing none, so all four
+    # classes came back `consumables: dealt {...} made {}` -- the kit
+    # comment two paragraphs up describes the identical failure from
+    # `#1101`. Same key, same stream.
+    potions: dict[str, int] = {}
+    for ref in chargen.deal_consumables(
+        level, Random(f"{seed}:{cls}:consumables")
+    ):
+        potions[ref] = potions.get(ref, 0) + 1
     return Sheet(
         cls=cls, level=level, build=build.name, race=race,
         powers=kept, feats=taken, kit=kit, skills=trained,
-        background=history,
+        background=history, consumables=potions,
     )
 
 
