@@ -729,10 +729,34 @@ def i3255p2(c: Cast) -> None:
 @power("i3491p1", level=7, cls=ITEM, action=MOVE,
        reach=PERSONAL, target=SELF, dropped=("c.collide()",))
 def i3491p1(c: Cast) -> None:
-    """Two dice rather than one `2d10`, because the malfunction reads each
-    of them. The malfunction itself is dropped: nothing carries a creature
-    in a random direction into whatever is standing there."""
+    """Up and down, or -- once in a hundred -- sideways instead.
+
+    **The malfunction branch is written now, and the docstring it replaces
+    stated a rule the body did not implement.** It said the two `1d10`s
+    were rolled "because the malfunction reads each of them", and nothing
+    read them: on a 1 and a 1 the row rose two squares and fell, which is
+    the Effect rather than the printed exception. Two dice are what makes
+    "if you roll a 1 on each d10" sayable, and the branch **replaces** the
+    Effect rather than adding to it -- `items/wondrous.i3493p1` prints the
+    same two-part shape ("Effect: ... Malfunction: on a result of 1 ...")
+    and reads it the same way, with a body and a `return`.
+
+    **"A random direction" is the mover's own decider**, which is that
+    sibling's recorded conclusion and holds here for the same reason:
+    there is no way to name a direction, only a square, so choosing one
+    would be less random than letting the decider choose. `c.move` is the
+    only sideways mover there is -- `c.rise` and `c.hover` go up.
+
+    Still dropped: "you take 2d10 damage and stop moving if you collide
+    with anything". `c.move` picks from `World.reachable_paths`, so it
+    routes around whatever is in the way and never arrives at a square it
+    could not enter -- there is no collision for the damage to hang on.
+    A shortfall in squares moved cannot stand in for one either, because
+    the decider is equally free to stop short of its own accord."""
     first, second = c.roll("1d10"), c.roll("1d10")
+    if first == 1 and second == 1:
+        c.move(c.roll("1d10"))
+        return
     c.rise(first + second)
     c.fall()
 
@@ -844,10 +868,32 @@ def i942x1(c: Cast) -> None:
 
 
 @power("i2067x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retrieve(consumable=)",))
+       reach=PERSONAL, target=SELF, todo=("chargen.deals_consumables",))
 def i2067x1(c: Cast) -> None:
-    """Drawing and stowing are not actions the engine spends, so a belt that
-    makes one of them free has nothing to make free."""
+    """A belt that holds six of a thing, and a free action to take one out.
+
+    **Re-pointed one layer earlier than the verb, and the premise it
+    carried was wrong on both halves.** The marker was
+    `c.retrieve(consumable=)` and the note read "drawing and stowing are
+    not actions the engine spends". Drawing *is* spent -- `Gear.draw_cost`
+    prices it, `actions._wielding` offers it, and `c.draws_free` is the
+    verb that makes one cheaper, with `only=` to name which -- so the
+    absence asserted here does not exist. It is weapon-only, which is a
+    narrower and truer statement, and it is still not this row's blocker.
+
+    Nothing a character carries is one of these to retrieve.
+    `chargen.treasure` deals exactly three records, all chosen by
+    `item.enh_to` being `attack_damage`, `ac` or `defences`, so none of
+    the 118 `Consumable` or 75 `Alchemical Item` rows in `game.db` ever
+    reaches a sheet -- and `Gear.worn` is a set of **slot names** rather
+    than a list of things held, so there is no pool for six slots to draw
+    from even if one were dealt.
+
+    `chargen.deals_consumables` is the symbol three rows in
+    `items/alchemical.py` already wait on for this same measurement
+    (`i3324x1` records the `Gear.worn` half of it), so it is reused rather
+    than re-minted: the belt's capacity and its free action both wait
+    behind one gap, not two."""
 
 
 @power("i2393x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -894,9 +940,33 @@ def i2393x1(c: Cast) -> None:
 @power("i2393p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
        reach=Melee(1), target=ONE_CREATURE, todo=("c.sustain_grab()",))
 def i2393p1(c: Cast) -> None:
-    """Handing a grab to an object that then holds it without the grabber
-    adjacent has no relation to set: `Relation.GRABBED_BY` names a
-    creature."""
+    """Relief from a cost the engine does not charge.
+
+    **The marker is right and the reason recorded under it was not.** It
+    read "handing a grab to an object that then holds it without the
+    grabber adjacent has no relation to set: `Relation.GRABBED_BY` names a
+    creature". That is a fact about implementing the *transfer*, and the
+    transfer is not what is missing. Measured: `c.grab` applies its hold at
+    `When.ENCOUNTER`, `engine/escape.py` is the only thing that ends one,
+    and `actions.py` offers no action for keeping one up. So a grab here
+    costs no minor action to sustain and does not lapse when the grabber
+    walks away.
+
+    Every clause this card pays out is therefore already the default --
+    the minor action, the adjacency, and the defences resisting an escape,
+    which stay the grabber's own either way. And the printed trigger,
+    "when you would spend a minor action to sustain a grab", can never
+    occur, so there is nothing for a free action to answer. Writing the
+    row's one real consequence -- losing `i2393x1`'s property while the
+    power is up -- would be a cost paid for a benefit nobody received.
+
+    `c.sustain_grab()` stays, because it names the thing that must land
+    first: `m6346a1` waits on it for the same absence ("keeping a grab up
+    is a minor action nothing announces"), and until a grab costs
+    something to keep, this power has nothing to take over.
+    `c.grab(sustain=)` is a second spelling of the same gap on `m2104a1`
+    and `p16626` -- "nothing gives a grab a sustain cost of its own" --
+    and the two want collapsing into one symbol by whoever writes it."""
 
 
 @power("i2689p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1522,11 +1592,43 @@ def i2208p2(c: Cast) -> None:
 
 
 @power("i3469x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.teleport(no_sight=)",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.teleport(occupied_fails=)",))
 def i3469x1(c: Cast) -> None:
-    """`c.teleport` picks its destination through the decider and asks no
-    question about sight, so neither the permission nor the printed penalty
-    for aiming at an occupied square can be written."""
+    """No sight needed to a space you have seen, and a teleport aimed at an
+    occupied space fails and spends the power.
+
+    **Re-pointed, because the old marker named a restriction that is not
+    there.** It was `c.teleport(no_sight=)`, off a note reading
+    "`c.teleport` picks its destination through the decider and asks no
+    question about sight" -- and that second clause is the measurement,
+    which refutes the first. `c.teleport`'s `fits` tests `Grid.passable`
+    and occupancy and nothing else; `movement.teleport` emits `MoveStart`
+    and calls `step`; neither path asks about sight, and `MoveStart`
+    carries no destination for a listener to judge. Line of sight is not
+    modelled at all -- `feats/warlord_b` records the same, and
+    `query.line_of_effect` is the nearest thing to it. So the permission
+    this card grants is already every creature's default and there is no
+    waiver to write.
+
+    What is genuinely unwritable is the **cost**. An occupied square is
+    filtered out of `options` before the decider sees one, so the attempt
+    the penalty is about cannot be made: `share=True` is the only way into
+    an occupied square and it belongs to the teleporting row, not to a
+    property its wearer carries. A gate written on it would be a gate that
+    can never be true.
+
+    So the wait is for `c.teleport` to consult a standing hold when it
+    decides what counts as a destination. That is the same machinery
+    `i1341x1`'s `c.no_teleport_within()` wants from the other side, and a
+    separate symbol deliberately: a bar on where anybody may land and a
+    permission that expends the power on failure are not one gap, and one
+    symbol could not go green correctly for both.
+
+    `todo=` rather than `dropped=`, because nothing is written here. The
+    wearer enjoys the printed benefit anyway -- the engine grants it to
+    everybody -- so the item is stronger than its card by the one clause
+    it cannot pay, which is recorded here rather than papered over."""
 
 
 @power("i3469p1", level=8, cls=ITEM, usage=DAILY, action=MOVE,
