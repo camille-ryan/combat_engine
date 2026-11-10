@@ -16930,6 +16930,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         ranged: bool = False,
         ref: str = "",
         vs_kind: str = "",
+        when: Callable[[dict], bool] | None = None,
     ) -> Effect | None:
         """This creature's weapon attacks deal that type from now on.
 
@@ -17085,9 +17086,19 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             if not eff.label.startswith("deals:"):
                 continue
             parts = [*eff.label.split("|"), "", "", "", "", ""][1:6]
+            # **A gated hold neither supersedes nor is superseded**, because
+            # the narrowing in the label is no longer the whole of what
+            # distinguishes two holds. "Fire against anything" and "fire
+            # against whatever is vulnerable to it" share every label field
+            # and are different sentences; ending one for the other would
+            # silently drop a printed clause. Only two holds that are both
+            # unconditional still collapse, which is the case the paragraph
+            # above is about.
+            if getattr(eff, "deals_when", None) is not None or when is not None:
+                continue
             if "|".join(parts) == narrowing:
                 self.world.effects.end(eff, "deals another type now")
-        return self.world.effects.apply(
+        laid = self.world.effects.apply(
             who, self.me, until,
             label=(f"deals:{types[0].value}|{narrowing}"
                    f"|{','.join(t.value for t in types[1:])}"
@@ -17095,6 +17106,22 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             # A structured key, not a ref: `by` carries the row. #580
             by=self.ref,
         )
+        # **`when=` rides the effect object, not the label**, and that is
+        # forced rather than chosen. Every other narrowing here is a *field
+        # in a pipe-delimited string* -- six of them, positionally padded --
+        # because the label is text the page reads and `audit.py` matches on
+        # `startswith("deals:")`. A predicate cannot be serialised into
+        # that, which is why `c.deals(per_target=)`'s own triage concluded
+        # "a callable cannot ride on it".
+        #
+        # It can ride the object, which is the same answer `events.py`
+        # reaches for a rider it must keep off the wire: *"an attribute, not
+        # a field. See `Bloodied.weapon`"*. The label is unchanged, so
+        # nothing that reads it sees a new field, and `_retyped` asks for
+        # the attribute with a default.
+        if laid is not None and when is not None:
+            laid.deals_when = when      # ty: ignore[unresolved-attribute]
+        return laid
 
     def _typed(self, dtype: DamageType) -> tuple[DamageType, ...]:
         """Every type this blow really is. One of them, usually.
@@ -17204,6 +17231,27 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 and keywords is not None
                 and Keyword(through) not in keywords
             ):
+                continue
+            # **The one narrowing that is not in the label.** Asked last,
+            # so it costs nothing on the overwhelming majority of holds
+            # that carry no predicate, and so a gate cannot accidentally
+            # admit a blow the label already excluded.
+            #
+            # The context is built from `self` because there is none to be
+            # had: `_typed` is reached from `c.damage` and takes only the
+            # type, so there is no attack context here the way `c.bonus`
+            # has one. What `self` can honestly answer is who is swinging,
+            # at whom, through which row, and whether it is ranged -- which
+            # is what the cards on this axis ask about. A predicate wanting
+            # more than that is a predicate this cannot serve, and it will
+            # read a missing key rather than be silently true.
+            gate = getattr(eff, "deals_when", None)
+            if gate is not None and not gate({
+                "attacker": self.me,
+                "target": self.target,
+                "power": self.ref,
+                "ranged": self.ranged,
+            }):
                 continue
             # **A set, comma-joined, and any of them matches.** One card
             # prints "the next necrotic or poison power", and with a single

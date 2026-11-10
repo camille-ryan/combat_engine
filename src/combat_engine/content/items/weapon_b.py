@@ -2174,17 +2174,55 @@ def i1174x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.deals(per_target=)",),
 )
 def i1231x1(c: Cast) -> None:
-    """The damage is one type against a creature vulnerable to it and
-    another against everyone else.
+    """Fire and necrotic, but only against a creature already vulnerable
+    to one of them.
 
-    So this is **not a standing effect on the wielder at all** -- the same
-    blow is one type against one creature and another against the next, and
-    the recolour is decided by the target. `c.deals` retypes every swing
-    from the attacker's side, which no gate on the attacker can fix. #613.
+    **The old note said this was unwritable and it was right about the
+    reason and wrong about the fix.** It read: *"the recolour is decided by
+    the target, and `c.deals` retypes every swing from the attacker's side,
+    which no gate on the attacker can fix"* (#613). The hold does still sit
+    on the attacker -- that part was never the problem. What was missing is
+    that nothing *asked about the blow* once it was laid: every narrowing
+    `c.deals` had lived in its pipe-delimited label, and a label cannot
+    hold a question.
+
+    `when=` is that question, asked inside `_retyped` as the blow is
+    coloured, with the victim in the context. So the same standing hold
+    answers differently for the next creature, which is what the card
+    prints.
+
+    **Both types, not a choice between them.** `dtypes=` is the "several
+    types at once" form -- `types = tuple(dict.fromkeys(dtypes)) or
+    (dtype,)` -- so the blow is fire *and* necrotic, and a creature
+    vulnerable to either takes it as both. Reading it as a pick would have
+    paid the lower of the two vulnerabilities on a creature that has both.
+
+    `c.vulnerabilities(on=)` is the reader, and it answers for the live
+    creature rather than the printed stat block, so a vulnerability laid
+    mid-fight counts.
     """
+    me = c.me
+
+    def already_vulnerable(ctx: dict) -> bool:
+        """Does the creature being hit have either vulnerability?
+
+        Reads `ctx["target"]` rather than `c.target`, because the hold
+        outlives the use that laid it and `c.target` would be whoever was
+        being hit *then*.
+        """
+        victim = ctx.get("target")
+        if not isinstance(victim, int):
+            return False
+        held = c.vulnerabilities(on=victim)
+        return bool(held.get(DamageType.FIRE) or held.get(DamageType.NECROTIC))
+
+    c.deals(
+        dtypes=(DamageType.FIRE, DamageType.NECROTIC),
+        on=me,
+        when=already_vulnerable,
+    )
 
 
 @power(

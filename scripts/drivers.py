@@ -69366,6 +69366,110 @@ def prone_defences(out: Result) -> None:
         "grants_ca is still True; the melee restriction is filed separately",
     )
 
+
+def deals_when(out: Result) -> None:
+    """A retype can ask about the creature being hit, not just the swinger.
+
+    `c.deals` keeps every narrowing it has in a **pipe-delimited label** --
+    six positional fields, padded -- because the label is text the page
+    reads and `audit.py` matches `startswith("deals:")`. A question cannot
+    be serialised into that, which is why `c.deals(per_target=)`'s own
+    triage concluded "a callable cannot ride on it" and why `i1231x1` sat
+    marked with a docstring saying no gate could fix it.
+
+    `when=` rides the **effect object** instead -- the same answer
+    `events.py` reaches for a rider it must keep off the wire ("an
+    attribute, not a field. See `Bloodied.weapon`") -- and `_retyped` asks
+    it as the blow is coloured, with the victim in the context.
+
+    **The negative controls carry this rule.** A positive alone would pass
+    on an implementation that ignored the predicate and recoloured
+    everything, which is the shape a gated modifier usually ships in.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences
+    from combat_engine.engine.types import DamageType
+
+    world, me, _ = _board()
+    from combat_engine.engine.query import enemies
+
+    foes = enemies(world, me)
+    soft = foes[0]
+    plain = foes[1] if len(foes) > 1 else foes[0]
+    out.that(
+        soft != plain,
+        "the board offers two distinct enemies, so the gate has something"
+        " to discriminate between -- one foe would prove nothing",
+        f"{soft} and {plain}",
+    )
+
+    held = world.need(soft, Defences)
+    held.vulnerable = {**dict(held.vulnerable or {}), DamageType.NECROTIC: 5}
+    bare = world.need(plain, Defences)
+    bare.vulnerable = {k: v for k, v in (bare.vulnerable or {}).items()
+                       if k not in (DamageType.FIRE, DamageType.NECROTIC)}
+
+    def typed(target: int) -> list[str]:
+        c = Cast(world=world, me=me, ref="drivers")
+        c.target = target
+        return sorted(t.value for t in c._typed(DamageType.UNTYPED))
+
+    before = typed(soft)
+    lay = Cast(world=world, me=me, ref="drivers")
+    lay.deals(
+        dtypes=(DamageType.FIRE, DamageType.NECROTIC), on=me,
+        when=lambda ctx: bool(
+            lay.vulnerabilities(on=ctx.get("target")).get(DamageType.FIRE)
+            or lay.vulnerabilities(on=ctx.get("target")).get(DamageType.NECROTIC)
+        ) if isinstance(ctx.get("target"), int) else False,
+    )
+
+    out.that(
+        typed(soft) == ["fire", "necrotic"],
+        "the blow comes out **both** printed types against a creature"
+        " already vulnerable to one of them -- `dtypes=` is the"
+        " several-at-once form, and reading it as a choice would pay the"
+        " lower of two vulnerabilities on a creature holding both",
+        f"{before} -> {typed(soft)}",
+    )
+    out.that(
+        typed(plain) == ["untyped"],
+        "and is **unchanged** against a creature vulnerable to neither --"
+        " the control that fails on any implementation ignoring the"
+        " predicate, which is how a gated retype usually ships",
+        f"{typed(plain)}",
+    )
+
+    bare.vulnerable = {**dict(bare.vulnerable or {}), DamageType.FIRE: 5}
+    out.that(
+        typed(plain) == ["fire", "necrotic"],
+        "and the **same standing hold** answers differently once that"
+        " creature becomes vulnerable mid-fight, so the gate is asked per"
+        " blow rather than frozen when it was laid",
+        f"{typed(plain)}",
+    )
+
+    out.that(
+        any(e.label.startswith("deals:") for e in world.effects.of(me)),
+        "the hold is still a labelled effect, so nothing that reads the"
+        " label sees a new field -- the predicate rides the object",
+        ", ".join(e.label for e in world.effects.of(me)
+                  if e.label.startswith("deals:")),
+    )
+
+    second = Cast(world=world, me=me, ref="drivers2")
+    second.deals(DamageType.COLD, on=me)
+    holds = [e.label for e in world.effects.of(me)
+             if e.label.startswith("deals:")]
+    out.that(
+        len(holds) == 2,
+        "a gated hold and an ungated one of the same narrowing **coexist**:"
+        " 'fire against anything' and 'fire against the vulnerable' share"
+        " every label field and are different sentences, so superseding one"
+        " for the other would silently drop a printed clause",
+        f"{len(holds)} holds: {holds}",
+    )
+
 DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
@@ -70400,6 +70504,10 @@ DRIVERS = {
         "one extra square on every shift, and not on a teleport",
     ),
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
+    "deals_when": (
+        deals_when,
+        "a retype gated on the creature being hit (#613)",
+    ),
     "prone_defences": (
         prone_defences,
         "a prone creature's +2 against nonadjacent ranged attacks (#1198)",
