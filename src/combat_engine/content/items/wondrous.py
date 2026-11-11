@@ -1151,7 +1151,20 @@ def i3466p1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=Target(side="enemy", count=99, everyone=True),
-    dropped=("c.consume_item()",),
+    # **Re-pointed off `c.consume_item()`, whose premise `#1233` satisfied
+    # and which was never this row's gap anyway.** That symbol is about
+    # spending a thing on your person, and `dsl.use` does it now -- but
+    # `i3466` is a `Wondrous` item, so it is in `Gear.worn` and the
+    # carried spend cannot reach it. What this row prints is an item
+    # destroying **itself**.
+    #
+    # `c.destroy` exists and is the near miss: it walks `gear.weapons`
+    # and returns False for anything not in it, and it announces a bare
+    # `Note`, which `audit.DID_SOMETHING` refuses because a `Note`
+    # carries no `by`. So the want is a keyword on a verb that is already
+    # there rather than a new verb -- the cheapest shape `blocked._shape_of`
+    # prices (#677).
+    dropped=("c.destroy(worn=)",),
 )
 def i3466p2(c: Cast) -> None:
     """No attack roll is printed. The globe destroying itself is dropped --

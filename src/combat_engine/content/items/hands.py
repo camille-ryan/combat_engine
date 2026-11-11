@@ -1582,7 +1582,28 @@ def i1560p1(c: Cast) -> None:
 @power("i465x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i465x1(c: Cast) -> None:
-    """A place to keep something the engine does not carry."""
+    """A place to keep something the engine does not carry.
+
+    **That premise is false since `#1233` and this row is now writable.**
+    The engine does carry one: `Gear.carried` holds entry refs, a dealt
+    character has two, and `dsl.use` spends one when its block is used.
+
+    What this row wants is `c.store_row(ref, by=c.ref)` over a carried
+    alchemical item that can go on a weapon, and **both halves of that
+    already exist** -- `c.store_row` puts a row into an object keyed by
+    the holder, `c.stored_row(of=)` reads it back, and
+    `feats/general_l.py` reads one and acts on it today. So neither this
+    row nor `i465p1` is blocked on the engine any more.
+
+    Left unwritten rather than guessed at: the pair wants the printed
+    coating mechanism (`c.apply_poison` is what `items/alchemical.py`
+    uses for *"apply this to your weapon"*), and `i465p1`'s marker is
+    therefore **stale rather than correct**. Said here because the next
+    author's first question is why a row with an empty body and no
+    marker sits beside one that is refused. `#1233` has the measurement.
+
+    `out_of_combat=True` stays right either way: stowing a thing is a
+    line about the pack."""
 
 
 @power("i465p1", level=8, cls=ITEM, usage=AT_WILL, action=FREE,

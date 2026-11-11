@@ -588,7 +588,26 @@ def i2659x1(c: Cast) -> None:
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i467x1(c: Cast) -> None:
     """Storage. Consumables are not carried as objects, so stowing one is a
-    line about the pack rather than about the fight."""
+    line about the pack rather than about the fight.
+
+    **The first sentence of that is false since `#1233`.** `Gear.carried`
+    holds entry refs, a dealt character has two, and `dsl.use` spends one
+    when its block is used -- so a consumable *is* carried as an object
+    and there is something to stow.
+
+    This row and `i467p1` are **writable content work now, not blocked on
+    the engine**: `c.store_row(ref, by=c.ref)` stores, `c.stored_row(of=)`
+    reads back, and `feats/general_l.py` already reads one and acts on it.
+    `i467p1`'s remaining clause is the printed *"as part of the same
+    action"* on a second wind, which is a trigger rather than a facility.
+
+    So `i467p1`'s marker is **stale rather than correct**, and it is left
+    in place rather than re-pointed at an invented symbol -- a marker
+    naming the wrong gap is worse than one naming a satisfied premise,
+    and `#1233` carries the measurement either way.
+
+    The second sentence stands and is why `out_of_combat=True` is right:
+    stowing a thing is a line about the pack."""
 
 
 @power("i467p1", level=6, cls=ITEM, action=FREE,

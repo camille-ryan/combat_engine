@@ -916,7 +916,7 @@ def f1873(c: Cast) -> None:
 
 
 @power("f1983", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
+       reach=PERSONAL, target=SELF, todo=("c.restore_item()",))
 def f1983(c: Cast) -> None:
     """Hands back a consumable on a missed attack.
 

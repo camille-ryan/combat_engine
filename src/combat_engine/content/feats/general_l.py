@@ -3480,7 +3480,7 @@ def f2864(c: Cast) -> None:
 
 @power("f2865", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("feat.damage_choice()", "c.consume_item()"))
+       todo=("feat.damage_choice()",))
 def f2865(c: Cast) -> None:
     """"Choose a damage type" is chosen when the *feat* is taken, not
     when the class is built, so `chargen.BUILDS` was the wrong name for

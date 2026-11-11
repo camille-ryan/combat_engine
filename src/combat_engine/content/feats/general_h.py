@@ -546,7 +546,7 @@ def f1346(c: Cast) -> None:
     c.initiative(2 + (c.wis_mod - c.dex_mod), on=me)
 
 
-@_trait("f1256", todo=("c.opportunity_instead()", "c.consume_item()"))
+@_trait("f1256", todo=("c.opportunity_instead()",))
 def f1256(c: Cast) -> None:
     """Use an alchemical item in place of the melee basic an opportunity
     attack would be. Nothing substitutes for the swing an opportunity
