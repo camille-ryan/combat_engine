@@ -8561,9 +8561,29 @@ def main() -> int:
     # Red, for `OUTGROWN`'s reason: a claim that has stopped being true is
     # a loosening already in place. 29 such rows were found by hand in one
     # session, 24 of them declaring the light model absent after it landed.
+    # **`ItemConsumed` does not wake a row, and that is a correction to this
+    # check's definition rather than a waiver.** `out_of_combat=True` claims
+    # the row has nothing to say *in a fight*; the object leaving the pack is
+    # the **price** of using it, which is why the event is in
+    # `DID_SOMETHING` at all -- so a row whose whole effect is out of combat
+    # pays that price and still does nothing in the fight.
+    #
+    # Found by `#1233`, which made three rows AWAKE at once and none of them
+    # wrongly marked. All three cards read, and all three are measured in
+    # minutes: ashes that erase a campfire's tracks after five, a draught
+    # that lets you speak with fey beasts for five, and a solution that
+    # purifies 935 gallons after one. `i3306p1`, `i3512p1`, `i899p1`, each
+    # emitting `ItemConsumed` and nothing else.
+    #
+    # Narrow on purpose: a row that heals, damages, moves anybody or applies
+    # a condition still trips this, so the check is not loosened for any
+    # other event. **Only** an event set that is `ItemConsumed` alone is
+    # excused -- a row emitting it *and* a heal is still awake, which is the
+    # case the subtraction below would have let through.
     awake = [
         r for r in _run_all(inert, args.jobs)
-        if not r.error and (r.events & DID_SOMETHING)
+        if not r.error
+        and (r.events & DID_SOMETHING) - {"ItemConsumed"}
     ]
 
     broken, silent, never, known_quiet, outgrown = [], [], [], [], []
