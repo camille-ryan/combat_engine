@@ -48,6 +48,71 @@ def _elsewhere(c: Cast) -> bool:
     return c.target != getattr(c.trigger, "target", None)
 
 
+def _forgo_for_attack_penalty(c: Cast) -> bool:
+    """`f3401`'s trade: give up the whole flurry to leave the target at -2.
+
+    **`_forgo_for_necrotic`'s sibling, and the structural difference is
+    the printed word.** That feat gives up *"dealing damage"* and nothing
+    else, so it gates one line; this one gives up *"the normal effect"*,
+    which is the whole of what the power does -- so the caller **returns**
+    rather than skipping a clause. Three of the five flurries also shift,
+    pull, slide, slow or bar a shift, and those stand under `f3171` and
+    fall under this one.
+
+    **Checked before `f3171`**, for the same reason: a trade that forgoes
+    everything cannot be followed by a trade that forgoes part of it.
+
+    One helper for five rows, which is `content/CLAUDE.md`'s sanctioned
+    exception -- the card names the *feature* and five is a finite list,
+    so the clause is written into each power behind `c.feat` rather than
+    through `c.pre_empt`. `f3401`'s own note worked that out and said the
+    helper was *"not written here"*; this is it.
+
+    **The symbol it replaces was stale on both claims**, which that note
+    also recorded: `spec.power_ref()` said the ref was missing (it is
+    `FLURRIES`, the canonical list) and that nothing suppresses a row
+    being used (`#780` is this helper's twin).
+
+    `on=c.target` because the penalty is the *target's* -- "the target
+    take a -2 penalty to attack rolls" -- and `c.penalty` defaults to the
+    target anyway; written out because the sibling's own comment records
+    the two verbs disagreeing about that and a driver catching it on all
+    five rows at once.
+
+    `c.credit` so the penalty is the feat's doing rather than the
+    flurry's, which is what stops `f3401` reading SILENT while working.
+    """
+    if not c.feat("f3401"):
+        return False
+    if not c.choose([False, True],
+                    "forgo the flurry to leave the target at -2 to attack"):
+        return False
+    with c.credit("f3401"):
+        # **`label="f3401"` and it is the one sanctioned use of that
+        # argument.** `c.bonus`'s docstring reserves it for *"a body
+        # laying two PENALTIES from two different printed sources"*, and
+        # `p16131` is now exactly that: its own rider puts -2 on whoever
+        # attacks the monk, and this puts -2 on the target. `Mods.total`
+        # buckets penalties by `Mod.label` and takes the worse of a
+        # bucket, so without this both would be labelled `p16131`.
+        #
+        # **What `c.credit` does to a Mod label is COMPOSE, not
+        # replace**, and that was measured both ways rather than assumed.
+        # With the block and no `label=`, the Mod came out `'p7448'` --
+        # the power's ref, because that is what `c.penalty` defaults to.
+        # With `label="f3401"` it comes out `'p7448:f3401'`. So the feat
+        # is nameable in the bucket only if the clause supplies the word,
+        # which is the whole reason this argument is here.
+        #
+        # A reader asking "did this clause land" therefore matches the
+        # **tail** of the label, not the whole of it. `drivers`
+        # `flurry_forgone` does, and said so after asserting equality and
+        # failing on all five rows.
+        c.penalty("attack", 2, on=c.target, until=When.EONT,
+                  label="f3401")
+    return True
+
+
 def _forgo_for_necrotic(c: Cast) -> bool:
     """`f3171`'s trade: give up this flurry's damage to strip the target's
     necrotic resistance. True when it is taken, so the caller skips the
@@ -107,6 +172,8 @@ def _forgo_for_necrotic(c: Cast) -> bool:
     on=TRIGGERED,
 )
 def p11207(c: Cast) -> None:
+    if _forgo_for_attack_penalty(c):
+        return
     if not _forgo_for_necrotic(c):
         c.flat(3 + c.str_mod
                + ((2 + 2 * _tier(c.level)) if _elsewhere(c) else 0))
@@ -129,6 +196,8 @@ def p13123(c: Cast) -> None:
     """"Cannot shift" is `c.cannot_shift`, not `c.immobilized` -- the creature can
     still walk. "Cannot make opportunity attacks" has no `Cast` method at
     all, so the second half of the off-target clause is dropped."""
+    if _forgo_for_attack_penalty(c):
+        return
     if not _forgo_for_necrotic(c):
         c.flat(2 + c.con_mod)
     c.cannot_shift(until=When.SONT)
@@ -151,6 +220,8 @@ def p16131(c: Cast) -> None:
     """"Any attack that includes you as a target" is a gate on the attack
     context, which carries `target` -- it is the damage context that does
     not."""
+    if _forgo_for_attack_penalty(c):
+        return
     if not _forgo_for_necrotic(c):
         c.flat(2 + c.cha_mod, dtype=DamageType.FIRE)
     if _elsewhere(c):
@@ -174,6 +245,8 @@ def p16131(c: Cast) -> None:
     on=TRIGGERED,
 )
 def p16132(c: Cast) -> None:
+    if _forgo_for_attack_penalty(c):
+        return
     if not _forgo_for_necrotic(c):
         c.flat(c.str_mod)
     c.pull(1)
@@ -198,6 +271,8 @@ def p7448(c: Cast) -> None:
     """A creature the attack hit is already adjacent, so "slide it to a
     square adjacent to you" and "slide it 1 square" come to the same move
     at this reach; the decider picks either way."""
+    if _forgo_for_attack_penalty(c):
+        return
     if not _forgo_for_necrotic(c):
         c.flat(2 + c.wis_mod)
     c.slide(1)

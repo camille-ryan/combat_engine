@@ -53080,6 +53080,118 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def a_flurry_traded_for_an_attack_penalty(out: Result) -> None:
+    """`f3401` gives up the WHOLE flurry, where `f3171` gives up the damage.
+
+    `flurry_traded` above is this rule's twin and the two cards differ in
+    one printed word, which is the whole reason both exist. `f3171` gives
+    up *"dealing damage"*, so three flurries' slide, pull or barred shift
+    stand. `f3401` gives up *"the normal effect"* -- the whole of what the
+    power does -- so **nothing** should happen but the penalty.
+
+    **That difference is the assertion.** A helper written to the sibling's
+    shape would have gated the damage line and left the riders running,
+    which is a row stronger than its card and silent: the damage stops,
+    the penalty lands, and only the surviving slide says it is wrong.
+
+    Driven across all five, because a helper shared by five bodies is
+    exactly the shape where four callers are right and the fifth was never
+    wired up -- which is `flurry_traded`'s own stated reason.
+
+    Three arms per row, the same three that rule uses: without the feat,
+    with it and declining, and with it and taking. A rule that checked only
+    the third would pass on a row that always traded.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.content.powers.monk.level_0 import FLURRIES
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+
+    def run(ref: str, *, hold: bool, take: bool) -> tuple[int, int, int]:
+        """Damage dealt, the target's attack penalty, events emitted."""
+        world, me, _armed = _posed(ref, 1)
+        foe = sorted(enemies(world, me))[0]
+        if hold:
+            world.need(me, Powers).known.append("f3401")
+        world.decider = (
+            lambda _a, _k, options, _p="":
+            take if options == [False, True] else options[0]
+        )
+        use = Cast(world=world, me=me, ref=ref, targets=[foe])
+        use.target = foe
+        world.rng.loaded = 20
+        mark = len(world.bus.log)
+        REGISTRY[ref].body(use)
+        dealt = sum(int(getattr(e, "amount", 0) or 0)
+                    for e in world.bus.log[mark:]
+                    if isinstance(e, DamageApplied)
+                    and getattr(e, "target", None) == foe)
+        # **Read by LABEL, not by total.** `c.credit("f3401")` makes the
+        # penalty the feat's doing, so `c.suffering` can be asked whether
+        # *this clause* landed. A total cannot: `audit.board` already puts
+        # -2 on the foe, and `p16131` lays another -2 of its own that
+        # disappears when the trade is taken -- so declined and taken both
+        # come to -4 for opposite reasons and a delta reads 0. That row
+        # failed on exactly that and is why this is a label read.
+        mods = world.get(foe, Mods)
+        credited = any(
+            str(getattr(m, "label", "")).endswith("f3401")
+            for m in (mods.items if mods else [])
+        )
+        return dealt, int(credited), len(world.bus.log) - mark
+
+    out.that(len(FLURRIES) == 5,
+             "five flurries to drive, which is the list the clause was "
+             "written across and the one the stale symbol called missing",
+             f"{FLURRIES}")
+
+    for ref in sorted(FLURRIES):
+        plain, plain_pen, _ = run(ref, hold=False, take=True)
+        kept, kept_pen, kept_events = run(ref, hold=True, take=False)
+        gone, gone_pen, gone_events = run(ref, hold=True, take=True)
+
+        # **The DELTA, never the absolute.** `audit.board`'s own hand
+        # already puts an attack penalty on the foe -- measured, -2 before
+        # this row runs at all, and -4 on `p16131` because that flurry
+        # lays one of its own. Asserting `== -2` read the board's number
+        # and failed on four rows of five; `audit.board` pre-sets the
+        # numbers you measure, so the claim has to be what this clause
+        # *added*.
+        out.that(plain > 0 and not plain_pen and kept > 0 and not kept_pen,
+                 f"{ref}: without f3401 it deals damage and credits no "
+                 "penalty, and holding the feat without taking the trade "
+                 "is the same row -- a printed 'you can' is a choice, not "
+                 "a free upgrade",
+                 f"dealt={plain}/{kept}, credited={plain_pen}/{kept_pen}")
+        out.that(gone == 0,
+                 f"{ref}: taking the trade forgoes the damage",
+                 f"dealt={kept} -> {gone}")
+        out.that(bool(gone_pen),
+                 f"{ref}: and lands a penalty the feat can be named in -- "
+                 "matched on the TAIL of `Mod.label`, because `c.credit` "
+                 "composes (`p7448:f3401`) rather than replacing, and "
+                 "because the board's own -2 makes a total unreadable",
+                 f"credited={bool(gone_pen)}")
+        # **`== 1`, not `< kept_events`, and the plant is why.** Giving
+        # the trade `f3171`'s shape -- gate the damage line, let the
+        # riders run -- reddened **nothing** against the inequality: one
+        # fewer damage event still satisfies `<`. The exact claim is that
+        # taking the trade emits the penalty and **nothing else**, which
+        # is what "forgo the normal effect" means against "forgo dealing
+        # damage", and it is the only reading the two cards' difference
+        # can be measured by.
+        out.that(gone_events == 1,
+                 f"{ref}: and the WHOLE normal effect goes -- one event, "
+                 "the penalty, where declining emits the damage and this "
+                 "row's own slide, pull or barred shift besides. `f3171`'s "
+                 "shape would leave those running",
+                 f"{gone_events} event(s) taking against {kept_events} declining")
+
+
 def a_granted_teleport_reaches_the_menu_and_moves_somebody(out: Result) -> None:
     """`c.teleport_as` and a teleport action the menu can offer. #1233.
 
@@ -72345,6 +72457,10 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "flurry_forgone": (
+        a_flurry_traded_for_an_attack_penalty,
+        "a flurry traded for an attack penalty gives up ALL of it (#1233)",
     ),
     "granted_teleport": (
         a_granted_teleport_reaches_the_menu_and_moves_somebody,

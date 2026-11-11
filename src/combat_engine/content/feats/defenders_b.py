@@ -645,9 +645,30 @@ def f3327(c: Cast) -> None:
 
 
 @power("f3401", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
+       reach=PERSONAL, target=SELF, implemented_in=("p7448", "p11207",
+                                                   "p13123", "p16131",
+                                                   "p16132"))
 def f3401(c: Cast) -> None:
     """Trades the feature's normal effect for a penalty on the target.
+
+    **Written, into the five flurries.** This row's own note worked out
+    both halves and then said the helper was *"not written here"*;
+    `monk.level_0._forgo_for_attack_penalty` is it, a sibling of
+    `_forgo_for_necrotic` that `#780` built for `f3171`.
+
+    **The structural difference between the two is the printed word.**
+    `f3171` gives up *"dealing damage"*, so it gates one line and the
+    shift, pull, slide and slow of three flurries stand. This gives up
+    *"the normal effect"* -- the whole of what the power does -- so the
+    body returns, and it is checked first, because a trade that forgoes
+    everything cannot be followed by one that forgoes part of it.
+
+    `implemented_in=` rather than a body: `content/CLAUDE.md`'s rule is
+    that a feat naming one power writes its clause into that power and
+    stays declared as a pointer, and `audit.py` buckets such a row
+    separately rather than firing it. Five refs because the feature is
+    `monk.level_0.FLURRIES`, the canonical list the stale symbol claimed
+    was missing.
 
     **`spec.power_ref()` is stale on both of its claims and the row is
     writable.** The ref was never missing: the feature is the five rows
