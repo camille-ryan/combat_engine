@@ -210,7 +210,14 @@ CATEGORIES: dict[str, dict] = {
                 "save_early", "unsave",
             ]),
             ("dying and after", [
-                "decay", "destroy", "kill", "reanimate", "revives_unless",
+                # **`restore_item` is beside `destroy` rather than with the
+                # resources**, because it is that verb's opposite and the
+                # pair is only legible together: one takes a thing off its
+                # owner for good, the other puts a one-use thing back
+                # because the card says it was not spent after all.
+                # Somebody looking for either will look for both. #1233.
+                "decay", "destroy", "kill", "reanimate", "restore_item",
+                "revives_unless",
             ]),
             ("riders that behave like conditions", [
                 "curse", "cursed", "rattled", "rattling", "shroud", "shrouds",

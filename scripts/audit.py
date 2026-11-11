@@ -259,10 +259,22 @@ KNOWN_SILENT = {
     # moved draw means this board's character does not) and every other row
     # whose gate is "do I hold this". It moves verdicts in bulk, so it is
     # not a change to make beside content work.
-    # **`p13984` was here and `#1233` retired it.** The entry argued its
-    # branch needed a school benefit this board's wizard does not have.
-    # Emits `TempHP` now -- the carried blocks moved what the board does
-    # far enough to reach the other branch.
+    # **Restored, and the retirement was the mistake rather than this.**
+    # `#1233` deleted this entry because the row fired, which it did --
+    # and it fired because the carried blocks had moved the wizard's draw
+    # onto a build whose school benefit reaches the branch. Three commits
+    # later the draw moved again and the row went silent, so the entry is
+    # **true** and oscillates with the hand rather than with the row.
+    #
+    # Kept rather than argued with because the row is proved somewhere
+    # that does not depend on a draw: `drivers.school_summon` runs its
+    # body directly, 4 assertions, and names both creatures it can
+    # summon. An excuse for a row with a driver behind it is a statement
+    # about the board, which is what this list is for.
+    "p13984": "its branch needs a cf:wizard-mage-f4s3/s4 school benefit and"
+              " this board's wizard is usually an arcanist/sha-ir build --"
+              " it fires on a draw that happens to land one, so this entry"
+              " oscillates. Proved in drivers.school_summon instead",
     # "You hit a cursed target with an arcane power using this rod." The row
     # is correct and `_pose_cursed` below now curses every enemy, verified at
     # the moment it is laid -- but the one creature the provocation swings at

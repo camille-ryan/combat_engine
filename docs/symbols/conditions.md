@@ -97,12 +97,14 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
 
 - `c.decay(self, *, on: 'int | None' = None, amount: 'int' = 1, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, weapon: 'Weapon | None' = None) -> 'Effect | None'`
   - Take an item's enhancement bonus down, to a minimum of 0.
-- `c.destroy(self, *, on: 'int | None' = None, weapon: 'Weapon | None' = None) -> 'bool'`
-  - Destroy an item a creature is carrying. It does not come back.
+- `c.destroy(self, *, on: 'int | None' = None, weapon: 'Weapon | None' = None, worn: 'str' = '', armour: 'bool' = False) -> 'bool'`
+  - Destroy an item a creature is carrying or wearing. It does not
 - `c.kill(self, *, on: 'int | None' = None, critical: 'bool' = False, dead: 'bool' = False) -> 'bool'`
   - Reduce a creature to 0 hit points outright. Returns whether it moved.
 - `c.reanimate(self, *, on: 'int | None' = None, team: 'Team | None' = None, hp: 'int' = 1, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'bool'`
   - Put a dead creature back on the board, on somebody's side.
+- `c.restore_item(self, item: 'str', *, on: 'int | None' = None) -> 'bool'`
+  - Put a one-use item back on its owner. `c.destroy`'s opposite.
 - `c.revives_unless(self, *types: 'DamageType', on: 'int | None' = None) -> 'None'`
   - Say that this creature gets back up unless finished with `types`. #318.
 
