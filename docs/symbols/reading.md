@@ -191,6 +191,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - A shift is barred separately from a walk, and by different powers.
 - `query.can_walk(world: 'World', eid: 'int') -> 'bool'`
   - "It cannot use move actions to walk or run", but it may still shift.
+- `query.can_wield(world: 'World', eid: 'int', weapon: 'Weapon') -> 'str'`
+  - Why this creature cannot use that weapon, or `""` if it can.
 - `query.granted_actions(world: 'World', eid: 'int') -> 'dict[tuple[str, str], int]'`
   - Things this creature may do for a different action than usual.
 - `query.held_by(world: 'World', eid: 'int') -> 'list[int]'`

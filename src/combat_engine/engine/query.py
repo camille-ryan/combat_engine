@@ -32,6 +32,7 @@ from .components import (
     Side,
     Stats,
     Trap,
+    Weapon,
 )
 from .conditions import rules, rules_for
 from .grid import Square, between, linked_spread, spread
@@ -44,6 +45,7 @@ from .types import (
     Keyword,
     Light,
     Relation,
+    Size,
     Team,
 )
 
@@ -690,6 +692,73 @@ def moved_this_action(world: World, eid: int) -> int:
     """
     mv = world.get(eid, Movement)
     return mv.went if mv is not None else 0
+
+
+def can_wield(world: World, eid: int, weapon: Weapon) -> str:
+    """Why this creature cannot use that weapon, or `""` if it can.
+
+    The glossary entry *Weapons and Size*, PHB 220. Camille, asked on
+    `#1241` whether to build the weapon-size model at all, 2026-11-11:
+
+      > *"reference the glossary entry in the compendium entitled weapons
+      > and size. Build it."*
+
+    Three of the entry's rules are refusals and they are the three here.
+    Quoted rather than paraphrased, because each turns on a word:
+
+    * *"a Small character (such as a halfling) can't use a two-handed
+      weapon"* -- no melee/ranged qualifier, and the tables mark a crossbow
+      Two-Handed. **This is the one that bites today**: 4 of the 5 Small
+      characters in a 78-character deal were holding one. `#1246`.
+    * *"A creature can't use an undersized one-handed weapon at all; its
+      hand is too large to effectively hold the weapon's small grip."*
+      One-handed only -- an undersized *two-handed* weapon is not refused
+      by the page, so it is not refused here.
+    * *"Creatures can't use weapons designed for creatures larger than
+      themselves."* This is the one `rt:r10-t0` waives, through
+      `Gear.oversized`.
+
+    **A reason rather than a bool**, so a caller can say which rule
+    refused -- a bare False would have made the three indistinguishable at
+    the one place that reports them.
+
+    The entry's other four rules are not refusals and are not here: the
+    damage-die step for Large and larger wielders (a stat block prints a
+    finished number, so the engine does not rescale one), the Large
+    two-handed-as-one-handed allowance, the versatile clause, and the reach
+    bonus for a creature with natural reach.
+    """
+    from .components import Gear, Position
+
+    pos = world.get(eid, Position)
+    mine = pos.size if pos is not None else Size.MEDIUM
+    gear = world.get(eid, Gear)
+    allowance = gear.oversized if gear is not None else 0
+
+    if mine is Size.SMALL and weapon.hands == "two-handed":
+        return "a small wielder cannot use a two-handed weapon"
+
+    # **Medium and smaller are one band, and that is the page talking
+    # rather than a convenience.** *"Small characters use the same weapons
+    # that Medium creatures do"*, and *"Large, Huge, and Gargantuan
+    # creatures use weapons that are specially sized for them"* -- so only
+    # the three big categories are a separate weapon, and the tables are
+    # the rest. Comparing the raw `Size.order` instead refused a Small
+    # character an ordinary Medium weapon, which is the opposite of the
+    # first sentence; `drivers.weapon_size`'s last arm caught it.
+    #
+    # The same collapse `Size.squares` already makes for the grid, and for
+    # a related reason: Tiny, Small and Medium are not meaningfully
+    # different scales here.
+    def band(size: Size) -> int:
+        return max(Size.MEDIUM.order, size.order)
+
+    ours, theirs = band(mine), band(weapon.size)
+    if theirs < ours and weapon.hands == "one-handed":
+        return "an undersized one-handed weapon has too small a grip"
+    if theirs > ours + allowance:
+        return "the weapon is made for a larger creature"
+    return ""
 
 
 #: The printed run-up: *"if you move at least 2 squares before making the

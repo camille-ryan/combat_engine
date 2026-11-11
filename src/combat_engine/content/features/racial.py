@@ -299,12 +299,34 @@ def rt_r2_t2(c: Cast) -> None:
 
 @power("rt:r2-t3", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       dropped=("Gear.load",))
+       dropped=("Gear.load",),
+       declined_clause=("Gear.load",))
 def rt_r2_t3(c: Cast) -> None:
     """The armour penalty is a square taken off in `chargen.spawn`, so
     giving it back is a square of speed rather than a rule about armour --
     and it is laid only when there is a penalty to undo, or this race in
-    leather would walk 6. A heavy load is not carried anywhere.
+    leather would walk 6.
+
+    **The heavy-load half is declined, not owed.** Camille, asked directly
+    on `#1242`, 2026-11-11:
+
+      > *"Let's not build an encumbrance system. And yeah, build a marker
+      > that indicates this."*
+
+    So `Gear.load` keeps its `dropped=` -- the clause really is missing --
+    and `declined_clause=` says nobody is coming back for it. Nothing
+    tracks what a character carries by weight, nothing slows anyone for it,
+    and the near-miss is not it: `engine/skills.py`'s `ENCUMBERED` is the
+    **armour check penalty** list and its own note says so, *"about moving
+    in the stuff rather than about being encumbered generally"*.
+    `Gear.load_cost` and its siblings are **ammunition** loading, a
+    different sense of the word, which is most of why this marker read as a
+    gap for so long.
+
+    The row plays correctly for every character the game can produce: the
+    armour half is the half that fires, and a dealt character's load is not
+    modelled, so there is no case where the missing clause changes an
+    outcome.
 
     **Chain was missing.** This read `("scale", "plate")`, and
     `chargen.ARMOUR_SPEED` levies its -1 on **chain** as well -- so the one
@@ -581,14 +603,38 @@ def rt_r8_t1(c: Cast) -> None:
 
 
 @power("rt:r10-t0", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.oversized()",),
-       wants="a size on Weapon, and a refusal to wield one above the "
-             "wielder's, for this permission to have anything to permit")
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r10_t0(c: Cast) -> None:
-    """Wielding a weapon a size up. `Weapon` carries no size and nothing
-    refuses one for being too big, so the permission has nothing to
-    permit."""
+    """Wielding a weapon a size up.
+
+    **Written, and my reason for leaving it was the wrong one.** The old
+    note said *"`Weapon` carries no size and nothing refuses one for being
+    too big, so the permission has nothing to permit"*, and I filed `#1241`
+    recommending the row be declined on that ground. Camille, 2026-11-11:
+
+      > *"reference the glossary entry in the compendium entitled weapons
+      > and size. Build it."*
+
+    The rule is printed -- PHB 220, *Weapons and Size* -- and the sentence
+    this row waives is one of its three refusals: *"Creatures can't use
+    weapons designed for creatures larger than themselves."* The engine
+    not implementing a printed rule is a reason to implement it, not a
+    reason to retire the row that depends on it. That is the same mistake
+    as `#1021`, where a table I called non-existent was on DMG 125.
+
+    `Weapon.size` is the size of wielder a weapon was made for, defaulting
+    to Medium because the glossary's first sentence says the tables assume
+    one. `query.can_wield` holds the refusals and `Gear.oversized` is the
+    allowance this row raises by a category.
+
+    **Inert until something hands out a wrong-sized weapon, and nothing
+    does.** chargen deals size-appropriate weapons, `loader.spawn` gives a
+    monster no `Weapon`, and `c.pick_up()` does not exist. So the waiver is
+    correct and provokable only in a probe -- said here rather than left
+    for a reader to discover, and it is why the row carries no marker: it
+    is not waiting on a symbol, it is waiting on a way to pick a sword up.
+    This race is Medium, so what it waives is the use of Large weapons."""
+    c.oversized(1, on=c.me)
 
 
 # -- r14 ---------------------------------------------------------------

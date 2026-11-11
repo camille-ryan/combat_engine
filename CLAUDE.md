@@ -373,11 +373,15 @@ name.** Those are different questions and only the second is forbidden.
   is the ruling working, not the change failing.
 * **A row is fully implemented before it is added, or it carries a
   marker.** `todo=` (refused in play), `dropped=` (plays, one clause
-  missing), `narrative=` (finished, no combat meaning), `obsolete=` (retired
-  by a rules change), `defect=` (**the compendium is missing what the row
-  would be written from**). Symbols only for the first three — prose is
-  refused at import. The last two take plain words, because there is no
-  symbol to wait for. See the content component file.
+  missing), `narrative=` (finished, no combat meaning),
+  `declined_clause=` (**plays, and one missing clause is a scope decision
+  nobody is coming back for**), `obsolete=` (retired by a rules change),
+  `defect=` (**the compendium is missing what the row would be written
+  from**). Symbols only for the first four — prose is refused at import.
+  The last two take plain words, because there is no symbol to wait for.
+  `declined_clause=` is the odd one: symbols *and* a docstring carrying
+  whose call it was and a date, because a scope decision is the one marker
+  meant to outlive its symbol arriving. See the content component file.
 * **If a spec is garbled, refer it up rather than guessing.** An authoring
   agent cannot read the compendium; the main session can. It answers with
   what the page says, or the row is flagged `defect=`. **On a monster, one

@@ -2595,6 +2595,53 @@ class Cast:
             by=self.ref,
         )
 
+    def oversized(
+        self, categories: int = 1, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Wield a weapon made for a creature this many sizes larger.
+
+        The glossary's refusal, PHB 220: *"Creatures can't use weapons
+        designed for creatures larger than themselves."* `rt:r10-t0` is the
+        printed exemption and the only caller: *"You can use weapons of
+        your size or one size larger than you as if they were your size."*
+
+        `categories` because the sentence says "one size larger" and a
+        second row saying two would otherwise want a second verb.
+
+        **Correct and inert today, and that is deliberate rather than
+        unnoticed.** Nothing hands a creature a weapon of the wrong size:
+        chargen deals size-appropriate ones, `loader.spawn` gives a monster
+        no `Weapon`, and `c.pick_up()` does not exist -- two rows wait on
+        it. So this waives a refusal nothing can currently provoke. It is
+        built because the rule is printed and Camille ruled on `#1241` that
+        it should be (*"reference the glossary entry ... Build it"*), and
+        it is written down here so the next reader does not take a quiet
+        verb for a working one.
+
+        Read by `query.can_wield`, which is the one reader and holds the
+        three printed refusals.
+        """
+        from .components import Gear
+
+        who = on if on is not None else self.me
+        gear = self.world.get(who, Gear)
+        if gear is None or categories <= 0:
+            return None
+        was = gear.oversized
+        if was >= categories:
+            return None
+        gear.oversized = categories
+        # `on_suspend` for `ignores_difficult`'s reason: `Effects._lift`
+        # runs it for an expiry and a suspension both, so the allowance
+        # comes back exactly once either way.
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} oversized",
+            on_suspend=[lambda: setattr(gear, "oversized", was)],
+            on_resume=[lambda: setattr(gear, "oversized", categories)],
+            by=self.ref,
+        )
+
     def _ignores_difficult_made_by(
         self, made_by: str, who: int, moves: Any, until: When
     ) -> Effect | None:

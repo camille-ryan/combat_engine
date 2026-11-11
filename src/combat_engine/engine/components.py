@@ -1904,6 +1904,22 @@ class Gear:
     #:   > generated characters don't do that. We'll actually have item
     #:   > shopping."*
     carried: list[str] = field(default_factory=list)
+    #: **How many size categories above its own this creature may wield**,
+    #: 0 for everybody by default.
+    #:
+    #: The glossary says *"Creatures can't use weapons designed for
+    #: creatures larger than themselves"*, and `rt:r10-t0` is the printed
+    #: exemption: *"You can use weapons of your size or one size larger
+    #: than you as if they were your size."* So the waiver is a number of
+    #: categories rather than a flag -- the sentence says "one size larger",
+    #: and a second row saying "two" would otherwise need a second field.
+    #:
+    #: Read only by `query.can_wield`. **Correct and inert today**, which is
+    #: worth saying rather than finding out later: nothing in this engine
+    #: hands anybody a weapon that is not their own size. chargen deals
+    #: size-appropriate ones, `loader.spawn` gives a monster no `Weapon` at
+    #: all, and `c.pick_up()` does not exist. PHB 220, `#1241`.
+    oversized: int = 0
     #: How many copies of a throwable weapon are left, by weapon ref.
     #:
     #: **A dict rather than a field on `Weapon`, deliberately.** `Weapon` is
@@ -2171,6 +2187,19 @@ class Weapon:
     #: melee" and without it that band could match nothing, which refused the
     #: class its own dagger. #285.
     hands: str = ""
+    #: **Which size of wielder this weapon was made for.** The printed
+    #: default, said by the glossary's first sentence: *"The weapon tables
+    #: assume a Medium wielder, which includes almost all player
+    #: characters."* So every row the `weapon` table supplies is Medium, and
+    #: a larger or smaller one is a thing somebody made or took.
+    #:
+    #: Here rather than derived, because it is not derivable: a Large
+    #: longsword and a Medium one are the same printed row with a different
+    #: damage die, and nothing in `game.db` distinguishes them.
+    #:
+    #: Read by `query.can_wield`, which is where the glossary's refusals
+    #: live. PHB 220, *Weapons and Size*. `#1241`.
+    size: Size = Size.MEDIUM
     properties: frozenset[str] = frozenset()
     #: A magic weapon's enhancement bonus, which adds to its attack and its
     #: damage. Zero is a plain weapon, and everything `chargen` hands out is

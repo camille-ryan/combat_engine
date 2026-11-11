@@ -53,6 +53,8 @@ Making an attack, and what the attack turns out to be.
   - "The attack misses", or it lands after all.
 - `c.landed`
   - Did the last attack hit? `c.hit()` is the damage; this is the question.
+- `c.oversized(self, categories: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Wield a weapon made for a creature this many sizes larger.
 - `c.provoke(self, attacker: 'int', *, on: 'int | None' = None, why: 'str' = '') -> 'None'`
   - Open an opportunity window for a named creature against a target.
 - `c.redirect(self, *, to: 'int | None' = None, by: 'int | None' = None) -> 'bool'`

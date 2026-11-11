@@ -80,7 +80,7 @@ CATEGORIES: dict[str, dict] = {
                 "cast_from", "coup_de_grace", "crit", "crit_becomes",
                 "disarm",
                 "flurry_of_blows", "grant_attack", "hit", "hit_becomes",
-                "landed",
+                "landed", "oversized",
                 "provoke", "redirect", "retarget_defence", "strike",
                 "target",
             ]),
@@ -871,6 +871,7 @@ READERS: dict[str, list[str]] = {
     ],
     "what a creature may do": [
         "can_act", "can_move", "can_react", "can_shift", "can_run", "can_walk",
+        "can_wield",
         "granted_actions", "held_by", "holding", "holds_somebody",
         "immune_to", "may_ride", "needs_loading", "ready_to_fire",
         "ready_to_throw", "rideable_by",

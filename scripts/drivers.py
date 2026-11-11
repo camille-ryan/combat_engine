@@ -30668,6 +30668,231 @@ def a_run_up_doubles_a_jump_and_a_trait_can_grant_one(out: Result) -> None:
              f"went {mv.went}, run_up {sorted(mv.run_up)}")
 
 
+def a_weapon_is_refused_for_the_wrong_size_of_wielder(out: Result) -> None:
+    """The three refusals in the *Weapons and Size* glossary. PHB 220.
+
+    Camille, asked on `#1241` whether to build the weapon-size model or
+    retire the row that waits on it, 2026-11-11:
+
+      > *"reference the glossary entry in the compendium entitled weapons
+      > and size. Build it."*
+
+    I had recommended retiring it, on the ground that *"`Weapon` carries no
+    size and nothing refuses one for being too big, so the permission has
+    nothing to permit"*. The engine not implementing a printed rule is a
+    reason to implement the rule, not to retire the row -- the same mistake
+    as `#1021`, where a table I called non-existent was on DMG 125.
+
+    Each refusal is asserted against the sentence it comes from, because
+    each turns on a word:
+
+    * *"a Small character ... can't use a two-handed weapon"* -- no
+      melee/ranged qualifier, so a crossbow counts. The one that bites
+      today: `#1246`, 4 of 5 Small characters were holding one.
+    * *"A creature can't use an undersized **one-handed** weapon at all"*
+      -- so an undersized two-handed weapon is **not** refused, which is
+      asserted as well, since a rule read as "undersized is out" would
+      pass every other arm here.
+    * *"Creatures can't use weapons designed for creatures larger than
+      themselves"* -- waived one category by `rt:r10-t0`, and only one.
+
+    **`audit.board` arms the trait itself**, so the allowance is already 1
+    before this rule touches anything. Every arm that needs it absent sets
+    it to 0 first; the first draft read the board's armed value as its own
+    control and reported a Large weapon wieldable with no trait at all.
+    """
+    from dataclasses import replace
+
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import can_wield
+    from combat_engine.engine.types import Size
+
+    ROW = "rt:r10-t0"
+    world, me, _ = audit_board(ROW, 1)
+    gear, pos = world.need(me, Gear), world.need(me, Position)
+    base = gear.weapons[0]
+
+    out.that(gear.oversized == 1,
+             f"{ROW} is armed by the board itself, so the allowance is "
+             "already up before this rule does anything -- which is why "
+             "every control below zeroes it rather than trusting the board",
+             f"oversized={gear.oversized}")
+    out.that(pos.size is Size.MEDIUM,
+             "and this race is Medium, so what the trait waives is the use "
+             "of LARGE weapons",
+             f"size={pos.size.name}")
+
+    def sized(size: Size, hands: str = "") -> object:
+        return replace(base, size=size, **({"hands": hands} if hands else {}))
+
+    LARGE, HUGE = sized(Size.LARGE), sized(Size.HUGE)
+
+    # -- the control: no allowance ---------------------------------------
+    gear.oversized = 0
+    out.that(can_wield(world, me, LARGE),
+             "with no allowance a Large weapon is refused -- 'creatures "
+             "can't use weapons designed for creatures larger than "
+             "themselves'",
+             f"{can_wield(world, me, LARGE)!r}")
+    out.that(not can_wield(world, me, sized(Size.MEDIUM)),
+             "while its own size is fine, so the refusal is about the gap "
+             "and not about the field being read at all",
+             f"{can_wield(world, me, sized(Size.MEDIUM))!r}")
+
+    # -- the trait --------------------------------------------------------
+    REGISTRY[ROW].body(Cast(world=world, me=me, ref=ROW))
+    out.that(gear.oversized == 1,
+             "the row raises the allowance by one category",
+             f"oversized={gear.oversized}")
+    out.that(not can_wield(world, me, LARGE),
+             "so a Large weapon is wieldable -- the printed exemption, 'as "
+             "if they were your size'",
+             f"{can_wield(world, me, LARGE)!r}")
+    out.that(can_wield(world, me, HUGE),
+             "and a Huge one is still refused: the card says ONE size "
+             "larger, so an unbounded waiver would be stronger than print",
+             f"{can_wield(world, me, HUGE)!r}")
+
+    # -- Medium and smaller are ONE band, which is the page talking --------
+    #
+    # *"Small characters use the same weapons that Medium creatures do"*, so
+    # a Small weapon is not undersized for a Medium wielder. Comparing the
+    # raw `Size.order` refused exactly that and this arm caught it.
+    gear.oversized = 0
+    out.that(not can_wield(world, me, sized(Size.SMALL, "one-handed")),
+             "a Small weapon is NOT undersized for a Medium wielder -- "
+             "'Small characters use the same weapons that Medium creatures "
+             "do', so only Large and up are a separate weapon",
+             f"{can_wield(world, me, sized(Size.SMALL, 'one-handed'))!r}")
+
+    # -- the undersized rule, which needs a big wielder to bite ------------
+    #
+    # The page's own example is a fire giant and a human's dagger. One-handed
+    # only: *"Large creatures can use two-handed weapons intended for
+    # creatures one size category smaller than themselves and treat them as
+    # one-handed weapons."*
+    pos.size = Size.LARGE
+    big_1h = can_wield(world, me, sized(Size.MEDIUM, "one-handed"))
+    big_2h = can_wield(world, me, sized(Size.MEDIUM, "two-handed"))
+    out.that(big_1h and not big_2h,
+             "a Large wielder is refused an undersized ONE-HANDED weapon "
+             "and allowed an undersized two-handed one -- the page refuses "
+             "only the first, and a rule read as 'undersized is out' would "
+             "pass every other arm here while being wrong",
+             f"one-handed {big_1h!r}, two-handed {big_2h!r}")
+    pos.size = Size.MEDIUM
+
+    # -- the Small wielder, which is the live one -------------------------
+    pos.size = Size.SMALL
+    gear.oversized = 0
+    two_handed = can_wield(world, me, replace(base, hands="two-handed"))
+    one_handed = can_wield(world, me, replace(base, hands="one-handed"))
+    out.that(two_handed and not one_handed,
+             "a Small wielder is refused a two-handed weapon and allowed a "
+             "one-handed one. This is the rule with live consequences -- "
+             "`#1246` measured 4 of 5 dealt Small characters holding one",
+             f"two-handed {two_handed!r}, one-handed {one_handed!r}")
+
+
+def a_declined_clause_is_not_work_owed(out: Result) -> None:
+    """`declined_clause=`: the row says a missing clause is a decision.
+
+    Camille, asked directly on `#1242`, 2026-11-11:
+
+      > *"Let's not build an encumbrance system. And yeah, build a marker
+      > that indicates this."*
+
+    **The counting half already existed; the visibility half did not.**
+    `blocked.DECLINED` has kept clause-level scope decisions out of the
+    owed list since `#1039`, so an ELI5 of mine was wrong to tell her such
+    a clause *"stays on the owed list"*. What no mechanism could do was
+    tell a reader of the **row**: the decision sat in a set in
+    `scripts/blocked.py`, nowhere near the header it governed, so
+    `dropped=("Gear.load",)` read as ordinary unfinished work.
+
+    So the marker is the row saying it, and it is subtracted in
+    `Power.unfinished` -- the one property `blocked.py` and `todo.py` both
+    read, which is why neither needed to learn the field.
+
+    **`dropped=` stays beside it**, deliberately: the clause really is
+    missing, and a row that dropped the admission as well would claim to
+    be finished. The pair says "missing" and "nobody is coming back".
+    """
+    from combat_engine.content import declared  # noqa: F401
+    from combat_engine.engine import AT_WILL, PERSONAL, SELF, ActionType, power
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+
+    # `content` imported first, deliberately: reading `REGISTRY` before
+    # anything loads it raises `KeyError` on the row this rule is about.
+    ROW = "rt:r2-t3"
+    p = REGISTRY[ROW]
+    out.that(p.dropped == ("Gear.load",),
+             f"{ROW} still admits the clause is missing -- `dropped=` is not "
+             "replaced, because a row that dropped the admission too would "
+             "claim to be finished",
+             f"dropped={p.dropped}")
+    out.that(p.declined_clause == ("Gear.load",),
+             "and the row itself says the clause is a decision, which is the "
+             "half no mechanism had",
+             f"declined_clause={p.declined_clause}")
+    out.that(p.unfinished == (),
+             "so it is not work owed -- subtracted in `Power.unfinished`, "
+             "which `blocked.py` and `todo.py` both read. Reds if the "
+             "subtraction is dropped, which is the plant",
+             f"unfinished={p.unfinished}")
+    out.that(not p.declined and not p.todo,
+             "and the row is not refused: it plays, which is the whole "
+             "reason `declined=` would have been wrong on it",
+             f"declined={p.declined!r} todo={p.todo}")
+
+    # -- the three refusals, each at import ------------------------------
+    DATED = "A reason long enough to pass the length test, ruled 2026-11-11."
+
+    def refused(label: str, doc: str, **kw: object) -> str:
+        try:
+            def body(c: Cast) -> None:
+                pass
+            body.__doc__ = doc
+            power(f"rt:drv-{label}", level=0, cls="", usage=AT_WILL,
+                  action=ActionType.NONE, reach=PERSONAL, target=SELF,
+                  **kw)(body)
+        except ValueError as e:
+            return str(e)
+        return ""
+
+    stray = refused("stray", DATED, declined_clause=("Gear.nope",))
+    out.that("names no marked clause" in stray,
+             "declining a clause no marker names is refused at import -- "
+             "otherwise a row subtracts work it never claimed",
+             stray[:70] or "ACCEPTED")
+
+    both = refused("both", DATED, dropped=("Gear.load",),
+                   declined_clause=("Gear.load",), declined="all of it")
+    out.that("cannot both be set" in both,
+             "and `declined=` beside it is refused: one refuses the whole "
+             "row, the other says the row plays",
+             both[:70] or "ACCEPTED")
+
+    undated = refused("undated", "Short reason naming no year whatsoever.",
+                      dropped=("Gear.load",), declined_clause=("Gear.load",))
+    out.that("whose call it was and when" in undated,
+             "and a reason with no date is refused -- a scope decision is "
+             "the one marker meant to outlive its symbol arriving, so a "
+             "reader has to be able to tell a live one from a stale one",
+             undated[:70] or "ACCEPTED")
+
+    ok = refused("valid", DATED, dropped=("Gear.load",),
+                 declined_clause=("Gear.load",))
+    out.that(ok == "",
+             "while the well-formed one is accepted, so the three refusals "
+             "above are not simply refusing everything",
+             ok[:70] or "accepted")
+
+
 def the_damage_context_says_which_hand_swung(out: Result) -> None:
     """A two-weapon card's damage half, which had no key to gate on.
 
@@ -73158,6 +73383,14 @@ DRIVERS = {
     "damage_hand": (
         the_damage_context_says_which_hand_swung,
         "the damage context says which hand swung (#501's other half)",
+    ),
+    "declined_clause": (
+        a_declined_clause_is_not_work_owed,
+        "a declined clause is not work owed (#1242)",
+    ),
+    "weapon_size": (
+        a_weapon_is_refused_for_the_wrong_size_of_wielder,
+        "a weapon is refused for the wrong size of wielder (PHB 220)",
     ),
     "illuminate": (
         one_carried_light_level_at_a_time,
