@@ -915,10 +915,36 @@ def f1873(c: Cast) -> None:
     c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="charge")
 
 
-@power("f1983", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.restore_item()",))
+@power("f1983", level=1, cls="", usage=DAILY, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f1983(c: Cast) -> None:
     """Hands back a consumable on a missed attack.
+
+    **Written.** The note below was right about the ordering -- a restore
+    verb landing first *"would have nothing to put back"* -- and `#1233`
+    put the thing to put back on the character: `Gear.carried` holds entry
+    refs, two per dealt character, and `dsl.use` spends one.
+
+    So this is `c.restore_item`, the inverse of that spend, and the
+    recognition half is `alchemical.of_category` over
+    `query.block_categories` -- the one spelling `hands.i476x1`,
+    `arms.i468x1` and `general_l.f2864` also use.
+
+    **`c.once_per_board` rather than `once=True` on the watch, and the
+    difference is the printed sentence.** *"Once per day, when you miss
+    ... roll a d20"* -- the once-per-day governs the **attempt**, so a
+    roll under 10 spends it. `once=` on a watch reads the log to see
+    whether the handler *did* anything, which would hand the taker
+    another go on every failed roll: strictly stronger than print, and
+    silent, because both halves are individually correct.
+
+    `usage=DAILY` on the header is this tree's word for "once per day" --
+    `general_q.f3366`'s note records the convention. It is belt and
+    braces beside the board latch, since a trait is armed once per
+    encounter and its usage does not bound a watch laid inside it.
+
+    The restored item is named off the `Miss` being answered rather than
+    guessed, which is what keeps `c.restore_item` from minting one.
 
     **Re-pointed off `c.restore_use(item=)`, which named a facility one
     layer above the gap.** Restoring an expended item presupposes that an
@@ -934,6 +960,22 @@ def f1983(c: Cast) -> None:
     it: the 75 alchemical blocks are declared with ordinary
     `Attack(printed=)` lines and sit in a category of their own in
     `game.db`, so recognising the attack is not what stops this row."""
+    from combat_engine.content.items.alchemical import ALCHEMICAL, of_category
+    from combat_engine.engine.dsl import entry_of
+
+    me = c.me
+
+    def missed(ev: Miss) -> None:
+        if ev.attacker != me:
+            return
+        if not of_category(ALCHEMICAL)({"power": ev.power}):
+            return
+        if not c.once_per_board(me):
+            return
+        if c.roll("1d20") >= 10:
+            c.restore_item(entry_of(ev.power), on=me)
+
+    c.watch(Miss, missed, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f1986", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -224,10 +224,27 @@ def f941(c: Cast) -> None:
 
 
 @power("f942", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.opportunity_instead()",))
+       reach=PERSONAL, target=SELF, todo=("c.as_basic(action=)",))
 def f942(c: Cast) -> None:
     """Shift instead of making the opportunity attack. The window offers
-    an attack and nothing else can be put in it."""
+    an attack and nothing else can be put in it.
+
+    **Re-pointed off `c.opportunity_instead()`, which was serving two
+    different needs.** That symbol also carried `general_h.f1256`, whose
+    clause substitutes a *power* -- an alchemical item's own block -- and
+    `c.as_basic(*refs, window="opportunity")` has always done that, so
+    `f1256` is written and this is not. Read against the cards the three
+    split two ways, and a symbol that cannot go red or green correctly
+    for both is the fault `content/CLAUDE.md` names.
+
+    What this row and `general_l.f2607` want is narrower and is shared:
+    `policy._opportunity_options` builds only `Action(kind="power")`, so
+    the window cannot offer a **shift** or a **bull rush** -- neither is
+    a power ref, and `actions._manoeuvres` offers a bull rush as a
+    *standard* action of its own kind. A keyword on the verb that already
+    files the power case is the cheapest shape `blocked._shape_of`
+    prices (#677).
+    """
 
 
 @power("f943", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

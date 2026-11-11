@@ -1371,8 +1371,14 @@ DID_SOMETHING = {
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
     "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
-    "ItemConsumed", "ItemDestroyed",
+    "ItemConsumed", "ItemDestroyed", "ItemRestored",
 }  # fmt: skip
+# `ItemRestored` is the fifteenth and is admitted on `UseRestored`'s
+# argument, which is the one this file already made for a price's inverse:
+# admitting one direction and not the other leaves a row whose whole
+# effect is the inverse invisible. `f1983`'s entire printed Effect is
+# *"that item is not expended"*, so without this it would fire, hand an
+# item back and report SILENT.
 # `ItemDestroyed` is the fourteenth and is `ItemConsumed`'s sibling rather
 # than a second spelling of it: a potion drunk is the item doing its job,
 # a suit of armour rusted through is the item being taken away. It carries

@@ -546,15 +546,45 @@ def f1346(c: Cast) -> None:
     c.initiative(2 + (c.wis_mod - c.dex_mod), on=me)
 
 
-@_trait("f1256", todo=("c.opportunity_instead()",))
+@_trait("f1256")
 def f1256(c: Cast) -> None:
     """Use an alchemical item in place of the melee basic an opportunity
-    attack would be. Nothing substitutes for the swing an opportunity
-    window is spent on.
+    attack would be.
 
-    `c.opportunity_instead()` is unchanged and is **not** re-pointed here:
-    it is one gap across three rows -- this one, `general_d.f942` and
-    `general_l.f2607` -- so it moves for all three or for none.
+    **Written, and the verb already existed.** `c.as_basic(*refs,
+    window="opportunity")` is *"you can use <this row> in place of a melee
+    basic attack"*, filed under the window that grants the swing, and
+    `policy._opportunity_options` reads it through `dsl.basic_options` --
+    *"the basic, plus whatever a feat has put in its place here"*. So the
+    substitution half was never a gap; the `content/CLAUDE.md` rule about
+    checking before marking is what found it.
+
+    **And the old note's claim that one symbol served three rows was
+    wrong**, which is why it is re-pointed here after all. Read against
+    their cards, the three split two ways:
+
+    * this row substitutes a **power** -- an item's own block -- which
+      `c.as_basic` takes;
+    * `general_d.f942` substitutes a **shift** and `general_l.f2607` a
+      **bull rush**, and neither is a power ref.
+      `_opportunity_options` builds only `Action(kind="power")`, so those
+      two want the window to offer something that is not a power. They
+      keep a shared symbol, now named for that.
+
+    The second hold the note described was real and `#1233` closed it: a
+    dealt character carries two consumables and their blocks are in
+    `Powers.known`, so *"if you have an alchemical item in hand"* can be
+    true.
+
+    **`carried` is read as "in hand", and that is the engine's one notion
+    of having a thing on you.** There is no in-hand/in-pack distinction
+    for a consumable -- `Gear.stowed` is weapons -- so the narrower
+    printed reading is not expressible and this is the whole of it.
+
+    Nothing is filtered for usability here on purpose: `basic_options`
+    drops a row the character cannot use **at the moment the swing is
+    offered**, which is what makes this self-correcting when the flask is
+    drunk mid-fight.
 
     **The second half of the old note was false and is now a symbol.** It
     said "alchemical items are not modelled". They are: `game.db` carries
@@ -567,6 +597,23 @@ def f1256(c: Cast) -> None:
     than spelled again here, and it is a real second hold: with the
     substitution verb and no dose in hand this row's "if you have an
     alchemical item in hand" is false in every fight."""
+    from combat_engine.engine import query as _q
+    from combat_engine.engine.components import Gear as _Gear
+    from combat_engine.engine.components import Powers as _Powers
+    from combat_engine.engine.dsl import entry_of as _entry_of
+
+    gear = c.world.get(c.me, _Gear)
+    powers = c.world.get(c.me, _Powers)
+    if gear is None or powers is None or not gear.carried:
+        return
+    cats = _q.block_categories()
+    held = set(gear.carried)
+    blocks = [
+        r for r in powers.known
+        if _entry_of(r) in held and cats.get(r, "") == "Alchemical Item"
+    ]
+    if blocks:
+        c.as_basic(*blocks, window="opportunity", on=c.me)
 
 
 #: The three holds f1259 answers, in the words the card prints.

@@ -3178,9 +3178,19 @@ def f2592(c: Cast) -> None:
 
 
 @power("f2607", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.opportunity_instead()",))
+       reach=PERSONAL, target=SELF, todo=("c.as_basic(action=)",))
 def f2607(c: Cast) -> None:
     """A bull rush in place of an opportunity attack, and combat advantage.
+
+    **Re-pointed off `c.opportunity_instead()`, which served two different
+    needs.** `general_h.f1256` was on the same symbol and substitutes a
+    *power*, which `c.as_basic(*refs, window="opportunity")` has always
+    done -- so that row is written and this is not.
+    `general_d.f942`'s note has the full reading; the short of it is that
+    `policy._opportunity_options` builds only `Action(kind="power")`, and
+    a bull rush is an `actions._manoeuvres` action of its own kind rather
+    than a declared row.
+
 
     **Half written, and the remaining half is named more narrowly now.** The
     bull rush exists, so `c.bull_rush()` is no longer the gap -- what is left

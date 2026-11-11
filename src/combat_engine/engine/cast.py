@@ -30,6 +30,7 @@ from .events import (
     Event,
     ItemDestroyed,
     ItemPowerUsed,
+    ItemRestored,
     Note,
     PowerUsed,
     RowStored,
@@ -17972,6 +17973,44 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         effect.on_resume.append(rearm)
         return effect
+
+    def restore_item(self, item: str, *, on: int | None = None) -> bool:
+        """Put a one-use item back on its owner. `c.destroy`'s opposite.
+
+        `f1983` is the card and the only caller: *"on a result of 10 or
+        higher, that item is not expended and can be retrieved at the end
+        of the encounter."*
+
+        **Immediately rather than at the end of the fight, and that is
+        faithful rather than convenient.** The printed timing matters only
+        if the item could be used again this encounter, and it cannot:
+        every consumable block is `usage=DAILY` -- `items/alchemical.py`
+        records the reason -- so `dsl.usable` answers `expended` for the
+        rest of the fight whether the object is on the belt or not. What
+        the card buys is that the party still has it afterwards, and
+        `story.harvest` reads `Gear.carried` off the board when the fight
+        ends. Putting it back now and putting it back at the bell are the
+        same hand.
+
+        **Refuses to mint one.** It returns False for a creature with no
+        `Gear`, and the caller is responsible for naming an item that was
+        really spent -- this verb cannot tell "hand back the flask you
+        just threw" from "give me a flask", and the row that calls it
+        reads the ref off the `Miss` it is answering.
+
+        Announced as `ItemRestored`, for `UseRestored`'s stated reason: a
+        row whose whole printed Effect is the inverse of a price is silent
+        by construction unless the inverse has an event with a `by` on it.
+        """
+        who = self._who(on)
+        gear = self.world.get(who, Gear) if who is not None else None
+        if gear is None or who is None or not item:
+            return False
+        gear.carried.append(item)
+        self.world.bus.emit(
+            ItemRestored(who=who, item=item, by=self.ref)
+        )
+        return True
 
     def destroy(
         self,

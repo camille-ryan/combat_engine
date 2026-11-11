@@ -53080,6 +53080,109 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def a_saved_flask_goes_back_on_the_belt_once_a_day(out: Result) -> None:
+    """`f1983` hands a missed alchemical item back. #1233.
+
+    *"Once per day, when you miss on an attack roll with an alchemical
+    item, roll a d20. On a result of 10 or higher, that item is not
+    expended and can be retrieved at the end of the encounter."*
+
+    The row's own note had the ordering right -- a restore verb landing
+    first *"would have nothing to put back"* -- and `#1233` put the thing
+    on the character. So this asserts `c.restore_item`, which is
+    `ItemConsumed`'s inverse, plus the two clauses that are easy to get
+    silently wrong.
+
+    **The once-per-day governs the ATTEMPT, not the benefit**, and that is
+    the assertion with a plant behind it. `once=True` on a watch reads the
+    log to see whether the handler *did* anything, so a roll under 10
+    would hand the taker another go -- strictly stronger than print and
+    silent, because both halves are individually correct.
+    `c.once_per_board` spends on the roll instead.
+
+    **A rate is not asserted.** The d20 is the board's, so the assertion
+    is `0 or 1` over five misses and the plant is what gives that teeth:
+    without the hold, five misses restore more than one. Asserting "about
+    half of seeds restore" would be measuring the dice.
+    """
+    import audit as A
+    from combat_engine.content import declared
+    from combat_engine.content.items.alchemical import ALCHEMICAL
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.events import ItemRestored, Miss
+
+    reg, cats = declared(), query.block_categories()
+    alch = next(
+        (r for r, c in sorted(cats.items())
+         if c == ALCHEMICAL and r in reg and not reg[r].unfinished),
+        "",
+    )
+    out.that(bool(alch),
+             "some declared alchemical block is finished, so there is an "
+             "item to miss with",
+             f"{alch or 'none'}")
+    if not alch:
+        return
+
+    def misses(power: str, times: int, seed: int) -> list[tuple[str, str]]:
+        w, who, _ = A.board("f1983", seed)
+        dsl.use(w, who, "f1983", targets=[who], spend=False)
+        foe = next(e for e in w.entities if e != who)
+        n = len(w.bus.log)
+        for _ in range(times):
+            w.bus.emit(Miss(attacker=who, target=foe, power=power))
+        return [(e.item, e.by) for e in w.bus.log[n:]
+                if isinstance(e, ItemRestored)]
+
+    # -- it fires at all, on some seed --------------------------------
+    hit = next(((s, misses(alch, 1, s)) for s in (1, 2, 3, 4, 5)
+                if misses(alch, 1, s)), None)
+    out.that(hit is not None,
+             "on some seed the d20 comes up 10 or higher and the item goes "
+             "back, named and credited to the feat rather than to the item",
+             f"{hit[1] if hit else 'none of five seeds'}")
+    if hit is not None:
+        seed, got = hit
+        out.that(len(got) == 1 and got[0][0] == dsl.entry_of(alch)
+                 and got[0][1] == "f1983",
+                 "and `ItemRestored` names the ENTRY that came back and the "
+                 "row that saved it -- `by` is the feat, not one of the "
+                 "item's own blocks, which is what tells this from a spend",
+                 f"seed {seed}: {got}")
+
+    # -- the once-per-day hold ---------------------------------------
+    many = {s: misses(alch, 5, s) for s in (1, 2, 3)}
+    out.that(all(len(v) <= 1 for v in many.values()),
+             "five misses in one fight hand back AT MOST ONE item -- the "
+             "printed once-per-day, spent on the ROLL so a result under 10 "
+             "uses up the attempt",
+             f"{ {s: len(v) for s, v in many.items()} }")
+
+    # -- the control: an ordinary power ------------------------------
+    out.that(not misses("p1", 5, 1) and not misses("p1", 5, 2),
+             "while missing with an ordinary power hands nothing back, on "
+             "either seed -- the control that tells the feat from a flat "
+             "save-on-any-miss",
+             f"{misses('p1', 5, 1)}")
+
+    # -- and the verb refuses to mint one ----------------------------
+    w2, me2, _ = A.board("f1983", 1)
+    c2 = Cast(world=w2, me=me2, ref="probe", target=me2)
+    held = list(w2.need(me2, Gear).carried)
+    n2 = len(w2.bus.log)
+    out.that(c2.restore_item("", on=me2) is False
+             and list(w2.need(me2, Gear).carried) == held
+             and not [e for e in w2.bus.log[n2:]
+                      if isinstance(e, ItemRestored)],
+             "`c.restore_item` refuses an empty ref, changes nothing and "
+             "announces nothing -- it cannot tell 'hand back the flask you "
+             "threw' from 'give me a flask', so the caller names the item "
+             "off the `Miss` it is answering",
+             f"carried {len(held)} either way")
+
+
 def a_destroyed_item_takes_what_it_was_giving_with_it(out: Result) -> None:
     """`c.destroy` reaches a worn item and a suit of armour. #1233.
 
@@ -53272,7 +53375,7 @@ def an_alchemical_attack_is_told_apart_from_an_ordinary_one(out: Result) -> None
     from combat_engine.content import declared
     from combat_engine.content.items.alchemical import ALCHEMICAL
     from combat_engine.engine import dsl, query
-    from combat_engine.engine.components import Mods, Position, Powers
+    from combat_engine.engine.components import Gear, Mods, Position, Powers
     from combat_engine.engine.events import OpportunityWindow
     from combat_engine.engine.query import enemies
     from combat_engine.engine.query import squares as occupies
@@ -53402,6 +53505,68 @@ def an_alchemical_attack_is_told_apart_from_an_ordinary_one(out: Result) -> None
                  "and nothing at all for an ordinary power, which is the "
                  "control that tells the feat from a flat temp-HP-on-hit",
                  f"{ctrl}: {temps(ctrl, 3)}")
+
+    # -- `f1256`: the flask is offered where the basic would be ----------
+    # **Found rather than named, and here it is load-bearing twice over.**
+    # A hand has to carry an alchemical item that is *usable as an attack*
+    # -- seed 1 draws one `out_of_combat` and one at personal range, so
+    # the feat correctly offers neither, and a rule naming that seed would
+    # have failed on a working engine.
+    #
+    # Asserted through `policy._opportunity_options`, which is what the
+    # window actually reads, rather than through `dsl.basic_options` --
+    # the offer has to reach the menu and not merely be filed.
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.policy import _opportunity_options
+
+    def offered(seed: int, arm: bool) -> tuple[list[str], list[str]]:
+        # **Boarded on a DIFFERENT row, which is the whole of the
+        # control.** `audit.board` grants the row under test *and arms
+        # traits itself*, so a board built for `f1256` has the feat's
+        # offer already filed -- the first draft of this read `mba` plus
+        # the flask in BOTH arms and the `added` set was empty. The feat
+        # is granted and armed by hand here instead.
+        w, who, _ = A.board("i476x1", seed)
+        kn = w.need(who, Powers)
+        if "f1256" not in kn.known:
+            kn.known.append("f1256")
+        g = w.need(who, Gear)
+        mine = [r for r in kn.known
+                if dsl.entry_of(r) in set(g.carried)
+                and cats.get(r, "") == ALCHEMICAL]
+        enc = Encounter(w)
+        prov = next(e for e in w.entities if e != who)
+        if arm:
+            dsl.use(w, who, "f1256", targets=[who], spend=False)
+        return mine, [a.ref for a in _opportunity_options(w, enc, who, prov)]
+
+    found = next(
+        ((s, offered(s, True)) for s in range(1, 10)
+         if set(offered(s, True)[1]) - {"mba"}),
+        None,
+    )
+    out.that(found is not None,
+             "some dealt hand carries an alchemical item usable as an "
+             "attack, so `f1256` has something to offer -- seed 1 draws one "
+             "out-of-combat and one at personal range and correctly offers "
+             "neither",
+             "searched 9 seeds")
+    if found is not None:
+        seed, (mine, with_feat) = found
+        _, without = offered(seed, False)
+        added = sorted(set(with_feat) - set(without))
+        out.that(bool(added) and all(a in mine for a in added),
+                 "`f1256` puts the carried flask into the opportunity "
+                 "window -- through `policy._opportunity_options`, which is "
+                 "what the window reads, not merely filed in "
+                 "`dsl.basic_options`",
+                 f"seed {seed}: {without} -> {with_feat}, added {added}")
+        out.that(without == ["mba"],
+                 "and without the feat the window offers the melee basic "
+                 "and nothing else -- the control, since an option beside "
+                 "the basic is indistinguishable from one replacing it "
+                 "unless the bare case is checked",
+                 f"seed {seed}: {without}")
 
 
 def a_carried_consumable_is_offered_and_spent_by_using_it(out: Result) -> None:
@@ -71837,6 +72002,10 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "saved_flask": (
+        a_saved_flask_goes_back_on_the_belt_once_a_day,
+        "a saved flask goes back on the belt, once a day (#1233)",
     ),
     "destroy_worn": (
         a_destroyed_item_takes_what_it_was_giving_with_it,

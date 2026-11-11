@@ -1474,6 +1474,31 @@ class UseSpent(Event):
 
 
 @dataclass
+class ItemRestored(Event):
+    """A one-use item was **not** spent after all, and is back on its owner.
+
+    `ItemConsumed`'s inverse, and it exists for the reason
+    `RelationCleared` had to be added beside `RelationSet` and
+    `UseRestored` beside `UseSpent`: admitting one direction and not the
+    other leaves a row whose whole effect is the inverse invisible.
+
+    `f1983` is the card -- *"on a result of 10 or higher, that item is not
+    expended"* -- and its entire printed Effect is this, so without an
+    event carrying `by` the row would fire, hand an item back and report
+    SILENT. That is the fault `UseRestored`'s docstring records costing a
+    row its whole life on the `UNUSED` list.
+
+    `who` is the creature that keeps it, `item` the entry ref that went
+    back, and `by` the row that saved it -- which is not one of that
+    item's own blocks, unlike `ItemConsumed`.
+    """
+
+    who: int
+    item: str
+    by: str
+
+
+@dataclass
 class ItemDestroyed(Event):
     """An item is **gone**, and not by being used as intended.
 
