@@ -53427,6 +53427,7 @@ def a_stowed_item_is_spent_by_the_row_that_stowed_it(out: Result) -> None:
     from combat_engine.content.items.hands import _I465_COATINGS
     from combat_engine.engine import dsl
     from combat_engine.engine.components import Gear, Powers
+    from combat_engine.engine.dsl import NO_TARGET, REGISTRY, SELF
     from combat_engine.engine.events import ItemConsumed, SecondWind
 
     out.that(len(_I465_COATINGS) >= 3 and "i469" in _I465_COATINGS,
@@ -53450,7 +53451,23 @@ def a_stowed_item_is_spent_by_the_row_that_stowed_it(out: Result) -> None:
         if by_trigger:
             w.bus.emit(SecondWind(actor=who, healed=10, cost="standard"))
         else:
-            dsl.use(w, who, row, targets=[who], spend=False)
+            # `targets=None`, so `dsl.use` resolves each row's declared
+            # `Target` the way a fight does. **This said `targets=[who]`
+            # and that is what hid a bug for a whole sweep.** `i3324p1` is
+            # `NO_TARGET`; `use`'s own docstring says such a row "runs once
+            # with `c.target` set to None", and its body called
+            # `c.use_stored` with a bare `on=`, which resolves through
+            # `Cast._who` to `self.target`. Handed a target it cannot have,
+            # the verb found the caster and worked here; in a fight it
+            # returned False before reading the slot, so the row fired, did
+            # nothing and announced nothing. The three i3324 assertions
+            # below were green over it.
+            #
+            # Not `targets=[]` either, which is the other wrong answer: an
+            # explicit empty list makes `_who` None for the two `SELF`
+            # callers as well, so both of their arms fail and the harness
+            # is merely broken in the opposite direction.
+            dsl.use(w, who, row, targets=None, spend=False)
         said = [(e.item, e.by) for e in w.bus.log[n:]
                 if isinstance(e, ItemConsumed)]
         return stowed, dict(kn.stored), list(g.carried), said
@@ -53505,6 +53522,23 @@ def a_stowed_item_is_spent_by_the_row_that_stowed_it(out: Result) -> None:
              "construction, since every square on the board is inside the "
              "printed mile and nothing here aims",
              f"{stowed3} -> {after3}, carried={carried3} {said3}")
+
+    # **Which caller is NO_TARGET is the whole reason the arm above can
+    # fail**, so it is asserted rather than left to the reader: a bare
+    # `on=` resolves through `Cast._who` to `self.target`, which a
+    # `NO_TARGET` row has not got. `i3324p1` is the one, and it is the one
+    # that needed `on=c.me` written into it; the other two are `SELF`, so
+    # their bare calls find the caster and are right. Re-declare any of
+    # the three and this reds instead of the harness quietly covering it.
+    kinds = {ref: REGISTRY[ref].target for ref in ("i3324p1", "i465p1", "i467p1")}
+    named = {r: ("NO_TARGET" if t == NO_TARGET else
+                 "SELF" if t == SELF else "other") for r, t in kinds.items()}
+    out.that(named == {"i3324p1": "NO_TARGET", "i465p1": "SELF",
+                       "i467p1": "SELF"},
+             "and the three callers are declared as this rule assumes -- "
+             "one NO_TARGET, which is why only it carries an explicit on=, "
+             "and two SELF whose bare calls resolve to the caster",
+             f"{named}")
 
     # -- the control: nothing stowed ------------------------------------
     w3, me3, _ = A.board("i465p1", 1)

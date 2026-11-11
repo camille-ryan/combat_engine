@@ -1916,22 +1916,21 @@ def i3324p1(c: Cast) -> None:
     mile, and line of effect is not consulted because nothing here aims.
     So the remote half is true by construction rather than unwritten.
 
-    `on=c.me` is not needed -- `c.use_stored` takes `by=` and reads the
-    *holder*, not a target -- but the row is `NO_TARGET`, so the inner
-    use is aimed at the caster, which is what `use_stored` defaults to.
+    **`on=c.me`, and this docstring argued the opposite.** It said *"`on=`
+    is not needed ... the inner use is aimed at the caster, which is what
+    `use_stored` defaults to"*. Every clause of that is wrong:
+    `use_stored` resolves `on` through `Cast._who`, which returns
+    `self.target`, and a `NO_TARGET` row has none -- so `who is None` and
+    the verb returned False before reading the slot. The row fired, did
+    nothing, and said so to nobody. `lint.py`'s `NO_TARGET` check named it
+    on the first wide run after it was written.
 
-    The reader exists; the thing it would read does not.
-
-    `c.stored_row()` landed in #720, so "which item this one was tied to"
-    has a place to be recorded and a way to be read back. This row waits on
-    its other half, `i3324x1`, which cannot do the linking: nothing
-    enumerates a character's carried items, so there is never a second item
-    to link to. Re-marked off the symbol that now exists.
-
-    Confirmed and left, with its other half. The wait is a ruling, not a
-    verb: nobody is dealt a consumable by construction, and `#1233` is
-    where that decision sits -- see `i3320p1` for the measurement."""
-    c.use_stored(by=_entry_of(c.ref))
+    `by=` really does read the holder, which is what made the wrong claim
+    plausible: the *key* needs no target, but the creature to use the
+    stored row **as** does. The two sibling callers are `target=SELF`, so
+    their bare calls resolve to the caster and are correct -- which is why
+    this was the only one of the three that lint named."""
+    c.use_stored(by=_entry_of(c.ref), on=c.me)
 
 
 @power("i3481p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

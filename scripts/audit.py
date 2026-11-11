@@ -282,20 +282,25 @@ KNOWN_SILENT = {
     # `i469` -- the first of the card's own two named examples -- by hand
     # and asserts the coating is applied, the item consumed and the slot
     # emptied, with a control for nothing stowed. #1233.
-    # **The Property and the Power are audited on separate boards.**
-    # `audit.board` grants the row under test plus every level-0 row of
-    # its class, and `i3324x1` is level 10 -- so on `i3324p1`'s board
-    # nothing has linked anything and the slot is empty. The row is
-    # correct and the board cannot pose the chain, which is the same
-    # shape as `i465p1` two entries down.
+    # **`i3324p1`'s entry is gone, and every clause of it was false.** It
+    # said *"the two are audited on separate boards -- `i3324x1` is level
+    # 10, so `audit.board` does not grant it here"*. Measured on the
+    # board: `i3324x1` **is** in `Powers.known`, `arm_traits` fires it
+    # because it is `action=NONE`, and the slot is loaded on **7 of 12**
+    # seeds -- the variable is whether the dealt hand holds an alchemical
+    # item cheap enough for the Property's level gate, not whether the
+    # Property is granted.
     #
-    # Proved in `drivers.stowed_item`, which runs the Property and then
-    # the Power on one board and asserts the link, the activation, the
-    # item consumed and the slot emptied. #1233.
-    "i3324p1": "needs its own Property to have linked an item first, and"
-               " the two are audited on separate boards -- i3324x1 is"
-               " level 10, so audit.board does not grant it here. Proved"
-               " in drivers.stowed_item instead",
+    # The row really was silent when the entry was written, for a reason
+    # the entry never names: its body called `c.use_stored` with a bare
+    # `on=`, and `NO_TARGET` + `Cast._who` meant the verb returned False
+    # before reading the slot. So this was an excuse covering a bug --
+    # `an_audit_excuse_can_be_covering_a_bug` -- and the excuse is what
+    # kept the bug from being read as one.
+    #
+    # It is **not** the `p13984` oscillation above: `_attempts` walks a
+    # fixed 8 seeds, so a seeded draw makes this deterministic rather
+    # than lucky, and seeds 1, 3 and 4 each load the slot.
     "i465p1": "stows only a weapon coating, 6 of 193 in the pool, and a"
               " dealt hand is two items -- 0 of 78 hands held one. Proved"
               " in drivers.stowed_item instead",

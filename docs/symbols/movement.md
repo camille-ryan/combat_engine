@@ -39,6 +39,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - "You can shift 2 squares as a move action."
 - `c.teleport(self, squares_: 'int', *, who: 'int | None' = None, to: 'Square | None' = None, toward: 'int | None' = None, away_from: 'int | None' = None, into: 'Callable[[Square], bool] | None' = None, share: 'bool' = False) -> 'bool'`
   - Blink somewhere. `to` names the square, as `c.shift` already allowed.
+- `c.teleport_as(self, cost: 'ActionType', squares_: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.STANCE: 'stance'>) -> 'Effect | None'`
+  - "You can teleport 3 squares as a move action."
 - `c.walk_toward(self, target: 'int | Square', squares_: 'int' = 0, *, on: 'int | None' = None) -> 'int'`
   - Compelled: the creature walks the most direct route, no choice.
 

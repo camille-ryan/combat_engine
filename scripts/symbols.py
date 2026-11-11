@@ -138,7 +138,7 @@ CATEGORIES: dict[str, dict] = {
                 "charge", "charge_at", "charge_through", "dismount",
                 "flee", "hover", "jump", "move", "moving_as", "overrun",
                 "ride", "rise", "run_at", "shift", "shift_as", "teleport",
-                "walk_toward",
+                "teleport_as", "walk_toward",
             ]),
             ("forced -- somebody else moves it", [
                 "bull_rush", "pull", "push", "slide",
