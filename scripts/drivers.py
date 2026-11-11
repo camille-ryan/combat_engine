@@ -30705,7 +30705,7 @@ def a_weapon_is_refused_for_the_wrong_size_of_wielder(out: Result) -> None:
 
     from audit import board as audit_board
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Gear, Position
+    from combat_engine.engine.components import Gear, Position, Weapon
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.query import can_wield
     from combat_engine.engine.types import Size
@@ -30725,7 +30725,7 @@ def a_weapon_is_refused_for_the_wrong_size_of_wielder(out: Result) -> None:
              "of LARGE weapons",
              f"size={pos.size.name}")
 
-    def sized(size: Size, hands: str = "") -> object:
+    def sized(size: Size, hands: str = "") -> Weapon:
         return replace(base, size=size, **({"hands": hands} if hands else {}))
 
     LARGE, HUGE = sized(Size.LARGE), sized(Size.HUGE)
@@ -30852,7 +30852,7 @@ def a_declined_clause_is_not_work_owed(out: Result) -> None:
     # -- the three refusals, each at import ------------------------------
     DATED = "A reason long enough to pass the length test, ruled 2026-11-11."
 
-    def refused(label: str, doc: str, **kw: object) -> str:
+    def refused(label: str, doc: str, **kw: Any) -> str:
         try:
             def body(c: Cast) -> None:
                 pass
@@ -64555,10 +64555,37 @@ def after_a_fight_the_standing_try_to_save_the_dying(out: Result) -> None:
     )
 
     # -- and it SAYS something, which is what the teardown bug hid --------
-    camp = run_mod.begin(built, seed=5)
-    camp.party.sheets[0].hp = -10
-    made = run_mod.step(camp, built, record=False)
-    spoke = [str(x) for x in made.lines if "After the fight" in str(x)]
+    #
+    # **The seed is searched for, not pinned, and that is a repair rather
+    # than a loosening.** This read `seed=5` and asserted the note
+    # outright. Setting `hp = -10` controls how the character goes *in*;
+    # whether it is still dying when the fight *ends* is up to the fight,
+    # and at seed 5 the party now heals it to 5. Un-refusing `rt:r10-t0`
+    # moved the level-2 draw and that was enough -- the same change that
+    # re-recorded three replay fixtures.
+    #
+    # So the premise is established first and asserted, which is what stops
+    # the arm going vacuous: without the second `out.that` below, a run
+    # where no seed left anybody dying would find no note and look like a
+    # broken pass. 8 of the 12 seeds pose it today.
+    dying_at = 0
+    spoke: list[str] = []
+    for seed in range(1, 13):
+        camp = run_mod.begin(built, seed=seed)
+        camp.party.sheets[0].hp = -10
+        made = run_mod.step(camp, built, record=False)
+        if camp.party.sheets[0].hp > 0:
+            continue          # the party healed it; this fight poses nothing
+        dying_at = seed
+        spoke = [str(x) for x in made.lines if "After the fight" in str(x)]
+        break
+    out.that(
+        dying_at,
+        "a fight can be found that ends with somebody still dying -- the "
+        "premise, asserted so this arm reds instead of going quiet if the "
+        "draw ever moves far enough that no seed poses it",
+        f"seed {dying_at}" if dying_at else "no seed of 12 left anybody dying",
+    )
     out.that(
         spoke,
         "and a real fight that leaves somebody dying produces the attempt "
