@@ -135,6 +135,7 @@ def legal(
     out.extend(_instinctives(world, encounter, actor))
     out.extend(_commands(world, encounter, actor))
     out.extend(_movement(world, encounter, actor))
+    out.extend(_teleports(world, encounter, actor))
     out.extend(_charges(world, encounter, actor))
     out.extend(_recovery(world, encounter, actor))
     out.extend(_mounting(world, encounter, actor))
@@ -1216,7 +1217,52 @@ GRANTABLE = frozenset({
     # have been #583 again: carried, costing nothing, doing nothing, with
     # the row auditing green for the whole life of the fight. #1233.
     "bull_rush",
+    # **`teleport` arrived with its reader too**, which is `_teleports`
+    # below. Three cards print the same sentence `c.shift_as` already
+    # says for a shift -- "you can teleport 3 squares as a move action",
+    # "teleport 1 square as a minor action until the end of the
+    # encounter" -- and the menu had **no teleport action at all**, so
+    # there was nothing for the word to price. #1233.
+    "teleport",
 })
+
+
+def _teleports(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Teleports a stance or an item has granted, by destination.
+
+    **The menu had no teleport action at all**, which is why three rows
+    carried `c.teleport_as()`. Teleporting is not something a creature may
+    simply do -- it is granted, by a power that says so -- so unlike
+    `_movement`'s walk there is no unconditional entry here and the list
+    is empty for almost every creature.
+
+    `c.shift_as` is the shape this mirrors and `c.teleport_as` the verb:
+    both are a standing change to what an action buys, read back here
+    rather than doing anything when the row runs.
+
+    **Destinations are not filtered for a clear path, deliberately.**
+    That is the whole of what teleporting is -- `movement.teleport`
+    refuses an occupied or illegal square and nothing else, so offering
+    every square within range is offering exactly what the printed line
+    allows. `reachable` would be the wrong reader: it walks.
+    """
+    from .grid import spread
+
+    out: list[Action] = []
+    pos = world.get(actor, Position)
+    if pos is None:
+        return out
+    for (what, cost), squares in sorted(_granted(world, actor).items()):
+        if what != "teleport":
+            continue
+        if not encounter.can_spend(actor, cost):
+            continue
+        for dest in sorted(spread(pos.squares, squares) - pos.squares):
+            if not world.grid.passable(dest) or world.grid.occupant(dest):
+                continue
+            out.append(Action(kind="teleport", cost=cost, dest=dest,
+                              path=(dest,)))
+    return out
 
 
 def granted_in_window(
@@ -2588,6 +2634,14 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         if budget is not None:
             budget.standard = budget.move = budget.minor = 0
         return hit
+
+    if action.kind == "teleport":
+        # **`movement.teleport`, not `Cast.teleport`.** The verb takes a
+        # number of squares and chooses; the menu has already chosen, so
+        # this is the placement half and nothing else.
+        from .movement import teleport as _tp
+
+        return bool(_tp(world, actor, action.dest)) if action.dest else False
 
     if action.kind == "shift":
         from .movement import shift

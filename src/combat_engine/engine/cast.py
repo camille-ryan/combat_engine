@@ -4717,6 +4717,49 @@ class Cast:
         who = on if on is not None else self.me
         return self.grant_action("shift", cost, squares_=squares_, on=who, until=until)
 
+    def teleport_as(
+        self,
+        cost: ActionType,
+        squares_: int = 1,
+        *,
+        on: int | None = None,
+        until: When = When.STANCE,
+    ) -> Effect | None:
+        """"You can teleport 3 squares as a move action."
+
+        `c.shift_as`'s sibling, written to it line for line, and the
+        reason it had to exist separately is that **the menu had no
+        teleport action at all**. A shift was always offered and this verb
+        only changed what it cost; teleporting is never offered unless
+        something grants it, so `actions._teleports` is the reader and
+        there is no unconditional entry beside it.
+
+        Three cards print this sentence -- a draught that buys *"a move
+        action to teleport up to 5 squares"*, a cloak that gives *"teleport
+        1 square as a minor action"* after a critical hit, and a power
+        whose stance allows *"up to 3 squares as a move action once per
+        round"*. All three were marked `c.teleport_as()`, and
+        `fixtures/triage.json` had judged it **mis-marked** in October on
+        exactly the right ground: *"nothing new is needed but the word and
+        its reader, which is what `shift_as` already cost."*
+
+        Like every verb in this family it does **nothing now**: it is a
+        standing change to what an action buys. `until=When.STANCE` for
+        `shift_as`'s reason, and a card that says "until the end of the
+        encounter" passes that instead.
+
+        **The once-per-round two of the cards print is NOT here.** That is
+        a limit on the granted action rather than on the grant, and
+        nothing in `GRANTABLE` carries one -- so the rows that print it
+        say so in their own docstrings rather than this verb pretending
+        to.
+        """
+        who = on if on is not None else self.me
+        return self.grant_action(
+            "teleport", cost, squares_=squares_, on=who, until=until
+        )
+
+
     def grant_action(
         self,
         what: str,

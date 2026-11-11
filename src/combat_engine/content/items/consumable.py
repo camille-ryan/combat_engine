@@ -2046,12 +2046,36 @@ def i667p1(c: Cast) -> None:
 
 
 @power("i1265p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
-       todo=("c.teleport_as()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION])
 def i1265p1(c: Cast) -> None:
-    """"You can use a move action to teleport 5 squares" is a way of
+    """A draught that buys a move action's worth of teleporting.
+
+    **Written.** The note below is the symbol's own history and it was
+    right: `c.grant_action` knew `shift` and `stand` and nothing else, so
+    there was no word for this and no reader behind one. `c.teleport_as`
+    is `c.shift_as`'s sibling now and `actions._teleports` is the reader.
+
+    `until=When.EONT` is the printed *"before the end of your next
+    turn"*, which is what makes this a draught rather than a stance --
+    every other caller of this family takes the `When.STANCE` default.
+
+    **The second-dose clause is unreachable and that is measured, not
+    assumed.** *"If you consume another before the end of the encounter,
+    you teleport 2 fewer squares"* needs a second copy of this item, and
+    `chargen` deals two consumables sampled **without replacement** from
+    a pool of 193 -- so no character is ever dealt two of these. It is the
+    same unreachable shape `#1238` records for a second potion of any
+    kind: a block's budget is its printed `usage=`, so even given one the
+    row is `expended`. Written down rather than carried as a marker,
+    because a marker names a symbol and there is none to name -- what is
+    missing is a second copy of an object.
+
+    "You can use a move action to teleport 5 squares" is a way of
     moving granted for a while; `c.grant_action` knows shift and stand
     and silently eats anything else."""
+    from combat_engine.engine.types import ActionType as _AT
+
+    c.teleport_as(_AT.MOVE, 5, on=c.me, until=When.EONT)
 
 
 @power("i1297p1", level=10, cls=ITEM, usage=DAILY, action=FREE,

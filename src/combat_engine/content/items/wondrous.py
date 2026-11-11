@@ -2601,7 +2601,6 @@ def i2708x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.teleport_as()",),
 )
 def i2830x1(c: Cast) -> None:
     """The whole benefit is a new way to spend a minor action, and the word
@@ -2615,6 +2614,18 @@ def i2830x1(c: Cast) -> None:
     write, and the ref path is no way round it: the card prints no row to
     grant, and minting one would be inventing a ref. `c.teleport` itself
     works, and `c.shift_as` is this sentence for a shift."""
+    from combat_engine.engine.types import ActionType as _AT
+
+    me = c.me
+
+    def crit(ev: Hit) -> None:
+        if ev.target != me or not ev.critical or ev.attacker == me:
+            return
+        if c.is_minion(on=ev.attacker):
+            return
+        c.teleport_as(_AT.MINOR, 1, on=me, until=When.ENCOUNTER)
+
+    c.watch(Hit, crit, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

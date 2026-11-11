@@ -1330,7 +1330,6 @@ def p14214(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW, Keyword.TELEPORTATION],
-    dropped=("c.teleport_as()",),
 )
 def p14216(c: Cast) -> None:
     """The opening teleport, with the printed requirement on it.
@@ -1365,10 +1364,27 @@ def p14216(c: Cast) -> None:
     itself: `p2623b`, `p10493b` and `p11603b` are all in `game.db` and
     `p14216b` is not. Declaring one here would be inventing a row the
     compendium does not print."""
+    from combat_engine.engine.types import ActionType as _AT
+
     c.teleport(
         6, who=c.me,
         into=lambda sq: light_level(c.world, sq) is not Light.BRIGHT,
     )
+    # **The standing half, which is what the marker named.** "Until the
+    # end of the encounter, you can teleport up to 3 squares as a move
+    # action" is `c.teleport_as` -- `c.shift_as`'s sibling, landed with
+    # `actions._teleports` as its reader.
+    #
+    # **Two printed narrowings are NOT here and both are said out loud.**
+    # *"Once per round"* is a limit on the granted action and nothing in
+    # `actions.GRANTABLE` carries one: the carrier is `"<what> as <cost>"`
+    # with a square count and no room for a rate. And *"the destination
+    # must be dim light or darkness"* reaches the opening teleport above,
+    # which carries it through `into=`, but not the granted one, which the
+    # menu offers rather than this row. So the stance is broader than
+    # print in those two respects -- written rather than held, because the
+    # clause the marker named is the grant.
+    c.teleport_as(_AT.MOVE, 3, on=c.me, until=When.ENCOUNTER)
 
 
 # ==========================================================================

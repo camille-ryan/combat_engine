@@ -1240,11 +1240,37 @@ def m1481a1(c: Cast) -> None:
     reach=CloseBlast(3),
     target=NO_TARGET,
     keywords=[Keyword.POISON, Keyword.TELEPORTATION, Keyword.ZONE],
-    dropped=("c.teleport_as()",),
+    dropped=("c.grant_action(into=)",),
 )
 def m1481a2(c: Cast) -> None:
     """The gas is exact. The teleport is a **standing move-action option**
-    granted for the encounter, which is the half that is missing.
+    granted for the encounter.
+
+    **Re-pointed again, because `c.teleport_as()` landed and is not
+    enough.** That verb exists now -- `c.shift_as`'s sibling, with
+    `actions._teleports` reading it back -- and granting this creature a
+    three-square move-action teleport is one line. What it cannot say is
+    the printed restriction: *"as long as it begins and ends this
+    movement **within the zone**"*.
+
+    The carrier `c.grant_action` lays is `"<what> as <cost>"` with a
+    square **count** and nothing else, and `_teleports` offers every legal
+    square in range off the grid. So the grant is all-or-nothing: taken
+    as written it is a creature that can blink anywhere within three
+    squares, which is **strictly stronger than print** and would be
+    silent -- the gas, the daze and the difficult terrain all still work,
+    so the row would audit green.
+
+    `c.teleport(into=)` carries a destination predicate, which is why the
+    earlier note was right that the *teleport* can be gated; what has no
+    predicate is the **grant**. Hence `c.grant_action(into=)`: a gate on
+    the offer, which `_teleports` would consult per destination. One
+    keyword on a verb that is already there -- the cheapest shape
+    `blocked._shape_of` prices -- and it would serve the "begins and ends
+    within" family rather than this row alone.
+
+    Held rather than written, because a row stronger than its card is the
+    one thing `content/CLAUDE.md` will not trade for a marker.
 
     **Re-pointed off `c.teleport(within=)`, and the reason it carried is
     now false.** That note said `c.teleport` "takes no such gate"; it does

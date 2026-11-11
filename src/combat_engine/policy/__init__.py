@@ -149,6 +149,18 @@ def features(
     # a turn -- so the first grabbed creature would have spent every move
     # action of the fight struggling whether or not it was worth it.
     f["is_escape"] = float(action.kind == "escape")
+    # **Named the day the teleport action arrived**, for the reason every
+    # comment here gives and `drivers.kinds_named` enforces: an unnamed
+    # kind scores **zero**, which beats ending a turn and beats a walk --
+    # so a creature granted a teleport would have blinked somewhere
+    # arbitrary in preference to doing anything useful.
+    #
+    # **Naming is all this does.** `doctrine.py` scores the destination
+    # through the same movement terms a walk goes through, so a teleport
+    # is preferred or not on where it lands rather than on being a
+    # teleport. Preferring it as such is a balance decision and Camille is
+    # explicit about deferring the AI portion. #1233.
+    f["is_teleport"] = float(action.kind == "teleport")
     # **Three DECLARED ZEROS, which is a different thing from being
     # unnamed.** `#1065` tracks ten printed kinds with no term, and these
     # three are the ones that are honestly correct at nothing: picking a

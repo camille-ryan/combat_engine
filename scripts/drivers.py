@@ -53080,6 +53080,108 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def a_granted_teleport_reaches_the_menu_and_moves_somebody(out: Result) -> None:
+    """`c.teleport_as` and a teleport action the menu can offer. #1233.
+
+    Three cards print `c.shift_as`'s sentence for a teleport -- *"you can
+    use a move action to teleport up to 5 squares"*, *"teleport 1 square
+    as a minor action until the end of the encounter"*, *"up to 3 squares
+    as a move action once per round"* -- and
+    `fixtures/triage.json` had judged the symbol **mis-marked** back in
+    October on exactly the right ground: *"nothing new is needed but the
+    word and its reader, which is what `shift_as` already cost."*
+
+    **The menu had no teleport action at all**, which is the part that
+    made it more than a word. A shift is always offered and `c.shift_as`
+    only changes what it costs; teleporting is never offered unless
+    something grants it, so `actions._teleports` has no unconditional
+    entry beside it and the list is empty for almost every creature.
+
+    So this asserts the whole chain -- **grant, offer, perform** -- plus
+    the two gates a new action kind owes: the word is in `GRANTABLE` with
+    a reader (`drivers.granted_words`) and the kind has a policy term
+    (`drivers.kinds_named`), both of which are separate rules and both
+    green.
+
+    **The control is the bare board.** Zero teleports offered without the
+    grant is what tells a granted action from one the menu always had --
+    and without it this would pass just as well on a menu that offered
+    teleports to everybody.
+    """
+    import audit as A
+    from combat_engine.engine import actions
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+
+    world, me, _ = A.board("i476x1", 1)
+    enc = Encounter(world)
+    enc._begin(me)
+    bare = [a for a in actions.legal(world, enc, me) if a.kind == "teleport"]
+    out.that(not bare,
+             "a creature nobody granted a teleport is offered none -- the "
+             "control, since a menu that offered them to everybody would "
+             "pass every assertion below",
+             f"{len(bare)} offered")
+
+    c = Cast(world=world, me=me, ref="probe", target=me)
+    c.teleport_as(ActionType.MOVE, 3, on=me)
+    after = [a for a in actions.legal(world, enc, me) if a.kind == "teleport"]
+    out.that(bool(after),
+             "`c.teleport_as(MOVE, 3)` puts teleports on the menu -- a "
+             "standing change to what an action buys, read back by "
+             "`actions._teleports` rather than doing anything when the row "
+             "runs",
+             f"{len(after)} destination(s)")
+    if not after:
+        return
+    out.that(all(a.cost is ActionType.MOVE for a in after),
+             "priced at the action the card named, not at a default",
+             f"{sorted({str(a.cost) for a in after})}")
+
+    pos = world.need(me, Position)
+    here = set(pos.squares)
+    out.that(not (here & {a.dest for a in after}),
+             "and it offers squares the creature is not already standing "
+             "in, which a bare `spread` would have included",
+             f"standing {sorted(here)}")
+
+    went = actions.perform(world, enc, me, after[0])
+    now = set(world.need(me, Position).squares)
+    out.that(went and now != here,
+             "performing one actually moves the creature -- the half a "
+             "menu entry cannot prove on its own, and the reason "
+             "`perform` needed a `teleport` branch",
+             f"{sorted(here)} -> {sorted(now)}")
+
+    # -- the three rows that wanted it ---------------------------------
+    from combat_engine.content import declared
+
+    reg = declared()
+    rows = ("i1265p1", "i2830x1", "p14216")
+    out.that(all(not (reg[r].todo or reg[r].dropped) for r in rows),
+             "the three rows that carried `c.teleport_as()` are written -- "
+             "a draught, a cloak answering a critical hit, and a stance",
+             f"{ {r: (reg[r].todo or ()) + (reg[r].dropped or ()) for r in rows} }")
+
+    w2, me2, _ = A.board("i1265p1", 1)
+    enc2 = Encounter(w2)
+    enc2._begin(me2)
+    from combat_engine.engine import dsl
+
+    before2 = len([a for a in actions.legal(w2, enc2, me2)
+                   if a.kind == "teleport"])
+    dsl.use(w2, me2, "i1265p1", targets=[me2], spend=False)
+    after2 = len([a for a in actions.legal(w2, enc2, me2)
+                  if a.kind == "teleport"])
+    out.that(before2 == 0 and after2 > 0,
+             "and drinking `i1265p1` is what puts them there -- asserted "
+             "through `actions.legal`, so the grant has to reach the menu "
+             "rather than merely be laid",
+             f"{before2} -> {after2}")
+
+
 def a_stowed_item_is_spent_by_the_row_that_stowed_it(out: Result) -> None:
     """`c.store_row` finally has something that fires what it stored. #1233.
 
@@ -72243,6 +72345,10 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "granted_teleport": (
+        a_granted_teleport_reaches_the_menu_and_moves_somebody,
+        "a granted teleport reaches the menu and moves somebody (#1233)",
     ),
     "stowed_item": (
         a_stowed_item_is_spent_by_the_row_that_stowed_it,
