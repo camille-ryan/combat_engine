@@ -42,6 +42,32 @@ cannot see ten rows healing while ten others break. The same shape as
 `localise.KNOWN_LABEL_DRIFT`, `cards.KNOWN` and `leaks.DEFERRED` — tightened when
 it improves, red when it regresses, never a bare allowance. #372.
 
+**It cannot say "sometimes", and a draw-dependent row is where that
+bites.** The list has two states and some rows have three: they fire on
+the hands that pose them and are silent on the hands that do not. In one
+session three rows crossed the line in both directions --
+
+```
+p13984   silent -> fires -> silent    needs a particular wizard build
+i2116p1  silent -> fires -> silent    a free action on a hit
+m2780a2  silent -> fires -> silent    "no living enemy already adjacent"
+```
+
+-- and the middle step was real each time: the hand had moved, because
+un-refusing a feat puts it in the chargen pool and moves every later
+draw. So **a healed row is not always a fixed row**, which is the
+mirror of the warning two paragraphs up, and the cost of acting on one
+is a `KNOWN_SILENT` entry deleted on Monday and restored on Wednesday --
+which happened here, to `p13984`.
+
+What to do with one, in order: ask whether a driver proves the row where
+a draw cannot move it (`p13984` has `drivers.school_summon`, `i465p1`
+has `drivers.stowed_item`); if so the entry is a statement about the
+*board* and belongs in `KNOWN_SILENT` with the oscillation named. If
+nothing proves it, let the baseline record what is true today and say in
+the commit that it oscillates -- but do not delete an excuse on the
+strength of one draw.
+
 ## Rules
 
 * **An instrument must not skip itself quietly.** A check that runs on half

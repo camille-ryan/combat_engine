@@ -542,7 +542,13 @@ CATEGORIES: dict[str, dict] = {
         "sections": [
             ("granting and spending a row", [
                 "borrow_row", "borrowed_rows", "expend_row", "expended",
-                "grant_row", "recast", "spellbook", "store_row", "stored_row",
+                # `use_stored` is beside the two verbs it completes:
+                # `store_row` puts a row into an object and
+                # `stored_row` reads the ref back, and until #1233
+                # nothing fired one. Somebody looking for any of the
+                # three wants all three.
+                "grant_row", "recast", "spellbook", "store_row",
+                "stored_row", "use_stored",
                 "unspent", "use_power",
                 "used",
             ]),

@@ -29,6 +29,8 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
   - The refs `c.expend_row` would accept. The complement of `c.expended`.
 - `c.use_power(self, ref: 'str', *, on: 'int | None' = None, who: 'int | None' = None, spend: 'bool' = True, again: 'bool' = False) -> 'bool'`
   - "You can use your p1449 racial power as a free action."
+- `c.use_stored(self, *, by: 'str' = '', on: 'int | None' = None, targets: 'Sequence[int] | None' = None) -> 'bool'`
+  - Use the row an object is holding, paying nothing for it.
 - `c.used(self) -> 'None'`
   - (no docstring)
 

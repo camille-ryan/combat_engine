@@ -398,7 +398,12 @@ def f740b(c: Cast) -> None:
     if _familiar(c, passive=True) is None:
         return
     c.halve(c.trigger)
-    c.destroy(companion=True)
+    # **`on=c.me` and not a bare call.** This row is `target=NO_TARGET`,
+    # so `Cast._who(None)` hands back `self.target`, which is None -- the
+    # verb would refuse and the familiar would survive, every time.
+    # `content/CLAUDE.md` calls that a certainty rather than a risk in a
+    # NO_TARGET row, and `lint.py` caught it here.
+    c.destroy(companion=True, on=c.me)
 
 
 @power("f741", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
