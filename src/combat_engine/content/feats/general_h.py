@@ -2381,7 +2381,14 @@ def f1334b(c: Cast) -> None:
     if pet is None:
         return
     near = {who for who in c.within(1, of=pet, side="other") if who != c.me}
-    c.world.despawn(pet)
+    # **`c.destroy(companion=)` rather than the bare despawn this used to
+    # do.** `World.despawn` emits nothing, so the cost was invisible and
+    # this row's verdict rested on its damage bonus alone -- and
+    # `general_c.f740b` printed the identical sentence, carried a marker
+    # for it, and was dropped. One spelling, one attributable event. The
+    # verb walks `familiar()` before `companion()` for the reason this
+    # docstring already gives. #1233.
+    c.destroy(companion=True)
     if not near:
         return
     c.bonus(

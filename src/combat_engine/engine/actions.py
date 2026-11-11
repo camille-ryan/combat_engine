@@ -1208,7 +1208,77 @@ GRANTABLE = frozenset({
     "aid_attack", "aid_defence", "command", "dismount", "escape",
     "instinctive", "mount", "move_zone", "pull_grabbed", "second_wind",
     "shift", "stand",
+    # **`bull_rush` arrived with its reader**, which is the rule this set
+    # exists to enforce. `general_l.f2607` prints "you can bull rush in
+    # place of a melee basic attack", and the thing that consults it is
+    # `policy._granted_in_window` -- the opportunity window, which until
+    # then built only `kind="power"` entries. Adding the word alone would
+    # have been #583 again: carried, costing nothing, doing nothing, with
+    # the row auditing green for the whole life of the fight. #1233.
+    "bull_rush",
 })
+
+
+def granted_in_window(
+    world: World, actor: int, provoker: int
+) -> list[Action]:
+    """What a feat put in the window that is **not** a power.
+
+    `basic_options` above answers *"you can use <this row> in place of a
+    melee basic attack"* and takes power refs, which was the whole of
+    what this window could offer -- every `Action` it built was
+    `kind="power"`. Two cards substitute something that is not a row:
+
+    * `general_d.f942` -- *"you can shift 1 square as an opportunity
+      action instead of making a melee basic attack"*
+    * `general_l.f2607` -- *"you can bull rush in place of a melee basic
+      attack"*
+
+    Both are ordinary menu entries priced at a different action, which is
+    exactly what `c.grant_action` says, so neither row needed a new verb
+    once the window learned to read one. **This function is the reader**
+    that makes `"bull_rush"` worth having in `actions.GRANTABLE` --
+    `drivers.granted_words` requires a word and its reader to arrive
+    together, and that rule is why the word was not simply added.
+
+    **An option beside the basic, never a replacement for it**, which is
+    the same call `basic_options` makes and for the printed reason: *"you
+    **can**"*. Both are scored and the policy takes whichever it rates
+    higher.
+
+    `shift` is offered per reachable square because that is how
+    `actions._movement` offers one, so `perform` needs no new branch for
+    either kind -- it already executes `kind="shift"` with a `dest` and
+    `kind="bull_rush"` against a target.
+    """
+    from .movement import reachable
+    from .query import can_move
+
+    out: list[Action] = []
+    for (what, cost), squares in sorted(_granted(world, actor).items()):
+        if cost is not ActionType.OPPORTUNITY:
+            continue
+        # **Written as `what == "..."` deliberately.**
+        # `drivers.granted_words` greps this file for exactly that
+        # comparison to prove each `GRANTABLE` word is consulted, and a
+        # dict lookup keyed on the pair -- which is what this was first --
+        # reads the same value and is invisible to it. Conforming is the
+        # cheaper half of the trade: the gate's idiom is a text search by
+        # design, because the fault it catches is a word carried with no
+        # reader at all.
+        if what == "shift" and can_move(world, actor):
+            for dest in sorted(reachable(world, actor, squares, kind="shift")):
+                out.append(
+                    Action(kind="shift", cost=ActionType.OPPORTUNITY,
+                           dest=dest, path=(dest,))
+                )
+        elif what == "bull_rush":
+            out.append(
+                Action(kind="bull_rush", cost=ActionType.OPPORTUNITY,
+                       targets=(provoker,))
+            )
+    return out
+
 
 
 def _granted(world: World, actor: int) -> dict[tuple[str, ActionType], int]:

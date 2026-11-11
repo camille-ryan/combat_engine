@@ -53080,6 +53080,111 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def a_stowed_item_is_spent_by_the_row_that_stowed_it(out: Result) -> None:
+    """`c.store_row` finally has something that fires what it stored. #1233.
+
+    That verb has put a row into an object since `#720` and **nothing ever
+    fired one**: all three readers use the stored ref as a *gate* -- "when
+    you hit with *that* power" -- through `c.stored_row`. Two cards want
+    the row itself run, and both are an item's Property stowing and its
+    Power spending:
+
+    * `hands.i465x1` / `i465p1` -- *"Use the alchemical item stowed in the
+      i465 on the weapon you are holding. (This consumes the item as
+      usual.)"*
+    * `waist.i467x1` / `i467p1` -- *"you can use the stowed item as a part
+      of the same action without having to draw it or spend an action."*
+
+    **The two chains are asserted separately because they differ in two
+    ways that matter**: `i465` narrows what may be stowed to the six
+    alchemical blocks that coat a weapon, and `i467p1` fires off a
+    declared `SecondWind` trigger rather than being chosen.
+
+    **`i467p1` goes through the real trigger**, not `dsl.use`: the printed
+    *"as part of the same action"* is what a declared trigger buys, and
+    firing the row by hand would assert the body while leaving the thing
+    that makes the sentence true untested.
+
+    **The slot must empty.** A stowed thing is stowed once, so a ref left
+    behind lets one flask coat a weapon every round -- which is the plant.
+    """
+    import audit as A
+    from combat_engine.content.items.hands import _I465_COATINGS
+    from combat_engine.engine import dsl
+    from combat_engine.engine.components import Gear, Powers
+    from combat_engine.engine.events import ItemConsumed, SecondWind
+
+    out.that(len(_I465_COATINGS) >= 3 and "i469" in _I465_COATINGS,
+             "`i465x1`'s stowable list holds the coatings, and `i469` -- "
+             "the first of the card's own two named examples -- is in it, "
+             "which is the check that the hand-written list is the right one",
+             f"{len(_I465_COATINGS)}: {_I465_COATINGS}")
+
+    def chain(
+        row: str, prop: str, item: str, block: str, by_trigger: bool
+    ) -> tuple[dict[str, str], dict[str, str], list[str],
+               list[tuple[str, str]]]:
+        w, who, _ = A.board(row, 1)
+        g, kn = w.need(who, Gear), w.need(who, Powers)
+        g.carried[:] = [item]
+        if block not in kn.known:
+            kn.known.append(block)
+        dsl.use(w, who, prop, targets=[who], spend=False)
+        stowed = dict(kn.stored)
+        n = len(w.bus.log)
+        if by_trigger:
+            w.bus.emit(SecondWind(actor=who, healed=10, cost="standard"))
+        else:
+            dsl.use(w, who, row, targets=[who], spend=False)
+        said = [(e.item, e.by) for e in w.bus.log[n:]
+                if isinstance(e, ItemConsumed)]
+        return stowed, dict(kn.stored), list(g.carried), said
+
+    # -- i465: the coating, chosen as a free action ----------------------
+    coat = "i469"
+    stowed, after, carried, said = chain(
+        "i465p1", "i465x1", coat, f"{coat}p1", by_trigger=False)
+    out.that(stowed.get("i465") == f"{coat}p1",
+             "`i465x1` stows the coating under the ITEM's ref, which is the "
+             "key its Power reads -- an item's Power and Property are "
+             "different refs, so neither can default to its own",
+             f"{stowed}")
+    out.that(not after,
+             "and spending it empties the slot -- a stowed thing is stowed "
+             "once, so a ref left behind would coat a weapon every round",
+             f"{stowed} -> {after}")
+    out.that(not carried and said == [(coat, f"{coat}p1")],
+             "the item leaves the person and says so, which is the printed "
+             "'this consumes the item as usual' -- paid by the inner use "
+             "rather than by a second clause",
+             f"carried={carried} {said}")
+
+    # -- i467: any consumable, off the second-wind trigger ---------------
+    stowed2, after2, carried2, said2 = chain(
+        "i467p1", "i467x1", "i3309", "i3309p1", by_trigger=True)
+    out.that(stowed2.get("i467") == "i3309p1",
+             "`i467x1` stows any carried alchemical item, which is its "
+             "card against `i465x1`'s narrower one",
+             f"{stowed2}")
+    out.that(not after2 and not carried2 and said2 == [("i3309", "i3309p1")],
+             "and a SECOND WIND spends it -- through the declared trigger, "
+             "because 'as part of the same action' is what that buys and "
+             "firing the row by hand would leave it untested",
+             f"{stowed2} -> {after2}, carried={carried2} {said2}")
+
+    # -- the control: nothing stowed ------------------------------------
+    w3, me3, _ = A.board("i465p1", 1)
+    kn3 = w3.need(me3, Powers)
+    kn3.stored.pop("i465", None)
+    n3 = len(w3.bus.log)
+    dsl.use(w3, me3, "i465p1", targets=[me3], spend=False)
+    out.that(not [e for e in w3.bus.log[n3:] if isinstance(e, ItemConsumed)],
+             "and with nothing stowed the row spends nothing -- the control "
+             "that tells the chain from a row that eats a carried item "
+             "whether or not it was ever stowed",
+             f"stored={dict(kn3.stored)}")
+
+
 def a_chosen_damage_type_is_decided_from_the_hand(out: Result) -> None:
     """`f2865` picks a damage type, and its two bonuses add. #1233.
 
@@ -72119,6 +72224,10 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "stowed_item": (
+        a_stowed_item_is_spent_by_the_row_that_stowed_it,
+        "a stowed item is spent by the row that stowed it (#1233)",
     ),
     "chosen_type": (
         a_chosen_damage_type_is_decided_from_the_hand,

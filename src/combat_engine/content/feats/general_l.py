@@ -3178,7 +3178,7 @@ def f2592(c: Cast) -> None:
 
 
 @power("f2607", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_basic(action=)",))
+       reach=PERSONAL, target=SELF)
 def f2607(c: Cast) -> None:
     """A bull rush in place of an opportunity attack, and combat advantage.
 
@@ -3201,7 +3201,35 @@ def f2607(c: Cast) -> None:
     `c.as_basic` is the near miss and does not fit: it files **refs** under a
     window, and a manoeuvre has no ref to file -- it is an action kind, not a
     row. Whatever closes `c.opportunity_instead` has to carry both.
+
+    **Written, and the note above was right about `c.as_basic` and wrong
+    about what was needed.** A manoeuvre has no ref to file, so nothing
+    files one: the *window* learned to read a **granted action** instead.
+    `c.grant_action("bull_rush", ActionType.OPPORTUNITY)` is the printed
+    sentence, and `actions.granted_in_window` is the reader -- offered
+    beside the melee basic, which is the printed *"you can"*.
+
+    **`"bull_rush"` arrived in `actions.GRANTABLE` WITH that reader**,
+    which is the rule that set exists to enforce: the word alone would be
+    `#583` again -- carried, costing nothing, doing nothing, with this row
+    auditing green for the whole life of the fight.
+
+    The combat-advantage half watches the bull rush land.
+    `cast.bull_rush` resolves as an attack labelled `bull_rush`, so the
+    watch reads `ev.power` rather than guessing from the shape, and
+    `When.SOTNT` is the printed *"until the start of your next turn"*.
     """
+    from combat_engine.engine.types import ActionType as _AT
+
+    me = c.me
+    c.grant_action("bull_rush", _AT.OPPORTUNITY, on=me,
+                   until=When.ENCOUNTER)
+
+    def shoved(ev: Hit) -> None:
+        if ev.attacker == me and ev.power == "bull_rush":
+            c.grants_advantage(on=ev.target, to=me, until=When.SOTNT)
+
+    c.watch(Hit, shoved, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2609", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

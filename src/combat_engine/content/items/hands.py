@@ -1579,6 +1579,19 @@ def i1560p1(c: Cast) -> None:
     _on_next_hit(c, extra)
 
 
+#: The alchemical items `i465x1` can stow -- *"one alchemical item that
+#: can be applied to a weapon (such as alchemical silver or inferno
+#: oil)"*. Hand-written because **nothing declarative marks them**: all
+#: six are `target=You` and `action=standard` like most of the slot, the
+#: compendium prints no "coating" flag, and whether a block coats a weapon
+#: lives in its body (`c.apply_poison`) rather than in its header.
+#:
+#: Found by reading every alchemical block that calls that verb -- six of
+#: the 77 -- and `i469` is literally the first of the card's two named
+#: examples, which is the check that the list is the right one.
+_I465_COATINGS = ("i1403", "i1622", "i2539", "i2591", "i469", "i715")
+
+
 @power("i465x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i465x1(c: Cast) -> None:
@@ -1620,12 +1633,54 @@ def i465x1(c: Cast) -> None:
     part of a second wind. Both are "use the stowed row now, paying
     nothing", which is one verb and not two.
     """
+    from combat_engine.engine.components import Gear as _Gear
+    from combat_engine.engine.components import Powers as _Powers
+    from combat_engine.engine.dsl import entry_of as _entry_of
+
+    gear = c.world.get(c.me, _Gear)
+    powers = c.world.get(c.me, _Powers)
+    if gear is None or powers is None:
+        return
+    for item in gear.carried:
+        if item not in _I465_COATINGS:
+            continue
+        block = next(
+            (b for b in powers.known if _entry_of(b) == item), ""
+        )
+        if block:
+            c.store_row(block, by=_entry_of(c.ref))
+            return
+
 
 
 @power("i465p1", level=8, cls=ITEM, usage=AT_WILL, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.use_stored()",))
+       reach=PERSONAL, target=SELF)
 def i465p1(c: Cast) -> None:
     """Spending the stowed alchemical item on the weapon in hand.
+
+    **Written.** `c.use_stored` is the verb, and it did not exist:
+    `c.store_row` has stored a row into an object since `#720` and
+    **nothing ever fired what it stored** -- all three readers used the
+    ref as a *gate*. Its docstring has the argument.
+
+    The chain is `i465x1` stowing one of `_I465_COATINGS` off the
+    character's person and this row spending it. `by=entry_of(c.ref)` is
+    the item, which is the key the Property stored under -- an item's
+    Power and its Property are different refs, so neither can default to
+    its own.
+
+    *"This consumes the item as usual"* needs no clause: the inner use
+    goes through `dsl.use` with `spend=True`, which takes the entry out of
+    `Gear.carried`. The coating itself is the stowed block's own body --
+    `c.apply_poison` in `items/alchemical.py` -- so this row does not
+    apply anything, it spends the row that does.
+
+    **Nothing checks that a weapon attack is being made**, which is the
+    printed Requirement and is the one clause not here. A `FREE` action
+    with no declared trigger is offered on the creature's own turn, and
+    the coating lasts until it is next used either way, so the printed
+    timing changes nothing on this board -- said rather than left for
+    somebody to find a missing gate.
 
     **Re-pointed off `c.alchemical()` for the reason `i476x1` carries**:
     alchemical items are declared, 75 of them, so the thing is not absent
@@ -1634,9 +1689,14 @@ def i465p1(c: Cast) -> None:
     the whole benefit and there is no consumable to spend"*, and it is
     already on `c.consume_item()`.
 
-    The Property beside this (`i465x1`) is the stowing and is correctly
-    inert out of combat: `Gear.worn` holds slot names rather than refs, so
-    there is nothing for it to put in the slot either."""
+    The old note said the Property beside this *"is correctly inert out of
+    combat: `Gear.worn` holds slot names rather than refs, so there is
+    nothing for it to put in the slot either."* The premise was about the
+    wrong field -- the stow is `Powers.stored`, which is keyed by holder
+    and has always taken a ref."""
+    from combat_engine.engine.dsl import entry_of as _entry_of
+
+    c.use_stored(by=_entry_of(c.ref))
 
 
 # -- level 9 ----------------------------------------------------------------

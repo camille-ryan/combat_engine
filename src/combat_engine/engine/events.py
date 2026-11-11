@@ -1474,6 +1474,35 @@ class UseSpent(Event):
 
 
 @dataclass
+class CompanionDestroyed(Event):
+    """A familiar or a spirit companion was spent, not killed.
+
+    **`World.despawn` emits nothing**, which is why this exists: two cards
+    pay their cost by destroying the caster's familiar, and the clause was
+    therefore invisible. `f1334b` hand-rolled `world.despawn(pet)` and
+    `f740b` carried a marker for the same sentence, so one row was
+    finished and the other dropped on identical text.
+
+    Not `Died` or `Dropped`: those are about hit points and a creature
+    that reached zero, and this one was in perfect health. The caster
+    chose to spend it.
+
+    `who` is the owner, `companion` the entity that left play, and `by`
+    the row that spent it -- the owner's own, which is what distinguishes
+    this from anything an enemy did.
+
+    The printed difference between *destroyed* and *dismissed* is what it
+    takes to get one back, and that is a ritual (`#453`), so the two are
+    one event here. `f1334b`'s note has the ruling: *"coming back is a
+    matter for the rest, not the board."*
+    """
+
+    who: int
+    companion: int
+    by: str
+
+
+@dataclass
 class ItemRestored(Event):
     """A one-use item was **not** spent after all, and is back on its owner.
 

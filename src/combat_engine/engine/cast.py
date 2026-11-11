@@ -27,6 +27,7 @@ from .durations import Effect, When
 from .events import (
     Aided,
     Boosted,
+    CompanionDestroyed,
     Event,
     ItemDestroyed,
     ItemPowerUsed,
@@ -17974,6 +17975,77 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         effect.on_resume.append(rearm)
         return effect
 
+    def use_stored(
+        self,
+        *,
+        by: str = "",
+        on: int | None = None,
+        targets: Sequence[int] | None = None,
+    ) -> bool:
+        """Use the row an object is holding, paying nothing for it.
+
+        `c.store_row`'s other half. That verb has existed since `#720` and
+        **nothing ever fired what it stored**: all three readers use the
+        stored ref as a *gate* -- "when you hit with *that* power" -- and
+        read it through `c.stored_row`. Two cards want the row itself run:
+
+        * `hands.i465p1` -- *"Use the alchemical item stowed in the i465 on
+          the weapon you are holding. (This consumes the item as usual.)"*
+        * `waist.i467p1` -- *"you can use the stowed item as a part of the
+          same action without having to draw it or spend an action."*
+
+        Both are "use the stowed row now, for free", which is one verb and
+        not two. The action cost is the caller's: this pays nothing,
+        because in both printed lines the row is used *as part of*
+        something the creature already paid for.
+
+        **`spend=True` on the inner use**, which is what makes the printed
+        *"this consumes the item as usual"* true: `dsl.use` takes the entry
+        out of `Gear.carried` when the used row's own entry is one the
+        creature carries, so the object is spent by being used rather than
+        by a second clause here.
+
+        **The slot is emptied whatever the row did.** A stowed thing is
+        stowed once -- `i465x1` holds *one* item -- so leaving the ref
+        behind would let one flask coat a weapon every round. Emptied
+        before the inner use rather than after, so a row that somehow
+        re-enters cannot find it still there.
+
+        **Nested uses are safe here and the guard says why.** `dsl.use`
+        refuses a re-entrant use of the *same* `(actor, ref)`; the stored
+        row is always a different ref, so this is an ordinary nested use
+        of the kind a trigger already makes.
+
+        `by` is the holder, defaulting to this row's own ref. An item's
+        Power and its Property are different refs, so `i465p1` passes
+        `entry_of(c.ref)` to reach what `i465x1` stored -- the same key
+        `c.store_row(by=)` was given.
+        """
+        from .components import Powers
+        from .dsl import get as _get
+
+        who = self._who(on)
+        powers = self.world.get(who, Powers) if who is not None else None
+        if powers is None or who is None:
+            return False
+        key = by or self.ref
+        ref = powers.stored.get(key, "")
+        if not ref or _get(ref) is None:
+            return False
+        powers.stored.pop(key, None)
+        from .dsl import use as _use
+
+        _use(
+            self.world,
+            who,
+            ref,
+            targets=list(targets) if targets is not None else [who],
+            spend=True,
+            granted_by=who,
+            granted_via=self.ref,
+        )
+        return True
+
     def restore_item(self, item: str, *, on: int | None = None) -> bool:
         """Put a one-use item back on its owner. `c.destroy`'s opposite.
 
@@ -18019,6 +18091,7 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         weapon: Weapon | None = None,
         worn: str = "",
         armour: bool = False,
+        companion: bool = False,
     ) -> bool:
         """Destroy an item a creature is carrying or wearing. It does not
         come back.
@@ -18053,12 +18126,36 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         printed bonus has to be laid back as a penalty or the creature
         keeps plate AC with no plate. `m115879a2` is the card.
 
+        **`companion=` is the fourth branch and destroys an entity rather
+        than an object.** Two cards pay their cost by destroying the
+        caster's familiar, and `World.despawn` emits **nothing** -- so
+        `f1334b` hand-rolled the despawn and `f740b` carried a marker for
+        the identical sentence, one finished and one dropped. This is one
+        spelling with an attributable `CompanionDestroyed` on it.
+
+        `familiar()` first and `companion()` second, which is `f1334b`'s
+        own reasoning: `c.companion` walks whatever single body the caster
+        keeps, so a sorcerer with both would lose the wrong one.
+
         Announced as `ItemDestroyed`, which replaces the bare `Note` this
         used to emit -- a `Note` carries no `by`, so `DID_SOMETHING`
         refuses it and the four monster rows destroying a weapon had the
         clause credited to nobody.
         """
         who = self._who(on)
+        if companion:
+            # **No `Gear` needed, so this is above the guard.** A familiar
+            # is an entity and not a thing in a bag -- and a creature with
+            # no `Gear` at all can still have one, which the guard below
+            # would have refused.
+            pet = self.familiar() or self.companion()
+            if pet is None or who is None:
+                return False
+            self.world.despawn(pet)
+            self.world.bus.emit(
+                CompanionDestroyed(who=who, companion=pet, by=self.ref)
+            )
+            return True
         gear = self.world.get(who, Gear) if who is not None else None
         if gear is None or who is None:
             return False

@@ -85,6 +85,7 @@ from combat_engine.engine import (
     Position,
     Ranged,
     SavingThrow,
+    SecondWind,
     SkillCheck,
     Square,
     Target,
@@ -623,14 +624,96 @@ def i467x1(c: Cast) -> None:
     coating on the weapon in hand; `i467p1` spends a stowed consumable as
     part of a second wind. Both are "use the stowed row now, paying
     nothing", which is one verb and not two.
+
+    **Written.** `c.store_row(ref, by=entry_of(c.ref))` keys the stow on
+    the item, which is what `i467p1` reads. Any carried `Alchemical Item`
+    qualifies -- the card says *"one consumable alchemical item"* with no
+    further test, unlike `hands.i465x1`, whose own card narrows to the
+    ones that go on a weapon.
+
+    The level gate is `i467p1`'s and not this one's: *"if you have a
+    consumable alchemical item stowed **that is 10th level or lower**"*
+    is a condition on using it, so a higher-level item can be stowed and
+    simply cannot be spent this way.
     """
+    from combat_engine.engine import query as _q
+    from combat_engine.engine.components import Gear as _Gear
+    from combat_engine.engine.components import Powers as _Powers
+    from combat_engine.engine.dsl import entry_of as _entry_of
+
+    gear = c.world.get(c.me, _Gear)
+    powers = c.world.get(c.me, _Powers)
+    if gear is None or powers is None:
+        return
+    cats = _q.block_categories()
+    held = set(gear.carried)
+    block = next(
+        (b for b in powers.known
+         if _entry_of(b) in held and cats.get(b, "") == "Alchemical Item"),
+        "",
+    )
+    if block:
+        c.store_row(block, by=_entry_of(c.ref))
 
 
 @power("i467p1", level=6, cls=ITEM, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.use_stored()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, lambda w, me, ev: ev.actor == me,
+                  "you use your second wind"))
 def i467p1(c: Cast) -> None:
-    """The second wind half is reachable; the stowed alchemical item is the
-    whole benefit and there is no consumable to spend."""
+    """The stowed alchemical item, spent as part of the second wind.
+
+    **Written.** The old note said *"the stowed alchemical item is the
+    whole benefit and there is no consumable to spend"* -- `#1233` deals
+    two per character and `i467x1` stows one, so there is.
+
+    `c.use_stored` is the verb and it did not exist: `c.store_row` has
+    stored a row since `#720` and nothing ever fired what it stored. Its
+    docstring has the argument.
+
+    **The trigger is declared rather than left to the menu.** *"When you
+    use your second wind"* is a printed Trigger, so the row is offered by
+    `engine/triggers.py` when `SecondWind` fires and never from the list
+    of what a creature may do on its turn -- which is also what makes
+    *"as a part of the same action"* true without a cost of its own.
+
+    **The level gate is read from the database, not from the row** --
+    *"10th level or lower"* is `item_step.level`, and the test is the
+    lowest rung, the one the item is bought at.
+
+    **And it cannot refuse anything today, which is said rather than
+    discovered.** Measured over every declared `Alchemical Item`: levels
+    run 1 to **10**, so **0 of them** are above the printed bound. This is
+    the heroic-tier corpus and the bound is a paragon one -- the card's
+    own next lines raise it to 20th at 16th level and to any item at
+    26th, which are out of scope like every other paragon line in this
+    file.
+
+    So the gate is a correct reading of a printed condition that nothing
+    in the tree exercises, kept because the paragon import is what makes
+    it bite and a missing bound would then be silent. No plant can redden
+    it; the same honest state `general_l.f2864`'s once-per-attack
+    assertion carries.
+    """
+    from combat_engine.db import game as _game
+    from combat_engine.engine.components import Powers as _Powers
+    from combat_engine.engine.dsl import entry_of as _entry_of
+
+    powers = c.world.get(c.me, _Powers)
+    if powers is None:
+        return
+    key = _entry_of(c.ref)
+    stowed = powers.stored.get(key, "")
+    if not stowed:
+        return
+    row = _game().execute(
+        "SELECT MIN(level) AS lvl FROM item_step WHERE ref = ?",
+        (_entry_of(stowed),),
+    ).fetchone()
+    if row is None or row["lvl"] is None or row["lvl"] > 10:
+        return
+    c.use_stored(by=key)
 
 
 @power("i594x1", level=6, cls=ITEM, action=ActionType.NONE,

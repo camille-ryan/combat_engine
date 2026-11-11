@@ -224,10 +224,26 @@ def f941(c: Cast) -> None:
 
 
 @power("f942", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_basic(action=)",))
+       reach=PERSONAL, target=SELF)
 def f942(c: Cast) -> None:
-    """Shift instead of making the opportunity attack. The window offers
-    an attack and nothing else can be put in it.
+    """Shift instead of making the opportunity attack.
+
+    **Written, and it needed no new verb.** The note below said the window
+    *"offers an attack and nothing else can be put in it"*, and that was
+    true of `policy._opportunity_options`, which built only
+    `Action(kind="power")`. What it wanted was the *window* taught to read
+    a granted action, not a way to file one: `c.grant_action("shift",
+    ActionType.OPPORTUNITY)` is almost the printed sentence -- *"you can
+    shift 1 square as an opportunity action"* -- and has existed since
+    `#583`.
+
+    `actions.granted_in_window` is the reader, and it offers the shift
+    **beside** the melee basic rather than in place of it, which is the
+    printed *"you can"* and the same call `dsl.basic_options` makes for
+    the power case.
+
+    One square, which is the number the card prints; `grant_action`'s
+    `squares_` defaults to it.
 
     **Re-pointed off `c.opportunity_instead()`, which was serving two
     different needs.** That symbol also carried `general_h.f1256`, whose
@@ -245,6 +261,11 @@ def f942(c: Cast) -> None:
     files the power case is the cheapest shape `blocked._shape_of`
     prices (#677).
     """
+    from combat_engine.engine.types import ActionType as _AT
+
+    c.grant_action("shift", _AT.OPPORTUNITY, squares_=1, on=c.me,
+                   until=When.ENCOUNTER)
+
 
 
 @power("f943", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

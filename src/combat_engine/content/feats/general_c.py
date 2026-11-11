@@ -365,8 +365,7 @@ def _hurts_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 @power("f740b", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_INTERRUPT, reach=PERSONAL, target=NO_TARGET,
        keywords=ARCANE, trigger="you are hit by an attack",
-       on=Trigger(DamageRolled, _hurts_me, "an attack damages you"),
-       dropped=("c.destroy(companion=)",))
+       on=Trigger(DamageRolled, _hurts_me, "an attack damages you"))
 def f740b(c: Cast) -> None:
     """Half damage from the triggering attack, and the familiar pays for
     it.
@@ -376,16 +375,30 @@ def f740b(c: Cast) -> None:
     carries no amount and `c.halve` needs one; the blow is announced
     before it is applied, which is the interrupt's window.
 
-    Dropped: the familiar is *destroyed*, and the nearest thing the
-    engine has is dismissing it. The two differ out of combat -- a
-    destroyed familiar wants a ritual and a dismissed one does not -- so
-    the cost is taken as a dismissal and the difference is named rather
-    than papered over.
+    **Written.** The old note said the familiar is *destroyed* and *"the
+    nearest thing the engine has is dismissing it"*, so the cost was taken
+    as a dismissal and the difference named rather than paid.
+
+    `c.destroy(companion=)` is that difference now, and what it buys is
+    not the ritual -- that is still `#453` -- but an **attributable
+    event**. `World.despawn` emits nothing, so `c.dismiss_companion`
+    spent the familiar silently: this row's cost was invisible and its
+    verdict rested entirely on `c.halve`.
+
+    **And it unifies two rows that disagreed on one sentence.**
+    `general_h.f1334b` prints the same clause, hand-rolled
+    `world.despawn(pet)`, and carried **no** marker -- so the identical
+    text was finished in one file and dropped in another. One spelling,
+    one event.
+
+    `familiar()` before `companion()` inside the verb, which is
+    `f1334b`'s reasoning: `c.companion` walks whatever single body the
+    caster keeps, so a sorcerer with both would lose the wrong one.
     """
     if _familiar(c, passive=True) is None:
         return
     c.halve(c.trigger)
-    c.dismiss_companion()
+    c.destroy(companion=True)
 
 
 @power("f741", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

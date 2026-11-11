@@ -1049,6 +1049,7 @@ def _opportunity_options(
     power that says otherwise, so this is every declared opportunity-action
     power that can reach, plus the basic.
     """
+    from combat_engine.engine.actions import granted_in_window
     from combat_engine.engine.components import Powers
     from combat_engine.engine.dsl import basic_options, candidates
     from combat_engine.engine.dsl import usable as is_usable
@@ -1072,6 +1073,7 @@ def _opportunity_options(
             out.append(
                 Action(kind="power", cost=ActionType.OPPORTUNITY, ref=ref, targets=(provoker,))
             )
+    out.extend(granted_in_window(world, actor, provoker))
     return out
 
 

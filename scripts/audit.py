@@ -271,6 +271,20 @@ KNOWN_SILENT = {
     # body directly, 4 assertions, and names both creatures it can
     # summon. An excuse for a row with a driver behind it is a statement
     # about the board, which is what this list is for.
+    # **The board essentially cannot stow one.** `i465x1` stows only an
+    # alchemical item that goes on a weapon -- six of the 193 in the
+    # consumable pool -- and a dealt hand is two items, so the chance is
+    # about 6%. Measured over 26 classes x 3 seeds: **0 of 78 hands** held
+    # one, so the Property stows nothing and this row fires and finds the
+    # slot empty.
+    #
+    # Proved where a draw cannot move it: `drivers.stowed_item` stows
+    # `i469` -- the first of the card's own two named examples -- by hand
+    # and asserts the coating is applied, the item consumed and the slot
+    # emptied, with a control for nothing stowed. #1233.
+    "i465p1": "stows only a weapon coating, 6 of 193 in the pool, and a"
+              " dealt hand is two items -- 0 of 78 hands held one. Proved"
+              " in drivers.stowed_item instead",
     "p13984": "its branch needs a cf:wizard-mage-f4s3/s4 school benefit and"
               " this board's wizard is usually an arcanist/sha-ir build --"
               " it fires on a draw that happens to land one, so this entry"
@@ -1384,7 +1398,15 @@ DID_SOMETHING = {
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
     "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
     "ItemConsumed", "ItemDestroyed", "ItemRestored",
+    "CompanionDestroyed",
 }  # fmt: skip
+# `CompanionDestroyed` is the sixteenth, and it is here because
+# `World.despawn` emits nothing: two cards pay their cost by
+# destroying the caster's familiar and the clause was invisible, so
+# `f1334b` read as finished on its other half and `f740b` carried a
+# marker for the same sentence. Not `Died` or `Dropped` -- those are
+# about a creature that reached zero hit points, and this one was in
+# perfect health and was spent on purpose.
 # `ItemRestored` is the fifteenth and is admitted on `UseRestored`'s
 # argument, which is the one this file already made for a price's inverse:
 # admitting one direction and not the other leaves a row whose whole
