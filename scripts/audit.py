@@ -8624,6 +8624,16 @@ def main() -> int:
             # and `dropped=` is the marker a monster wave reaches for most, so
             # the figure is printed separately below rather than left to be
             # read as finished.
+            #
+            # **A `declined_clause=` row still shows as DROP here**, and the
+            # divergence is deliberate for the same reason the `ELSEWHERE`
+            # branch above states: this instrument reports what the markers
+            # say and `blocked.py` is the queue. The clause really is
+            # missing, so DROP is true; nobody is coming back for it, so it
+            # is not owed, and `Power.unfinished` -- which `blocked.py` and
+            # `todo.py` read -- subtracts it. Said out loud because the two
+            # counts will not add up otherwise, which is the one way this
+            # goes wrong silently. `rt:r2-t3`, #1242.
             partial.append((ref, p.dropped, "DROP"))
         if p.out_of_combat:
             # Declared inert. A cantrip that lights a torch is not a silent

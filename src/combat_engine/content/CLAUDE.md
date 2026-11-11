@@ -81,9 +81,40 @@ the AI policy without running anything — and **the body is code** against a
   item, not the lines that happen to mention it.
 
   So it is **not** the marker for "one clause of a working row is declined".
-  That case was designed for, built in `blocked.py`, and removed when the
-  call turned out to be item-level — if it comes back, the row keeps
-  `dropped=` and the bucket comes back with it.
+  That case has its own marker now, below.
+* `declined_clause=(symbols,)` — **one clause of a working row is a scope
+  decision.** A subset of the row's `todo=`/`dropped=`, so the row still
+  says the clause is missing and this says nobody is coming back for it.
+  Requires a docstring giving whose call it was **and a date**, refused at
+  import without one.
+
+  `declined=` cannot say this: it refuses the whole row, and these rows
+  play. Camille, asked directly on `#1242`, 2026-11-11:
+
+  > *"Let's not build an encumbrance system. And yeah, build a marker that
+  > indicates this."*
+
+  `rt:r2-t3` is the first and the shape is typical — its armour half is
+  written and working, its heavy-load half waits on an encumbrance model
+  nobody is building.
+
+  **This paragraph used to say the case was "built in `blocked.py` and
+  removed", and that was half wrong in the direction that matters.**
+  `blocked.DECLINED` came back on `#1039` and has kept clause-level
+  decisions out of the owed list ever since, so the **count** was already
+  right. What no mechanism could do was tell a reader of the *row*: the
+  decision sat in a set in `scripts/blocked.py`, nowhere near the header
+  it governed, so `dropped=("Gear.load",)` read as ordinary unfinished
+  work. An ELI5 of mine told Camille the opposite — that such a clause
+  "stays on the owed list" — and she ruled on that premise. The ruling
+  stands and the reason given for it was wrong, which is worth recording
+  separately.
+
+  Subtracted in `Power.unfinished`, the one property `blocked.py` and
+  `todo.py` both read, so neither learned a new field.
+  `drivers.declined_clause` is the gate. The four terrain symbols stay in
+  `blocked.DECLINED` rather than migrating: that decision reaches 13 rows
+  across two files, so moving it is its own content change.
 * `defect="why"` — **the compendium is missing what the row would be written
   from.** Not a gap in this engine: a gap in the source, so no symbol will ever
   close it and `todo=`/`dropped=` both lie by naming one. Refused by `usable`

@@ -1535,6 +1535,31 @@ class Power:
     #: `obsolete=` is: a declined option is offered neither to a player nor
     #: to the dealer.
     declined: str = ""
+    #: Which of this row's **dropped clauses** we have decided not to build.
+    #: A subset of `todo`/`dropped`, so the row still says the clause is
+    #: missing and this says nobody is coming back for it.
+    #:
+    #: `declined=` above cannot do this: it refuses the **whole row**, and
+    #: these rows play. `rt:r2-t3` is the first one -- its armour half is
+    #: written and working, and its heavy-load half waits on an encumbrance
+    #: model. Camille, asked directly on `#1242`, 2026-11-11:
+    #:
+    #:   > *"Let's not build an encumbrance system. And yeah, build a marker
+    #:   > that indicates this."*
+    #:
+    #: **The counting half of this already existed and the visibility half
+    #: did not**, which is worth saying because the two get confused.
+    #: `blocked.DECLINED` has taken clause-level scope decisions out of the
+    #: owed list since `#1039`, so the backlog was already right. What it
+    #: could not do is tell a reader of the *row*: the decision lived in a
+    #: set in `scripts/blocked.py`, nowhere near the header it governs, so
+    #: `dropped=("Gear.load",)` read as ordinary unfinished work. This marker
+    #: is the row saying it.
+    #:
+    #: Subtracted in `unfinished`, which is the one property `blocked.py` and
+    #: `todo.py` both read -- so neither reports the clause as work owed and
+    #: neither had to learn a new field.
+    declined_clause: tuple[str, ...] = ()
     #: The row cannot be written because **the compendium is missing what it
     #: would be written from**. Not a gap in this engine: a gap in the source.
     #:
@@ -1697,8 +1722,17 @@ class Power:
 
     @property
     def unfinished(self) -> tuple[str, ...]:
-        """Everything this row is waiting for, whichever way it is waiting."""
-        return self.todo + self.dropped
+        """Everything this row is waiting for, whichever way it is waiting.
+
+        **A declined clause is not waiting.** `declined_clause` names the
+        dropped clauses nobody is coming back for, so they come out here --
+        the one property `blocked.py` and `todo.py` both read, which is why
+        neither needed to learn the new field. A row whose only missing
+        clause is declined therefore reads as finished to both, which is
+        what it is: as done as it will ever be.
+        """
+        declined = frozenset(self.declined_clause)
+        return tuple(w for w in self.todo + self.dropped if w not in declined)
 
     @property
     def is_attack(self) -> bool:
@@ -2054,6 +2088,7 @@ def power(
     narrative: Iterable[str] = (),
     obsolete: str = "",
     declined: str = "",
+    declined_clause: Iterable[str] = (),
     defect: str = "",
     wants: str = "",
     implemented_in: Iterable[str] = (),
@@ -2110,6 +2145,30 @@ def power(
             f"{ref}: defect cannot be combined with todo, dropped, obsolete, declined "
             f"or out_of_combat -- it means no symbol can finish this row"
         )
+    declined_clause = tuple(declined_clause)
+    if declined_clause:
+        # **It names a clause, so the clause has to be named.** Every entry
+        # must also be in `todo=`/`dropped=`: the pair says "this is missing"
+        # and "nobody is coming back for it", and an entry naming neither
+        # would take a symbol out of `unfinished` that was never in it --
+        # which reads as a row quietly declining work it never admitted to.
+        stray = [w for w in declined_clause if w not in tuple(todo) + tuple(dropped)]
+        if stray:
+            raise ValueError(
+                f"{ref}: declined_clause={stray!r} names no marked clause. "
+                f"A declined clause is a dropped one nobody will finish, so "
+                f"it must also appear in todo= or dropped= -- otherwise the "
+                f"row subtracts work it never claimed."
+            )
+        if declined:
+            # One refuses the whole row and the other says the row plays with
+            # a clause nobody will write. A row claiming both is telling
+            # `usable` to refuse it and `blocked.py` that it works.
+            raise ValueError(
+                f"{ref}: declined= and declined_clause= cannot both be set -- "
+                f"the first refuses the whole row, the second says the row "
+                f"plays and one of its clauses is a scope decision"
+            )
     if wants and not (todo or dropped):
         # **`wants=` describes a *gap*, so it needs a gap to describe.** The
         # field is a sentence beside the symbol -- what the missing thing has
@@ -2228,6 +2287,22 @@ def power(
                     f"({', '.join(skills)}). A clause the engine is merely "
                     f"missing is dropped=, not narrative=."
                 )
+        if declined_clause:
+            # **Whose call and when, in the row.** The same standard
+            # `content/CLAUDE.md` sets for `declined=`, and for its reason:
+            # the next reader's question is "can this be revisited" and
+            # nothing else in the row answers it. A date is asked for
+            # because a scope decision is the one marker that is *meant* to
+            # outlive its symbol arriving -- without one, a reader cannot
+            # tell a current decision from a stale one.
+            why = (body.__doc__ or "").strip()
+            if len(why) < _REASON or "202" not in why:
+                raise ValueError(
+                    f"{ref}: declined_clause= needs a docstring saying whose "
+                    f"call it was and when -- a date, so a later reader can "
+                    f"tell a live decision from a stale one. A clause the "
+                    f"engine is merely missing is dropped= on its own."
+                )
         if ref in REGISTRY:
             raise ValueError(f"{ref} declared twice")
         REGISTRY[ref] = Power(
@@ -2268,6 +2343,7 @@ def power(
             narrative=narrative,
             obsolete=obsolete,
             declined=declined,
+            declined_clause=declined_clause,
             defect=defect,
             wants=wants,
             implemented_in=implemented_in,

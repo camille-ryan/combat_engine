@@ -113,6 +113,20 @@ SOURCE_GAP = "compendium."
 #: symbol names with nothing in common to match on, and a prefix would need
 #: inventing one. The cost is that a new declined symbol wants an edit here,
 #: which is the right amount of friction for a scope decision.
+#:
+#: **There is a row-level marker for this now, and it is the one to reach
+#: for.** `declined_clause=` on the row says the same thing where the header
+#: is, and `Power.unfinished` subtracts it -- so this instrument needs no
+#: entry for a row that carries it. Camille asked for it on `#1242`, after
+#: an ELI5 of mine wrongly told her that a declined clause *"stays on the
+#: owed list"*: this set has taken clause-level decisions off that list
+#: since `#1039`, so the count was already right and only the **row** was
+#: silent about why.
+#:
+#: These four stay here rather than migrating. The decision they carry
+#: reaches 13 rows across two files, so moving it is a content change of its
+#: own and not a side effect of adding the marker -- and the two mechanisms
+#: agree, because both end at `unfinished`.
 DECLINED = frozenset({
     # Special ground is story-only. `story.terrain_words` is the board-level
     # vocabulary and `c.terrain(...)` is how a row would read it; a gate on
