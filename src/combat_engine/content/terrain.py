@@ -27,6 +27,7 @@ from random import Random
 
 from combat_engine.engine import AC, FORT, REF, WILL, DamageType, World
 from combat_engine.engine.components import (
+    Defenses,
     Health,
     Ident,
     Initiative,
@@ -246,6 +247,66 @@ def lay(world: World, row: dict, squares: set[Square] | frozenset[Square],
     )
 
 
+#: An object's AC, Fortitude and Reflex by size, with its base hit points.
+#: **DMG page 65, the "Object Properties" table, read in `resources/` and
+#: transcribed cell for cell** rather than derived from anything:
+#:
+#:     Size        AC/Reflex  Fortitude  base HP  example
+#:     Tiny            10         5         5     bottle, book
+#:     Small            8         8        10     treasure chest
+#:     Medium           5        10        20     door, statue
+#:     Large            4        12        40     wagon, vault door
+#:     Huge             3        15       100     big statue
+#:     Gargantuan       2        20       200     even bigger statue
+#:
+#: **AC and Reflex are ONE column on the page**, which is why they are one
+#: value here rather than two that happen to agree: an object neither
+#: parries nor dodges, so the page prices both the same.
+#:
+#: **And the page prints no Will.** `Defenses.base` answers 10 for a key it
+#: does not hold, so an attack against an object's Will reads 10 -- a
+#: number the page does not give. Recorded rather than invented: the
+#: printed table has three columns and this holds three, and a row aiming
+#: at an object's Will is a case 4e does not price.
+#:
+#: The hit points are **not** applied by `put()`, whose `hp` is the
+#: caller's for the reason its own docstring gives -- a module or an
+#: objective states what a thing can take. They are kept here because the
+#: table is one table and splitting it invites a second transcription.
+OBJECT_DEFENCES: dict[Size, tuple[int, int, int]] = {
+    Size.TINY: (10, 5, 5),
+    Size.SMALL: (8, 8, 10),
+    Size.MEDIUM: (5, 10, 20),
+    Size.LARGE: (4, 12, 40),
+    Size.HUGE: (3, 15, 100),
+    Size.GARGANTUAN: (2, 20, 200),
+}
+
+
+def object_defences(size: Size) -> Defenses:
+    """The printed defences for an object of that size, flat.
+
+    `scale="none"` is the whole reason this is a component rather than a
+    curve: the page gives one number per size and no level term, so
+    neither the character build-up nor the monster take-out applies.
+    `engine/scaling.py` reads that field.
+
+    **Five rows waited on this and every one said the same thing** --
+    *"a `Scenery` carries no defences, so there is nothing for an attack
+    against it to roll against: `query.defence` opens
+    `world.need(eid, Defenses)`"*. Aiming at an object was already written
+    (`Target(objects=True)` unions `query.scenery` into the pool and
+    `loose=` is the printed word); what was missing was something to hit.
+
+    An unknown size falls back to Medium -- the middle row and the
+    commonest printed example, a door -- rather than raising, because a
+    spawner that cannot name a size should still produce a thing that can
+    be attacked.
+    """
+    ac_ref, fort, _hp = OBJECT_DEFENCES.get(size, OBJECT_DEFENCES[Size.MEDIUM])
+    return Defenses(values={AC: ac_ref, REF: ac_ref, FORT: fort}, scale="none")
+
+
 def put(world: World, square: Square, *, kind: str = "object",
         hp: int = 0, size: Size = Size.MEDIUM, fastened: bool = False,
         solid: bool = True, by: int = 0, ref: str = "") -> int:
@@ -284,6 +345,11 @@ def put(world: World, square: Square, *, kind: str = "object",
         Ident(ref=ref or f"scenery:{kind}"),
         Position(square=square, size=size),
         Scenery(kind=kind, fastened=fastened, by=by),
+        # **The printed defences, so the thing can be attacked at
+        # all.** Five rows carried `Scenery.defences` and each said
+        # the same: aiming at an object was written and there was
+        # nothing to roll against. DMG page 65, by size. #1233.
+        object_defences(size),
     ]
     if hp > 0:
         bits.append(Health(hp=hp, max_hp=hp, dies_at_zero=True))

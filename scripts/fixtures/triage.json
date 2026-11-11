@@ -3024,13 +3024,13 @@
     "why": "c.give(fn=, cost=) is gated on encounter.can_spend so it comes out of the ordinary budget, and Budget holds counts with no record of what bought them"
   },
   "c.extra_area_target()": {
-    "at": "2026-10-12",
-    "by": "slice5",
-    "found": "c.add_target(who)",
+    "at": "2026-11-11",
+    "by": "goal-heroic",
+    "found": "c.add_target(who: int) -- a CREATURE id",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "mis-marked",
-    "why": "c.add_target appends a creature to the use running underneath an immediate interrupt, and its docstring is explicit that \"an appended creature is one that power's body is then called for - attack roll, damage and all\". That is widening another row's target line, which is what i1098x1 says nothing does."
+    "verdict": "real",
+    "why": "REFUTES the 2026-10-12 mis-marked verdict, which named c.add_target. That verb's parameter is `who: int`, a creature, and i1098x1 widens a target line to 'two conjurations or zones instead of one' -- neither is a creature and neither has an entity id in the target list. Checked the signature rather than the docstring. The +2 to attack rolls to destroy them is written; the widening is real."
   },
   "c.extra_damage(applies=)": {
     "at": "2026-10-12",
@@ -4594,13 +4594,13 @@
     "why": "`c.passive(skill, of=other)` reads another creature's modifier (plus 10) and `c.bonus(\"skill:insight\", 2)` is a live key -- cf:ardent-f0 lays one -- so 'use my modifier for these four skills' is the difference of the two laid as four modifiers. f30 is writable today; nothing new is needed."
   },
   "c.light(square=)": {
-    "at": "2026-10-12",
-    "by": "slice2",
-    "found": "c.light(radius), Grid.light, query.light_level, query.Light, c.unlit",
+    "at": "2026-11-11",
+    "by": "goal-heroic",
+    "found": "c.unlit(square=) is the precedent; Grid.light is written by nothing",
     "refused_rows": 1,
     "rows": 1,
-    "verdict": "mis-marked",
-    "why": "m4589a3 refuses because 'the engine has no light level', which is stale: `c.light` lays a carried `light_radius`, `query.light_level` is the reader and `Grid.light` is the painted map field (query.Light: 'absent from Grid.light means BRIGHT'). Lighting a square rather than a creature is a kwarg onto an existing model."
+    "verdict": "real",
+    "why": "NARROWS the 2026-10-12 mis-marked verdict, which is right that the lighting model exists -- c.light lays a carried light_radius, query.light_level reads it, c.unlit already takes square=. What m4589a3 needs is a light that SITS ON A SQUARE: 'targets one object or unoccupied square; the target sheds bright light'. Grid.light is dict[Square, str], is read in two places in query.py and written by NOTHING in the tree, and it records darkness (absent means BRIGHT), so it has no duration semantics to expire. Zone can darken (no_light, obscured) and cannot light. So this is a stationary light source with a duration, not a kwarg."
   },
   "c.line_of_sight_from()": {
     "at": "2026-10-12",
@@ -7767,13 +7767,13 @@
     "why": "c.unsave turns a success into a failure; nothing anywhere writes saved = True, so there is no other half. Writing the cost alone would be a row that only hurts."
   },
   "c.unseen_by(sense=)": {
-    "at": "2026-10-12",
-    "by": "slice5",
-    "found": "c.blindsight, c.tremorsense, c.has_sense, query.sees_in",
+    "at": "2026-11-11",
+    "by": "goal-heroic",
+    "found": "query.unseen_by(world, watcher, who) -- takes NO sense",
     "refused_rows": 2,
     "rows": 4,
-    "verdict": "mis-marked",
-    "why": "cast.py:8811 and :8833 grant blindsight and tremorsense as Mods keys with working ranges, query.sees_in answers for both, and c.has_sense asks after one on somebody else - so i2413x1's \"tremorsense is not a sense the board has\" and i1470p1's \"blindsight is not a sense the board keeps\" are both false. A row skips the hide per enemy with c.has_sense(..., on=foe)."
+    "verdict": "real",
+    "why": "REFUTES the 2026-10-12 mis-marked verdict. The senses do exist -- c.has_sense, query.sees_in, the blindsight and tremorsense Mods keys are all as that verdict says -- but what these rows print is DENYING one: 'creatures that have tremorsense must have line of sight to detect you', 'creatures can't use darkvision, blindsight or tremorsense to detect you'. query.unseen_by reads HIDDEN_FROM relations and takes no sense argument, and there is no Cast writer at all (c.unseen_by is absent). The reader existing is not the same as being able to switch a sense off."
   },
   "c.untargetable()": {
     "at": "2026-10-12",

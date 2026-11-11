@@ -38,6 +38,7 @@ from combat_engine.engine import (
     OpportunityWindow,
     Position,
     Square,
+    Target,
     UpTo,
     When,
     Window,
@@ -254,10 +255,14 @@ def p13126(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    # **"One creature or unattended object"**, with `loose=` the
+    # printed word -- this row's own note worked that out. What was
+    # missing was something to roll against: a `Scenery` carried no
+    # defences until `terrain.object_defences`, the DMG page-65 table.
+    # #1233.
+    target=Target("enemy", 1, objects=True, loose=True),
     keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
-    dropped=("Scenery.defences",),
 )
 def p13128(c: Cast) -> None:
     """Only the creature half of "one creature or unattended object".
@@ -273,8 +278,18 @@ def p13128(c: Cast) -> None:
     measured. That is `Scenery.defences`, which `p465`, `i1145p1` and
     `x2_117` wait on for the same reason. #855.
     """
+    from combat_engine.engine.components import Scenery as _Scenery
+
+    victim = c.target
     if c.strike():
-        c.damage("2d8", c.dex_mod)
+        # **"Against an unattended object, this attack deals 2d8 extra
+        # damage."** One `c.damage` call rather than two, because two
+        # would roll two sets of dice where the card adds to one.
+        unattended = (
+            victim is not None
+            and c.world.get(victim, _Scenery) is not None
+        )
+        c.damage("4d8" if unattended else "2d8", c.dex_mod)
         if c.str_mod > 0:
             c.penalty(AC, c.str_mod, until=When.EONT)
 

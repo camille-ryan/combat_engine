@@ -53080,6 +53080,107 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def an_object_can_be_hit_for_the_numbers_the_page_prints(out: Result) -> None:
+    """A `Scenery` carries defences, so an attack on one can be rolled.
+
+    **Five rows carried `Scenery.defences` and every one said the same
+    thing**: aiming at an object was written -- `Target(objects=True)`
+    unions `query.scenery` into the pool and `loose=` is the printed word
+    for unattended -- and *"a `Scenery` carries no defences, so there is
+    nothing for an attack against it to roll against: `query.defence`
+    opens `world.need(eid, Defenses)`"*.
+
+    `terrain.OBJECT_DEFENCES` is the DMG page-65 "Object Properties"
+    table, read in `resources/` and transcribed cell for cell. Two
+    details of the page are load-bearing and both are asserted:
+
+    * **AC and Reflex are one column.** An object neither parries nor
+      dodges, so the page prices both the same -- not two numbers that
+      happen to agree.
+    * **`scale="none"`.** The page gives one number per size and no level
+      term, so neither the character build-up nor the monster take-out
+      applies. A `pc` or `monster` scale would put a level into a flat
+      number.
+
+    **And hit points are what make it attackable**, which cost a wrong
+    diagnosis: with defences but no `Health`, `query.alive` is False and
+    the resolver refuses after `AttackDeclared` -- the row aims, declares
+    and never rolls. So the audit board's object carries the printed 20
+    for a Medium object, and an indestructible one still cannot be
+    attacked, which is a narrower and true statement.
+    """
+    import audit as A
+    from combat_engine.content.terrain import OBJECT_DEFENCES, object_defences
+    from combat_engine.engine import dsl, query
+    from combat_engine.engine.components import Health, Scenery
+    from combat_engine.engine.events import AttackRolled, DamageApplied
+    from combat_engine.engine.types import Defense, Size
+
+    out.that(len(OBJECT_DEFENCES) == 6,
+             "the printed table has a row per size, Tiny through "
+             "Gargantuan",
+             f"{sorted(str(k) for k in OBJECT_DEFENCES)}")
+    out.that(all(ac == ref for ac, ref, _ in
+                 ((v[0], v[0], v[2]) for v in OBJECT_DEFENCES.values())),
+             "AC and Reflex are ONE column on the page, not two numbers "
+             "that agree -- an object neither parries nor dodges",
+             "one value per size")
+    med = object_defences(Size.MEDIUM)
+    out.that(med.base(Defense.AC) == 5 and med.base(Defense.REF) == 5
+             and med.base(Defense.FORT) == 10,
+             "a Medium object is AC/Reflex 5 and Fortitude 10, which is "
+             "the page's own example row (a door, a statue)",
+             f"AC={med.base(Defense.AC)} REF={med.base(Defense.REF)} "
+             f"FORT={med.base(Defense.FORT)}")
+    out.that(med.scale == "none",
+             "and flat -- `scale='none'`, because the page gives no level "
+             "term and a pc or monster scale would put one in",
+             f"{med.scale!r}")
+
+    # -- through the board, which is the half a table cannot prove -------
+    world, me, _ = A.board("p465", 1)
+    objs = [e for e, _ in world.each(Scenery)]
+    attackable = [e for e in objs if world.get(e, Health) is not None]
+    out.that(bool(attackable),
+             "the audit board stands an object with hit points, which is "
+             "what `query.alive` reads -- without them the resolver "
+             "refuses after `AttackDeclared` and the row never rolls",
+             f"scenery={objs} with Health={attackable}")
+    if not attackable:
+        return
+    t = attackable[0]
+    out.that(query.defence(world, t, Defense.AC, {}) == 5,
+             "and `query.defence` answers the printed number for it, "
+             "which is the read the five rows were blocked on",
+             f"AC={query.defence(world, t, Defense.AC, {})}")
+
+    pool = dsl.candidates(world, me, dsl.REGISTRY["p465"])
+    out.that(t in pool,
+             "`p465` offers the object -- *'One creature or object'*, "
+             "which is `objects=True` unioning the scenery into the pool",
+             f"{t} in a pool of {len(pool)}")
+    world.rng.loaded = 20
+    n = len(world.bus.log)
+    dsl.use(world, me, "p465", targets=[t], spend=False)
+    rolled = [e for e in world.bus.log[n:] if isinstance(e, AttackRolled)]
+    hurt = [e.amount for e in world.bus.log[n:]
+            if isinstance(e, DamageApplied) and getattr(e, "target", None) == t]
+    out.that(bool(rolled) and bool(hurt),
+             "and attacking it ROLLS and deals damage -- the whole of what "
+             "the five rows were waiting for, and the half that "
+             "`AttackDeclared` alone does not prove",
+             f"{[(e.total, e.defence) for e in rolled[:1]]} damage={hurt}")
+
+    # -- the control: a fire is scenery nobody swings at ----------------
+    inert = [e for e in objs if world.get(e, Health) is None]
+    out.that(bool(inert) and not any(e in pool for e in inert),
+             "while the board's fires carry no hit points and are offered "
+             "to nobody -- the control, because giving every `Scenery` "
+             "`Health` would put it in `query.creatures` and widen rows "
+             "that have nothing to do with objects",
+             f"inert={inert}")
+
+
 def a_flurry_traded_for_an_attack_penalty(out: Result) -> None:
     """`f3401` gives up the WHOLE flurry, where `f3171` gives up the damage.
 
@@ -72457,6 +72558,10 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "object_defences": (
+        an_object_can_be_hit_for_the_numbers_the_page_prints,
+        "an object can be hit for the numbers the page prints (#1233)",
     ),
     "flurry_forgone": (
         a_flurry_traded_for_an_attack_penalty,

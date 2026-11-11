@@ -151,13 +151,27 @@ def _ridden_by_sixth_level(world: World, me: int) -> bool:
     The level-4/5 sweeps wrote one of these per tier rather than a single
     parametrised helper, so this one matches that shape rather than
     reaching past it.
+
+    **And the printed feat, which `#1056` made readable.** The
+    Requirement is *"a friendly rider of Nth level or higher **with the
+    f30 feat**"*, and this tested team and level only -- so it paid a
+    rider who lacked it. The spec used to carry the theme's hash
+    (`x12_...`) where the feat ref belonged, which is what put
+    `etl.monster.feat_ref()` on the row; `build._feat_phrases` landed
+    under `#1056` and both specs read `f30` now. Measured: zero specs in
+    `monster_power` still carry that hash for this phrase.
+
+    `query.feats_of` rather than `c.feat`, because this helper takes a
+    `World` and not a `Cast`.
     """
     from combat_engine.engine import Stats
+    from combat_engine.engine.query import feats_of
 
     for rider in world.relations.targets(Relation.RIDDEN_BY, me):
         if team(world, rider) is team(world, me):
             stats = world.get(rider, Stats)
-            if stats is not None and stats.level >= 6:
+            if (stats is not None and stats.level >= 6
+                    and "f30" in feats_of(world, rider)):
                 return True
     return False
 
@@ -1566,7 +1580,6 @@ def m4032a1(c: Cast) -> None:
     target=NO_TARGET,
     requires=_ridden_by_sixth_level,
     requires_text="while mounted by a friendly rider of 6th level or higher with the feat",
-    dropped=("etl.monster.feat_ref()",),
 )
 def m4032a2(c: Cast) -> None:
     """A charge bonus for a qualified rider; the feat half of the printed

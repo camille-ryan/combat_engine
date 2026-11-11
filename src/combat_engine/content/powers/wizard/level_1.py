@@ -33,6 +33,7 @@ from combat_engine.engine import (
     Effect,
     Keyword,
     Ranged,
+    Target,
     When,
     power,
 )
@@ -254,10 +255,17 @@ def p464(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Ranged(20),
-    target=ONE_CREATURE,
+    # **"One creature or object"**, the printed Primary Target. The
+    # aiming half was already written -- `objects=True` unions
+    # `query.scenery` into the pool -- and what was missing is that a
+    # `Scenery` carried no defences, so an attack on one had nothing to
+    # roll against. `terrain.object_defences` is the DMG page-65 table.
+    #
+    # No `loose=`: this card says "object" without the word unattended,
+    # unlike `monk.p13128`. #1233.
+    target=Target("enemy", 1, objects=True),
     keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
-    dropped=("Scenery.defences",),
 )
 def p465(c: Cast) -> None:
     """The second block is `p465b`. Only on a hit, and only at enemies --

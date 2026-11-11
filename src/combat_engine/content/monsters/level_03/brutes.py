@@ -1262,7 +1262,15 @@ def _qualified_rider(c: Cast) -> int | None:
     if rider is None or team(c.world, rider) is not team(c.world, c.me):
         return None
     stats = c.world.get(rider, Stats)
-    return rider if stats is not None and stats.level >= MOUNTED_RIDER_LEVEL else None
+    if stats is None or stats.level < MOUNTED_RIDER_LEVEL:
+        return None
+    # **And the printed feat, which `#1056` made readable.** The
+    # Requirement is "with the f30 feat" and this tested team and level
+    # only, so it paid a rider who lacked it -- which the docstring below
+    # records as true "before this". The spec carried the theme's hash
+    # where the feat ref belonged; `build._feat_phrases` landed under
+    # `#1056` and both specs read `f30` now.
+    return rider if c.feat("f30", on=rider) else None
 
 
 @power(
@@ -1273,7 +1281,6 @@ def _qualified_rider(c: Cast) -> int | None:
     reach=PERSONAL,
     target=NO_TARGET,
     requires_text="the m476 must be carrying a friendly rider of 3rd level or higher",
-    dropped=("etl.monster.feat_ref()",),
 )
 def m476a2(c: Cast) -> None:
     """A bonus to the rider's damage roll, and only when it came in at a run.

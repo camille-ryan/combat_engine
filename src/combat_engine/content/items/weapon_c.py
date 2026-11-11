@@ -2589,7 +2589,7 @@ def i1536p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("Scenery.defences",),
+    todo=("c.multiply_damage(against=)",),
 )
 def i1737x1(c: Cast) -> None:
     """One gap, not two. Aiming at an object is written --
@@ -2617,7 +2617,22 @@ def i1737x1(c: Cast) -> None:
     damage roll in any buildable fight has, so writing it would un-refuse
     the row -- a draw change and a replay re-record -- to buy a clause that
     cannot fire. `todo=` rather than `dropped=` for the same reason:
-    nothing of this card works yet, and the one symbol says why."""
+    nothing of this card works yet, and the one symbol says why.
+
+    **Re-pointed: the defences arrived and were never this row's gap.**
+    `terrain.object_defences` is the DMG page-65 table and `put()` lays
+    it, so `p465` and `p13128` are written -- an attack on an object
+    rolls against a real number now (measured: 19 against a Medium
+    object's printed AC of 5).
+
+    What this card needs is **doubling**, and that is multiplicative
+    where every damage modifier here is additive: `c.bonus("damage")`
+    adds a number and a row cannot know the base to double it, there is
+    no `c.double_damage`, and `c.change_amount` names a mechanic rather
+    than scaling a roll. So the want is a multiplier keyed on the damage
+    context -- which already carries `target`, so the "to objects" half
+    needs nothing new. #1233.
+    """
 
 
 @power(

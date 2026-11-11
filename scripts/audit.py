@@ -3304,18 +3304,49 @@ def board(ref: str, seed: int, pose: bool = False,
     # shift. A second fire further off, because "teleport to a square
     # adjacent to a fire" is a different square from the one you are
     # standing beside.
-    from combat_engine.engine.components import Ident, Position, Scenery
+    from combat_engine.content.terrain import (
+        object_defences as _object_defences,
+    )
+    from combat_engine.engine.components import (
+        Health,
+        Ident,
+        Position,
+        Scenery,
+    )
     from combat_engine.engine.types import Size
 
-    for square, kind, size in (
-        ((8, 9), "object", Size.MEDIUM),
-        ((6, 7), "fire", Size.MEDIUM),
-        ((12, 10), "fire", Size.LARGE),
+    # **The object carries hit points and the fires do not**, which is
+    # what makes it attackable: `resolve` refuses an attack on anything
+    # `query.alive` answers False for, and `alive` reads `Health`. So a
+    # row printing "one creature or object" could be *aimed* at the old
+    # board's crate and never rolled against it -- `AttackDeclared` and
+    # then nothing.
+    #
+    # 20 is the printed base for a Medium object (DMG page 65, the same
+    # table `terrain.object_defences` transcribes), so the number is read
+    # rather than chosen.
+    #
+    # Only the `"object"` kind. A fire is scenery nobody swings at, and
+    # giving it `Health` would put it in `query.creatures` -- which is
+    # the pool every "any" target reads, so it would widen rows that have
+    # nothing to do with objects. #1233.
+    for square, kind, size, hp in (
+        ((8, 9), "object", Size.MEDIUM, 20),
+        ((6, 7), "fire", Size.MEDIUM, 0),
+        ((12, 10), "fire", Size.LARGE, 0),
     ):
         world.spawn(
             Ident(ref=f"audit:setup {kind}"),
             Position(square=square, size=size),
             Scenery(kind=kind),
+            *([Health(hp=hp, max_hp=hp, dies_at_zero=True)] if hp else []),
+            # **The printed defences, or an attack on it cannot be
+            # rolled.** `query.defence` opens `Defenses` and five rows
+            # carried `Scenery.defences` because a scenery entity had
+            # none. `terrain.object_defences` is the DMG page-65 table by
+            # size, and this board is the only place those rows can be
+            # posed -- aiming at an object was already written. #1233.
+            _object_defences(size),
         )
 
     # Bloodied, so a row gated on it can fire -- **on odd seeds only**.
