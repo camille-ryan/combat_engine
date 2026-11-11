@@ -602,8 +602,7 @@
      "diplomacy",
      "heal",
      "insight",
-     "religion",
-     "stealth"
+     "religion"
     ],
     "worships": "x1_48"
    },
@@ -1111,6 +1110,7 @@
      "diplomacy",
      "heal",
      "insight",
+     "nature",
      "religion"
     ],
     "worships": "x1_56"
@@ -1283,9 +1283,9 @@
     "race2": "",
     "skills": [
      "arcana",
+     "diplomacy",
      "heal",
      "insight",
-     "nature",
      "religion"
     ],
     "worships": "x1_13"
