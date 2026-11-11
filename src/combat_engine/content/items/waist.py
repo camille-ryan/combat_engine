@@ -986,9 +986,28 @@ def i942x1(c: Cast) -> None:
 
 
 @power("i2067x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.deals_consumables",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def i2067x1(c: Cast) -> None:
     """A belt that holds six of a thing, and a free action to take one out.
+
+    **Finished and inert, which is a verdict rather than a wait.** The
+    marker said `chargen.deals_consumables`, and `#1233` closed that --
+    a dealt character carries two and `Gear.carried` enumerates them. The
+    row still has nothing to do, and both printed clauses say why:
+
+    * *"can hold up to six potions"* -- `Gear.carried` is a plain list
+      with no cap, so there is no limit for the belt to raise. Capping it
+      and then exempting this item would be inventing a restriction in
+      order to lift it.
+    * *"retrieve a potion as a free action"* -- already free. The note
+      below has the measurement: drawing **is** priced, by
+      `Gear.draw_cost`, and it is **weapon-only**. Nothing charges for
+      reaching a carried consumable, so the clause removes a cost that
+      does not exist.
+
+    So `out_of_combat=True` rather than a marker: this is complete, and
+    what it says about a fight is nothing. The day `Gear.carried` grows a
+    cap, this is the row that lifts it.
 
     **Re-pointed one layer earlier than the verb, and the premise it
     carried was wrong on both halves.** The marker was

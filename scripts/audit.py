@@ -282,6 +282,20 @@ KNOWN_SILENT = {
     # `i469` -- the first of the card's own two named examples -- by hand
     # and asserts the coating is applied, the item consumed and the slot
     # emptied, with a control for nothing stowed. #1233.
+    # **The Property and the Power are audited on separate boards.**
+    # `audit.board` grants the row under test plus every level-0 row of
+    # its class, and `i3324x1` is level 10 -- so on `i3324p1`'s board
+    # nothing has linked anything and the slot is empty. The row is
+    # correct and the board cannot pose the chain, which is the same
+    # shape as `i465p1` two entries down.
+    #
+    # Proved in `drivers.stowed_item`, which runs the Property and then
+    # the Power on one board and asserts the link, the activation, the
+    # item consumed and the slot emptied. #1233.
+    "i3324p1": "needs its own Property to have linked an item first, and"
+               " the two are audited on separate boards -- i3324x1 is"
+               " level 10, so audit.board does not grant it here. Proved"
+               " in drivers.stowed_item instead",
     "i465p1": "stows only a weapon coating, 6 of 193 in the pool, and a"
               " dealt hand is two items -- 0 of 78 hands held one. Proved"
               " in drivers.stowed_item instead",
@@ -1398,8 +1412,17 @@ DID_SOMETHING = {
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
     "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
     "ItemConsumed", "ItemDestroyed", "ItemRestored",
-    "CompanionDestroyed",
+    "CompanionDestroyed", "RowStored",
 }  # fmt: skip
+# `RowStored` is the seventeenth, admitted on `UseRestored`'s argument
+# like the three above it. `c.store_row` has existed since `#720` and
+# six content files call it; for most the storing is a *gate* set up
+# for a later clause, but `alchemical.i3324x1`'s whole printed
+# Property is the link -- *"you must first link the item to another
+# alchemical item"* -- so it stored correctly and read SILENT.
+#
+# It carries `holder`, `row`, `actor` and `by`, so it is attributable,
+# which is the only test this set applies. #1233.
 # `CompanionDestroyed` is the sixteenth, and it is here because
 # `World.despawn` emits nothing: two cards pay their cost by
 # destroying the caster's familiar and the clause was invisible, so

@@ -211,6 +211,78 @@ def of_category(*wanted: str) -> Callable[[dict[str, Any]], bool]:
     return gate
 
 
+def _entry_of(ref: str) -> str:
+    """This block's own item. `dsl.entry_of`, imported where it is used."""
+    from combat_engine.engine.dsl import entry_of
+
+    return entry_of(ref)
+
+
+def _level_of(item: str) -> int:
+    """An item's level -- the rung it is bought at, which is its lowest.
+
+    `item_step` holds one row per rung, so the level a card means by *"a
+    level 5 item"* is the minimum. Read here rather than written down,
+    because two cards in this file gate on it and a copied number is a
+    number that goes stale on a rebuild.
+
+    A very large number for an item the table does not price, so a level
+    gate **refuses** rather than letting an unpriced item through.
+    """
+    from combat_engine.db import game
+
+    row = game().execute(
+        "SELECT MIN(level) AS lvl FROM item_step WHERE ref = ?", (item,)
+    ).fetchone()
+    if row is None or row["lvl"] is None:
+        return 99
+    return int(row["lvl"])
+
+
+def _carried_alchemical(c: Cast) -> list[str]:
+    """The alchemical items on this creature's person, by entry ref.
+
+    **The thing three rows in this file said did not exist.** Each
+    carried a note that *"nothing enumerates the items a character
+    carries"* -- true while `Gear.worn` held slot names and nothing else
+    did. `#1233` made `Gear.carried` a list of entry refs and deals two
+    per character.
+
+    Filtered to the category, because every card here means an
+    *alchemical* item rather than any consumable, and ordered as carried
+    so a pick is reproducible from the hand.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = c.world.get(c.me, Gear)
+    if gear is None:
+        return []
+    cats = query.block_categories()
+    out = []
+    for item in gear.carried:
+        block = _block_of(c, item)
+        if block and cats.get(block, "") == ALCHEMICAL:
+            out.append(item)
+    return out
+
+
+def _block_of(c: Cast, item: str) -> str:
+    """The first row of that item the creature actually knows.
+
+    `Powers.known` is what `dsl.use` can fire, so a block absent from it
+    is not a thing this character can be made to use -- which is why the
+    lookup goes through the creature rather than through `item_block`.
+    """
+    from combat_engine.engine.components import Powers
+
+    powers = c.world.get(c.me, Powers)
+    if powers is None:
+        return ""
+    return next(
+        (r for r in powers.known if _entry_of(r) == item), ""
+    )
+
+
 def _free_near(c: Cast, of: int | None = None) -> Square | None:
     """An unoccupied square beside somebody, for "an adjacent square"."""
     pos = c.world.get(c.me if of is None else of, Position)
@@ -1776,10 +1848,33 @@ def i3322p1(c: Cast) -> None:
 
 
 @power("i3324x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("chargen.deals_consumables",))
+       reach=PERSONAL, target=SELF)
 def i3324x1(c: Cast) -> None:
-    """**The link has somewhere to live now; what is missing is the other
+    """**Written: the other item exists now.**
+
+    This row's own note named the blocker exactly -- *"nothing enumerates
+    the items a character carries. `Gear.worn` is a set of **slot
+    names**, so the candidate set for the link is empty on every
+    board."* `#1233` made `Gear.carried` a list of entry refs and deals
+    two per character, so the candidate set is no longer empty.
+
+    `c.store_row(ref, by=entry_of(c.ref))` keys the link on this item,
+    which is what `i3324p1` reads back. The level gate is the card's --
+    *"the level of the linked item must be the same as or lower than the
+    level of the i3324"* -- read off `item_step` rather than written
+    down, and this item is level 10, which is the top of the heroic
+    alchemical range -- so **the gate cannot refuse anything today**,
+    exactly as `waist.i467p1`'s does: every declared alchemical item is
+    level 1 to 10. Kept because it is a correct reading of a printed
+    condition and the paragon import is what would make it bite, and
+    said here rather than left for somebody to find a dead branch.
+
+    **"In hand or in an adjacent square" is read as carried.** The engine
+    has one notion of having a thing on you and none of an item lying in
+    a square, so the narrower half of that phrase is not expressible --
+    said rather than left as a missing clause.
+
+    **The link has somewhere to live now; what is missing is the other
     item.**
 
     `c.store_row(ref)` landed in #720 -- an item can remember a second
@@ -1794,13 +1889,38 @@ def i3324x1(c: Cast) -> None:
     `enh_to`, and `chargen.treasure` draws on `ac`, `attack_damage` and
     `defences` only, so the dealer cannot reach one. `#1233` holds the
     ruling this waits on -- see `i3320p1` for the measurement."""
+    mine = _entry_of(c.ref)
+    ours = _level_of(mine)
+    for item in _carried_alchemical(c):
+        if _level_of(item) > ours:
+            continue
+        block = _block_of(c, item)
+        if block:
+            c.store_row(block, by=mine)
+            return
 
 
 @power("i3324p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=NO_TARGET,
-       todo=("chargen.deals_consumables",))
+       reach=PERSONAL, target=NO_TARGET)
 def i3324p1(c: Cast) -> None:
-    """The reader exists; the thing it would read does not.
+    """**Written: `c.use_stored` is what this was waiting for.**
+
+    The note below is right that `c.stored_row()` landed in `#720` and
+    gave the link a place to live -- and that was never enough, because
+    **nothing fired what was stored**. `#1233` built `c.use_stored`, and
+    the other half of the wait (`i3324x1` having a second item to link
+    to) is closed by `Gear.carried`.
+
+    *"You do not need line of effect, but you must be within 1 mile"* is
+    one clause the board cannot fail: every square on it is inside a
+    mile, and line of effect is not consulted because nothing here aims.
+    So the remote half is true by construction rather than unwritten.
+
+    `on=c.me` is not needed -- `c.use_stored` takes `by=` and reads the
+    *holder*, not a target -- but the row is `NO_TARGET`, so the inner
+    use is aimed at the caster, which is what `use_stored` defaults to.
+
+    The reader exists; the thing it would read does not.
 
     `c.stored_row()` landed in #720, so "which item this one was tied to"
     has a place to be recorded and a way to be read back. This row waits on
@@ -1811,6 +1931,7 @@ def i3324p1(c: Cast) -> None:
     Confirmed and left, with its other half. The wait is a ruling, not a
     verb: nobody is dealt a consumable by construction, and `#1233` is
     where that decision sits -- see `i3320p1` for the measurement."""
+    c.use_stored(by=_entry_of(c.ref))
 
 
 @power("i3481p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

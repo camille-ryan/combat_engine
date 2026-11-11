@@ -53172,6 +53172,25 @@ def a_stowed_item_is_spent_by_the_row_that_stowed_it(out: Result) -> None:
              "firing the row by hand would leave it untested",
              f"{stowed2} -> {after2}, carried={carried2} {said2}")
 
+    # -- i3324: the link, which is the same verb pair one card over -----
+    # **A third chain because the card is a different sentence**, not for
+    # coverage: `i3324x1` links to *"another alchemical item"* rather than
+    # to a weapon coating, and `i3324p1` activates it at range. Both
+    # halves carried `chargen.deals_consumables` and both notes named the
+    # same blocker in their own words -- *"nothing enumerates the items a
+    # character carries"*.
+    stowed3, after3, carried3, said3 = chain(
+        "i3324p1", "i3324x1", "i3309", "i3309p1", by_trigger=False)
+    out.that(stowed3.get("i3324") == "i3309p1",
+             "`i3324x1` links a carried alchemical item, which is the "
+             "candidate set its own note called empty on every board",
+             f"{stowed3}")
+    out.that(not after3 and not carried3 and said3 == [("i3309", "i3309p1")],
+             "and `i3324p1` activates it -- the remote half is true by "
+             "construction, since every square on the board is inside the "
+             "printed mile and nothing here aims",
+             f"{stowed3} -> {after3}, carried={carried3} {said3}")
+
     # -- the control: nothing stowed ------------------------------------
     w3, me3, _ = A.board("i465p1", 1)
     kn3 = w3.need(me3, Powers)
