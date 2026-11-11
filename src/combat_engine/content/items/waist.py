@@ -607,11 +607,27 @@ def i467x1(c: Cast) -> None:
     and `#1233` carries the measurement either way.
 
     The second sentence stands and is why `out_of_combat=True` is right:
-    stowing a thing is a line about the pack."""
+    stowing a thing is a line about the pack.
+    **Correction to the paragraph above, which over-claimed.** It said
+    this pair is *"writable content work, not blocked on the engine"*,
+    on the ground that `c.store_row` stores, `c.stored_row(of=)` reads
+    back and `feats/general_l.py` *"already reads one and acts on it"*.
+    The first two are true and the third is not the thing needed: all
+    three existing readers use the stored ref as a **gate** -- "when you
+    hit with *that* power" -- and none of them **fires** the row. No
+    content row calls `dsl.use` at all.
+
+    So the remaining gap is real, shared by both halves of this item and
+    by `waist.i467`, and now named: **a way to use the row an object is
+    holding, for free.** `i465p1` is a free action that spends the stowed
+    coating on the weapon in hand; `i467p1` spends a stowed consumable as
+    part of a second wind. Both are "use the stowed row now, paying
+    nothing", which is one verb and not two.
+    """
 
 
 @power("i467p1", level=6, cls=ITEM, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.consume_item()",))
+       reach=PERSONAL, target=SELF, todo=("c.use_stored()",))
 def i467p1(c: Cast) -> None:
     """The second wind half is reachable; the stowed alchemical item is the
     whole benefit and there is no consumable to spend."""

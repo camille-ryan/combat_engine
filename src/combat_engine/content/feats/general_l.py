@@ -3488,28 +3488,126 @@ def f2864(c: Cast) -> None:
     c.watch(Hit, landed, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
-@power("f2865", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("feat.damage_choice()",))
+#: `f2865`'s seven, in the order the card prints them. The order is the
+#: tie-break, so it is the printed one rather than alphabetical.
+_F2865_SEVEN = (
+    Keyword.ACID,
+    Keyword.COLD,
+    Keyword.FIRE,
+    Keyword.LIGHTNING,
+    Keyword.NECROTIC,
+    Keyword.POISON,
+    Keyword.THUNDER,
+)
+
+
+def _f2865_choice(c: Cast) -> Keyword | None:
+    """The damage type `f2865`'s taker chose, decided from its own hand.
+
+    **The card says the player chooses and there is no player**, which is
+    `#793`: `chargen` deals every character. So the choice has to be made
+    for it, and the honest rule is the one a player would use -- the type
+    this character already deals most, counted over the powers it holds.
+
+    That is a *decision rule* rather than a *store*, which is why this row
+    needed no new state. `feat.damage_choice()` named a place to keep the
+    answer; what was missing was a way to reach one. `f2149`'s
+    `feat.weapon_choice()` is the same shape and could be derived the same
+    way -- from the weapon in hand -- which is its own work.
+
+    Measured over all 26 dealt classes: **22 carry at least one of the
+    seven**, and the picks read right -- the sorcerer takes fire (4 powers
+    of 4), the warlock necrotic (6). The other four hold none, so the feat
+    is inert for them; a fighter with no elemental power taking an
+    elemental-damage feat is a bad pick rather than a bug, and
+    `chargen`'s scorer picks feats by fit.
+
+    Ties break on the **printed order** of the seven, which is stable
+    across runs where a dict order or a `max` over a Counter is not.
+    """
+    from collections import Counter
+
+    from combat_engine.engine.components import Powers
+
+    known = c.world.get(c.me, Powers)
+    if known is None:
+        return None
+    tally: Counter[Keyword] = Counter()
+    for ref in known.known:
+        row = get(ref)
+        if row is None:
+            continue
+        for word in _F2865_SEVEN:
+            if word in row.keywords:
+                tally[word] += 1
+    if not tally:
+        return None
+    best = max(tally.values())
+    return next(w for w in _F2865_SEVEN if tally.get(w, 0) == best)
+
+
+@power("f2865", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2865(c: Cast) -> None:
-    """"Choose a damage type" is chosen when the *feat* is taken, not
-    when the class is built, so `chargen.BUILDS` was the wrong name for
-    it -- that dict exists and holds ability forks. The pair for this is
-    `feat.weapon_choice()`, which f2149 already carries. `c.element`
-    answers only for a character whose class bound a type.
+    """A chosen damage type is worth +1, and alchemical items more while
+    you are running on temporary hit points.
 
-    **The second symbol is re-pointed with `f2864`'s**, off
-    `Keyword.ALCHEMICAL` and onto the gap that actually holds both: the
-    compendium prints no such keyword -- 0 of the `item_block` rows carry
-    the word, where 75 items carry the category -- and nobody is ever
-    dealt a consumable, so the sentence about alchemical item attack
-    powers has no reachable use to attach to. `f2864` has the measurement;
-    the two rows are one wait and now say so.
+    **Written.** The note below said the choice *"is chosen when the feat
+    is taken"* and looked for somewhere to keep it. There is no player to
+    choose -- `chargen` deals every character (`#793`) -- so what was
+    needed was a **decision rule** and not a store: `_f2865_choice` takes
+    the type this character already deals most, which is what a player
+    would have picked. 22 of 26 dealt classes carry one of the seven.
 
-    It is still two symbols on this row and not one, because the two
-    clauses are independent: the chosen damage type is a +1 on *any*
-    attack power with that keyword and would pay out on the day the choice
-    is recorded, whether or not a consumable is ever carried."""
+    **The two bonuses must ADD, so only the first is a feat bonus.** The
+    card prints *"a +1 feat bonus"* and then *"an additional +1 bonus"* --
+    no type on the second -- and `Mods.total` collapses two bonuses of one
+    `kind` to the larger. Writing both as `kind="feat"` would have paid +1
+    where the card pays +2, silently.
+
+    **The temporary hit points are read when the damage is rolled**, not
+    when the trait is armed: *"while you have any temporary hit points"*
+    is a live condition, and a trait arms at the top of the fight when
+    nobody has any. `f2864` is often what grants them, which is the pair
+    the two cards make.
+
+    The tier steps are `c.level`, so one row covers 1st, 11th and 21st.
+
+    `AT_WILL` rather than `ENCOUNTER`: these are standing modifiers with
+    no printed once-a-fight limit, and `content/CLAUDE.md` records that
+    `ENCOUNTER` on such a trait is spent by its own arming.
+
+    Two things from the note this replaces are worth keeping. `c.element`
+    was the near miss and answers only for a character whose class bound
+    a type -- measured, **0 of 26** dealt classes have one, so a row
+    built on it would have been inert for every character. And the
+    alchemical half never wanted a `Keyword.ALCHEMICAL`: the compendium
+    prints no such keyword (0 of the `item_block` rows carry the word,
+    where 75 items carry the category), which is why it reads
+    `alchemical.of_category` over `query.block_categories` like the
+    other three rows in this family.
+    """
+    from combat_engine.engine.components import Health
+
+    pick = _f2865_choice(c)
+    if pick is None:
+        return
+    me = c.me
+    step = 1 + (c.level >= 11) + (c.level >= 21)
+
+    def chosen(ctx: dict[str, Any]) -> bool:
+        row = get(ctx.get("power") or "")
+        return row is not None and pick in row.keywords
+
+    def topped_up(ctx: dict[str, Any]) -> bool:
+        health = c.world.get(me, Health)
+        if health is None or health.temp <= 0:
+            return False
+        return of_category(ALCHEMICAL)({"power": ctx.get("power") or ""})
+
+    c.bonus("damage", step, on=me, until=When.ENCOUNTER, kind="feat",
+            when=chosen)
+    c.bonus("damage", 1, on=me, until=When.ENCOUNTER, when=topped_up)
 
 
 @power("f2624", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

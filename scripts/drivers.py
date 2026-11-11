@@ -53080,6 +53080,123 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def a_chosen_damage_type_is_decided_from_the_hand(out: Result) -> None:
+    """`f2865` picks a damage type, and its two bonuses add. #1233.
+
+    *"Choose a damage type ... you gain a +1 feat bonus to the damage
+    roll ... While you have any temporary hit points, you gain an
+    additional +1 bonus to your damage rolls with alchemical item attack
+    powers."*
+
+    **The card says the player chooses and there is no player** --
+    `chargen` deals every character (`#793`) -- so `feat.damage_choice()`
+    named a place to keep an answer when what was missing was a way to
+    reach one. `_f2865_choice` takes the type the character already deals
+    most, which is what a player would have picked, ties broken on the
+    printed order of the seven.
+
+    **THE assertion is that the two bonuses ADD.** The card prints *"a +1
+    feat bonus"* and then *"an additional +1 bonus"* with no type, and
+    `Mods.total` collapses two bonuses of one `kind` to the larger -- so
+    writing both as `kind="feat"` pays +1 where the card pays +2, and
+    both halves look individually right. The case that catches it is an
+    alchemical item that *also* carries the chosen keyword, with temporary
+    hit points up.
+
+    **The temporary hit points are read when the damage is rolled.** A
+    trait arms at the top of the fight, when nobody has any, so an
+    arming-time read would make that clause dead in every fight.
+
+    Posed on a **sorcerer** rather than on `audit.board`'s hand: the row
+    is `cls=""`, so its board holds none of the seven and the choice is
+    `None` there -- correctly, and uselessly for this rule.
+    """
+    import audit as A  # noqa: F401
+    import combat_engine.content.feats.general_l as GL
+    from combat_engine import chargen
+    from combat_engine.content import declared
+    from combat_engine.content.items.alchemical import ALCHEMICAL
+    from combat_engine.engine import Bus, Grid, World, dsl, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Mods, Powers
+    from combat_engine.engine.rng import Rng
+
+    reg, cats = declared(), query.block_categories()
+    was = chargen.SCORED_CHOICES
+    chargen.SCORED_CHOICES = True
+    try:
+        world = World(Grid(24, 16), Rng(1), Bus())
+        me = chargen.spawn(world, chargen.Character(
+            cls="sorcerer", level=1, build="", feats=[], powers=[]), (5, 5))
+        chargen.spawn(world, chargen.Character(
+            cls="fighter", level=1, build="", feats=[], powers=[]), (6, 5))
+    finally:
+        chargen.SCORED_CHOICES = was
+
+    known = world.need(me, Powers)
+    if "f2865" not in known.known:
+        known.known.append("f2865")
+    c = Cast(world=world, me=me, ref="f2865", target=me)
+    pick = GL._f2865_choice(c)
+    out.that(pick is not None and pick in GL._F2865_SEVEN,
+             "the choice is decided from the character's own hand, and it "
+             "is one of the seven the card prints",
+             f"{pick}")
+    if pick is None:
+        return
+
+    dsl.use(world, me, "f2865", targets=[me], spend=False)
+    mods = world.need(me, Mods)
+
+    def dmg(ref: str) -> int:
+        return mods.total("damage", {"source": me, "target": 2,
+                                     "power": ref, "from_attack": True})
+
+    with_kw = next((r for r, p in sorted(reg.items())
+                    if pick in p.keywords
+                    and cats.get(r, "") != ALCHEMICAL), "")
+    plain = next((r for r, p in sorted(reg.items())
+                  if pick not in p.keywords
+                  and cats.get(r, "") != ALCHEMICAL), "")
+    alch = next((r for r, p in sorted(reg.items())
+                 if cats.get(r, "") == ALCHEMICAL
+                 and pick not in p.keywords), "")
+    both = next((r for r, p in sorted(reg.items())
+                 if cats.get(r, "") == ALCHEMICAL and pick in p.keywords), "")
+    out.that(all((with_kw, plain, alch, both)),
+             "four populations exist to ask about -- the chosen keyword, an "
+             "ordinary power, an alchemical item without it, and one WITH "
+             "it, which is the only case that can see the two bonuses add",
+             f"{with_kw}, {plain}, {alch}, {both}")
+    if not all((with_kw, plain, alch, both)):
+        return
+
+    out.that(dmg(with_kw) == 1,
+             "a power carrying the chosen keyword gets the printed +1",
+             f"{with_kw}: {dmg(with_kw):+d}")
+    out.that(dmg(plain) == 0,
+             "and an ordinary power gets nothing -- the control that tells "
+             "the feat from a flat +1 to all damage",
+             f"{plain}: {dmg(plain):+d}")
+    out.that(dmg(alch) == 0,
+             "an alchemical item gets nothing while the character has no "
+             "temporary hit points, which is the printed condition",
+             f"{alch}: {dmg(alch):+d}")
+
+    world.need(me, Health).temp = 5
+    out.that(dmg(alch) == 1,
+             "and +1 once it has some -- read when the DAMAGE is rolled, "
+             "because a trait arms when nobody has any and an arming-time "
+             "read would be dead in every fight",
+             f"{alch}: {dmg(alch):+d}")
+    out.that(dmg(both) == 2,
+             "**and an alchemical item carrying the chosen keyword gets +2 "
+             "-- the two bonuses ADD.** Only the first is a feat bonus; "
+             "typing both the same collapses them to +1, which is the card "
+             "underpaid with both halves looking correct",
+             f"{both}: {dmg(both):+d}")
+
+
 def a_saved_flask_goes_back_on_the_belt_once_a_day(out: Result) -> None:
     """`f1983` hands a missed alchemical item back. #1233.
 
@@ -72002,6 +72119,11 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "chosen_type": (
+        a_chosen_damage_type_is_decided_from_the_hand,
+        "a chosen damage type is decided from the hand, and the two"
+        " bonuses add (#1233)",
     ),
     "saved_flask": (
         a_saved_flask_goes_back_on_the_belt_once_a_day,
