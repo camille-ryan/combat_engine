@@ -173,12 +173,13 @@ KNOWN_SILENT = {
     # which is strictly toward observability; the newly-silent check reads
     # membership of one list and so reports it as a regression. Nothing
     # about the row changed.
-    "i1676p1": ("fires on the board's all-missed `PowerResolved`, which is "
-                "provoked by a BASIC ATTACK -- so `c.trigger.power` is "
-                "`rba`, a pseudo-ref with no use to restore, and "
-                "`restore_use` returns False on the printed Requirement's "
-                "own branch. Posing it needs an all-missed resolution from "
-                "a real power the caster has spent: #1143"),
+    # **`i1676p1` was here and `#1233` retired it.** The entry argued that
+    # posing it "needs an all-missed resolution from a real power the
+    # caster has spent", and the board had none -- its `PowerResolved`
+    # came from a basic attack, whose `rba` pseudo-ref has no use to
+    # restore. A dealt character now carries two consumables whose blocks
+    # are real spendable rows, so the board has exactly that. Verified by
+    # the event rather than by the count: it emits `UseRestored`.
     # **This row's premise is two things at once and the board poses one.**
     # It triggers on the caster becoming bloodied, and pays only if an enemy
     # is carrying a shroud *at that instant*. A shroud exists only after
@@ -258,9 +259,10 @@ KNOWN_SILENT = {
     # moved draw means this board's character does not) and every other row
     # whose gate is "do I hold this". It moves verdicts in bulk, so it is
     # not a change to make beside content work.
-    "p13984": "its branch needs a cf:wizard-mage-f4s3/s4 school benefit and"
-              " this board's wizard is an arcanist/sha-ir build -- proved in"
-              " drivers.school_summon instead",
+    # **`p13984` was here and `#1233` retired it.** The entry argued its
+    # branch needed a school benefit this board's wizard does not have.
+    # Emits `TempHP` now -- the carried blocks moved what the board does
+    # far enough to reach the other branch.
     # "You hit a cursed target with an arcane power using this rod." The row
     # is correct and `_pose_cursed` below now curses every enemy, verified at
     # the moment it is laid -- but the one creature the provocation swings at
@@ -1246,7 +1248,10 @@ KNOWN_SILENT = {
     # trade. Driven by hand on a full level 6 wizard: p11035 goes back into
     # the book, p10145 comes out of it, and the +1 power bonus applies to
     # p10145 and to nothing else.
-    "p7377": "swaps a prepared power for one in the book; the board deals no second one",
+    # **`p7377` was here and `#1233` retired it.** The entry argued the
+    # board "deals no second one" to swap to. It deals two consumables
+    # now, whose blocks are in `Powers.known`, so there is a second power
+    # to reach for. Emits `ConditionApplied` and `EffectApplied`.
     # **`p16380` was here and #680 retired it.** The entry read "dazes an
     # enemy affected by `p12577`; the board never uses that power", and that
     # was true, measured, and driven by hand with both controls when it was
