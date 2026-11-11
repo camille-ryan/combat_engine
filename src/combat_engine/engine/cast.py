@@ -24,7 +24,16 @@ from typing import TYPE_CHECKING, Any
 
 from .components import Gear, Health, Mod, Mods, Position, Stats
 from .durations import Effect, When
-from .events import Aided, Boosted, Event, ItemPowerUsed, Note, PowerUsed, RowStored
+from .events import (
+    Aided,
+    Boosted,
+    Event,
+    ItemDestroyed,
+    ItemPowerUsed,
+    Note,
+    PowerUsed,
+    RowStored,
+)
 from .grid import Square, spread
 from .grid import distance as _distance
 from .movement import forced, shift, teleport, walk
@@ -17964,18 +17973,125 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         effect.on_resume.append(rearm)
         return effect
 
-    def destroy(self, *, on: int | None = None, weapon: Weapon | None = None) -> bool:
-        """Destroy an item a creature is carrying. It does not come back."""
+    def destroy(
+        self,
+        *,
+        on: int | None = None,
+        weapon: Weapon | None = None,
+        worn: str = "",
+        armour: bool = False,
+    ) -> bool:
+        """Destroy an item a creature is carrying or wearing. It does not
+        come back.
+
+        **`worn=` names the item by its own ref**, not by its slot, and
+        that is the choice two cards force. `Gear.worn` is keyed by
+        `slot or ref`, so a slot would read naturally -- but
+        `equipment.equip` writes one entry per slot, so two wondrous items
+        collide there, and both printed lines mean *a particular object*:
+        `i3466p2`'s *"the globe is destroyed"* is the item destroying
+        itself, and `m115879a2`'s *"the rusting item is destroyed"* is an
+        attack against whichever item the trait had already marked.
+
+        **It goes through `equipment.unequip`**, which is the only thing
+        that knows what a worn item laid: its mods are found by label
+        rather than kept in a list, its enhancement is stripped back off
+        the weapon it was raising, and its ammunition leaves the quiver.
+        Re-implementing any of that here would be a second copy of the
+        rule, which is the drift this engine keeps paying for.
+
+        **And its powers leave `Powers.known`, which `unequip` does not
+        do.** That asymmetry is defensible for taking a thing off -- you
+        may put it back on -- and indefensible for destroying it: the
+        card's own point is that the globe is gone, and leaving its blocks
+        in the list leaves them usable. Done here rather than in
+        `unequip`, so the four existing callers of that are untouched.
+
+        **`armour=` is a third thing and not a spelling of `worn=`.**
+        `Gear.armour` is a *kind* -- a string, `"plate"` -- so there is no
+        object to remove, and the AC it is worth was baked into `Defences`
+        when the character was built. See the branch's own comment: the
+        printed bonus has to be laid back as a penalty or the creature
+        keeps plate AC with no plate. `m115879a2` is the card.
+
+        Announced as `ItemDestroyed`, which replaces the bare `Note` this
+        used to emit -- a `Note` carries no `by`, so `DID_SOMETHING`
+        refuses it and the four monster rows destroying a weapon had the
+        clause credited to nobody.
+        """
         who = self._who(on)
         gear = self.world.get(who, Gear) if who is not None else None
-        if gear is None:
+        if gear is None or who is None:
             return False
+        if armour:
+            # **The suit itself, which is a *kind* and not an object.**
+            # `Gear.armour` is a string -- "plate", "hide" -- so there is
+            # nothing to remove from a list; destroying it is going back
+            # to `"cloth"`, which is what wearing nothing is called.
+            #
+            # **And the AC has to be paid for separately, which is the
+            # whole reason this is not two lines.** `chargen` is the only
+            # reader of `armour.ARMOUR`, so a suit's bonus is baked into
+            # `Defences` when the character is built and *nothing*
+            # recomputes it. Clearing the field alone would leave a
+            # creature with plate AC and no plate -- silently false, which
+            # is this component's documented failure mode. So the printed
+            # bonus for the kind being destroyed is laid back as a penalty.
+            #
+            # The number is `ARMOUR[kind]` -- the printed table, read
+            # through `combat_engine.armour`, which sits below every
+            # component for exactly this (#852). Nothing is derived.
+            if gear.armour == "cloth":
+                return False
+            from combat_engine.armour import ARMOUR
+
+            from .equipment import unequip
+
+            kind = gear.armour
+            magic = next(
+                (m for m in gear.worn.values() if m.slot == "armor"), None
+            )
+            if magic is not None:
+                unequip(self.world, who, magic.ref)
+            gear.armour = "cloth"
+            lost = ARMOUR.get(kind, 0)
+            if lost:
+                self.penalty(Defense.AC, lost, on=who, until=When.ENCOUNTER)
+            self.world.bus.emit(
+                ItemDestroyed(
+                    who=who,
+                    item=magic.ref if magic is not None else kind,
+                    by=self.ref,
+                )
+            )
+            return True
+        if worn:
+            from .components import Powers
+            from .equipment import unequip
+
+            magic = next(
+                (m for m in gear.worn.values() if m.ref == worn), None
+            )
+            if magic is None:
+                return False
+            unequip(self.world, who, worn)
+            powers = self.world.get(who, Powers)
+            if powers is not None:
+                for ref in magic.powers:
+                    if ref in powers.known:
+                        powers.known.remove(ref)
+            self.world.bus.emit(
+                ItemDestroyed(who=who, item=worn, by=self.ref)
+            )
+            return True
         arm = weapon or next(iter(self.held(on=who, what="magic")), None)
         if arm is None or arm not in gear.weapons:
             return False
         gear.weapons.remove(arm)
         gear.stowed.discard(arm.ref)
-        self.world.bus.emit(Note(text=f"{arm.ref} is destroyed"))
+        self.world.bus.emit(
+            ItemDestroyed(who=who, item=arm.item or arm.ref, by=self.ref)
+        )
         return True
 
     def disarm(

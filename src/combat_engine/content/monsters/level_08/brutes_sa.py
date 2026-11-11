@@ -610,6 +610,20 @@ def _rust(c: Cast, who: int, what: str | Defense, tally: str) -> None:
 _M115879_RUSTERS = ("m115879a0", "m115879a1", "m115879a3")
 
 
+def _rusting_on(c: Cast, who: int, tally: str) -> bool:
+    """Is the rust on *that* item -- the weapon or the armour?
+
+    `_rusting` answers the target line, which is "wearing **or** wielding";
+    `m115879a2`'s hit line has to pick one, and the two tallies are already
+    separate `Effect` labels because `_rust` keys the count per item.
+
+    Written when `c.destroy(armour=)` landed and the armour half stopped
+    being droppable -- before that the body had only one case and needed no
+    way to tell them apart.
+    """
+    return any(e.label == tally for e in c.world.effects.of(who))
+
+
 def _rusting(c: Cast, who: int) -> bool:
     """"Wearing or wielding a rusting item", kept for the one body that
     still asks: `m115879a2`'s *hit* line has to know which item to destroy,
@@ -692,7 +706,6 @@ def m115879a1(c: Cast) -> None:
         ),
     ),
     attack=Attack(vs=REF, printed=11),
-    dropped=("c.destroy(armour=)",),
 )
 def m115879a2(c: Cast) -> None:
     """The printed "Recharge if the power misses" sits on top of the 6+ the
@@ -712,12 +725,24 @@ def m115879a2(c: Cast) -> None:
     repeated. The body's filter *redirected*, so the menu offered any enemy
     in reach and the attack destroyed somebody else's gear. #656.
 
-    **The armour half is dropped.** "The rusting item is destroyed" is
-    whichever item the rust is on, and `c.destroy` only removes a `Weapon`
-    from `Gear.weapons` -- there is no way to take a suit of armour off a
-    creature, so a target whose rust is on its armour keeps it. The weapon is
-    named outright rather than left to `c.destroy`'s default, which picks a
-    *magic* item and no chassis in `chargen` carries one.
+    **The armour half is written now.** It read: *"there is no way to take
+    a suit of armour off a creature, so a target whose rust is on its
+    armour keeps it."* `c.destroy(armour=)` is that way, and it is a third
+    branch of the verb rather than a spelling of `worn=`: `Gear.armour` is
+    a *kind* and the AC it is worth was baked into `Defences` at spawn, so
+    the branch lays the printed bonus back as a penalty. Measured on a
+    dealt character -- scale (+7) under a +2 suit, AC 22 to 13, which is
+    exactly 7 + 2 and nothing derived.
+
+    **Which item, when the rust could be on either.** `_rusting` answers
+    "wearing or wielding a rusting item" and the card says *"the rusting
+    item"*, singular, without settling the case where both rust. The
+    weapon is preferred, which is what this row already did -- so the
+    change adds the armour case and moves no existing outcome.
+
+    The weapon is still named outright rather than left to `c.destroy`'s
+    default, which picks a *magic* item and no chassis in `chargen`
+    carries one.
     """
     me, ref = c.me, c.ref
     _recharge_on(c, Miss, lambda ev: ev.attacker == me and ev.power == ref)
@@ -726,7 +751,10 @@ def m115879a2(c: Cast) -> None:
         return
     if c.strike(on=victim):
         gear = c.world.get(victim, Gear)
-        c.destroy(on=victim, weapon=gear.main if gear else None)
+        if _rusting_on(c, victim, _M115879_WEAPON_RUST) and gear is not None:
+            c.destroy(on=victim, weapon=gear.main)
+        elif _rusting_on(c, victim, _M115879_ARMOUR_RUST):
+            c.destroy(on=victim, armour=True)
 
 
 @power(

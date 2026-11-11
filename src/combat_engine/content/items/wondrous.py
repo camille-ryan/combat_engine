@@ -1158,18 +1158,38 @@ def i3466p1(c: Cast) -> None:
     # carried spend cannot reach it. What this row prints is an item
     # destroying **itself**.
     #
-    # `c.destroy` exists and is the near miss: it walks `gear.weapons`
-    # and returns False for anything not in it, and it announces a bare
-    # `Note`, which `audit.DID_SOMETHING` refuses because a `Note`
-    # carries no `by`. So the want is a keyword on a verb that is already
-    # there rather than a new verb -- the cheapest shape `blocked._shape_of`
-    # prices (#677).
-    dropped=("c.destroy(worn=)",),
+    # `c.destroy` was the near miss and `worn=` is the keyword it wanted --
+    # the cheapest shape `blocked._shape_of` prices (#677). Landed.
 )
 def i3466p2(c: Cast) -> None:
-    """No attack roll is printed. The globe destroying itself is dropped --
-    an item cannot take itself off its own wearer."""
+    """Blind the burst, and the globe is spent doing it.
+
+    **Written.** The note this replaces said *"an item cannot take itself
+    off its own wearer"*, which was true: `c.destroy` walked
+    `gear.weapons` and returned False for anything else, so a worn item
+    had no way to go.
+
+    `c.destroy(worn=)` names the item by its **own ref** rather than by
+    its slot, which is what this card forces -- `Gear.worn` is keyed by
+    `slot or ref` and `equip` writes one entry per slot, so two wondrous
+    items collide there while the printed line means one particular
+    object.
+
+    `c.first` because the destruction is one printed sentence and the body
+    runs once per target: a close burst 3 that catches four enemies would
+    otherwise try to destroy the globe four times. The second and third
+    calls would return False once it is gone, so this is tidiness rather
+    than a fix -- but a row that asks four times for one printed effect is
+    the thing `c.first` exists to say.
+
+    `entry_of(c.ref)` rather than the literal, so the row cannot drift
+    from the item it belongs to.
+    """
+    from combat_engine.engine.dsl import entry_of
+
     c.blinded(until=When.SOTNT)
+    if c.first:
+        c.destroy(worn=entry_of(c.ref), on=c.me)
 
 
 @power("i3557x1", level=3, cls=ITEM, action=ActionType.NONE,

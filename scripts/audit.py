@@ -1371,8 +1371,18 @@ DID_SOMETHING = {
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
     "CritChanged", "BlowTurned", "BlowRedirected", "UseRestored", "UseSpent",
     "TargetAdded", "MarkHeld", "DiceRewritten", "CheckSubstituted",
-    "ItemConsumed",
+    "ItemConsumed", "ItemDestroyed",
 }  # fmt: skip
+# `ItemDestroyed` is the fourteenth and is `ItemConsumed`'s sibling rather
+# than a second spelling of it: a potion drunk is the item doing its job,
+# a suit of armour rusted through is the item being taken away. It carries
+# `by` and the `by` is usually somebody *else's* row, which is the whole
+# reason it is a separate event -- and why it does **not** inherit the
+# `_awake` excuse `ItemConsumed` gets. Spending a thing you used is not a
+# combat effect; being disarmed of it is.
+#
+# It replaced a bare `Note` in `c.destroy`, so four monster rows that
+# destroy a weapon had that clause credited to nobody until now.
 # `ItemConsumed` is the thirteenth and is admitted on `UseSpent`'s argument,
 # which is the one two above it: a **price** is a real effect when it is
 # attributable, and this carries `by` naming the row whose use paid it. A

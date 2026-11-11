@@ -53080,6 +53080,159 @@ def a_thrown_weapon_runs_out_after_five_throws(out: Result) -> None:
                  f"quiver {before} -> {[a.count for a in gear_p.quiver]}")
 
 
+def a_destroyed_item_takes_what_it_was_giving_with_it(out: Result) -> None:
+    """`c.destroy` reaches a worn item and a suit of armour. #1233.
+
+    The verb walked `Gear.weapons` and returned False for anything else,
+    so **two printed lines had nowhere to go** and both carried a marker
+    naming a keyword on it -- the cheapest shape `blocked._shape_of`
+    prices (#677):
+
+    * `wondrous.i3466p2` -- *"the globe is destroyed"*, an item destroying
+      **itself**. `worn=` names it by its own **ref** rather than by its
+      slot, because `Gear.worn` is keyed `slot or ref` and `equip` writes
+      one entry per slot, so two wondrous items collide there while the
+      card means one object.
+    * `brutes_sa.m115879a2` -- *"the rusting item is destroyed"*, on an
+      enemy. `armour=` is a **third** branch and not a spelling of
+      `worn=`: `Gear.armour` is a *kind* string, so there is no object to
+      remove.
+
+    **The AC is the assertion that matters for `armour=`.** `chargen` is
+    the only reader of `armour.ARMOUR`, so a suit's bonus is baked into
+    `Defences` when the character is built and nothing recomputes it --
+    clearing the field alone leaves a creature with plate AC and no
+    plate, which is this component's documented silently-false failure.
+    So the loss is checked against the **printed** table plus the suit's
+    enhancement, never against a remembered number.
+
+    **And a destroyed item's powers leave `Powers.known`**, which
+    `equipment.unequip` does not do. That asymmetry is right for taking a
+    thing off and wrong for destroying it: the card's point is the globe
+    is gone, and leaving its blocks in the list leaves them usable.
+
+    `m115879a2` audits **UNUSED** -- its target line wants a creature
+    already affected by a rusting row, which the audit board cannot pose
+    -- so this rule is the only thing that executes its hit line at all.
+    """
+    from dataclasses import replace
+
+    import audit as A
+    from combat_engine.armour import ARMOUR
+    from combat_engine.chargen import _blocks_of, magic_for
+    from combat_engine.engine import dsl, equipment, query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Powers
+    from combat_engine.engine.events import ItemDestroyed
+    from combat_engine.engine.types import Defense
+
+    # -- worn=, on a row destroying its own item -------------------------
+    world, me, _ = A.board("i476x1", 1)
+    gear, powers = world.need(me, Gear), world.need(me, Powers)
+    magic = replace(magic_for("i3466", plus=0), powers=_blocks_of("i3466"))
+    out.that(bool(magic.powers),
+             "the globe's own blocks are known to `_blocks_of`, so there is "
+             "something for `equip` to grant and `destroy` to take back",
+             f"{magic.powers}")
+    equipment.equip(world, me, magic)
+    held = [r for r in powers.known if r.startswith("i3466")]
+    out.that(bool(held) and any(m.ref == "i3466" for m in gear.worn.values()),
+             "and wearing it puts the item in `Gear.worn` and its rows in "
+             "`Powers.known`",
+             f"worn={sorted(gear.worn)} known={held}")
+
+    foe = next(e for e in world.entities if e != me)
+    n = len(world.bus.log)
+    dsl.use(world, me, "i3466p2", targets=[foe], spend=False)
+    said = [e for e in world.bus.log[n:] if isinstance(e, ItemDestroyed)]
+    out.that(not any(m.ref == "i3466" for m in gear.worn.values()),
+             "`i3466p2` destroys the globe it belongs to -- `worn=` by ref, "
+             "so a row cannot drift from its own item",
+             f"worn={sorted(gear.worn)}")
+    out.that(not [r for r in powers.known if r.startswith("i3466")],
+             "and every one of its rows leaves `Powers.known`, which "
+             "`unequip` does not do -- a destroyed item's cards must not "
+             "stay usable",
+             f"still known: {[r for r in powers.known if r.startswith('i3466')]}")
+    out.that(len(said) == 1 and said[0].item == "i3466"
+             and said[0].by == "i3466p2",
+             "announced once as `ItemDestroyed`, naming the item and the row "
+             "-- it replaced a bare `Note`, which `DID_SOMETHING` refuses "
+             "for carrying no `by`",
+             f"{[(e.item, e.by) for e in said]}")
+
+    # -- armour=, through the row that wanted it -------------------------
+    # **On the rust monster's own board and posed by hand**, because its
+    # target line wants an already-rusting creature and nothing on an
+    # audit board rusts anybody.
+    import combat_engine.content.monsters.level_08.brutes_sa as RUST
+
+    w2, rust, _ = A.board("m115879a2", 1)
+    victim = next(
+        (e for e, _ in w2.each(Gear)
+         if e != rust and (w2.need(e, Gear).armour or "cloth") != "cloth"),
+        None,
+    )
+    out.that(victim is not None,
+             "somebody on the rust monster's board is wearing armour, so "
+             "there is a suit to destroy",
+             f"victim={victim}")
+    if victim is None:
+        return
+    vg = w2.need(victim, Gear)
+    kind = vg.armour
+    suit = next((m for m in vg.worn.values() if m.slot == "armor"), None)
+    plus = suit.plus if suit is not None else 0
+
+    rc = Cast(world=w2, me=rust, ref="m115879a1", target=victim)
+    RUST._rust(rc, victim, Defense.AC, RUST._M115879_ARMOUR_RUST)
+    out.that(RUST._rusting_on(rc, victim, RUST._M115879_ARMOUR_RUST)
+             and not RUST._rusting_on(rc, victim, RUST._M115879_WEAPON_RUST),
+             "the armour is rusting and the weapon is not, which is the "
+             "branch the card's armour half is about -- `_rusting` alone "
+             "cannot tell them apart and the hit line has to pick one",
+             f"{kind!r}")
+
+    before = query.defence(w2, victim, Defense.AC, {})
+    n2 = len(w2.bus.log)
+    dsl.use(w2, rust, "m115879a2", targets=[victim], spend=False)
+    after = query.defence(w2, victim, Defense.AC, {})
+    gone = [e for e in w2.bus.log[n2:] if isinstance(e, ItemDestroyed)]
+    out.that(vg.armour == "cloth",
+             "the suit is destroyed -- `Gear.armour` is a kind, so going "
+             "back to `cloth` is what wearing nothing is called",
+             f"{kind!r} -> {vg.armour!r}")
+    want = ARMOUR.get(kind, 0) + plus
+    out.that(before - after == want,
+             "and the AC falls by exactly the PRINTED bonus for that kind "
+             "plus the suit's enhancement -- the number comes from "
+             "`armour.ARMOUR`, because `Defences` was baked at spawn and "
+             "clearing the field alone would leave plate AC with no plate",
+             f"{kind} +{ARMOUR.get(kind, 0)} and suit +{plus}: "
+             f"AC {before} -> {after}, lost {before - after}, want {want}")
+    out.that(len(gone) == 1 and gone[0].by == "m115879a2",
+             "announced once, by the row that swung -- `by` is somebody "
+             "else's row here, which is why this is not `ItemConsumed`",
+             f"{[(e.item, e.by) for e in gone]}")
+
+    # -- the control: nothing to destroy ---------------------------------
+    w3, me3, _ = A.board("i476x1", 2)
+    g3 = w3.need(me3, Gear)
+    g3.armour = "cloth"
+    c3 = Cast(world=w3, me=me3, ref="probe", target=me3)
+    ac3 = query.defence(w3, me3, Defense.AC, {})
+    n3 = len(w3.bus.log)
+    refused = c3.destroy(armour=True, on=me3)
+    out.that(refused is False
+             and query.defence(w3, me3, Defense.AC, {}) == ac3
+             and not [e for e in w3.bus.log[n3:]
+                      if isinstance(e, ItemDestroyed)],
+             "a creature wearing nothing refuses the call, lays no penalty "
+             "and announces nothing -- without this, `armour=` would charge "
+             "an unarmoured creature for a suit it never had",
+             f"returned {refused}, AC {ac3}")
+
+
 def an_alchemical_attack_is_told_apart_from_an_ordinary_one(out: Result) -> None:
     """Two facilities the alchemical cards needed, and their controls. #1233.
 
@@ -71684,6 +71837,10 @@ DRIVERS = {
     "thrown_spares": (
         a_thrown_weapon_runs_out_after_five_throws,
         "a thrown weapon runs out after five throws (#520)",
+    ),
+    "destroy_worn": (
+        a_destroyed_item_takes_what_it_was_giving_with_it,
+        "a destroyed item takes what it was giving with it (#1233)",
     ),
     "alchemical_gate": (
         an_alchemical_attack_is_told_apart_from_an_ordinary_one,

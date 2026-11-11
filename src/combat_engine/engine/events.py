@@ -1474,6 +1474,40 @@ class UseSpent(Event):
 
 
 @dataclass
+class ItemDestroyed(Event):
+    """An item is **gone**, and not by being used as intended.
+
+    `ItemConsumed`'s sibling and deliberately not the same event. A potion
+    drunk and a suit of armour rusted through both leave the inventory,
+    and they are opposite kinds of fact: one is the item doing its job,
+    the other is the item being taken away -- usually by an enemy.
+    `m115879a2` is the worked case, *"the rusting item is destroyed"*,
+    and it is an attack against Reflex.
+
+    Collapsing the two would make a row that eats your armour read as a
+    row that spent a consumable, and `audit._awake` excuses
+    `ItemConsumed` alone on the ground that spending a thing you used is
+    not a combat effect. Being disarmed of it very much is, so it must
+    not inherit that excuse.
+
+    **Replaces a bare `Note`.** `c.destroy` announced itself as
+    `Note(text=f"{ref} is destroyed")`, which `audit.DID_SOMETHING`
+    refuses because a `Note` carries no `by` -- so four monster rows
+    destroying a weapon had that clause credited to nobody. Nothing read
+    the text, and no fixture recorded one, so the `Note` is gone rather
+    than kept beside this.
+
+    `who` is the creature that lost it, `item` the entry ref that was
+    destroyed, and `by` the row that did it -- which is usually somebody
+    else's, and is the whole reason this carries one.
+    """
+
+    who: int
+    item: str
+    by: str
+
+
+@dataclass
 class ItemConsumed(Event):
     """A one-use item on the creature's person was spent.
 
