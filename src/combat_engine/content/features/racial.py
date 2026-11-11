@@ -1363,14 +1363,25 @@ def rt_r51_t0(c: Cast) -> None:
 
 
 @power("rt:r51-t1", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.running_start()",),
-       wants="a run-up c.jump can read, so a standing jump and a "
-             "running one differ")
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r51_t1(c: Cast) -> None:
-    """`c.jump` takes a number of squares and knows nothing about a
-    run-up, so "always considered to have a running start" has nothing to
-    be true of."""
+    """Always counts as having run up to a jump.
+
+    **Written.** The old note said *"`c.jump` takes a number of squares and
+    knows nothing about a run-up, so this has nothing to be true of"*, and
+    the first half is still true -- `c.jump` does take squares. What was
+    missing was not a distance but the **condition**: the run-up changes
+    the divisor a jumping row applies to its own check result, so it lives
+    on the creature and not inside the leap.
+
+      > *"Running Start: If you move at least 2 squares before making the
+      > jump, divide your check result by 5, not 10."* -- PHB 183
+
+    `c.running_start` grants it and `query.has_running_start` is what reads
+    it, which is `p9301`'s divisor. Armed by `turns.arm_traits` with no
+    declared trigger, so `until=When.ENCOUNTER` is the whole fight -- the
+    trait is "always", and a shorter duration would make it "once"."""
+    c.running_start(on=c.me)
 
 
 # -- r52 ---------------------------------------------------------------

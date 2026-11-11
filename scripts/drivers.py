@@ -30538,6 +30538,136 @@ def drawing_stowing_and_a_running_jump(out: Result) -> None:
              f"moved {moved}, over-10 would allow {total // 10}")
 
 
+def a_run_up_doubles_a_jump_and_a_trait_can_grant_one(out: Result) -> None:
+    """The printed running start, which `p9301` was missing by half.
+
+    PHB 183, under Athletics:
+
+      > *"Running Start: If you move at least 2 squares before making the
+      > jump, divide your check result by 5, not 10."*
+
+    So the **standing** jump is the base and a run-up is the improvement.
+    Worth stating because `p9301`'s own note had it the other way round --
+    *"a jump off a run and a jump from standing come to the same distance
+    here, so the clause buys nothing"* -- which reads as though the row
+    were already giving the better of the two. It was giving the worse one
+    to everybody, including a character who had just run 5 squares.
+
+    **Two ways to have one, and both are asserted**, because they are
+    different mechanisms: `Movement.went >= 2` is run up to, and
+    `Movement.run_up` is granted by a card. `query.has_running_start`
+    answers either.
+
+    **The boundary is asserted at 1 and 2 squares with literals**, not by
+    reading `query.RUN_UP`. A rule that reads the constant under test moves
+    with it, so changing the printed 2 to a 3 would keep this green.
+
+    **The divisor needs a floor, not a ceiling**, which the rule above this
+    one learned the hard way: it asserted "no further than the check over
+    5" and a `// 10` plant stayed **green**, because a shorter jump still
+    satisfies an upper bound. So the run-up case asserts the jump goes
+    *further* than over-10 allows, and the standing case asserts it does
+    *not* -- one of each, so a divisor stuck at either value reds one arm.
+
+    `p3958` is the sibling that prints "considered to have a running start"
+    and hard-codes `// 5`. That stays correct and is left alone: its card
+    grants the run-up outright, so there is no condition for it to read.
+    """
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.grid import distance
+    from combat_engine.engine.query import has_running_start
+
+    def leap(went: int, granted: bool) -> tuple[int, int, bool]:
+        """`(check total, squares moved, what the reader answered)`."""
+        world, me, _ = audit_board("p9301", 1)
+        mv = world.need(me, Movement)
+        # **Both inputs are set, including the one being set to nothing.**
+        # `audit.board` deals a character, `r51` is in the race pool, and
+        # `rt:r51-t1` arms itself -- so on the draw this board happens to
+        # make, the "no run-up" arms were handed a granted one and read
+        # True at `went=0`. Found in the full suite, where the dealt
+        # character differs from the one a single-rule run gets. Clearing
+        # it is what makes this rule about the mechanism rather than about
+        # which race was dealt.
+        mv.run_up.clear()
+        mv.went = went
+        if granted:
+            mv.run_up.add("rt:r51-t1")
+        was = _at(world, me)
+        rolls: list[SkillCheck] = []
+        world.bus.on(SkillCheck, rolls.append)
+        world.rng.loaded = 20
+
+        # The chooser the rule above this one needed and for its reason:
+        # `c.jump` delegates to `c.move`, so the square decision arrives
+        # under that name, and unaimed it takes the lowest-sorted
+        # destination -- one square away, which says nothing about the
+        # divisor.
+        def furthest(actor, kind, options, prompt):  # noqa: ANN001, ANN202
+            if options and isinstance(options[0], tuple):
+                return max(options, key=lambda sq: distance(was, sq))
+            return options[0]
+
+        world.decider = furthest
+        answered = has_running_start(world, me)
+        REGISTRY["p9301"].body(Cast(world=world, me=me, ref="p9301"))
+        total = rolls[-1].total if rolls else 0
+        return total, distance(was, _at(world, me)), answered
+
+    # -- the printed boundary -------------------------------------------
+    at0, at1, at2 = (leap(n, False) for n in (0, 1, 2))
+    out.that((at0[2], at1[2], at2[2]) == (False, False, True),
+             "two squares is a running start and one is not, which is the"
+             " printed 'at least 2 squares' -- asserted with literals, so"
+             " moving the constant reds this instead of moving with it",
+             f"went 0 -> {at0[2]}, 1 -> {at1[2]}, 2 -> {at2[2]}")
+
+    # -- the divisor, one arm each way ----------------------------------
+    total, standing, _ = at1
+    out.that(total > 0, "p9301 rolls an Athletics check", f"total {total}")
+    if not total:
+        return
+    out.that(total // 5 > total // 10,
+             "the roll is one where the two divisors differ, so neither arm"
+             " below agrees by accident",
+             f"over-5 {total // 5} against over-10 {total // 10}")
+    out.that(standing <= total // 10,
+             "without a run-up the jump is the check over TEN -- the upper"
+             " bound is the discriminating assertion on this arm, because a"
+             " divisor stuck at 5 overshoots it",
+             f"check {total}, moved {standing}, over-10 allows {total // 10}")
+
+    _, ran, _ = at2
+    out.that(ran > total // 10,
+             "and with one it goes FURTHER than over-10 allows -- a floor,"
+             " because an upper bound cannot catch a divisor stuck at 10",
+             f"check {total}, moved {ran}, over-10 would allow {total // 10}")
+    out.that(ran <= total // 5,
+             "and no further than over-5 allows",
+             f"moved {ran}, over-5 allows {total // 5}")
+
+    # -- granted rather than run up to ----------------------------------
+    _, by_grant, answered = leap(0, True)
+    out.that(answered and by_grant > total // 10,
+             "a granted run-up reaches the same distance from standing --"
+             " the mechanism `rt:r51-t1` uses, asserted separately because"
+             " a flag and a step count are different things to read",
+             f"moved {by_grant}, over-10 would allow {total // 10}")
+
+    # -- and the trait really lays it -----------------------------------
+    world, me, _ = audit_board("rt:r51-t1", 1)
+    mv = world.need(me, Movement)
+    out.that(not mv.went and mv.run_up and has_running_start(world, me),
+             "`rt:r51-t1` lays it on its own board, from a standing start"
+             " -- armed by `turns.arm_traits`, since the row declares no"
+             " trigger",
+             f"went {mv.went}, run_up {sorted(mv.run_up)}")
+
+
 def a_fight_rolls_skill_checks_and_these_rows_change_them(out: Result) -> None:
     """Five rows that said a fight rolls no skill check, and it does.
 
@@ -72918,6 +73048,10 @@ DRIVERS = {
         drawing_stowing_and_a_running_jump,
         "drawing, stowing and a running jump -- three false premises",
     ),
+    "run_up": (
+        a_run_up_doubles_a_jump_and_a_trait_can_grant_one,
+        "a run-up doubles a jump, and a trait can grant one (PHB 183)",
+    ),
     "illuminate": (
         one_carried_light_level_at_a_time,
         "one carried light level at a time, chosen from what the card offers",
@@ -73978,7 +74112,30 @@ UNSCORED_DRAW = frozenset(
         "banked_reroll",
         "gear_and_jump",
         "kind_waived",
+        # **These two were written against the unscored draw and never said
+        # so**, which made their verdicts depend on process state rather
+        # than on the verb under test. Both need two skills on the dealt
+        # character whose modifiers *differ* -- `substitute_check` says so
+        # in its first assertion, and `reroll_as_another_skill` needs the
+        # gap to beat the face deficit between its two rolls. Measured on
+        # `p11552`, seed 1:
+        #
+        #     unscored   acrobatics +5, streetwise +1      they differ
+        #     scored     acrobatics +1, streetwise +1      they do not
+        #
+        # So under the scored draw the premise is false and every arm below
+        # it would pass for a verb that changed nothing -- which is the
+        # thing the premise exists to prevent. Writing `rt:r51-t1` moved
+        # the draw and surfaced it; the rules were always this fragile.
+        # Named here rather than re-pinned to another skill pair because
+        # the widest gap available on that board is 7 and the face deficit
+        # on the other draw is 15, so no pair of skills can rescue it --
+        # it is the draw that has to be pinned, which is what this set is
+        # for. #1037 is the first time registration order decided a
+        # verdict here.
+        "reroll_as_another_skill",
         "simple_weapon",
+        "substitute_check",
         "vestige_augment",
         "weapon_is_mine",
     }

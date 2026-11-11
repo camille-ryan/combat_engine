@@ -33,6 +33,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Go up, and stay there. Yours, so it defaults to the caster.
 - `c.run_at(self, victim: 'int', *, who: 'int | None' = None) -> 'bool'`
   - Walk into reach of a named creature, the way a charge's move does.
+- `c.running_start(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Count as having run up to a jump without having run up.
 - `c.shift(self, squares_: 'int' = 1, *, who: 'int | None' = None, to: 'Square | None' = None, toward: 'int | None' = None, away_from: 'int | None' = None, share: 'bool' = False) -> 'bool'`
   - Shift, choosing the destination through the world's decider.
 - `c.shift_as(self, cost: 'ActionType', squares_: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.STANCE: 'stance'>) -> 'Effect | None'`

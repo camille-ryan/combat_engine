@@ -137,8 +137,8 @@ CATEGORIES: dict[str, dict] = {
             ("voluntary -- the creature spends its own movement", [
                 "charge", "charge_at", "charge_through", "dismount",
                 "flee", "hover", "jump", "move", "moving_as", "overrun",
-                "ride", "rise", "run_at", "shift", "shift_as", "teleport",
-                "teleport_as", "walk_toward",
+                "ride", "rise", "run_at", "running_start", "shift",
+                "shift_as", "teleport", "teleport_as", "walk_toward",
             ]),
             ("forced -- somebody else moves it", [
                 "bull_rush", "pull", "push", "slide",
@@ -829,8 +829,8 @@ READERS: dict[str, list[str]] = {
         # question about *where the fight is* rather than where anybody
         # stands in it -- "is this fight underwater". A section of its own
         # would hold one entry. #1209.
-        "adjacent", "charging", "distance_between", "hindering_at",
-        "kept_away_from", "leash_of", "line_of_effect",
+        "adjacent", "charging", "distance_between", "has_running_start",
+        "hindering_at", "kept_away_from", "leash_of", "line_of_effect",
         "moved_this_action", "moving_as", "on_the_ground", "prefers_range",
         "ran_this_action", "range_profile",
         "sealed", "speed", "squares", "telepathy_of", "terrain",

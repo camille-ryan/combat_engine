@@ -386,12 +386,27 @@ class Movement:
     #: where it checks. `Budget.refresh` clears it too, so a turn with no
     #: movement reads 0 rather than last turn's number.
     #:
-    #: Read by `query.moved_this_action` and `query.ran_this_action`; the
-    #: only consumer is the hide **action**, which is the only hide that is
-    #: a Stealth check -- a card reading "it becomes hidden" is not one, and
-    #: there are 85 of those.
+    #: Read by `query.moved_this_action` and `query.ran_this_action`. Two
+    #: consumers: the hide **action**, which is the only hide that is a
+    #: Stealth check -- a card reading "it becomes hidden" is not one, and
+    #: there are 85 of those -- and `query.has_running_start`, for which 2
+    #: squares is the printed run-up.
     went: int = 0
     went_kind: str = ""
+    #: Who is granting this creature a **running start** it has not run up
+    #: for, by ref. Truthy means it has one however little it moved.
+    #:
+    #: *"If you move at least 2 squares before making the jump, divide your
+    #: check result by 5, not 10"* (PHB 183, Athletics/Jump) is the rule,
+    #: and `query.has_running_start` is where the two halves meet: this set
+    #: or `went >= RUN_UP`. Read nowhere else -- a jump's **distance** is
+    #: the calling row's arithmetic, because `c.jump` takes squares and the
+    #: divisor is what the card prints.
+    #:
+    #: **A set of refs rather than a bool**, for `ignores_difficult`'s
+    #: reason: two rows can grant it at once, and a bool cannot be given
+    #: back by one effect ending without lying about the other.
+    run_up: set[str] = field(default_factory=set)
 
 
 @dataclass

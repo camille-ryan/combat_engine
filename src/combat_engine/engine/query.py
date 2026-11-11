@@ -692,6 +692,48 @@ def moved_this_action(world: World, eid: int) -> int:
     return mv.went if mv is not None else 0
 
 
+#: The printed run-up: *"if you move at least 2 squares before making the
+#: jump"*. PHB 183, under Athletics.
+RUN_UP = 2
+
+
+def has_running_start(world: World, eid: int) -> bool:
+    """Does this creature's next jump get the running-start divisor?
+
+    The printed rule is one sentence under Athletics/Jump (PHB 183):
+
+      > *"Running Start: If you move at least 2 squares before making the
+      > jump, divide your check result by 5, not 10."*
+
+    So the base is the **standing** jump and a run-up is the improvement,
+    which is the direction worth saying out loud -- `p9301` already read
+    `// 10` and was correct, and the clause it was missing makes the jump
+    *longer* rather than shorter. The page's own worked example settles it:
+    a result of 24 is 4.8 squares with a run-up and 2.4 without.
+
+    Two ways to have one, which is why this reader exists rather than the
+    rows asking `moved_this_action` themselves:
+
+    * **Run up to it** -- `Movement.went >= RUN_UP`. `went` counts the
+      squares of the creature's most recent walk and `dsl.use` does not
+      clear it, so a walk earlier in the turn is still visible when the
+      jumping row's body runs. That is the printed condition rather than a
+      convenience: a walk before the jump is what the sentence asks for.
+    * **Be granted one** -- `c.running_start`, for the cards that say a
+      creature is *always* considered to have one, or that one particular
+      jump counts as having one.
+
+    It answers about the creature, not about a jump, because nothing in
+    this engine models a jump as a thing with properties -- `c.jump` takes
+    a number of squares and the divisor belongs to the row holding the
+    card.
+    """
+    mv = world.get(eid, Movement)
+    if mv is None:
+        return False
+    return bool(mv.run_up) or mv.went >= RUN_UP
+
+
 def ran_this_action(world: World, eid: int) -> bool:
     """Was this creature's current move action a **run**?
 

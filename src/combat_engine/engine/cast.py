@@ -2544,6 +2544,57 @@ class Cast:
             by=self.ref,
         )
 
+    def running_start(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """Count as having run up to a jump without having run up.
+
+        The printed rule is one sentence under Athletics/Jump (PHB 183):
+
+          > *"Running Start: If you move at least 2 squares before making
+          > the jump, divide your check result by 5, not 10."*
+
+        Two cards want it granted rather than earned -- a racial trait that
+        is *"always considered to have a running start when jumping"*, and
+        a terrain row whose jump at the end of a swing is *"treated as a
+        jump with a running start"*.
+
+        **This lays it; `query.has_running_start` reads it.** Two symbols
+        rather than one, deliberately: the three rows waiting all named
+        `c.running_start()`, but two of them want to *grant* it and one
+        wants to *ask*, and a symbol doing duty for both cannot go green
+        correctly for either -- which is what `c.ability_for` cost when it
+        served three needs and twelve rows reported ready on a third of it.
+
+        **It does not touch a distance.** `c.jump` takes a number of
+        squares, and the divisor the rule changes is arithmetic in the
+        calling row, off the check result the card tells it to divide. A
+        verb here that silently doubled a jump would be a rule no card
+        prints.
+
+        `until=When.ENCOUNTER` by default because the racial trait is a
+        standing one armed by `turns.arm_traits`; the terrain row wants
+        `until=When.EOT`, for the one jump.
+        """
+        from .components import Movement
+
+        who = on if on is not None else self.me
+        moves = self.world.get(who, Movement)
+        if moves is None:
+            return None
+        if self.ref in moves.run_up:
+            return None
+        moves.run_up.add(self.ref)
+        # `on_suspend` rather than `on_end`, for `ignores_difficult`'s
+        # reason: `Effects._lift` runs it for an expiry and a suspension
+        # both, so the grant comes off exactly once either way.
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} running start",
+            on_suspend=[lambda: moves.run_up.discard(self.ref)],
+            on_resume=[lambda: moves.run_up.add(self.ref)],
+            by=self.ref,
+        )
+
     def _ignores_difficult_made_by(
         self, made_by: str, who: int, moves: Any, until: When
     ) -> Effect | None:

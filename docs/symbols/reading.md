@@ -76,6 +76,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Is this creature in the middle of a charge?
 - `query.distance_between(world: 'World', a: 'int', b: 'int') -> 'int'`
   - (no docstring)
+- `query.has_running_start(world: 'World', eid: 'int') -> 'bool'`
+  - Does this creature's next jump get the running-start divisor?
 - `query.hindering_at(world: 'World', square: 'Square') -> 'bool'`
   - Does any live zone make this square hindering terrain?
 - `query.kept_away_from(world: 'World', eid: 'int') -> 'tuple[int, int] | None'`

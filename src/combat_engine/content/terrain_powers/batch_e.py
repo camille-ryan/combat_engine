@@ -259,7 +259,7 @@ def x2_145(c: Cast) -> None:
 @power("x2_147", level=1, usage=Usage.AT_WILL, action=ActionType.MOVE,
        reach=PERSONAL, target=SELF,
        check=Check("athletics", "moderate"),
-       dropped=("Zone.path", "c.running_start()"))
+       dropped=("Zone.path", "c.jump(to=)"))
 def x2_147(c: Cast) -> None:
     """Swing across on it, from the near end of the region to the far one.
 
@@ -292,12 +292,15 @@ def x2_147(c: Cast) -> None:
       and *"you can let go from x2_147 at any point during this
       movement"* -- the ref standing where the card prints its own name --
       has no midpoint to let go at.
-    * `c.running_start()` -- *"you can make an Athletics check to jump at
-      the end of the swing, treating it as a jump with a running start"*.
-      `rt:r51-t1` is already waiting on that symbol, so this reuses it
-      rather than minting a synonym; `c.jump` takes a distance and no
-      run-up, and the row also needs a direction `c.jump` cannot be given
-      (`c.jump(to=)`, `m5355a3`).
+    * `c.jump(to=)` -- *"you can make an Athletics check to jump at the
+      end of the swing, treating it as a jump with a running start"*. **The
+      run-up half of this landed and the marker moved to the half that did
+      not.** `c.running_start` exists now and would say "treating it as a
+      jump with a running start" exactly, for the one jump
+      (`until=When.EOT`); what is still missing is that the leap goes
+      *onward from the far end*, and `c.jump` takes a distance with no
+      destination. `m5355a3` waits on the same symbol, so this reuses it
+      rather than minting a synonym.
 
     What is left is the swing itself, which is the clause the card is about.
     """

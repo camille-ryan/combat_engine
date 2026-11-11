@@ -44,7 +44,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import Escaped, Miss, SkillCheck
-from combat_engine.engine.query import defence, held_by
+from combat_engine.engine.query import defence, has_running_start, held_by
 
 SKILL = "athletics"
 
@@ -136,23 +136,37 @@ def p13690(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.running_start()",),
 )
 def p9301(c: Cast) -> None:
-    """A long jump is the check result divided by ten, in squares.
+    """A long jump is the check result divided by ten, or by five off a
+    run-up.
 
     The +5 rides on this one check rather than being laid as a standing
     modifier, so it cannot be collected by a second check in the same turn.
 
-    The running start is dropped: a jump off a run and a jump from standing
-    come to the same distance here, so the clause buys nothing until
-    `c.jump` can read a run-up -- `rt:r51-t1` and `x2_147` wait on the same
-    symbol. The clause that the distance may exceed the character's speed
-    needs nothing written, because `c.jump` is paid for by the power and is
-    not capped by speed.
+    **Written, and the old note had the rule backwards.** It said *"a jump
+    off a run and a jump from standing come to the same distance here, so
+    the clause buys nothing"*, which read as though the row was already
+    giving the better of the two. It was not. The page (PHB 183, under
+    Athletics):
+
+      > *"Running Start: If you move at least 2 squares before making the
+      > jump, divide your check result by 5, not 10."*
+
+    So `// 10` is the **standing** jump and was always correct, and the
+    missing clause makes the jump *longer* rather than capping it -- this
+    row has been short by half for every character who ran at it. The
+    page's worked example is the check: a result of 24 clears 4.8 squares
+    with a run-up and 2.4 without.
+
+    `query.has_running_start` is the reader and answers the two ways of
+    having one -- 2 squares of this turn's walking, or a card granting it.
+    The clause that the distance may exceed the character's speed needs
+    nothing written, because `c.jump` is paid for by the power and is not
+    capped by speed.
     """
     got = c.check(SKILL, bonus=5)
-    c.jump(got.total // 10)
+    c.jump(got.total // (5 if has_running_start(c.world, c.me) else 10))
 
 
 @power(
