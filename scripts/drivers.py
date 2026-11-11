@@ -30668,6 +30668,109 @@ def a_run_up_doubles_a_jump_and_a_trait_can_grant_one(out: Result) -> None:
              f"went {mv.went}, run_up {sorted(mv.run_up)}")
 
 
+def the_damage_context_says_which_hand_swung(out: Result) -> None:
+    """A two-weapon card's damage half, which had no key to gate on.
+
+    `cf:fighter-weaponmaster-f3s4` prints two halves and only the attack
+    one worked:
+
+      > *"you gain a +1 bonus to attack rolls with weapons that have the
+      > offhand property ... When wearing light armor or chainmail, you
+      > gain a +1 bonus to damage rolls with melee and close weapon
+      > attacks when you are wielding two weapons. This bonus increases to
+      > +2 with weapons that have the off-hand property."*
+
+    The attack context has carried `hand` since `#501`; the damage context
+    had thirteen keys and not that one, so the step from +1 to +2 had
+    nothing to ask. The row **dropped** the clause rather than
+    approximating it off `Gear.main`, which would have paid the larger
+    number on main-hand swings of a fighter whose main weapon happens to
+    carry the property. That refusal is why this was findable at all.
+
+    **Asserted through a real attack, not by handing a ctx in.** A probe
+    that calls `mods.total("damage", {"hand": "off"})` passes whatever the
+    engine does, because it supplies the very key under test -- it would
+    stay green with `hand` deleted from `resolve.dmg_ctx`. So this swings
+    for real and reads the hit points off the target, which is the only
+    reading that goes through the context the engine actually builds.
+
+    **The hand cannot be read back off `AttackResult`**, and the first
+    draft of the engine change did exactly that and measured nothing:
+    `resolve.attack` sets `hand` on the Hit/Miss **event**, so
+    `getattr(self.result, "hand", "")` is `""` for every blow. `c.attack`
+    records it on the `Cast` instead, as a plain attribute, which is the
+    idiom `resolve` already states for `landed.vs` -- off the wire and out
+    of a replay fixture.
+    """
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    REF = "cf:fighter-weaponmaster-f3s4"
+
+    def swing(hand: str, *, armed: bool, armour: str = "leather") -> int:
+        """Damage dealt by one swing with that hand. Same seed throughout,
+        so the damage dice are identical and the difference is the bonus."""
+        world, me, _ = audit_board(REF, 1)
+        world.need(me, Gear).armour = armour
+        if armed:
+            REGISTRY[REF].body(Cast(world=world, me=me, ref=REF))
+        foe = enemies(world, me)[0]
+        was = world.need(foe, Health).hp
+        world.rng.loaded = 20
+        c = Cast(world=world, me=me, ref="mba", target=foe, targets=[foe])
+        if c.attack(50, Defense.AC, hand=hand).hit:
+            c.damage("1d6", 2)
+        return was - world.need(foe, Health).hp
+
+    # -- the board really is the one the card asks for -------------------
+    world, me, _ = audit_board(REF, 1)
+    gear = world.need(me, Gear)
+    out.that(gear.two_weapon and gear.off is not None
+             and "off-hand" in gear.off.properties,
+             "the board's fighter wields two melee weapons and the one in "
+             "its off hand carries the printed off-hand property, so the "
+             "+2 case is reachable at all",
+             f"weapons {[w.slug for w in gear.weapons]}, "
+             f"off properties {sorted(gear.off.properties) if gear.off else None}")
+
+    # -- the control: no trait, so the hands are alike -------------------
+    bare_main, bare_off = swing("main", armed=False), swing("off", armed=False)
+    out.that(bare_main == bare_off,
+             "without the trait both hands deal the same, so the board is "
+             "not telling the hands apart by itself",
+             f"main {bare_main}, off {bare_off}")
+
+    # -- the step --------------------------------------------------------
+    main, off = swing("main", armed=True), swing("off", armed=True)
+    out.that(main == bare_main + 1,
+             "armed, a main-hand melee weapon swing deals one more -- the "
+             "printed +1 to damage rolls",
+             f"{bare_main} -> {main}")
+    out.that(off == bare_off + 2,
+             "and an off-hand swing with an off-hand-property weapon deals "
+             "TWO more, which is the clause that was dropped. It reds if "
+             "`resolve.dmg_ctx` stops carrying `hand`, because the gate "
+             "then matches neither arm and the row pays the +1",
+             f"{bare_off} -> {off}")
+    out.that(off - main == 1,
+             "so the two hands differ by exactly one, which is 'increases "
+             "to +2' rather than two bonuses adding to something else",
+             f"main {main}, off {off}")
+
+    # -- the armour gate, which is the other half of the printed sentence
+    heavy_main = swing("main", armed=True, armour="scale")
+    heavy_off = swing("off", armed=True, armour="scale")
+    out.that(heavy_main == bare_main and heavy_off == bare_off,
+             "and in scale neither hand gains anything -- 'when wearing "
+             "light armor or chainmail' is a real gate and not decoration",
+             f"main {heavy_main}, off {heavy_off} against a bare "
+             f"{bare_main}/{bare_off}")
+
+
 def a_fight_rolls_skill_checks_and_these_rows_change_them(out: Result) -> None:
     """Five rows that said a fight rolls no skill check, and it does.
 
@@ -73051,6 +73154,10 @@ DRIVERS = {
     "run_up": (
         a_run_up_doubles_a_jump_and_a_trait_can_grant_one,
         "a run-up doubles a jump, and a trait can grant one (PHB 183)",
+    ),
+    "damage_hand": (
+        the_damage_context_says_which_hand_swung,
+        "the damage context says which hand swung (#501's other half)",
     ),
     "illuminate": (
         one_carried_light_level_at_a_time,

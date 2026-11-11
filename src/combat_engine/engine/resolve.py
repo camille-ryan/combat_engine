@@ -1139,6 +1139,20 @@ def deal_damage(
     dtypes: Sequence[DamageType] = (),
     unpreventable: bool = False,
     weapon: str = "",
+    #: Which hand swung, for the blows that came from a swing. `""` for
+    #: every other sort of damage -- ongoing, a zone's burn, a trait's
+    #: `c.flat` -- which is the honest answer rather than a default of
+    #: `"main"` that would read as a main-hand hit.
+    #:
+    #: **The attack context has carried `hand` since `#501` and the damage
+    #: context did not**, so "weapons that have the off-hand property deal
+    #: +2 damage" had nothing to gate on while the *attack* half of the
+    #: same card was exact. `cf:fighter-weaponmaster-f3s4` is the worked
+    #: case and its note is what named this: it refused to approximate the
+    #: step off `Gear.main`, because that pays the larger number on
+    #: main-hand swings of a fighter whose main weapon happens to carry the
+    #: property.
+    hand: str = "",
     roll: Roll | None = None,
     reprice: Callable[[int], int] | None = None,
     by_attack: bool = False,
@@ -1207,6 +1221,13 @@ def deal_damage(
         # granted" is a damage-side rider and had nothing to gate on.
         "granted_by": granted_by,
         "granted_via": granted_via,
+        # Which hand swung, empty for damage that came from no swing. The
+        # attack context has carried this since #501; this one did not, so
+        # a two-weapon card's attack half was exact and its damage half had
+        # nothing to read. Read off `AttackResult.hand`, which `attack`
+        # sets as a plain attribute for the reason `vs` is one -- it stays
+        # off the wire and out of a replay fixture.
+        "hand": hand,
         "dtype": dtype,
         "crit": crit,
         # **Asked of the board, not carried from the roll.** "+2 damage

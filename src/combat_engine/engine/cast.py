@@ -3913,6 +3913,19 @@ class Cast:
         if who is None:
             return AttackResult()
         # `from_` moves only where the swing comes from -- reach, cover and
+        # **Which arm swung, remembered for the damage that follows.** The
+        # attack context carries `hand` and the damage context did not, so
+        # a two-weapon card's attack half was exact while its damage half
+        # had nothing to gate on. It cannot be read back off the outcome:
+        # `resolve.attack` sets `hand` on the **Hit/Miss event**, not on
+        # the `AttackResult` the caller gets, and `getattr(self.result,
+        # "hand", "")` is therefore `""` every time -- which is what the
+        # first draft of this did.
+        #
+        # A plain attribute rather than a declared field, which is the
+        # idiom `resolve` already states for `landed.vs`: it stays off the
+        # wire and out of a replay fixture. `cf:fighter-weaponmaster-f3s4`.
+        self._swung_hand = hand
         # flanking are measured from there. The numbers stay the caster's,
         # which is what a conjuration is: your attack, its position.
         self.result = attack(
@@ -4279,6 +4292,13 @@ class Cast:
             # Which weapon the blow came through. `detail` says which row
             # swung and cannot say which arm did it. #653.
             weapon=self._swung_weapon(),
+            # And which arm. Off `c.attack`'s own record of the swing --
+            # `resolve.attack` puts `hand` on the Hit/Miss **event** and
+            # not on the `AttackResult` returned here, so reading it off
+            # `self.result` answers `""` for every blow. Empty when no
+            # attack produced this damage, which is the honest answer for
+            # ongoing damage and a zone's burn.
+            hand=getattr(self, "_swung_hand", ""),
         )
         if dealt:
             self._rattle(who)

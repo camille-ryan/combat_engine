@@ -663,24 +663,31 @@ def fighter_talent_brawling(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
     requires=on_leg("tempest"),
     requires_text=_NOT_MY_OPTION,
-    dropped=("c.off_hand()",),
 )
 def fighter_talent_two_weapon(c: Cast) -> None:
     """The talent for fighting with a weapon in each hand.
 
     The last of the three `cf:fighter-weaponmaster-f3` leaves out.
 
-    **The attack bonus is exact, and the damage step is not, and the
-    difference is one key.** The attack context carries `hand`, so "with
-    weapons that have the offhand property" is the hand that swung and the
-    property on the weapon in it, asked outright. The damage context does
-    not carry it -- it has `target`, `power`, `opportunity`, `charge`,
-    `dtype`, `crit`, `advantage` and `ranged`, and no hand -- so the step
-    from +1 to +2 has nothing to gate on. Rather than approximate it off
-    `Gear.main`, which would pay the larger number on main-hand swings of a
-    fighter whose main weapon happens to carry the property, the step is
-    **dropped** and `c.off_hand()` names what it wants. The +1 is written
-    and plays.
+    **Written. The damage step was dropped on one missing context key and
+    the key is there now.** The old note was right about the cause: the
+    attack context carried `hand` and the damage context did not, so
+    *"this bonus increases to +2 with weapons that have the off-hand
+    property"* had nothing to gate on, and it refused to approximate the
+    step off `Gear.main` because that pays the larger number on main-hand
+    swings of a fighter whose main weapon happens to carry the property.
+    That refusal was the right call and it is what made the gap findable.
+
+    `resolve.dmg_ctx` carries `hand` now, off `c.attack`'s own record of
+    the swing -- **not** off `AttackResult`, which does not have it:
+    `resolve.attack` sets `hand` on the Hit/Miss *event*, so reading it
+    back from the result answers `""` for every blow.
+
+    **The two damage gates are mutually exclusive rather than stacked**,
+    because the card says the bonus *increases* to 2. Two untyped `+1`s
+    would have come to 2 as well -- `Mods.total` adds untyped bonuses
+    freely -- so this is about the row printing the number the page
+    prints, not about a stacking rule.
 
     The bonus feat is `c.feat`, which is the verb for "you gain <feat> even
     if you don't meet the prerequisites": it does not consult
@@ -713,7 +720,23 @@ def fighter_talent_two_weapon(c: Cast) -> None:
             and p.reach.kind in _MELEE_OR_CLOSE
         )
 
-    c.bonus("damage", 1, until=When.ENCOUNTER, on=me, when=melee_weapon)
+    # **Two mutually exclusive gates, not a second bonus laid on top.**
+    # The printed word is *"this bonus increases to +2"*, which is one
+    # bonus changing value rather than two adding. A pair of untyped `+1`s
+    # would in fact total 2 -- `Mods.total` says untyped bonuses "add
+    # freely" -- so this is about saying what the card says, not about
+    # dodging a stacking rule. What it buys is that the number here is the
+    # printed number: a reader checking the row against the page sees a 2
+    # where the page prints 2, instead of having to know the stacking rule
+    # to work out that 1 and 1 come to it.
+    def plain_melee(ctx: dict[str, Any]) -> bool:
+        return melee_weapon(ctx) and not swung_off_hand(ctx)
+
+    def off_hand_melee(ctx: dict[str, Any]) -> bool:
+        return melee_weapon(ctx) and swung_off_hand(ctx)
+
+    c.bonus("damage", 1, until=When.ENCOUNTER, on=me, when=plain_melee)
+    c.bonus("damage", 2, until=When.ENCOUNTER, on=me, when=off_hand_melee)
 
 
 # ----------------------------------------------------------------- invoker
