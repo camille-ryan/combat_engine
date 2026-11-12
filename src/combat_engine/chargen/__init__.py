@@ -3007,6 +3007,33 @@ ATTACK_GAINS: dict[Usage, tuple[int, ...]] = {
     Usage.DAILY: (1, 5, 9),
 }
 
+#: Extra power gains a **class feature** prints, beyond the table above.
+#:
+#: `cf:sorcerer-elementalist-f1` ends *"you gain an extra at-will attack
+#: power of your choice at 9th level and again at 19th"*, which is a gain
+#: and not a pick from a named list -- so it is neither `BUILD_OPTIONS`
+#: nor anything a body can do. The row carried
+#: `dropped=("chargen.power_choice()",)` and its note said so: *"a pick
+#: made when the character is built, and no body can make it."*
+#:
+#: Keyed by the **feature's ref**, read against the features already in
+#: the hand, so a character gets the extra gain exactly when it has the
+#: row -- an elementalist and nobody else. 19th is past where the tree
+#: goes; `ATTACK_GAINS` above says "heroic tier only" for the same reason
+#: and this follows it.
+#:
+#: **Three numbers, not two, and two was a silent no-op.** The entry says
+#: *(usage, the level the gain happens at, the level of the pool it comes
+#: from)*. Written as `(AT_WILL, 9)` -- reading the second as both -- it
+#: dealt **nothing**: `deal` filters `p.level == at`, and no at-will
+#: attack power is printed at 9th level in this corpus. An extra at-will
+#: comes from the **1st-level** list, which is what the card means by *"of
+#: your choice"*. Measured by A/B-ing the entry: 28 refs either way, and
+#: the difference an empty set. #1112.
+EXTRA_GAINS: dict[str, tuple[tuple[Usage, int, int], ...]] = {
+    "cf:sorcerer-elementalist-f1": ((Usage.AT_WILL, 9, 1),),
+}
+
 #: Utility powers are gained on their own levels and are not attack powers, so
 #: they are drawn without regard to usage -- a utility may be at-will,
 #: encounter or daily, and the level is what says it is a utility. These were
@@ -3186,6 +3213,15 @@ def loadout(
             if at > level:
                 continue
             out += deal(at, usage, sum(1 for g in gains if g == at))
+    # **And the extra gains a dealt class feature prints.** Read against
+    # `out`, which already holds this character's features by here, so the
+    # gain lands on the character that has the row and on nobody else.
+    # `deal` skips anything already dealt, so "an extra at-will of your
+    # choice" is a different one rather than a second copy. #1112.
+    for ref in list(out):
+        for usage, when, from_level in EXTRA_GAINS.get(ref, ()):
+            if when <= level:
+                out += deal(from_level, usage, 1)
     for at in UTILITY_GAINS:
         if at <= level:
             out += deal(at, None, 1)

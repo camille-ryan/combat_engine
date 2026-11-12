@@ -42855,6 +42855,81 @@ def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     )
 
 
+def a_class_feature_may_grant_an_extra_power_gain(out: Result) -> None:
+    """*"You gain an extra at-will attack power of your choice at 9th level
+    and again at 19th"* -- `cf:sorcerer-elementalist-f1`.
+
+    A power **gain**, which no body can make: the row carried
+    `dropped=("chargen.power_choice()",)` and its note said so --
+    *"a pick made when the character is built, and no body can make it."*
+    `chargen.EXTRA_GAINS` is it, keyed on the feature's ref and read
+    against the hand, so the gain reaches an elementalist and nobody else.
+    `#1112`.
+
+    **Not `BUILD_OPTIONS`**, which is the neighbouring table and the first
+    thing to reach for after `#1085`: that picks among a *named* list the
+    card prints, and "of your choice" is the whole at-will list. One
+    symbol for both would be the collapse `content/CLAUDE.md` is about.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Usage
+
+    REF = "cf:sorcerer-elementalist-f1"
+    build = chargen.build_of("sorcerer", "fire")
+
+    def at_wills(level: int, *, entry: bool) -> int:
+        """Level-1 at-will **attacks** in an elementalist's hand."""
+        saved = chargen.EXTRA_GAINS.pop(REF) if not entry else None
+        try:
+            got = chargen.loadout("sorcerer", level=level, build=build,
+                                  who_chassis="elementalist")
+        finally:
+            if saved is not None:
+                chargen.EXTRA_GAINS[REF] = saved
+        return sum(1 for r in got
+                   if r in REGISTRY and not r.startswith("cf:")
+                   and REGISTRY[r].usage is Usage.AT_WILL
+                   and REGISTRY[r].level == 1 and REGISTRY[r].is_attack)
+
+    out.that(at_wills(8, entry=True) == 2,
+             "a level-8 elementalist has the two at-will attacks every "
+             "character gets -- the floor, and the level the clause has not "
+             "reached yet",
+             f"{at_wills(8, entry=True)}")
+    out.that(at_wills(9, entry=True) == 3,
+             "and a level-9 one has THREE, which is the printed clause: the "
+             "extra comes from the **1st-level** list, because no at-will "
+             "attack is printed at 9th and asking for one there deals "
+             "nothing at all",
+             f"{at_wills(9, entry=True)}")
+    out.that(at_wills(9, entry=False) == 2,
+             "while removing the entry puts it back to two -- the A/B, "
+             "without which a count of three proves nothing about this "
+             "table",
+             f"{at_wills(9, entry=False)}")
+
+    # **Only the elementalist**, which is what keying on the ref buys.
+    other = chargen.loadout(
+        "sorcerer", level=9,
+        build=chargen.build_of("sorcerer", "cosmic"),
+        who_chassis=chargen.ORIGINAL)
+    base = sum(1 for r in other
+               if r in REGISTRY and not r.startswith("cf:")
+               and REGISTRY[r].usage is Usage.AT_WILL
+               and REGISTRY[r].level == 1 and REGISTRY[r].is_attack)
+    out.that(base == 2,
+             "and a level-9 sorcerer on the OTHER chassis still has two -- "
+             "the gain is keyed on the feature's ref, so it follows the row "
+             "rather than the class",
+             f"{base}")
+    out.that(not REGISTRY[REF].unfinished,
+             "so the row carries no marker: all three printed clauses are "
+             "honoured, the third one by chargen rather than by its body",
+             f"{REGISTRY[REF].unfinished}")
+
+
 def a_build_time_option_is_drawn_and_both_halves_are_dealt(out: Result) -> None:
     """`BUILD_OPTIONS` is **drawn** now, not fixed at `options[0]`. `#1085`.
 
@@ -74480,6 +74555,11 @@ DRIVERS = {
     "group_check": (
         a_group_check_scores_the_party_once_against_a_threshold,
         "a group check scores the party once against a threshold (#984)",
+    ),
+    "extra_gain": (
+        a_class_feature_may_grant_an_extra_power_gain,
+        "a class feature may grant an extra power gain, which no body can"
+        " make: the elementalist's third at-will at 9th (#1112)",
     ),
     "build_option_draw": (
         a_build_time_option_is_drawn_and_both_halves_are_dealt,

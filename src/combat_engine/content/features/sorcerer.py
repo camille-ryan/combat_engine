@@ -555,7 +555,6 @@ def elementalist_f0(c: Cast) -> None:
     keywords=ARCANE,
     requires=_elementalist,
     requires_text="needs one of the elemental specialties",
-    dropped=("chargen.power_choice()",),
 )
 def elementalist_f1(c: Cast) -> None:
     """The damage bonus and the armour clause, both off Constitution.
@@ -569,8 +568,24 @@ def elementalist_f1(c: Cast) -> None:
     already put the better of those two into the number, so what the clause
     is worth is the difference and nothing else.
 
-    The third clause -- an extra at-will of your choice at 9th and 19th --
-    is a pick made when the character is built, and no body can make it.
+    **The third clause is honoured by chargen, not here, which is why this
+    row has no marker and no third statement.** *"You gain an extra
+    at-will attack power of your choice at 9th level and again at 19th
+    level"* is a power **gain**, and the old note was right that *"no body
+    can make it"* -- so it is `chargen.EXTRA_GAINS`, keyed on this row's
+    ref and read against the hand, which gives the gain to an
+    elementalist and nobody else. Measured: a level-8 elementalist holds
+    **2** level-1 at-will attacks and a level-9 one holds **3**, and
+    removing the entry puts it back to 2.
+
+    19th is past where the tree goes, which `ATTACK_GAINS` says of itself
+    too.
+
+    **It is not `BUILD_OPTIONS`**, which was the first thing to reach for
+    after `#1085`: that table picks among a *named* list the card prints,
+    and *"of your choice"* is the whole at-will list rather than a pair.
+    One symbol for both would be the collapse `content/CLAUDE.md` is
+    about. #1112.
     """
     step = 2 * (c.level >= 5) + 3 * (c.level >= 15) + 3 * (c.level >= 25)
     c.bonus(
