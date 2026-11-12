@@ -43,6 +43,7 @@ from combat_engine.content.features.strikers import (
     PRIME_SHOT_BONUS,
     extra_damage,
     nearest_to_target,
+    pay_extra,
 )
 from combat_engine.engine import (
     AT_WILL,
@@ -603,7 +604,6 @@ def _vestige_augment(c: Cast, victim: int) -> None:
     # 56/55 was first measured on its retired twin.
     requires=on_leg("vestige"),
     requires_text="needs the pact that prints it",
-    dropped=("c.curse_damage()",),
 )
 def warlock_f1c11(c: Cast) -> None:
     """The one at-will that moves the curse around: it lands on the target
@@ -617,9 +617,22 @@ def warlock_f1c11(c: Cast) -> None:
 
     **The remnant's augment is written** -- `_vestige_augment` above, which
     carries the reading of which clause belongs to which remnant and why it
-    lands on a hit. One clause is still dropped: a creature already cursed
-    takes the curse's extra damage *instead of* the target, which wants
-    that damage payable on demand rather than on the next hit.
+    lands on a hit.
+
+    **The last clause is written, and the symbol it waited on was the wrong
+    shape of question.** It was `dropped=("c.curse_damage()",)`, described
+    as wanting the curse's damage *"payable on demand rather than on the
+    next hit"* -- and that facility already existed. `strikers.pay_extra`
+    is the payout half `extra_damage` arms, factored out of it because
+    `f1722` pays the same sentence on a miss, and its own docstring
+    anticipates this caller: *"answers whether it paid, so a row offering
+    the choice can tell 'you had already used it' from 'there was nothing
+    to add'."*
+
+    What actually blocked the clause was one line of this body: the pool
+    filtered out every creature already cursed, so the printed branch
+    `if the creature is already cursed by you` could never be reached. The
+    pool is everybody in reach now, which is what the card offers.
     """
     victim = c.target
     if not c.strike() or victim is None:
@@ -630,11 +643,35 @@ def warlock_f1c11(c: Cast) -> None:
     # left to curse is still a successful attack.
     _vestige_augment(c, victim)
     near = [victim, *(e for e in c.within(3, of=victim, side="enemy") if e != victim)]
-    pool = sorted(e for e in near if not c.cursed(on=e))
+    # **Everybody in reach, cursed or not.** This filtered the cursed ones
+    # out, and that is why the printed "if the creature is already cursed
+    # by you" branch could never arise: the pool it reads could not hold
+    # one. The choice itself is printed -- *"choose the target or a
+    # creature within 3 squares"* -- so an already-cursed creature being
+    # offered is the card, not a widening.
+    pool = sorted(near)
     pick = c.choose(pool, f"{c.ref}: who the curse settles on") if pool else None
     if pick is None:
         return
+    # Read before placing, because placing is what would make it true.
+    already = c.cursed(on=pick)
     c.curse(on=pick)
+    if already:
+        # *"...if the creature is already cursed by you, you can deal your
+        # cf:warlock-f4 extra damage to that creature instead of to the
+        # target."* A printed **may**, so it is offered rather than taken,
+        # and `pay_extra` answers whether the once-per-round window was
+        # still open -- which is how "declined" is told from "already
+        # spent" without this row keeping a latch of its own.
+        #
+        # **No rider in this branch**, which is the "instead of" doing its
+        # work: a creature already cursed by this warlock already carries
+        # one, and arming a second would pay the curse twice from one
+        # placement.
+        if c.choose([pick], f"{c.ref}: deal the curse's damage to it now",
+                    optional=True) is not None:
+            pay_extra(c, CURSE, "1d6", on=pick)
+        return
     extra_damage(c, "1d6", applies=lambda t: t == pick, label=CURSE)
 
 

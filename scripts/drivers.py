@@ -30797,6 +30797,75 @@ def a_weapon_is_refused_for_the_wrong_size_of_wielder(out: Result) -> None:
              f"two-handed {two_handed!r}, one-handed {one_handed!r}")
 
 
+def a_curse_already_placed_pays_its_damage_instead(out: Result) -> None:
+    """`cf:warlock-f1c11`'s last clause, and the symbol was the wrong shape.
+
+    The card, after choosing who the curse settles on:
+
+      > *"You place your cf:warlock-f4 on that creature; if the creature is
+      > already cursed by you, you can deal your cf:warlock-f4 extra damage
+      > to that creature instead of to the target."*
+
+    It was `dropped=("c.curse_damage()",)`, wanting the curse's damage
+    *"payable on demand rather than on the next hit"* -- and that facility
+    already existed. `strikers.pay_extra` is the payout half
+    `extra_damage` arms, factored out because `f1722` pays the same
+    sentence on a miss, and its docstring anticipates this caller:
+    *"answers whether it paid, so a row offering the choice can tell 'you
+    had already used it' from 'there was nothing to add'."*
+
+    **What blocked the clause was one line of the row's own body.** The
+    pool filtered out every already-cursed creature, so the printed branch
+    could not be reached -- the set it reads could not contain one. That
+    filter is the plant.
+
+    The `may` is asserted in both directions, because an offered choice
+    that is taken either way is not a choice.
+    """
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies
+
+    REF = "cf:warlock-f1c11"
+
+    def swing(*, pre_cursed: bool, take: bool) -> int:
+        """Hit points the foe loses. One seed, so the dice are the same and
+        the difference is the clause."""
+        world, me, _ = audit_board(REF, 1)
+        foe = enemies(world, me)[0]
+        setup = Cast(world=world, me=me, ref="driver", target=foe, targets=[foe])
+        if pre_cursed:
+            setup.curse(on=foe)
+        # first option is the pick / accept, last is the decline
+        world.decider = lambda a, k, o, p: (o[0] if take else o[-1])
+        world.rng.loaded = 20
+        was = world.need(foe, Health).hp
+        REGISTRY[REF].body(
+            Cast(world=world, me=me, ref=REF, target=foe, targets=[foe]))
+        return was - world.need(foe, Health).hp
+
+    plain = swing(pre_cursed=False, take=True)
+    taken = swing(pre_cursed=True, take=True)
+    declined = swing(pre_cursed=True, take=False)
+
+    out.that(plain > 0,
+             "the power lands its own damage on a foe nobody has cursed, "
+             "which is the arm that worked before this clause",
+             f"{plain} hit points")
+    out.that(taken > plain,
+             "and against a foe ALREADY cursed, taking the printed option "
+             "pays the curse's extra damage there and then -- the clause "
+             "that was dropped. Reds if the body filters the cursed out of "
+             "the pool again, which is the plant",
+             f"{plain} -> {taken}")
+    out.that(declined == plain,
+             "while declining it pays nothing extra, so the printed `can` "
+             "is a real choice rather than a step taken for the player",
+             f"declined {declined}, plain {plain}")
+
+
 def a_declined_clause_is_not_work_owed(out: Result) -> None:
     """`declined_clause=`: the row says a missing clause is a decision.
 
@@ -73418,6 +73487,10 @@ DRIVERS = {
     "weapon_size": (
         a_weapon_is_refused_for_the_wrong_size_of_wielder,
         "a weapon is refused for the wrong size of wielder (PHB 220)",
+    ),
+    "curse_instead": (
+        a_curse_already_placed_pays_its_damage_instead,
+        "a curse already placed pays its damage instead (cf:warlock-f1c11)",
     ),
     "illuminate": (
         one_carried_light_level_at_a_time,
