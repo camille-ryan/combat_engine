@@ -108,42 +108,46 @@ def _provoked_beside(c: Cast, who: int):  # noqa: ANN202
 @power(
     "cf:shaman-f0",
     **TRAIT,
-    dropped=("c.forbid(when=)",),
 )
 def shaman_f0(c: Cast) -> None:
     """The feature's writable half is the power it hands over.
 
-    "Your spirit companion must be present when you use a spirit power" is
-    still dropped, and **the marker has moved because the old one arrived.**
-    It said `Keyword.SPIRIT`, and #589 recorded that keyword on 66 powers --
-    so the set of rows to gate now exists and names itself.
+    **"Your spirit companion must be present when you use such a power" is
+    a prerequisite on each power now, not a bar laid here.** Camille, asked
+    directly, 2026-11-11:
 
-    What is missing is the *shape* of the refusal. `c.forbid(keyword=)`
-    exists and is a timed effect: it adds to `Powers.forbidden_keywords` and
-    gives the rows back when the duration ends. This sentence is not a
-    duration, it is a **live condition** -- `c.companion()` is there or it is
-    not, and it can change twice in a round. Laying the refusal at arming
-    would bar every spirit power for the whole encounter, including while the
-    companion is standing next to its owner, which is worse than the gap.
+      > *"this should be a prereq for every power which uses the spirit
+      > companion. If that's already present in the powers, no changes
+      > required."*
 
-    So the want is a refusal asked at the moment of use against a predicate,
-    the same distinction #489 draws for a recharge: a state, not a moment.
+    It was not already present, and the reason this row believed it was is
+    worth keeping. This docstring used to say *"the spirit-melee rows are
+    gated anyway -- their reach is measured from the companion and cannot
+    be measured without one"*. They can: `dsl.measured_from` **falls back
+    to the caster**, and says so -- *"falls back to the caster when the
+    named thing is not on the board, so a shaman whose spirit has been
+    dismissed is simply out of reach rather than throwing from inside
+    `legal()`"*. `return mine or [actor]`. So a spirit-melee power with no
+    companion was measured from the shaman and still worked, which is
+    exactly what the card forbids.
 
-    **There is a second hold and the marker names the first on purpose.**
-    Even given that refusal, the set it would bar is read from the content
-    *headers*, and none of the 66 powers the database now calls spirit
-    declares the keyword -- `#486`'s family, the same one `f1836` sits in.
-    The marker names the engine facility because that one does not exist at
-    all, where the headers are a known content debt with a count against it;
-    if the headers land first this row still will not play, which is what a
-    reader needs to know before picking it up.
+    `_spirit.spirit_present` is the predicate and it is on **65 of the 66**
+    spirit powers. The one left out is `p11365`, which is
+    `out_of_combat=True` -- a row never offered in a fight, so a
+    prerequisite asked mid-fight adds nothing to it.
 
-    The spirit-melee rows are gated anyway -- their reach is measured from
-    the companion and cannot be measured without one -- so what is actually
-    unguarded is a *ranged* spirit power.
+    **Which also retires the old marker's second hold.** It said the set to
+    bar is read from content headers and *"none of the 66 powers the
+    database now calls spirit declares the keyword"* -- true, and no longer
+    load-bearing: a prerequisite per row needs no keyword to find its rows
+    by. `#486`'s header debt is still real and no longer blocks this.
+
+    `c.forbid(when=)` is not wanted either way. The marker asked for a
+    refusal evaluated against a live predicate, which is what `requires=`
+    already is: asked at the moment of use, every time.
 
     The Companion Spirit choice is the `cf:shaman-f0sN` rows.
-    """
+        """
     c.grant_row("p6515")
 
 

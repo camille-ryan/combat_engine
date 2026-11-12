@@ -38,7 +38,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.query import adjacent, team
 
-from ._spirit import beside, friends, near_spirit
+from ._spirit import beside, friends, near_spirit, spirit_present
 
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
 SPIRIT_MELEE = Melee(1, from_="companion")
@@ -131,6 +131,8 @@ def p6515(c: Cast) -> None:
     attack=Attack(WIS, vs=REF),
     trigger="an enemy leaves a square adjacent to your spirit companion",
     on=LEAVES,
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12865(c: Cast) -> None:
     if c.strike(from_=c.companion()):
@@ -150,6 +152,8 @@ def p12865(c: Cast) -> None:
     attack=Attack(WIS, vs=REF),
     trigger="an enemy leaves a square adjacent to your spirit companion",
     on=LEAVES,
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5388(c: Cast) -> None:
     if c.strike(from_=c.companion()):
@@ -168,6 +172,8 @@ def p5388(c: Cast) -> None:
     attack=Attack(WIS, vs=REF),
     trigger="an enemy leaves a square adjacent to your spirit companion",
     on=LEAVES,
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5389(c: Cast) -> None:
     """The heal is an Effect line, so it happens whether or not the swing
@@ -199,6 +205,8 @@ def p5389(c: Cast) -> None:
     keywords=[Keyword.PRIMAL, Keyword.SPIRIT],
     trigger="an enemy leaves a square adjacent to your spirit companion",
     on=LEAVES,
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9732(c: Cast) -> None:
     """No attack of your own: an ally shoots instead. The combat advantage is
@@ -227,6 +235,8 @@ def p9732(c: Cast) -> None:
     attack=Attack(WIS, vs=WILL),
     trigger="an enemy leaves a square adjacent to your spirit companion",
     on=LEAVES,
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9733(c: Cast) -> None:
     """"Stops moving and must use a different action to resume" is the move

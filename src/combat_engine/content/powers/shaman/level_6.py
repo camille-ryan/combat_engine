@@ -36,7 +36,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.ecs import World
 
-from ._spirit import beside, friends, keyed
+from ._spirit import beside, friends, keyed, spirit_present
 
 PRIMAL = [Keyword.PRIMAL]
 
@@ -184,6 +184,8 @@ def p11365(c: Cast) -> None:
     reach=CloseBurst(5, from_="companion"),
     target=YOU_OR_ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12530(c: Cast) -> None:
     """The printed line bars calling the companion again until the end of
@@ -209,6 +211,8 @@ def p12530(c: Cast) -> None:
     reach=CloseBurst(2, from_="companion"),
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL, Keyword.ZONE, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12873(c: Cast) -> None:
     """The zone is laid out before the spirit goes, since the burst is
@@ -274,6 +278,8 @@ def p3847(c: Cast) -> None:
     reach=CloseBurst(1, from_="companion"),
     target=YOU_AND_EACH_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5545(c: Cast) -> None:
     """"You and each ally in the burst" is two pools: the shaman is a
@@ -314,6 +320,8 @@ def p9757(c: Cast) -> None:
     keywords=[*PRIMAL, Keyword.SPIRIT],
     trigger="an enemy hits your spirit companion",
     on=Trigger(Hit, hits_my_companion, "an enemy hits your spirit companion"),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9758(c: Cast) -> None:
     """`Hit` does not carry which defence was attacked, so when the trigger

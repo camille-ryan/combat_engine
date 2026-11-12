@@ -28,7 +28,7 @@ from combat_engine.engine import (
     power,
 )
 
-from ._spirit import beside, beside_spirit, friends, spirit_square
+from ._spirit import beside, beside_spirit, friends, spirit_present, spirit_square
 
 PRIMAL = [Keyword.PRIMAL]
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
@@ -45,6 +45,8 @@ SPIRIT_MELEE = Melee(1, from_="companion")
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p11360(c: Cast) -> None:
     """"Or until your target is not adjacent to your spirit companion at
@@ -75,6 +77,8 @@ def p11360(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12531(c: Cast) -> None:
     at = spirit_square(c)
@@ -95,6 +99,8 @@ def p12531(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.ZONE, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12874(c: Cast) -> None:
     """The zone and the allies' slide are laid out first: both are measured
@@ -127,6 +133,8 @@ def p12874(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.LIGHTNING, Keyword.THUNDER, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p3795(c: Cast) -> None:
     """One lump of damage carries one type, so the lightning half is what
@@ -149,6 +157,8 @@ def p3795(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p3796(c: Cast) -> None:
     if not c.strike(from_=c.companion()):
@@ -235,6 +245,8 @@ def p5400(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5438(c: Cast) -> None:
     if not c.strike(from_=c.companion()):
@@ -258,6 +270,8 @@ def p5438(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5445(c: Cast) -> None:
     """The bonus counts how many targets were hit, and a count cannot be
@@ -290,6 +304,8 @@ def p5445(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9760(c: Cast) -> None:
     """"If you hit at least one target" is the same shape as p5445: the
@@ -323,6 +339,8 @@ def p9760(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9761(c: Cast) -> None:
     if c.first:
@@ -344,6 +362,8 @@ def p9761(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9762(c: Cast) -> None:
     """The granted swing has combat advantage, which is the target granting

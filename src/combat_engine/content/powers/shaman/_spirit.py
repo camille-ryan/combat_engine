@@ -14,9 +14,54 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.engine import Cast, Hit, Keyword, Square, get, spread
+from combat_engine.engine import Cast, Hit, Keyword, Square, World, get, spread
 from combat_engine.engine.dsl import area_of
 from combat_engine.engine.query import distance_between, squares
+
+
+def spirit_present(world: World, eid: int) -> bool:
+    """"Your spirit companion must be present when you use such a power."
+
+    `cf:warlock-f1s1`'s sibling problem, settled the other way. Camille,
+    asked on `cf:shaman-f0` whether this wanted a central refusal,
+    2026-11-11:
+
+      > *"this should be a prereq for every power which uses the spirit
+      > companion. If that's already present in the powers, no changes
+      > required."*
+
+    So it is a `requires=` on each row rather than one timed bar laid by
+    the class feature -- which is also the only shape that can be right:
+    the feature's own marker wanted `c.forbid(when=)` because the printed
+    sentence is a **live condition** and `c.forbid(keyword=)` is a
+    duration. A prerequisite is asked at the moment of use, every time,
+    which is what "must be present" means.
+
+    **It mostly WAS already present**, which is what her second sentence
+    asked. Of the 66 powers the database calls spirit, 62 read the
+    companion in their bodies -- their reach is measured from it, so they
+    cannot resolve without one -- and 2 carry a `requires=` of their own.
+    Four had no gate of any kind and they are the four callers here.
+
+    Takes `(World, int)` rather than a `Cast`, because that is the shape
+    `Power.requires` is asked in. Narrowed to `kind == "spirit"`: a shaman
+    is the one character who can hold a second companion, and a card
+    saying "your spirit companion" does not mean a familiar.
+
+    **Invisible to the chargen draw, deliberately.** `chargen._leg_of`
+    reads a `leg` attribute off the gate -- `features.on_leg` sets one --
+    and this gate has none, so the draw deals these powers exactly as
+    before and only play refuses them. The alternative would have been a
+    card the shaman is never dealt.
+    """
+    from combat_engine.engine.components import Companion
+
+    return any(
+        (held := world.get(e, Companion)) is not None
+        and held.owner == eid
+        and held.kind == "spirit"
+        for e in world.having(Companion)
+    )
 
 
 def beside_spirit(c: Cast, who: int | None) -> bool:

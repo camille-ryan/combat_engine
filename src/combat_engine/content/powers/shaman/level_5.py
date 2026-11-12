@@ -37,7 +37,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.query import distance_between
 
-from ._spirit import beside_spirit, friends, spirit_square
+from ._spirit import beside_spirit, friends, spirit_present, spirit_square
 
 PRIMAL = [Keyword.PRIMAL]
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
@@ -227,6 +227,8 @@ def p9754(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.ZONE, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12529(c: Cast) -> None:
     """"Until your spirit companion is no longer present" is not a duration
@@ -264,6 +266,8 @@ def p12529(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.ZONE, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12871(c: Cast) -> None:
     """The second printed block is `p12871b`, an opportunity action that
@@ -289,6 +293,8 @@ def p12871(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.PSYCHIC, Keyword.ZONE, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p16501(c: Cast) -> None:
     """Concealment is not something a creature can be barred from using --
@@ -325,6 +331,8 @@ def p16501(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.COLD, Keyword.HEALING, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5454(c: Cast) -> None:
     """Three payouts, growing, then the hold is spent. The flag keeps the
@@ -389,6 +397,8 @@ def p5555(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9753(c: Cast) -> None:
     """The hold is a named effect with nothing in it: what it is for is the

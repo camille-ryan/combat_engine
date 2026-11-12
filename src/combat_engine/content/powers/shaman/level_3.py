@@ -46,6 +46,7 @@ from ._spirit import (
     friends,
     granted_hit,
     pick_foe,
+    spirit_present,
     spirit_square,
 )
 
@@ -70,6 +71,8 @@ SPIRIT_MELEE = Melee(1, from_="companion")
         both(hits_my_companion, by_melee),
         "your spirit companion is hit by a melee attack",
     ),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p11364(c: Cast) -> None:
     """The target is the creature that swung, read off the trigger rather
@@ -98,6 +101,8 @@ def p11364(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.FIRE, Keyword.ZONE, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12528(c: Cast) -> None:
     """The zone is a burst 2 laid out from the spirit's square. "Taking
@@ -132,6 +137,8 @@ def p12528(c: Cast) -> None:
     target=ONE_ALLY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=AC, plus=2),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12870(c: Cast) -> None:
     """The header's attack line is the secondary one: the primary target is
@@ -159,6 +166,8 @@ def p12870(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p3789(c: Cast) -> None:
     """The damage context carries no reach, so "melee attacks" is read off
@@ -224,6 +233,8 @@ def p5395(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.HEALING, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5396(c: Cast) -> None:
     if not c.strike(from_=c.companion()):
@@ -246,6 +257,8 @@ def p5396(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5436(c: Cast) -> None:
     """The spirit is standing next to the target -- the range line says so
@@ -268,6 +281,8 @@ def p5436(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5537(c: Cast) -> None:
     """Flanking with the spirit has no verb -- `c.cannot_be_flanked` is all
@@ -287,6 +302,8 @@ def p5537(c: Cast) -> None:
     reach=SPIRIT_MELEE,
     target=ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9749(c: Cast) -> None:
     mate = c.target
@@ -312,6 +329,8 @@ def p9749(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9750(c: Cast) -> None:
     if not c.strike(from_=c.companion(), plus=2 if c.bloodied() else 0):
@@ -342,6 +361,8 @@ def p9750(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9751(c: Cast) -> None:
     if c.strike(from_=c.companion()):

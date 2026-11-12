@@ -40,7 +40,7 @@ from combat_engine.engine.ecs import World
 from combat_engine.engine.events import InitiativeRolled
 from combat_engine.engine.query import distance_between, team
 
-from ._spirit import beside_spirit, friends, send_spirit
+from ._spirit import beside_spirit, friends, send_spirit, spirit_present
 
 PRIMAL = [Keyword.PRIMAL]
 
@@ -179,6 +179,8 @@ def p9748(c: Cast) -> None:
     target=Target("ally", 1, objects=True),
     keywords=[*PRIMAL, Keyword.SPIRIT],
     dropped=("Scenery.weight",),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p11358(c: Cast) -> None:
     """*"One ally ... or one object you can lift adjacent to your spirit
@@ -214,6 +216,8 @@ def p11358(c: Cast) -> None:
     reach=CloseBurst(5, from_="companion"),
     target=YOU_OR_ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12527(c: Cast) -> None:
     """"Makes a saving throw **or** gains temporary hit points" is a choice,
@@ -237,6 +241,8 @@ def p12527(c: Cast) -> None:
     reach=Melee(5, from_="companion"),
     target=ONE_ALLY,
     keywords=[Keyword.PRIMAL, Keyword.HEALING, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12869(c: Cast) -> None:
     """Regeneration is a watch on the beneficiary's own turn start. The
@@ -277,6 +283,8 @@ def p12869(c: Cast) -> None:
         stepped_away_from_spirit,
         "an enemy stops standing beside your spirit companion",
     ),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9744(c: Cast) -> None:
     foe = getattr(c.trigger, "actor", None)
@@ -292,6 +300,8 @@ def p9744(c: Cast) -> None:
     reach=CloseBurst(1, from_="companion"),
     target=YOU_AND_EACH_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9745(c: Cast) -> None:
     """"You and each ally in the burst" is two pools: the shaman is a

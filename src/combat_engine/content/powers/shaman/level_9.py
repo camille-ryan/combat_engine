@@ -36,7 +36,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.query import distance_between
 
-from ._spirit import by_hand, spirit_power
+from ._spirit import by_hand, spirit_power, spirit_present
 
 PRIMAL = [Keyword.PRIMAL]
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
@@ -267,6 +267,8 @@ def p9766(c: Cast) -> None:
     # the label is the card's own line. #855.
     target=Target("self", 0, label="Your spirit companion"),
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12532(c: Cast) -> None:
     """The printed second block is `p12532b`, the standard-action attack the
@@ -289,6 +291,8 @@ def p12532(c: Cast) -> None:
     target=ONE_ALLY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.POLYMORPH, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12875(c: Cast) -> None:
     """`c.form` is the caster's own shape and takes no `on=`, so the ally's
@@ -320,6 +324,8 @@ def p12875(c: Cast) -> None:
     reach=SPIRIT_MELEE,
     target=ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p13771(c: Cast) -> None:
     mate = c.target
@@ -339,6 +345,8 @@ def p13771(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9764(c: Cast) -> None:
     """"You can't call it back until after the end of your next turn" wants

@@ -30797,6 +30797,147 @@ def a_weapon_is_refused_for_the_wrong_size_of_wielder(out: Result) -> None:
              f"two-handed {two_handed!r}, one-handed {one_handed!r}")
 
 
+def a_spirit_power_needs_the_spirit_present(out: Result) -> None:
+    """`cf:shaman-f0`'s printed requirement, as a prereq on every power.
+
+    Camille, asked whether this wanted a central refusal, 2026-11-11:
+
+      > *"this should be a prereq for every power which uses the spirit
+      > companion. If that's already present in the powers, no changes
+      > required."*
+
+    **It was not already present, and the row believed it was.**
+    `cf:shaman-f0`'s own note said the spirit-melee rows were *"gated
+    anyway -- their reach is measured from the companion and cannot be
+    measured without one"*. They can: `dsl.measured_from` falls back to the
+    caster and says so in its docstring, `return mine or [actor]`. So a
+    spirit-melee power with no companion was measured from the shaman and
+    worked -- which is the first arm below, and the reason the prereq is
+    load-bearing rather than belt-and-braces.
+    """
+    import inspect
+
+    from combat_engine import chargen
+    from combat_engine.content.powers.shaman._spirit import spirit_present
+    from combat_engine.engine import Bus, Grid, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Powers
+    from combat_engine.engine.dsl import REGISTRY, origins, usable
+    from combat_engine.engine.rng import Rng
+
+    WHY = "your spirit companion must be present"
+
+    # **The population comes from the database and the rows, NOT from the
+    # prereq.** Deriving it from `requires_text` is what the first draft
+    # did, and removing a gate then simply shrank the population: the
+    # plant stayed green, which is the vacuous-census failure this suite
+    # keeps paying for. The expected set is "a spirit power that uses the
+    # companion", which is a fact about the card and the body.
+    import json as _json
+
+    from combat_engine.db import game as _game
+
+    spirit = [r for r, kw in _game().execute("select ref, keywords from power")
+              if any(str(w).lower() == "spirit"
+                     for w in _json.loads(kw or "[]"))]
+    expect = sorted(
+        r for r in spirit
+        if r in REGISTRY and not REGISTRY[r].out_of_combat
+        and (getattr(REGISTRY[r].reach, "from_", "") == "companion"
+             or "companion(" in inspect.getsource(REGISTRY[r].body))
+    )
+    gated = sorted(r for r in expect
+                   if getattr(REGISTRY[r], "requires_text", "") == WHY)
+
+    world = World(Grid(24, 16), Rng(3), Bus())
+    me = chargen.spawn(world, chargen.Character(
+        cls="shaman", level=9, build="", feats=[], powers=[]), (5, 5))
+    # **A foe and an ally, both adjacent, or the whole rule is vacuous.**
+    # With an empty board every row is unusable for "no targets" and the
+    # refusal arm passes without the prereq existing -- which is what two
+    # drafts of this did. They stand next to the shaman so that the reach
+    # fallback (`return mine or [actor]`) would find them.
+    chargen.spawn(world, chargen.Character(
+        cls="fighter", level=9, build="", feats=[], powers=[]), (6, 5))
+    chargen.spawn(world, chargen.Character(
+        cls="cleric", level=9, build="", feats=[], powers=[]), (5, 6))
+    known = world.need(me, Powers)
+    for ref in gated:
+        if ref not in known.known:
+            known.known.append(ref)
+    for eid in list(world.having(Companion)):
+        world.remove(eid, Companion)
+
+    # -- why the prereq is needed at all --------------------------------
+    melee = next((r for r in gated
+                  if getattr(REGISTRY[r].reach, "from_", "") == "companion"), "")
+    out.that(bool(melee),
+             "some gated row measures its reach from the companion, which "
+             "is the family the old note thought was already safe",
+             f"{melee}")
+    if melee:
+        out.that(origins(world, me, REGISTRY[melee].reach) == [me],
+                 "and with NO companion that reach falls back to the CASTER "
+                 "-- `return mine or [actor]` -- so the row would have been "
+                 "measured from the shaman and worked. This is the arm that "
+                 "says the prereq is load-bearing",
+                 f"{origins(world, me, REGISTRY[melee].reach)} vs caster {me}")
+
+    # -- the prereq, both ways ------------------------------------------
+    out.that(len(expect) >= 60,
+             "the population is read off the cards and the bodies -- a "
+             "spirit power whose reach is measured from the companion or "
+             "whose body reads it -- so it cannot shrink when a gate is "
+             "removed",
+             f"{len(expect)} such rows")
+    # **Asserted on behaviour, not on the gate's wording.** The first
+    # draft matched `requires_text` and reported `p12532b` missing -- a
+    # false positive: that row carries its own gate, which already checks
+    # the companion in its own words. What matters is that the row is
+    # refused, however the refusal is spelled.
+    open_without = [r for r in expect if usable(world, me, REGISTRY[r])[0]]
+    out.that(not open_without,
+             "and with no companion EVERY one of them is refused, however "
+             "its gate is worded",
+             f"{len(open_without)} still usable: {open_without[:6]}")
+
+    # **Which rows make that arm non-vacuous, named.** Most of the 62 are
+    # refused anyway with no companion -- a burst measured from nothing
+    # finds no targets even with the reach fallback -- so "all refused"
+    # would pass on a tree with no prereq at all. Measured by clearing
+    # each gate in turn: **18 of the 62** were usable without it. `p9749`
+    # is one, so it is the row to plant: drop ITS prereq and the arm above
+    # reds. Dropping the prereq from `p11357` does not, and a first draft
+    # of this rule was planted there and read as sound.
+    LOAD_BEARING = "p9749"
+    out.that(LOAD_BEARING in expect,
+             f"{LOAD_BEARING} is in the population, so the arm above is "
+             "about it",
+             f"{LOAD_BEARING in expect}")
+    out.that(usable(world, me, REGISTRY[LOAD_BEARING])[1] == WHY,
+             f"and {LOAD_BEARING} is refused for the printed reason -- it "
+             "is one of the eighteen that WOULD be usable without the "
+             "prereq, which is what stops this rule passing vacuously",
+             f"{usable(world, me, REGISTRY[LOAD_BEARING])}")
+    refused = [r for r in gated if usable(world, me, REGISTRY[r])[1] == WHY]
+    out.that(len(refused) == len(gated) and len(gated) >= 60,
+             "and the ones carrying the shared predicate give the printed "
+             "reason rather than a board accident -- which is what tells a "
+             "real refusal from 'no targets'",
+             f"{len(refused)} of {len(gated)} say {WHY!r}")
+
+    Cast(world=world, me=me, ref="drivers:shaman").call_companion()
+    still = [r for r in gated if usable(world, me, REGISTRY[r])[1] == WHY]
+    out.that(not still,
+             "and calling the spirit back lifts it from all of them, so the "
+             "gate is the live condition the card prints and not a bar laid "
+             "once at the top of the fight",
+             f"{len(still)} still refused: {still[:4]}")
+    out.that(spirit_present(world, me),
+             "the predicate itself answers yes with one on the board",
+             f"companions={len(list(world.having(Companion)))}")
+
+
 def a_curse_already_placed_pays_its_damage_instead(out: Result) -> None:
     """`cf:warlock-f1c11`'s last clause, and the symbol was the wrong shape.
 
@@ -73546,6 +73687,10 @@ DRIVERS = {
     "curse_instead": (
         a_curse_already_placed_pays_its_damage_instead,
         "a curse already placed pays its damage instead (cf:warlock-f1c11)",
+    ),
+    "spirit_present": (
+        a_spirit_power_needs_the_spirit_present,
+        "a spirit power needs the spirit present (cf:shaman-f0)",
     ),
     "illuminate": (
         one_carried_light_level_at_a_time,

@@ -55,6 +55,7 @@ from ._spirit import (
     granted_hit,
     pick_foe,
     send_spirit,
+    spirit_present,
 )
 
 PRIMAL = [Keyword.PRIMAL]
@@ -230,6 +231,8 @@ def p9743(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p11357(c: Cast) -> None:
     """Cover has no verb of its own. What it is printed as is -2 to the
@@ -259,6 +262,8 @@ def p11357(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.PSYCHIC, Keyword.FEAR, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p11363(c: Cast) -> None:
     """The penalty is an Effect line, so it lands whether the attack did or
@@ -282,6 +287,8 @@ def p11363(c: Cast) -> None:
     reach=SPIRIT_MELEE,
     target=ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12866(c: Cast) -> None:
     mate = c.target
@@ -301,6 +308,8 @@ def p12866(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.FIRE, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12867(c: Cast) -> None:
     """"Can choose to deal fire damage" is the type on the damage as it is
@@ -332,6 +341,8 @@ def p12867(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.ZONE, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12868(c: Cast) -> None:
     """The zone goes down before the spirit does, since the burst is
@@ -359,6 +370,8 @@ def p12868(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p3778(c: Cast) -> None:
     """The Perception half of the printed bonus is a skill check and has
@@ -383,6 +396,8 @@ def p3778(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p3780(c: Cast) -> None:
     if not c.strike(from_=c.companion()):
@@ -429,6 +444,8 @@ def p3783(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p3784(c: Cast) -> None:
     if not c.strike(from_=c.companion()):
@@ -454,6 +471,8 @@ def p3784(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p3786(c: Cast) -> None:
     if not c.strike(from_=c.companion()):
@@ -585,6 +604,8 @@ def p5432(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5440(c: Cast) -> None:
     """A mark belongs to whoever is named, so this one is the spirit's. The
@@ -644,6 +665,8 @@ def p5451(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5510(c: Cast) -> None:
     """Flanking with the spirit has no verb -- `c.cannot_be_flanked` is the
@@ -664,6 +687,8 @@ def p5510(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.COLD, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p5538(c: Cast) -> None:
     """"An attack that includes your spirit companion in the area" is the
@@ -687,6 +712,8 @@ def p5538(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p6521(c: Cast) -> None:
     if not c.strike(from_=c.companion()):
@@ -706,6 +733,8 @@ def p6521(c: Cast) -> None:
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9734(c: Cast) -> None:
     victim = c.target
@@ -759,6 +788,8 @@ def p9735(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.PSYCHIC, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9736(c: Cast) -> None:
     spirit = c.companion()
@@ -786,6 +817,8 @@ def p9736(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9738(c: Cast) -> None:
     victim = c.target
@@ -810,6 +843,8 @@ def p9738(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.LIGHTNING, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p9739(c: Cast) -> None:
     """The spirit walks before the attack, which is why the range the

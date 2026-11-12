@@ -34,7 +34,7 @@ from combat_engine.engine import (
     power,
 )
 
-from ._spirit import beside, beside_spirit, friends, near_spirit
+from ._spirit import beside, beside_spirit, friends, near_spirit, spirit_present
 
 PRIMAL = [Keyword.PRIMAL]
 
@@ -134,6 +134,8 @@ def p9769(c: Cast) -> None:
     target=NO_TARGET,
     keywords=[
         Keyword.PRIMAL, Keyword.FEAR, Keyword.HEALING, Keyword.ZONE, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12534(c: Cast) -> None:
     """"The zone moves with the spirit companion" is an aura on the spirit
@@ -170,6 +172,8 @@ def p12534(c: Cast) -> None:
     reach=Melee(5, from_="companion"),
     target=ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p12876(c: Cast) -> None:
     """Lightly obscured is concealment, which has no verb -- the engine's
@@ -220,6 +224,8 @@ def p5459(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[*PRIMAL, Keyword.SPIRIT],
+    requires=spirit_present,
+    requires_text="your spirit companion must be present",
 )
 def p6945(c: Cast) -> None:
     """There is no verb for giving a healing surge back -- `c.spend_surge`

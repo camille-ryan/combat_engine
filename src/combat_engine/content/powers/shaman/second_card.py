@@ -17,8 +17,9 @@ from typing import Any
 
 from combat_engine.content.powers.cards import active
 from combat_engine.engine import *
-from combat_engine.engine.components import Companion
 from combat_engine.engine.query import enemies
+
+from ._spirit import spirit_present
 
 PRIMAL_IMPLEMENT = [Keyword.PRIMAL, Keyword.IMPLEMENT]
 
@@ -121,9 +122,11 @@ def _shaped_spirit(ref: str) -> Callable[[World, int], bool]:
     held = active(ref)
 
     def check(world: World, eid: int) -> bool:
-        return held(world, eid) and any(
-            world.get(who, Companion).owner == eid for who in world.having(Companion)
-        )
+        # **`spirit_present` rather than a second walk.** This counted the
+        # companions itself, which was the same question `cf:shaman-f0`'s
+        # requirement is now asked as on 65 other rows -- two copies of one
+        # sentence is the shape that drifts.
+        return held(world, eid) and spirit_present(world, eid)
 
     return check
 
