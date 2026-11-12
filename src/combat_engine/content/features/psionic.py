@@ -387,9 +387,18 @@ def monk_unarmed_strike(c: Cast) -> None:
       a character *buys and holds*, so refusing the group for a full hand
       would refuse those wrongly. It wants a field on the weapon saying
       this one is a natural strike, which is an ETL change.
-    * *"Your `w3678` can benefit from an `i1775`."* An implement clause,
-      and `Weapon.as_implement` is the field it would set -- also data
-      rather than behaviour.
+    * *"Your `w3678` can benefit from an `i1775`."* **Not**
+      `Weapon.as_implement`, which was my first answer and is a
+      per-character *grant* -- its own docstring is about the printed
+      *"you can use this weapon as an implement"* and records that it
+      overwrites `group`. `i1775` is a **ki focus** (`base='["ki focus"]'`,
+      `enh_to='attack_damage'`), so the clause is an implement's
+      **enhancement** reaching this weapon, and that family is modelled:
+      `Gear.implement` exists precisely because *"the moment a magic
+      implement has an enhancement bonus, that bonus is read off the mace
+      instead"*. The open question is whether an unarmed strike picks it
+      up, given `Gear.main` and `Gear.implement` are separate for a
+      documented reason -- an engine question, not a column.
 
     So the marker is right that this is *"a weapon, and a weapon is not
     something a body can make"*, and wrong about which facts are missing.
