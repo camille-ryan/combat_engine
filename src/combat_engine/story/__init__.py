@@ -528,13 +528,36 @@ class Party:
             # no source at all. The key is unchanged, so this does not move
             # a hand for any class whose pool does not narrow, which is
             # 25 of 26.
-            build = (
+            # **The leg is drawn twice and the first one is not wasted.**
+            # Camille's ruling on `#1244` weights the leg by the race --
+            # *"prefer legs which align with the selected race's ability
+            # score bonuses"* -- and `deal_race`'s scorer wants a leg to
+            # rank races against, so the two want opposite orders.
+            #
+            # Broken by giving the race's scorer the **unweighted** draw,
+            # which is precisely what it got before this ruling, so **no
+            # dealt race moves**. The leg the character actually takes is
+            # then weighted by that race.
+            #
+            # The alternative -- scoring the race against no leg at all,
+            # which is what Camille's *"choose race, then choose class"*
+            # literally orders -- changes **64 of 96** dealt races in a
+            # 24-seed probe. That is a far larger change than this ruling
+            # is about and is asked about on the issue rather than taken.
+            unweighted = (
                 deal_build(Random(f"{seed}:{key}:build"), key, chassis)
                 if DEAL_BUILDS else build_of(key, "")
             )
             race = (
-                deal_race(Random(f"{seed}:{key}:race"), key, build)
+                deal_race(Random(f"{seed}:{key}:race"), key, unweighted)
                 if DEAL_RACES else ""
+            )
+            # **And now the leg, weighted by the race.** With no race
+            # dealt this is the unweighted draw unchanged, so turning
+            # `DEAL_RACES` off leaves the leg exactly where it was.
+            build = (
+                deal_build(Random(f"{seed}:{key}:build"), key, chassis, race)
+                if DEAL_BUILDS and race else unweighted
             )
             # `race=` so `dealt_hand`'s own pre-feat training derivation is
             # the one this dealer would compute: a skill power is drawn from

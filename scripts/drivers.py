@@ -30914,6 +30914,142 @@ def every_build_leg_can_be_dealt(out: Result) -> None:
              "narrowing that empties a pool is a character nobody can be "
              "dealt",
              f"{empty}")
+
+    # -- the race weights the leg, which is Camille's ruling -------------
+    #
+    #   > *"For class/race combos, prefer legs which align with the
+    #   > selected race's ability score bonuses. 3x chance if both ability
+    #   > scores match. 2x chance if the primary only. 1.5x if secondary
+    #   > only. 1x if neither."*
+    #
+    # And, asked whether "the race's bonuses" meant the one a race grants
+    # outright or that plus the one it lets you choose:
+    #
+    #   > *"the free plus one of the two."*
+    #
+    # That second answer is load-bearing: only 8 of 46 races grant two
+    # outright, so on the narrow reading **53 of 106 legs** could never
+    # reach the 3x tier from any race. #1248.
+    from collections import Counter as _C
+
+    out.that(chargen.LEG_WEIGHTS == {(True, True): 3.0, (True, False): 2.0,
+                                     (False, True): 1.5, (False, False): 1.0},
+             "the four weights are the printed ruling's own numbers",
+             f"{chargen.LEG_WEIGHTS}")
+
+    fits = chargen.RACES["r10"]            # two fixed bonuses, dex and str
+    have = set(fits.fixed) | set(fits.choices)
+    pool = chargen.legs_for("fighter", "weaponmaster")
+    best = [b.name for b in pool
+            if b.primary in have and b.secondary in have]
+    drawn = _C(chargen.deal_build(Random(f"{s}:w"), "fighter",
+                                  "weaponmaster", "r10").name
+               for s in range(4000))
+    rest = [b.name for b in pool if b.name not in best]
+    out.that(bool(best) and bool(rest)
+             and min(drawn[a] for a in best) > max(drawn[b] for b in rest),
+             "a leg matching BOTH of the race's abilities is drawn more "
+             "often than EVERY leg that does not -- the ruling's direction, "
+             "measured over 4,000 draws rather than asserted",
+             f"both {[(a, drawn[a]) for a in best]}, "
+             f"rest {[(b, drawn[b]) for b in rest]}")
+    # The *ratio*, which is what tells a weighting from a mere preference.
+    # 3.0/2.0 is 1.5, and 4,000 draws puts the sampling error well inside
+    # the 0.25 band below -- a plant flattening the weights lands at 1.0.
+    pair = [b for b in pool if b.primary in have and b.secondary in have]
+    two = [b for b in pool if (b.primary in have) != (b.secondary in have)]
+    if pair and two:
+        ratio = (sum(drawn[b.name] for b in pair) / len(pair)) / \
+                (sum(drawn[b.name] for b in two) / len(two))
+        out.that(1.25 < ratio < 1.75,
+                 "and the RATIO is the ruling's 3:2 and not merely an "
+                 "ordering -- a flattened weighting lands at 1.0 and still "
+                 "passes an assertion that only checks which is bigger",
+                 f"{ratio:.2f} against 1.50")
+
+    # **And the SECOND answer, on a race shaped like most of them.**
+    #
+    #   > *"the free plus one of the two."*
+    #
+    # The probe above uses a race with **two fixed** bonuses and no
+    # choice, so `fixed | choices == fixed` there and reading only `fixed`
+    # is invisible on it -- my first version of this block asserted
+    # nothing about Camille's second answer and passed its own plant. 37
+    # of the 46 dealable races grant **one** outright plus a choice of
+    # two, which is the shape that tells the two readings apart: a leg
+    # whose pair is the free one and one of the two options reaches the 3x
+    # tier on her reading and the 1x tier on the narrow one.
+    forked = chargen.RACES["r1"]           # cha fixed, con-or-str to choose
+    assert len(forked.fixed) == 1 and len(forked.choices) == 2
+    wide = set(forked.fixed) | set(forked.choices)
+    narrow = set(forked.fixed)
+    best_wide = [b.name for b in pool
+                 if b.primary in wide and b.secondary in wide]
+    best_narrow = [b.name for b in pool
+                   if b.primary in narrow and b.secondary in narrow]
+    out.that(best_wide and not best_narrow,
+             "a race granting one bonus outright and a choice of two has "
+             "legs that reach the 3x tier on Camille's reading and NONE "
+             "on the narrow one -- which is the shape 37 of 46 races have, "
+             "and the reason the second answer was worth asking for",
+             f"wide {best_wide}, narrow {best_narrow}")
+    forked_drawn = _C(chargen.deal_build(Random(f"{s}:f"), "fighter",
+                                         "weaponmaster", "r1").name
+                      for s in range(4000))
+    others = [b.name for b in pool if b.name not in best_wide]
+    forked_ratio = (sum(forked_drawn[a] for a in best_wide) / len(best_wide)) \
+        / (sum(forked_drawn[b] for b in others) / len(others))
+    out.that(1.25 < forked_ratio < 1.75,
+             "and the draw bends for it at the ruling's 3:2 -- reading only "
+             "the free bonus would make every leg 1x here and flatten this "
+             "to 1.0, which is the plant that passed before this assertion "
+             "existed",
+             f"{forked_ratio:.2f} against 1.50")
+
+    # **Every leg survives the weighting**, which is what `1x if neither`
+    # buys and is why this ruling cannot undo `#1244`'s reachability.
+    lost = {}
+    for c in sorted(chargen.CLASSES):
+        for ch in chargen.declared_chassis(c) or ("",):
+            whole = {b.name for b in chargen.legs_for(c, ch)}
+            seen = {chargen.deal_build(Random(f"{s}:{c}"), c, ch, "r1").name
+                    for s in range(600)}
+            if whole - seen:
+                lost[(c, ch)] = sorted(whole - seen)
+    out.that(not lost,
+             "while every leg is still dealt even to a race that matches "
+             "none of it -- `1x if neither` keeps the pool whole, so this "
+             "cannot undo `#1244`",
+             f"{lost}")
+
+    # -- and no dealt RACE moved, which is the order's whole point --------
+    #
+    # `deal_race` ranks races against a leg, so the two draws want
+    # opposite orders. `Party.of` gives the race scorer the **unweighted**
+    # leg -- exactly what it had before the ruling -- and weights only the
+    # leg the character keeps. Scoring the race against no leg at all,
+    # which Camille's *"choose race, then choose class"* literally orders,
+    # moves 64 of 96 dealt races; that is asked about on `#1248` rather
+    # than taken.
+    from combat_engine.story import Party as _P
+
+    seen_races, seen_legs = set(), set()
+    for seed in range(1, 13):
+        for sh in _P.of(level=1, seed=seed).sheets:
+            seen_races.add((seed, sh.cls, sh.race))
+            seen_legs.add((seed, sh.cls, sh.build))
+    unweighted = set()
+    for seed in range(1, 13):
+        for cls in ("fighter", "cleric", "rogue", "wizard"):
+            ch = chargen.deal_chassis(Random(f"{seed}:{cls}:chassis"), cls)
+            b = chargen.deal_build(Random(f"{seed}:{cls}:build"), cls, ch)
+            r = chargen.deal_race(Random(f"{seed}:{cls}:race"), cls, b)
+            unweighted.add((seed, cls, r))
+    out.that(seen_races == unweighted,
+             "and the race a party is dealt is the one the UNWEIGHTED leg "
+             "would have scored -- so landing this ruling moved no race, "
+             "which is the only reason it is not a whole-tree change",
+             f"{len(seen_races ^ unweighted)} differ of {len(seen_races)}")
     # **And a chassis every leg is attributed away from keeps the whole
     # pool.** The sha'ir is the case: once `control` and `war` went to the
     # arcanist and the six schools to the mage, `legs_for` returned
@@ -56600,18 +56736,40 @@ def a_combat_scene_is_judged_on_the_objective_its_module_states(
     # The third is not posed here: a fight with a wave due in round 2 ends
     # in round 1 against this party, so the arrival never happens. Said
     # rather than contrived.
-    none_allowed = play({"kind": "hold", "rounds": 3, "leaks": 0,
-                         "position": "centre"})
+    # **Two claims, and only one of them is about a played fight.** That
+    # `leaks: 0` reaches the watcher as nought rather than the party-size
+    # default is a fact about parsing; that nought permitted is *winnable*
+    # needs a fight nothing walked through, which is a fact about the
+    # dice and the party.
+    #
+    # **Split and the second one searched, because pinning seed 5 broke
+    # it.** `#1248` weighted the leg draw by the race, so the party
+    # changed and one foe now reaches the centre on that seed -- which
+    # makes `0 of an allowed 0` unposable there and says nothing about the
+    # `0 < 0` fault this guards. Searched, with the search asserted: a
+    # hold nobody can ever keep would be a finding about the scenario.
+    spec = {"kind": "hold", "rounds": 3, "leaks": 0, "position": "centre"}
+    none_allowed = play(spec)
     out.that(
-        "an allowed 0" in said(none_allowed)
-        and none_allowed.outcome == "won",
-        "a module may ask for **no** leaks at all and hold it. `leaks: 0` "
-        "was unexpressible twice over: `watcher` tested `not "
-        "objective.leaks`, so nought became the party-size default of "
-        "four; and the verdict compared `through < allowed`, under which "
-        "nought permitted is unwinnable because `0 < 0` is false",
+        "an allowed 0" in said(none_allowed),
+        "a module may ask for **no** leaks at all and the nought reaches "
+        "the watcher: it tested `not objective.leaks`, so nought became "
+        "the party-size default of four",
         f"{said(none_allowed)}",
     )
+    clean = next((st for st in (play(spec, seed=sd) for sd in range(1, 40))
+                  if "0 of an allowed 0" in said(st)), None)
+    out.that(clean is not None,
+             "and some seed holds the centre with nothing getting through, "
+             "which is what makes the verdict below posable -- a hold "
+             "nobody can keep is a finding about the scenario rather than "
+             "a seed to re-measure",
+             f"{said(none_allowed)}")
+    out.that(clean is not None and clean.outcome == "won",
+             "and nought permitted is WINNABLE -- the verdict compared "
+             "`through < allowed`, under which nought is unwinnable "
+             "because `0 < 0` is false",
+             f"{said(clean) if clean else 'no clean seed'}")
     out.that(
         "an allowed 4" in said(held),
         "while a module that says nothing still gets the party-size "
@@ -56680,10 +56838,39 @@ def a_combat_scene_is_judged_on_the_objective_its_module_states(
     # then dies in round 1 instead of taking as long as `defeat_all`. So the
     # floor here was redundant with a direct check and fragile where that
     # check is not.
+    # **Searched, not posed on seed 5, and the docstring above predicted
+    # this.** It records the same fragility twice -- `#992` raising a dump
+    # stat was enough for the party to clear the minions in round 1 and
+    # red this assertion on working code. `#1248` did it a third time, by
+    # weighting the leg draw: the party changed, and both designations now
+    # finish in round **2**, so `<` fails while nothing is broken.
+    #
+    # The premise is *"some party and some dice make the thugs fall before
+    # the captain"*, which is a fact about the scenario rather than about
+    # seed 5. Searched, with the search asserted -- if no seed separates
+    # them the scenario cannot tell the two designations apart, and that
+    # is a finding worth reddening for.
+    pair = next(
+        ((sn, lo) for sn, lo in
+         ((play({"kind": "defeat_foe", "foes": ["thugs"]}, NAMED, seed=sd),
+           play({"kind": "defeat_foe", "foes": ["the captain"]}, NAMED,
+                seed=sd))
+          for sd in range(1, 40))
+         if sn.outcome == "won" and sn.rounds < lo.rounds),
+        None)
     out.that(
-        sooner.outcome == "won" and sooner.rounds < last_one.rounds,
+        pair is not None,
+        "some seed makes the thugs fall before the captain, which is what "
+        "makes the assertion below posable -- a scenario where no seed "
+        "separates the two designations could not tell them apart at all",
+        f"searched 39 seeds; seed 5 gives thugs {sooner.rounds} vs captain "
+        f"{last_one.rounds}",
+    )
+    out.that(
+        pair is not None and pair[0].rounds < pair[1].rounds,
         "designating a creature that falls sooner ends the fight sooner",
-        f"thugs {sooner.rounds} rounds vs the captain {last_one.rounds}",
+        f"thugs {pair[0].rounds} rounds vs the captain {pair[1].rounds}"
+        if pair else "no seed separates them",
     )
     cased = play({"kind": "defeat_foe", "foes": ["THE CAPTAIN"]}, NAMED)
     out.that(

@@ -2599,7 +2599,23 @@ def deal_chassis(rng: Random, cls: str = "") -> str:
     return rng.choice(list(options))
 
 
-def deal_build(rng: Random, cls: str = "", chassis: str = "") -> Build:
+#: How much likelier a leg is when the race's ability bonuses line up with
+#: it. Camille's ruling on `#1244`, 2026-11-11, verbatim:
+#:
+#:   > *"For class/race combos, prefer legs which align with the selected
+#:   > race's ability score bonuses. 3x chance if both ability scores
+#:   > match. 2x chance if the primary only. 1.5x if secondary only. 1x if
+#:   > neither."*
+#:
+#: `1x if neither` is as load-bearing as the `3x`: every leg keeps a
+#: non-zero weight, so this cannot make one unreachable and `#1244`'s
+#: reachability result survives it.
+LEG_WEIGHTS = {(True, True): 3.0, (True, False): 2.0,
+               (False, True): 1.5, (False, False): 1.0}
+
+
+def deal_build(rng: Random, cls: str = "", chassis: str = "",
+               race: str = "") -> Build:
     """One leg of a class's fork, drawn rather than defaulted.
 
     `build_of(cls, "")` answers `options[0]`, which is the right answer for
@@ -2635,11 +2651,42 @@ def deal_build(rng: Random, cls: str = "", chassis: str = "") -> Build:
     exists to choose.
 
     See `legs_for` for how a leg is attributed and what falls open.
+
+    **`race` weights the draw rather than filtering it**, which is
+    Camille's ruling -- see `LEG_WEIGHTS` for the quote and the numbers.
+
+    **What counts as a match is the race's *possible* bonuses, not the one
+    it ended up with**, and that is her call too. Asked whether "the
+    race's ability score bonuses" meant the bonus a race grants outright
+    or that plus the one it lets you choose, 2026-11-11:
+
+      > *"the free plus one of the two. I guess this requires choose race,
+      > then choose class, then choose race bonuses."*
+
+    It matters: measured over the 46 dealable races, only **8** grant two
+    bonuses outright while **37** grant one plus a choice of two. On the
+    narrow reading **53 of 106 legs** could never reach the 3x tier from
+    any race; on hers, all 106 can.
+
+    Reading what the race *can* give also removes the circularity her
+    ordering sentence is about: the weight never consults the bonus
+    actually chosen, so nothing has to be decided twice.
+    `RaceLine.taken(build)` then puts the choosable bonus on whichever of
+    the leg's two abilities is among the options -- her third step, which
+    was already implemented.
     """
     options = legs_for(cls, chassis)
     if len(options) <= 1:
         return build_of(cls, "")
-    return rng.choice(list(options))
+    if not race:
+        return rng.choice(list(options))
+    line = RACES.get(race)
+    if line is None:
+        return rng.choice(list(options))
+    have = set(line.fixed) | set(line.choices)
+    weights = [LEG_WEIGHTS[(b.primary in have, b.secondary in have)]
+               for b in options]
+    return rng.choices(list(options), weights=weights, k=1)[0]
 
 
 @cache

@@ -160,10 +160,16 @@ def interview(
     legs = list(chargen.legs_for(cls, chassis))
     # Drawn rather than defaulted, for `chargen.DEAL_BUILDS`'s reason --
     # the interactive path below replaces it when somebody answers.
+    # **Unweighted here, and re-drawn after the race below.** `Party.of`
+    # does the same and records why: Camille's ruling weights the leg by
+    # the race, and `deal_race`'s scorer wants a leg to rank races
+    # against, so the race gets the unweighted draw -- which is what it
+    # got before the ruling -- and the leg is re-drawn weighted. #1248.
     build = (
         chargen.deal_build(Random(f"{seed}:{cls}:build"), cls, chassis)
         if chargen.DEAL_BUILDS else chargen.build_of(cls, "")
     )
+    default_build = build.name
     if len(legs) > 1:
         options = [
             Option(ref=leg.name, why=f"{leg.primary.value}/{leg.secondary.value}")
@@ -194,6 +200,17 @@ def interview(
             default=_index_of(options, dealt),
         )
         race = options[answer(question)].ref if options else dealt
+
+    # -- the leg again, now that the race is known -------------------------
+    #
+    # The interview offers the leg **before** the race, which is the order
+    # a player expects and the order this file has always used. So the
+    # weighted draw happens here instead, and only when the default was
+    # taken: somebody who answered the build question chose, and a draw
+    # must not overrule an answer.
+    if chargen.DEAL_BUILDS and race and build.name == default_build:
+        build = chargen.deal_build(
+            Random(f"{seed}:{cls}:build"), cls, chassis, race)
 
     # -- the hand ----------------------------------------------------------
     # `race=` for the reason `Party.of` passes it: the hand now depends on
