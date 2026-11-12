@@ -3957,6 +3957,12 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     # whose options are feats rather than rows of the class -- `c.grant_row`
     # grants either, because a feat is an ordinary row in `Powers.known`.
     "cf:assassin-executioner-f5": ("f162", "f172"),
+    # **The knight's benefit.** Three riders on `p12668`, one per weapon
+    # group -- the same arrangement `cf:fighter-slayer-f21` has, on the
+    # same row, with different groups and different effects. #642.
+    "cf:fighter-knight-f9": ("cf:fighter-knight-f9s0",
+                             "cf:fighter-knight-f9s1",
+                             "cf:fighter-knight-f9s2"),
 }
 
 

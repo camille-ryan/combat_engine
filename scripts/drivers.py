@@ -43979,6 +43979,204 @@ def the_executioners_guild_forbids_the_six_it_did_not_choose(
              f"{refused}")
 
 
+def the_knights_grants_are_measured_per_ref_and_its_watches_fire(
+        out: Result) -> None:
+    """`#642`'s wave, the fighter's third chassis. 29 rows, 14 of which
+    play, and two things in it are worth a gate.
+
+    **"Is it a power of this class" is not the test for whether a grant
+    matters.** Four of the knight's rows grant something and the answers
+    differ: `p12660`, `p12661` and `p12668` are level-0 fighter rows and
+    `loadout` has dealt all three, so those grants are no-ops; `p12677` is
+    `cls="fighter"` **too** and is not dealt, because it is not level 0;
+    and `f3148` is a feat, which `loadout` never deals. Measured per ref
+    here rather than reasoned about, which is `#1259`'s point.
+
+    **Four watches are fired rather than armed**, which is
+    `cf:rogue-thief-f16`'s lesson -- a `c.shift(on=)` `TypeError` survived
+    26 clean refs there and surfaced only when the triggering row was
+    audited. `-f9`'s three benefits, `-f17`'s aura and `-f19`'s second
+    surge each get a real event.
+    """
+    from dataclasses import replace
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+    from combat_engine.engine.events import Hit, PowerResolved, SecondWind
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:fighter-knight-"))
+    out.that(len(rows) == 29,
+             "all 29 of the printed knight rows are declared",
+             f"{len(rows)}")
+    out.that(set(chargen.declared_chassis("fighter"))
+             == {"knight", "slayer", "weaponmaster"},
+             "and the fighter now has all three of its printed chassis",
+             f"{chargen.declared_chassis('fighter')}")
+
+    # -- the four grants, each measured ----------------------------------
+    leg = chargen.deal_build(Random("k"), "fighter", "knight")
+    hand = set(chargen.loadout("fighter", level=1, build=leg,
+                               who_chassis="knight"))
+    dealt = {ref: ref in hand for ref in
+             ("p12660", "p12661", "p12668", "p12677", "f3148")}
+    out.that(dealt == {"p12660": True, "p12661": True, "p12668": True,
+                       "p12677": False, "f3148": False},
+             "three of the granted refs are already dealt and two are not "
+             "-- and `p12677` is `cls=\"fighter\"` exactly as the first "
+             "three are, so the level is the test and not the class. "
+             "Asserted as a map, because a count cannot tell which way a "
+             "ref moved",
+             f"{dealt}")
+
+    # -- f3 and f11: the two real grants, through the row -----------------
+    for ref, got in (("cf:fighter-knight-f3", "f3148"),
+                     ("cf:fighter-knight-f11", "p12677")):
+        world, me, _ = _posed("cf:fighter-knight-f0", 1)
+        known = world.get(me, Powers)
+        while got in known.known:
+            known.known.remove(got)
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        out.that(got in known.all,
+                 f"`{ref.rsplit('-', 1)[-1]}` puts `{got}` in reach -- "
+                 "cleared first, because `audit.board` grants what the row "
+                 "under test names and a grant onto a row already held "
+                 "returns `None` silently",
+                 f"{got} in Powers.all: {got in known.all}")
+
+    # -- f9: the three benefits, fired, each with a wrong weapon ----------
+    fork = chargen.BUILD_OPTIONS.get("cf:fighter-knight-f9", ())
+    out.that(len(fork) == 3 and not (hand & set(fork)),
+             "the benefit is a three-way `BUILD_OPTIONS` fork and a dealt "
+             "knight gets NEITHER option -- the parent chooses",
+             f"{fork}, dealt {sorted(hand & set(fork))}")
+
+    BLADE = replace(chargen.LONGSWORD, group="heavy blade")
+    STAFF = replace(chargen.LONGSWORD, group="staff")
+    HAMMER = replace(chargen.LONGSWORD, group="hammer")
+
+    def credited(ref: str, weapon: object) -> list[str]:
+        """Which events this row's own doing, firing `p12668` for real.
+
+        Four fields, for `drivers.slayer_mastery`'s reason: a condition
+        carries `label`, damage carries `detail`, and a forced move names
+        the row in `power`. `gear.stowed` is cleared so the weapon reaches
+        the hand at all.
+        """
+        world, me, _ = _posed("cf:fighter-knight-f0", 1)
+        gear = world.get(me, Gear)
+        gear.weapons = [weapon]
+        gear.stowed = []
+        c = Cast(world=world, me=me, ref=ref)
+        REGISTRY[ref].body(c)
+        victim = next(f for f in c.enemies() if c.adjacent(f))
+        mark = len(world.bus.log)
+        world.bus.emit(PowerResolved(
+            actor=me, power="p12668", targets=[victim], rolls=[],
+            trigger=Hit(attacker=me, target=victim, power="mba",
+                        critical=False)))
+        mine = []
+        for ev in world.bus.log[mark:]:
+            fields = (getattr(ev, "detail", "") or "",
+                      getattr(ev, "label", "") or "",
+                      getattr(ev, "power", "") or "",
+                      str(getattr(ev, "by", "") or ""))
+            if any(ref in f for f in fields):
+                mine.append(type(ev).__name__)
+        return mine
+
+    right = {fork[0]: BLADE, fork[1]: STAFF, fork[2]: HAMMER}
+    wrong = {fork[0]: STAFF, fork[1]: HAMMER, fork[2]: BLADE}
+    paid = {ref: credited(ref, w) for ref, w in right.items()}
+    idle = {ref: credited(ref, w) for ref, w in wrong.items()}
+    out.that(all(paid.values()),
+             "each benefit does something when `p12668` resolves with its "
+             "own weapon group in hand -- fired, not merely armed",
+             f"{ {k.rsplit('-', 1)[-1]: v for k, v in paid.items()} }")
+    out.that(not any(idle.values()),
+             "and NOTHING with one of the other two's. Credited per row, "
+             "because the board arms all three and one weapon fires "
+             "whichever option names it whoever is under test",
+             f"{ {k.rsplit('-', 1)[-1]: v for k, v in idle.items()} }")
+
+    # -- f17: two printed triggers, so both are fired ---------------------
+    def valour(event: type) -> int:
+        world, me, _ = _posed("cf:fighter-knight-f0", 1)
+        c = Cast(world=world, me=me, ref="cf:fighter-knight-f17")
+        REGISTRY["cf:fighter-knight-f17"].body(c)
+        mark = len(list(world.effects.of(me)))
+        if event is SecondWind:
+            world.bus.emit(SecondWind(actor=me, healed=5, cost=None))
+        else:
+            from combat_engine.engine.events import TotalDefence
+            world.bus.emit(TotalDefence(actor=me, amount=2))
+        return len([e for e in list(world.effects.of(me))[mark:]])
+
+    from combat_engine.engine.events import TotalDefence
+
+    both = {"second wind": valour(SecondWind),
+            "total defence": valour(TotalDefence)}
+    out.that(all(both.values()),
+             "`-f17`'s aura goes up on BOTH printed triggers. Half of an "
+             "\"or\" declared looks finished and is not, which is what "
+             "`content/CLAUDE.md` says about this exact shape",
+             f"{both}")
+
+    # -- f19: the second surge, and the empty-pool case -------------------
+    def surges(left: int) -> tuple[int, bool]:
+        """How many surges one second wind cost, and whether the board had
+        already armed the row.
+
+        **The body is NOT called.** `audit.board` arms every row the
+        chassis holds, so arming it again lays a second watch and one
+        second wind spends TWO surges -- which the first draft measured and
+        reported as the row paying twice.
+        """
+        world, me, _ = _posed("cf:fighter-knight-f0", 1)
+        from combat_engine.engine.components import Health
+        health = world.get(me, Health)
+        health.surges = left
+        health.hp = max(1, health.max_hp // 4)
+        armed = any((e.label or "") == "cf:fighter-knight-f19"
+                    for e in world.effects.of(me))
+        world.bus.emit(SecondWind(actor=me, healed=5, cost=None))
+        return left - world.get(me, Health).surges, armed
+
+    spent, armed = surges(3)
+    out.that(armed,
+             "the board arms `-f19` by itself, which has to be asserted "
+             "before the count below means anything: arming it a second "
+             "time lays a second watch and one second wind then spends TWO "
+             "surges",
+             f"armed by the board: {armed}")
+    out.that(spent == 1,
+             "`-f19` spends ONE extra healing surge on a second wind -- "
+             "fired through a real `SecondWind`",
+             f"{spent} spent")
+    out.that(surges(0)[0] == 0,
+             "and spends none when the pool is empty, which `c.spend_surge` "
+             "declines on its own rather than this row having to ask",
+             f"{surges(0)[0]} spent")
+
+    # -- the six the import cannot supply ---------------------------------
+    world, me, _ = _posed("cf:fighter-knight-f0", 1)
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r in rows
+                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+    out.that(refused == ["cf:fighter-knight-f15", "cf:fighter-knight-f18",
+                         "cf:fighter-knight-f22", "cf:fighter-knight-f23",
+                         "cf:fighter-knight-f24", "cf:fighter-knight-f25"],
+             "six rows are `defect=` and it is exactly those six -- one "
+             "naming itself, one naming a power by its printed name, four "
+             "printing 'one of the following' and no list",
+             f"{refused}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -75842,6 +76040,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "knight_chassis": (
+        the_knights_grants_are_measured_per_ref_and_its_watches_fire,
+        "the knight's four grants are measured per ref -- the level and not"
+        " the class is the test -- and its watches fire (#642, #1259)",
     ),
     "executioner_guild": (
         the_executioners_guild_forbids_the_six_it_did_not_choose,
