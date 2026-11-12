@@ -3993,6 +3993,13 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
                              "cf:ranger-hunter-f11s1"),
     "cf:ranger-hunter-f18": ("cf:ranger-hunter-f18s0",
                              "cf:ranger-hunter-f18s1"),
+    # **The sentinel's season, and ONE entry for four readers.** `-f1`,
+    # `-f9`, `-f10` and `-f12` all read this ref's answer rather than
+    # drawing their own, which is the blackguard's arrangement with one
+    # more option and one more reader. #642, #851.
+    "cf:druid-sentinel-f0": ("cf:druid-sentinel-f0s0",
+                             "cf:druid-sentinel-f0s1",
+                             "cf:druid-sentinel-f0s2"),
 }
 
 

@@ -43224,14 +43224,26 @@ def the_protectors_circle_is_a_leg_the_base_druid_also_has(out: Result) -> None:
 
     pools = {ch: sorted(b.name for b in chargen.legs_for("druid", ch))
              for ch in chargen.declared_chassis("druid")}
-    out.that(pools == {"protector": ["f1s0", "f1s1"],
-                       chargen.ORIGINAL: ["f1s0", "f1s1", "f1s2", "f1s3"]},
+    out.that(pools[chargen.ORIGINAL] == ["f1s0", "f1s1", "f1s2", "f1s3"]
+             and pools["protector"] == ["f1s0", "f1s1"],
              "the plain druid keeps ALL FOUR printed aspects while the "
              "protector is narrowed to the two that are circles. Reds if "
              "the circle rows go back to carrying an `on_leg` header, which "
              "attributed the shared legs away and left the base class with "
              "two",
              f"{pools}")
+    # **The sentinel is read loosely on purpose, and this assertion was
+    # exact until it landed.** That chassis forks on a `BUILD_OPTIONS`
+    # season rather than a leg, so it has no leg to be wrong about -- the
+    # two unattributed aspects fall open to it, which is `legs_for`'s
+    # fail-open rule and changes nothing about a sentinel. What has to
+    # hold is only that its pool is non-empty, because an empty one is a
+    # character nobody can be dealt.
+    out.that(all(v for v in pools.values()),
+             "and every druid chassis has a leg to be dealt -- the "
+             "sentinel's two are the open aspects falling through, which "
+             "is harmless because its rows read no leg",
+             f"{ {k: len(v) for k, v in pools.items()} }")
 
     def circle(ref: str, leg: str) -> list[str]:
         """What that circle lays, on a board posed on one leg.
@@ -44820,7 +44832,7 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
                 seen.extend(options)
             return real(options, why, **kw)
 
-        c.choose = spy  # type: ignore[method-assign]
+        object.__setattr__(c, "choose", spy)
         victim = next(f for f in c.enemies() if c.adjacent(f))
         c.target = victim
         c.targets = [victim]
@@ -44920,6 +44932,204 @@ def the_hunters_third_rider_lives_in_the_power_it_names(out: Result) -> None:
              "seven rows are `defect=`, and `-f1` is the sharpest: *you "
              "gain the following three powers* and then no list at all",
              f"{refused}")
+
+
+def the_sentinels_season_agrees_across_five_parents(out: Result) -> None:
+    """`#642`'s wave, the druid's third chassis and the largest yet -- 47
+    rows, with a **season** chosen on `-f0` and read by four other parents:
+    `-f1`, `-f9`, `-f10` and `-f12`.
+
+    One `chargen.BUILD_OPTIONS` entry with **three** options, which is
+    `drivers.blackguard_vice`'s property with one more option and one more
+    reader. Asserted the same way and for the same reason: five
+    independent draws would make a character a different season in each of
+    its five features, every row would still work, and nothing anywhere
+    would go red.
+
+    **Three verbs on this chassis read the opposite way from their names**,
+    and all three were written wrong first:
+
+        c.reach(ref)              the READER -- "how far do my melee
+                                  attacks carry". The increase is
+                                  `c.bonus("reach", 1, when=melee)`
+        c.within(radius, side=)   RETURNS the list. Not a predicate, so
+                                  `c.within(ally, 10)` type-checks and
+                                  answers about the wrong thing
+        c.weapon_proficiency      a SET, not a bonus -- its own docstring
+                                  says the figure "is already added to
+                                  every swing", so granting proficiency a
+                                  second time pays twice
+
+    The third is why `-f0s0` writes no proficiency clause: the engine
+    models no unproficient penalty for one to lift.
+    """
+    from dataclasses import replace
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.content.features.sentinel import SEASON, SEASONS
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:druid-sentinel-"))
+    out.that(len(rows) == 47,
+             "all 47 of the printed sentinel rows are declared -- the "
+             "largest chassis in the wave",
+             f"{len(rows)}")
+    out.that(set(chargen.declared_chassis("druid"))
+             == {"protector", "sentinel", chargen.ORIGINAL},
+             "and the druid now has all three of its printed chassis",
+             f"{chargen.declared_chassis('druid')}")
+
+    entries = sorted(k for k in chargen.BUILD_OPTIONS
+                     if k.startswith("cf:druid-sentinel-"))
+    out.that(entries == [SEASON],
+             "exactly ONE `BUILD_OPTIONS` entry, and it is `-f0`. Five "
+             "would be five independent draws and the character would be "
+             "a different season in each of its five features",
+             f"{entries}")
+
+    PARENTS = {
+        SEASON: SEASONS,
+        "cf:druid-sentinel-f1": ("cf:druid-sentinel-f1s0",
+                                 "cf:druid-sentinel-f1s1",
+                                 "cf:druid-sentinel-f1s2"),
+        "cf:druid-sentinel-f9": ("cf:druid-sentinel-f9s0",
+                                 "cf:druid-sentinel-f9s1",
+                                 "cf:druid-sentinel-f9s2"),
+        "cf:druid-sentinel-f10": ("cf:druid-sentinel-f10s0",
+                                  "cf:druid-sentinel-f10s1",
+                                  "cf:druid-sentinel-f10s2"),
+        "cf:druid-sentinel-f12": ("cf:druid-sentinel-f12s0",
+                                  "cf:druid-sentinel-f12s1",
+                                  "cf:druid-sentinel-f12s2"),
+    }
+
+    def granted(chose: str) -> dict[str, str]:
+        world, me, _ = _posed(SEASON, 1)
+        held = world.get(me, Build)
+        held.choices = {x for x in held.choices
+                        if not x.startswith(f"option:{SEASON}:")}
+        held.choices.add(f"option:{SEASON}:{chose}")
+        known = world.get(me, Powers)
+        every = [r for trio in PARENTS.values() for r in trio]
+        for ref in every:
+            while ref in known.known:
+                known.known.remove(ref)
+        answer = {}
+        for parent in PARENTS:
+            before = set(known.known)
+            REGISTRY[parent].body(Cast(world=world, me=me, ref=parent))
+            new = sorted((set(known.known) - before) & set(every))
+            answer[parent] = new[0] if len(new) == 1 else str(new)
+        return answer
+
+    for index, chose in enumerate(SEASONS):
+        handed = granted(chose)
+        wanted = {p: trio[index] for p, trio in PARENTS.items()}
+        out.that(handed == wanted,
+                 f"with season {index} chosen, all five parents hand over "
+                 f"season {index}'s option -- the whole map, over ALL "
+                 "THREE seasons, because two read alone pass five parents "
+                 "that ignore the choice and grant the first",
+                 f"{ {k.rsplit('-', 1)[-1]: v.rsplit('-', 1)[-1] for k, v in handed.items()} }")
+
+    drawn = {chargen.deal_build_option(Random(f"{s}:se"), SEASON)
+             for s in range(80)}
+    out.that(drawn == set(SEASONS),
+             "all three seasons come out of the dealer, which has to hold "
+             "or the agreement above is agreement about one value",
+             f"{sorted(drawn)}")
+
+    # -- f9s1: the reach increase, through the real key -------------------
+    world, me, _ = _posed("cf:druid-sentinel-f2", 1)
+    n0 = len(list(world.effects.of(me)))
+    REGISTRY["cf:druid-sentinel-f9s1"].body(
+        Cast(world=world, me=me, ref="cf:druid-sentinel-f9s1"))
+    laid = [e.label for e in list(world.effects.of(me))[n0:]]
+    out.that(any("reach" in (lbl or "") for lbl in laid),
+             "`-f9s1` lays a **reach** modifier. `c.reach` is the reader "
+             "-- it answers how far melee attacks carry and takes a ref, "
+             "not a number -- so the increase is `c.bonus(\"reach\", 1)` "
+             "with a melee gate, which is what three other rows lay",
+             f"{laid}")
+
+    # -- f0s1: the die written onto the sentinel's own weapon -------------
+    dice = {}
+    for weapon, name in (
+            (replace(chargen.MACE, group="mace"), "one-handed mace"),
+            (replace(chargen.MACE, group="mace", hands="two-handed",
+                     properties=frozenset({"two-handed"})), "two-handed mace"),
+            (replace(chargen.MACE, group="staff"), "staff"),
+            (chargen.LONGSWORD, "a heavy blade")):
+        from combat_engine.engine import Gear
+
+        world, me, _ = _posed("cf:druid-sentinel-f2", 1)
+        gear = world.get(me, Gear)
+        gear.weapons = [weapon]
+        gear.stowed = []
+        REGISTRY["cf:druid-sentinel-f0s1"].body(
+            Cast(world=world, me=me, ref="cf:druid-sentinel-f0s1"))
+        dice[name] = world.get(me, Gear).main.damage
+    out.that(dice == {"one-handed mace": "1d10", "two-handed mace": "1d12",
+                      "staff": "1d12", "a heavy blade": "1d8"},
+             "`-f0s1` writes `d10` into a one-handed mace, `d12` into a "
+             "two-handed one and into a staff, and leaves a blade alone. "
+             "All four, because the hands and the group each decide half "
+             "of it and a reading that tested only the group would give a "
+             "one-handed mace a `d12`",
+             f"{dice}")
+
+    # -- the three companions, and the measurement behind the symbol -----
+    companions = sorted(r for r in rows
+                        if "chargen.companion_from_option()"
+                        in (REGISTRY[r].unfinished or ()))
+    out.that(companions == ["cf:druid-sentinel-f1s0",
+                            "cf:druid-sentinel-f1s1",
+                            "cf:druid-sentinel-f1s2",
+                            "cf:druid-sentinel-f9s0",
+                            "cf:druid-sentinel-f9s2"],
+             "FIVE rows wait on the companion, not three -- the three "
+             "`-f1` options are `todo=` (that is all they are) and two of "
+             "`-f9`'s are `dropped=`, because each of those has a half "
+             "that plays and a half about the companion. One symbol over "
+             "both kinds, which is what lets `blocked.py --group` price "
+             "the gap at five rows rather than three",
+             f"{companions}")
+    kinds = {r: bool(REGISTRY[r].todo) for r in companions}
+    out.that(sum(kinds.values()) == 3,
+             "and the split is three `todo=` to two `dropped=`, asserted "
+             "because the marker is what tells a reader whether the row "
+             "plays at all",
+             f"{kinds}")
+    world, me, _ = _posed("cf:druid-sentinel-f2", 1)
+    c = Cast(world=world, me=me, ref="probe")
+    try:
+        c.call_companion("x10_1")
+        raised = ""
+    except Exception as exc:
+        raised = f"{type(exc).__name__}: {exc}"
+    out.that("x10_1" in raised,
+             "and the symbol rests on a measurement rather than a reading: "
+             "`c.call_companion(\"x10_1\")` raises, because that verb reads "
+             "the MONSTER table and all three of these live in "
+             "`associate`. Asserted so the day the verb learns to, this "
+             "reds and the three rows get written",
+             f"{raised or 'it did NOT raise'}")
+
+    # -- the thirteen the import cannot supply ----------------------------
+    world, me, _ = _posed("cf:druid-sentinel-f2", 1)
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r in rows
+                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+    out.that(len(refused) == 13,
+             "thirteen rows are `defect=` -- every one 'you gain one of "
+             "the following powers of your choice' with no list, which is "
+             "more than a quarter of the chassis",
+             f"{len(refused)}: {refused[:4]} ...")
 
 
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
@@ -76785,6 +76995,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "sentinel_season": (
+        the_sentinels_season_agrees_across_five_parents,
+        "the sentinel's season agrees across five parents, and three verbs"
+        " on this chassis read the opposite way from their names (#642)",
     ),
     "hunter_rider": (
         the_hunters_third_rider_lives_in_the_power_it_names,
