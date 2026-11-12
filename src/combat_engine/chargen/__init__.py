@@ -3946,6 +3946,17 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
     "cf:fighter-slayer-f21": ("cf:fighter-slayer-f21s0",
                               "cf:fighter-slayer-f21s1",
                               "cf:fighter-slayer-f21s2"),
+    # **The executioner's guild.** Three options, each granting three of
+    # nine level-0 assassin rows and forbidding the other six -- which is
+    # the whole content of the fork, since `loadout` deals all nine. The
+    # assassin's three legs are the base class's. #642.
+    "cf:assassin-executioner-f2": ("cf:assassin-executioner-f2s0",
+                                   "cf:assassin-executioner-f2s1",
+                                   "cf:assassin-executioner-f2s2"),
+    # **A bonus feat, one of two named.** The only entry in this table
+    # whose options are feats rather than rows of the class -- `c.grant_row`
+    # grants either, because a feat is an ordinary row in `Powers.known`.
+    "cf:assassin-executioner-f5": ("f162", "f172"),
 }
 
 

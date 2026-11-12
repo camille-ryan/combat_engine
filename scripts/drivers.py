@@ -43757,6 +43757,228 @@ def the_slayers_three_masteries_each_answer_their_own_weapon(
              f"{refused}")
 
 
+def the_executioners_guild_forbids_the_six_it_did_not_choose(
+        out: Result) -> None:
+    """`#642`'s wave, the assassin. 27 rows, and the one chassis so far
+    whose fork is **entirely about taking things away**.
+
+    `-f2` offers three guilds and each grants three powers. All nine are
+    level-0 assassin rows, so `chargen.loadout` has dealt every one to
+    every assassin -- which makes the grants no-ops and the exclusivity the
+    whole content. Each option therefore forbids the other guilds' six,
+    which is `cf:barbarian-f1`'s arrangement and its sentence: *"the only
+    way the exclusivity can be true."*
+
+    **Three watches are fired rather than armed**, which is
+    `cf:rogue-thief-f16`'s lesson: a `c.shift(on=)` `TypeError` survived 26
+    clean refs there and surfaced only when the triggering row was audited.
+    `-f1`'s extra damage, `-f7`'s finisher and `-f8`'s tumble each get a
+    real event here, and `-f7` gets a victim on both sides of its printed
+    ceiling.
+    """
+    from dataclasses import replace
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.content.features.executioner import GUILDS
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.dsl import REGISTRY, get, usable
+    from combat_engine.engine.events import Fell, Hit
+
+    rows = sorted(r for r in REGISTRY
+                  if r.startswith("cf:assassin-executioner-"))
+    out.that(len(rows) == 27,
+             "all 27 of the printed executioner rows are declared",
+             f"{len(rows)}")
+    out.that("executioner" in chargen.declared_chassis("assassin"),
+             "and the chassis is dealable beside the plain assassin",
+             f"{chargen.declared_chassis('assassin')}")
+
+    # -- the premise: every one of the nine is already dealt -------------
+    leg = chargen.deal_build(Random("a"), "assassin", "executioner")
+    hand = set(chargen.loadout("assassin", level=1, build=leg,
+                               who_chassis="executioner"))
+    nine = [p for three in GUILDS.values() for p in three]
+    out.that(all(p in hand for p in nine),
+             "all nine guild powers are dealt to every executioner, which "
+             "is the premise the whole fork rests on -- if `loadout` ever "
+             "stopped dealing them the grants would become load-bearing "
+             "and the forbidding would be wrong",
+             f"{sum(p in hand for p in nine)} of {len(nine)}")
+    out.that(not (hand & set(GUILDS)) and "cf:assassin-executioner-f2" in hand,
+             "while the three guild rows themselves are NOT dealt -- the "
+             "parent chooses one, so dealing the siblings would make a "
+             "character a member of all three and forbid all nine",
+             f"{sorted(hand & set(GUILDS))}")
+
+    # -- each guild keeps its three and forbids the other six ------------
+    def guild(ref: str) -> tuple[int, int]:
+        world, me, _ = _posed("cf:assassin-executioner-f0", 1)
+        c = Cast(world=world, me=me, ref=ref)
+        REGISTRY[ref].body(c)
+        forbidden = {e.label for e in world.effects.of(me)
+                     if ref in (getattr(e, "label", "") or "")
+                     and "forbids" in e.label}
+        kept = sum(1 for p in GUILDS[ref]
+                   if not any(f"forbids {p}" in lbl for lbl in forbidden))
+        return len(forbidden), kept
+
+    shut = {ref: guild(ref) for ref in GUILDS}
+    out.that(all(six == 6 and kept == 3 for six, kept in shut.values()),
+             "each guild forbids exactly SIX rows and forbids none of its "
+             "own three. Over all three options, because reading one "
+             "passes a row that forbids a fixed list",
+             f"{ {k.rsplit('-', 1)[-1]: v for k, v in shut.items()} }")
+
+    # -- f1: the extra damage, fired, and once a turn --------------------
+    DAGGER = chargen.DAGGER
+    # **`hands=`, not `properties=`.** `Weapon.__post_init__` folds `hands`
+    # back into `properties`, so `replace(MACE, properties={"two-handed"})`
+    # came back holding BOTH words -- a weapon the gate correctly accepted,
+    # and a negative control that read as the row being ungated when the
+    # row was right.
+    CLUB = replace(chargen.MACE, group="mace", hands="two-handed",
+                   properties=frozenset({"two-handed"}))
+
+    def extra(weapon: object, swings: int = 1) -> int:
+        world, me, _ = _posed("cf:assassin-executioner-f0", 1)
+        gear = world.get(me, Gear)
+        gear.weapons = [weapon]
+        gear.stowed = []
+        c = Cast(world=world, me=me, ref="cf:assassin-executioner-f1")
+        REGISTRY["cf:assassin-executioner-f1"].body(c)
+        victim = next(f for f in c.enemies() if c.adjacent(f))
+        # **The victim is given hit points to spare, and that is not
+        # padding.** The board arms the whole chassis, so one `Hit` also
+        # fires `p13799` -- measured at 8 damage, which killed the target
+        # outright and left `c.damage` nothing to apply. The first draft
+        # read `0` for a working row.
+        health = world.get(victim, Health)
+        health.max_hp = health.hp = 500
+        mark = len(world.bus.log)
+        for _ in range(swings):
+            world.bus.emit(Hit(attacker=me, target=victim, power="mba",
+                               critical=False))
+        return sum(1 for ev in world.bus.log[mark:]
+                   if type(ev).__name__ == "DamageApplied"
+                   and "cf:assassin-executioner-f1"
+                   in (getattr(ev, "detail", "") or ""))
+
+    out.that(extra(DAGGER) == 1,
+             "`-f1` pays its extra die on a hit with a one-handed weapon "
+             "-- fired through a real `Hit`, not merely armed",
+             f"{extra(DAGGER)}")
+    out.that(extra(CLUB) == 0,
+             "and NOT with a two-handed mace, which is none of the four "
+             "printed arms. The negative arm is the clause: ungated this "
+             "would pay a greataxe",
+             f"{extra(CLUB)}")
+    out.that(extra(DAGGER, swings=3) == 1,
+             "and three hits in one turn pay ONCE -- `pay_extra`'s latch, "
+             "shared with the rogue and the ranger rather than a second "
+             "one of its own",
+             f"{extra(DAGGER, swings=3)}")
+
+    # -- f7: the finisher, on both sides of its printed ceiling ----------
+    # **The ceiling is asserted through the row's own predicate, and the
+    # wiring separately.** An end-to-end firing cannot test the boundary
+    # here: the board arms the whole chassis, so one `Hit` also pays
+    # `p9400` and `p13799` -- 9 damage, measured -- which drags a creature
+    # posed at 11 down to 2 and the finisher then correctly takes it. The
+    # first draft read that as the ceiling failing when the row was right.
+    from combat_engine.content.features.executioner import _finishable
+
+    world, me, _ = _posed("cf:assassin-executioner-f0", 1)
+    c = Cast(world=world, me=me, ref="cf:assassin-executioner-f7")
+    victim = next(f for f in c.enemies() if c.adjacent(f))
+    health = world.get(victim, Health)
+    health.max_hp = 50
+    ceiling = {}
+    for left in (0, 1, 8, 10, 11, 25):
+        health.hp = left
+        ceiling[left] = _finishable(c, victim, 10)
+    out.that(ceiling == {0: False, 1: True, 8: True, 10: True,
+                         11: False, 25: False},
+             "`-f7`'s test is `0 < hp <= 10`, over both boundaries and "
+             "both sides: 10 counts and 11 does not, 1 counts and 0 does "
+             "not. Six values, because a `<` for a `<=` shows at exactly "
+             "one of them",
+             f"{ceiling}")
+
+    # and the wiring, end to end, on a creature the board's own rows
+    # cannot finish first
+    world, me, _ = _posed("cf:assassin-executioner-f0", 1)
+    c = Cast(world=world, me=me, ref="cf:assassin-executioner-f7")
+    REGISTRY["cf:assassin-executioner-f7"].body(c)
+    victim = next(f for f in c.enemies() if c.adjacent(f))
+    health = world.get(victim, Health)
+    health.max_hp, health.hp = 50, 10
+    world.bus.emit(Hit(attacker=me, target=victim, power="mba",
+                       critical=False))
+    out.that(world.get(victim, Health).hp <= 0,
+             "and the watch is wired: a real `Hit` on a creature inside the "
+             "ceiling takes it down. Fired rather than armed, which is "
+             "`cf:rogue-thief-f16`'s lesson",
+             f"hp {world.get(victim, Health).hp}")
+
+    # -- f8: the fall ----------------------------------------------------
+    world, me, _ = _posed("cf:assassin-executioner-f0", 1)
+    fell = Fell(actor=me, squares=2, from_=None, soften=0, prone=True)
+    c = Cast(world=world, me=me, ref="cf:assassin-executioner-f8",
+             trigger=fell)
+    REGISTRY["cf:assassin-executioner-f8"].body(c)
+    out.that(fell.soften == 6 + c.level,
+             "`-f8` softens the fall by exactly `6 + level`. **The trigger "
+             "is handed to the `Cast`**, because `c.cushion` reads "
+             "`self.trigger` and declines anything that is not a `Fell` -- "
+             "which is why this row is a declared-trigger row and not a "
+             "trait laying `c.arm_trigger`: a trait's `Cast` has no "
+             "trigger, so the handler ran, charged the free action and "
+             "softened nothing",
+             f"soften {fell.soften}, wanted {6 + c.level}")
+    out.that(REGISTRY["cf:assassin-executioner-f8"].on,
+             "and the row DECLARES its trigger rather than describing one "
+             "-- `trigger=` alone is prose the engine never reads, which "
+             "`content/CLAUDE.md` names as the way a row never fires",
+             f"{REGISTRY['cf:assassin-executioner-f8'].on}")
+
+    # -- f5: a feat granted, which needed checking ------------------------
+    world, me, _ = _posed("cf:assassin-executioner-f0", 1)
+    known = world.get(me, Powers)
+    # **The two feats are removed first.** `audit.board` grants the row
+    # under test *and its first sub-option*, and this fork's first option
+    # is `f162` -- so the first draft read `before True, after True` and
+    # could not have failed. The witch and mage rules clear their families
+    # for the same reason.
+    for feat in ("f162", "f172"):
+        while feat in known.known:
+            known.known.remove(feat)
+    before = "f162" in known.all
+    REGISTRY["cf:assassin-executioner-f5"].body(
+        Cast(world=world, me=me, ref="cf:assassin-executioner-f5"))
+    out.that(not before and "f162" in known.all,
+             "`-f5` grants a FEAT with `c.grant_row` -- a feat is an "
+             "ordinary row in `Powers.known`, which is what lets one arm "
+             "itself at the start of a fight. Asserted because `c.feat` "
+             "reads like the granter and is the reader",
+             f"before {before}, after {'f162' in known.all}")
+
+    # -- and the two the import cannot supply -----------------------------
+    world, me, _ = _posed("cf:assassin-executioner-f0", 1)
+    DEFECT = "the compendium is missing what this row needs"
+    refused = sorted(r for r in rows
+                     if usable(world, me, get(r), spent_ok=True)[1] == DEFECT)
+    out.that(refused == ["cf:assassin-executioner-f17",
+                         "cf:assassin-executioner-f20"],
+             "two rows are `defect=` and it is exactly those two, each "
+             "naming itself as the power it grants",
+             f"{refused}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -75620,6 +75842,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "executioner_guild": (
+        the_executioners_guild_forbids_the_six_it_did_not_choose,
+        "the executioner's guild forbids the six powers it did not choose,"
+        " which is the whole content of the fork (#642)",
     ),
     "slayer_mastery": (
         the_slayers_three_masteries_each_answer_their_own_weapon,
