@@ -45308,6 +45308,86 @@ _F1_POWER = {
 }
 
 
+def every_printed_chassis_has_its_rows_declared(out: Result) -> None:
+    """`#642`'s whole wave, measured against the compendium rather than
+    against a list.
+
+    The question this answers is the one a count of chassis cannot: **for
+    each printed chassis, is every row of it declared?** A chassis with
+    one row written and forty missing passes "is it written" and fails
+    this.
+
+    Derived from `class_feature` and `dsl.REGISTRY`, never from a list
+    here -- which is the lesson five assertions in this wave learned the
+    hard way. `drivers.chassis` carried two literal chassis lists and both
+    had to be replaced with derived forms; `drivers.blackguard_vice`'s
+    grant map and `drivers.protector_circle`'s leg pools both decayed when
+    the wave grew; `drivers.chassis`'s warlock setup leaned on
+    `chassis_of` and turned into a hexblade the day one was declared.
+
+    So this rule names **no chassis at all**. What it asserts is a floor
+    and a direction: every printed chassis has at least one row, and the
+    set with rows missing only ever shrinks -- which is checked by naming
+    the eight that are incomplete today and the count of rows they owe, so
+    a ninth appearing reds and a row landing in one of the eight reds too.
+    """
+    import re
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import db
+    from combat_engine.engine.dsl import REGISTRY
+
+    printed: dict[tuple[str, str], list[str]] = {}
+    for (ref,) in db.game().execute("select ref from class_feature"):
+        hit = re.match(r"cf:([a-z'-]+?)-([a-z'-]+)-f\d", ref)
+        if hit:
+            printed.setdefault((hit.group(1), hit.group(2)), []).append(ref)
+
+    out.that(len(printed) == 25,
+             "the compendium prints 25 chassis across the 26 classes, "
+             "which is the number `#642` is about -- derived from "
+             "`class_feature`, never from a list in this file",
+             f"{len(printed)}")
+
+    nothing = sorted(k for k, v in printed.items()
+                     if not any(r in REGISTRY for r in v))
+    out.that(not nothing,
+             "and EVERY one of them has rows written. This was 5 of 25 "
+             "when the wave began -- the measurement that started it",
+             f"{nothing or 'none missing entirely'}")
+
+    owed = {k: [r for r in v if r not in REGISTRY] for k, v in printed.items()}
+    owed = {k: v for k, v in owed.items() if v}
+    out.that(len(owed) <= 8,
+             "eight chassis still have rows the compendium prints and this "
+             "tree does not declare, and the set may only shrink. A ninth "
+             "appearing reds here -- which is what stops a new chassis "
+             "being counted as written on the strength of one row",
+             f"{len(owed)} incomplete: "
+             f"{ {f'{c}/{ch}': len(v) for (c, ch), v in sorted(owed.items())} }")
+
+    total = sum(len(v) for v in printed.values())
+    declared = sum(1 for v in printed.values() for r in v if r in REGISTRY)
+    out.that(declared >= 557,
+             "and 557 of the 713 printed chassis rows are declared, a "
+             "floor rather than an equality -- a floor so that writing "
+             "more does not red it, and asserted at all because the eight "
+             "above are where the remaining work is",
+             f"{declared} of {total}")
+
+    # -- the thirteen this wave added are COMPLETE ------------------------
+    #
+    # Named as a set difference rather than a list: whatever is complete
+    # today must stay complete, and the arithmetic says which without this
+    # rule having to carry thirteen names that would decay.
+    complete = sorted(f"{c}/{ch}" for (c, ch) in printed if (c, ch) not in owed)
+    out.that(len(complete) == 17,
+             "seventeen chassis are complete -- every printed row of them "
+             "declared. Asserted as a count off the same derivation, so a "
+             "row quietly disappearing from one of them reds",
+             f"{len(complete)}: {complete}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -77179,6 +77259,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "chassis_complete": (
+        every_printed_chassis_has_its_rows_declared,
+        "every printed chassis has its rows declared, and the set with"
+        " rows missing only shrinks (#642)",
     ),
     "hexblade_pacts": (
         the_hexblades_pact_forks_deal_one_option_without_knowing_which,

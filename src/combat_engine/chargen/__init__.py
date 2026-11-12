@@ -4020,6 +4020,16 @@ BUILD_OPTIONS: dict[str, tuple[str, ...]] = {
                                "cf:warlock-hexblade-f2s4"),
     "cf:warlock-hexblade-f10": tuple(
         f"cf:warlock-hexblade-f10s{n}" for n in range(9)),
+    # **The binder's nine pact forks and its two summon forks**, every one
+    # of them a `#1264` fork: it deals one option without knowing which
+    # pact that option belongs to. Nine where the hexblade has four, and
+    # the same marker on each. #642, #1264.
+    **{f"cf:warlock-binder-f{n}": tuple(
+        f"cf:warlock-binder-f{n}s{i}" for i in range(3))
+       for n in (1, 2, 7, 8, 11, 14, 17, 20, 22)},
+    **{f"cf:warlock-binder-f{n}": tuple(
+        f"cf:warlock-binder-f{n}s{i}" for i in range(9))
+       for n in (12, 21)},
 }
 
 
