@@ -257,3 +257,193 @@ def ardent_mantle(c: Cast) -> None:
             continue
         c.bonus("skill:insight", 2, until=When.ENCOUNTER, on=who, stacks=False)
         c.bonus("skill:perception", 2, until=When.ENCOUNTER, on=who, stacks=False)
+
+
+# -- the skald, #642's wave ------------------------------------------------
+#
+# Six rows, and every one of them is a line the bard beside it already
+# answers in some form -- which is what makes this the second-cheapest of
+# the sixteen chassis and a good place to learn the shape.
+
+
+@power(
+    "cf:bard-skald-f0",
+    level=0,
+    cls="bard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.MARTIAL],
+)
+def skald_charisma(c: Cast) -> None:
+    """*"When you make a melee basic attack with a one-handed weapon, you
+    can use Charisma instead of Strength for the attack roll and the damage
+    roll."*
+
+    `c.rolls_with("mba", CHA, when=...)` says exactly that:
+    `Attack.ability_for` reads the swap *before* the header, and `mba`'s
+    body reads `c.attack_mod`, so **both** rolls move on one line. That is
+    the mechanism `cf:warlord-marshal-f0`'s note records wanting for its
+    own bow clause.
+
+    The gate is `(world, eid)` rather than an attack context -- "with a
+    one-handed weapon" is a fact about what the skald is holding, which
+    `query.holding` answers off the printed `hands` field. Asked live, so
+    putting a two-hander in hand mid-fight takes the swap away, which is
+    better than the arming-time reads most gear gates here settle for.
+    """
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.types import Ability
+
+    def one_handed(world, eid) -> bool:  # noqa: ANN001
+        gear = world.get(eid, Gear)
+        return (gear is not None and gear.main is not None
+                and gear.main.hands == "one-handed")
+
+    c.rolls_with("mba", Ability.CHA, on=c.me, until=When.ENCOUNTER,
+                 when=one_handed)
+
+
+@power(
+    "cf:bard-skald-f1",
+    level=0,
+    cls="bard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+    dropped=("chargen.dailies_per_day()",),
+)
+def skald_dailies(c: Cast) -> None:
+    """*"You gain two 1st-level bard daily attack powers of your choice, but
+    each day you can use only one bard attack power."*
+
+    **Two clauses and they pull opposite ways**: the skald is dealt an
+    extra daily and may spend fewer of them than it holds. The first is
+    `chargen.EXTRA_GAINS`' shape -- the table `#1112` landed -- and the
+    second has no home at all.
+
+    `Powers.per_day` counts uses **per ref**, which is the printed clock
+    for a row that says "once a day". What this card prints is a budget
+    *across* rows -- one bard daily a day whatever you know, rising to two
+    at 5th and three at 9th, and no more than one of a particular level --
+    and nothing holds a per-character allowance over a family of rows.
+    `c.spend_per_day` keyed on a shared label is the nearest thing and is
+    the artificer's answer for its three infusions
+    (`cf:artificer-f2`), but that is one pool for three **named** rows,
+    not a cap over everything a class knows.
+
+    So the marker names the budget rather than the gain: granting the extra
+    daily without the cap makes the skald strictly stronger than print,
+    which is the wrong direction to ship half a card in. Both halves land
+    together or neither.
+    """
+
+
+@power(
+    "cf:bard-skald-f2",
+    level=0,
+    cls="bard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def skald_virtue(c: Cast) -> None:
+    """*"You gain the `p15849` power."* Declared and unmarked, so granted.
+
+    **Inert today for `#1259`'s reason**, like `cf:wizard-witch-f0`: a
+    power a feature grants has no printed level, so it imports at
+    `level = 0` and `loadout` hands it to every bard. The grant stays
+    because it is what the card says and is what will work once the import
+    carries a chassis.
+    """
+    c.grant_row("p15849", on=c.me, until=When.ENCOUNTER)
+
+
+@power(
+    "cf:bard-skald-f3",
+    level=0,
+    cls="bard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def skald_untrained(c: Cast) -> None:
+    """*"You gain a +1 bonus to untrained skill checks."*
+
+    The same line as `cf:bard-f4` beside it, and its note carries the
+    reasoning this inherits: the blanket `skill` key is read by
+    `skills.modifier` on top of the per-skill one, and *"untrained is not
+    gated, and cannot be"* -- `engine/skills.py` has no training model, so
+    every check is an untrained one and the gate would have nothing to
+    read. Exactly right today, one skill too wide the day a `Skills`
+    component lands, and that is the one place to come back to.
+    """
+    c.bonus("skill", 1, until=When.ENCOUNTER, on=c.me, kind="untyped")
+
+
+@power(
+    "cf:bard-skald-f4",
+    level=0,
+    cls="bard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE, Keyword.HEALING],
+    dropped=("turns.short_rest(surges=)",),
+)
+def skald_song_of_rest(c: Cast) -> None:
+    """The skald's Song of Rest, which is `cf:bard-f5`'s card again.
+
+    *"When an affected character spends healing surges at the end of the
+    rest, that character regains additional hit points equal to your
+    Charisma modifier with each healing surge."*
+
+    **The same gap and the same symbol as `cf:bard-f5`**, deliberately:
+    the two rows print one card between them and the hold is identical, so
+    one symbol over both is the rule working rather than the collapse
+    `content/CLAUDE.md` warns about -- two rows measured to want the same
+    thing sharing one symbol is what that file asks for.
+
+    What is missing is one layer out from the symbol's name, which `#1257`
+    records: `events.ShortRested` exists, and `turns.short_rest`'s own
+    docstring declines to spend surges -- *"that is `Cast.surge`, not
+    this"*. **Nothing calls `Cast.surge` at a rest**, so there is no
+    spending for this to add to. A party-level decision rather than a
+    parameter.
+
+    The one-at-a-time clause it ends with has nothing to arbitrate until
+    then, which is `cf:bard-f5`'s note in the same words.
+    """
+
+
+@power(
+    "cf:bard-skald-f5",
+    level=0,
+    cls="bard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def skald_aura(c: Cast) -> None:
+    """*"You gain the `p2887` power."* Declared and unmarked, so granted.
+
+    `cf:bard-f6` grants the same ref to the plain bard -- which is the one
+    pair `chargen.superseded_for` **keeps** rather than replacing, its own
+    measurement naming `cf:bard-f6` and `-f6c0` as the 2 of 144 blank rows
+    a named chassis does not cover. So a skald reaches this power by its
+    own row and the bard by its own, which is the arrangement that
+    measurement describes.
+
+    Inert today for `#1259`'s reason, as `-f2` above.
+    """
+    c.grant_row("p2887", on=c.me, until=When.ENCOUNTER)

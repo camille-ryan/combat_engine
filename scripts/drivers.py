@@ -42855,6 +42855,77 @@ def a_challenge_can_run_on_the_fight_s_own_board(out: Result) -> None:
     )
 
 
+def declaring_an_essentials_chassis_does_not_cost_the_plain_one(out: Result) -> None:
+    """`#642`'s wave, and the regression `#730` asked not to happen.
+
+    Camille on `#730`, about the warlock:
+
+    > *"But the other warlocks getting weaker? This shouldn't affect non
+    > hexblade warlocks"*
+
+    The bard is the first class where this is **live** rather than
+    predicted: it has a substantial blank ladder and the skald is now
+    written, so `_declared_chassis`' first-in-sorted-order default answers
+    `skald`. Without `#1191`'s `ORIGINAL` the bard would have exactly one
+    option and every plain bard would lose all 8 of its rows, silently.
+
+    So this is the assertion that makes the remaining 14 chassis safe to
+    declare in any order.
+    """
+    from random import Random
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+
+    # -- the setup, asserted, because the whole point turns on it --------
+    out.that(chargen.chassis_of("bard") == "skald",
+             "the bard's first NAMED chassis is the skald, so the "
+             "resolver's default has moved off the blank ladder -- which "
+             "is the state `#730` was worried about and the reason this "
+             "rule exists",
+             f"{chargen.chassis_of('bard')!r}")
+    out.that(chargen.ORIGINAL in chargen.declared_chassis("bard"),
+             "and the plain bard is a NAMED option beside it, which is "
+             "Camille's ruling on `#1191` -- *make the original a named "
+             "option*",
+             f"{chargen.declared_chassis('bard')}")
+
+    # -- both are dealt, over seeds -------------------------------------
+    seen = {chargen.deal_chassis(Random(f"{s}:bard"), "bard")
+            for s in range(80)}
+    out.that(seen == {chargen.ORIGINAL, "skald"},
+             "both come out of the dealer, so a plain bard is still a "
+             "character the game produces",
+             f"{sorted(seen)}")
+
+    # -- and the plain one keeps its rows -------------------------------
+    build = chargen.build_of("bard", "")
+    plain = {r for r in chargen.loadout("bard", level=1, build=build,
+                                        who_chassis=chargen.ORIGINAL)
+             if r.startswith("cf:bard-f")}
+    out.that(len(plain) >= 8,
+             "a plain bard keeps its own ladder -- 8 features, where "
+             "declaring the skald without `ORIGINAL` would have left it "
+             "with the skald's and none of its own",
+             f"{len(plain)}: {sorted(plain)}")
+
+    # -- while the skald gets its own, and the ONE shared row -----------
+    skald = {r for r in chargen.loadout("bard", level=1, build=build,
+                                        who_chassis="skald")
+             if r.startswith("cf:")}
+    shared = plain & skald
+    out.that(shared == {"cf:bard-f6"},
+             "and the two share exactly `cf:bard-f6` -- which is "
+             "`superseded_for`'s own measurement, naming it and `-f6c0` as "
+             "the 2 of 144 blank rows a named chassis does not cover, "
+             "because it is a power grant and Camille named power "
+             "selection as the thing the two versions share",
+             f"shared {sorted(shared)}")
+    out.that(len([r for r in skald if "skald" in r]) == 6,
+             "while the skald's own six rows are all there",
+             f"{sorted(r for r in skald if 'skald' in r)}")
+
+
 def a_chassis_whose_fork_is_a_build_option_deals_one_of_it(out: Result) -> None:
     """The witch, which is `#642`'s wave arriving one chassis at a time.
 
@@ -50794,11 +50865,18 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
     dealable = {c: chargen.declared_chassis(c)
                 for c in sorted(chargen.CLASSES)}
     forked = {c: v for c, v in dealable.items() if len(v) > 1}
-    out.that(sorted(forked) == ["cleric", "sorcerer", "wizard"],
-             "three classes have a dealable chassis choice, which is the "
-             "population the arm below is about -- the mage is NOT among "
-             "them and `declared_chassis` says why",
-             f"{forked}")
+    # **Derived with a floor, not listed, for the reason the party
+    # assertion below carries.** This named `["cleric", "sorcerer",
+    # "wizard"]` and reddened the moment the skald was written -- the
+    # second time in one session that a literal list of chassis had to be
+    # edited by whoever added content, and `#642` has 14 more to come. The
+    # claim worth making is that there IS a population, not which.
+    out.that(len(forked) >= 3 and all(len(v) >= 2 for v in forked.values()),
+             "several classes have a dealable chassis choice, which is the "
+             "population the arm below is about. A floor rather than a "
+             "list: `#642` adds to it, and a rule edited by whoever adds "
+             "content is a rule edited carelessly",
+             f"{len(forked)} forked: {forked}")
 
     # -- the original is a NAME, which is Camille's ruling on `#1191` -----
     #
@@ -74781,6 +74859,11 @@ DRIVERS = {
     "group_check": (
         a_group_check_scores_the_party_once_against_a_threshold,
         "a group check scores the party once against a threshold (#984)",
+    ),
+    "essentials_chassis": (
+        declaring_an_essentials_chassis_does_not_cost_the_plain_one,
+        "declaring an Essentials chassis does not cost the plain one its"
+        " rows -- the bard is the first live case (#642, #730)",
     ),
     "witch_coven": (
         a_chassis_whose_fork_is_a_build_option_deals_one_of_it,
