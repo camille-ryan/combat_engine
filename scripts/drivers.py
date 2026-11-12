@@ -43294,6 +43294,148 @@ def the_protectors_circle_is_a_leg_the_base_druid_also_has(out: Result) -> None:
              f"{mine}")
 
 
+def the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand(
+        out: Result) -> None:
+    """`#642`'s wave, the wizard's fourth chassis and its largest -- 24
+    printed rows, more than the arcanist, the mage and the witch together.
+
+    **Nine have combat meaning and four of those nine are about the hand**,
+    which is why they are the ones worth a rule: `audit.board`'s wizard
+    holds **no weapon at all** (`Gear.main is None`), so all four read
+    SILENT on the sweep and nothing there can tell a correct gate from a
+    missing clause. Each is posed here with the weapon it asks about and
+    with one it must refuse.
+
+    The gates are deliberately three different questions and a reader
+    should not assume they are one:
+
+    * `-f0` wants a **blade** -- a one-handed mace in a free hand satisfies
+      `p14285` and satisfies none of this;
+    * `-f6`'s first clause wants only a one-handed melee weapon, its second
+      wants `_sword_hand` **and** light-or-no armour, and the +2 is a
+      **shield** bonus, so a bladesinger carrying an actual shield gets one
+      bonus and not two;
+    * `-f7` wants a weapon wielded in one hand and nothing about blades.
+
+    **`-f7` is asserted through its gate and not through its effect**,
+    which is the trap this rule exists to not fall into. `c.rolls_with`
+    lays the effect unconditionally and hands the `when=` a `(world, eid)`
+    question answered at roll time, so reading the effect store says
+    "laid" for a two-hander as readily as for a sword -- a probe that did
+    exactly that reported both arms identical and looked like a passing
+    test.
+    """
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.content.features.bladesinger import _one_handed_swing
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+
+    rows = sorted(r for r in REGISTRY if r.startswith("cf:wizard-bladesinger-"))
+    out.that(len(rows) == 24,
+             "all 24 of the printed bladesinger rows are declared",
+             f"{len(rows)}")
+    out.that("bladesinger" in chargen.declared_chassis("wizard"),
+             "and the chassis is dealable, beside the other four",
+             f"{chargen.declared_chassis('wizard')}")
+
+    def posed(ref: str, weapon: object | None, *,
+              armour: str = "cloth", shield: bool = False) -> tuple:
+        """The board, re-armed, and what the row laid.
+
+        `gear.weapons` and not `gear.main`, which is a read-only property
+        derived from it -- assigning to `main` raises, and `held` is
+        derived too.
+        """
+        world, me, _ = _posed("cf:wizard-bladesinger-f3", 1)
+        gear = world.get(me, Gear)
+        gear.weapons = [weapon] if weapon is not None else []
+        gear.shield = shield
+        gear.armour = armour
+        n0 = len(list(world.effects.of(me)))
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        return world, me, [e.label for e in list(world.effects.of(me))[n0:]]
+
+    STAFF = replace(chargen.MACE, group="staff")
+
+    # -- f0: the blade is an implement, and only a blade -----------------
+    got = {}
+    for weapon, what in ((chargen.LONGSWORD, "heavy blade"),
+                         (chargen.DAGGER, "light blade"),
+                         (chargen.MACE, "one-handed mace"),
+                         (STAFF, "staff")):
+        world, me, _ = posed("cf:wizard-bladesinger-f0", weapon)
+        got[what] = world.get(me, Gear).main.as_implement
+    out.that(got == {"heavy blade": True, "light blade": True,
+                     "one-handed mace": False, "staff": False},
+             "`-f0` makes a light or heavy blade count as an implement and "
+             "refuses a mace and a staff. Over all four, because reading "
+             "the blade alone passes a row with no group test at all -- and "
+             "a mace is the input that matters, since it satisfies "
+             "`p14285`'s own requirement",
+             f"{got}")
+
+    # -- f6: two clauses, two requirements -------------------------------
+    arms = {}
+    for weapon, armour, shield, what in (
+            (chargen.LONGSWORD, "cloth", False, "blade, cloth, hand free"),
+            (chargen.LONGSWORD, "plate", False, "blade, plate, hand free"),
+            (chargen.LONGSWORD, "cloth", True, "blade, cloth, shield"),
+            (chargen.LONGBOW, "cloth", False, "a bow, cloth")):
+        _, _, laid = posed("cf:wizard-bladesinger-f6", weapon,
+                           armour=armour, shield=shield)
+        arms[what] = sorted(x.rsplit(" ", 1)[-1] for x in laid)
+    out.that(arms == {"blade, cloth, hand free": ["ac+2", "provoke"],
+                      "blade, plate, hand free": ["provoke"],
+                      "blade, cloth, shield": ["provoke"],
+                      "a bow, cloth": []},
+             "`-f6`'s two clauses come apart exactly as printed: the "
+             "no-provoking half needs only a one-handed melee weapon, the "
+             "+2 needs light-or-no armour AND a free hand, and a bow gets "
+             "neither",
+             f"{arms}")
+
+    # -- f7: asserted through the GATE, not the effect --------------------
+    swap = {}
+    for weapon, what in ((chargen.LONGSWORD, "one-handed"),
+                         (chargen.MACE, "one-handed mace"),
+                         (chargen.LONGBOW, "two-handed")):
+        world, me, laid = posed("cf:wizard-bladesinger-f7", weapon)
+        swap[what] = (bool(laid), _one_handed_swing(world, me))
+    out.that(swap == {"one-handed": (True, True),
+                      "one-handed mace": (True, True),
+                      "two-handed": (True, False)},
+             "`-f7` lays its swap on every weapon and its GATE is what "
+             "says no to a two-hander -- both halves asserted, because the "
+             "effect being laid is not the clause and a rule reading only "
+             "that passes a row whose `when=` was deleted",
+             f"{swap}")
+
+    # -- and the markers, named ------------------------------------------
+    owed: dict[str, list[str]] = {}
+    for ref in rows:
+        if REGISTRY[ref].unfinished:
+            owed.setdefault(sorted(REGISTRY[ref].unfinished)[0], []).append(ref)
+    out.that(sorted(owed) == ["Weapon.as_wand",
+                              "c.widen_to_adjacent(per_day=)",
+                              "chargen.power_choice()",
+                              "chargen.power_choice(keyword=)",
+                              "chargen.spellbook(encounter_as_daily=)",
+                              "triggers.widen(Miss)"],
+             "and the twelve unfinished rows wait on SIX symbols, seven of "
+             "them on one -- the spellbook gap is one gap seven times, and "
+             "seven symbols would make `blocked.py --group` unable to say "
+             "how much work it is",
+             f"{ {k: len(v) for k, v in sorted(owed.items())} }")
+    out.that(len(owed.get("chargen.spellbook(encounter_as_daily=)", ())) == 7,
+             "the shared one is exactly those seven",
+             f"{sorted(owed.get('chargen.spellbook(encounter_as_daily=)', ()))}")
+
+
 def the_mages_second_school_is_chosen_and_differs_from_the_first(out: Result) -> None:
     """*"Choose a school of magic **different** from the one you chose at
     1st level"* -- `cf:wizard-mage-f3`, and `-f5` gives the Expert benefit
@@ -75157,6 +75299,11 @@ DRIVERS = {
         the_protectors_circle_is_a_leg_the_base_druid_also_has,
         "the protector's circle is a leg the base druid also has, and"
         " declaring it costs the base druid nothing (#642, #730)",
+    ),
+    "bladesinger_hand": (
+        the_bladesingers_four_gated_rows_each_read_what_is_in_the_hand,
+        "the bladesinger's four hand-gated rows each read what is in the"
+        " hand, which the audit board's empty-handed wizard cannot (#642)",
     ),
     "witch_coven": (
         a_chassis_whose_fork_is_a_build_option_deals_one_of_it,

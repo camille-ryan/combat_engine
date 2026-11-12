@@ -277,7 +277,17 @@ def p13970(c: Cast) -> None:
 def p14285(c: Cast) -> None:
     """"The effect ends if you stop fulfilling the requirement" is not
     written: a modifier cannot watch what is in a hand, and nothing puts a
-    weapon down mid-fight."""
+    weapon down mid-fight.
+
+    **The bare hold is what makes "while this is active" askable.** Three
+    bladesinger rows gate on it -- `cf:wizard-bladesinger-f13`, `-f16` and
+    the fork around them -- and `c.lingers_label` matches a label
+    **exactly**, so the five bonuses below (`p14285 attack+2` and friends)
+    answer nothing. One labelled `c.effect` beside them is the shape
+    `p12660` already uses for its aura, and it costs nothing: it carries no
+    modifier and expires on the same clock.
+    """
+    c.effect(c.ref, until=When.EONT, on=c.me)
     c.bonus("attack", 2, on=c.me, until=When.EONT, kind="power")
     c.bonus("damage", 5, on=c.me, until=When.EONT, kind="power")
     for defence in (AC, FORT, REF, WILL):
