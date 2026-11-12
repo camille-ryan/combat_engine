@@ -361,13 +361,40 @@ def monk_unarmed_strike(c: Cast) -> None:
     make.
 
     Most of it is already true by data: `chargen.CLASSES["monk"].weapons`
-    carries `w:unarmed`, a simple weapon in the unarmed group with a +3
+    carries `w3678`, a simple weapon in the unarmed group with a +3
     proficiency bonus and a d8, so every monk the tree deals is already
-    swinging the printed thing. What is not there is the rest of the object
-    -- the off-hand property, which `Weapon.properties` is empty for, and
-    the free-hand requirement -- and the implement clause, which says a
-    `i1775` enhances this weapon. None of those is a modifier: they are
-    fields on a weapon row nothing declares.
+    swinging the printed thing.
+
+    **And the off-hand property is there too, where this note said it was
+    not.** It read *"the off-hand property, which `Weapon.properties` is
+    empty for"*. Measured off the loaded weapon:
+
+        Weapon(ref='w3678', slug=..., damage='1d8', proficiency=3,
+               group='unarmed', category='simple', hands='one-handed',
+               properties=frozenset({'one-handed', 'off-hand'}))
+
+    So three of the four printed facts -- the group, the proficiency bonus,
+    the damage die and the off-hand property -- are all carried. The spec
+    names the weapon by ref as well, so `spec.weapon_ref()` is not a
+    missing citation either.
+
+    **What is actually left is two clauses, and neither is a modifier.**
+
+    * *"You must have a hand free to use your `w3678`."* `query.can_wield`
+      is the right home -- it is where the printed refusals live, three of
+      them from the *Weapons and Size* glossary -- but the rule cannot be
+      keyed on the **group**: `w3635` and `w3724` are unarmed-group weapons
+      a character *buys and holds*, so refusing the group for a full hand
+      would refuse those wrongly. It wants a field on the weapon saying
+      this one is a natural strike, which is an ETL change.
+    * *"Your `w3678` can benefit from an `i1775`."* An implement clause,
+      and `Weapon.as_implement` is the field it would set -- also data
+      rather than behaviour.
+
+    So the marker is right that this is *"a weapon, and a weapon is not
+    something a body can make"*, and wrong about which facts are missing.
+    Narrowed rather than written, because both remaining halves are weapon
+    **fields** and so wait on the ETL batch. #1229.
     """
 
 
