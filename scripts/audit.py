@@ -1357,7 +1357,7 @@ KNOWN_SILENT = {
     # measured; `drivers.stored_power` drives the row on one and asserts the
     # borrow, the expend, that the two are different rows, and that the
     # price is of the taken card's level or higher.
-    # **Two recall rows, silent because nothing on the board is on the
+    # **Three recall rows, silent because nothing on the board is on the
     # floor.** `c.recall_weapon` fetches a weapon whose `Item.was` is the
     # caller, and a disarm is the only thing that puts one there -- which
     # the board never does to the creature under test. Driven in
@@ -1367,6 +1367,14 @@ KNOWN_SILENT = {
     "f612": "nothing is on the floor to call back; a disarm is the only "
             "thing that drops a weapon and the board never does one. "
             "Driven: it fetches from nine squares at the printed twenty",
+    # The swordmage's bond, same sentence at the card's own TEN squares --
+    # which is what the driver pins, because gap 12 is inside `f612`'s
+    # twenty and outside this one. Written off `#736`'s verb after its
+    # marker had outlived the gap it named.
+    "cf:swordmage-f0": "nothing is on the floor to call back; a disarm is "
+                       "the only thing that drops a weapon and the board "
+                       "never does one. Driven: it fetches at nine and "
+                       "leaves it at twelve, the printed ten",
     # **Three rows #755 made reachable, and then showed doing nothing.**
     # Each was UNUSED before the total-defence and escape poses existed --
     # "this row cannot work" -- and each is now fired and judged. Two of the

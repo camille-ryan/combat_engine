@@ -38628,7 +38628,28 @@ def a_weapon_called_back_to_the_hand(out: Result) -> None:
              " stand-in for 'anywhere'",
              f"{[(e, i.weapon.ref) for e, i in world.each(Item) if i.weapon]}")
 
-    for ref in ("f612", "i1252x1"):
+    # **A third caller, and its number is a different one.**
+    # `cf:swordmage-f0` prints TEN where `f612` prints twenty, so the pair
+    # pins that each row carries its own reach rather than leaning on a
+    # shared default -- gap 12 is the discriminating distance, inside
+    # f612's twenty and outside the bond's ten.
+    world, me, foe, _c = disarmed("cf:swordmage-f0", gap=9)
+    REGISTRY["cf:swordmage-f0"].body(
+        Cast(world=world, me=me, ref="cf:swordmage-f0"))
+    out.that(not [i for _e, i in world.each(Item) if i.weapon is not None],
+             "the swordmage bond fetches the blade at nine squares, inside"
+             " the ten its own card prints",
+             f"{[(e, i.weapon.ref) for e, i in world.each(Item) if i.weapon]}")
+
+    world, me, foe, _c = disarmed("cf:swordmage-f0", gap=12)
+    REGISTRY["cf:swordmage-f0"].body(
+        Cast(world=world, me=me, ref="cf:swordmage-f0"))
+    out.that(bool([i for _e, i in world.each(Item) if i.weapon is not None]),
+             "and leaves it lying at twelve -- which f612's twenty WOULD"
+             " have reached, so the two rows are not sharing one number",
+             f"{[(e, i.weapon.ref) for e, i in world.each(Item) if i.weapon]}")
+
+    for ref in ("f612", "i1252x1", "cf:swordmage-f0"):
         out.that("recall" not in str(REGISTRY[ref].unfinished),
                  f"{ref} waits on no recall symbol",
                  f"{REGISTRY[ref].unfinished}")

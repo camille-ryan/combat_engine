@@ -33,6 +33,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     DAILY,
     ENCOUNTER,
     FORT,
@@ -40,6 +41,8 @@ from combat_engine.engine import (
     ONE_ALLY,
     PERSONAL,
     REF,
+    SELF,
+    STANDARD,
     WILL,
     ActionPointSpent,
     ActionType,
@@ -646,32 +649,45 @@ def bard_word_feature(c: Cast) -> None:
     "cf:swordmage-f0",
     level=0,
     cls="swordmage",
-    usage=ENCOUNTER,
-    action=ActionType.NONE,
+    usage=AT_WILL,
+    action=STANDARD,
     reach=PERSONAL,
-    target=NO_TARGET,
+    target=SELF,
     keywords=ARCANE,
-    todo=("c.pick_up()", "Gear.owned"),
 )
 def swordmage_bond(c: Cast) -> None:
-    """Only one clause of this has a reading inside a fight -- calling the
-    bonded blade back to hand as a standard action from ten squares away --
-    and it still has nothing to change.
+    """Calling the bonded blade back to hand, which is the card's one
+    clause with a reading inside a fight.
 
-    **"Nothing anywhere picks one back up" is no longer true, and the clause
-    is no closer.** `actions._picking_up` takes a disarmed weapon off the
-    floor, but only out of the actor's **own square**, for a **minor**
-    action, offered in the action menu -- there is no `Cast` verb, so a body
-    cannot reach that path at all, and the printed line is a standard action
-    at ten squares. The retrieval wants the same three lines without the
-    adjacency test, which is an engine door and not a row.
+    > *"As a standard action, you can call your bonded weapon to your hand
+    > from up to 10 squares away."*
 
-    `Gear` is the other half and is untouched: it records what is held,
-    stowed and worn, never what is *owned and elsewhere*, so nothing says
-    which blade is bonded or that it is away. The rest of the card is an
-    hour of meditation between fights. `docs/blocked.json` has the same two
-    wants under this ref.
+    **Written, and both symbols it waited on had been answered
+    elsewhere.** The old note said *"there is no `Cast` verb, so a body
+    cannot reach that path at all ... the retrieval wants the same three
+    lines without the adjacency test, which is an engine door and not a
+    row"*. That door was built: `c.recall_weapon(within=)` is exactly it,
+    `Item.was` is the record of whose the weapon was, and `#736` is where
+    both landed. The marker outlived its own gap.
+
+    The second want, `Gear.owned`, is answered by the sibling rather than
+    built. `f612` prints the same sentence at twenty squares and its note
+    settles it: *"No second record is needed either way: the only weapon
+    on the floor that `was` this creature's is the one it lost, and a
+    swordmage with two on the ground gets the nearer."*
+
+    **Declared as the standard action the card prints**, not as a trait --
+    `f612`'s reasoning, for the same reason: this is a thing the swordmage
+    *does*, so it belongs on the action menu rather than being laid at the
+    top of the fight. `AT_WILL` because the card prints no limit on calling
+    the blade back.
+
+    The rest of the card is an hour of meditation between fights -- forging
+    the bond, moving it to another blade, remaking a broken one from a
+    fragment. None of that has a combat reading, and none of it is a
+    symbol anybody could land.
     """
+    c.recall_weapon(within=10)
 
 
 #: The three aegis rows, by the leg that takes each.
